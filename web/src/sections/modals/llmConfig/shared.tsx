@@ -605,6 +605,7 @@ interface LLMConfigurationModalWrapperProps {
   isFormValid: boolean;
   isDirty?: boolean;
   isTesting?: boolean;
+  isSubmitting?: boolean;
   children: ReactNode;
 }
 
@@ -616,8 +617,10 @@ export function LLMConfigurationModalWrapper({
   isFormValid,
   isDirty,
   isTesting,
+  isSubmitting,
   children,
 }: LLMConfigurationModalWrapperProps) {
+  const busy = isTesting || isSubmitting;
   const providerIcon = getProviderIcon(providerEndpoint);
   const providerDisplayName =
     providerName ?? getProviderDisplayName(providerEndpoint);
@@ -649,17 +652,15 @@ export function LLMConfigurationModalWrapper({
             </Button>
             <Disabled
               disabled={
-                !isFormValid ||
-                isTesting ||
-                (!!existingProviderName && !isDirty)
+                !isFormValid || busy || (!!existingProviderName && !isDirty)
               }
             >
-              <Button type="submit" icon={isTesting ? SimpleLoader : undefined}>
+              <Button type="submit" icon={busy ? SimpleLoader : undefined}>
                 {existingProviderName
-                  ? isTesting
+                  ? busy
                     ? "Updating"
                     : "Update"
-                  : isTesting
+                  : busy
                     ? "Connecting"
                     : "Connect"}
               </Button>

@@ -126,6 +126,7 @@ export default function OpenAIModal({
           isFormValid={formikProps.isValid}
           isDirty={formikProps.dirty}
           isTesting={isTesting}
+          isSubmitting={formikProps.isSubmitting}
         >
           <APIKeyField providerName="OpenAI" />
 

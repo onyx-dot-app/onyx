@@ -329,6 +329,7 @@ export default function CustomModal({
           isFormValid={formikProps.isValid}
           isDirty={formikProps.dirty}
           isTesting={isTesting}
+          isSubmitting={formikProps.isSubmitting}
         >
           {!isOnboarding && (
             <Section gap={0}>

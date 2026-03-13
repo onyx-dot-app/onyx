@@ -128,6 +128,7 @@ export default function AnthropicModal({
           isFormValid={formikProps.isValid}
           isDirty={formikProps.dirty}
           isTesting={isTesting}
+          isSubmitting={formikProps.isSubmitting}
         >
           <APIKeyField providerName="Anthropic" />
 

@@ -136,6 +136,7 @@ function OllamaModalInternals({
       isFormValid={formikProps.isValid}
       isDirty={formikProps.dirty}
       isTesting={isTesting}
+      isSubmitting={formikProps.isSubmitting}
     >
       <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
         <Tabs defaultValue={defaultTab}>

@@ -158,6 +158,7 @@ function OpenRouterModalInternals({
       isFormValid={formikProps.isValid}
       isDirty={formikProps.dirty}
       isTesting={isTesting}
+      isSubmitting={formikProps.isSubmitting}
     >
       <FieldWrapper>
         <InputLayouts.Vertical

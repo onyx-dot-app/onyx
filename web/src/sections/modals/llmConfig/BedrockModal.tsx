@@ -164,6 +164,7 @@ function BedrockModalInternals({
       isFormValid={formikProps.isValid}
       isDirty={formikProps.dirty}
       isTesting={isTesting}
+      isSubmitting={formikProps.isSubmitting}
     >
       <FieldWrapper>
         <Section gap={1}>
