@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -67,7 +67,8 @@ function OllamaModalInternals({
   onClose,
   isOnboarding,
 }: OllamaModalInternalsProps) {
-  const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const isInitialMount = useRef(true);
 
   const doFetchModels = useCallback(
     (apiBase: string, signal: AbortSignal) => {
@@ -101,6 +102,12 @@ function OllamaModalInternals({
   );
 
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      // Only auto-fetch on mount if editing an existing provider
+      if (!existingLlmProvider) return;
+    }
+
     if (formikProps.values.api_base) {
       const controller = new AbortController();
       debouncedFetchModels(formikProps.values.api_base, controller.signal);
@@ -112,7 +119,12 @@ function OllamaModalInternals({
       setIsLoadingModels(false);
       setFetchedModels([]);
     }
-  }, [formikProps.values.api_base, debouncedFetchModels, setFetchedModels]);
+  }, [
+    formikProps.values.api_base,
+    debouncedFetchModels,
+    setFetchedModels,
+    existingLlmProvider,
+  ]);
 
   const currentModels =
     fetchedModels.length > 0
