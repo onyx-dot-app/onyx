@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { Formik } from "formik";
+import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
+  LLMProviderView,
   ModelConfiguration,
   OpenRouterModelResponse,
 } from "@/interfaces/llm";
@@ -28,12 +29,12 @@ import {
   DisplayNameField,
   ModelsAccessField,
   FieldSeparator,
-  FetchModelsButton,
+  FieldWrapper,
   SingleDefaultModelField,
 } from "@/sections/modals/llmConfig/shared";
+import { toast } from "@/hooks/useToast";
 
 export const OPENROUTER_PROVIDER_NAME = "openrouter";
-const OPENROUTER_DISPLAY_NAME = "OpenRouter";
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
 const OPENROUTER_MODELS_API_URL = "/api/admin/llm/openrouter/available-models";
 
@@ -94,6 +95,117 @@ async function fetchOpenRouterModels(params: {
       error instanceof Error ? error.message : "Unknown error";
     return { models: [], error: errorMessage };
   }
+}
+
+interface OpenRouterModalInternalsProps {
+  formikProps: FormikProps<OpenRouterModalValues>;
+  existingLlmProvider: LLMProviderView | undefined;
+  fetchedModels: ModelConfiguration[];
+  setFetchedModels: (models: ModelConfiguration[]) => void;
+  modelConfigurations: ModelConfiguration[];
+  isTesting: boolean;
+  onClose: () => void;
+  isOnboarding: boolean;
+}
+
+function OpenRouterModalInternals({
+  formikProps,
+  existingLlmProvider,
+  fetchedModels,
+  setFetchedModels,
+  modelConfigurations,
+  isTesting,
+  onClose,
+  isOnboarding,
+}: OpenRouterModalInternalsProps) {
+  const currentModels =
+    fetchedModels.length > 0
+      ? fetchedModels
+      : existingLlmProvider?.model_configurations || modelConfigurations;
+
+  const isFetchDisabled =
+    !formikProps.values.api_base || !formikProps.values.api_key;
+
+  const handleFetchModels = async () => {
+    const { models, error } = await fetchOpenRouterModels({
+      apiBase: formikProps.values.api_base,
+      apiKey: formikProps.values.api_key,
+      providerName: existingLlmProvider?.name,
+    });
+    if (error) {
+      throw new Error(error);
+    }
+    setFetchedModels(models);
+  };
+
+  // Auto-fetch models on initial load when editing an existing provider
+  useEffect(() => {
+    if (existingLlmProvider && !isFetchDisabled) {
+      handleFetchModels().catch((err) => {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to fetch models"
+        );
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <LLMConfigurationModalWrapper
+      providerEndpoint={OPENROUTER_PROVIDER_NAME}
+      existingProviderName={existingLlmProvider?.name}
+      onClose={onClose}
+      isFormValid={formikProps.isValid}
+      isTesting={isTesting}
+    >
+      <FieldWrapper>
+        <InputLayouts.Vertical
+          name="api_base"
+          title="API Base URL"
+          subDescription="Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly."
+        >
+          <InputTypeInField
+            name="api_base"
+            placeholder="Your OpenRouter base URL"
+          />
+        </InputLayouts.Vertical>
+      </FieldWrapper>
+
+      <APIKeyField providerName="OpenRouter" />
+
+      {!isOnboarding && (
+        <>
+          <FieldSeparator />
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
+      )}
+
+      <FieldSeparator />
+
+      {isOnboarding ? (
+        <SingleDefaultModelField placeholder="E.g. openai/gpt-4o" />
+      ) : (
+        <ModelsField
+          modelConfigurations={currentModels}
+          formikProps={formikProps}
+          noModelConfigurationsMessage={
+            "Fetch available models first, then you'll be able to select " +
+            "the models you want to make available in Onyx."
+          }
+          recommendedDefaultModel={null}
+          shouldShowAutoUpdateToggle={false}
+          onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+        />
+      )}
+
+      {!isOnboarding && (
+        <>
+          <FieldSeparator />
+          <ModelsAccessField formikProps={formikProps} />
+        </>
+      )}
+    </LLMConfigurationModalWrapper>
+  );
 }
 
 export function OpenRouterModal({
@@ -190,82 +302,18 @@ export function OpenRouterModal({
         }
       }}
     >
-      {(formikProps) => {
-        const currentModels =
-          fetchedModels.length > 0
-            ? fetchedModels
-            : existingLlmProvider?.model_configurations || modelConfigurations;
-
-        const isFetchDisabled =
-          !formikProps.values.api_base || !formikProps.values.api_key;
-
-        return (
-          <LLMConfigurationModalWrapper
-            providerEndpoint={OPENROUTER_PROVIDER_NAME}
-            providerName={OPENROUTER_DISPLAY_NAME}
-            existingProviderName={existingLlmProvider?.name}
-            onClose={onClose}
-            isFormValid={formikProps.isValid}
-            isTesting={isTesting}
-          >
-            {!isOnboarding && (
-              <DisplayNameField disabled={!!existingLlmProvider} />
-            )}
-
-            <APIKeyField providerName="OpenRouter" />
-
-            <InputLayouts.Vertical
-              name="api_base"
-              title="API Base URL"
-              description="The base URL for OpenRouter API."
-            >
-              <InputTypeInField
-                name="api_base"
-                placeholder={DEFAULT_API_BASE}
-              />
-            </InputLayouts.Vertical>
-
-            <FetchModelsButton
-              onFetch={() =>
-                fetchOpenRouterModels({
-                  apiBase: formikProps.values.api_base,
-                  apiKey: formikProps.values.api_key,
-                  providerName: existingLlmProvider?.name,
-                })
-              }
-              isDisabled={isFetchDisabled}
-              disabledHint={
-                !formikProps.values.api_key
-                  ? "Enter your API key first."
-                  : !formikProps.values.api_base
-                    ? "Enter the API base URL."
-                    : undefined
-              }
-              onModelsFetched={setFetchedModels}
-              autoFetchOnInitialLoad={!!existingLlmProvider}
-            />
-
-            <FieldSeparator />
-
-            {isOnboarding ? (
-              <SingleDefaultModelField placeholder="E.g. openai/gpt-4o" />
-            ) : (
-              <ModelsField
-                modelConfigurations={currentModels}
-                formikProps={formikProps}
-                noModelConfigurationsMessage={
-                  "Fetch available models first, then you'll be able to select " +
-                  "the models you want to make available in Onyx."
-                }
-                recommendedDefaultModel={null}
-                shouldShowAutoUpdateToggle={false}
-              />
-            )}
-
-            {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
-          </LLMConfigurationModalWrapper>
-        );
-      }}
+      {(formikProps) => (
+        <OpenRouterModalInternals
+          formikProps={formikProps}
+          existingLlmProvider={existingLlmProvider}
+          fetchedModels={fetchedModels}
+          setFetchedModels={setFetchedModels}
+          modelConfigurations={modelConfigurations}
+          isTesting={isTesting}
+          onClose={onClose}
+          isOnboarding={isOnboarding}
+        />
+      )}
     </Formik>
   );
 }
