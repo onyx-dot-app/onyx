@@ -40,8 +40,5 @@ export const WithCustomIcon: Story = {
   args: {
     title: "Custom Provider",
     description: "A provider with a custom icon element",
-    customIcon: (
-      <div className="h-4 w-4 rounded-full bg-theme-primary-05" />
-    ),
   },
 };

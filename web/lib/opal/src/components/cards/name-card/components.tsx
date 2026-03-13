@@ -11,9 +11,6 @@ export type NameCardProps = {
   /** Icon displayed to the left of the title. */
   icon?: IconFunctionComponent;
 
-  /** Custom icon element (takes precedence over `icon`). */
-  customIcon?: React.ReactNode;
-
   /** Primary text. */
   title: string;
 
@@ -30,7 +27,6 @@ export type NameCardProps = {
 
 export function NameCard({
   icon,
-  customIcon,
   title,
   description,
   rightChildren,
@@ -38,7 +34,7 @@ export function NameCard({
   return (
     <Card backgroundVariant="light" borderVariant="none">
       <ContentAction
-        icon={customIcon ? () => <>{customIcon}</> : icon}
+        icon={icon}
         title={title}
         description={description}
         sizePreset="main-ui"
