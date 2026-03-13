@@ -42,7 +42,6 @@ import { toast } from "@/hooks/useToast";
 import useOnMount from "@/hooks/useOnMount";
 
 const BEDROCK_PROVIDER_NAME = "bedrock";
-
 const AWS_REGION_OPTIONS = [
   { name: "us-east-1", value: "us-east-1" },
   { name: "us-east-2", value: "us-east-2" },
@@ -58,11 +57,9 @@ const AWS_REGION_OPTIONS = [
   { name: "eu-central-1", value: "eu-central-1" },
   { name: "eu-west-2", value: "eu-west-2" },
 ];
-
 const AUTH_METHOD_ENVIRONMENT_IAM = "environment_iam";
 const AUTH_METHOD_ACCESS_KEY = "access_key";
 const AUTH_METHOD_LONG_TERM_API_KEY = "long_term_api_key";
-
 const FIELD_AWS_REGION_NAME = "custom_config.AWS_REGION_NAME";
 const FIELD_BEDROCK_AUTH_METHOD = "custom_config.BEDROCK_AUTH_METHOD";
 const FIELD_AWS_ACCESS_KEY_ID = "custom_config.AWS_ACCESS_KEY_ID";
@@ -293,10 +290,6 @@ function BedrockModalInternals({
         <ModelsField
           modelConfigurations={currentModels}
           formikProps={formikProps}
-          noModelConfigurationsMessage={
-            "Fetch available models first, then you’ll be able to select " +
-            "the models you want to make available in Onyx."
-          }
           recommendedDefaultModel={null}
           shouldShowAutoUpdateToggle={false}
           onRefetch={isFetchDisabled ? undefined : handleFetchModels}

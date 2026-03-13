@@ -4,7 +4,7 @@
  * Tests the complete user journey for configuring a custom LLM provider.
  * This tests the full workflow: open modal → form fill → test config → save → set as default
  */
-import React from "react";
+
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import { toast } from "@/hooks/useToast";

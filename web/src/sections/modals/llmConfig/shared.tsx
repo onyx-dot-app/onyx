@@ -434,8 +434,6 @@ export function FetchModelsButton({
 export interface ModelsFieldProps<T> {
   formikProps: FormikProps<T>;
   modelConfigurations: ModelConfiguration[];
-  noModelConfigurationsMessage?: string;
-  isLoading?: boolean;
   recommendedDefaultModel: SimpleKnownModel | null;
   shouldShowAutoUpdateToggle: boolean;
   /** Called when the user clicks the refresh button to re-fetch models. */
@@ -445,8 +443,6 @@ export interface ModelsFieldProps<T> {
 export function ModelsField<T extends BaseLLMFormValues>({
   formikProps,
   modelConfigurations,
-  noModelConfigurationsMessage,
-  isLoading,
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
   onRefetch,

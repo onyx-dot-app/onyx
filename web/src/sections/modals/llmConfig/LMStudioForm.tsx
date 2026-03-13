@@ -63,16 +63,11 @@ function LMStudioFormInternals({
   onClose,
   isOnboarding,
 }: LMStudioFormInternalsProps) {
-  const [isLoadingModels, setIsLoadingModels] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
   const initialApiKey =
     (existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY as string) ?? "";
 
   const doFetchModels = useCallback(
     (apiBase: string, apiKey: string | undefined, signal: AbortSignal) => {
-      setIsLoadingModels(true);
-      setFetchError(null);
       fetchModels(
         LLMProviderName.LM_STUDIO,
         {
@@ -82,21 +77,14 @@ function LMStudioFormInternals({
           name: existingLlmProvider?.name,
         },
         signal
-      )
-        .then((data) => {
-          if (signal.aborted) return;
-          if (data.error) {
-            setFetchError(data.error);
-            setFetchedModels([]);
-            return;
-          }
-          setFetchedModels(data.models);
-        })
-        .finally(() => {
-          if (!signal.aborted) {
-            setIsLoadingModels(false);
-          }
-        });
+      ).then((data) => {
+        if (signal.aborted) return;
+        if (data.error) {
+          setFetchedModels([]);
+          return;
+        }
+        setFetchedModels(data.models);
+      });
     },
     [existingLlmProvider?.name, initialApiKey, setFetchedModels]
   );
@@ -118,9 +106,7 @@ function LMStudioFormInternals({
         controller.abort();
       };
     } else {
-      setIsLoadingModels(false);
       setFetchedModels([]);
-      setFetchError(null);
     }
   }, [apiBase, apiKey, debouncedFetchModels, setFetchedModels]);
 
@@ -180,11 +166,6 @@ function LMStudioFormInternals({
         <ModelsField
           modelConfigurations={currentModels}
           formikProps={formikProps}
-          noModelConfigurationsMessage={
-            fetchError ||
-            "No models found. Please provide a valid API base URL."
-          }
-          isLoading={isLoadingModels}
           recommendedDefaultModel={null}
           shouldShowAutoUpdateToggle={false}
         />

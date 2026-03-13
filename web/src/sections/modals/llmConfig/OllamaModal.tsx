@@ -37,7 +37,6 @@ import { Card } from "@opal/components";
 
 const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
-
 const TAB_SELF_HOSTED = "self-hosted";
 const TAB_CLOUD = "cloud";
 
@@ -197,8 +196,6 @@ function OllamaModalInternals({
         <ModelsField
           modelConfigurations={currentModels}
           formikProps={formikProps}
-          noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
-          isLoading={isLoadingModels}
           recommendedDefaultModel={null}
           shouldShowAutoUpdateToggle={false}
         />

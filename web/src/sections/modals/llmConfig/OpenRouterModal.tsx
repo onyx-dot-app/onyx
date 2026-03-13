@@ -189,10 +189,6 @@ function OpenRouterModalInternals({
         <ModelsField
           modelConfigurations={currentModels}
           formikProps={formikProps}
-          noModelConfigurationsMessage={
-            "Fetch available models first, then you'll be able to select " +
-            "the models you want to make available in Onyx."
-          }
           recommendedDefaultModel={null}
           shouldShowAutoUpdateToggle={false}
           onRefetch={isFetchDisabled ? undefined : handleFetchModels}
