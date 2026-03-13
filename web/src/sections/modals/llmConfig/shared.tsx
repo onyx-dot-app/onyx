@@ -32,8 +32,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/icons/onyx-logo";
-import { NameCard } from "@/refresh-components/cards";
-import { Card, EmptyMessageCard } from "@opal/components";
+import { Card, EmptyMessageCard, NameCard } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import useUsers from "@/hooks/useUsers";
