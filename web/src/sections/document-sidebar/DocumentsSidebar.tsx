@@ -3,7 +3,15 @@
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import ChatDocumentDisplay from "@/sections/document-sidebar/ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
-import { Dispatch, SetStateAction, useMemo, memo } from "react";
+import {
+  Dispatch,
+  SetStateAction,
+  useMemo,
+  memo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { getCitations } from "@/app/app/services/packetUtils";
 import {
   useCurrentMessageTree,
@@ -40,25 +48,30 @@ const buildOnyxDocumentFromFile = (
 
 interface HeaderProps {
   children: string;
-  onClose: () => void;
+  onClose?: () => void;
+  isTop?: boolean;
 }
 
-function Header({ children, onClose }: HeaderProps) {
+function Header({ children, onClose, isTop }: HeaderProps) {
   return (
     <div className="sticky top-0 z-sticky bg-background-tint-01">
       <div className="flex flex-row w-full items-center justify-between gap-2 py-3">
         <div className="flex items-center gap-2 w-full px-3">
-          <SvgSearchMenu className="w-[1.3rem] h-[1.3rem] stroke-text-03" />
+          {isTop && (
+            <SvgSearchMenu className="w-[1.3rem] h-[1.3rem] stroke-text-03" />
+          )}
           <Text as="p" headingH3 text03>
             {children}
           </Text>
         </div>
-        <Button
-          icon={SvgX}
-          prominence="tertiary"
-          onClick={onClose}
-          tooltip="Close Sidebar"
-        />
+        {onClose && (
+          <Button
+            icon={SvgX}
+            prominence="tertiary"
+            onClick={onClose}
+            tooltip="Close Sidebar"
+          />
+        )}
       </div>
       <Separator noPadding />
     </div>
@@ -122,6 +135,26 @@ const DocumentsSidebar = memo(
       return { citedDocumentIds, citationOrder };
     }, [idOfMessageToDisplay, selectedMessage?.packets.length]);
 
+    const observerRef = useRef<IntersectionObserver | null>(null);
+    const [isMoreStuck, setIsMoreStuck] = useState(false);
+
+    const moreSentinelRef = useCallback((node: HTMLDivElement | null) => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+
+      if (!node) return;
+
+      const root = node.closest("#onyx-chat-sidebar");
+      if (!root) return;
+
+      const observer = new IntersectionObserver(
+        (entries) => setIsMoreStuck(!entries[0]?.isIntersecting),
+        { root, threshold: 0 }
+      );
+      observer.observe(node);
+      observerRef.current = observer;
+    }, []);
+
     // if these are missing for some reason, then nothing we can do. Just
     // don't render.
     // TODO: improve this display
@@ -167,7 +200,9 @@ const DocumentsSidebar = memo(
         <div className="flex flex-col px-3 gap-6">
           {hasCited && (
             <div>
-              <Header onClose={closeSidebar}>Cited Sources</Header>
+              <Header isTop onClose={closeSidebar}>
+                Cited Sources
+              </Header>
               <ChatDocumentDisplayWrapper>
                 {citedDocuments.map((document) => (
                   <ChatDocumentDisplay
@@ -186,7 +221,11 @@ const DocumentsSidebar = memo(
 
           {hasOther && (
             <div>
-              <Header onClose={closeSidebar}>
+              <div ref={moreSentinelRef} className="h-px" />
+              <Header
+                isTop={!hasCited || isMoreStuck}
+                onClose={!hasCited || isMoreStuck ? closeSidebar : undefined}
+              >
                 {citedDocuments.length > 0 ? "More" : "Found Sources"}
               </Header>
               <ChatDocumentDisplayWrapper>
@@ -207,7 +246,12 @@ const DocumentsSidebar = memo(
 
           {humanFileDescriptors && humanFileDescriptors.length > 0 && (
             <div>
-              <Header onClose={closeSidebar}>User Files</Header>
+              <Header
+                isTop={!hasCited && !hasOther}
+                onClose={!hasCited && !hasOther ? closeSidebar : undefined}
+              >
+                User Files
+              </Header>
               <ChatDocumentDisplayWrapper>
                 {humanFileDescriptors.map((file) => (
                   <ChatDocumentDisplay

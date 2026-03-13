@@ -464,7 +464,7 @@ export default function VoiceConfigurationPage() {
     return (
       <>
         <AdminPageTitle
-          title="Voice"
+          title="Voice Mode"
           icon={SvgMicrophone}
           includeDivider={false}
         />
@@ -484,7 +484,7 @@ export default function VoiceConfigurationPage() {
     return (
       <>
         <AdminPageTitle
-          title="Voice"
+          title="Voice Mode"
           icon={SvgMicrophone}
           includeDivider={false}
         />
@@ -497,7 +497,7 @@ export default function VoiceConfigurationPage() {
 
   return (
     <>
-      <AdminPageTitle icon={SvgAudio} title="Voice" />
+      <AdminPageTitle icon={SvgAudio} title="Voice Mode" />
       <div className="pt-4 pb-4">
         <Text as="p" secondaryBody text03>
           Speech to text (STT) and text to speech (TTS) capabilities.

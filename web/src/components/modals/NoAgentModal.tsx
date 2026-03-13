@@ -22,10 +22,10 @@ export default function NoAgentModal() {
             <>
               <Text as="p">
                 As an administrator, you can create a new agent by visiting the
-                admin panel.
+                admin settings.
               </Text>
               <Button width="full" href="/admin/agents">
-                Go to Admin Panel
+                Go to Admin Settings
               </Button>
             </>
           ) : (
