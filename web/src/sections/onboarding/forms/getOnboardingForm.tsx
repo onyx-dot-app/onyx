@@ -4,16 +4,16 @@ import {
   LLMProviderName,
 } from "@/interfaces/llm";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
-import { OpenAIModal } from "@/sections/modals/llmConfig/OpenAIModal";
-import { AnthropicModal } from "@/sections/modals/llmConfig/AnthropicModal";
-import { OllamaModal } from "@/sections/modals/llmConfig/OllamaModal";
-import { AzureModal } from "@/sections/modals/llmConfig/AzureModal";
-import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
-import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
-import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
-import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
-import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
-import { LiteLLMProxyModal } from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import OpenAIModal from "@/sections/modals/llmConfig/OpenAIModal";
+import AnthropicModal from "@/sections/modals/llmConfig/AnthropicModal";
+import OllamaModal from "@/sections/modals/llmConfig/OllamaModal";
+import AzureModal from "@/sections/modals/llmConfig/AzureModal";
+import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
+import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
+import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
+import CustomModal from "@/sections/modals/llmConfig/CustomModal";
+import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
+import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 
 // Display info for LLM provider cards - title is the product name, displayName is the company/platform
 const PROVIDER_DISPLAY_INFO: Record<

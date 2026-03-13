@@ -199,7 +199,7 @@ function LMStudioFormInternals({
   );
 }
 
-export function LMStudioForm({
+export default function LMStudioForm({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,

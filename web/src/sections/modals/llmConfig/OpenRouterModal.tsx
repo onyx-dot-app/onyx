@@ -34,7 +34,7 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
 
-export const OPENROUTER_PROVIDER_NAME = "openrouter";
+const OPENROUTER_PROVIDER_NAME = "openrouter";
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
 const OPENROUTER_MODELS_API_URL = "/api/admin/llm/openrouter/available-models";
 
@@ -208,7 +208,7 @@ function OpenRouterModalInternals({
   );
 }
 
-export function OpenRouterModal({
+export default function OpenRouterModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,

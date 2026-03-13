@@ -24,10 +24,10 @@ import {
   LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
-export const OPENAI_PROVIDER_NAME = "openai";
+const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
 
-export function OpenAIModal({
+export default function OpenAIModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,

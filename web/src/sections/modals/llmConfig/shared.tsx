@@ -55,7 +55,7 @@ export type FieldWrapperProps = WithoutStyles<
 >;
 
 export function FieldWrapper(props: FieldWrapperProps) {
-  return <div {...props} className="px-2 w-full" />;
+  return <div {...props} className="p-2 w-full" />;
 }
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
@@ -702,8 +702,9 @@ export function LLMConfigurationModalWrapper({
             description={description}
             onClose={onClose}
           />
-          <Modal.Body padding={0.5}>
-            <div className="py-2 w-full flex flex-col gap-4">{children}</div>
+          <Modal.Body padding={0.5} gap={0.5}>
+            {children}
+            {/*<div className="py-2 w-full flex flex-col gap-4"></div>*/}
           </Modal.Body>
           <Modal.Footer>
             <Button prominence="secondary" onClick={onClose} type="button">

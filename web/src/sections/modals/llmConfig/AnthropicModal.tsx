@@ -24,10 +24,10 @@ import {
   LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
-export const ANTHROPIC_PROVIDER_NAME = "anthropic";
+const ANTHROPIC_PROVIDER_NAME = "anthropic";
 const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
 
-export function AnthropicModal({
+export default function AnthropicModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,

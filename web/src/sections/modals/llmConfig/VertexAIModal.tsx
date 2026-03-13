@@ -28,7 +28,7 @@ import {
   LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
-export const VERTEXAI_PROVIDER_NAME = "vertex_ai";
+const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
 const VERTEXAI_DEFAULT_MODEL = "gemini-2.5-pro";
 const VERTEXAI_DEFAULT_LOCATION = "global";
@@ -40,7 +40,7 @@ interface VertexAIModalValues extends BaseLLMFormValues {
   };
 }
 
-export function VertexAIModal({
+export default function VertexAIModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,

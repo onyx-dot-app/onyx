@@ -153,7 +153,7 @@ function LiteLLMProxyModalInternals({
   );
 }
 
-export function LiteLLMProxyModal({
+export default function LiteLLMProxyModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,

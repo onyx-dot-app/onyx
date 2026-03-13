@@ -32,7 +32,7 @@ import {
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
 
-export const AZURE_PROVIDER_NAME = "azure";
+const AZURE_PROVIDER_NAME = "azure";
 
 interface AzureModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -72,7 +72,7 @@ const processValues = (values: AzureModalValues): AzureModalValues => {
   return processedValues;
 };
 
-export function AzureModal({
+export default function AzureModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,

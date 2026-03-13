@@ -38,7 +38,7 @@ function customConfigProcessing(customConfigsList: [string, string][]) {
   return customConfig;
 }
 
-export function CustomModal({
+export default function CustomModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,

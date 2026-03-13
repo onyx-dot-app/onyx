@@ -36,11 +36,12 @@ import {
 import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
 import { Card } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { SvgAlertCircle, SvgKey, SvgLock, SvgShield } from "@opal/icons";
+import { SvgAlertCircle } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
+import useOnMount from "@/hooks/useOnMount";
 
-export const BEDROCK_PROVIDER_NAME = "bedrock";
+const BEDROCK_PROVIDER_NAME = "bedrock";
 
 const AWS_REGION_OPTIONS = [
   { name: "us-east-1", value: "us-east-1" },
@@ -148,7 +149,7 @@ function BedrockModalInternals({
   };
 
   // Auto-fetch models on initial load when editing an existing provider
-  useEffect(() => {
+  useOnMount(() => {
     if (existingLlmProvider && !isFetchDisabled) {
       handleFetchModels().catch((err) => {
         toast.error(
@@ -156,8 +157,7 @@ function BedrockModalInternals({
         );
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
 
   return (
     <LLMConfigurationModalWrapper
@@ -168,59 +168,59 @@ function BedrockModalInternals({
       isTesting={isTesting}
     >
       <FieldWrapper>
-        <InputLayouts.Vertical
-          name={FIELD_AWS_REGION_NAME}
-          title="AWS Region"
-          subDescription="Region where your Amazon Bedrock models are hosted."
-        >
-          <InputSelectField name={FIELD_AWS_REGION_NAME}>
-            <InputSelect.Trigger placeholder="Select a region" />
-            <InputSelect.Content>
-              {AWS_REGION_OPTIONS.map((option) => (
-                <InputSelect.Item key={option.value} value={option.value}>
-                  {option.name}
-                </InputSelect.Item>
-              ))}
-            </InputSelect.Content>
-          </InputSelectField>
-        </InputLayouts.Vertical>
-      </FieldWrapper>
-
-      <FieldWrapper>
-        <InputLayouts.Vertical
-          name={FIELD_BEDROCK_AUTH_METHOD}
-          title="Authentication Method"
-          subDescription="Choose how Onyx should authenticate with Bedrock."
-        >
-          <InputSelect
-            value={authMethod || AUTH_METHOD_ACCESS_KEY}
-            onValueChange={(value) =>
-              formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
-            }
+        <Section gap={1}>
+          <InputLayouts.Vertical
+            name={FIELD_AWS_REGION_NAME}
+            title="AWS Region"
+            subDescription="Region where your Amazon Bedrock models are hosted."
           >
-            <InputSelect.Trigger defaultValue={AUTH_METHOD_ENVIRONMENT_IAM} />
-            <InputSelect.Content>
-              <InputSelect.Item
-                value={AUTH_METHOD_ENVIRONMENT_IAM}
-                description="Recommended for AWS environments"
-              >
-                Environment IAM Role
-              </InputSelect.Item>
-              <InputSelect.Item
-                value={AUTH_METHOD_ACCESS_KEY}
-                description="For non-AWS environments"
-              >
-                Access Key
-              </InputSelect.Item>
-              <InputSelect.Item
-                value={AUTH_METHOD_LONG_TERM_API_KEY}
-                description="For non-AWS environments"
-              >
-                Long-term API Key
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
-        </InputLayouts.Vertical>
+            <InputSelectField name={FIELD_AWS_REGION_NAME}>
+              <InputSelect.Trigger placeholder="Select a region" />
+              <InputSelect.Content>
+                {AWS_REGION_OPTIONS.map((option) => (
+                  <InputSelect.Item key={option.value} value={option.value}>
+                    {option.name}
+                  </InputSelect.Item>
+                ))}
+              </InputSelect.Content>
+            </InputSelectField>
+          </InputLayouts.Vertical>
+
+          <InputLayouts.Vertical
+            name={FIELD_BEDROCK_AUTH_METHOD}
+            title="Authentication Method"
+            subDescription="Choose how Onyx should authenticate with Bedrock."
+          >
+            <InputSelect
+              value={authMethod || AUTH_METHOD_ACCESS_KEY}
+              onValueChange={(value) =>
+                formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
+              }
+            >
+              <InputSelect.Trigger defaultValue={AUTH_METHOD_ENVIRONMENT_IAM} />
+              <InputSelect.Content>
+                <InputSelect.Item
+                  value={AUTH_METHOD_ENVIRONMENT_IAM}
+                  description="Recommended for AWS environments"
+                >
+                  Environment IAM Role
+                </InputSelect.Item>
+                <InputSelect.Item
+                  value={AUTH_METHOD_ACCESS_KEY}
+                  description="For non-AWS environments"
+                >
+                  Access Key
+                </InputSelect.Item>
+                <InputSelect.Item
+                  value={AUTH_METHOD_LONG_TERM_API_KEY}
+                  description="For non-AWS environments"
+                >
+                  Long-term API Key
+                </InputSelect.Item>
+              </InputSelect.Content>
+            </InputSelect>
+          </InputLayouts.Vertical>
+        </Section>
       </FieldWrapper>
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
@@ -312,7 +312,7 @@ function BedrockModalInternals({
   );
 }
 
-export function BedrockModal({
+export default function BedrockModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,

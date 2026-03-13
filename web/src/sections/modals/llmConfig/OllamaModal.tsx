@@ -35,7 +35,7 @@ import debounce from "lodash/debounce";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
 
-export const OLLAMA_PROVIDER_NAME = "ollama_chat";
+const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
 
 const TAB_SELF_HOSTED = "self-hosted";
@@ -199,7 +199,7 @@ function OllamaModalInternals({
   );
 }
 
-export function OllamaModal({
+export default function OllamaModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
