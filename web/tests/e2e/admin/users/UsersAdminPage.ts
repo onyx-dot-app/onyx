@@ -6,6 +6,9 @@
 
 import { type Page, type Locator, expect } from "@playwright/test";
 
+/** URL pattern that matches the users data fetch. */
+const USERS_API = /\/api\/manage\/users\/(accepted\/all|invited)/;
+
 export class UsersAdminPage {
   readonly page: Page;
 
@@ -25,6 +28,9 @@ export class UsersAdminPage {
   // Pagination
   readonly paginationSummary: Locator;
 
+  /** Locator for the currently-open Radix popover content. */
+  readonly popover: Locator;
+
   constructor(page: Page) {
     this.page = page;
     this.inviteButton = page.getByRole("button", { name: "Invite Users" });
@@ -40,6 +46,7 @@ export class UsersAdminPage {
     this.tableRows = page.getByRole("table").locator("tbody tr");
 
     this.paginationSummary = page.getByText(/Showing \d/);
+    this.popover = page.locator("[data-radix-popper-content-wrapper]");
   }
 
   // ---------------------------------------------------------------------------
@@ -51,6 +58,18 @@ export class UsersAdminPage {
     await expect(this.page.getByText("Users & Requests")).toBeVisible({
       timeout: 15000,
     });
+    // Wait for the table to finish loading (pagination summary only appears
+    // after the async data fetch completes).
+    await expect(this.paginationSummary).toBeVisible({ timeout: 15000 });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Waiting helpers
+  // ---------------------------------------------------------------------------
+
+  /** Wait for the users API response that follows a table-refreshing action. */
+  private async waitForTableRefresh(): Promise<void> {
+    await this.page.waitForResponse(USERS_API);
   }
 
   // ---------------------------------------------------------------------------
@@ -59,12 +78,10 @@ export class UsersAdminPage {
 
   async search(term: string) {
     await this.searchInput.fill(term);
-    await this.page.waitForTimeout(300);
   }
 
   async clearSearch() {
     await this.searchInput.fill("");
-    await this.page.waitForTimeout(300);
   }
 
   // ---------------------------------------------------------------------------
@@ -73,45 +90,34 @@ export class UsersAdminPage {
 
   async openAccountTypesFilter() {
     await this.accountTypesFilter.click();
-    await expect(
-      this.page
-        .getByRole("dialog")
-        .or(this.page.locator("[data-radix-popper-content-wrapper]"))
-    ).toBeVisible();
+    await expect(this.popover).toBeVisible();
   }
 
   async selectAccountType(label: string) {
-    const popover = this.page.locator("[data-radix-popper-content-wrapper]");
-    await popover.getByRole("button", { name: new RegExp(label) }).click();
+    await this.popover.getByText(label, { exact: false }).click();
   }
 
   async openStatusFilter() {
     await this.statusFilter.click();
-    await expect(
-      this.page.locator("[data-radix-popper-content-wrapper]")
-    ).toBeVisible();
+    await expect(this.popover).toBeVisible();
   }
 
   async selectStatus(label: string) {
-    const popover = this.page.locator("[data-radix-popper-content-wrapper]");
-    await popover.getByRole("button", { name: new RegExp(label) }).click();
+    await this.popover.getByText(label, { exact: false }).click();
   }
 
   async openGroupsFilter() {
     await this.groupsFilter.click();
-    await expect(
-      this.page.locator("[data-radix-popper-content-wrapper]")
-    ).toBeVisible();
+    await expect(this.popover).toBeVisible();
   }
 
   async selectGroup(label: string) {
-    const popover = this.page.locator("[data-radix-popper-content-wrapper]");
-    await popover.getByRole("button", { name: new RegExp(label) }).click();
+    await this.popover.getByText(label, { exact: false }).click();
   }
 
   async closePopover() {
     await this.page.keyboard.press("Escape");
-    await this.page.waitForTimeout(200);
+    await expect(this.popover).not.toBeVisible();
   }
 
   // ---------------------------------------------------------------------------
@@ -126,12 +132,13 @@ export class UsersAdminPage {
     return this.table.getByRole("row").filter({ hasText: email });
   }
 
+  /** Click the sort button on a column header. */
   async sortByColumn(columnName: string) {
-    const header = this.table
-      .getByRole("columnheader")
-      .filter({ hasText: columnName });
-    await header.getByRole("button").first().click();
-    await this.page.waitForTimeout(300);
+    // Column headers are <th> elements. The sort button is a child <button>
+    // that only appears on hover — hover first to reveal it.
+    const header = this.table.locator("th").filter({ hasText: columnName });
+    await header.hover();
+    await header.locator("button").first().click();
   }
 
   // ---------------------------------------------------------------------------
@@ -142,14 +149,11 @@ export class UsersAdminPage {
     const row = this.getRowByEmail(email);
     const actionsButton = row.getByRole("button").last();
     await actionsButton.click();
-    await expect(
-      this.page.locator("[data-radix-popper-content-wrapper]")
-    ).toBeVisible();
+    await expect(this.popover).toBeVisible();
   }
 
   async clickRowAction(actionName: string) {
-    const popover = this.page.locator("[data-radix-popper-content-wrapper]");
-    await popover.getByRole("button", { name: actionName }).click();
+    await this.popover.getByText(actionName).click();
   }
 
   // ---------------------------------------------------------------------------
@@ -169,7 +173,7 @@ export class UsersAdminPage {
   }
 
   async expectToast(message: string | RegExp) {
-    await expect(this.page.getByText(message)).toBeVisible({ timeout: 10000 });
+    await expect(this.page.getByText(message)).toBeVisible();
   }
 
   // ---------------------------------------------------------------------------
@@ -186,7 +190,8 @@ export class UsersAdminPage {
       "Add emails to invite, comma separated"
     );
     await input.fill(email + ",");
-    await this.page.waitForTimeout(200);
+    // Wait for the chip to appear in the dialog
+    await expect(this.dialog.getByText(email)).toBeVisible();
   }
 
   async submitInvite() {
@@ -199,22 +204,16 @@ export class UsersAdminPage {
 
   async openRoleDropdown(email: string) {
     const row = this.getRowByEmail(email);
-    // The role cell renders an OpenButton inside a Popover.Trigger
     const roleButton = row
       .locator("button")
       .filter({ hasText: /Basic|Admin|Global Curator|Slack User/ });
     await roleButton.click();
-    await expect(
-      this.page.locator("[data-radix-popper-content-wrapper]")
-    ).toBeVisible();
+    await expect(this.popover).toBeVisible();
   }
 
   async selectRole(roleName: string) {
-    const popover = this.page
-      .locator("[data-radix-popper-content-wrapper]")
-      .last();
-    await popover.getByRole("button", { name: roleName }).click();
-    await this.page.waitForTimeout(500);
+    await this.popover.last().getByText(roleName).click();
+    await this.waitForTableRefresh();
   }
 
   // ---------------------------------------------------------------------------
@@ -231,15 +230,11 @@ export class UsersAdminPage {
 
   async searchGroupsInModal(term: string) {
     await this.dialog.getByPlaceholder("Search groups to join...").fill(term);
-    await this.page.waitForTimeout(300);
+    await expect(this.dialog.getByText(term).first()).toBeVisible();
   }
 
   async toggleGroupInModal(groupName: string) {
-    await this.dialog
-      .getByRole("button", { name: new RegExp(groupName) })
-      .first()
-      .click();
-    await this.page.waitForTimeout(200);
+    await this.dialog.getByText(groupName).first().click();
   }
 
   async saveGroupsModal() {
