@@ -32,6 +32,7 @@ func Execute() error {
 	rootCmd.AddCommand(newAgentsCmd())
 	rootCmd.AddCommand(newConfigureCmd())
 	rootCmd.AddCommand(newValidateConfigCmd())
+	rootCmd.AddCommand(newServeCmd())
 
 	// Default command is chat
 	rootCmd.RunE = chatCmd.RunE
