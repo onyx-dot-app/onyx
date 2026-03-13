@@ -39,6 +39,7 @@ import {
   XenforoIcon,
   ColorDiscordIcon,
   FreshdeskIcon,
+  FreshdeskSolutionsIcon,
   FirefliesIcon,
   EgnyteIcon,
   AirtableIcon,
@@ -168,6 +169,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Guru",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/guru`,
+  },
+  freshdesk_solutions: {
+    icon: FreshdeskSolutionsIcon,
+    displayName: "Freshdesk Solutions",
+    category: SourceCategory.Wiki,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/freshdesk`,
   },
   mediawiki: {
     icon: MediaWikiIcon,
