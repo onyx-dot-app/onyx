@@ -278,6 +278,23 @@ def _log_and_raise_for_status(response: requests.Response) -> None:
         raise
 
 
+GRAPH_INVALID_REQUEST_CODE = "invalidRequest"
+
+
+def _is_graph_invalid_request(response: requests.Response) -> bool:
+    """Return True if the response body is the generic Graph API
+    ``{"error": {"code": "invalidRequest", "message": "Invalid request"}}``
+    shape. This particular error has no actionable inner error code and is
+    returned by the site-pages endpoint when a page has a corrupt canvas layout
+    (e.g. duplicate web-part IDs — see SharePoint/sp-dev-docs#8822)."""
+    try:
+        body = response.json()
+    except Exception:
+        return False
+    error = body.get("error", {})
+    return error.get("code") == GRAPH_INVALID_REQUEST_CODE
+
+
 def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData | None:
     """Load certificate from .pfx file for MSAL authentication"""
     try:
@@ -1248,19 +1265,35 @@ class SharepointConnector(
         site.execute_query()
         site_id = site.id
 
-        page_url: str | None = (
-            f"{self.graph_api_base}/sites/{site_id}" f"/pages/microsoft.graph.sitePage"
+        site_pages_base = (
+            f"{self.graph_api_base}/sites/{site_id}/pages/microsoft.graph.sitePage"
         )
+        page_url: str | None = site_pages_base
         params: dict[str, str] | None = {"$expand": "canvasLayout"}
         total_yielded = 0
+        yielded_ids: set[str] = set()
 
         while page_url:
             try:
                 data = self._graph_api_get_json(page_url, params)
             except HTTPError as e:
-                if e.response.status_code == 404:
+                if e.response is not None and e.response.status_code == 404:
                     logger.warning(f"Site page not found: {page_url}")
                     break
+                if (
+                    e.response is not None
+                    and e.response.status_code == 400
+                    and _is_graph_invalid_request(e.response)
+                ):
+                    logger.warning(
+                        f"$expand=canvasLayout on the LIST endpoint returned 400 "
+                        f"for site {site_descriptor.url}. Falling back to "
+                        f"per-page expansion."
+                    )
+                    yield from self._fetch_site_pages_individually(
+                        site_pages_base, start, end, skip_ids=yielded_ids
+                    )
+                    return
                 raise
 
             params = None  # nextLink already embeds query params
@@ -1269,11 +1302,97 @@ class SharepointConnector(
                 if not _site_page_in_time_window(page, start, end):
                     continue
                 total_yielded += 1
+                page_id = page.get("id")
+                if page_id:
+                    yielded_ids.add(page_id)
                 yield page
 
             page_url = data.get("@odata.nextLink")
 
         logger.debug(f"Yielded {total_yielded} site pages for {site_descriptor.url}")
+
+    def _fetch_site_pages_individually(
+        self,
+        site_pages_base: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        skip_ids: set[str] | None = None,
+    ) -> Generator[dict[str, Any], None, None]:
+        """Fallback for _fetch_site_pages: list pages without $expand, then
+        expand canvasLayout on each page individually.
+
+        The Graph API's LIST endpoint can return 400 when $expand=canvasLayout
+        is used and *any* page in the site has a corrupt canvas layout (e.g.
+        duplicate web part IDs — see SharePoint/sp-dev-docs#8822). Since the
+        LIST expansion is all-or-nothing, a single bad page poisons the entire
+        response. This method works around it by fetching metadata first, then
+        expanding each page individually so only the broken page loses its
+        canvas content.
+
+        ``skip_ids`` contains page IDs already yielded by the caller before the
+        fallback was triggered, preventing duplicates.
+        """
+        page_url: str | None = site_pages_base
+        total_yielded = 0
+        _skip_ids = skip_ids or set()
+
+        while page_url:
+            try:
+                data = self._graph_api_get_json(page_url)
+            except HTTPError as e:
+                if e.response is not None and e.response.status_code == 404:
+                    break
+                raise
+
+            for page in data.get("value", []):
+                if not _site_page_in_time_window(page, start, end):
+                    continue
+
+                page_id = page.get("id")
+                if page_id and page_id in _skip_ids:
+                    continue
+
+                if not page_id:
+                    total_yielded += 1
+                    yield page
+                    continue
+
+                expanded = self._try_expand_single_page(site_pages_base, page_id, page)
+                total_yielded += 1
+                yield expanded
+
+            page_url = data.get("@odata.nextLink")
+
+        logger.debug(
+            f"Yielded {total_yielded} site pages (per-page expansion fallback)"
+        )
+
+    def _try_expand_single_page(
+        self,
+        site_pages_base: str,
+        page_id: str,
+        fallback_page: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Try to GET a single page with $expand=canvasLayout. On 400, return
+        the metadata-only fallback so the page is still indexed (without canvas
+        content)."""
+        pages_collection = site_pages_base.removesuffix("/microsoft.graph.sitePage")
+        single_url = f"{pages_collection}/{page_id}/microsoft.graph.sitePage"
+        try:
+            return self._graph_api_get_json(single_url, {"$expand": "canvasLayout"})
+        except HTTPError as e:
+            if (
+                e.response is not None
+                and e.response.status_code == 400
+                and _is_graph_invalid_request(e.response)
+            ):
+                page_name = fallback_page.get("name", page_id)
+                logger.warning(
+                    f"$expand=canvasLayout failed for page '{page_name}' "
+                    f"({page_id}). Indexing metadata only."
+                )
+                return fallback_page
+            raise
 
     def _acquire_token(self) -> dict[str, Any]:
         """
