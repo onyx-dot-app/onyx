@@ -135,6 +135,23 @@ const DocumentsSidebar = memo(
       return { citedDocumentIds, citationOrder };
     }, [idOfMessageToDisplay, selectedMessage?.packets.length]);
 
+    const sidebarRef = useRef<HTMLDivElement>(null);
+    const moreSentinelRef = useRef<HTMLDivElement>(null);
+    const [isMoreStuck, setIsMoreStuck] = useState(false);
+
+    useEffect(() => {
+      const sentinel = moreSentinelRef.current;
+      const root = sidebarRef.current;
+      if (!sentinel || !root) return;
+
+      const observer = new IntersectionObserver(
+        (entries) => setIsMoreStuck(!entries[0]?.isIntersecting),
+        { root, threshold: 0 }
+      );
+      observer.observe(sentinel);
+      return () => observer.disconnect();
+    }, []);
+
     // if these are missing for some reason, then nothing we can do. Just
     // don't render.
     // TODO: improve this display
@@ -171,23 +188,6 @@ const DocumentsSidebar = memo(
     );
     const hasCited = citedDocuments.length > 0;
     const hasOther = otherDocuments.length > 0;
-
-    const sidebarRef = useRef<HTMLDivElement>(null);
-    const moreSentinelRef = useRef<HTMLDivElement>(null);
-    const [isMoreStuck, setIsMoreStuck] = useState(false);
-
-    useEffect(() => {
-      const sentinel = moreSentinelRef.current;
-      const root = sidebarRef.current;
-      if (!sentinel || !root) return;
-
-      const observer = new IntersectionObserver(
-        (entries) => setIsMoreStuck(!entries[0]?.isIntersecting),
-        { root, threshold: 0 }
-      );
-      observer.observe(sentinel);
-      return () => observer.disconnect();
-    }, [hasCited, hasOther]);
 
     return (
       <div
