@@ -59,6 +59,63 @@ export async function setUserRole(
   }
 }
 
+export async function addUserToGroup(
+  groupId: number,
+  userId: string
+): Promise<void> {
+  const res = await fetch(`/api/manage/admin/user-group/${groupId}/add-users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_ids: [userId] }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res, "Failed to add user to group"));
+  }
+}
+
+export async function removeUserFromGroup(
+  groupId: number,
+  currentUserIds: string[],
+  userIdToRemove: string,
+  ccPairIds: number[]
+): Promise<void> {
+  const res = await fetch(`/api/manage/admin/user-group/${groupId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_ids: currentUserIds.filter((id) => id !== userIdToRemove),
+      cc_pair_ids: ccPairIds,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await parseErrorDetail(res, "Failed to remove user from group")
+    );
+  }
+}
+
+export async function cancelInvite(email: string): Promise<void> {
+  const res = await fetch("/api/manage/admin/remove-invited-user", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_email: email }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res, "Failed to cancel invite"));
+  }
+}
+
+export async function approveRequest(email: string): Promise<void> {
+  const res = await fetch("/api/tenants/users/invite/approve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res, "Failed to approve request"));
+  }
+}
+
 export async function inviteUsers(emails: string[]): Promise<void> {
   const res = await fetch("/api/manage/admin/users", {
     method: "PUT",
@@ -68,4 +125,21 @@ export async function inviteUsers(emails: string[]): Promise<void> {
   if (!res.ok) {
     throw new Error(await parseErrorDetail(res, "Failed to invite users"));
   }
+}
+
+export async function downloadUsersCsv(): Promise<void> {
+  const res = await fetch("/api/manage/users/download");
+  if (!res.ok) {
+    throw new Error(
+      await parseErrorDetail(res, "Failed to download users CSV")
+    );
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  a.download = `onyx_users_${ts}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }

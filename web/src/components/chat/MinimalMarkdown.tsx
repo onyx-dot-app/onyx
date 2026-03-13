@@ -11,14 +11,13 @@ import rehypeHighlight from "rehype-highlight";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import { transformLinkUri } from "@/lib/utils";
+import { cn, transformLinkUri } from "@/lib/utils";
 
 type MinimalMarkdownComponentOverrides = Partial<Components>;
 
 interface MinimalMarkdownProps {
   content: string;
   className?: string;
-  style?: CSSProperties;
   showHeader?: boolean;
   /**
    * Override specific markdown renderers.
@@ -30,7 +29,6 @@ interface MinimalMarkdownProps {
 export default function MinimalMarkdown({
   content,
   className = "",
-  style,
   showHeader = true,
   components,
 }: MinimalMarkdownProps) {
@@ -63,19 +61,17 @@ export default function MinimalMarkdown({
   }, [content, components, showHeader]);
 
   return (
-    <div style={style || {}} className={`${className}`}>
-      <ReactMarkdown
-        className="prose dark:prose-invert max-w-full text-sm break-words"
-        components={markdownComponents}
-        rehypePlugins={[rehypeHighlight, rehypeKatex]}
-        remarkPlugins={[
-          remarkGfm,
-          [remarkMath, { singleDollarTextMath: false }],
-        ]}
-        urlTransform={transformLinkUri}
-      >
-        {content}
-      </ReactMarkdown>
-    </div>
+    <ReactMarkdown
+      className={cn(
+        "prose dark:prose-invert max-w-full text-sm break-words",
+        className
+      )}
+      components={markdownComponents}
+      rehypePlugins={[rehypeHighlight, rehypeKatex]}
+      remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+      urlTransform={transformLinkUri}
+    >
+      {content}
+    </ReactMarkdown>
   );
 }

@@ -11,6 +11,7 @@ export const imageVariant: PreviewVariant = {
   width: "lg",
   height: "full",
   needsTextContent: false,
+  codeBackground: false,
   headerDescription: () => "",
 
   renderContent: (ctx) => (

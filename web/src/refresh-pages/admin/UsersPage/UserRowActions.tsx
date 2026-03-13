@@ -2,21 +2,40 @@
 
 import { useState } from "react";
 import { Button } from "@opal/components";
-import { SvgMoreHorizontal, SvgXCircle, SvgTrash, SvgCheck } from "@opal/icons";
+import {
+  SvgMoreHorizontal,
+  SvgUsers,
+  SvgXCircle,
+  SvgTrash,
+  SvgCheck,
+} from "@opal/icons";
 import { Disabled } from "@opal/core";
 import Popover from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
-import { deactivateUser, activateUser, deleteUser } from "./svc";
+import {
+  deactivateUser,
+  activateUser,
+  deleteUser,
+  cancelInvite,
+  approveRequest,
+} from "./svc";
+import EditGroupsModal from "./EditGroupsModal";
 import type { UserRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type ModalType = "deactivate" | "activate" | "delete" | null;
+type ModalType =
+  | "deactivate"
+  | "activate"
+  | "delete"
+  | "cancelInvite"
+  | "editGroups"
+  | null;
 
 interface UserRowActionsProps {
   user: UserRow;
@@ -52,14 +71,101 @@ export default function UserRowActions({
     }
   }
 
-  // Only show actions for accepted users (active or inactive).
-  // Invited/requested users have no row actions in this PR.
-  if (
-    user.status !== UserStatus.ACTIVE &&
-    user.status !== UserStatus.INACTIVE
-  ) {
-    return null;
-  }
+  const openModal = (type: ModalType) => {
+    setPopoverOpen(false);
+    setModal(type);
+  };
+
+  // Status-aware action menus
+  const actionButtons = (() => {
+    switch (user.status) {
+      case UserStatus.INVITED:
+        return (
+          <Button
+            prominence="tertiary"
+            variant="danger"
+            icon={SvgXCircle}
+            onClick={() => openModal("cancelInvite")}
+          >
+            Cancel Invite
+          </Button>
+        );
+
+      case UserStatus.REQUESTED:
+        return (
+          <Button
+            prominence="tertiary"
+            icon={SvgCheck}
+            onClick={() => {
+              setPopoverOpen(false);
+              handleAction(
+                () => approveRequest(user.email),
+                "Request approved"
+              );
+            }}
+          >
+            Approve
+          </Button>
+        );
+
+      case UserStatus.ACTIVE:
+        return (
+          <>
+            {user.id && (
+              <Button
+                prominence="tertiary"
+                icon={SvgUsers}
+                onClick={() => openModal("editGroups")}
+              >
+                Groups
+              </Button>
+            )}
+            <Button
+              prominence="tertiary"
+              icon={SvgXCircle}
+              onClick={() => openModal("deactivate")}
+            >
+              Deactivate User
+            </Button>
+          </>
+        );
+
+      case UserStatus.INACTIVE:
+        return (
+          <>
+            {user.id && (
+              <Button
+                prominence="tertiary"
+                icon={SvgUsers}
+                onClick={() => openModal("editGroups")}
+              >
+                Groups
+              </Button>
+            )}
+            <Button
+              prominence="tertiary"
+              icon={SvgCheck}
+              onClick={() => openModal("activate")}
+            >
+              Activate User
+            </Button>
+            <Button
+              prominence="tertiary"
+              variant="danger"
+              icon={SvgTrash}
+              onClick={() => openModal("delete")}
+            >
+              Delete User
+            </Button>
+          </>
+        );
+
+      default: {
+        const _exhaustive: never = user.status;
+        return null;
+      }
+    }
+  })();
 
   // SCIM-managed users cannot be modified from the UI — changes would be
   // overwritten on the next IdP sync.
@@ -74,46 +180,47 @@ export default function UserRowActions({
           <Button prominence="tertiary" icon={SvgMoreHorizontal} />
         </Popover.Trigger>
         <Popover.Content align="end">
-          <div className="flex flex-col gap-0.5 p-1">
-            {user.status === UserStatus.ACTIVE ? (
-              <Button
-                prominence="tertiary"
-                icon={SvgXCircle}
-                onClick={() => {
-                  setPopoverOpen(false);
-                  setModal("deactivate");
-                }}
-              >
-                Deactivate User
-              </Button>
-            ) : (
-              <>
-                <Button
-                  prominence="tertiary"
-                  icon={SvgCheck}
-                  onClick={() => {
-                    setPopoverOpen(false);
-                    setModal("activate");
-                  }}
-                >
-                  Activate User
-                </Button>
-                <Button
-                  prominence="tertiary"
-                  variant="danger"
-                  icon={SvgTrash}
-                  onClick={() => {
-                    setPopoverOpen(false);
-                    setModal("delete");
-                  }}
-                >
-                  Delete User
-                </Button>
-              </>
-            )}
-          </div>
+          <div className="flex flex-col gap-0.5 p-1">{actionButtons}</div>
         </Popover.Content>
       </Popover>
+
+      {modal === "editGroups" && user.id && (
+        <EditGroupsModal
+          user={user as UserRow & { id: string }}
+          onClose={() => setModal(null)}
+          onMutate={onMutate}
+        />
+      )}
+
+      {modal === "cancelInvite" && (
+        <ConfirmationModalLayout
+          icon={SvgXCircle}
+          title="Cancel Invite"
+          onClose={() => setModal(null)}
+          submit={
+            <Disabled disabled={isSubmitting}>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  handleAction(
+                    () => cancelInvite(user.email),
+                    "Invite cancelled"
+                  );
+                }}
+              >
+                Cancel
+              </Button>
+            </Disabled>
+          }
+        >
+          <Text as="p" text03>
+            <Text as="span" text05>
+              {user.email}
+            </Text>{" "}
+            will no longer be able to join Onyx with this invite.
+          </Text>
+        </ConfirmationModalLayout>
+      )}
 
       {modal === "deactivate" && (
         <ConfirmationModalLayout
@@ -141,7 +248,8 @@ export default function UserRowActions({
               {user.email}
             </Text>{" "}
             will immediately lose access to Onyx. Their sessions and agents will
-            be preserved. You can reactivate this account later.
+            be preserved. Their license seat will be freed. You can reactivate
+            this account later.
           </Text>
         </ConfirmationModalLayout>
       )}
@@ -201,7 +309,7 @@ export default function UserRowActions({
               {user.email}
             </Text>{" "}
             will be permanently removed from Onyx. All of their session history
-            will be deleted. This cannot be undone.
+            will be deleted. Deletion cannot be undone.
           </Text>
         </ConfirmationModalLayout>
       )}

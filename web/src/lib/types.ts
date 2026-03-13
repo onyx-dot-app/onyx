@@ -83,7 +83,7 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
   [UserStatus.ACTIVE]: "Active",
   [UserStatus.INACTIVE]: "Inactive",
   [UserStatus.INVITED]: "Invite Pending",
-  [UserStatus.REQUESTED]: "Requested",
+  [UserStatus.REQUESTED]: "Request to Join",
 };
 
 export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {

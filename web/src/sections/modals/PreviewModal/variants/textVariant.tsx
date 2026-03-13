@@ -28,6 +28,7 @@ export const textVariant: PreviewVariant = {
   width: "md",
   height: "lg",
   needsTextContent: true,
+  codeBackground: true,
   headerDescription: (ctx) =>
     ctx.fileContent
       ? `${ctx.lineCount} ${ctx.lineCount === 1 ? "line" : "lines"} · ${
@@ -36,7 +37,7 @@ export const textVariant: PreviewVariant = {
       : "",
 
   renderContent: (ctx) => (
-    <CodePreview content={ctx.fileContent} language={ctx.language} />
+    <CodePreview normalize content={ctx.fileContent} language={ctx.language} />
   ),
 
   renderFooterLeft: (ctx) => (

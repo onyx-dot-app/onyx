@@ -616,7 +616,7 @@ opentelemetry-sdk==1.39.1
     #   opentelemetry-exporter-otlp-proto-http
 opentelemetry-semantic-conventions==0.60b1
     # via opentelemetry-sdk
-orjson==3.11.4 ; platform_python_implementation != 'PyPy'
+orjson==3.11.6 ; platform_python_implementation != 'PyPy'
     # via langsmith
 packaging==24.2
     # via

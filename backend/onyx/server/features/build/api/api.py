@@ -1,3 +1,4 @@
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
@@ -39,6 +40,9 @@ from onyx.server.features.build.utils import is_onyx_craft_enabled
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
+_WEBAPP_HMR_FIXER_TEMPLATE = (_TEMPLATES_DIR / "webapp_hmr_fixer.js").read_text()
 
 
 def require_onyx_craft_enabled(user: User = Depends(current_user)) -> User:
@@ -239,18 +243,62 @@ def _stream_response(response: httpx.Response) -> Iterator[bytes]:
         yield chunk
 
 
+def _inject_hmr_fixer(content: bytes, session_id: str) -> bytes:
+    """Inject a script that stubs root-scoped Next HMR websocket connections."""
+    base = f"/api/build/sessions/{session_id}/webapp"
+    script = f"<script>{_WEBAPP_HMR_FIXER_TEMPLATE.replace('__WEBAPP_BASE__', base)}</script>"
+    text = content.decode("utf-8")
+    text = re.sub(
+        r"(<head\b[^>]*>)",
+        lambda m: m.group(0) + script,
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    return text.encode("utf-8")
+
+
 def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
     """Rewrite Next.js asset paths to go through the proxy."""
-    import re
-
-    # Base path includes session_id for routing
     webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
+    escaped_webapp_base_path = webapp_base_path.replace("/", r"\/")
+    hmr_paths = ("/_next/webpack-hmr", "/_next/hmr")
 
     text = content.decode("utf-8")
-    # Rewrite /_next/ paths to go through our proxy
-    text = text.replace("/_next/", f"{webapp_base_path}/_next/")
-    # Rewrite JSON data file fetch paths (e.g., /data.json, /data/tickets.json)
-    # Matches paths like "/filename.json" or "/path/to/file.json"
+    # Anchor on delimiter so already-prefixed URLs (from assetPrefix) aren't double-rewritten.
+    for delim in ('"', "'", "("):
+        text = text.replace(f"{delim}/_next/", f"{delim}{webapp_base_path}/_next/")
+        text = re.sub(
+            rf"{re.escape(delim)}https?://[^/\"')]+/_next/",
+            f"{delim}{webapp_base_path}/_next/",
+            text,
+        )
+        text = re.sub(
+            rf"{re.escape(delim)}wss?://[^/\"')]+/_next/",
+            f"{delim}{webapp_base_path}/_next/",
+            text,
+        )
+    text = text.replace(r"\/_next\/", rf"{escaped_webapp_base_path}\/_next\/")
+    text = re.sub(
+        r"https?:\\\/\\\/[^\"']+?\\\/_next\\\/",
+        rf"{escaped_webapp_base_path}\/_next\/",
+        text,
+    )
+    text = re.sub(
+        r"wss?:\\\/\\\/[^\"']+?\\\/_next\\\/",
+        rf"{escaped_webapp_base_path}\/_next\/",
+        text,
+    )
+    for hmr_path in hmr_paths:
+        escaped_hmr_path = hmr_path.replace("/", r"\/")
+        text = text.replace(
+            f"{webapp_base_path}{hmr_path}",
+            hmr_path,
+        )
+        text = text.replace(
+            f"{escaped_webapp_base_path}{escaped_hmr_path}",
+            escaped_hmr_path,
+        )
     text = re.sub(
         r'"(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)"',
         f'"{webapp_base_path}\\1"',
@@ -261,9 +309,27 @@ def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
         f"'{webapp_base_path}\\1'",
         text,
     )
-    # Rewrite favicon
     text = text.replace('"/favicon.ico', f'"{webapp_base_path}/favicon.ico')
     return text.encode("utf-8")
+
+
+def _rewrite_proxy_response_headers(
+    headers: dict[str, str], session_id: str
+) -> dict[str, str]:
+    """Rewrite response headers that can leak root-scoped asset URLs."""
+    link = headers.get("link")
+    if link:
+        webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
+        rewritten_link = re.sub(
+            r"<https?://[^>]+/_next/",
+            f"<{webapp_base_path}/_next/",
+            link,
+        )
+        rewritten_link = rewritten_link.replace(
+            "</_next/", f"<{webapp_base_path}/_next/"
+        )
+        headers["link"] = rewritten_link
+    return headers
 
 
 # Content types that may contain asset path references that need rewriting
@@ -342,12 +408,17 @@ def _proxy_request(
                 for key, value in response.headers.items()
                 if key.lower() not in EXCLUDED_HEADERS
             }
+            response_headers = _rewrite_proxy_response_headers(
+                response_headers, str(session_id)
+            )
 
             content_type = response.headers.get("content-type", "")
 
             # For HTML/CSS/JS responses, rewrite asset paths
             if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
                 content = _rewrite_asset_paths(response.content, str(session_id))
+                if "text/html" in content_type:
+                    content = _inject_hmr_fixer(content, str(session_id))
                 return Response(
                     content=content,
                     status_code=response.status_code,
@@ -391,7 +462,7 @@ def _check_webapp_access(
     return session
 
 
-_OFFLINE_HTML_PATH = Path(__file__).parent / "templates" / "webapp_offline.html"
+_OFFLINE_HTML_PATH = _TEMPLATES_DIR / "webapp_offline.html"
 
 
 def _offline_html_response() -> Response:
@@ -399,6 +470,7 @@ def _offline_html_response() -> Response:
 
     Design mirrors the default Craft web template (outputs/web/app/page.tsx):
     terminal window aesthetic with Minecraft-themed typing animation.
+
     """
     html = _OFFLINE_HTML_PATH.read_text()
     return Response(content=html, status_code=503, media_type="text/html")
