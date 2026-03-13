@@ -49,6 +49,10 @@ class VoiceRecorderSession {
   private transcript = "";
   private stopResolver: ((text: string | null) => void) | null = null;
   private isActive = false;
+  // Guard: true once onFinalTranscript has fired for the current utterance.
+  // Prevents the same transcript from being delivered twice when VAD-triggered
+  // stop causes the server to echo the final transcript a second time.
+  private finalTranscriptDelivered = false;
 
   // Callbacks to update React state
   private onTranscriptChange: (text: string) => void;
@@ -99,6 +103,7 @@ class VoiceRecorderSession {
     this.cleanup();
     this.transcript = "";
     this.audioBuffer = [];
+    this.finalTranscriptDelivered = false;
 
     // Get microphone
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -274,8 +279,9 @@ class VoiceRecorderSession {
         }
 
         if (data.is_final && data.text) {
-          // VAD detected silence - trigger callback
-          if (this.onFinalTranscript) {
+          // VAD detected silence - trigger callback (only once per utterance)
+          if (this.onFinalTranscript && !this.finalTranscriptDelivered) {
+            this.finalTranscriptDelivered = true;
             this.onFinalTranscript(data.text);
           }
 
@@ -288,6 +294,7 @@ class VoiceRecorderSession {
           } else {
             // If not auto-stopping, reset for next utterance
             this.transcript = "";
+            this.finalTranscriptDelivered = false;
             this.onTranscriptChange("");
             this.resetBackendTranscript();
           }

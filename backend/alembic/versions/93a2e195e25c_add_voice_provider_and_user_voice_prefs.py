@@ -1,7 +1,7 @@
 """add_voice_provider_and_user_voice_prefs
 
 Revision ID: 93a2e195e25c
-Revises: b5c4d7e8f9a1
+Revises: 27fb147a843f
 Create Date: 2026-02-23 15:16:39.507304
 
 """
@@ -15,7 +15,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "93a2e195e25c"
-down_revision = "b5c4d7e8f9a1"
+down_revision = "27fb147a843f"
 branch_labels = None
 depends_on = None
 

@@ -553,11 +553,10 @@ class AzureVoiceProvider(VoiceProviderInterface):
         headers = {"Ocp-Apim-Subscription-Key": self.api_key}
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
+                if response.status in (401, 403):
+                    raise RuntimeError("Invalid Azure API key.")
                 if response.status != 200:
-                    error_text = await response.text()
-                    raise RuntimeError(
-                        f"Azure credential validation failed: {error_text}"
-                    )
+                    raise RuntimeError("Azure credential validation failed.")
 
     def get_available_voices(self) -> list[dict[str, str]]:
         """Return common Azure Neural voices."""

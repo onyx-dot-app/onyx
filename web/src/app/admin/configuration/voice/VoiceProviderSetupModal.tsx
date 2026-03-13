@@ -10,12 +10,14 @@ import {
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { FormField } from "@/refresh-components/form/FormField";
 import { Vertical, Horizontal } from "@/layouts/input-layouts";
-import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange, SvgOnyxLogo } from "@opal/icons";
+import { Disabled } from "@opal/core";
 import type { IconProps } from "@opal/types";
 import { VoiceProviderView } from "@/hooks/useVoiceProviders";
 import {
@@ -107,6 +109,12 @@ const MODEL_ID_MAP: Record<string, string> = {
   whisper: "whisper-1",
 };
 
+type Phase = "idle" | "validating" | "saving";
+type MessageState = {
+  kind: "status" | "error" | "success";
+  text: string;
+} | null;
+
 export default function VoiceProviderSetupModal({
   providerType,
   existingProvider,
@@ -136,7 +144,8 @@ export default function VoiceProviderSetupModal({
   const [defaultVoice, setDefaultVoice] = useState(
     existingProvider?.default_voice ?? ""
   );
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [message, setMessage] = useState<MessageState>(null);
 
   // Dynamic voices fetched from backend
   const [voiceOptions, setVoiceOptions] = useState<VoiceOption[]>([]);
@@ -156,14 +165,15 @@ export default function VoiceProviderSetupModal({
 
     fetchLLMProviders()
       .then((res) => res.json())
-      .then((data: LLMProviderView[]) => {
-        const openaiProviders = data.filter(
+      .then((data: { providers: LLMProviderView[] } | LLMProviderView[]) => {
+        const providers = Array.isArray(data) ? data : data.providers ?? [];
+        const openaiProviders = providers.filter(
           (p) => p.provider === "openai" && p.api_key
         );
         const options: ApiKeyOption[] = openaiProviders.map((p) => ({
           value: p.api_key!,
           label: p.api_key!,
-          description: `Used for LLM provider ${p.name}`,
+          description: `Used for LLM provider **${p.name}**`,
         }));
         setExistingApiKeyOptions(options);
 
@@ -211,6 +221,14 @@ export default function VoiceProviderSetupModal({
 
   const isEditing = !!existingProvider;
   const label = PROVIDER_LABELS[providerType] ?? providerType;
+  const isProcessing = phase !== "idle";
+
+  const canConnect = (() => {
+    if (selectedLlmProviderId) return true;
+    if (!isEditing && !apiKey) return false;
+    if (providerType === "azure" && !isEditing && !targetUri) return false;
+    return true;
+  })();
 
   // Logo arrangement component for the modal header
   // No useMemo needed - providerType and label are stable props
@@ -242,30 +260,24 @@ export default function VoiceProviderSetupModal({
     </div>
   );
 
+  const formFieldState: "idle" | "error" | "success" =
+    message?.kind === "error"
+      ? "error"
+      : message?.kind === "success"
+        ? "success"
+        : "idle";
+
   const handleSubmit = async () => {
-    // API key required for new providers, or when explicitly changed during edit
-    if (!selectedLlmProviderId) {
-      if (!isEditing && !apiKey) {
-        toast.error("API key is required");
-        return;
-      }
-      if (isEditing && apiKeyChanged && !apiKey) {
-        toast.error(
-          "API key cannot be empty. Leave blank to keep existing key."
-        );
-        return;
-      }
-    }
+    if (!canConnect) return;
 
-    if (providerType === "azure" && !isEditing && !targetUri) {
-      toast.error("Target URI is required");
-      return;
-    }
+    setMessage(null);
 
-    setIsSubmitting(true);
     try {
-      // Test the connection first (skip if reusing LLM provider key - it's already validated)
+      // Test the connection first (skip if reusing LLM provider key - validated on save)
       if (!selectedLlmProviderId) {
+        setPhase("validating");
+        setMessage({ kind: "status", text: "Validating API key..." });
+
         const testResponse = await testVoiceProvider({
           provider_type: providerType,
           api_key: apiKeyChanged ? apiKey : undefined,
@@ -274,14 +286,24 @@ export default function VoiceProviderSetupModal({
         });
 
         if (!testResponse.ok) {
-          const data = await testResponse.json();
-          toast.error(data.detail || "Connection test failed");
-          setIsSubmitting(false);
+          const data = await testResponse.json().catch(() => ({}));
+          const detail =
+            typeof data?.detail === "string"
+              ? data.detail
+              : "Connection test failed";
+          setPhase("idle");
+          setMessage({ kind: "error", text: detail });
           return;
         }
+
+        setMessage({
+          kind: "status",
+          text: "API key validated. Saving provider...",
+        });
       }
 
       // Save the provider
+      setPhase("saving");
       const response = await upsertVoiceProvider({
         id: existingProvider?.id,
         name: label,
@@ -302,16 +324,19 @@ export default function VoiceProviderSetupModal({
       });
 
       if (response.ok) {
-        toast.success(isEditing ? "Provider updated" : "Provider connected");
         onSuccess();
       } else {
-        const data = await response.json();
-        toast.error(data.detail || "Failed to save provider");
+        const data = await response.json().catch(() => ({}));
+        const detail =
+          typeof data?.detail === "string"
+            ? data.detail
+            : "Failed to save provider";
+        setPhase("idle");
+        setMessage({ kind: "error", text: detail });
       }
     } catch {
-      toast.error("Failed to save provider");
-    } finally {
-      setIsSubmitting(false);
+      setPhase("idle");
+      setMessage({ kind: "error", text: "Failed to save provider" });
     }
   };
 
@@ -326,10 +351,10 @@ export default function VoiceProviderSetupModal({
         />
         <Modal.Body>
           <Section gap={1} alignItems="stretch">
-            <Vertical
-              title="API Key"
-              subDescription={
-                isEditing ? (
+            <FormField name="api_key" state={formFieldState} className="w-full">
+              <FormField.Label>API Key</FormField.Label>
+              <FormField.Description>
+                {isEditing ? (
                   "Leave blank to keep existing key"
                 ) : (
                   <>
@@ -344,48 +369,68 @@ export default function VoiceProviderSetupModal({
                     </a>{" "}
                     from {label} to access your models.
                   </>
-                )
-              }
-              nonInteractive
-            >
-              {providerType === "openai" && existingApiKeyOptions.length > 0 ? (
-                <InputComboBox
-                  placeholder={isEditing ? "••••••••" : "Enter API key"}
-                  value={apiKey}
-                  onChange={(e) => {
-                    setApiKey(e.target.value);
-                    setApiKeyChanged(true);
-                    setSelectedLlmProviderId(null);
-                  }}
-                  onValueChange={(value) => {
-                    setApiKey(value);
-                    // Check if this is an existing key
-                    const llmProviderId = llmProviderMap.get(value);
-                    if (llmProviderId) {
-                      setSelectedLlmProviderId(llmProviderId);
-                      setApiKeyChanged(false);
-                    } else {
-                      setSelectedLlmProviderId(null);
+                )}
+              </FormField.Description>
+              <FormField.Control asChild>
+                {providerType === "openai" &&
+                existingApiKeyOptions.length > 0 ? (
+                  <InputComboBox
+                    placeholder={isEditing ? "••••••••" : "Enter API key"}
+                    value={apiKey}
+                    onChange={(e) => {
+                      setApiKey(e.target.value);
                       setApiKeyChanged(true);
-                    }
+                      setSelectedLlmProviderId(null);
+                      setMessage(null);
+                    }}
+                    onValueChange={(value) => {
+                      setApiKey(value);
+                      // Check if this is an existing key
+                      const llmProviderId = llmProviderMap.get(value);
+                      if (llmProviderId) {
+                        setSelectedLlmProviderId(llmProviderId);
+                        setApiKeyChanged(false);
+                      } else {
+                        setSelectedLlmProviderId(null);
+                        setApiKeyChanged(true);
+                      }
+                      setMessage(null);
+                    }}
+                    options={existingApiKeyOptions}
+                    separatorLabel="Reuse OpenAI API Keys"
+                    strict={false}
+                    showAddPrefix
+                  />
+                ) : (
+                  <PasswordInputTypeIn
+                    placeholder={isEditing ? "••••••••" : "Enter API key"}
+                    value={apiKey}
+                    onChange={(e) => {
+                      setApiKey(e.target.value);
+                      setApiKeyChanged(true);
+                      setMessage(null);
+                    }}
+                    showClearButton={false}
+                  />
+                )}
+              </FormField.Control>
+              {isProcessing ? (
+                <FormField.APIMessage
+                  state="loading"
+                  messages={{
+                    loading: message?.text ?? "Validating API key...",
                   }}
-                  options={existingApiKeyOptions}
-                  separatorLabel="Reuse OpenAI API Keys"
-                  strict={false}
-                  showAddPrefix
                 />
-              ) : (
-                <InputTypeIn
-                  type="password"
-                  placeholder={isEditing ? "••••••••" : "Enter API key"}
-                  value={apiKey}
-                  onChange={(e) => {
-                    setApiKey(e.target.value);
-                    setApiKeyChanged(true);
+              ) : message ? (
+                <FormField.Message
+                  messages={{
+                    idle: "",
+                    error: message.kind === "error" ? message.text : "",
+                    success: message.kind === "success" ? message.text : "",
                   }}
                 />
-              )}
-            </Vertical>
+              ) : null}
+            </FormField>
 
             {providerType === "azure" && (
               <Vertical
@@ -497,9 +542,11 @@ export default function VoiceProviderSetupModal({
           <Button secondary onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting ? "Connecting..." : isEditing ? "Save" : "Connect"}
-          </Button>
+          <Disabled disabled={!canConnect || isProcessing}>
+            <Button onClick={handleSubmit}>
+              {isProcessing ? "Connecting..." : isEditing ? "Save" : "Connect"}
+            </Button>
+          </Disabled>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

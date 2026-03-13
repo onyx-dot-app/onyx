@@ -128,12 +128,15 @@ async def upsert_voice_provider_endpoint(
     try:
         voice_provider = get_voice_provider(provider)
         await voice_provider.validate_credentials()
+    except OnyxError:
+        db_session.rollback()
+        raise
     except Exception as e:
         db_session.rollback()
         logger.error(f"Voice provider credential validation failed on save: {e}")
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            "Connection test failed. Please verify your API key and settings.",
+            str(e),
         ) from e
 
     db_session.commit()
@@ -260,7 +263,7 @@ async def test_voice_provider(
         logger.error(f"Voice provider connection test failed: {e}")
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            "Connection test failed. Please verify your API key and settings.",
+            str(e),
         ) from e
 
     logger.info(f"Voice provider test succeeded for {request.provider_type}.")

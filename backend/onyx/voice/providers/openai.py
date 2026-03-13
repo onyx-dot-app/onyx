@@ -572,8 +572,15 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
 
     async def validate_credentials(self) -> None:
         """Validate OpenAI API key by listing models."""
+        from openai import AuthenticationError, PermissionDeniedError
+
         client = self._get_client()
-        await client.models.list()
+        try:
+            await client.models.list()
+        except AuthenticationError:
+            raise RuntimeError("Invalid OpenAI API key.")
+        except PermissionDeniedError:
+            raise RuntimeError("OpenAI API key does not have sufficient permissions.")
 
     def get_available_voices(self) -> list[dict[str, str]]:
         """Get available OpenAI TTS voices."""

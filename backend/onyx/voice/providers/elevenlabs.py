@@ -778,20 +778,38 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
                 )
 
     async def validate_credentials(self) -> None:
-        """Validate ElevenLabs API key by fetching user info."""
+        """Validate ElevenLabs API key.
+
+        Calls /v1/models as a lightweight check. ElevenLabs returns 401 for
+        both truly invalid keys and valid keys with restricted scopes, so we
+        inspect the response body: a "missing_permissions" status means the
+        key authenticated successfully but lacks a specific scope.
+        """
         if not self.api_key:
             raise ValueError("ElevenLabs API key required")
 
         headers = {"xi-api-key": self.api_key}
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                f"{self.api_base}/v1/user", headers=headers
+                f"{self.api_base}/v1/models", headers=headers
             ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise RuntimeError(
-                        f"ElevenLabs credential validation failed: {error_text}"
-                    )
+                if response.status == 200:
+                    return
+                if response.status in (401, 403):
+                    try:
+                        body = await response.json()
+                        detail = body.get("detail", {})
+                        status = (
+                            detail.get("status", "") if isinstance(detail, dict) else ""
+                        )
+                    except Exception:
+                        status = ""
+                    # "missing_permissions" means the key is valid but
+                    # lacks this specific scope — that's fine.
+                    if status == "missing_permissions":
+                        return
+                    raise RuntimeError("Invalid ElevenLabs API key.")
+                raise RuntimeError("ElevenLabs credential validation failed.")
 
     def get_available_voices(self) -> list[dict[str, str]]:
         """Return common ElevenLabs voices."""

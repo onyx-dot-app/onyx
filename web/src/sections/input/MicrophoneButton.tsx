@@ -31,8 +31,10 @@ interface MicrophoneButtonProps {
   stopRecordingRef?: React.MutableRefObject<
     (() => Promise<string | null>) | null
   >;
-  /** Called when recording starts to clear input */
+  /** Called when recording starts */
   onRecordingStart?: () => void;
+  /** Existing message text to prepend to transcription (append mode) */
+  currentMessage?: string;
   /** Called when mute state changes */
   onMuteChange?: (isMuted: boolean) => void;
   /** Ref to expose setMuted function to parent */
@@ -53,6 +55,7 @@ function MicrophoneButton({
   onRecordingChange,
   stopRecordingRef,
   onRecordingStart,
+  currentMessage = "",
   onMuteChange,
   setMutedRef,
   onAudioLevel,
@@ -72,19 +75,36 @@ function MicrophoneButton({
   const lastHandledManualStopCountRef = useRef(manualStopCount);
   const autoListenCooldownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasManualRecordStartRef = useRef(false);
+  // Prevent late transcript events from repopulating input after auto-send.
+  const suppressTranscriptUpdatesRef = useRef(false);
+  // Snapshot of existing message text when recording starts (for append mode)
+  const messagePrefixRef = useRef("");
+
+  // Helper to combine prefix with new transcript
+  const withPrefix = useCallback((text: string) => {
+    const prefix = messagePrefixRef.current;
+    if (!prefix) return text;
+    return prefix + (prefix.endsWith(" ") ? "" : " ") + text;
+  }, []);
 
   // Handler for VAD (Voice Activity Detection) triggered auto-send.
   // VAD runs server-side in the STT provider and detects when the user stops speaking.
   const handleFinalTranscript = useCallback(
     (text: string) => {
-      onTranscription(text);
+      const combined = withPrefix(text);
+      if (!suppressTranscriptUpdatesRef.current) {
+        onTranscription(combined);
+      }
       const isManualStop = manualStopRequestedRef.current;
       // Only auto-send if chat is ready for input (not streaming)
       if (!isManualStop && autoSend && onAutoSend && chatState === "input") {
-        onAutoSend(text);
+        suppressTranscriptUpdatesRef.current = true;
+        onAutoSend(combined);
+        // Clear prefix after send to prevent stale text in next auto-listen cycle
+        messagePrefixRef.current = "";
       }
     },
-    [onTranscription, autoSend, onAutoSend, chatState]
+    [onTranscription, autoSend, onAutoSend, chatState, withPrefix]
   );
 
   const {
@@ -128,12 +148,16 @@ function MicrophoneButton({
     onRecordingChange?.(isRecording);
   }, [isRecording, onRecordingChange]);
 
-  // Update input with live transcript as user speaks
+  // Update input with live transcript as user speaks (appending to existing text)
   useEffect(() => {
-    if (isRecording && liveTranscript) {
-      onTranscription(liveTranscript);
+    if (
+      isRecording &&
+      liveTranscript &&
+      !suppressTranscriptUpdatesRef.current
+    ) {
+      onTranscription(withPrefix(liveTranscript));
     }
-  }, [isRecording, liveTranscript, onTranscription]);
+  }, [isRecording, liveTranscript, onTranscription, withPrefix]);
 
   const handleClick = useCallback(async () => {
     if (isRecording) {
@@ -142,22 +166,26 @@ function MicrophoneButton({
       try {
         const finalTranscript = await stopRecording();
         if (finalTranscript) {
-          onTranscription(finalTranscript);
+          const combined = withPrefix(finalTranscript);
+          onTranscription(combined);
+          if (
+            autoSend &&
+            onAutoSend &&
+            chatState === "input" &&
+            combined.trim()
+          ) {
+            onAutoSend(combined);
+          }
         }
-        if (
-          autoSend &&
-          onAutoSend &&
-          chatState === "input" &&
-          finalTranscript?.trim()
-        ) {
-          onAutoSend(finalTranscript);
-        }
+        messagePrefixRef.current = "";
       } finally {
         manualStopRequestedRef.current = false;
       }
     } else {
       try {
-        // Clear input before starting recording
+        // Snapshot existing text so transcription can append to it
+        suppressTranscriptUpdatesRef.current = false;
+        messagePrefixRef.current = currentMessage;
         onRecordingStart?.();
         await startRecording();
         // Arm auto-listen only after first manual mic start in this session.
@@ -176,6 +204,8 @@ function MicrophoneButton({
     autoSend,
     onAutoSend,
     chatState,
+    currentMessage,
+    withPrefix,
   ]);
 
   // Auto-start listening shortly after TTS finishes (only if autoListen is enabled).
@@ -215,6 +245,7 @@ function MicrophoneButton({
         ) {
           return;
         }
+        messagePrefixRef.current = currentMessage;
         startRecording().catch((err) => {
           console.error("Auto-start microphone failed:", err);
           toast.error("Could not auto-start microphone");
@@ -249,8 +280,15 @@ function MicrophoneButton({
   useEffect(() => {
     if (isNewSession) {
       hasManualRecordStartRef.current = false;
+      suppressTranscriptUpdatesRef.current = false;
     }
   }, [isNewSession]);
+
+  useEffect(() => {
+    if (!isRecording) {
+      suppressTranscriptUpdatesRef.current = false;
+    }
+  }, [isRecording]);
 
   useEffect(() => {
     return () => {
