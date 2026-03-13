@@ -25,8 +25,7 @@ def verify_auth_setting() -> None:
     raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
     if raw_auth_type == "disabled":
         logger.warning(
-            "AUTH_TYPE='disabled' is no longer supported. "
-            "Using 'basic' instead. Please update your configuration."
+            "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
         )
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
 

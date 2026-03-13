@@ -168,8 +168,7 @@ def verify_auth_setting() -> None:
         )
     if raw_auth_type == "disabled":
         logger.warning(
-            "AUTH_TYPE='disabled' is no longer supported. "
-            "Using 'basic' instead. Please update your configuration."
+            "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
         )
 
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
@@ -612,8 +611,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             char in PASSWORD_SPECIAL_CHARS for char in password
         ):
             raise exceptions.InvalidPasswordException(
-                reason="Password must contain at least one special character from the following set: "
-                f"{PASSWORD_SPECIAL_CHARS}."
+                reason=f"Password must contain at least one special character from the following set: {PASSWORD_SPECIAL_CHARS}."
             )
         return
 
@@ -880,7 +878,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
     async def on_after_forgot_password(
-        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
+        self,
+        user: User,
+        token: str,
+        request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
         if not EMAIL_CONFIGURED:
             logger.error(
@@ -899,7 +900,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
     async def on_after_request_verify(
-        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
+        self,
+        user: User,
+        token: str,
+        request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
         verify_email_domain(user.email)
 
@@ -1195,7 +1199,9 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
         return
 
     async def refresh_token(
-        self, token: Optional[str], user: User  # noqa: ARG002
+        self,
+        token: Optional[str],  # noqa: ARG002
+        user: User,  # noqa: ARG002
     ) -> str:
         """Issue a fresh JWT with a new expiry."""
         return await self.write_token(user)
@@ -1223,8 +1229,7 @@ def get_jwt_strategy() -> SingleTenantJWTStrategy:
 if AUTH_BACKEND == AuthBackend.JWT:
     if MULTI_TENANT or AUTH_TYPE == AuthType.CLOUD:
         raise ValueError(
-            "JWT auth backend is only supported for single-tenant, self-hosted deployments. "
-            "Use 'redis' or 'postgres' instead."
+            "JWT auth backend is only supported for single-tenant, self-hosted deployments. Use 'redis' or 'postgres' instead."
         )
     if not USER_AUTH_SECRET:
         raise ValueError("USER_AUTH_SECRET is required for JWT auth backend.")

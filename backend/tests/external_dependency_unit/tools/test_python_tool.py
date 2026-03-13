@@ -1359,10 +1359,9 @@ def test_code_interpreter_replay_packets_include_code_and_output(
 
     # Extract PythonToolStart packets – these must contain the code
     start_packets = [p for p in packets if isinstance(p.obj, PythonToolStart)]
-    assert len(start_packets) == 1, (
-        f"Expected 1 PythonToolStart packet, got {len(start_packets)}. "
-        f"Packet types: {[type(p.obj).__name__ for p in packets]}"
-    )
+    assert (
+        len(start_packets) == 1
+    ), f"Expected 1 PythonToolStart packet, got {len(start_packets)}. Packet types: {[type(p.obj).__name__ for p in packets]}"
     start_obj = start_packets[0].obj
     assert isinstance(start_obj, PythonToolStart)
     assert start_obj.code == code

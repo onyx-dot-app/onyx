@@ -1163,8 +1163,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             self.sf_client.describe()
         except Exception as e:
             raise ConnectorMissingCredentialError(
-                "Failed to validate Salesforce credentials. Please check your"
-                f"credentials and try again. Error: {e}"
+                f"Failed to validate Salesforce credentials. Please check yourcredentials and try again. Error: {e}"
             )
 
         if self.custom_query_config:
@@ -1172,8 +1171,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                 _validate_custom_query_config(self.custom_query_config)
             except Exception as e:
                 raise ConnectorMissingCredentialError(
-                    "Failed to validate Salesforce custom query config. Please check your"
-                    f"config and try again. Error: {e}"
+                    f"Failed to validate Salesforce custom query config. Please check yourconfig and try again. Error: {e}"
                 )
 
         logger.info("Salesforce credentials validated successfully.")

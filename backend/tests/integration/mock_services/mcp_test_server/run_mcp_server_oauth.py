@@ -127,11 +127,7 @@ class WWWAuthenticateMiddleware(BaseHTTPMiddleware):
         if response.status_code == 401:
             # RFC 9728: include resource_metadata param pointing to PRM URL.
             # RFC 6750: include error + error_description when appropriate.
-            challenge = (
-                f'Bearer resource_metadata="{PRM_URL}", '
-                f'error="invalid_token", '
-                f'error_description="Authentication required"'
-            )
+            challenge = f'Bearer resource_metadata="{PRM_URL}", error="invalid_token", error_description="Authentication required"'
             # Don't clobber if already present; append or set.
             if "www-authenticate" in response.headers:
                 response.headers["www-authenticate"] += ", " + challenge

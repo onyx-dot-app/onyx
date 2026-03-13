@@ -326,8 +326,7 @@ def refresh_hierarchy_cache_from_db(
     acquired = lock.acquire(blocking=True)
     if not acquired:
         logger.warning(
-            f"Could not acquire lock for hierarchy cache refresh "
-            f"for source {source.value} - another worker may be refreshing"
+            f"Could not acquire lock for hierarchy cache refresh for source {source.value} - another worker may be refreshing"
         )
         return
 
@@ -378,8 +377,7 @@ def _walk_ancestor_chain(
     while current_id is not None and len(ancestors) < MAX_DEPTH:
         if current_id in visited:
             logger.error(
-                f"Cycle detected in hierarchy for source {source.value} "
-                f"at node {current_id}. Ancestors so far: {ancestors}"
+                f"Cycle detected in hierarchy for source {source.value} at node {current_id}. Ancestors so far: {ancestors}"
             )
             break
 
@@ -390,8 +388,7 @@ def _walk_ancestor_chain(
 
         if not found:
             logger.debug(
-                f"Cache miss for hierarchy node {current_id} "
-                f"of source {source.value}, attempting refresh"
+                f"Cache miss for hierarchy node {current_id} of source {source.value}, attempting refresh"
             )
             refresh_hierarchy_cache_from_db(redis_client, db_session, source)
             parent_id, found = get_parent_id_from_cache(
@@ -400,8 +397,7 @@ def _walk_ancestor_chain(
 
             if not found:
                 logger.error(
-                    f"Hierarchy node {current_id} not found in cache "
-                    f"for source {source.value} even after refresh."
+                    f"Hierarchy node {current_id} not found in cache for source {source.value} even after refresh."
                 )
                 break
 
@@ -454,8 +450,7 @@ def get_ancestors_from_raw_id(
     if not found:
         # Cache miss - try refresh
         logger.debug(
-            f"Cache miss for raw_node_id '{parent_hierarchy_raw_node_id}' "
-            f"of source {source.value}, attempting refresh"
+            f"Cache miss for raw_node_id '{parent_hierarchy_raw_node_id}' of source {source.value}, attempting refresh"
         )
         refresh_hierarchy_cache_from_db(redis_client, db_session, source)
         node_id, found = get_node_id_from_raw_id(

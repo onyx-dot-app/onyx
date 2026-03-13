@@ -69,7 +69,8 @@ def setup_chat_session(reset: None) -> tuple[DATestUser, str]:  # noqa: ARG001
     reason="Chat history tests are enterprise only",
 )
 def test_chat_history_endpoints(
-    reset: None, setup_chat_session: tuple[DATestUser, str]  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    setup_chat_session: tuple[DATestUser, str],
 ) -> None:
     admin_user, first_chat_id = setup_chat_session
 
@@ -126,7 +127,8 @@ def test_chat_history_endpoints(
     reason="Chat history tests are enterprise only",
 )
 def test_chat_history_csv_export(
-    reset: None, setup_chat_session: tuple[DATestUser, str]  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    setup_chat_session: tuple[DATestUser, str],
 ) -> None:
     admin_user, _ = setup_chat_session
 

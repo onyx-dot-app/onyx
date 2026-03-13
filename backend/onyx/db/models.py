@@ -168,7 +168,9 @@ class EncryptedString(_EncryptedBase):
     _is_json: bool = False
 
     def process_bind_param(
-        self, value: str | SensitiveValue[str] | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: str | SensitiveValue[str] | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
             # Handle both raw strings and SensitiveValue wrappers
@@ -179,7 +181,9 @@ class EncryptedString(_EncryptedBase):
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: bytes | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> SensitiveValue[str] | None:
         if value is not None:
             return SensitiveValue(
@@ -207,7 +211,9 @@ class EncryptedJson(_EncryptedBase):
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: bytes | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> SensitiveValue[dict[str, Any]] | None:
         if value is not None:
             return SensitiveValue(
@@ -259,7 +265,9 @@ class NullFilteredString(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(
-        self, value: str | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: str | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> str | None:
         if value is not None and "\x00" in value:
             logger.warning(f"NUL characters found in value: {value}")
@@ -267,7 +275,9 @@ class NullFilteredString(TypeDecorator):
         return value
 
     def process_result_value(
-        self, value: str | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: str | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> str | None:
         return value
 
@@ -1762,8 +1772,7 @@ class ChunkStats(Base):
         NullFilteredString,
         primary_key=True,
         default=lambda context: (
-            f"{context.get_current_parameters()['document_id']}"
-            f"__{context.get_current_parameters()['chunk_in_doc_id']}"
+            f"{context.get_current_parameters()['document_id']}__{context.get_current_parameters()['chunk_in_doc_id']}"
         ),
         index=True,
     )
@@ -4701,7 +4710,7 @@ class DocPermissionSyncAttempt(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<DocPermissionSyncAttempt(id={self.id!r}, " f"status={self.status!r})>"
+        return f"<DocPermissionSyncAttempt(id={self.id!r}, status={self.status!r})>"
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
@@ -4770,10 +4779,7 @@ class ExternalGroupPermissionSyncAttempt(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<ExternalGroupPermissionSyncAttempt(id={self.id!r}, "
-            f"status={self.status!r})>"
-        )
+        return f"<ExternalGroupPermissionSyncAttempt(id={self.id!r}, status={self.status!r})>"
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()

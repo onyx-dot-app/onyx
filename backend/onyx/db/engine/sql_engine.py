@@ -86,13 +86,23 @@ if LOG_POSTGRES_LATENCY:
 
     @event.listens_for(Engine, "before_cursor_execute")
     def before_cursor_execute(  # type: ignore
-        conn, cursor, statement, parameters, context, executemany  # noqa: ARG001
+        conn,
+        cursor,  # noqa: ARG001
+        statement,  # noqa: ARG001
+        parameters,  # noqa: ARG001
+        context,  # noqa: ARG001
+        executemany,  # noqa: ARG001
     ):
         conn.info["query_start_time"] = time.time()
 
     @event.listens_for(Engine, "after_cursor_execute")
     def after_cursor_execute(  # type: ignore
-        conn, cursor, statement, parameters, context, executemany  # noqa: ARG001
+        conn,
+        cursor,  # noqa: ARG001
+        statement,
+        parameters,  # noqa: ARG001
+        context,  # noqa: ARG001
+        executemany,  # noqa: ARG001
     ):
         total_time = time.time() - conn.info["query_start_time"]
         if total_time > 0.1:

@@ -472,8 +472,7 @@ class DynamicCitationProcessor:
             # Check if we have a mapping for this citation number
             if num not in self.citation_to_doc:
                 logger.warning(
-                    f"Citation number {num} not found in mapping. "
-                    f"Available: {list(self.citation_to_doc.keys())}"
+                    f"Citation number {num} not found in mapping. Available: {list(self.citation_to_doc.keys())}"
                 )
                 continue
 

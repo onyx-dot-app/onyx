@@ -128,25 +128,20 @@ def evaluate_tool_assertions(
         missing_tools = expected_tools - called_tools
         if missing_tools:
             return False, (
-                f"Missing expected tools: {sorted(missing_tools)}. "
-                f"Called tools: {sorted(called_tools)}"
+                f"Missing expected tools: {sorted(missing_tools)}. Called tools: {sorted(called_tools)}"
             )
         return True, (
-            f"All expected tools called: {sorted(expected_tools)}. "
-            f"Called tools: {sorted(called_tools)}"
+            f"All expected tools called: {sorted(expected_tools)}. Called tools: {sorted(called_tools)}"
         )
     else:
         # At least one expected tool must be called
         matched_tools = expected_tools & called_tools
         if not matched_tools:
             return False, (
-                f"None of expected tools called. "
-                f"Expected one of: {sorted(expected_tools)}. "
-                f"Called tools: {sorted(called_tools)}"
+                f"None of expected tools called. Expected one of: {sorted(expected_tools)}. Called tools: {sorted(called_tools)}"
             )
         return True, (
-            f"Expected tool(s) called: {sorted(matched_tools)}. "
-            f"Called tools: {sorted(called_tools)}"
+            f"Expected tool(s) called: {sorted(matched_tools)}. Called tools: {sorted(called_tools)}"
         )
 
 

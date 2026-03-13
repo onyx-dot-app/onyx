@@ -43,8 +43,7 @@ class UsageLimitExceededError(Exception):
         self.current = current
         self.limit = limit
         super().__init__(
-            f"Usage limit exceeded for {usage_type.value}: "
-            f"current usage {current}, limit {limit}"
+            f"Usage limit exceeded for {usage_type.value}: current usage {current}, limit {limit}"
         )
 
 

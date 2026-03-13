@@ -48,7 +48,8 @@ class TestBotConfigEndpoints:
         DiscordBotManager.delete_bot_config_if_exists(admin_user)
 
     def test_create_bot_config_already_exists(
-        self, reset: None  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
     ) -> None:
         """POST /config returns 409 if config already exists."""
         admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -360,7 +361,8 @@ class TestChannelConfigEndpoints:
         DiscordBotManager.delete_guild_if_exists(guild.id, admin_user)
 
     def test_update_channel_require_bot_invocation(
-        self, reset: None  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
     ) -> None:
         """PATCH /guilds/{id}/channels/{id} updates require_bot_invocation."""
         admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -420,7 +422,8 @@ class TestServiceApiKeyCleanup:
     """Tests for service API key cleanup when bot/guild configs are deleted."""
 
     def test_delete_bot_config_also_deletes_service_api_key(
-        self, reset: None  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
     ) -> None:
         """DELETE /config also deletes the service API key (self-hosted flow)."""
         admin_user: DATestUser = UserManager.create(name="admin_user")

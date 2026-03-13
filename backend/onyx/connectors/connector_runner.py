@@ -263,8 +263,7 @@ class ConnectorRunner(Generic[CT]):
                 f"{key}: {value}" for key, value in local_vars.items()
             )
             logger.error(
-                f"Error in connector. type: {exc_type};\n"
-                f"local_vars below -> \n{local_vars_str[:1024]}"
+                f"Error in connector. type: {exc_type};\nlocal_vars below -> \n{local_vars_str[:1024]}"
             )
             raise
 

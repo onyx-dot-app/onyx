@@ -175,14 +175,16 @@ class SimpleJobClient:
                 del self.jobs[job.id]
 
     def submit(
-        self, func: Callable, *args: Any, pure: bool = True  # noqa: ARG002
+        self,
+        func: Callable,
+        *args: Any,
+        pure: bool = True,  # noqa: ARG002
     ) -> SimpleJob | None:
         """NOTE: `pure` arg is needed so this can be a drop in replacement for Dask"""
         self._cleanup_completed_jobs()
         if len(self.jobs) >= self.n_workers:
             logger.debug(
-                f"No available workers to run job. "
-                f"Currently running '{len(self.jobs)}' jobs, with a limit of '{self.n_workers}'."
+                f"No available workers to run job. Currently running '{len(self.jobs)}' jobs, with a limit of '{self.n_workers}'."
             )
             return None
 

@@ -27,7 +27,8 @@ _CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
 
 
 def _adjust_message_text_for_agent_search_results(
-    adjusted_message_text: str, final_documents: list[SavedSearchDoc]  # noqa: ARG001
+    adjusted_message_text: str,
+    final_documents: list[SavedSearchDoc],  # noqa: ARG001
 ) -> str:
     # Remove all [Q<integer>] patterns (sub-question citations)
     return re.sub(r"\[Q\d+\]", "", adjusted_message_text)

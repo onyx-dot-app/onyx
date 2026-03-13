@@ -231,8 +231,7 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
         else:
             link = template.format(file_id)
         logger.debug(
-            "Missing webViewLink for Google Drive file with id %s. "
-            "Falling back to constructed link %s",
+            "Missing webViewLink for Google Drive file with id %s. Falling back to constructed link %s",
             file_id,
             link,
         )
@@ -643,8 +642,7 @@ def _convert_drive_item_to_document(
                     sections = cast(list[TextSection | ImageSection], doc_sections)
                     if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
                         logger.debug(
-                            f"found smart chips in {file.get('name')},"
-                            " aligning with basic sections"
+                            f"found smart chips in {file.get('name')}, aligning with basic sections"
                         )
                         basic_sections = _download_and_extract_sections_basic(
                             file, _get_drive_service(), allow_images, size_threshold

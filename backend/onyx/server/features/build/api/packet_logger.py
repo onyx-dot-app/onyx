@@ -616,9 +616,7 @@ class PacketLogger:
 
         ctx_prefix = f"[{context}] " if context else ""
         self._write_log(
-            f"{ctx_prefix}[ACP-CLIENT-STOP] "
-            f"sandbox={self._format_uuid(sandbox_id)} "
-            f"session={self._format_uuid(session_id)}"
+            f"{ctx_prefix}[ACP-CLIENT-STOP] sandbox={self._format_uuid(sandbox_id)} session={self._format_uuid(session_id)}"
         )
 
     # =========================================================================
@@ -646,8 +644,7 @@ class PacketLogger:
             if details:
                 details_str = "\n" + json.dumps(details, indent=2, default=str)
             self._write_log(
-                f"[STREAMING-STATE] session={self._format_uuid(session_id)} "
-                f"type={state_type}{details_str}"
+                f"[STREAMING-STATE] session={self._format_uuid(session_id)} type={state_type}{details_str}"
             )
         except Exception as e:
             self._write_log(f"[STREAMING-STATE] {state_type} (logging error: {e})")

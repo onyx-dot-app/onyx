@@ -25,10 +25,7 @@ from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsResponse
 from onyx.server.features.hierarchy.models import HierarchyNodesResponse
 from onyx.server.features.hierarchy.models import HierarchyNodeSummary
 
-OPENSEARCH_NOT_ENABLED_MESSAGE = (
-    "Per-source knowledge selection is coming soon in v3.0! "
-    "OpenSearch indexing must be enabled to use this feature."
-)
+OPENSEARCH_NOT_ENABLED_MESSAGE = "Per-source knowledge selection is coming soon in v3.0! OpenSearch indexing must be enabled to use this feature."
 
 MIGRATION_STATUS_MESSAGE = (
     "Our records indicate that the transition to OpenSearch is still in progress. "

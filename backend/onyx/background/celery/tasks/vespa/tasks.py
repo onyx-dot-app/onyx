@@ -199,8 +199,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
             lock_beat.release()
         else:
             task_logger.error(
-                "check_for_vespa_sync_task - Lock not owned on completion: "
-                f"tenant={tenant_id}"
+                f"check_for_vespa_sync_task - Lock not owned on completion: tenant={tenant_id}"
             )
             redis_lock_dump(lock_beat, r)
 
@@ -266,8 +265,7 @@ def try_generate_document_set_sync_tasks(
     #     return 0
 
     task_logger.info(
-        f"RedisDocumentSet.generate_tasks finished. "
-        f"document_set={document_set.id} tasks_generated={tasks_generated}"
+        f"RedisDocumentSet.generate_tasks finished. document_set={document_set.id} tasks_generated={tasks_generated}"
     )
 
     # create before setting fence to avoid race condition where the monitoring
@@ -342,8 +340,7 @@ def try_generate_user_group_sync_tasks(
     #     return 0
 
     task_logger.info(
-        f"RedisUserGroup.generate_tasks finished. "
-        f"usergroup={usergroup.id} tasks_generated={tasks_generated}"
+        f"RedisUserGroup.generate_tasks finished. usergroup={usergroup.id} tasks_generated={tasks_generated}"
     )
 
     # create before setting fence to avoid race condition where the monitoring
@@ -398,8 +395,7 @@ def monitor_document_set_taskset(
 
     count = cast(int, r.scard(rds.taskset_key))
     task_logger.info(
-        f"Document set sync progress: document_set={document_set_id} "
-        f"remaining={count} initial={initial_count}"
+        f"Document set sync progress: document_set={document_set_id} remaining={count} initial={initial_count}"
     )
     if count > 0:
         update_sync_record_status(
@@ -444,9 +440,7 @@ def monitor_document_set_taskset(
             )
         except Exception:
             task_logger.exception(
-                "update_sync_record_status exceptioned. "
-                f"document_set_id={document_set_id} "
-                "Resetting document set regardless."
+                f"update_sync_record_status exceptioned. document_set_id={document_set_id} Resetting document set regardless."
             )
 
     rds.reset()
@@ -483,9 +477,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
             if not doc:
                 elapsed = time.monotonic() - start
                 task_logger.info(
-                    f"doc={document_id} "
-                    f"action=no_operation "
-                    f"elapsed={elapsed:.2f}"
+                    f"doc={document_id} action=no_operation elapsed={elapsed:.2f}"
                 )
                 completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
             else:
@@ -524,9 +516,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                 mark_document_as_synced(document_id, db_session)
 
                 elapsed = time.monotonic() - start
-                task_logger.info(
-                    f"doc={document_id} " f"action=sync " f"elapsed={elapsed:.2f}"
-                )
+                task_logger.info(f"doc={document_id} action=sync elapsed={elapsed:.2f}")
                 completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
@@ -549,9 +539,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
             if isinstance(e, httpx.HTTPStatusError):
                 if e.response.status_code == HTTPStatus.BAD_REQUEST:
                     task_logger.exception(
-                        f"Non-retryable HTTPStatusError: "
-                        f"doc={document_id} "
-                        f"status={e.response.status_code}"
+                        f"Non-retryable HTTPStatusError: doc={document_id} status={e.response.status_code}"
                     )
                 completion_status = (
                     OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION

@@ -89,8 +89,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
             import azure.cognitiveservices.speech as speechsdk  # type: ignore
         except ImportError as e:
             raise RuntimeError(
-                "Azure Speech SDK is required for streaming STT. "
-                "Install `azure-cognitiveservices-speech`."
+                "Azure Speech SDK is required for streaming STT. Install `azure-cognitiveservices-speech`."
             ) from e
 
         self._loop = asyncio.get_running_loop()
@@ -231,8 +230,7 @@ class AzureStreamingSynthesizer(StreamingSynthesizerProtocol):
             import azure.cognitiveservices.speech as speechsdk
         except ImportError as e:
             raise RuntimeError(
-                "Azure Speech SDK is required for streaming TTS. "
-                "Install `azure-cognitiveservices-speech`."
+                "Azure Speech SDK is required for streaming TTS. Install `azure-cognitiveservices-speech`."
             ) from e
 
         self._logger.info("AzureStreamingSynthesizer: connecting")
@@ -411,10 +409,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
             # Self-hosted container endpoint
             return f"{self.api_base.rstrip('/')}/speech/recognition/conversation/cognitiveservices/v1"
         # Azure cloud endpoint
-        return (
-            f"https://{self.speech_region}.stt.speech.microsoft.com/"
-            "speech/recognition/conversation/cognitiveservices/v1"
-        )
+        return f"https://{self.speech_region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1"
 
     def _get_tts_url(self) -> str:
         """Get the TTS endpoint URL (auto-detects cloud vs self-hosted)."""

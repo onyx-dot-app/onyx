@@ -64,29 +64,25 @@ def main() -> None:
     def add_standard_arguments(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
             "--host",
-            help="OpenSearch host. If not provided, will fall back to OPENSEARCH_HOST, then prompt "
-            "for input.",
+            help="OpenSearch host. If not provided, will fall back to OPENSEARCH_HOST, then prompt for input.",
             type=str,
             default=os.environ.get("OPENSEARCH_HOST", ""),
         )
         parser.add_argument(
             "--port",
-            help="OpenSearch port. If not provided, will fall back to OPENSEARCH_REST_API_PORT, "
-            "then prompt for input.",
+            help="OpenSearch port. If not provided, will fall back to OPENSEARCH_REST_API_PORT, then prompt for input.",
             type=int,
             default=int(os.environ.get("OPENSEARCH_REST_API_PORT", 0)),
         )
         parser.add_argument(
             "--username",
-            help="OpenSearch username. If not provided, will fall back to OPENSEARCH_ADMIN_USERNAME, "
-            "then prompt for input.",
+            help="OpenSearch username. If not provided, will fall back to OPENSEARCH_ADMIN_USERNAME, then prompt for input.",
             type=str,
             default=os.environ.get("OPENSEARCH_ADMIN_USERNAME", ""),
         )
         parser.add_argument(
             "--password",
-            help="OpenSearch password. If not provided, will fall back to OPENSEARCH_ADMIN_PASSWORD, "
-            "then prompt for input.",
+            help="OpenSearch password. If not provided, will fall back to OPENSEARCH_ADMIN_PASSWORD, then prompt for input.",
             type=str,
             default=os.environ.get("OPENSEARCH_ADMIN_PASSWORD", ""),
         )

@@ -129,8 +129,7 @@ async def check_implicit_invocation(
         # Bot owns the thread
         if thread.owner_id == bot_user.id:
             logger.debug(
-                f"Implicit invocation via bot-owned thread: "
-                f"'{message.content[:50]}...' in #{thread.name}"
+                f"Implicit invocation via bot-owned thread: '{message.content[:50]}...' in #{thread.name}"
             )
             return True
 
@@ -140,8 +139,7 @@ async def check_implicit_invocation(
                 starter = await thread.parent.fetch_message(thread.id)
                 if starter.author.id == bot_user.id:
                     logger.debug(
-                        f"Implicit invocation via bot-started thread: "
-                        f"'{message.content[:50]}...' in #{thread.name}"
+                        f"Implicit invocation via bot-started thread: '{message.content[:50]}...' in #{thread.name}"
                     )
                     return True
             except (discord.NotFound, discord.HTTPException):

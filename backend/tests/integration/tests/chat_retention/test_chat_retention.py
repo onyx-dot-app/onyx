@@ -37,8 +37,10 @@ def _run_ttl_cleanup(retention_days: int) -> None:
     reason="Chat retention tests are enterprise only",
 )
 def test_chat_retention(
-    reset: None, admin_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
-) -> None:  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+) -> None:
     """Test that chat sessions are deleted after the retention period expires."""
 
     retention_days = RETENTION_SECONDS // 86400

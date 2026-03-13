@@ -460,8 +460,7 @@ def bulk_invite_users(
         if current_invited + len(emails_needing_seats) > NUM_FREE_TRIAL_USER_INVITES:
             raise HTTPException(
                 status_code=403,
-                detail="You have hit your invite limit. "
-                "Please upgrade for unlimited invites.",
+                detail="You have hit your invite limit. Please upgrade for unlimited invites.",
             )
 
     # Check seat availability for new users

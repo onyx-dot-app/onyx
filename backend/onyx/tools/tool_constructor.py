@@ -450,8 +450,7 @@ def construct_tools(
             tool_dict[memory_tool_db_model.id] = [memory_tool]
         except RuntimeError:
             logger.warning(
-                "MemoryTool not found in the database. "
-                "Run the latest alembic migration to seed it."
+                "MemoryTool not found in the database. Run the latest alembic migration to seed it."
             )
 
     tools: list[Tool] = []

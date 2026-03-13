@@ -59,8 +59,7 @@ async def search_indexed_documents(
             time_cutoff_dt = datetime.fromisoformat(time_cutoff.replace("Z", "+00:00"))
         except ValueError as e:
             logger.warning(
-                f"Onyx MCP Server: Invalid time_cutoff format '{time_cutoff}': {e}. "
-                "Continuing without time filter."
+                f"Onyx MCP Server: Invalid time_cutoff format '{time_cutoff}': {e}. Continuing without time filter."
             )
             # Continue with no time_cutoff instead of returning an error
             time_cutoff_dt = None

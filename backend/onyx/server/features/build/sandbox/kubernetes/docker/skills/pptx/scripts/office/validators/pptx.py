@@ -8,7 +8,6 @@ from .base import BaseSchemaValidator
 
 
 class PPTXSchemaValidator(BaseSchemaValidator):
-
     PRESENTATIONML_NAMESPACE = (
         "http://schemas.openxmlformats.org/presentationml/2006/main"
     )

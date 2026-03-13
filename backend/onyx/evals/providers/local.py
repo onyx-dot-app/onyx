@@ -80,8 +80,7 @@ class LocalEvalProvider(EvalProvider):
     ) -> EvalationAck:
         if remote_dataset_name is not None:
             raise ValueError(
-                "LocalEvalProvider does not support remote datasets. "
-                "Use --local-data-path with a local JSON file."
+                "LocalEvalProvider does not support remote datasets. Use --local-data-path with a local JSON file."
             )
 
         if data is None:

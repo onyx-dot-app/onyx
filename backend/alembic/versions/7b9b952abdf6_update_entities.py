@@ -289,8 +289,7 @@ def upgrade() -> None:
         attributes_str = json.dumps(attributes).replace("'", "''")
         op.execute(
             sa.text(
-                f"UPDATE kg_entity_type SET attributes = '{attributes_str}'"
-                f"WHERE id_name = '{entity_type}'"
+                f"UPDATE kg_entity_type SET attributes = '{attributes_str}'WHERE id_name = '{entity_type}'"
             ),
         )
 
@@ -312,7 +311,6 @@ def downgrade() -> None:
         attributes_str = json.dumps(attributes).replace("'", "''")
         op.execute(
             sa.text(
-                f"UPDATE kg_entity_type SET attributes = '{attributes_str}'"
-                f"WHERE id_name = '{entity_type}'"
+                f"UPDATE kg_entity_type SET attributes = '{attributes_str}'WHERE id_name = '{entity_type}'"
             ),
         )

@@ -86,19 +86,16 @@ def assert_response_is_equivalent(
         for config in model_configurations
     }
 
-    assert set(actual_by_name.keys()) == set(expected_by_name.keys()), (
-        f"Model names don't match. "
-        f"Actual: {set(actual_by_name.keys())}, Expected: {set(expected_by_name.keys())}"
-    )
+    assert set(actual_by_name.keys()) == set(
+        expected_by_name.keys()
+    ), f"Model names don't match. Actual: {set(actual_by_name.keys())}, Expected: {set(expected_by_name.keys())}"
 
     for name in actual_by_name:
         actual_config = actual_by_name[name]
         expected_config = expected_by_name[name]
-        assert actual_config == expected_config, (
-            f"Config mismatch for {name}:\n"
-            f"Actual: {actual_config}\n"
-            f"Expected: {expected_config}"
-        )
+        assert (
+            actual_config == expected_config
+        ), f"Config mismatch for {name}:\nActual: {actual_config}\nExpected: {expected_config}"
 
     # test that returned key is sanitized
     if api_key:
@@ -386,7 +383,9 @@ def test_delete_llm_provider(
     assert provider_data is None
 
 
-def test_delete_default_llm_provider_rejected(reset: None) -> None:  # noqa: ARG001
+def test_delete_default_llm_provider_rejected(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """Deleting the default LLM provider should return 400."""
     admin_user = UserManager.create(name="admin_user")
 
@@ -1098,10 +1097,9 @@ def _validate_provider_data(
 
     # Validate is_public if provided (only available in admin endpoint response)
     if expected_is_public is not None and "is_public" in provider_data:
-        assert provider_data["is_public"] == expected_is_public, (
-            f"is_public mismatch. Expected: {expected_is_public}, "
-            f"Actual: {provider_data['is_public']}"
-        )
+        assert (
+            provider_data["is_public"] == expected_is_public
+        ), f"is_public mismatch. Expected: {expected_is_public}, Actual: {provider_data['is_public']}"
 
     # Validate model configurations
     _validate_model_configurations(
@@ -1112,7 +1110,9 @@ def _validate_provider_data(
     )
 
 
-def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG001
+def test_default_model_persistence_and_update(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """
     Test that the default model is correctly set, persisted, and can be updated.
 
@@ -1370,7 +1370,9 @@ def _set_default_vision_provider(
     assert response.status_code == 200
 
 
-def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG001
+def test_multiple_providers_default_switching(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """
     Test switching default providers and models across multiple LLM providers.
 

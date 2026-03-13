@@ -241,8 +241,7 @@ def get_federated_retrieval_functions(
             == FederatedConnectorSource.FEDERATED_SLACK
         ):
             logger.debug(
-                "Skipping Slack federated connector in user OAuth path - "
-                "handled by SearchTool"
+                "Skipping Slack federated connector in user OAuth path - handled by SearchTool"
             )
             continue
 

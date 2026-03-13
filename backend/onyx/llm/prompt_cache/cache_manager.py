@@ -156,8 +156,7 @@ class CacheManager:
             )
             self._kv_store.delete(cache_key)
             logger.debug(
-                f"Deleted cache metadata for provider={provider}, "
-                f"model={model_name}, cache_key={cache_key_hash[:16]}..."
+                f"Deleted cache metadata for provider={provider}, model={model_name}, cache_key={cache_key_hash[:16]}..."
             )
         except Exception as e:
             # Best-effort: log and continue

@@ -341,8 +341,7 @@ class SessionManager:
                 )
             else:
                 logger.warning(
-                    f"Requested provider type {requested_provider_type} not found, "
-                    f"falling back to default"
+                    f"Requested provider type {requested_provider_type} not found, falling back to default"
                 )
 
         # Fallback to system default
@@ -462,8 +461,7 @@ class SessionManager:
         self._db_session.flush()
         session_id = str(build_session.id)
         logger.info(
-            f"Created build session {session_id} for user {user_id} "
-            f"(port: {nextjs_port})"
+            f"Created build session {session_id} for user {user_id} (port: {nextjs_port})"
         )
 
         # Check if user already has a sandbox (one sandbox per user model)
@@ -481,8 +479,7 @@ class SessionManager:
             ):
                 # Re-provision sandbox (pod doesn't exist or failed)
                 logger.info(
-                    f"Re-provisioning {sandbox.status.value} sandbox {sandbox_id} "
-                    f"for user {user_id}"
+                    f"Re-provisioning {sandbox.status.value} sandbox {sandbox_id} for user {user_id}"
                 )
                 sandbox_info = self._sandbox_manager.provision(
                     sandbox_id=sandbox_id,
@@ -498,8 +495,7 @@ class SessionManager:
                 # Verify pod is healthy before reusing (use short timeout for quick check)
                 if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
                     logger.warning(
-                        f"Sandbox {sandbox_id} marked as {sandbox.status} but pod is "
-                        f"unhealthy/missing. Entering recovery mode."
+                        f"Sandbox {sandbox_id} marked as {sandbox.status} but pod is unhealthy/missing. Entering recovery mode."
                     )
                     # Terminate to clean up any lingering K8s resources
                     self._sandbox_manager.terminate(sandbox_id)
@@ -524,8 +520,7 @@ class SessionManager:
                     )
                 else:
                     logger.info(
-                        f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
-                        f"for new session {session_id}"
+                        f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) for new session {session_id}"
                     )
             else:
                 # PROVISIONING status - sandbox is being created by another request
@@ -663,8 +658,7 @@ class SessionManager:
                     return existing
                 elif not is_healthy:
                     logger.warning(
-                        f"Empty session {existing.id} has unhealthy sandbox {sandbox.id}. "
-                        f"Deleting and creating fresh session."
+                        f"Empty session {existing.id} has unhealthy sandbox {sandbox.id}. Deleting and creating fresh session."
                     )
                 else:
                     logger.warning(
@@ -1208,8 +1202,7 @@ class SessionManager:
         # The log file auto-rotates to keep only the last N lines (default 5000).
         # Add a prominent separator for visual identification of new message streams.
         log_separator(
-            f"NEW MESSAGE STREAM - Session: {str(session_id)[:8]} - "
-            f"User: {str(user_id)[:8]}"
+            f"NEW MESSAGE STREAM - Session: {str(session_id)[:8]} - User: {str(user_id)[:8]}"
         )
         packet_logger.log_raw(
             "STREAM-START",

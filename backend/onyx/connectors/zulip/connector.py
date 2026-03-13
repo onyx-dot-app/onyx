@@ -61,8 +61,7 @@ class ZulipConnector(LoadConnector, PollConnector):
 
             if not netloc:
                 raise ValueError(
-                    f"Invalid realm URL format: {realm_url}. "
-                    f"URL must include a valid domain name."
+                    f"Invalid realm URL format: {realm_url}. URL must include a valid domain name."
                 )
 
             # Always use HTTPS for security

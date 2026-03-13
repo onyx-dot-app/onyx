@@ -96,8 +96,7 @@ async def verify_captcha_token(
                     )
 
             logger.debug(
-                f"Captcha verification passed: score={result.score}, "
-                f"action={result.action}"
+                f"Captcha verification passed: score={result.score}, action={result.action}"
             )
 
     except httpx.HTTPError as e:

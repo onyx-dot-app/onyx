@@ -157,8 +157,7 @@ def _try_fallback_tool_extraction(
         )
     if extracted_tool_calls:
         logger.info(
-            f"Extracted {len(extracted_tool_calls)} tool call(s) from response text "
-            "as fallback"
+            f"Extracted {len(extracted_tool_calls)} tool call(s) from response text as fallback"
         )
         return (
             LlmStepResult(
@@ -397,8 +396,7 @@ def construct_message_history(
         ]
         if forgotten_meta:
             logger.debug(
-                f"FileReader: building forgotten-files message for "
-                f"{[(m.file_id, m.filename) for m in forgotten_meta]}"
+                f"FileReader: building forgotten-files message for {[(m.file_id, m.filename) for m in forgotten_meta]}"
             )
             forgotten_files_message = _create_file_tool_metadata_message(
                 forgotten_meta, token_counter
@@ -488,8 +486,7 @@ def _drop_orphaned_tool_call_responses(
                 sanitized.append(msg)
             else:
                 logger.debug(
-                    "Dropping orphaned tool response with tool_call_id=%s while "
-                    "constructing message history",
+                    "Dropping orphaned tool response with tool_call_id=%s while constructing message history",
                     msg.tool_call_id,
                 )
             continue
@@ -515,8 +512,7 @@ def _create_file_tool_metadata_message(
     ]
     for meta in file_metadata:
         lines.append(
-            f'- file_id="{meta.file_id}" filename="{meta.filename}" '
-            f"(~{meta.approx_char_count:,} chars)"
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
         )
 
     message_content = "\n".join(lines)

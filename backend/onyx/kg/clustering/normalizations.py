@@ -81,7 +81,6 @@ def _normalize_one_entity(
 
     # step 1: find entities containing the entity_name or something similar
     with get_session_with_current_tenant() as db_session:
-
         # get allowed documents
         metadata = MetaData()
         if allowed_docs_temp_view_name is None:
@@ -261,7 +260,6 @@ def normalize_entities(
     for entity, attributes, normalized_entity in zip(
         raw_entities, entity_attributes, mapping
     ):
-
         if normalized_entity is not None:
             normalized_entities.append(normalized_entity)
             normalized_entities_w_attributes.append(

@@ -194,6 +194,5 @@ def infer_author(
         return next(iter(new_changes))
 
     raise ValueError(
-        f"Multiple authors added new changes: {new_changes}. "
-        "Cannot infer which author to validate."
+        f"Multiple authors added new changes: {new_changes}. Cannot infer which author to validate."
     )

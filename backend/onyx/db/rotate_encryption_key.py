@@ -89,8 +89,7 @@ def rotate_encryption_key(
 
     if not ENCRYPTION_KEY_SECRET:
         raise RuntimeError(
-            "ENCRYPTION_KEY_SECRET is not set — cannot rotate. "
-            "Set the target encryption key in the environment before running."
+            "ENCRYPTION_KEY_SECRET is not set — cannot rotate. Set the target encryption key in the environment before running."
         )
 
     encrypted_columns = _discover_encrypted_columns()
@@ -129,8 +128,7 @@ def rotate_encryption_key(
             except (ValueError, UnicodeDecodeError) as e:
                 pk_vals = [row[i] for i in range(len(pk_names))]
                 logger.warning(
-                    f"Could not decrypt/parse {table_name}.{col_name} "
-                    f"row {pk_vals} — skipping: {e}"
+                    f"Could not decrypt/parse {table_name}.{col_name} row {pk_vals} — skipping: {e}"
                 )
                 continue
 
@@ -154,8 +152,7 @@ def rotate_encryption_key(
         if reencrypted > 0:
             totals[f"{table_name}.{col_name}"] = reencrypted
             logger.info(
-                f"{'[DRY RUN] Would re-encrypt' if dry_run else 'Re-encrypted'} "
-                f"{reencrypted} value(s) in {table_name}.{col_name}"
+                f"{'[DRY RUN] Would re-encrypt' if dry_run else 'Re-encrypted'} {reencrypted} value(s) in {table_name}.{col_name}"
             )
 
     return totals

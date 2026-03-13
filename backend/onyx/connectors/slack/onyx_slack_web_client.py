@@ -100,9 +100,7 @@ class OnyxSlackWebClient(WebClient):
 
         if delay_ms > 0:
             logger.warning(
-                f"OnyxSlackWebClient._perform_urllib_http_request_internal delay: "
-                f"{delay_ms=} "
-                f"{self.num_requests=}"
+                f"OnyxSlackWebClient._perform_urllib_http_request_internal delay: {delay_ms=} {self.num_requests=}"
             )
 
             time.sleep(delay_ms / 1000.0)

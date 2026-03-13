@@ -200,8 +200,7 @@ def _validate_zip_contents(
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Zip decompressed size ({declared_total // (1024*1024)}MB) "
-                f"would exceed storage limit."
+                f"Zip decompressed size ({declared_total // (1024 * 1024)}MB) would exceed storage limit."
             ),
         )
 
@@ -372,7 +371,7 @@ async def upload_files(
         if file_size > USER_LIBRARY_MAX_FILE_SIZE_BYTES:
             raise HTTPException(
                 status_code=400,
-                detail=f"File '{file.filename}' exceeds maximum size of {USER_LIBRARY_MAX_FILE_SIZE_BYTES // (1024*1024)}MB",
+                detail=f"File '{file.filename}' exceeds maximum size of {USER_LIBRARY_MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB",
             )
 
         # Validate cumulative storage (existing + this upload batch)
@@ -380,7 +379,7 @@ async def upload_files(
         if existing_usage + total_size > USER_LIBRARY_MAX_TOTAL_SIZE_BYTES:
             raise HTTPException(
                 status_code=400,
-                detail=f"Total storage would exceed maximum of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024*1024*1024)}GB",
+                detail=f"Total storage would exceed maximum of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024 * 1024 * 1024)}GB",
             )
 
         # Sanitize filename
@@ -456,7 +455,7 @@ async def upload_zip(
     if len(content) > USER_LIBRARY_MAX_TOTAL_SIZE_BYTES:
         raise HTTPException(
             status_code=400,
-            detail=f"Zip file exceeds maximum size of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024*1024*1024)}GB",
+            detail=f"Zip file exceeds maximum size of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024 * 1024 * 1024)}GB",
         )
 
     # Check cumulative storage usage
@@ -517,7 +516,7 @@ async def upload_zip(
                 if existing_usage + total_size > USER_LIBRARY_MAX_TOTAL_SIZE_BYTES:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Total storage would exceed maximum of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024*1024*1024)}GB",
+                        detail=f"Total storage would exceed maximum of {USER_LIBRARY_MAX_TOTAL_SIZE_BYTES // (1024 * 1024 * 1024)}GB",
                     )
 
                 # Build path preserving zip structure

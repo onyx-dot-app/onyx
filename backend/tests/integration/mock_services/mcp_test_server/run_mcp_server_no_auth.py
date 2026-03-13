@@ -24,7 +24,6 @@ def make_many_tools() -> None:
 
 
 if __name__ == "__main__":
-
     # Get port from command-line argument first (passed by test)
     port_from_arg = int(sys.argv[1]) if len(sys.argv) > 1 else None
     # Streamable HTTP transport (recommended)

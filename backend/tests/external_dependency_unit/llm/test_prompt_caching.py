@@ -598,10 +598,9 @@ def test_google_genai_prompt_caching_reduces_costs(
             except OSError:
                 pass
 
-    assert success, (
-        "Expected Gemini prompt caching evidence across attempts. "
-        f"Last observed metrics: {last_metrics}"
-    )
+    assert (
+        success
+    ), f"Expected Gemini prompt caching evidence across attempts. Last observed metrics: {last_metrics}"
 
 
 @pytest.mark.skipif(

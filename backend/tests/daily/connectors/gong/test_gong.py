@@ -29,7 +29,8 @@ def gong_connector() -> GongConnector:
     return_value=None,
 )
 def test_gong_basic(
-    mock_get_api_key: MagicMock, gong_connector: GongConnector  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001
+    gong_connector: GongConnector,
 ) -> None:
     doc_batch_generator = gong_connector.poll_source(0, time.time())
 

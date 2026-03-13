@@ -62,9 +62,7 @@ def _truncate_output(output: str, max_length: int, label: str = "output") -> str
     truncated = output[:max_length]
     if len(output) > max_length:
         truncated += (
-            "\n... [output truncated, "
-            f"{len(output) - max_length} "
-            "characters omitted]"
+            f"\n... [output truncated, {len(output) - max_length} characters omitted]"
         )
         logger.debug(f"Truncated {label}: {truncated}")
     return truncated
@@ -289,8 +287,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
                     except Exception as e:
                         logger.error(
-                            f"Failed to handle generated file "
-                            f"{workspace_file.path}: {e}"
+                            f"Failed to handle generated file {workspace_file.path}: {e}"
                         )
 
                 # Cleanup Code Interpreter files (generated files)
@@ -299,8 +296,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         client.delete_file(ci_file_id)
                     except Exception as e:
                         logger.error(
-                            f"Failed to delete Code Interpreter generated "
-                            f"file {ci_file_id}: {e}"
+                            f"Failed to delete Code Interpreter generated file {ci_file_id}: {e}"
                         )
 
                 # Cleanup staged input files
@@ -309,8 +305,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         client.delete_file(file_mapping["file_id"])
                     except Exception as e:
                         logger.error(
-                            f"Failed to delete Code Interpreter staged "
-                            f"file {file_mapping['file_id']}: {e}"
+                            f"Failed to delete Code Interpreter staged file {file_mapping['file_id']}: {e}"
                         )
 
                 # Emit file_ids once files are processed

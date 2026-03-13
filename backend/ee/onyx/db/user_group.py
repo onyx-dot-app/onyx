@@ -424,8 +424,7 @@ def fetch_user_groups_for_documents(
 def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
     if not user_group.is_up_to_date:
         raise ValueError(
-            "Specified user group is currently syncing. Wait until the current "
-            "sync has finished before editing."
+            "Specified user group is currently syncing. Wait until the current sync has finished before editing."
         )
 
 

@@ -194,8 +194,7 @@ class _Parser:
             if self._progressed:
                 if self._toplevel_value is _UNSET:
                     raise RuntimeError(
-                        "Internal error: toplevel_value should not be unset "
-                        "after progressing"
+                        "Internal error: toplevel_value should not be unset after progressing"
                     )
                 current = copy.deepcopy(cast(JsonValue, self._toplevel_value))
                 if isinstance(self._prev_snapshot, _Unset):
@@ -250,8 +249,7 @@ class _Parser:
 
         elif state.type == _StateEnum.InString:
             raise ValueError(
-                f"Unexpected {json_token_type_to_string(JsonTokenType.StringStart)} "
-                f"token in the middle of string"
+                f"Unexpected {json_token_type_to_string(JsonTokenType.StringStart)} token in the middle of string"
             )
 
     def handle_string_middle(self, value: str) -> None:
@@ -268,8 +266,7 @@ class _Parser:
 
         if state.type != _StateEnum.InString:
             raise ValueError(
-                f"Unexpected {json_token_type_to_string(JsonTokenType.StringMiddle)} "
-                f"token when not in string"
+                f"Unexpected {json_token_type_to_string(JsonTokenType.StringMiddle)} token when not in string"
             )
 
         assert isinstance(state.value, str)
@@ -284,8 +281,7 @@ class _Parser:
 
         if state.type != _StateEnum.InString:
             raise ValueError(
-                f"Unexpected {json_token_type_to_string(JsonTokenType.StringEnd)} "
-                f"token when not in string"
+                f"Unexpected {json_token_type_to_string(JsonTokenType.StringEnd)} token when not in string"
             )
 
         self._state_stack.pop()
@@ -361,14 +357,12 @@ class _Parser:
 
         elif state.type == _StateEnum.InString:
             raise ValueError(
-                f"Unexpected {json_token_type_to_string(token_type)} "
-                f"token in the middle of string"
+                f"Unexpected {json_token_type_to_string(token_type)} token in the middle of string"
             )
 
         elif state.type == _StateEnum.InObjectExpectingKey:
             raise ValueError(
-                f"Unexpected {json_token_type_to_string(token_type)} "
-                f"token in the middle of object expecting key"
+                f"Unexpected {json_token_type_to_string(token_type)} token in the middle of object expecting key"
             )
 
     def _update_string_parent(self, updated: str, parent_state: _State | None) -> None:

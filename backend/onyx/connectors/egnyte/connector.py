@@ -132,8 +132,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         egnyte_domain: str = Field(
             title="Egnyte Domain",
             description=(
-                "The domain for the Egnyte instance "
-                "(e.g. 'company' for company.egnyte.com)"
+                "The domain for the Egnyte instance (e.g. 'company' for company.egnyte.com)"
             ),
         )
 

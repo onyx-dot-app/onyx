@@ -417,14 +417,12 @@ def put_llm_provider(
     if existing_provider and is_creation:
         raise OnyxError(
             OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"LLM Provider with name {llm_provider_upsert_request.name} and "
-            f"id={llm_provider_upsert_request.id} already exists",
+            f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} already exists",
         )
     elif not existing_provider and not is_creation:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
-            f"LLM Provider with name {llm_provider_upsert_request.name} and "
-            f"id={llm_provider_upsert_request.id} does not exist",
+            f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} does not exist",
         )
 
     # SSRF Protection: Validate api_base and custom_config match stored values
@@ -1438,8 +1436,7 @@ def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
         elif e.response.status_code == 404:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
-                f"LiteLLM models endpoint not found at {url}. "
-                "Please verify the API base URL.",
+                f"LiteLLM models endpoint not found at {url}. Please verify the API base URL.",
             )
         else:
             raise OnyxError(

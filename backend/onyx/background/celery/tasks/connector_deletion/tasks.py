@@ -307,14 +307,12 @@ def try_generate_document_cc_pair_cleanup_tasks(
 
         if redis_connector.prune.fenced:
             raise TaskDependencyError(
-                "Connector deletion - Delayed (pruning in progress): "
-                f"cc_pair={cc_pair_id}"
+                f"Connector deletion - Delayed (pruning in progress): cc_pair={cc_pair_id}"
             )
 
         if redis_connector.permissions.fenced:
             raise TaskDependencyError(
-                f"Connector deletion - Delayed (permissions in progress): "
-                f"cc_pair={cc_pair_id}"
+                f"Connector deletion - Delayed (permissions in progress): cc_pair={cc_pair_id}"
             )
 
         # add tasks to celery and build up the task set to monitor in redis
@@ -354,8 +352,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
         #     return 0
 
         task_logger.info(
-            "RedisConnectorDeletion.generate_tasks finished. "
-            f"cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
+            f"RedisConnectorDeletion.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
         )
 
         # set this only after all tasks have been added
@@ -366,7 +363,9 @@ def try_generate_document_cc_pair_cleanup_tasks(
 
 
 def monitor_connector_deletion_taskset(
-    tenant_id: str, key_bytes: bytes, r: Redis  # noqa: ARG001
+    tenant_id: str,
+    key_bytes: bytes,
+    r: Redis,  # noqa: ARG001
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
@@ -690,8 +689,7 @@ def validate_connector_deletion_fence(
         tasks_not_in_celery += 1
 
     task_logger.info(
-        "validate_connector_deletion_fence task check: "
-        f"tasks_scanned={tasks_scanned} tasks_not_in_celery={tasks_not_in_celery}"
+        f"validate_connector_deletion_fence task check: tasks_scanned={tasks_scanned} tasks_not_in_celery={tasks_not_in_celery}"
     )
 
     # we're active if there are still tasks to run and those tasks all exist in celery

@@ -31,7 +31,8 @@ def fetch_query_analytics(
             func.sum(case((ChatMessageFeedback.is_positive, 1), else_=0)),
             func.sum(
                 case(
-                    (ChatMessageFeedback.is_positive == False, 1), else_=0  # noqa: E712
+                    (ChatMessageFeedback.is_positive == False, 1),  # noqa: E712
+                    else_=0,  # noqa: E712
                 )
             ),
             cast(ChatMessage.time_sent, Date),
@@ -66,7 +67,8 @@ def fetch_per_user_query_analytics(
             func.sum(case((ChatMessageFeedback.is_positive, 1), else_=0)),
             func.sum(
                 case(
-                    (ChatMessageFeedback.is_positive == False, 1), else_=0  # noqa: E712
+                    (ChatMessageFeedback.is_positive == False, 1),  # noqa: E712
+                    else_=0,  # noqa: E712
                 )
             ),
             cast(ChatMessage.time_sent, Date),

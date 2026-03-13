@@ -455,7 +455,6 @@ class S3BackedFileStore(FileStore):
     def delete_file(self, file_id: str, db_session: Session | None = None) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-
                 file_record = get_filerecord_by_file_id(
                     file_id=file_id, db_session=db_session
                 )

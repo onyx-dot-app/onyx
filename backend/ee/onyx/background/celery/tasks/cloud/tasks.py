@@ -59,7 +59,6 @@ def cloud_beat_task_generator(
         # gated_tenants = get_gated_tenants()
 
         for tenant_id in tenant_ids:
-
             # Same comment here as the above NOTE
             # if tenant_id in gated_tenants:
             #     continue

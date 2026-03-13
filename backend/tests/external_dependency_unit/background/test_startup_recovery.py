@@ -58,7 +58,9 @@ def _create_user_file(
 
 
 def _fake_delete_impl(
-    user_file_id: str, tenant_id: str, redis_locking: bool  # noqa: ARG001
+    user_file_id: str,
+    tenant_id: str,  # noqa: ARG001
+    redis_locking: bool,  # noqa: ARG001
 ) -> None:
     """Mock side-effect: delete the row so the drain loop terminates."""
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -69,7 +71,9 @@ def _fake_delete_impl(
 
 
 def _fake_sync_impl(
-    user_file_id: str, tenant_id: str, redis_locking: bool  # noqa: ARG001
+    user_file_id: str,
+    tenant_id: str,  # noqa: ARG001
+    redis_locking: bool,  # noqa: ARG001
 ) -> None:
     """Mock side-effect: clear sync flags so the drain loop terminates."""
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -241,10 +245,9 @@ class TestRecoveryMultipleFiles:
 
         called_ids = {call.kwargs["user_file_id"] for call in mock_impl.call_args_list}
         expected_ids = {str(uf.id) for uf in files}
-        assert expected_ids.issubset(called_ids), (
-            f"Expected all {len(files)} files to be recovered. "
-            f"Missing: {expected_ids - called_ids}"
-        )
+        assert expected_ids.issubset(
+            called_ids
+        ), f"Expected all {len(files)} files to be recovered. Missing: {expected_ids - called_ids}"
 
 
 class TestTransientFailures:
@@ -266,7 +269,10 @@ class TestTransientFailures:
         fail_id = str(uf_fail.id)
 
         def side_effect(
-            *, user_file_id: str, tenant_id: str, redis_locking: bool  # noqa: ARG001
+            *,
+            user_file_id: str,
+            tenant_id: str,  # noqa: ARG001
+            redis_locking: bool,  # noqa: ARG001
         ) -> None:
             if user_file_id == fail_id:
                 raise RuntimeError("transient failure")

@@ -295,10 +295,7 @@ def ssrf_safe_get(
             else:
                 # Relative path
                 base_path = parsed_current.path.rsplit("/", 1)[0]
-                redirect_url = (
-                    f"{parsed_current.scheme}://{parsed_current.netloc}"
-                    f"{base_path}/{redirect_url}"
-                )
+                redirect_url = f"{parsed_current.scheme}://{parsed_current.netloc}{base_path}/{redirect_url}"
 
         # Validate and follow the redirect (this will raise SSRFException if invalid)
         current_url = redirect_url
