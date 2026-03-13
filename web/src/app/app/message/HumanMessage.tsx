@@ -5,10 +5,11 @@ import { FileDescriptor } from "@/app/app/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn, isValidMessage } from "@/lib/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { SvgEdit } from "@opal/icons";
 import FileDisplay from "./FileDisplay";
 
@@ -34,8 +35,12 @@ function MessageEditing({
     textareaRef.current.select();
   }, []);
 
+  const isEditedContentValid = isValidMessage(editedContent);
+
   function handleSubmit() {
-    onSubmitEdit(editedContent);
+    if (isEditedContentValid) {
+      onSubmitEdit(editedContent);
+    }
   }
 
   function handleCancel() {
@@ -70,11 +75,16 @@ function MessageEditing({
               handleCancel();
             }
             // Submit edit if "Command Enter" is pressed, like in ChatGPT
-            if (e.key === "Enter" && e.metaKey) handleSubmit();
+            if (e.key === "Enter" && e.metaKey && isEditedContentValid) {
+              e.preventDefault();
+              handleSubmit();
+            }
           }}
         />
         <div className="flex justify-end gap-1">
-          <Button onClick={handleSubmit}>Submit</Button>
+          <Disabled disabled={!isEditedContentValid}>
+            <Button onClick={handleSubmit}>Submit</Button>
+          </Disabled>
           <Button prominence="secondary" onClick={handleCancel}>
             Cancel
           </Button>
@@ -203,6 +213,10 @@ const HumanMessage = React.memo(function HumanMessage({
             // Don't update UI for edits that can't be persisted
             if (messageId === undefined || messageId === null) {
               setIsEditing(false);
+              return;
+            }
+            // Validate edited content before submitting
+            if (!isValidMessage(editedContent)) {
               return;
             }
             onEdit?.(editedContent, messageId);

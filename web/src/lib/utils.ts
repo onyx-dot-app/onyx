@@ -290,3 +290,12 @@ export function mergeRefs<T>(
     });
   };
 }
+
+/**
+ * Checks if a message string contains at least one non-whitespace character.
+ * Returns false for empty strings, strings with only spaces, tabs, newlines, etc.
+ */
+export function isValidMessage(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return message.trim().length > 0;
+}
