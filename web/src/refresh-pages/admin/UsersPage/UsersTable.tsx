@@ -13,8 +13,10 @@ import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { toast } from "@/hooks/useToast";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
+import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
 import GroupsCell from "./GroupsCell";
 import UserRowActions from "./UserRowActions";
@@ -236,7 +238,13 @@ export default function UsersTable({
                 size="sm"
                 tooltip="Download CSV"
                 onClick={() => {
-                  window.open("/api/manage/users/download", "_blank");
+                  downloadUsersCsv().catch((err) => {
+                    toast.error(
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to download CSV"
+                    );
+                  });
                 }}
               />
             ),
