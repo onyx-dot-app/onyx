@@ -1,3 +1,4 @@
+import datetime
 from typing import Generic
 from typing import Optional
 from typing import TypeVar
@@ -31,21 +32,41 @@ class MinimalUserSnapshot(BaseModel):
     email: str
 
 
+class UserGroupInfo(BaseModel):
+    id: int
+    name: str
+
+
 class FullUserSnapshot(BaseModel):
     id: UUID
     email: str
     role: UserRole
     is_active: bool
     password_configured: bool
+    personal_name: str | None
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+    groups: list[UserGroupInfo]
+    is_scim_synced: bool
 
     @classmethod
-    def from_user_model(cls, user: User) -> "FullUserSnapshot":
+    def from_user_model(
+        cls,
+        user: User,
+        groups: list[UserGroupInfo] | None = None,
+        is_scim_synced: bool = False,
+    ) -> "FullUserSnapshot":
         return cls(
             id=user.id,
             email=user.email,
             role=user.role,
             is_active=user.is_active,
             password_configured=user.password_configured,
+            personal_name=user.personal_name,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            groups=groups or [],
+            is_scim_synced=is_scim_synced,
         )
 
 

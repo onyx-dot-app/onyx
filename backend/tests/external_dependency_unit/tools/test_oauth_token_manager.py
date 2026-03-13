@@ -374,8 +374,14 @@ class TestOAuthTokenManagerCodeExchange:
         assert call_args[0][0] == oauth_config.token_url
         assert call_args[1]["data"]["grant_type"] == "authorization_code"
         assert call_args[1]["data"]["code"] == "auth_code_123"
-        assert call_args[1]["data"]["client_id"] == oauth_config.client_id
-        assert call_args[1]["data"]["client_secret"] == oauth_config.client_secret
+        assert oauth_config.client_id is not None
+        assert oauth_config.client_secret is not None
+        assert call_args[1]["data"]["client_id"] == oauth_config.client_id.get_value(
+            apply_mask=False
+        )
+        assert call_args[1]["data"][
+            "client_secret"
+        ] == oauth_config.client_secret.get_value(apply_mask=False)
         assert call_args[1]["data"]["redirect_uri"] == "https://example.com/callback"
 
     @patch("onyx.auth.oauth_token_manager.requests.post")

@@ -11,6 +11,8 @@ OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 LM_STUDIO_PROVIDER_NAME = "lm_studio"
 LM_STUDIO_API_KEY_CONFIG_KEY = "LM_STUDIO_API_KEY"
 
+LITELLM_PROXY_PROVIDER_NAME = "litellm_proxy"
+
 # Providers that use optional Bearer auth from custom_config
 PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING: dict[str, str] = {
     LlmProviderNames.OLLAMA_CHAT: OLLAMA_API_KEY_CONFIG_KEY,

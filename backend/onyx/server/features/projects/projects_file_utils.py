@@ -157,10 +157,13 @@ def categorize_uploaded_files(
     """
     Categorize uploaded files based on text extractability and tokenized length.
 
-    - Extracts text using extract_file_text for supported plain/document extensions.
+    - Images are estimated for token cost via a patch-based heuristic.
+    - All other files are run through extract_file_text, which handles known
+      document formats (.pdf, .docx, …) and falls back to a text-detection
+      heuristic for unknown extensions (.py, .js, .rs, …).
     - Uses default tokenizer to compute token length.
-    - If token length > 100,000, reject file (unless threshold skip is enabled).
-    - If extension unsupported or text cannot be extracted, reject file.
+    - If token length > threshold, reject file (unless threshold skip is enabled).
+    - If text cannot be extracted, reject file.
     - Otherwise marked as acceptable.
     """
 
@@ -217,8 +220,7 @@ def categorize_uploaded_files(
                     )
                     results.rejected.append(
                         RejectedFile(
-                            filename=filename,
-                            reason=f"Unsupported file type: {extension}",
+                            filename=filename, reason="Unsupported file contents"
                         )
                     )
                     continue
@@ -235,8 +237,10 @@ def categorize_uploaded_files(
                     results.acceptable_file_to_token_count[filename] = token_count
                 continue
 
-            # Otherwise, handle as text/document: extract text and count tokens
-            elif extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+            # Handle as text/document: attempt text extraction and count tokens.
+            # This accepts any file that extract_file_text can handle, including
+            # code files (.py, .js, .rs, etc.) via its is_text_file() fallback.
+            else:
                 if is_file_password_protected(
                     file=upload.file,
                     file_name=filename,
@@ -259,7 +263,10 @@ def categorize_uploaded_files(
                 if not text_content:
                     logger.warning(f"No text content extracted from '{filename}'")
                     results.rejected.append(
-                        RejectedFile(filename=filename, reason="Could not read file")
+                        RejectedFile(
+                            filename=filename,
+                            reason=f"Unsupported file type: {extension}",
+                        )
                     )
                     continue
 
@@ -282,17 +289,6 @@ def categorize_uploaded_files(
                     logger.warning(
                         f"Failed to reset file pointer for '{filename}': {str(e)}"
                     )
-                continue
-
-            # If not recognized as supported types above, mark unsupported
-            logger.warning(
-                f"Unsupported file extension '{extension}' for file '{filename}'"
-            )
-            results.rejected.append(
-                RejectedFile(
-                    filename=filename, reason=f"Unsupported file type: {extension}"
-                )
-            )
         except Exception as e:
             logger.warning(
                 f"Failed to process uploaded file '{get_safe_filename(upload)}' (error_type={type(e).__name__}, error={str(e)})"

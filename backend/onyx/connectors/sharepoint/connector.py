@@ -33,6 +33,7 @@ from office365.runtime.queries.client_query import ClientQuery  # type: ignore[i
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from pydantic import BaseModel
 from pydantic import Field
+from requests.exceptions import HTTPError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
@@ -258,6 +259,10 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     # Track yielded hierarchy nodes by their raw_node_id (URLs) to avoid duplicates
     seen_hierarchy_node_raw_ids: set[str] = Field(default_factory=set)
 
+    # Track yielded document IDs to avoid processing the same document twice.
+    # The Microsoft Graph delta API can return the same item on multiple pages.
+    seen_document_ids: set[str] = Field(default_factory=set)
+
 
 class SharepointAuthMethod(Enum):
     CLIENT_SECRET = "client_secret"
@@ -266,6 +271,15 @@ class SharepointAuthMethod(Enum):
 
 class SizeCapExceeded(Exception):
     """Exception raised when the size cap is exceeded."""
+
+
+def _log_and_raise_for_status(response: requests.Response) -> None:
+    """Log the response text and raise for status."""
+    try:
+        response.raise_for_status()
+    except Exception:
+        logger.error(f"HTTP request failed: {response.text}")
+        raise
 
 
 def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData | None:
@@ -344,7 +358,7 @@ def _probe_remote_size(url: str, timeout: int) -> int | None:
     """Determine remote size using HEAD or a range GET probe. Returns None if unknown."""
     try:
         head_resp = requests.head(url, timeout=timeout, allow_redirects=True)
-        head_resp.raise_for_status()
+        _log_and_raise_for_status(head_resp)
         cl = head_resp.headers.get("Content-Length")
         if cl and cl.isdigit():
             return int(cl)
@@ -359,7 +373,7 @@ def _probe_remote_size(url: str, timeout: int) -> int | None:
             timeout=timeout,
             stream=True,
         ) as range_resp:
-            range_resp.raise_for_status()
+            _log_and_raise_for_status(range_resp)
             cr = range_resp.headers.get("Content-Range")  # e.g., "bytes 0-0/12345"
             if cr and "/" in cr:
                 total = cr.split("/")[-1]
@@ -384,7 +398,7 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
     - Returns the full bytes if the content fits within `cap`.
     """
     with requests.get(url, stream=True, timeout=timeout) as resp:
-        resp.raise_for_status()
+        _log_and_raise_for_status(resp)
 
         # If the server provides Content-Length, prefer an early decision.
         cl_header = resp.headers.get("Content-Length")
@@ -428,7 +442,7 @@ def _download_via_graph_api(
     with requests.get(
         url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
     ) as resp:
-        resp.raise_for_status()
+        _log_and_raise_for_status(resp)
         buf = io.BytesIO()
         for chunk in resp.iter_content(64 * 1024):
             if not chunk:
@@ -1245,7 +1259,14 @@ class SharepointConnector(
         total_yielded = 0
 
         while page_url:
-            data = self._graph_api_get_json(page_url, params)
+            try:
+                data = self._graph_api_get_json(page_url, params)
+            except HTTPError as e:
+                if e.response.status_code == 404:
+                    logger.warning(f"Site page not found: {page_url}")
+                    break
+                raise
+
             params = None  # nextLink already embeds query params
 
             for page in data.get("value", []):
@@ -1309,7 +1330,7 @@ class SharepointConnector(
                         access_token = self._get_graph_access_token()
                         headers = {"Authorization": f"Bearer {access_token}"}
                         continue
-                response.raise_for_status()
+                _log_and_raise_for_status(response)
                 return response.json()
             except (requests.ConnectionError, requests.Timeout):
                 if attempt < GRAPH_API_MAX_RETRIES:
@@ -1557,6 +1578,7 @@ class SharepointConnector(
         checkpoint.current_drive_id = None
         checkpoint.current_drive_web_url = None
         checkpoint.current_drive_delta_next_link = None
+        checkpoint.seen_document_ids.clear()
 
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
         site_descriptors = self.site_descriptors or self.fetch_sites()
@@ -2137,6 +2159,14 @@ class SharepointConnector(
             item_count = 0
             for driveitem in driveitems:
                 item_count += 1
+
+                if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
+                    logger.debug(
+                        f"Skipping duplicate document {driveitem.id} "
+                        f"({driveitem.name})"
+                    )
+                    continue
+
                 driveitem_extension = get_file_ext(driveitem.name)
                 if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
                     logger.warning(
@@ -2189,11 +2219,13 @@ class SharepointConnector(
 
                     if isinstance(doc_or_failure, Document):
                         if doc_or_failure.sections:
+                            checkpoint.seen_document_ids.add(doc_or_failure.id)
                             yield doc_or_failure
                         elif should_yield_if_empty:
                             doc_or_failure.sections = [
                                 TextSection(link=driveitem.web_url, text="")
                             ]
+                            checkpoint.seen_document_ids.add(doc_or_failure.id)
                             yield doc_or_failure
                         else:
                             logger.warning(

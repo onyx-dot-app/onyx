@@ -230,7 +230,7 @@ function SettingsHeader({
         </div>
       )}
 
-      <Spacer vertical rem={1} />
+      <Spacer vertical rem={2.5} />
 
       <div className="flex flex-col gap-6 px-4">
         <div className="flex w-full justify-between">

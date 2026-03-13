@@ -14,6 +14,7 @@ import {
   QwenIcon,
   OllamaIcon,
   LMStudioIcon,
+  LiteLLMIcon,
   ZAIIcon,
 } from "@/components/icons/icons";
 import {
@@ -21,12 +22,14 @@ import {
   OpenRouterModelResponse,
   BedrockModelResponse,
   LMStudioModelResponse,
+  LiteLLMProxyModelResponse,
   ModelConfiguration,
   LLMProviderName,
   BedrockFetchParams,
   OllamaFetchParams,
   LMStudioFetchParams,
   OpenRouterFetchParams,
+  LiteLLMProxyFetchParams,
 } from "@/interfaces/llm";
 import { SvgAvian, SvgAws, SvgOpenrouter } from "@opal/icons";
 
@@ -38,6 +41,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "avian",
   "ollama_chat",
   "lm_studio",
+  "litellm_proxy",
   "vertex_ai",
 ]);
 
@@ -74,6 +78,7 @@ export const getProviderIcon = (
     bedrock: SvgAws,
     bedrock_converse: SvgAws,
     openrouter: SvgOpenrouter,
+    litellm_proxy: LiteLLMIcon,
     avian: SvgAvian,
     vertex_ai: GeminiIcon,
   };
@@ -147,7 +152,7 @@ export const fetchBedrockModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -201,7 +206,7 @@ export const fetchOllamaModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -259,7 +264,7 @@ export const fetchOpenRouterModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -315,7 +320,7 @@ export const fetchLMStudioModels = async (
       let errorMessage = "Failed to fetch models";
       try {
         const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
+        errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
       }
@@ -330,6 +335,65 @@ export const fetchLMStudioModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: modelData.supports_reasoning,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
+ * Fetches LiteLLM Proxy models directly without any form state dependencies.
+ * Uses snake_case params to match API structure.
+ */
+export const fetchLiteLLMProxyModels = async (
+  params: LiteLLMProxyFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const apiBase = params.api_base;
+  const apiKey = params.api_key;
+  if (!apiBase) {
+    return { models: [], error: "API Base is required" };
+  }
+  if (!apiKey) {
+    return { models: [], error: "API Key is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/litellm/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_base: apiBase,
+        api_key: apiKey,
+        provider_name: params.provider_name,
+      }),
+      signal: params.signal,
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: LiteLLMProxyModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.model_name,
+      display_name: modelData.model_name,
+      is_visible: true,
+      max_input_tokens: null,
+      supports_image_input: false,
+      supports_reasoning: false,
     }));
 
     return { models };
@@ -387,6 +451,13 @@ export const fetchModels = async (
         api_key: formValues.api_key,
         provider_name: formValues.name,
       });
+    case LLMProviderName.LITELLM_PROXY:
+      return fetchLiteLLMProxyModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_name: formValues.name,
+        signal,
+      });
     default:
       return { models: [], error: `Unknown provider: ${providerName}` };
   }
@@ -399,6 +470,7 @@ export function canProviderFetchModels(providerName?: string) {
     case LLMProviderName.OLLAMA_CHAT:
     case LLMProviderName.LM_STUDIO:
     case LLMProviderName.OPENROUTER:
+    case LLMProviderName.LITELLM_PROXY:
       return true;
     default:
       return false;

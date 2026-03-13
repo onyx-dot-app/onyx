@@ -1,7 +1,7 @@
 /* Light mode syntax highlighting (Atom One Light) */
 .hljs {
   color: #383a42 !important;
-  background: #fafafa !important;
+  background: var(--background-code-01) !important;
 }
 
 .hljs-comment,
@@ -77,7 +77,7 @@
 /* Dark mode syntax highlighting (Atom One Dark) */
 .dark .hljs {
   color: #e2e6eb !important;
-  background: #151617 !important;
+  background: var(--background-code-01) !important;
 }
 
 .dark .hljs-comment,

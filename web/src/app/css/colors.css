@@ -438,6 +438,9 @@
   --action-text-link-05: var(--blue-50);
   --action-text-danger-05: var(--red-50);
 
+  /* Background / Code */
+  --background-code-01: var(--grey-02);
+
   /* Code */
   --code-code: var(--alpha-grey-100-85);
   --code-comment: var(--alpha-grey-100-35);
@@ -638,6 +641,9 @@
   /* Action / Text */
   --action-text-link-05: var(--blue-45);
   --action-text-danger-05: var(--red-45);
+
+  /* Background / Code */
+  --background-code-01: #151617;
 
   /* Code */
   --code-code: var(--alpha-grey-00-85);

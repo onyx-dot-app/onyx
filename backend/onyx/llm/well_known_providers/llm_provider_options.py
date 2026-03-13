@@ -16,6 +16,7 @@ from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AVIAN_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import LITELLM_PROXY_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LM_STUDIO_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
@@ -48,6 +49,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
         LM_STUDIO_PROVIDER_NAME: [],  # Dynamic - fetched from LM Studio API
         OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
+        LITELLM_PROXY_PROVIDER_NAME: [],  # Dynamic - fetched from LiteLLM proxy API
         AVIAN_PROVIDER_NAME: [
             "deepseek/deepseek-v3.2",
             "moonshotai/kimi-k2.5",
@@ -338,6 +340,7 @@ def get_provider_display_name(provider_name: str) -> str:
         BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
+        LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
         AVIAN_PROVIDER_NAME: "Avian",
     }
 

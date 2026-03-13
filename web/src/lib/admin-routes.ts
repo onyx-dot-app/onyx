@@ -187,7 +187,7 @@ export const ADMIN_ROUTE_CONFIG: Record<string, AdminRouteConfig> = {
   },
   [ADMIN_PATHS.USERS]: {
     icon: SvgUser,
-    title: "Manage Users",
+    title: "Users & Requests",
     sidebarLabel: "Users",
   },
   [ADMIN_PATHS.API_KEYS]: {

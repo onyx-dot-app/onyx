@@ -7,6 +7,8 @@ interface CodeBlockProps {
   className?: string;
   children?: ReactNode;
   codeText: string;
+  showHeader?: boolean;
+  noPadding?: boolean;
 }
 
 const MemoizedCodeLine = memo(({ content }: { content: ReactNode }) => (
@@ -17,6 +19,8 @@ export const CodeBlock = memo(function CodeBlock({
   className = "",
   children,
   codeText,
+  showHeader = true,
+  noPadding = false,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
@@ -111,22 +115,32 @@ export const CodeBlock = memo(function CodeBlock({
   };
 
   return (
-    <div className="bg-background-tint-00 px-1 pb-1 rounded-12 max-w-full min-w-0">
-      {language && (
-        <div className="flex items-center px-2 py-1 text-sm text-text-04 gap-x-2">
-          <SvgCode
-            height={12}
-            width={12}
-            stroke="currentColor"
-            className="my-auto"
-          />
-          <Text secondaryMono>{language}</Text>
-          {codeText && <CopyButton />}
+    <>
+      {showHeader ? (
+        <div
+          className={cn(
+            "bg-background-tint-00 rounded-12 max-w-full min-w-0",
+            !noPadding && "px-1 pb-1"
+          )}
+        >
+          {language && (
+            <div className="flex items-center px-2 py-1 text-sm text-text-04 gap-x-2">
+              <SvgCode
+                height={12}
+                width={12}
+                stroke="currentColor"
+                className="my-auto"
+              />
+              <Text secondaryMono>{language}</Text>
+              {codeText && <CopyButton />}
+            </div>
+          )}
+          <CodeContent />
         </div>
+      ) : (
+        <CodeContent />
       )}
-
-      <CodeContent />
-    </div>
+    </>
   );
 });
 

@@ -1,67 +1,102 @@
 name: Post-Merge Beta Cherry-Pick
 
 on:
-  push:
-    branches:
-      - main
+  pull_request_target:
+    types:
+      - closed
 
+# SECURITY NOTE:
+# This workflow intentionally uses pull_request_target so post-merge automation can
+# use base-repo credentials. Do not checkout PR head refs in this workflow
+# (e.g. github.event.pull_request.head.sha). Only trusted base refs are allowed.
 permissions:
   contents: read
 
 jobs:
-  cherry-pick-to-latest-release:
-    permissions:
-      contents: write
-      pull-requests: write
+  resolve-cherry-pick-request:
+    if: >-
+      github.event.pull_request.merged == true
+      && github.event.pull_request.base.ref == 'main'
+      && github.event.pull_request.head.repo.full_name == github.repository
     outputs:
       should_cherrypick: ${{ steps.gate.outputs.should_cherrypick }}
       pr_number: ${{ steps.gate.outputs.pr_number }}
-      cherry_pick_reason: ${{ steps.run_cherry_pick.outputs.reason }}
-      cherry_pick_details: ${{ steps.run_cherry_pick.outputs.details }}
+      merge_commit_sha: ${{ steps.gate.outputs.merge_commit_sha }}
+      merged_by: ${{ steps.gate.outputs.merged_by }}
+      gate_error: ${{ steps.gate.outputs.gate_error }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - name: Resolve merged PR and checkbox state
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # SECURITY: keep PR body in env/plain-text handling; avoid directly
+          # inlining github.event.pull_request.body into shell commands.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+          # GitHub team slug authorized to trigger cherry-picks (e.g. "core-eng").
+          # For private/secret teams the GITHUB_TOKEN may need org:read scope;
+          # visible teams work with the default token.
+          ALLOWED_TEAM: "onyx-core-team"
         run: |
-          # For the commit that triggered this workflow (HEAD on main), fetch all
-          # associated PRs and keep only the PR that was actually merged into main
-          # with this exact merge commit SHA.
-          pr_numbers="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" | jq -r --arg sha "${GITHUB_SHA}" '.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha) | .number')"
-          match_count="$(printf '%s\n' "$pr_numbers" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
-          pr_number="$(printf '%s\n' "$pr_numbers" | sed '/^[[:space:]]*$/d' | head -n 1)"
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "merged_by=${MERGED_BY}" >> "$GITHUB_OUTPUT"
 
-          if [ "${match_count}" -gt 1 ]; then
-            echo "::warning::Multiple merged PRs matched commit ${GITHUB_SHA}. Using PR #${pr_number}."
-          fi
-
-          if [ -z "$pr_number" ]; then
-            echo "No merged PR associated with commit ${GITHUB_SHA}; skipping."
+          if ! echo "${PR_BODY}" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
             echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+            echo "Cherry-pick checkbox not checked for PR #${PR_NUMBER}. Skipping."
             exit 0
           fi
 
-          # Read the PR once so we can gate behavior and infer preferred actor.
-          pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")"
-          pr_body="$(printf '%s' "$pr_json" | jq -r '.body // ""')"
-          merged_by="$(printf '%s' "$pr_json" | jq -r '.merged_by.login // ""')"
+          # Keep should_cherrypick output before any possible exit 1 below so
+          # notify-slack can still gate on this output even if this job fails.
+          echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
+          echo "Cherry-pick checkbox checked for PR #${PR_NUMBER}."
 
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
-          echo "merged_by=$merged_by" >> "$GITHUB_OUTPUT"
-
-          if echo "$pr_body" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
-            echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
-            echo "Cherry-pick checkbox checked for PR #${pr_number}."
-            exit 0
+          if [ -z "${MERGE_COMMIT_SHA}" ] || [ "${MERGE_COMMIT_SHA}" = "null" ]; then
+            echo "gate_error=missing-merge-commit-sha" >> "$GITHUB_OUTPUT"
+            echo "::error::PR #${PR_NUMBER} requested cherry-pick, but merge_commit_sha is missing."
+            exit 1
           fi
 
-          echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
-          echo "Cherry-pick checkbox not checked for PR #${pr_number}. Skipping."
+          echo "merge_commit_sha=${MERGE_COMMIT_SHA}" >> "$GITHUB_OUTPUT"
 
+          member_state_file="$(mktemp)"
+          member_err_file="$(mktemp)"
+          if ! gh api "orgs/${GITHUB_REPOSITORY_OWNER}/teams/${ALLOWED_TEAM}/memberships/${MERGED_BY}" --jq '.state' >"${member_state_file}" 2>"${member_err_file}"; then
+            api_err="$(tr '\n' ' ' < "${member_err_file}" | sed 's/[[:space:]]\+/ /g' | cut -c1-300)"
+            echo "gate_error=team-api-error" >> "$GITHUB_OUTPUT"
+            echo "::error::Team membership API call failed for ${MERGED_BY} in ${ALLOWED_TEAM}: ${api_err}"
+            exit 1
+          fi
+
+          member_state="$(cat "${member_state_file}")"
+          if [ "${member_state}" != "active" ]; then
+            echo "gate_error=not-team-member" >> "$GITHUB_OUTPUT"
+            echo "::error::${MERGED_BY} is not an active member of team ${ALLOWED_TEAM} (state: ${member_state}). Failing cherry-pick gate."
+            exit 1
+          fi
+
+          exit 0
+
+  cherry-pick-to-latest-release:
+    needs:
+      - resolve-cherry-pick-request
+    if: needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && needs.resolve-cherry-pick-request.result == 'success'
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      cherry_pick_reason: ${{ steps.run_cherry_pick.outputs.reason }}
+      cherry_pick_details: ${{ steps.run_cherry_pick.outputs.details }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
       - name: Checkout repository
-        if: steps.gate.outputs.should_cherrypick == 'true'
+        # SECURITY: keep checkout pinned to trusted base branch; do not switch to PR head refs.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           fetch-depth: 0
@@ -69,31 +104,37 @@ jobs:
           ref: main
 
       - name: Install the latest version of uv
-        if: steps.gate.outputs.should_cherrypick == 'true'
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # ratchet:astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # ratchet:astral-sh/setup-uv@v7
         with:
           enable-cache: false
           version: "0.9.9"
 
       - name: Configure git identity
-        if: steps.gate.outputs.should_cherrypick == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create cherry-pick PR to latest release
         id: run_cherry_pick
-        if: steps.gate.outputs.should_cherrypick == 'true'
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
-          CHERRY_PICK_ASSIGNEE: ${{ steps.gate.outputs.merged_by }}
+          CHERRY_PICK_ASSIGNEE: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
+          MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
         run: |
-          set -o pipefail
           output_file="$(mktemp)"
-          uv run --no-sync --with onyx-devtools ods cherry-pick "${GITHUB_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
-          exit_code="${PIPESTATUS[0]}"
+          set +e
+          uv run --no-sync --with onyx-devtools ods cherry-pick "${MERGE_COMMIT_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
+          pipe_statuses=("${PIPESTATUS[@]}")
+          exit_code="${pipe_statuses[0]}"
+          tee_exit="${pipe_statuses[1]:-0}"
+          set -e
+          if [ "${tee_exit}" -ne 0 ]; then
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+            echo "reason=output-capture-failed" >> "$GITHUB_OUTPUT"
+            echo "::error::tee failed to capture cherry-pick output (exit ${tee_exit}); cannot classify result."
+            exit 1
+          fi
 
           if [ "${exit_code}" -eq 0 ]; then
             echo "status=success" >> "$GITHUB_OUTPUT"
@@ -115,7 +156,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Mark workflow as failed if cherry-pick failed
-        if: steps.gate.outputs.should_cherrypick == 'true' && steps.run_cherry_pick.outputs.status == 'failure'
+        if: steps.run_cherry_pick.outputs.status == 'failure'
         env:
           CHERRY_PICK_REASON: ${{ steps.run_cherry_pick.outputs.reason }}
         run: |
@@ -124,8 +165,9 @@ jobs:
 
   notify-slack-on-cherry-pick-failure:
     needs:
+      - resolve-cherry-pick-request
       - cherry-pick-to-latest-release
-    if: always() && needs.cherry-pick-to-latest-release.outputs.should_cherrypick == 'true' && needs.cherry-pick-to-latest-release.result != 'success'
+    if: always() && needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && (needs.resolve-cherry-pick-request.result == 'failure' || needs.cherry-pick-to-latest-release.result == 'failure')
     runs-on: ubuntu-slim
     timeout-minutes: 10
     steps:
@@ -134,22 +176,49 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Fail if Slack webhook secret is missing
+        env:
+          CHERRY_PICK_PRS_WEBHOOK: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
+        run: |
+          if [ -z "${CHERRY_PICK_PRS_WEBHOOK}" ]; then
+            echo "::error::CHERRY_PICK_PRS_WEBHOOK is not configured."
+            exit 1
+          fi
+
       - name: Build cherry-pick failure summary
         id: failure-summary
         env:
-          SOURCE_PR_NUMBER: ${{ needs.cherry-pick-to-latest-release.outputs.pr_number }}
+          SOURCE_PR_NUMBER: ${{ needs.resolve-cherry-pick-request.outputs.pr_number }}
+          MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
+          GATE_ERROR: ${{ needs.resolve-cherry-pick-request.outputs.gate_error }}
           CHERRY_PICK_REASON: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_reason }}
           CHERRY_PICK_DETAILS: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_details }}
         run: |
           source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
 
           reason_text="cherry-pick command failed"
-          if [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
+          if [ "${GATE_ERROR}" = "missing-merge-commit-sha" ]; then
+            reason_text="requested cherry-pick but merge commit SHA was missing"
+          elif [ "${GATE_ERROR}" = "team-api-error" ]; then
+            reason_text="team membership lookup failed while validating cherry-pick permissions"
+          elif [ "${GATE_ERROR}" = "not-team-member" ]; then
+            reason_text="merger is not an active member of the allowed team"
+          elif [ "${CHERRY_PICK_REASON}" = "output-capture-failed" ]; then
+            reason_text="failed to capture cherry-pick output for classification"
+          elif [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
             reason_text="merge conflict during cherry-pick"
           fi
 
           details_excerpt="$(printf '%s' "${CHERRY_PICK_DETAILS}" | tail -n 8 | tr '\n' ' ' | sed "s/[[:space:]]\\+/ /g" | sed "s/\"/'/g" | cut -c1-350)"
-          failed_jobs="• cherry-pick-to-latest-release\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
+          if [ -n "${GATE_ERROR}" ]; then
+            failed_job_label="resolve-cherry-pick-request"
+          else
+            failed_job_label="cherry-pick-to-latest-release"
+          fi
+          failed_jobs="• ${failed_job_label}\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
+          if [ -n "${MERGE_COMMIT_SHA}" ]; then
+            failed_jobs="${failed_jobs}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
+          fi
           if [ -n "${details_excerpt}" ]; then
             failed_jobs="${failed_jobs}\\n• excerpt: ${details_excerpt}"
           fi
@@ -162,4 +231,4 @@ jobs:
           webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
           failed-jobs: ${{ steps.failure-summary.outputs.jobs }}
           title: "🚨 Automated Cherry-Pick Failed"
-          ref-name: ${{ github.ref_name }}
+          ref-name: ${{ github.event.pull_request.base.ref }}

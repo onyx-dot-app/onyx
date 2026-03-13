@@ -25,6 +25,9 @@ Some commands require external tools to be installed and configured:
 - **Docker** - Required for `compose`, `logs`, and `pull` commands
   - Install from [docker.com](https://docs.docker.com/get-docker/)
 
+- **uv** - Required for `backend` commands
+  - Install from [docs.astral.sh/uv](https://docs.astral.sh/uv/)
+
 - **GitHub CLI** (`gh`) - Required for `run-ci` and `cherry-pick` commands
   - Install from [cli.github.com](https://cli.github.com/)
   - Authenticate with `gh auth login`
@@ -168,6 +171,53 @@ ods pull
 
 # Pull images with a specific tag
 ods pull --tag edge
+```
+
+### `backend` - Run Backend Services
+
+Run backend services (API server, model server) with environment loaded from
+`.vscode/.env`. On first run, copies `.vscode/env_template.txt` to `.vscode/.env`
+if the `.env` file does not already exist.
+
+Enterprise Edition features are enabled by default with license enforcement
+disabled, matching the `compose` command behavior.
+
+```shell
+ods backend <subcommand>
+```
+
+**Subcommands:**
+
+- `api` - Start the FastAPI backend server (`uvicorn onyx.main:app --reload`)
+- `model_server` - Start the model server (`uvicorn model_server.main:app --reload`)
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--no-ee` | `false` | Disable Enterprise Edition features (enabled by default) |
+| `--port` | `8080` (api) / `9000` (model_server) | Port to listen on |
+
+Shell environment takes precedence over `.env` file values, so inline overrides
+work as expected (e.g. `S3_ENDPOINT_URL=foo ods backend api`).
+
+**Examples:**
+
+```shell
+# Start the API server
+ods backend api
+
+# Start the API server on a custom port
+ods backend api --port 9090
+
+# Start without Enterprise Edition
+ods backend api --no-ee
+
+# Start the model server
+ods backend model_server
+
+# Start the model server on a custom port
+ods backend model_server --port 9001
 ```
 
 ### `web` - Run Frontend Scripts

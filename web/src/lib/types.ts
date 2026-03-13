@@ -68,6 +68,20 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.SLACK_USER]: "Slack User",
 };
 
+export enum UserStatus {
+  ACTIVE = "active",
+  INACTIVE = "inactive",
+  INVITED = "invited",
+  REQUESTED = "requested",
+}
+
+export const USER_STATUS_LABELS: Record<UserStatus, string> = {
+  [UserStatus.ACTIVE]: "Active",
+  [UserStatus.INACTIVE]: "Inactive",
+  [UserStatus.INVITED]: "Invite Pending",
+  [UserStatus.REQUESTED]: "Request to Join",
+};
+
 export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
   [UserRole.BASIC]: "Basic users can't perform any admin actions",
   [UserRole.ADMIN]: "Admin users can perform all admin actions",

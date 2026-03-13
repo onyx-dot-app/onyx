@@ -9,6 +9,7 @@ import { AvianModal } from "./AvianModal";
 import { CustomModal } from "./CustomModal";
 import { BedrockModal } from "./BedrockModal";
 import { LMStudioForm } from "./LMStudioForm";
+import { LiteLLMProxyModal } from "./LiteLLMProxyModal";
 
 export function detectIfRealOpenAIProvider(provider: LLMProviderView) {
   return (
@@ -50,6 +51,8 @@ export function getModalForExistingProvider(
       return <AvianModal {...props} />;
     case LLMProviderName.LM_STUDIO:
       return <LMStudioForm {...props} />;
+    case LLMProviderName.LITELLM_PROXY:
+      return <LiteLLMProxyModal {...props} />;
     default:
       return <CustomModal {...props} />;
   }

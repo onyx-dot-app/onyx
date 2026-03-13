@@ -1,6 +1,4 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { useRouter } from "next/navigation";
-import type { Route } from "next";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -174,15 +172,21 @@ interface ToastFromQueryMessages {
  * and strips the param from the URL.
  */
 export function useToastFromQuery(messages: ToastFromQueryMessages) {
-  const router = useRouter();
-
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const messageValue = searchParams?.get("message");
 
     if (messageValue && messageValue in messages) {
+      searchParams.delete("message");
+      const newSearch = searchParams.toString()
+        ? "?" + searchParams.toString()
+        : "";
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + newSearch
+      );
       const spec = messages[messageValue];
-      router.replace(window.location.pathname as Route);
       if (spec !== undefined) {
         toast({
           message: spec.message,

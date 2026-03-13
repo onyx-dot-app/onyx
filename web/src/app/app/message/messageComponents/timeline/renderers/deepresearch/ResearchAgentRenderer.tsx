@@ -27,7 +27,6 @@ import {
   useMarkdownComponents,
   renderMarkdown,
 } from "@/app/app/message/messageComponents/markdownUtils";
-import { isReasoningPackets } from "../../packetHelpers";
 
 interface NestedToolGroup {
   sub_turn_index: number;
@@ -317,8 +316,6 @@ export const ResearchAgentRenderer: MessageRenderer<
             !fullReportContent &&
             !isComplete;
 
-          const isReasoning = isReasoningPackets(group.packets);
-
           return (
             <TimelineRendererComponent
               key={group.sub_turn_index}
@@ -337,7 +334,6 @@ export const ResearchAgentRenderer: MessageRenderer<
                   isFirstStep={!researchTask && index === 0}
                   isSingleStep={false}
                   collapsible={true}
-                  noPaddingRight={isReasoning}
                 />
               )}
             </TimelineRendererComponent>

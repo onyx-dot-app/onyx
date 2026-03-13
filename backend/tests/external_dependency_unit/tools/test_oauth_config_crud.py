@@ -148,8 +148,16 @@ class TestOAuthConfigCRUD:
         )
 
         # Secrets should be preserved
-        assert updated_config.client_id == original_client_id
-        assert updated_config.client_secret == original_client_secret
+        assert updated_config.client_id is not None
+        assert original_client_id is not None
+        assert updated_config.client_id.get_value(
+            apply_mask=False
+        ) == original_client_id.get_value(apply_mask=False)
+        assert updated_config.client_secret is not None
+        assert original_client_secret is not None
+        assert updated_config.client_secret.get_value(
+            apply_mask=False
+        ) == original_client_secret.get_value(apply_mask=False)
         # But name should be updated
         assert updated_config.name == new_name
 
@@ -173,9 +181,14 @@ class TestOAuthConfigCRUD:
         )
 
         # client_id should be cleared (empty string)
-        assert updated_config.client_id == ""
+        assert updated_config.client_id is not None
+        assert updated_config.client_id.get_value(apply_mask=False) == ""
         # client_secret should be preserved
-        assert updated_config.client_secret == original_client_secret
+        assert updated_config.client_secret is not None
+        assert original_client_secret is not None
+        assert updated_config.client_secret.get_value(
+            apply_mask=False
+        ) == original_client_secret.get_value(apply_mask=False)
 
     def test_update_oauth_config_clear_client_secret(self, db_session: Session) -> None:
         """Test clearing client_secret while preserving client_id"""
@@ -190,9 +203,14 @@ class TestOAuthConfigCRUD:
         )
 
         # client_secret should be cleared (empty string)
-        assert updated_config.client_secret == ""
+        assert updated_config.client_secret is not None
+        assert updated_config.client_secret.get_value(apply_mask=False) == ""
         # client_id should be preserved
-        assert updated_config.client_id == original_client_id
+        assert updated_config.client_id is not None
+        assert original_client_id is not None
+        assert updated_config.client_id.get_value(
+            apply_mask=False
+        ) == original_client_id.get_value(apply_mask=False)
 
     def test_update_oauth_config_clear_both_secrets(self, db_session: Session) -> None:
         """Test clearing both client_id and client_secret"""
@@ -207,8 +225,10 @@ class TestOAuthConfigCRUD:
         )
 
         # Both should be cleared (empty strings)
-        assert updated_config.client_id == ""
-        assert updated_config.client_secret == ""
+        assert updated_config.client_id is not None
+        assert updated_config.client_id.get_value(apply_mask=False) == ""
+        assert updated_config.client_secret is not None
+        assert updated_config.client_secret.get_value(apply_mask=False) == ""
 
     def test_update_oauth_config_authorization_url(self, db_session: Session) -> None:
         """Test updating authorization_url"""
@@ -275,7 +295,8 @@ class TestOAuthConfigCRUD:
         assert updated_config.token_url == new_token_url
         assert updated_config.scopes == new_scopes
         assert updated_config.additional_params == new_params
-        assert updated_config.client_id == new_client_id
+        assert updated_config.client_id is not None
+        assert updated_config.client_id.get_value(apply_mask=False) == new_client_id
 
     def test_delete_oauth_config(self, db_session: Session) -> None:
         """Test deleting an OAuth configuration"""
@@ -416,7 +437,8 @@ class TestOAuthUserTokenCRUD:
         assert user_token.id is not None
         assert user_token.oauth_config_id == oauth_config.id
         assert user_token.user_id == user.id
-        assert user_token.token_data == token_data
+        assert user_token.token_data is not None
+        assert user_token.token_data.get_value(apply_mask=False) == token_data
         assert user_token.created_at is not None
         assert user_token.updated_at is not None
 
@@ -446,8 +468,13 @@ class TestOAuthUserTokenCRUD:
 
         # Should be the same token record (updated, not inserted)
         assert updated_token.id == initial_token_id
-        assert updated_token.token_data == updated_token_data
-        assert updated_token.token_data != initial_token_data
+        assert updated_token.token_data is not None
+        assert (
+            updated_token.token_data.get_value(apply_mask=False) == updated_token_data
+        )
+        assert (
+            updated_token.token_data.get_value(apply_mask=False) != initial_token_data
+        )
 
     def test_get_user_oauth_token(self, db_session: Session) -> None:
         """Test retrieving a user's OAuth token"""
@@ -463,7 +490,8 @@ class TestOAuthUserTokenCRUD:
 
         assert retrieved_token is not None
         assert retrieved_token.id == created_token.id
-        assert retrieved_token.token_data == token_data
+        assert retrieved_token.token_data is not None
+        assert retrieved_token.token_data.get_value(apply_mask=False) == token_data
 
     def test_get_user_oauth_token_not_found(self, db_session: Session) -> None:
         """Test retrieving a non-existent user token returns None"""
@@ -519,7 +547,8 @@ class TestOAuthUserTokenCRUD:
         retrieved_token = get_user_oauth_token(oauth_config.id, user.id, db_session)
         assert retrieved_token is not None
         assert retrieved_token.id == updated_token.id
-        assert retrieved_token.token_data == token_data2
+        assert retrieved_token.token_data is not None
+        assert retrieved_token.token_data.get_value(apply_mask=False) == token_data2
 
     def test_cascade_delete_user_tokens_on_config_deletion(
         self, db_session: Session

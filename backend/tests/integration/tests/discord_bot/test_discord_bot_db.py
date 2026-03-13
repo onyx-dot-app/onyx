@@ -64,7 +64,8 @@ class TestBotConfigAPI:
         db_session.commit()
 
         assert config is not None
-        assert config.bot_token == "test_token_123"
+        assert config.bot_token is not None
+        assert config.bot_token.get_value(apply_mask=False) == "test_token_123"
 
         # Cleanup
         delete_discord_bot_config(db_session)

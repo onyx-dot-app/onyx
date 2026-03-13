@@ -76,7 +76,10 @@ vespa:
       memory: 32000Mi
 
 opensearch:
-  enabled: false
+  # Enabled by default. Override to false and set the appropriate env vars in
+  # the instance-specific values yaml if using AWS-managed OpenSearch, or simply
+  # override to false to entirely disable.
+  enabled: true
   # These values are passed to the opensearch subchart.
   # See https://github.com/opensearch-project/helm-charts/blob/main/charts/opensearch/values.yaml
 
@@ -1158,8 +1161,10 @@ auth:
   opensearch:
     # Enable or disable this secret entirely. Will remove from env var
     # configurations and remove any created secrets.
-    # Set to true when opensearch.enabled is true.
-    enabled: false
+    # Enabled by default. Override to false and set the appropriate env vars in
+    # the instance-specific values yaml if using AWS-managed OpenSearch, or
+    # simply override to false to entirely disable.
+    enabled: true
     # Overwrite the default secret name, ignored if existingSecret is defined.
     secretName: 'onyx-opensearch'
     # Use a secret specified elsewhere.
@@ -1178,10 +1183,28 @@ auth:
     values:
       opensearch_admin_username: "admin"
       opensearch_admin_password: "OnyxDev1!"
+  userauth:
+    # -- Used for signing password reset tokens, email verification tokens, and JWT tokens.
+    enabled: true
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-userauth'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map
+    secretKeys:
+      USER_AUTH_SECRET: user_auth_secret
+    # -- Secret value. Required - generate with: openssl rand -hex 32
+    # If not set, helm install/upgrade will fail.
+    values:
+      user_auth_secret: ""
 
 configMap:
-  # Change this for production uses unless Onyx is only accessible behind VPN
-  AUTH_TYPE: "disabled"
+  # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
+  # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.34.
+  # You must also set auth.userauth.values.user_auth_secret.
+  AUTH_TYPE: "basic"
+  # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
+  OIDC_PKCE_ENABLED: ""
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
