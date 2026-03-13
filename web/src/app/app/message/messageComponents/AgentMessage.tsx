@@ -175,6 +175,9 @@ const AgentMessage = React.memo(function AgentMessage({
   // Streaming TTS integration
   const { streamTTS, resetTTS, stopTTS } = useVoiceMode();
   const ttsCompletedRef = useRef(false);
+  const hasStreamedIncompleteRef = useRef(false);
+  const hasObservedPacketGrowthRef = useRef(false);
+  const lastSeenPacketCountRef = useRef(packetCount ?? rawPackets.length);
   const streamTTSRef = useRef(streamTTS);
 
   // Keep streamTTS ref in sync without triggering effect re-runs
@@ -186,6 +189,12 @@ const AgentMessage = React.memo(function AgentMessage({
   // Uses ref for streamTTS to avoid re-triggering when its identity changes
   // Note: packetCount is used instead of rawPackets because the array is mutated in place
   useLayoutEffect(() => {
+    const effectivePacketCount = packetCount ?? rawPackets.length;
+    if (effectivePacketCount > lastSeenPacketCountRef.current) {
+      hasObservedPacketGrowthRef.current = true;
+    }
+    lastSeenPacketCountRef.current = effectivePacketCount;
+
     // Skip if we've already finished TTS for this message
     if (ttsCompletedRef.current) return;
 
@@ -196,13 +205,22 @@ const AgentMessage = React.memo(function AgentMessage({
     }
 
     const textContent = removeThinkingTokens(getTextContent(rawPackets));
-    if (typeof textContent === "string" && textContent.length > 0) {
-      streamTTSRef.current(textContent, isComplete, nodeId);
+    if (!(typeof textContent === "string" && textContent.length > 0)) return;
 
-      // Mark as completed once the message is done streaming
-      if (isComplete) {
-        ttsCompletedRef.current = true;
+    // Only autoplay messages that were observed streaming in this lifecycle.
+    // Prevents historical, already-complete chats from re-triggering read-aloud on mount.
+    if (!isComplete) {
+      if (!hasObservedPacketGrowthRef.current) {
+        return;
       }
+      hasStreamedIncompleteRef.current = true;
+      streamTTSRef.current(textContent, false, nodeId);
+      return;
+    }
+
+    if (hasStreamedIncompleteRef.current) {
+      streamTTSRef.current(textContent, true, nodeId);
+      ttsCompletedRef.current = true;
     }
   }, [packetCount, isComplete, rawPackets, nodeId, stopPacketSeen, stopReason]); // packetCount triggers on new packets since rawPackets is mutated in place
 
@@ -216,6 +234,9 @@ const AgentMessage = React.memo(function AgentMessage({
   // Reset TTS completed flag when nodeId changes (new message)
   useEffect(() => {
     ttsCompletedRef.current = false;
+    hasStreamedIncompleteRef.current = false;
+    hasObservedPacketGrowthRef.current = false;
+    lastSeenPacketCountRef.current = packetCount ?? rawPackets.length;
   }, [nodeId]);
 
   // Reset TTS when component unmounts or nodeId changes
