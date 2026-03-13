@@ -5,7 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   BillingInformation,
   SubscriptionStatus,
-} from "@/lib/billing/interfaces";
+} from "@/lib/ee/billing/interfaces";
 
 /**
  * Hook to fetch billing information from Stripe.

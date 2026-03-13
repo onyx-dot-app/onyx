@@ -14,7 +14,7 @@ import {
   useBillingInformation,
   useLicense,
   hasActiveSubscription,
-} from "@/lib/billing";
+} from "@/lib/ee/billing";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { CombinedSettings } from "@/interfaces/settings";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
