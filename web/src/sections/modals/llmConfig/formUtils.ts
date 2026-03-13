@@ -13,6 +13,8 @@ import { toast } from "@/hooks/useToast";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { ScopedMutator } from "swr";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
+import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 import {
   track,
   AnalyticsEvent,
@@ -112,7 +114,6 @@ export interface SubmitLLMProviderParams<
   shouldMarkAsDefault?: boolean;
   hideSuccess?: boolean;
   setIsTesting: (testing: boolean) => void;
-  setTestError: (error: string) => void;
   mutate: ScopedMutator;
   onClose: () => void;
   setSubmitting: (submitting: boolean) => void;
@@ -168,7 +169,6 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   shouldMarkAsDefault,
   hideSuccess,
   setIsTesting,
-  setTestError,
   mutate,
   onClose,
   setSubmitting,
@@ -244,7 +244,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
 
     if (!response.ok) {
       const errorMsg = (await response.json()).detail;
-      setTestError(errorMsg);
+      toast.error(errorMsg);
       setSubmitting(false);
       return;
     }
@@ -313,4 +313,229 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   });
 
   setSubmitting(false);
+};
+
+// ── Onboarding helpers (migrated from llmConnectionHelpers.ts) ──────────
+
+export type TestApiKeyResult =
+  | { ok: true }
+  | { ok: false; errorMessage: string };
+
+const submitLlmTestRequest = async (
+  payload: Record<string, unknown>,
+  fallbackErrorMessage: string
+): Promise<TestApiKeyResult> => {
+  try {
+    const response = await fetch("/api/admin/llm/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorMsg = (await response.json()).detail;
+      return { ok: false, errorMessage: errorMsg };
+    }
+
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      errorMessage: fallbackErrorMessage,
+    };
+  }
+};
+
+export const testApiKeyHelper = async (
+  providerName: string,
+  formValues: Record<string, unknown>,
+  apiKey?: string,
+  modelName?: string,
+  customConfigOverride?: Record<string, unknown>
+): Promise<TestApiKeyResult> => {
+  let finalApiBase = formValues?.api_base;
+  let finalApiVersion = formValues?.api_version;
+  let finalDeploymentName = formValues?.deployment_name;
+
+  if (providerName === "azure" && formValues?.target_uri) {
+    try {
+      const { url, apiVersion, deploymentName } = parseAzureTargetUri(
+        formValues.target_uri as string
+      );
+      finalApiBase = url.origin;
+      finalApiVersion = apiVersion;
+      finalDeploymentName = deploymentName || "";
+    } catch {
+      // leave defaults so validation can surface errors upstream
+    }
+  }
+
+  const payload = {
+    api_key: apiKey ?? formValues?.api_key,
+    api_base: finalApiBase,
+    api_version: finalApiVersion,
+    deployment_name: finalDeploymentName,
+    provider: providerName,
+    api_key_changed: true,
+    custom_config_changed: true,
+    custom_config: {
+      ...((formValues?.custom_config as Record<string, unknown>) ?? {}),
+      ...(customConfigOverride ?? {}),
+    },
+    model: modelName ?? (formValues?.default_model_name as string) ?? "",
+  };
+
+  return await submitLlmTestRequest(
+    payload,
+    "An error occurred while testing the API key."
+  );
+};
+
+export const testCustomProvider = async (
+  formValues: Record<string, unknown>
+): Promise<TestApiKeyResult> => {
+  return await submitLlmTestRequest(
+    { ...formValues },
+    "An error occurred while testing the custom provider."
+  );
+};
+
+export const getModelOptions = (
+  fetchedModelConfigurations: Array<{ name: string }>
+) => {
+  return fetchedModelConfigurations.map((model) => ({
+    label: model.name,
+    value: model.name,
+  }));
+};
+
+/** Initial values used by onboarding forms (flat shape, always creating new). */
+export const buildOnboardingInitialValues = () => ({
+  name: "",
+  provider: "",
+  api_key: "",
+  api_base: "",
+  api_version: "",
+  default_model_name: "",
+  model_configurations: [] as ModelConfiguration[],
+  custom_config: {} as Record<string, string>,
+  api_key_changed: true,
+  groups: [] as number[],
+  is_public: true,
+  is_auto_mode: false,
+  personas: [] as number[],
+  selected_model_names: [] as string[],
+  deployment_name: "",
+  target_uri: "",
+});
+
+export interface SubmitOnboardingProviderParams {
+  providerName: string;
+  payload: Record<string, unknown>;
+  onboardingState: OnboardingState;
+  onboardingActions: OnboardingActions;
+  isCustomProvider: boolean;
+  onClose: () => void;
+  setIsSubmitting: (submitting: boolean) => void;
+}
+
+/**
+ * Onboarding submission flow:
+ * 1. Test credentials
+ * 2. Create provider
+ * 3. Set as default if first provider
+ * 4. Update onboarding state
+ */
+export const submitOnboardingProvider = async ({
+  providerName,
+  payload,
+  onboardingState,
+  onboardingActions,
+  isCustomProvider,
+  onClose,
+  setIsSubmitting,
+}: SubmitOnboardingProviderParams): Promise<void> => {
+  setIsSubmitting(true);
+
+  // Test credentials
+  let result: TestApiKeyResult;
+  if (isCustomProvider) {
+    result = await testCustomProvider(payload);
+  } else {
+    result = await testApiKeyHelper(providerName, payload);
+  }
+
+  if (!result.ok) {
+    toast.error(result.errorMessage);
+    setIsSubmitting(false);
+    return;
+  }
+
+  // Create provider
+  const response = await fetch(`${LLM_PROVIDERS_ADMIN_URL}?is_creation=true`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    toast.error(errorMsg);
+    setIsSubmitting(false);
+    return;
+  }
+
+  // Set as default if first provider
+  if (
+    onboardingState?.data?.llmProviders == null ||
+    onboardingState.data.llmProviders.length === 0
+  ) {
+    try {
+      const newLlmProvider = await response.json();
+      if (newLlmProvider?.id != null) {
+        const defaultModelName =
+          (payload as Record<string, string>).default_model_name ??
+          (payload as Record<string, ModelConfiguration[]>)
+            .model_configurations?.[0]?.name ??
+          "";
+
+        if (defaultModelName) {
+          const setDefaultResponse = await fetch(`${LLM_ADMIN_URL}/default`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              provider_id: newLlmProvider.id,
+              model_name: defaultModelName,
+            }),
+          });
+          if (!setDefaultResponse.ok) {
+            const err = await setDefaultResponse.json().catch(() => ({}));
+            toast.error(err?.detail ?? "Failed to set provider as default");
+            setIsSubmitting(false);
+            return;
+          }
+        }
+      }
+    } catch (_e) {
+      toast.error("Failed to set new provider as default");
+    }
+  }
+
+  track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
+    provider: isCustomProvider ? "custom" : providerName,
+    is_creation: true,
+    source: LLMProviderConfiguredSource.CHAT_ONBOARDING,
+  });
+
+  // Update onboarding state
+  onboardingActions.updateData({
+    llmProviders: [
+      ...(onboardingState?.data.llmProviders ?? []),
+      isCustomProvider ? "custom" : providerName,
+    ],
+  });
+  onboardingActions.setButtonActive(true);
+
+  setIsSubmitting(false);
+  onClose();
 };
