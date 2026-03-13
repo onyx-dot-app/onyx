@@ -97,7 +97,7 @@ interface InteractiveContainerProps
  */
 function InteractiveContainer({
   ref,
-  type = "button",
+  type,
   border,
   roundingVariant = "default",
   heightVariant = "lg",
