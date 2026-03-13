@@ -470,7 +470,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
       if (currentDefault === modelName && newSelected.length > 0) {
         formikProps.setFieldValue("default_model_name", newSelected[0]);
       } else if (newSelected.length === 0) {
-        formikProps.setFieldValue("default_model_name", null);
+        formikProps.setFieldValue("default_model_name", undefined);
       }
     }
   }
@@ -487,7 +487,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
     );
     formikProps.setFieldValue(
       "default_model_name",
-      recommendedDefaultModel?.name ?? null
+      recommendedDefaultModel?.name ?? undefined
     );
   }
 
@@ -498,7 +498,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
   function handleToggleSelectAll() {
     if (allSelected) {
       formikProps.setFieldValue("selected_model_names", []);
-      formikProps.setFieldValue("default_model_name", null);
+      formikProps.setFieldValue("default_model_name", undefined);
     } else {
       const allNames = modelConfigurations.map((m) => m.name);
       formikProps.setFieldValue("selected_model_names", allNames);
