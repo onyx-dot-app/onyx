@@ -121,7 +121,6 @@ const collections = (
           {
             name: "User Management",
             items: [
-              sidebarItem(ADMIN_PATHS.USERS),
               ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.GROUPS)] : []),
               sidebarItem(ADMIN_PATHS.API_KEYS),
               sidebarItem(ADMIN_PATHS.TOKEN_RATE_LIMITS),
@@ -130,8 +129,7 @@ const collections = (
           {
             name: "Permissions",
             items: [
-              // TODO (nikolas): Uncommented in switchover PR once Users v2 is ready
-              // sidebarItem(ADMIN_PATHS.USERS_V2),
+              sidebarItem(ADMIN_PATHS.USERS),
               ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.SCIM)] : []),
             ],
           },

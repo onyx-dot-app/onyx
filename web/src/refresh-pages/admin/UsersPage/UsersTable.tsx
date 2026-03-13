@@ -13,8 +13,10 @@ import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { toast } from "@/hooks/useToast";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
+import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
 import GroupsCell from "./GroupsCell";
 import UserRowActions from "./UserRowActions";
@@ -60,7 +62,7 @@ function renderStatusColumn(value: UserStatus, row: UserRow) {
 function renderLastUpdatedColumn(value: string | null) {
   return (
     <Text as="span" secondaryBody text03>
-      {timeAgo(value) ?? "\u2014"}
+      {value ? timeAgo(value) ?? "\u2014" : "\u2014"}
     </Text>
   );
 }
@@ -214,35 +216,40 @@ export default function UsersTable({
         roleCounts={roleCounts}
         statusCounts={statusCounts}
       />
-      {filteredUsers.length === 0 ? (
-        <IllustrationContent
-          illustration={SvgNoResult}
-          title="No users found"
-          description="No users match the current filters."
-        />
-      ) : (
-        <DataTable
-          data={filteredUsers}
-          columns={columns}
-          getRowId={(row) => row.id ?? row.email}
-          pageSize={PAGE_SIZE}
-          searchTerm={searchTerm}
-          footer={{
-            mode: "summary",
-            leftExtra: (
-              <Button
-                icon={SvgDownload}
-                prominence="tertiary"
-                size="sm"
-                tooltip="Download CSV"
-                onClick={() => {
-                  window.open("/api/manage/users/download", "_blank");
-                }}
-              />
-            ),
-          }}
-        />
-      )}
+      <DataTable
+        data={filteredUsers}
+        columns={columns}
+        getRowId={(row) => row.id ?? row.email}
+        pageSize={PAGE_SIZE}
+        searchTerm={searchTerm}
+        emptyState={
+          <IllustrationContent
+            illustration={SvgNoResult}
+            title="No users found"
+            description="No users match the current filters."
+          />
+        }
+        footer={{
+          mode: "summary",
+          leftExtra: (
+            <Button
+              icon={SvgDownload}
+              prominence="tertiary"
+              size="sm"
+              tooltip="Download CSV"
+              onClick={() => {
+                downloadUsersCsv().catch((err) => {
+                  toast.error(
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to download CSV"
+                  );
+                });
+              }}
+            />
+          ),
+        }}
+      />
     </div>
   );
 }

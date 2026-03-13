@@ -84,36 +84,25 @@ export default function GroupsCell({
     computeVisibleCount();
   }, [visibleCount, computeVisibleCount]);
 
-  // Re-measure on container resize.
-  // The ref moves between DOM elements depending on overflow state, so we
-  // track the observed node and re-attach when it changes.
-  const observedNodeRef = useRef<HTMLElement | null>(null);
-  const observerRef = useRef<ResizeObserver | null>(null);
+  // Re-measure when the container width changes (e.g. window resize).
+  // Track width so height-only changes (from the measurement cycle toggling
+  // visible tags) don't cause an infinite render loop.
+  const lastWidthRef = useRef(0);
 
   useEffect(() => {
-    if (!observerRef.current) {
-      observerRef.current = new ResizeObserver(() => {
-        setVisibleCount(null);
-      });
-    }
-    const observer = observerRef.current;
     const node = containerRef.current;
+    if (!node) return;
 
-    if (node !== observedNodeRef.current) {
-      if (observedNodeRef.current) {
-        observer.unobserve(observedNodeRef.current);
-      }
-      if (node) {
-        observer.observe(node);
-      }
-      observedNodeRef.current = node;
-    }
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (Math.abs(width - lastWidthRef.current) < 1) return;
+      lastWidthRef.current = width;
+      setVisibleCount(null);
+    });
+    observer.observe(node);
 
-    return () => {
-      observer.disconnect();
-      observedNodeRef.current = null;
-    };
-  });
+    return () => observer.disconnect();
+  }, [groups]);
 
   const isMeasuring = visibleCount === null;
   const effectiveVisible = visibleCount ?? groups.length;
@@ -162,12 +151,13 @@ export default function GroupsCell({
               —
             </Text>
           </div>
-        ) : hasOverflow ? (
+        ) : (
           <SimpleTooltip
             side="bottom"
             align="start"
             tooltip={allGroupsTooltip}
-            className="bg-background-neutral-01 border border-border-01 shadow-sm"
+            disabled={!hasOverflow}
+            className="bg-background-neutral-01 shadow-sm"
             delayDuration={200}
           >
             <div
@@ -177,13 +167,6 @@ export default function GroupsCell({
               {tagsContent}
             </div>
           </SimpleTooltip>
-        ) : (
-          <div
-            ref={containerRef}
-            className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 pr-7"
-          >
-            {tagsContent}
-          </div>
         )}
         {user.id && (
           <IconButton
