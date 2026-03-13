@@ -28,11 +28,12 @@ import {
   ModelsField,
   DisplayNameField,
   ModelsAccessField,
+  FieldSeparator,
+  FieldWrapper,
   SingleDefaultModelField,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
-import { ScopedMutator } from "swr";
 
 const DEFAULT_API_BASE = "http://localhost:1234";
 
@@ -43,27 +44,25 @@ interface LMStudioFormValues extends BaseLLMFormValues {
   };
 }
 
-interface LMStudioFormContentProps {
+interface LMStudioFormInternalsProps {
   formikProps: FormikProps<LMStudioFormValues>;
-  existingLlmProvider?: LLMProviderView;
+  existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
   isTesting: boolean;
   onClose: () => void;
-  isFormValid: boolean;
   isOnboarding: boolean;
 }
 
-function LMStudioFormContent({
+function LMStudioFormInternals({
   formikProps,
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
   isTesting,
   onClose,
-  isFormValid,
   isOnboarding,
-}: LMStudioFormContentProps) {
+}: LMStudioFormInternalsProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -135,34 +134,44 @@ function LMStudioFormContent({
       providerEndpoint={LLMProviderName.LM_STUDIO}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
-      isFormValid={isFormValid}
+      isFormValid={formikProps.isValid}
       isTesting={isTesting}
     >
-      {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
+      <FieldWrapper>
+        <InputLayouts.Vertical
+          name="api_base"
+          title="API Base URL"
+          subDescription="The base URL for your LM Studio server."
+        >
+          <InputTypeInField
+            name="api_base"
+            placeholder="Your LM Studio API base URL"
+          />
+        </InputLayouts.Vertical>
+      </FieldWrapper>
 
-      <InputLayouts.Vertical
-        name="api_base"
-        title="API Base URL"
-        description="The base URL for your LM Studio server (e.g., http://localhost:1234)"
-      >
-        <InputTypeInField name="api_base" placeholder={DEFAULT_API_BASE} />
-      </InputLayouts.Vertical>
-
-      <InputLayouts.Vertical
-        name="custom_config.LM_STUDIO_API_KEY"
-        title="API Key"
-        description="Optional API key if your LM Studio server requires authentication."
-        optional
-      >
-        <PasswordInputTypeInField
+      <FieldWrapper>
+        <InputLayouts.Vertical
           name="custom_config.LM_STUDIO_API_KEY"
-          placeholder="API Key"
-        />
-      </InputLayouts.Vertical>
+          title="API Key"
+          subDescription="Optional API key if your LM Studio server requires authentication."
+          optional
+        >
+          <PasswordInputTypeInField
+            name="custom_config.LM_STUDIO_API_KEY"
+            placeholder="API Key"
+          />
+        </InputLayouts.Vertical>
+      </FieldWrapper>
 
-      {fetchError && currentModels.length > 0 && (
-        <p className="text-sm text-status-error-05">{fetchError}</p>
+      {!isOnboarding && (
+        <>
+          <FieldSeparator />
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
       )}
+
+      <FieldSeparator />
 
       {isOnboarding ? (
         <SingleDefaultModelField placeholder="E.g. llama3.1" />
@@ -180,7 +189,12 @@ function LMStudioFormContent({
         />
       )}
 
-      {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
+      {!isOnboarding && (
+        <>
+          <FieldSeparator />
+          <ModelsAccessField formikProps={formikProps} />
+        </>
+      )}
     </LLMConfigurationModalWrapper>
   );
 }
@@ -296,14 +310,13 @@ export function LMStudioForm({
       }}
     >
       {(formikProps) => (
-        <LMStudioFormContent
+        <LMStudioFormInternals
           formikProps={formikProps}
           existingLlmProvider={existingLlmProvider}
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}
           isTesting={isTesting}
           onClose={onClose}
-          isFormValid={formikProps.isValid}
           isOnboarding={isOnboarding}
         />
       )}
