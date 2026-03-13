@@ -225,18 +225,20 @@ test.describe("Users page — sorting", () => {
     expect(firstRowAfter).not.toBe(firstRowBefore);
   });
 
-  test("clicking Status sort twice reorders rows", async ({ usersPage }) => {
+  test("clicking Account Type sort twice reorders rows", async ({
+    usersPage,
+  }) => {
     await usersPage.goto();
 
-    const statusesBefore = await usersPage.getColumnTexts(3);
+    const rolesBefore = await usersPage.getColumnTexts(2);
 
     // Click twice to guarantee a different order from default
-    await usersPage.sortByColumn("Status");
-    await usersPage.sortByColumn("Status");
+    await usersPage.sortByColumn("Account Type");
+    await usersPage.sortByColumn("Account Type");
 
-    const statusesAfter = await usersPage.getColumnTexts(3);
-    expect(statusesAfter.length).toBeGreaterThan(0);
-    expect(statusesAfter).not.toEqual(statusesBefore);
+    const rolesAfter = await usersPage.getColumnTexts(2);
+    expect(rolesAfter.length).toBeGreaterThan(0);
+    expect(rolesAfter).not.toEqual(rolesBefore);
   });
 });
 
