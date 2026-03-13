@@ -133,6 +133,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     height,
     headerBackground,
     serverSide,
+    emptyState,
   } = props;
 
   const effectivePageSize = pageSize ?? (footer ? 10 : data.length);
@@ -273,6 +274,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setPage}
+        leftExtra={footerConfig.leftExtra}
       />
     );
   }
@@ -301,7 +303,25 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
               : undefined),
           }}
         >
-          <Table>
+          <Table
+            width={
+              Object.keys(columnWidths).length > 0
+                ? Object.values(columnWidths).reduce((sum, w) => sum + w, 0)
+                : undefined
+            }
+          >
+            <colgroup>
+              {table.getAllLeafColumns().map((col) => (
+                <col
+                  key={col.id}
+                  style={
+                    columnWidths[col.id] != null
+                      ? { width: columnWidths[col.id] }
+                      : undefined
+                  }
+                />
+              ))}
+            </colgroup>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
@@ -428,6 +448,13 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                   : undefined
               }
             >
+              {emptyState && table.getRowModel().rows.length === 0 && (
+                <tr>
+                  <td colSpan={table.getVisibleLeafColumns().length}>
+                    {emptyState}
+                  </td>
+                </tr>
+              )}
               {table.getRowModel().rows.map((row) => {
                 const rowId = hasDraggable ? getRowId(row.original) : undefined;
 

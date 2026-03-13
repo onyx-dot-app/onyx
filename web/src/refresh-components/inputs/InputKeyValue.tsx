@@ -436,20 +436,18 @@ export default function KeyValueInput({
     <div
       className="w-full flex flex-col gap-y-2"
       role="group"
-      aria-labelledby={`${fieldId}-header`}
+      aria-label={`${keyTitle} and ${valueTitle} pairs`}
       {...rest}
     >
       {items && items.length > 0 ? (
-        <div className={cn("grid items-center gap-1", gridCols)}>
+        <div className={cn("grid items-start gap-1", gridCols)}>
           {/*
             # NOTE (@raunakab)
             We add this space below the "title"-row to add some breathing room between the titles and the key-value items.
             Since we're using a `grid` template, the padding below *one* item in a row applies additional height to *all* items in that row.
           */}
           <div className="pb-1">
-            <Text id={`${fieldId}-header`} mainUiAction>
-              {keyTitle}
-            </Text>
+            <Text mainUiAction>{keyTitle}</Text>
           </div>
           <Text mainUiAction>{valueTitle}</Text>
           <div aria-hidden />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, RefObject } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ComboBoxOption } from "./types";
 
 // =============================================================================
@@ -19,6 +19,7 @@ export function useComboBoxState({ value, options }: UseComboBoxStateProps) {
   const [inputValue, setInputValue] = useState(value);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);
+  const prevIsOpenRef = useRef(false);
 
   // Sync inputValue with the external value prop.
   // When the dropdown is closed, always reflect the controlled value.

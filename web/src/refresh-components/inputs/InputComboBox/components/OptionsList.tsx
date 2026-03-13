@@ -24,6 +24,8 @@ interface OptionsListProps {
   allowCreate: boolean;
   /** Whether to show create option (pre-computed by parent) */
   showCreateOption: boolean;
+  /** Show "Add" prefix in create option */
+  showAddPrefix: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   inputValue,
   allowCreate,
   showCreateOption,
+  showAddPrefix,
 }) => {
   // Index offset for other options when create option is shown
   const indexOffset = showCreateOption ? 1 : 0;
@@ -70,7 +73,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           data-index={0}
           role="option"
           aria-selected={false}
-          aria-label={`Create "${inputValue}"`}
+          aria-label={`${showAddPrefix ? "Add" : "Create"} "${inputValue}"`}
           onClick={(e) => {
             e.stopPropagation();
             onSelect({ value: inputValue, label: inputValue });
@@ -81,18 +84,47 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           onMouseEnter={() => onMouseEnter(0)}
           onMouseMove={onMouseMove}
           className={cn(
-            "px-3 py-2 cursor-pointer transition-colors",
+            "cursor-pointer transition-colors",
             "flex items-center justify-between rounded-08",
             highlightedIndex === 0 && "bg-background-tint-02",
-            "hover:bg-background-tint-02"
+            "hover:bg-background-tint-02",
+            showAddPrefix ? "px-1.5 py-1.5" : "px-3 py-2"
           )}
         >
-          <span className="font-main-ui-action text-text-04 truncate min-w-0">
-            {inputValue}
+          <span
+            className={cn(
+              "font-main-ui-action truncate min-w-0",
+              showAddPrefix ? "px-1" : ""
+            )}
+          >
+            {showAddPrefix ? (
+              <>
+                <span className="text-text-03">Add</span>
+                <span className="text-text-04">{` ${inputValue}`}</span>
+              </>
+            ) : (
+              <span className="text-text-04">{inputValue}</span>
+            )}
           </span>
-          <SvgPlus className="w-4 h-4 text-text-03 flex-shrink-0 ml-2" />
+          <SvgPlus
+            className={cn(
+              "w-4 h-4 flex-shrink-0",
+              showAddPrefix ? "text-text-04 mx-1" : "text-text-03 ml-2"
+            )}
+          />
         </div>
       )}
+
+      {/* Separator - show when there are options to display */}
+      {separatorLabel &&
+        (matchedOptions.length > 0 ||
+          (!hasSearchTerm && unmatchedOptions.length > 0)) && (
+          <div className="px-3 py-1">
+            <Text as="p" text03 secondaryBody>
+              {separatorLabel}
+            </Text>
+          </div>
+        )}
 
       {/* Matched/Filtered Options */}
       {matchedOptions.map((option, idx) => {
@@ -116,37 +148,27 @@ export const OptionsList: React.FC<OptionsListProps> = ({
         );
       })}
 
-      {/* Separator - only show if there are unmatched options and a search term */}
-      {hasSearchTerm && unmatchedOptions.length > 0 && (
-        <div className="px-3 py-2 pt-3">
-          <div className="border-t border-border-01 pt-2">
-            <Text as="p" text04 secondaryBody className="text-text-02">
-              {separatorLabel}
-            </Text>
-          </div>
-        </div>
-      )}
-
-      {/* Unmatched Options */}
-      {unmatchedOptions.map((option, idx) => {
-        const globalIndex = matchedOptions.length + idx + indexOffset;
-        const isExact = isExactMatch(option);
-        return (
-          <OptionItem
-            key={option.value}
-            option={option}
-            index={globalIndex}
-            fieldId={fieldId}
-            isHighlighted={globalIndex === highlightedIndex}
-            isSelected={value === option.value}
-            isExact={isExact}
-            onSelect={onSelect}
-            onMouseEnter={onMouseEnter}
-            onMouseMove={onMouseMove}
-            searchTerm={inputValue}
-          />
-        );
-      })}
+      {/* Unmatched Options - only show when NOT searching */}
+      {!hasSearchTerm &&
+        unmatchedOptions.map((option, idx) => {
+          const globalIndex = matchedOptions.length + idx + indexOffset;
+          const isExact = isExactMatch(option);
+          return (
+            <OptionItem
+              key={option.value}
+              option={option}
+              index={globalIndex}
+              fieldId={fieldId}
+              isHighlighted={globalIndex === highlightedIndex}
+              isSelected={value === option.value}
+              isExact={isExact}
+              onSelect={onSelect}
+              onMouseEnter={onMouseEnter}
+              onMouseMove={onMouseMove}
+              searchTerm={inputValue}
+            />
+          );
+        })}
     </>
   );
 };

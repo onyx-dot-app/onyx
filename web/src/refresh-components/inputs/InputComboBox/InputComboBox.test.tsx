@@ -210,10 +210,15 @@ describe("InputComboBox", () => {
 
       await user.type(input, "app");
 
-      // Search should only show matching options by default
+      // In non-strict mode, searching shows:
+      // 1) a create option for the current input and
+      // 2) matched options.
       const options = screen.getAllByRole("option");
-      expect(options.length).toBe(1);
-      expect(options[0]!.textContent).toBe("Apple");
+      expect(options.length).toBe(2);
+      expect(screen.getByLabelText('Create "app"')).toBeInTheDocument();
+      expect(
+        options.some((option) => option.textContent?.includes("Apple"))
+      ).toBe(true);
       expect(screen.queryByText("Banana")).not.toBeInTheDocument();
     });
 

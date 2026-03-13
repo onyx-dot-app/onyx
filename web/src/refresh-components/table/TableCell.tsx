@@ -21,13 +21,13 @@ export default function TableCell({
   const resolvedSize = size ?? contextSize;
   return (
     <td
-      className="tbl-cell"
+      className="tbl-cell overflow-hidden"
       data-size={resolvedSize}
       style={width != null ? { width } : undefined}
       {...props}
     >
       <div
-        className={cn("tbl-cell-inner", "flex items-center")}
+        className={cn("tbl-cell-inner", "flex items-center overflow-hidden")}
         data-size={resolvedSize}
       >
         {children}

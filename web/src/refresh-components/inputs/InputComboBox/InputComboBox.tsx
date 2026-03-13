@@ -130,6 +130,7 @@ const InputComboBox = ({
   leftSearchIcon = false,
   rightSection,
   separatorLabel = "Other options",
+  showAddPrefix = false,
   showOtherOptions = false,
   ...rest
 }: WithoutStyles<InputComboBoxProps>) => {
@@ -157,14 +158,11 @@ const InputComboBox = ({
   const visibleUnmatchedOptions =
     hasSearchTerm && showOtherOptions ? unmatchedOptions : [];
 
-  // Whether to show the create option (only when no partial matches)
-  const showCreateOption =
-    !strict &&
-    hasSearchTerm &&
-    inputValue.trim() !== "" &&
-    matchedOptions.length === 0;
+  // Whether to show the create option (always show when typing in non-strict mode)
+  const showCreateOption = !strict && hasSearchTerm && inputValue.trim() !== "";
 
   // Combined list for keyboard navigation (includes create option when shown)
+  // Only show matched options when searching (hide unmatched)
   const allVisibleOptions = useMemo(() => {
     const baseOptions = [...matchedOptions, ...visibleUnmatchedOptions];
     if (showCreateOption) {
@@ -450,6 +448,7 @@ const InputComboBox = ({
           inputValue={inputValue}
           allowCreate={!strict}
           showCreateOption={showCreateOption}
+          showAddPrefix={showAddPrefix}
         />
       </>
 

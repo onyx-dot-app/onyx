@@ -31,6 +31,7 @@ from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 from fastapi import status
+from fastapi import WebSocket
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -129,6 +130,7 @@ from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import onyx_error_to_json_response
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
+from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -1617,6 +1619,102 @@ async def current_admin_user(user: User = Depends(current_user)) -> User:
             detail="Access denied. User must be an admin to perform this action.",
         )
 
+    return user
+
+
+async def _get_user_from_token_data(token_data: dict) -> User | None:
+    """Shared logic: token data dict → User object.
+
+    Args:
+        token_data: Decoded token data containing 'sub' (user ID).
+
+    Returns:
+        User object if found and active, None otherwise.
+    """
+    user_id = token_data.get("sub")
+    if not user_id:
+        return None
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        return None
+
+    async with get_async_session_context_manager() as async_db_session:
+        user = await async_db_session.get(User, user_uuid)
+        if user is None or not user.is_active:
+            return None
+        return user
+
+
+async def current_user_from_websocket(
+    websocket: WebSocket,
+    token: str = Query(..., description="WebSocket authentication token"),
+) -> User:
+    """
+    WebSocket authentication dependency using query parameter.
+
+    Validates the WS token from query param and returns the User.
+    Raises BasicAuthenticationError if authentication fails.
+
+    The token must be obtained from POST /voice/ws-token before connecting.
+    Tokens are single-use and expire after 60 seconds.
+
+    Usage:
+        1. POST /voice/ws-token -> {"token": "xxx"}
+        2. Connect to ws://host/path?token=xxx
+
+    This applies the same auth checks as current_user() for HTTP endpoints.
+    """
+    # Check Origin header to prevent Cross-Site WebSocket Hijacking (CSWSH)
+    # Browsers always send Origin on WebSocket connections
+    origin = websocket.headers.get("origin")
+    expected_origin = WEB_DOMAIN.rstrip("/")
+    if not origin:
+        logger.warning("WS auth: missing Origin header")
+        raise BasicAuthenticationError(detail="Access denied. Missing origin.")
+
+    actual_origin = origin.rstrip("/")
+    if actual_origin != expected_origin:
+        logger.warning(
+            f"WS auth: origin mismatch. Expected {expected_origin}, got {actual_origin}"
+        )
+        raise BasicAuthenticationError(detail="Access denied. Invalid origin.")
+
+    # Validate WS token in Redis (single-use, deleted after retrieval)
+    try:
+        token_data = await retrieve_ws_token_data(token)
+        if token_data is None:
+            raise BasicAuthenticationError(
+                detail="Access denied. Invalid or expired authentication token."
+            )
+    except BasicAuthenticationError:
+        raise
+    except Exception as e:
+        logger.error(f"WS auth: error during token validation: {e}")
+        raise BasicAuthenticationError(
+            detail="Authentication verification failed."
+        ) from e
+
+    # Get user from token data
+    user = await _get_user_from_token_data(token_data)
+    if user is None:
+        logger.warning(f"WS auth: user not found for id={token_data.get('sub')}")
+        raise BasicAuthenticationError(
+            detail="Access denied. User not found or inactive."
+        )
+
+    # Apply same checks as HTTP auth (verification, OIDC expiry, role)
+    user = await double_check_user(user)
+
+    # Block LIMITED users (same as current_user)
+    if user.role == UserRole.LIMITED:
+        logger.warning(f"WS auth: user {user.email} has LIMITED role")
+        raise BasicAuthenticationError(
+            detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
+        )
+
+    logger.debug(f"WS auth: authenticated {user.email}")
     return user
 
 
