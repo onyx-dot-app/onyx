@@ -57,7 +57,7 @@ const AWS_REGION_OPTIONS = [
   { name: "eu-central-1", value: "eu-central-1" },
   { name: "eu-west-2", value: "eu-west-2" },
 ];
-const AUTH_METHOD_ENVIRONMENT_IAM = "environment_iam";
+const AUTH_METHOD_IAM = "iam";
 const AUTH_METHOD_ACCESS_KEY = "access_key";
 const AUTH_METHOD_LONG_TERM_API_KEY = "long_term_api_key";
 const FIELD_AWS_REGION_NAME = "custom_config.AWS_REGION_NAME";
@@ -100,7 +100,7 @@ function BedrockModalInternals({
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
 
   useEffect(() => {
-    if (authMethod === AUTH_METHOD_ENVIRONMENT_IAM) {
+    if (authMethod === AUTH_METHOD_IAM) {
       formikProps.setFieldValue(FIELD_AWS_ACCESS_KEY_ID, "");
       formikProps.setFieldValue(FIELD_AWS_SECRET_ACCESS_KEY, "");
       formikProps.setFieldValue(FIELD_AWS_BEARER_TOKEN_BEDROCK, "");
@@ -119,7 +119,7 @@ function BedrockModalInternals({
       : existingLlmProvider?.model_configurations || modelConfigurations;
 
   const isAuthComplete =
-    authMethod === AUTH_METHOD_ENVIRONMENT_IAM ||
+    authMethod === AUTH_METHOD_IAM ||
     (authMethod === AUTH_METHOD_ACCESS_KEY &&
       formikProps.values.custom_config?.AWS_ACCESS_KEY_ID &&
       formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY) ||
@@ -196,10 +196,10 @@ function BedrockModalInternals({
                 formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
               }
             >
-              <InputSelect.Trigger defaultValue={AUTH_METHOD_ENVIRONMENT_IAM} />
+              <InputSelect.Trigger defaultValue={AUTH_METHOD_IAM} />
               <InputSelect.Content>
                 <InputSelect.Item
-                  value={AUTH_METHOD_ENVIRONMENT_IAM}
+                  value={AUTH_METHOD_IAM}
                   description="Recommended for AWS environments"
                 >
                   Environment IAM Role
@@ -247,7 +247,7 @@ function BedrockModalInternals({
         </Card>
       )}
 
-      {authMethod === AUTH_METHOD_ENVIRONMENT_IAM && (
+      {authMethod === AUTH_METHOD_IAM && (
         <FieldWrapper>
           <Card backgroundVariant="none" borderVariant="solid">
             <Content

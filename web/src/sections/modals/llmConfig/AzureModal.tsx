@@ -65,8 +65,8 @@ const processValues = (values: AzureModalValues): AzureModalValues => {
         api_version: apiVersion,
         deployment_name: deploymentName || processedValues.deployment_name,
       };
-    } catch (error) {
-      console.error("Failed to parse target_uri:", error);
+    } catch {
+      // Malformed target_uri — fall through and use original values
     }
   }
   return processedValues;
