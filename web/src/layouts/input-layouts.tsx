@@ -136,13 +136,14 @@ function HorizontalInputLayout({
         justifyContent="between"
         alignItems={center ? "center" : "start"}
       >
-        <div className="flex flex-col flex-1 self-stretch">
+        <div className="flex flex-col flex-1 min-w-0 self-stretch">
           <Content
             title={title}
             description={description}
             optional={optional}
             sizePreset={sizePreset}
             variant="section"
+            widthVariant="full"
           />
         </div>
         <div className="flex flex-col items-end">{children}</div>
