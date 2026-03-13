@@ -98,8 +98,8 @@ def remove_scheduled_feedback_reminder(
 
     try:
         client.chat_deleteScheduledMessage(
-            channel=channel,
-            scheduled_message_id=msg_id,  # type:ignore
+            channel=channel,  # type:ignore
+            scheduled_message_id=msg_id,
         )
         logger.info("Scheduled feedback reminder deleted")
     except SlackApiError as e:
