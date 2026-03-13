@@ -101,10 +101,12 @@ function OllamaModalInternals({
     [doFetchModels]
   );
 
+  // Skip the initial fetch for new providers — api_base starts with a default
+  // value, which would otherwise trigger a fetch before the user has done
+  // anything. Existing providers should still auto-fetch on mount.
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
-      // Only auto-fetch on mount if editing an existing provider
       if (!existingLlmProvider) return;
     }
 
