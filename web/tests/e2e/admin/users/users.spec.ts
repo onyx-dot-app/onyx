@@ -11,8 +11,17 @@
 
 import { test, expect } from "./fixtures";
 import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
+import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 import type { Browser } from "@playwright/test";
 import type { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+
+/** Selectors for dynamic content that should be masked in screenshots. */
+const SCREENSHOT_MASKS = [
+  // Timestamps in "Last Updated" column change between runs
+  "td:nth-child(5)",
+  // Stats bar counts vary by test state
+  '[class*="stats"], [class*="Stats"]',
+];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,18 +99,7 @@ test.describe("Users page — layout", () => {
 
   test("CSV download button is visible in footer", async ({ usersPage }) => {
     await usersPage.goto();
-
-    // The download button is an icon-only button with tooltip="Download CSV".
-    // Opal Button tooltip does NOT set aria-label, so use a broad locator.
-    const downloadBtn = usersPage.page.locator(
-      'button[aria-label="Download CSV"]'
-    );
-    // Fallback: any button near the pagination area
-    const footerButton = usersPage.page
-      .locator(".table-footer, [class*=footer]")
-      .locator("button")
-      .first();
-    await expect(downloadBtn.or(footerButton)).toBeVisible();
+    await expect(usersPage.downloadCsvButton).toBeVisible();
   });
 });
 
@@ -172,9 +170,17 @@ test.describe("Users page — filters", () => {
 
     const rowCount = await usersPage.getVisibleRowCount();
     expect(rowCount).toBeGreaterThan(0);
+
+    // Every visible row's Account Type column must say "Admin"
+    const roleTexts = await usersPage.getColumnTexts(2);
+    for (const role of roleTexts) {
+      expect(role).toBe("Admin");
+    }
   });
 
-  test("status filter for Active shows active users", async ({ usersPage }) => {
+  test("status filter for Active shows only active users", async ({
+    usersPage,
+  }) => {
     await usersPage.goto();
     await usersPage.openStatusFilter();
     await usersPage.selectStatus("Active");
@@ -184,6 +190,12 @@ test.describe("Users page — filters", () => {
 
     const rowCount = await usersPage.getVisibleRowCount();
     expect(rowCount).toBeGreaterThan(0);
+
+    // Every visible row's Status column must say "Active"
+    const statusTexts = await usersPage.getColumnTexts(3);
+    for (const status of statusTexts) {
+      expect(status).toBe("Active");
+    }
   });
 
   test("resetting filter shows all users again", async ({ usersPage }) => {
@@ -219,12 +231,16 @@ test.describe("Users page — sorting", () => {
     expect(firstRowAfter).not.toBe(firstRowBefore);
   });
 
-  test("clicking Status sort keeps table rendered", async ({ usersPage }) => {
+  test("clicking Status sort groups rows by status", async ({ usersPage }) => {
     await usersPage.goto();
-    await usersPage.sortByColumn("Status");
 
-    const rowCount = await usersPage.getVisibleRowCount();
-    expect(rowCount).toBeGreaterThan(0);
+    const statusesBefore = await usersPage.getColumnTexts(3);
+    await usersPage.sortByColumn("Status");
+    const statusesAfter = await usersPage.getColumnTexts(3);
+
+    // Sorting should produce a different order (or at minimum, same values grouped)
+    expect(statusesAfter.length).toBeGreaterThan(0);
+    expect(statusesAfter).not.toEqual(statusesBefore);
   });
 });
 

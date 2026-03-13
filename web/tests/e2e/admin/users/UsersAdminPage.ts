@@ -25,8 +25,9 @@ export class UsersAdminPage {
   readonly table: Locator;
   readonly tableRows: Locator;
 
-  // Pagination
+  // Pagination & footer
   readonly paginationSummary: Locator;
+  readonly downloadCsvButton: Locator;
 
   /** Locator for the currently-open Radix popover content. */
   readonly popover: Locator;
@@ -46,6 +47,9 @@ export class UsersAdminPage {
     this.tableRows = page.getByRole("table").locator("tbody tr");
 
     this.paginationSummary = page.getByText(/Showing \d/);
+    this.downloadCsvButton = page.getByRole("button", {
+      name: "Download CSV",
+    });
     this.popover = page.locator("[data-radix-popper-content-wrapper]");
   }
 
@@ -126,6 +130,21 @@ export class UsersAdminPage {
 
   async getVisibleRowCount(): Promise<number> {
     return await this.tableRows.count();
+  }
+
+  /**
+   * Returns the text content of a specific column across all visible rows.
+   * Column indices: 0=Name, 1=Groups, 2=Account Type, 3=Status, 4=Last Updated.
+   */
+  async getColumnTexts(columnIndex: number): Promise<string[]> {
+    const cells = this.tableRows.locator(`td:nth-child(${columnIndex + 2})`);
+    const count = await cells.count();
+    const texts: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const text = await cells.nth(i).textContent();
+      if (text) texts.push(text.trim());
+    }
+    return texts;
   }
 
   getRowByEmail(email: string): Locator {
