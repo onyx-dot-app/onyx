@@ -96,6 +96,22 @@ Key benefits include:
 - **Flexibility**: Connect any data source via custom connectors
 - **Extensibility**: Open-source codebase with active community`;
 
+const LATEX_AI_RESPONSE = `Here is a mix of math and plain text:
+
+Inline math should render cleanly: \\(E = mc^2\\).
+
+Display math should render on its own line:
+\\[
+\\int_0^1 x^2 \\, dx = \\frac{1}{3}
+\\]
+
+This currency value should stay plain text: $100.
+
+And this LaTeX source should remain a code block:
+\`\`\`latex
+\\int_0^1 x^2 \\, dx = \\frac{1}{3}
+\`\`\``;
+
 interface MockDocument {
   document_id: string;
   semantic_identifier: string;
@@ -440,6 +456,31 @@ for (const theme of THEMES) {
         await screenshotChatContainer(
           page,
           `chat-markdown-code-response-${theme}`
+        );
+      });
+
+      test("AI response with LaTeX math renders correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, LATEX_AI_RESPONSE);
+
+        await sendMessage(page, "Show me inline and block math");
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+        await expect(aiMessage).toContainText("Inline math should render");
+        await expect(aiMessage).toContainText(
+          "This currency value should stay plain text: $100."
+        );
+        await expect(aiMessage.locator(".katex")).toHaveCount(2);
+        await expect(aiMessage.locator(".katex-display")).toBeVisible();
+        await expect(aiMessage.getByTestId("code-block")).toContainText(
+          "\\int_0^1 x^2 \\, dx = \\frac{1}{3}"
+        );
+
+        await screenshotChatContainer(
+          page,
+          `chat-latex-math-response-${theme}`
         );
       });
     });
