@@ -2,12 +2,7 @@
 
 import { useEffect } from "react";
 import { motion } from "motion/react";
-import {
-  track,
-  AnalyticsEvent,
-  autoCapture,
-  AutoCaptureAction,
-} from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import BigButton from "@/app/craft/components/BigButton";
@@ -76,9 +71,9 @@ export default function BuildModeIntroContent({
           <BigButton
             secondary
             className="!border-white !text-white hover:!bg-white/10 active:!bg-white/20 !w-[160px]"
-            {...autoCapture(AutoCaptureAction.CLICKED_GO_HOME)}
             onClick={(e) => {
               e.stopPropagation();
+              track(AnalyticsEvent.CLICKED_GO_HOME);
               onClose();
             }}
           >
@@ -87,9 +82,9 @@ export default function BuildModeIntroContent({
           <BigButton
             primary
             className="!bg-white !text-black hover:!bg-gray-200 active:!bg-gray-300 !w-[160px]"
-            {...autoCapture(AutoCaptureAction.CLICKED_TRY_CRAFT)}
             onClick={(e) => {
               e.stopPropagation();
+              track(AnalyticsEvent.CLICKED_TRY_CRAFT);
               onTryBuildMode();
             }}
           >

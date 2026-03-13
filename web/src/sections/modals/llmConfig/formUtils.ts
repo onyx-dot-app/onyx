@@ -1,4 +1,5 @@
 import {
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
@@ -304,8 +305,9 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     toast.success(successMsg);
   }
 
+  const knownProviders = new Set<string>(Object.values(LLMProviderName));
   track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
-    provider: providerName,
+    provider: knownProviders.has(providerName) ? providerName : "custom",
     is_creation: !existingLlmProvider,
     source: LLMProviderConfiguredSource.ADMIN_PAGE,
   });

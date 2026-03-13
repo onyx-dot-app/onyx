@@ -9,33 +9,11 @@ export enum AnalyticsEvent {
   COMPLETED_CRAFT_USER_INFO = "completed_craft_user_info",
   SENT_CRAFT_MESSAGE = "sent_craft_message",
   SAW_CRAFT_INTRO = "saw_craft_intro",
-  RELEASE_NOTIFICATION_CLICKED = "release_notification_clicked",
-  EXTENSION_CHAT_QUERY = "extension_chat_query",
-}
-
-// ─── Autocapture Actions ───────────────────────────────────────────────────
-// Simple click events handled by PostHog autocapture. Use `autoCapture()`
-// to get the data attribute for a given action. PostHog picks these up
-// automatically from the `data-ph-capture-attribute-action` attribute on
-// the clicked element, so no manual `track()` call is needed.
-
-export enum AutoCaptureAction {
   CLICKED_GO_HOME = "clicked_go_home",
   CLICKED_TRY_CRAFT = "clicked_try_craft",
   CLICKED_CRAFT_IN_SIDEBAR = "clicked_craft_in_sidebar",
-}
-
-/**
- * Returns a props object with the PostHog autocapture data attribute.
- * Spread onto any clickable element to tag it for autocapture.
- *
- * @example
- * <button {...autoCapture(AutoCaptureAction.CLICKED_GO_HOME)} onClick={onClose}>
- *   Return Home
- * </button>
- */
-export function autoCapture(action: AutoCaptureAction) {
-  return { "data-ph-capture-attribute-action": action } as const;
+  RELEASE_NOTIFICATION_CLICKED = "release_notification_clicked",
+  EXTENSION_CHAT_QUERY = "extension_chat_query",
 }
 
 // ─── Shared Enums ──────────────────────────────────────────────────────────
@@ -66,6 +44,9 @@ interface AnalyticsEventProperties {
   };
   [AnalyticsEvent.SENT_CRAFT_MESSAGE]: void;
   [AnalyticsEvent.SAW_CRAFT_INTRO]: void;
+  [AnalyticsEvent.CLICKED_GO_HOME]: void;
+  [AnalyticsEvent.CLICKED_TRY_CRAFT]: void;
+  [AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR]: void;
   [AnalyticsEvent.RELEASE_NOTIFICATION_CLICKED]: {
     version: string | undefined;
   };
