@@ -126,6 +126,7 @@ export default function AnthropicModal({
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
           isFormValid={formikProps.isValid}
+          isDirty={formikProps.dirty}
           isTesting={isTesting}
         >
           <APIKeyField providerName="Anthropic" />

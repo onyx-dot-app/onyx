@@ -143,6 +143,7 @@ function OllamaModalInternals({
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
       isFormValid={formikProps.isValid}
+      isDirty={formikProps.dirty}
       isTesting={isTesting}
     >
       <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">

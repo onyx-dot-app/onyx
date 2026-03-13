@@ -180,6 +180,7 @@ export default function AzureModal({
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
           isFormValid={formikProps.isValid}
+          isDirty={formikProps.dirty}
           isTesting={isTesting}
         >
           <FieldWrapper>

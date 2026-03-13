@@ -249,6 +249,10 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       />
     );
 
+    // Make a change to dirty the form (Update is disabled until dirty)
+    const modelInputs = screen.getAllByPlaceholderText("Model name");
+    await user.type(modelInputs[0]!, "-updated");
+
     // Submit — button says "Update" for existing providers
     const submitButton = screen.getByRole("button", { name: /update/i });
     await user.click(submitButton);

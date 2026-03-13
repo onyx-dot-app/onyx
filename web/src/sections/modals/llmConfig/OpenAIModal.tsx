@@ -124,6 +124,7 @@ export default function OpenAIModal({
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
           isFormValid={formikProps.isValid}
+          isDirty={formikProps.dirty}
           isTesting={isTesting}
         >
           <APIKeyField providerName="OpenAI" />

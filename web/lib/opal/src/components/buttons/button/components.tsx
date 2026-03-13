@@ -55,7 +55,7 @@ function Button({
   children,
   rightIcon: RightIcon,
   size = "lg",
-  type = "button",
+  type,
   width,
   tooltip,
   tooltipSide = "top",

@@ -667,6 +667,7 @@ interface LLMConfigurationModalWrapperProps {
   existingProviderName?: string;
   onClose: () => void;
   isFormValid: boolean;
+  isDirty?: boolean;
   isTesting?: boolean;
   children: ReactNode;
 }
@@ -677,6 +678,7 @@ export function LLMConfigurationModalWrapper({
   existingProviderName,
   onClose,
   isFormValid,
+  isDirty,
   isTesting,
   children,
 }: LLMConfigurationModalWrapperProps) {
@@ -704,15 +706,26 @@ export function LLMConfigurationModalWrapper({
           />
           <Modal.Body padding={0.5} gap={0.5}>
             {children}
-            {/*<div className="py-2 w-full flex flex-col gap-4"></div>*/}
           </Modal.Body>
           <Modal.Footer>
             <Button prominence="secondary" onClick={onClose} type="button">
               Cancel
             </Button>
-            <Disabled disabled={!isFormValid || isTesting}>
+            <Disabled
+              disabled={
+                !isFormValid ||
+                isTesting ||
+                (!!existingProviderName && !isDirty)
+              }
+            >
               <Button type="submit" icon={isTesting ? SimpleLoader : undefined}>
-                {existingProviderName ? "Update" : "Connect"}
+                {existingProviderName
+                  ? isTesting
+                    ? "Updating"
+                    : "Update"
+                  : isTesting
+                    ? "Connecting"
+                    : "Connect"}
               </Button>
             </Disabled>
           </Modal.Footer>
