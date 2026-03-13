@@ -124,7 +124,7 @@ export function LiteLLMProxyModal({
                     placeholder={DEFAULT_API_BASE}
                   />
 
-                  <PasswordInputTypeInField name="api_key" />
+                  <PasswordInputTypeInField name="api_key" label="API Key" />
 
                   <FetchModelsButton
                     onFetch={() =>

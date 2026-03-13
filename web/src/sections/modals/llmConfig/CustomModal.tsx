@@ -200,7 +200,10 @@ export function CustomModal({
                     which fields are required.
                   </Text>
 
-                  <PasswordInputTypeInField name="api_key" />
+                  <PasswordInputTypeInField
+                    name="api_key"
+                    label="[Optional] API Key"
+                  />
 
                   <TextFormField
                     name="api_base"

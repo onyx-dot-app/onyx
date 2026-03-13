@@ -209,7 +209,12 @@ export const PasswordInput: Story = {
   name: "PasswordInputTypeInField",
   render: () => (
     <FormikWrapper initialValues={{ apiKey: "" }}>
-      <PasswordInputTypeInField name="apiKey" placeholder="sk-..." />
+      <PasswordInputTypeInField
+        name="apiKey"
+        label="API Key"
+        subtext="Your key is stored encrypted."
+        placeholder="sk-..."
+      />
     </FormikWrapper>
   ),
 };

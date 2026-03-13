@@ -172,7 +172,7 @@ export function OpenRouterModal({
                 <Form className={LLM_FORM_CLASS_NAME}>
                   <DisplayNameField disabled={!!existingLlmProvider} />
 
-                  <PasswordInputTypeInField name="api_key" />
+                  <PasswordInputTypeInField name="api_key" label="API Key" />
 
                   <TextFormField
                     name="api_base"

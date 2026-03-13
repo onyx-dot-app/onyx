@@ -143,7 +143,11 @@ function LMStudioFormContent({
         placeholder={DEFAULT_API_BASE}
       />
 
-      <PasswordInputTypeInField name="custom_config.LM_STUDIO_API_KEY" />
+      <PasswordInputTypeInField
+        name="custom_config.LM_STUDIO_API_KEY"
+        label="API Key (Optional)"
+        subtext="Optional API key if your LM Studio server requires authentication."
+      />
 
       {fetchError && currentModels.length > 0 && (
         <p className="text-sm text-status-error-05">{fetchError}</p>
