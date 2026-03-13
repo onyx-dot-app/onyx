@@ -1275,6 +1275,7 @@ class SharepointConnector(
         page_url: str | None = site_pages_base
         params: dict[str, str] | None = {"$expand": "canvasLayout"}
         total_yielded = 0
+        yielded_ids: set[str] = set()
 
         while page_url:
             try:
@@ -1294,7 +1295,7 @@ class SharepointConnector(
                         f"per-page expansion."
                     )
                     yield from self._fetch_site_pages_individually(
-                        site_pages_base, start, end
+                        site_pages_base, start, end, skip_ids=yielded_ids
                     )
                     return
                 raise
@@ -1305,6 +1306,9 @@ class SharepointConnector(
                 if not _site_page_in_time_window(page, start, end):
                     continue
                 total_yielded += 1
+                page_id = page.get("id")
+                if page_id:
+                    yielded_ids.add(page_id)
                 yield page
 
             page_url = data.get("@odata.nextLink")
@@ -1316,6 +1320,7 @@ class SharepointConnector(
         site_pages_base: str,
         start: datetime | None = None,
         end: datetime | None = None,
+        skip_ids: set[str] | None = None,
     ) -> Generator[dict[str, Any], None, None]:
         """Fallback for _fetch_site_pages: list pages without $expand, then
         expand canvasLayout on each page individually.
@@ -1327,9 +1332,13 @@ class SharepointConnector(
         response. This method works around it by fetching metadata first, then
         expanding each page individually so only the broken page loses its
         canvas content.
+
+        ``skip_ids`` contains page IDs already yielded by the caller before the
+        fallback was triggered, preventing duplicates.
         """
         page_url: str | None = site_pages_base
         total_yielded = 0
+        _skip_ids = skip_ids or set()
 
         while page_url:
             try:
@@ -1344,6 +1353,9 @@ class SharepointConnector(
                     continue
 
                 page_id = page.get("id")
+                if page_id and page_id in _skip_ids:
+                    continue
+
                 if not page_id:
                     total_yielded += 1
                     yield page
@@ -1368,7 +1380,8 @@ class SharepointConnector(
         """Try to GET a single page with $expand=canvasLayout. On 400, return
         the metadata-only fallback so the page is still indexed (without canvas
         content)."""
-        single_url = f"{site_pages_base}/{page_id}/microsoft.graph.sitePage"
+        pages_collection = site_pages_base.removesuffix("/microsoft.graph.sitePage")
+        single_url = f"{pages_collection}/{page_id}/microsoft.graph.sitePage"
         try:
             return self._graph_api_get_json(single_url, {"$expand": "canvasLayout"})
         except HTTPError as e:

@@ -20,10 +20,8 @@ from onyx.connectors.sharepoint.connector import SiteDescriptor
 
 SITE_URL = "https://tenant.sharepoint.com/sites/ClassicSite"
 FAKE_SITE_ID = "tenant.sharepoint.com,abc123,def456"
-SITE_PAGES_BASE = (
-    f"https://graph.microsoft.com/v1.0/sites/{FAKE_SITE_ID}"
-    f"/pages/microsoft.graph.sitePage"
-)
+PAGES_COLLECTION = f"https://graph.microsoft.com/v1.0/sites/{FAKE_SITE_ID}/pages"
+SITE_PAGES_BASE = f"{PAGES_COLLECTION}/microsoft.graph.sitePage"
 
 
 def _site_descriptor() -> SiteDescriptor:
@@ -234,9 +232,12 @@ class TestFetchSitePages400Fallback:
                 )
             if url == SITE_PAGES_BASE and params is None:
                 return {"value": [good_page, bad_page]}
-            if "good-1" in url:
+            expand_params = {"$expand": "canvasLayout"}
+            if url == f"{PAGES_COLLECTION}/good-1/microsoft.graph.sitePage":
+                assert params == expand_params, f"Expected $expand params, got {params}"
                 return good_page_expanded
-            if "bad-1" in url:
+            if url == f"{PAGES_COLLECTION}/bad-1/microsoft.graph.sitePage":
+                assert params == expand_params, f"Expected $expand params, got {params}"
                 raise _make_http_error(
                     400, GRAPH_INVALID_REQUEST_CODE, "Invalid request"
                 )
@@ -249,6 +250,60 @@ class TestFetchSitePages400Fallback:
         assert pages[0].get("canvasLayout") is not None
         assert pages[1].get("canvasLayout") is None
         assert pages[1]["id"] == "bad-1"
+
+    def test_mid_pagination_400_does_not_duplicate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the first paginated batch succeeds but a later nextLink
+        returns 400, pages from the first batch must not be re-yielded
+        by the fallback."""
+        connector = _setup_connector(monkeypatch)
+        good_page = self.GOOD_PAGE
+        good_page_expanded = self.GOOD_PAGE_EXPANDED
+        bad_page = self.BAD_PAGE
+        second_page = {
+            "id": "page-2",
+            "name": "Second.aspx",
+            "title": "Second Page",
+            "lastModifiedDateTime": "2025-06-01T00:00:00Z",
+        }
+        next_link = "https://graph.microsoft.com/v1.0/next-page-link"
+
+        def fake_get_json(
+            self: SharepointConnector,  # noqa: ARG001
+            url: str,
+            params: dict[str, str] | None = None,
+        ) -> dict[str, Any]:
+            if url == SITE_PAGES_BASE and params == {"$expand": "canvasLayout"}:
+                return {
+                    "value": [good_page],
+                    "@odata.nextLink": next_link,
+                }
+            if url == next_link:
+                raise _make_http_error(
+                    400, GRAPH_INVALID_REQUEST_CODE, "Invalid request"
+                )
+            if url == SITE_PAGES_BASE and params is None:
+                return {"value": [good_page, bad_page, second_page]}
+            expand_params = {"$expand": "canvasLayout"}
+            if url == f"{PAGES_COLLECTION}/good-1/microsoft.graph.sitePage":
+                assert params == expand_params, f"Expected $expand params, got {params}"
+                return good_page_expanded
+            if url == f"{PAGES_COLLECTION}/bad-1/microsoft.graph.sitePage":
+                assert params == expand_params, f"Expected $expand params, got {params}"
+                raise _make_http_error(
+                    400, GRAPH_INVALID_REQUEST_CODE, "Invalid request"
+                )
+            if url == f"{PAGES_COLLECTION}/page-2/microsoft.graph.sitePage":
+                assert params == expand_params, f"Expected $expand params, got {params}"
+                return {**second_page, "canvasLayout": {"horizontalSections": []}}
+            raise AssertionError(f"Unexpected call: {url} {params}")
+
+        _patch_graph_api_get_json(monkeypatch, fake_get_json)
+        pages = list(connector._fetch_site_pages(_site_descriptor()))
+
+        ids = [p["id"] for p in pages]
+        assert ids == ["good-1", "bad-1", "page-2"]
 
     def test_non_invalid_request_400_still_raises(
         self, monkeypatch: pytest.MonkeyPatch
