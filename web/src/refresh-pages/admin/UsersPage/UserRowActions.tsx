@@ -169,6 +169,11 @@ export default function UserRowActions({
             </Button>
           </>
         );
+
+      default: {
+        const _exhaustive: never = user.status;
+        return null;
+      }
     }
   })();
 

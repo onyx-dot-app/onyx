@@ -14,7 +14,7 @@ import Separator from "@/refresh-components/Separator";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
-import { UserRole } from "@/lib/types";
+import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
@@ -23,11 +23,7 @@ import type { UserRow } from "./interfaces";
 // Constants
 // ---------------------------------------------------------------------------
 
-const ASSIGNABLE_ROLES: { value: UserRole; label: string }[] = [
-  { value: UserRole.ADMIN, label: "Admin" },
-  { value: UserRole.GLOBAL_CURATOR, label: "Global Curator" },
-  { value: UserRole.BASIC, label: "Basic" },
-];
+const ASSIGNABLE_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.BASIC];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -291,13 +287,22 @@ export default function EditGroupsModal({
                     >
                       <InputSelect.Trigger />
                       <InputSelect.Content>
-                        {ASSIGNABLE_ROLES.map(({ value, label }) => (
+                        {user.role && !ASSIGNABLE_ROLES.includes(user.role) && (
                           <InputSelect.Item
-                            key={value}
-                            value={value}
+                            key={user.role}
+                            value={user.role}
                             icon={SvgUser}
                           >
-                            {label}
+                            {USER_ROLE_LABELS[user.role]}
+                          </InputSelect.Item>
+                        )}
+                        {ASSIGNABLE_ROLES.map((role) => (
+                          <InputSelect.Item
+                            key={role}
+                            value={role}
+                            icon={SvgUser}
+                          >
+                            {USER_ROLE_LABELS[role]}
                           </InputSelect.Item>
                         ))}
                       </InputSelect.Content>

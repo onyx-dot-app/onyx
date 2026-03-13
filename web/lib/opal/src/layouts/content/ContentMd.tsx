@@ -25,7 +25,11 @@ function useIsOverflowing<T extends HTMLElement>() {
   const check = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    setOverflowing(el.scrollWidth > el.clientWidth);
+    // Check both axes: scrollWidth covers `white-space: nowrap` truncation,
+    // scrollHeight covers `-webkit-line-clamp` vertical clipping.
+    setOverflowing(
+      el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight
+    );
   }, []);
 
   useEffect(() => {
