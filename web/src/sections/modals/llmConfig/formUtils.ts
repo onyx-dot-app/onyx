@@ -1,4 +1,5 @@
 import {
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
@@ -14,6 +15,14 @@ import isEqual from "lodash/isEqual";
 import { ScopedMutator } from "swr";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
+import {
+  track,
+  AnalyticsEvent,
+  LLMProviderConfiguredSource,
+} from "@/lib/analytics";
+
+// Common class names for the Form component across all LLM provider forms
+export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
 
 export const buildDefaultInitialValues = (
   existingLlmProvider?: LLMProviderView,
@@ -296,6 +305,13 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     toast.success(successMsg);
   }
 
+  const knownProviders = new Set<string>(Object.values(LLMProviderName));
+  track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
+    provider: knownProviders.has(providerName) ? providerName : "custom",
+    is_creation: !existingLlmProvider,
+    source: LLMProviderConfiguredSource.ADMIN_PAGE,
+  });
+
   setSubmitting(false);
 };
 
@@ -504,6 +520,12 @@ export const submitOnboardingProvider = async ({
       toast.error("Failed to set new provider as default");
     }
   }
+
+  track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
+    provider: isCustomProvider ? "custom" : providerName,
+    is_creation: true,
+    source: LLMProviderConfiguredSource.CHAT_ONBOARDING,
+  });
 
   // Update onboarding state
   onboardingActions.updateData({

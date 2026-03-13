@@ -93,6 +93,13 @@ type KeyValueError = {
   value?: string;
 };
 
+/*
+ * CSS Grid is used instead of flexbox so that the key column, value column,
+ * and remove button stay perfectly aligned across every row — including the
+ * header titles. With flex + width restrictions each row is laid out
+ * independently, so columns can drift when content (e.g. validation errors)
+ * causes one cell to grow. Grid's shared column tracks prevent that.
+ */
 const GRID_COLS = {
   equal: "grid-cols-[1fr_1fr_2.25rem]",
   "key-wide": "grid-cols-[3fr_2fr_2.25rem]",

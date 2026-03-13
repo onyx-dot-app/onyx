@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { usePostHog } from "posthog-js/react";
+import {
+  track,
+  AnalyticsEvent,
+  LLMProviderConfiguredSource,
+} from "@/lib/analytics";
 import { SvgArrowRight, SvgArrowLeft, SvgX } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -112,8 +116,6 @@ export default function BuildOnboardingModal({
   onLlmComplete,
   onClose,
 }: BuildOnboardingModalProps) {
-  const posthog = usePostHog();
-
   // Compute steps based on mode
   const steps = useMemo(
     () => getStepsForMode(mode, isAdmin, allProvidersConfigured, hasUserInfo),
@@ -283,6 +285,12 @@ export default function BuildOnboardingModal({
         modelName: selectedModel,
       });
 
+      track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
+        provider: currentProviderConfig.providerName,
+        is_creation: true,
+        source: LLMProviderConfiguredSource.CRAFT_ONBOARDING,
+      });
+
       setConnectionStatus("success");
     } catch (error) {
       console.error("Error connecting LLM provider:", error);
@@ -347,7 +355,7 @@ export default function BuildOnboardingModal({
         level: level || undefined,
       });
 
-      posthog?.capture("completed_craft_onboarding");
+      track(AnalyticsEvent.COMPLETED_CRAFT_ONBOARDING);
       onClose();
     } catch (error) {
       console.error("Error completing onboarding:", error);
@@ -465,7 +473,7 @@ export default function BuildOnboardingModal({
               <button
                 type="button"
                 onClick={() => {
-                  posthog?.capture("completed_craft_user_info", {
+                  track(AnalyticsEvent.COMPLETED_CRAFT_USER_INFO, {
                     first_name: firstName.trim(),
                     last_name: lastName.trim() || undefined,
                     work_area: workArea,
