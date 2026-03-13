@@ -8,6 +8,8 @@ import Title from "@/components/ui/title";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
+const route = ADMIN_ROUTES.DOCUMENT_FEEDBACK;
+
 function Main() {
   const {
     data: mostLikedDocuments,
@@ -61,8 +63,6 @@ function Main() {
 }
 
 export default function Page() {
-  const route = ADMIN_ROUTES.DOCUMENT_FEEDBACK;
-
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header icon={route.icon} title={route.title} separator />

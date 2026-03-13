@@ -11,6 +11,8 @@ import { refreshDocumentSets } from "../hooks";
 import CardSection from "@/components/admin/CardSection";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
+const route = ADMIN_ROUTES.DOCUMENT_SETS;
+
 function Main() {
   const router = useRouter();
   const vectorDbEnabled = useVectorDbEnabled();
@@ -58,8 +60,6 @@ function Main() {
 }
 
 export default function Page() {
-  const route = ADMIN_ROUTES.DOCUMENT_SETS;
-
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header

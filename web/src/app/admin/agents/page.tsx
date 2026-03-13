@@ -15,6 +15,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useState, useEffect } from "react";
 import Pagination from "@/refresh-components/Pagination";
 
+const route = ADMIN_ROUTES.AGENTS;
 const PAGE_SIZE = 20;
 
 function MainContent({
@@ -120,7 +121,6 @@ function MainContent({
 }
 
 export default function Page() {
-  const route = ADMIN_ROUTES.AGENTS;
   const [currentPage, setCurrentPage] = useState(1);
   const { personas, totalItems, isLoading, error, refresh } = useAdminPersonas({
     pageNum: currentPage - 1, // Backend uses 0-indexed pages

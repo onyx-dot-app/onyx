@@ -6,6 +6,8 @@ import { Explorer } from "./Explorer";
 import { Connector } from "@/lib/connectors/connectors";
 import { DocumentSetSummary } from "@/lib/types";
 
+const route = ADMIN_ROUTES.DOCUMENT_EXPLORER;
+
 interface DocumentExplorerPageProps {
   initialSearchValue: string | undefined;
   connectors: Connector<any>[];
@@ -17,8 +19,6 @@ export default function DocumentExplorerPage({
   connectors,
   documentSets,
 }: DocumentExplorerPageProps) {
-  const route = ADMIN_ROUTES.DOCUMENT_EXPLORER;
-
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header icon={route.icon} title={route.title} separator />

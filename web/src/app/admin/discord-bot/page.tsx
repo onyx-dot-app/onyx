@@ -21,6 +21,8 @@ import { DiscordGuildsTable } from "@/app/admin/discord-bot/DiscordGuildsTable";
 import { BotConfigCard } from "@/app/admin/discord-bot/BotConfigCard";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
+const route = ADMIN_ROUTES.DISCORD_BOTS;
+
 function DiscordBotContent() {
   const { data: guilds, isLoading, error, refreshGuilds } = useDiscordGuilds();
   const { data: botConfig, isManaged } = useDiscordBotConfig();
@@ -118,8 +120,6 @@ function DiscordBotContent() {
 }
 
 export default function Page() {
-  const route = ADMIN_ROUTES.DISCORD_BOTS;
-
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header

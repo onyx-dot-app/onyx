@@ -12,6 +12,8 @@ import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
+const route = ADMIN_ROUTES.DOCUMENT_SETS;
+
 function Main({ documentSetId }: { documentSetId: number }) {
   const router = useRouter();
   const vectorDbEnabled = useVectorDbEnabled();
@@ -93,7 +95,6 @@ export default function Page(props: {
 }) {
   const params = use(props.params);
   const documentSetId = parseInt(params.documentSetId);
-  const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
   return (
     <SettingsLayouts.Root>

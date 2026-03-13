@@ -10,6 +10,8 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
+const route = ADMIN_ROUTES.SLACK_BOTS;
+
 function Main() {
   const {
     data: slackBots,
@@ -75,8 +77,6 @@ function Main() {
 }
 
 export default function Page() {
-  const route = ADMIN_ROUTES.SLACK_BOTS;
-
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header icon={route.icon} title={route.title} separator />

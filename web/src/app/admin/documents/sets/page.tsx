@@ -43,6 +43,7 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 
+const route = ADMIN_ROUTES.DOCUMENT_SETS;
 const numToDisplay = 50;
 
 // Component to display federated connectors with consistent styling
@@ -422,8 +423,6 @@ function Main() {
 }
 
 export default function Page() {
-  const route = ADMIN_ROUTES.DOCUMENT_SETS;
-
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header icon={route.icon} title={route.title} separator />

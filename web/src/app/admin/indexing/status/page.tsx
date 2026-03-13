@@ -18,6 +18,8 @@ import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import { IndexingStatusRequest } from "@/lib/types";
 
+const route = ADMIN_ROUTES.INDEXING_STATUS;
+
 function Main() {
   const vectorDbEnabled = useVectorDbEnabled();
 
@@ -204,8 +206,6 @@ function Main() {
 }
 
 export default function Status() {
-  const route = ADMIN_ROUTES.INDEXING_STATUS;
-
   useToastFromQuery({
     "connector-created": {
       message: "Connector created successfully",
