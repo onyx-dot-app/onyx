@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { Formik } from "formik";
-import { LLMProviderFormProps } from "@/interfaces/llm";
+import { Formik, FormikProps } from "formik";
+import { LLMProviderFormProps, ModelConfiguration } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
   submitLLMProvider,
@@ -22,9 +22,163 @@ import {
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
+import Text from "@/refresh-components/texts/Text";
+import { Button, EmptyMessageCard } from "@opal/components";
+import { Disabled } from "@opal/core";
+import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { toast } from "@/hooks/useToast";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
+
+// ─── Model Configuration List ─────────────────────────────────────────────────
+
+const MODEL_GRID_COLS = "grid-cols-[2fr_2fr_minmax(10rem,1fr)_1fr_2.25rem]";
+
+type CustomModelConfiguration = Pick<
+  ModelConfiguration,
+  "name" | "max_input_tokens" | "supports_image_input"
+> & {
+  display_name: string;
+};
+
+interface ModelConfigurationItemProps {
+  model: CustomModelConfiguration;
+  onChange: (next: CustomModelConfiguration) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}
+
+function ModelConfigurationItem({
+  model,
+  onChange,
+  onRemove,
+  canRemove,
+}: ModelConfigurationItemProps) {
+  return (
+    <>
+      <InputTypeIn
+        placeholder="Model name"
+        value={model.name}
+        onChange={(e) => onChange({ ...model, name: e.target.value })}
+        showClearButton={false}
+      />
+      <InputTypeIn
+        placeholder="Display name"
+        value={model.display_name}
+        onChange={(e) => onChange({ ...model, display_name: e.target.value })}
+        showClearButton={false}
+      />
+      <InputSelect
+        value={model.supports_image_input ? "text-image" : "text-only"}
+        onValueChange={(value) =>
+          onChange({ ...model, supports_image_input: value === "text-image" })
+        }
+      >
+        <InputSelect.Trigger placeholder="Input type" />
+        <InputSelect.Content>
+          <InputSelect.Item value="text-only">Text Only</InputSelect.Item>
+          <InputSelect.Item value="text-image">Text & Image</InputSelect.Item>
+        </InputSelect.Content>
+      </InputSelect>
+      <InputTypeIn
+        placeholder="Default"
+        value={model.max_input_tokens?.toString() ?? ""}
+        onChange={(e) =>
+          onChange({
+            ...model,
+            max_input_tokens:
+              e.target.value === "" ? null : Number(e.target.value),
+          })
+        }
+        showClearButton={false}
+        type="number"
+      />
+      <Disabled disabled={!canRemove}>
+        <Button
+          prominence="tertiary"
+          icon={SvgMinusCircle}
+          onClick={onRemove}
+        />
+      </Disabled>
+    </>
+  );
+}
+
+interface ModelConfigurationListProps {
+  formikProps: FormikProps<{
+    model_configurations: CustomModelConfiguration[];
+  }>;
+}
+
+function ModelConfigurationList({ formikProps }: ModelConfigurationListProps) {
+  const models = formikProps.values.model_configurations;
+
+  function handleChange(index: number, next: CustomModelConfiguration) {
+    const updated = [...models];
+    updated[index] = next;
+    formikProps.setFieldValue("model_configurations", updated);
+  }
+
+  function handleRemove(index: number) {
+    formikProps.setFieldValue(
+      "model_configurations",
+      models.filter((_, i) => i !== index)
+    );
+  }
+
+  function handleAdd() {
+    formikProps.setFieldValue("model_configurations", [
+      ...models,
+      {
+        name: "",
+        display_name: "",
+        max_input_tokens: null,
+        supports_image_input: false,
+      },
+    ]);
+  }
+
+  return (
+    <div className="w-full flex flex-col gap-y-2">
+      {models.length > 0 ? (
+        <div className={`grid items-center gap-1 ${MODEL_GRID_COLS}`}>
+          <div className="pb-1">
+            <Text mainUiAction>Model Name</Text>
+          </div>
+          <Text mainUiAction>Display Name</Text>
+          <Text mainUiAction>Input Type</Text>
+          <Text mainUiAction>Max Tokens</Text>
+          <div aria-hidden />
+
+          {models.map((model, index) => (
+            <ModelConfigurationItem
+              key={index}
+              model={model}
+              onChange={(next) => handleChange(index, next)}
+              onRemove={() => handleRemove(index)}
+              canRemove={models.length > 1}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyMessageCard title="No models added yet." />
+      )}
+
+      <Button
+        prominence="secondary"
+        icon={SvgPlusCircle}
+        onClick={handleAdd}
+        type="button"
+      >
+        Add Model
+      </Button>
+    </div>
+  );
+}
+
+// ─── Custom Config Processing ─────────────────────────────────────────────────
 
 function customConfigProcessing(items: KeyValue[]) {
   const customConfig: { [key: string]: string } = {};
@@ -59,17 +213,18 @@ export default function CustomModal({
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map(
-      (modelConfiguration) => ({
-        ...modelConfiguration,
-        max_input_tokens: modelConfiguration.max_input_tokens ?? null,
+      (mc) => ({
+        name: mc.name,
+        display_name: mc.display_name ?? "",
+        max_input_tokens: mc.max_input_tokens ?? null,
+        supports_image_input: mc.supports_image_input,
       })
     ) ?? [
       {
         name: "",
-        is_visible: true,
+        display_name: "",
         max_input_tokens: null,
         supports_image_input: false,
-        supports_reasoning: false,
       },
     ],
     custom_config_list: existingLlmProvider?.custom_config
@@ -116,16 +271,15 @@ export default function CustomModal({
         setSubmitting(true);
 
         const modelConfigurations = values.model_configurations
+          .filter((mc) => mc.name.trim() !== "")
           .map((mc) => ({
             name: mc.name,
-            is_visible: mc.is_visible,
+            display_name: mc.display_name || undefined,
+            is_visible: true,
             max_input_tokens: mc.max_input_tokens ?? null,
-            supports_image_input: mc.supports_image_input ?? false,
-            supports_reasoning: mc.supports_reasoning ?? false,
-          }))
-          .filter(
-            (mc) => mc.name === values.default_model_name || mc.is_visible
-          );
+            supports_image_input: mc.supports_image_input,
+            supports_reasoning: false,
+          }));
 
         if (modelConfigurations.length === 0) {
           toast.error("At least one model name is required");
@@ -197,6 +351,7 @@ export default function CustomModal({
               <Content
                 title="Provider Configs"
                 description="Add properties as needed by the model provider. This is passed to LiteLLM completion() call as arguments in the environment variable. See LiteLLM documentation for more instructions."
+                widthVariant="full"
                 variant="section"
                 sizePreset="main-content"
               />
@@ -214,15 +369,18 @@ export default function CustomModal({
           <FieldSeparator />
 
           <FieldWrapper>
-            <Content
-              title="Models"
-              description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
-              variant="section"
-              sizePreset="main-content"
-            />
-          </FieldWrapper>
+            <Section gap={0.75}>
+              <Content
+                title="Models"
+                description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
+                variant="section"
+                sizePreset="main-content"
+                widthVariant="full"
+              />
 
-          {/* TODO: Model configuration fields (model list, default model selection) */}
+              <ModelConfigurationList formikProps={formikProps as any} />
+            </Section>
+          </FieldWrapper>
 
           {!isOnboarding && (
             <>
