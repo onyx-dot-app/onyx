@@ -31,11 +31,9 @@ import {
   FieldSeparator,
   FieldWrapper,
   ModelsAccessField,
-  FetchModelsButton,
   SingleDefaultModelField,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
-import Text from "@/refresh-components/texts/Text";
 import { Card } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { SvgAlertCircle, SvgKey, SvgLock, SvgShield } from "@opal/icons";
@@ -132,6 +130,27 @@ function BedrockModalInternals({
   const isFetchDisabled =
     !formikProps.values.custom_config?.AWS_REGION_NAME || !isAuthComplete;
 
+  const handleFetchModels = async () => {
+    const { models } = await fetchBedrockModels({
+      aws_region_name: formikProps.values.custom_config?.AWS_REGION_NAME ?? "",
+      aws_access_key_id: formikProps.values.custom_config?.AWS_ACCESS_KEY_ID,
+      aws_secret_access_key:
+        formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY,
+      aws_bearer_token_bedrock:
+        formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
+      provider_name: existingLlmProvider?.name,
+    });
+    setFetchedModels(models);
+  };
+
+  // Auto-fetch models on initial load when editing an existing provider
+  useEffect(() => {
+    if (existingLlmProvider && !isFetchDisabled) {
+      handleFetchModels();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <LLMConfigurationModalWrapper
       providerEndpoint={BEDROCK_PROVIDER_NAME}
@@ -188,7 +207,7 @@ function BedrockModalInternals({
       </FieldWrapper>
 
       {authMethod === AUTH_METHOD_IAM && (
-        <Section padding={0.5}>
+        <FieldWrapper>
           <Card backgroundVariant="none" borderVariant="solid">
             <Content
               icon={SvgAlertCircle}
@@ -197,7 +216,7 @@ function BedrockModalInternals({
               sizePreset="main-ui"
             />
           </Card>
-        </Section>
+        </FieldWrapper>
       )}
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
@@ -241,32 +260,6 @@ function BedrockModalInternals({
         </Card>
       )}
 
-      <FetchModelsButton
-        onFetch={() =>
-          fetchBedrockModels({
-            aws_region_name:
-              formikProps.values.custom_config?.AWS_REGION_NAME ?? "",
-            aws_access_key_id:
-              formikProps.values.custom_config?.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key:
-              formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY,
-            aws_bearer_token_bedrock:
-              formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
-            provider_name: existingLlmProvider?.name,
-          })
-        }
-        isDisabled={isFetchDisabled}
-        disabledHint={
-          !formikProps.values.custom_config?.AWS_REGION_NAME
-            ? "Select an AWS region."
-            : !isAuthComplete
-              ? 'Complete the "Authentication Method" section.'
-              : undefined
-        }
-        onModelsFetched={setFetchedModels}
-        autoFetchOnInitialLoad={!!existingLlmProvider}
-      />
-
       {!isOnboarding && (
         <>
           <FieldSeparator />
@@ -283,11 +276,12 @@ function BedrockModalInternals({
           modelConfigurations={currentModels}
           formikProps={formikProps}
           noModelConfigurationsMessage={
-            "Fetch available models first, then you'll be able to select " +
+            "Fetch available models first, then you’ll be able to select " +
             "the models you want to make available in Onyx."
           }
           recommendedDefaultModel={null}
           shouldShowAutoUpdateToggle={false}
+          onRefetch={isFetchDisabled ? undefined : handleFetchModels}
         />
       )}
 
