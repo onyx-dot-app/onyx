@@ -24,6 +24,7 @@ import {
   FieldSeparator,
   FieldWrapper,
   ModelsAccessField,
+  ModelsField,
   SingleDefaultModelField,
 } from "@/sections/modals/llmConfig/shared";
 import {
@@ -183,13 +184,11 @@ export function AzureModal({
           isFormValid={formikProps.isValid}
           isTesting={isTesting}
         >
-          <APIKeyField providerName="Azure" />
-
           <FieldWrapper>
             <InputLayouts.Vertical
               name="target_uri"
               title="Target URI"
-              subDescription="The complete target URI for your deployment from the Azure AI portal."
+              subDescription="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
             >
               <InputTypeInField
                 name="target_uri"
@@ -197,6 +196,8 @@ export function AzureModal({
               />
             </InputLayouts.Vertical>
           </FieldWrapper>
+
+          <APIKeyField providerName="Azure" />
 
           {!isOnboarding && (
             <>
@@ -206,7 +207,17 @@ export function AzureModal({
           )}
 
           <FieldSeparator />
-          <SingleDefaultModelField placeholder="E.g. gpt-4o" />
+
+          {isOnboarding ? (
+            <SingleDefaultModelField placeholder="E.g. gpt-4o" />
+          ) : (
+            <ModelsField
+              modelConfigurations={modelConfigurations}
+              formikProps={formikProps}
+              recommendedDefaultModel={null}
+              shouldShowAutoUpdateToggle={false}
+            />
+          )}
 
           {!isOnboarding && (
             <>
