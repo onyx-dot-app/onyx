@@ -33,6 +33,10 @@ logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/voice")
 
+VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE = (
+    "Connection test failed. Please verify your API key and settings."
+)
+
 
 def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | None:
     """Validate and normalize provider api_base / target URI."""
@@ -136,7 +140,7 @@ async def upsert_voice_provider_endpoint(
         logger.error(f"Voice provider credential validation failed on save: {e}")
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            str(e),
+            VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE,
         ) from e
 
     db_session.commit()
@@ -263,7 +267,7 @@ async def test_voice_provider(
         logger.error(f"Voice provider connection test failed: {e}")
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            str(e),
+            VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE,
         ) from e
 
     logger.info(f"Voice provider test succeeded for {request.provider_type}.")
