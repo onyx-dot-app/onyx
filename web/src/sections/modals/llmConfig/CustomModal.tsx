@@ -17,13 +17,18 @@ import {
   FieldSeparator,
   ModelsAccessField,
   LLMConfigurationModalWrapper,
+  FieldWrapper,
 } from "@/sections/modals/llmConfig/shared";
+import KeyValueInput, {
+  KeyValue,
+} from "@/refresh-components/inputs/InputKeyValue";
 import { toast } from "@/hooks/useToast";
 import { Content } from "@opal/layouts";
+import { Section } from "@/layouts/general-layouts";
 
-function customConfigProcessing(customConfigsList: [string, string][]) {
+function customConfigProcessing(items: KeyValue[]) {
   const customConfig: { [key: string]: string } = {};
-  customConfigsList.forEach(([key, value]) => {
+  items.forEach(({ key, value }) => {
     customConfig[key] = value;
   });
   return customConfig;
@@ -68,7 +73,9 @@ export default function CustomModal({
       },
     ],
     custom_config_list: existingLlmProvider?.custom_config
-      ? Object.entries(existingLlmProvider.custom_config)
+      ? Object.entries(existingLlmProvider.custom_config).map(
+          ([key, value]) => ({ key, value: String(value) })
+        )
       : [],
     deployment_name: existingLlmProvider?.deployment_name ?? null,
   };
@@ -185,23 +192,35 @@ export default function CustomModal({
 
           <FieldSeparator />
 
-          <Content
-            title="Provider Configs"
-            description="Add properties as needed by the model provider. This is passed to LiteLLM completion() call as arguments in the environment variable. See LiteLLM documentation for more instructions."
-            variant="section"
-            sizePreset="main-ui"
-          />
+          <FieldWrapper>
+            <Section gap={0.75}>
+              <Content
+                title="Provider Configs"
+                description="Add properties as needed by the model provider. This is passed to LiteLLM completion() call as arguments in the environment variable. See LiteLLM documentation for more instructions."
+                variant="section"
+                sizePreset="main-content"
+              />
 
-          {/* TODO: Provider config fields (provider name, API key, API base, API version, custom configs) */}
+              <KeyValueInput
+                items={formikProps.values.custom_config_list}
+                onChange={(items) =>
+                  formikProps.setFieldValue("custom_config_list", items)
+                }
+                addButtonLabel="Add Line"
+              />
+            </Section>
+          </FieldWrapper>
 
           <FieldSeparator />
 
-          <Content
-            title="Models"
-            description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
-            variant="section"
-            sizePreset="main-ui"
-          />
+          <FieldWrapper>
+            <Content
+              title="Models"
+              description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
+              variant="section"
+              sizePreset="main-content"
+            />
+          </FieldWrapper>
 
           {/* TODO: Model configuration fields (model list, default model selection) */}
 

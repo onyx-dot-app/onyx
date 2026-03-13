@@ -78,8 +78,9 @@ import React, {
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
-import { Button } from "@opal/components";
+import { Button, EmptyMessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
+import type { WithoutStyles } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
 import { FieldMessage } from "../messages/FieldMessage";
@@ -92,6 +93,11 @@ type KeyValueError = {
   value?: string;
 };
 
+const GRID_COLS = {
+  equal: "grid-cols-[1fr_1fr_2.25rem]",
+  "key-wide": "grid-cols-[3fr_2fr_2.25rem]",
+} as const;
+
 interface KeyValueInputItemProps {
   item: KeyValue;
   onChange: (next: KeyValue) => void;
@@ -102,11 +108,10 @@ interface KeyValueInputItemProps {
   error?: KeyValueError;
   canRemove: boolean;
   index: number;
-  layout?: "equal" | "key-wide";
   fieldId: string;
 }
 
-const KeyValueInputItem = ({
+function KeyValueInputItem({
   item,
   onChange,
   disabled,
@@ -116,90 +121,82 @@ const KeyValueInputItem = ({
   error,
   canRemove,
   index,
-  layout = "equal",
   fieldId,
-}: KeyValueInputItemProps) => {
-  // Layout classes: equal = both flex-1, key-wide = key gets more space (3/5 vs 2/5)
-  const keyClassName = layout === "equal" ? "flex-1" : "flex-[3]";
-  const valueClassName = layout === "equal" ? "flex-1" : "flex-[2]";
-
+}: KeyValueInputItemProps) {
   return (
-    <div className="flex gap-1 w-full">
-      <div className="flex gap-2 flex-1">
-        <div className={cn(keyClassName, "flex flex-col gap-y-0.5")}>
-          <InputTypeIn
-            placeholder={keyPlaceholder || "Key"}
-            value={item.key}
-            onChange={(e) => onChange({ ...item, key: e.target.value })}
-            aria-label={`${keyPlaceholder || "Key"} ${index + 1}`}
-            aria-invalid={!!error?.key}
-            aria-describedby={
-              error?.key ? `${fieldId}-key-error-${index}` : undefined
-            }
-            variant={disabled ? "disabled" : undefined}
-            showClearButton={false}
-          />
-          {error?.key && (
-            <FieldMessage variant="error" className="ml-0.5">
-              <FieldMessage.Content
-                id={`${fieldId}-key-error-${index}`}
-                role="alert"
-                className="ml-0.5"
-              >
-                {error.key}
-              </FieldMessage.Content>
-            </FieldMessage>
-          )}
-        </div>
-        <div className={cn(valueClassName, "flex flex-col gap-y-0.5")}>
-          <InputTypeIn
-            placeholder={valuePlaceholder || "Value"}
-            value={item.value}
-            onChange={(e) => onChange({ ...item, value: e.target.value })}
-            aria-label={`${valuePlaceholder || "Value"} ${index + 1}`}
-            aria-invalid={!!error?.value}
-            aria-describedby={
-              error?.value ? `${fieldId}-value-error-${index}` : undefined
-            }
-            variant={disabled ? "disabled" : undefined}
-            showClearButton={false}
-          />
-          {error?.value && (
-            <FieldMessage variant="error" className="ml-0.5">
-              <FieldMessage.Content
-                id={`${fieldId}-value-error-${index}`}
-                role="alert"
-                className="ml-0.5"
-              >
-                {error.value}
-              </FieldMessage.Content>
-            </FieldMessage>
-          )}
-        </div>
+    <>
+      <div className="flex flex-col gap-y-0.5">
+        <InputTypeIn
+          placeholder={keyPlaceholder || "Key"}
+          value={item.key}
+          onChange={(e) => onChange({ ...item, key: e.target.value })}
+          aria-label={`${keyPlaceholder || "Key"} ${index + 1}`}
+          aria-invalid={!!error?.key}
+          aria-describedby={
+            error?.key ? `${fieldId}-key-error-${index}` : undefined
+          }
+          variant={disabled ? "disabled" : undefined}
+          showClearButton={false}
+        />
+        {error?.key && (
+          <FieldMessage variant="error" className="ml-0.5">
+            <FieldMessage.Content
+              id={`${fieldId}-key-error-${index}`}
+              role="alert"
+              className="ml-0.5"
+            >
+              {error.key}
+            </FieldMessage.Content>
+          </FieldMessage>
+        )}
       </div>
-      <div className="flex items-start pt-[2px]">
-        <Disabled disabled={disabled || !canRemove}>
-          <Button
-            prominence="tertiary"
-            size="sm"
-            icon={SvgMinusCircle}
-            onClick={onRemove}
-            aria-label={`Remove ${keyPlaceholder || "key-value"} pair ${
-              index + 1
-            }`}
-          />
-        </Disabled>
+      <div className="flex flex-col gap-y-0.5">
+        <InputTypeIn
+          placeholder={valuePlaceholder || "Value"}
+          value={item.value}
+          onChange={(e) => onChange({ ...item, value: e.target.value })}
+          aria-label={`${valuePlaceholder || "Value"} ${index + 1}`}
+          aria-invalid={!!error?.value}
+          aria-describedby={
+            error?.value ? `${fieldId}-value-error-${index}` : undefined
+          }
+          variant={disabled ? "disabled" : undefined}
+          showClearButton={false}
+        />
+        {error?.value && (
+          <FieldMessage variant="error" className="ml-0.5">
+            <FieldMessage.Content
+              id={`${fieldId}-value-error-${index}`}
+              role="alert"
+              className="ml-0.5"
+            >
+              {error.value}
+            </FieldMessage.Content>
+          </FieldMessage>
+        )}
       </div>
-    </div>
+      <Disabled disabled={disabled || !canRemove}>
+        <Button
+          prominence="tertiary"
+          icon={SvgMinusCircle}
+          onClick={onRemove}
+          aria-label={`Remove ${keyPlaceholder || "key-value"} pair ${
+            index + 1
+          }`}
+        />
+      </Disabled>
+    </>
   );
-};
+}
 
 export interface KeyValueInputProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "onChange"> {
+  extends WithoutStyles<
+    Omit<React.HTMLAttributes<HTMLDivElement>, "onChange">
+  > {
   /** Title for the key column */
-  keyTitle: string;
+  keyTitle?: string;
   /** Title for the value column */
-  valueTitle: string;
+  valueTitle?: string;
   /** Array of key-value pairs */
   items: KeyValue[];
   /** Callback when items change */
@@ -242,9 +239,9 @@ export interface KeyValueInputProps
   addButtonLabel?: string;
 }
 
-const KeyValueInput = ({
-  keyTitle,
-  valueTitle,
+export default function KeyValueInput({
+  keyTitle = "Key",
+  valueTitle = "Value",
   items = [],
   onChange,
   onAdd,
@@ -260,9 +257,8 @@ const KeyValueInput = ({
   validateEmptyKeys = true,
   name,
   addButtonLabel = "Add Line",
-  className,
   ...rest
-}: KeyValueInputProps) => {
+}: KeyValueInputProps) {
   // Try to get field context if used within FormField (safe access)
   const fieldContext = useContext(FieldContext);
 
@@ -434,75 +430,61 @@ const KeyValueInput = ({
 
   const autoId = useId();
   const fieldId = fieldContext?.baseId || name || `key-value-input-${autoId}`;
-
-  // Header layout classes to match input layout
-  const headerKeyClassName = layout === "equal" ? "flex-1" : "flex-[3]";
-  const headerValueClassName = layout === "equal" ? "flex-1" : "flex-[2]";
+  const gridCols = GRID_COLS[layout];
 
   return (
     <div
-      className={cn("w-full flex flex-col gap-y-2", className)}
+      className="w-full flex flex-col gap-y-2"
       role="group"
       aria-labelledby={`${fieldId}-header`}
       {...rest}
     >
-      <div id={`${fieldId}-header`} className="flex gap-1 items-center w-full">
-        <div className="flex gap-2 flex-1">
-          <Text as="p" text04 mainUiAction className={headerKeyClassName}>
-            {keyTitle}
-          </Text>
-          <Text as="p" text04 mainUiAction className={headerValueClassName}>
-            {valueTitle}
-          </Text>
-        </div>
-        <div className="w-[1.5rem]" aria-hidden />
-      </div>
-
       {items && items.length > 0 ? (
-        <div
-          className="flex flex-col gap-y-2"
-          role="list"
-          aria-label={`${keyTitle} and ${valueTitle} pairs`}
-        >
+        <div className={cn("grid items-center gap-1", gridCols)}>
+          {/*
+            # NOTE (@raunakab)
+            We add this space below the "title"-row to add some breathing room between the titles and the key-value items.
+            Since we're using a `grid` template, the padding below *one* item in a row applies additional height to *all* items in that row.
+          */}
+          <div className="pb-1">
+            <Text id={`${fieldId}-header`} mainUiAction>
+              {keyTitle}
+            </Text>
+          </div>
+          <Text mainUiAction>{valueTitle}</Text>
+          <div aria-hidden />
+
           {items.map((item, index) => (
-            <div key={index} role="listitem">
-              <KeyValueInputItem
-                item={item}
-                onChange={(next) => handleItemChange(index, next)}
-                disabled={disabled}
-                onRemove={() => handleRemove(index)}
-                keyPlaceholder={keyTitle}
-                valuePlaceholder={valueTitle}
-                error={errors[index]}
-                canRemove={canRemoveItems}
-                index={index}
-                layout={layout}
-                fieldId={fieldId}
-              />
-            </div>
+            <KeyValueInputItem
+              key={index}
+              item={item}
+              onChange={(next) => handleItemChange(index, next)}
+              disabled={disabled}
+              onRemove={() => handleRemove(index)}
+              keyPlaceholder={keyTitle}
+              valuePlaceholder={valueTitle}
+              error={errors[index]}
+              canRemove={canRemoveItems}
+              index={index}
+              fieldId={fieldId}
+            />
           ))}
         </div>
       ) : (
-        <Text as="p" text03 secondaryBody className="ml-0.5">
-          No items added yet.
-        </Text>
+        <EmptyMessageCard title="No items added yet." />
       )}
 
-      <div>
-        <Disabled disabled={disabled}>
-          <Button
-            prominence="secondary"
-            onClick={handleAdd}
-            icon={SvgPlusCircle}
-            aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
-            type="button"
-          >
-            {addButtonLabel}
-          </Button>
-        </Disabled>
-      </div>
+      <Disabled disabled={disabled}>
+        <Button
+          prominence="secondary"
+          onClick={handleAdd}
+          icon={SvgPlusCircle}
+          aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
+          type="button"
+        >
+          {addButtonLabel}
+        </Button>
+      </Disabled>
     </div>
   );
-};
-
-export default KeyValueInput;
+}
