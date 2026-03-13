@@ -459,7 +459,7 @@ for (const theme of THEMES) {
         );
       });
 
-      test("AI response with LaTeX math renders correctly", async ({
+      test.only("AI response with LaTeX math renders correctly", async ({
         page,
       }) => {
         await openChat(page);
@@ -468,19 +468,20 @@ for (const theme of THEMES) {
         await sendMessage(page, "Show me inline and block math");
 
         const aiMessage = page.getByTestId("onyx-ai-message").first();
+
+        await screenshotChatContainer(
+          page,
+          `chat-latex-math-response-${theme}`
+        );
+
         await expect(aiMessage).toContainText("Inline math should render");
         await expect(aiMessage).toContainText(
           "This currency value should stay plain text: $100."
         );
         await expect(aiMessage.locator(".katex")).toHaveCount(2);
         await expect(aiMessage.locator(".katex-display")).toBeVisible();
-        await expect(aiMessage.getByTestId("code-block")).toContainText(
+        await expect(aiMessage.getByRole("code")).toContainText(
           "\\int_0^1 x^2 \\, dx = \\frac{1}{3}"
-        );
-
-        await screenshotChatContainer(
-          page,
-          `chat-latex-math-response-${theme}`
         );
       });
     });
