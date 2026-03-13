@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -9,6 +8,8 @@ from onyx.db.models import User
 from onyx.db.notification import dismiss_notification
 from onyx.db.notification import get_notification_by_id
 from onyx.db.notification import get_notifications
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.utils import ensure_build_mode_intro_notification
 from onyx.server.features.release_notes.utils import (
     ensure_release_notes_fresh_and_notify,
@@ -64,10 +65,10 @@ def dismiss_notification_endpoint(
     try:
         notification = get_notification_by_id(notification_id, user, db_session)
     except PermissionError:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to dismiss this notification"
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED, "Not authorized to dismiss this notification"
         )
     except ValueError:
-        raise HTTPException(status_code=404, detail="Notification not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Notification not found")
 
     dismiss_notification(notification, db_session)
