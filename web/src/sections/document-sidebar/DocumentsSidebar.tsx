@@ -10,7 +10,7 @@ import {
   memo,
   useRef,
   useState,
-  useEffect,
+  useCallback,
 } from "react";
 import { getCitations } from "@/app/app/services/packetUtils";
 import {
@@ -135,21 +135,24 @@ const DocumentsSidebar = memo(
       return { citedDocumentIds, citationOrder };
     }, [idOfMessageToDisplay, selectedMessage?.packets.length]);
 
-    const sidebarRef = useRef<HTMLDivElement>(null);
-    const moreSentinelRef = useRef<HTMLDivElement>(null);
+    const observerRef = useRef<IntersectionObserver | null>(null);
     const [isMoreStuck, setIsMoreStuck] = useState(false);
 
-    useEffect(() => {
-      const sentinel = moreSentinelRef.current;
-      const root = sidebarRef.current;
-      if (!sentinel || !root) return;
+    const moreSentinelRef = useCallback((node: HTMLDivElement | null) => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+
+      if (!node) return;
+
+      const root = node.closest("#onyx-chat-sidebar");
+      if (!root) return;
 
       const observer = new IntersectionObserver(
         (entries) => setIsMoreStuck(!entries[0]?.isIntersecting),
         { root, threshold: 0 }
       );
-      observer.observe(sentinel);
-      return () => observer.disconnect();
+      observer.observe(node);
+      observerRef.current = observer;
     }, []);
 
     // if these are missing for some reason, then nothing we can do. Just
@@ -191,7 +194,6 @@ const DocumentsSidebar = memo(
 
     return (
       <div
-        ref={sidebarRef}
         id="onyx-chat-sidebar"
         className="bg-background-tint-01 overflow-y-scroll h-full w-full border-l"
       >
@@ -219,7 +221,7 @@ const DocumentsSidebar = memo(
 
           {hasOther && (
             <div>
-              <div ref={moreSentinelRef} className="h-0" />
+              <div ref={moreSentinelRef} className="h-px" />
               <Header
                 isTop={!hasCited || isMoreStuck}
                 onClose={!hasCited || isMoreStuck ? closeSidebar : undefined}
