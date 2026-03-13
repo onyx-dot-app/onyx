@@ -69,11 +69,32 @@ Set secret name
 {{- end }}
 
 {{/*
+Whether the user auth secret should be managed by the chart.
+This secret is required for basic, cloud, Google OAuth, and OIDC auth flows,
+but not for SAML where the external IdP owns the login flow.
+*/}}
+{{- define "onyx.userauthEnabled" -}}
+{{- $authType := lower (default "basic" .Values.configMap.AUTH_TYPE) -}}
+{{- $userauth := .Values.auth.userauth | default dict -}}
+{{- $enabled := true -}}
+{{- if hasKey $userauth "enabled" -}}
+{{- $enabled = $userauth.enabled -}}
+{{- end -}}
+{{- if and $enabled (ne $authType "saml") -}}true{{- end -}}
+{{- end }}
+
+{{/*
 Create env vars from secrets
 */}}
 {{- define "onyx.envSecrets" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
+    {{- $secretEnabled := false -}}
+    {{- if eq $secretSuffix "userauth" -}}
+    {{- $secretEnabled = eq (include "onyx.userauthEnabled" $) "true" -}}
+    {{- else if and (ne $secretContent.enabled false) ($secretContent.secretKeys) -}}
+    {{- $secretEnabled = true -}}
+    {{- end -}}
+    {{- if and $secretEnabled ($secretContent.secretKeys) }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:

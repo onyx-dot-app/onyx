@@ -1184,7 +1184,8 @@ auth:
       opensearch_admin_username: "admin"
       opensearch_admin_password: "OnyxDev1!"
   userauth:
-    # -- Used for signing password reset tokens, email verification tokens, and JWT tokens.
+    # -- Used for password reset / verification tokens and OAuth/OIDC state signing.
+    # Automatically skipped when configMap.AUTH_TYPE is "saml".
     enabled: true
     # -- Overwrite the default secret name, ignored if existingSecret is defined
     secretName: 'onyx-userauth'
@@ -1193,15 +1194,15 @@ auth:
     # -- This defines the env var to secret map
     secretKeys:
       USER_AUTH_SECRET: user_auth_secret
-    # -- Secret value. Required - generate with: openssl rand -hex 32
-    # If not set, helm install/upgrade will fail.
+    # -- Secret value. Required for non-SAML auth modes - generate with: openssl rand -hex 32
+    # If not set, helm install/upgrade will fail when the configured auth mode uses it.
     values:
       user_auth_secret: ""
 
 configMap:
   # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
   # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.34.
-  # You must also set auth.userauth.values.user_auth_secret.
+  # You must also set auth.userauth.values.user_auth_secret for non-SAML auth modes.
   AUTH_TYPE: "basic"
   # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
   OIDC_PKCE_ENABLED: ""
