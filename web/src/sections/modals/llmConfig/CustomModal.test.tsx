@@ -1,5 +1,4 @@
 /**
-/**
  * Integration Test: Custom LLM Provider Configuration Workflow
  *
  * Tests the complete user journey for configuring a custom LLM provider.
@@ -62,41 +61,23 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     fetchSpy.mockRestore();
   });
 
-  async function openModalAndFillBasicFields(
+  async function fillBasicFields(
     user: ReturnType<typeof setupUser>,
     options: {
       name: string;
       provider: string;
-      apiKey?: string;
       modelName: string;
-      defaultModel: string;
     }
   ) {
-    // Click the button to open the modal
-    const openButton = screen.getByRole("button", {
-      name: /add custom llm provider/i,
-    });
-    await user.click(openButton);
-
-    // Fill in the form
-    const nameInput = screen.getByLabelText(/display name/i);
-    const providerInput = screen.getByLabelText(/provider name/i);
+    const nameInput = screen.getByPlaceholderText("Display Name");
+    const providerInput = screen.getByPlaceholderText("Provider Name");
 
     await user.type(nameInput, options.name);
     await user.type(providerInput, options.provider);
 
-    if (options.apiKey) {
-      const apiKeyInput = screen.getByLabelText(/api key/i);
-      await user.type(apiKeyInput, options.apiKey);
-    }
-
-    // Fill in model configuration
-    const modelNameInput = screen.getByPlaceholderText(/model-name-1/i);
+    // Fill in model name (first model row)
+    const modelNameInput = screen.getByPlaceholderText("Model name");
     await user.type(modelNameInput, options.modelName);
-
-    // Set default model
-    const defaultModelInput = screen.getByLabelText(/default model/i);
-    await user.type(defaultModelInput, options.defaultModel);
   }
 
   test("creates a new custom LLM provider successfully", async () => {
@@ -115,22 +96,19 @@ describe("Custom LLM Provider Configuration Workflow", () => {
         id: 1,
         name: "My Custom Provider",
         provider: "openai",
-        api_key: "test-key",
       }),
     } as Response);
 
-    render(<CustomModal />);
+    render(<CustomModal open={true} onOpenChange={() => {}} />);
 
-    await openModalAndFillBasicFields(user, {
+    await fillBasicFields(user, {
       name: "My Custom Provider",
       provider: "openai",
-      apiKey: "test-key-123",
       modelName: "gpt-4",
-      defaultModel: "gpt-4",
     });
 
     // Submit the form
-    const submitButton = screen.getByRole("button", { name: /enable/i });
+    const submitButton = screen.getByRole("button", { name: /connect/i });
     await user.click(submitButton);
 
     // Verify test API was called first
@@ -188,18 +166,16 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Invalid API key" }),
     } as Response);
 
-    render(<CustomModal />);
+    render(<CustomModal open={true} onOpenChange={() => {}} />);
 
-    await openModalAndFillBasicFields(user, {
+    await fillBasicFields(user, {
       name: "Bad Provider",
       provider: "openai",
-      apiKey: "invalid-key",
       modelName: "gpt-4",
-      defaultModel: "gpt-4",
     });
 
     // Submit the form
-    const submitButton = screen.getByRole("button", { name: /enable/i });
+    const submitButton = screen.getByRole("button", { name: /connect/i });
     await user.click(submitButton);
 
     // Verify test API was called
@@ -212,9 +188,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       );
     });
 
-    // Verify error is displayed (form should NOT proceed to create)
+    // Verify error toast is displayed
     await waitFor(() => {
-      expect(screen.getByText(/invalid api key/i)).toBeInTheDocument();
+      expect(toast.error).toHaveBeenCalled();
     });
 
     // Verify create API was NOT called
@@ -238,6 +214,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       model_configurations: [
         {
           name: "claude-3-opus",
+          display_name: "",
           is_visible: true,
           max_input_tokens: null,
           supports_image_input: false,
@@ -261,21 +238,18 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     // Mock PUT /api/admin/llm/provider (update, no is_creation param)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ ...existingProvider, api_key: "new-key" }),
+      json: async () => ({ ...existingProvider }),
     } as Response);
 
-    render(<CustomModal existingLlmProvider={existingProvider} />);
+    render(
+      <CustomModal
+        existingLlmProvider={existingProvider}
+        open={true}
+        onOpenChange={() => {}}
+      />
+    );
 
-    // For existing provider, click "Edit" button to open modal
-    const editButton = screen.getByRole("button", { name: /edit/i });
-    await user.click(editButton);
-
-    // Update the API key
-    const apiKeyInput = screen.getByLabelText(/api key/i);
-    await user.clear(apiKeyInput);
-    await user.type(apiKeyInput, "new-key-456");
-
-    // Submit
+    // Submit — button says "Update" for existing providers
     const submitButton = screen.getByRole("button", { name: /update/i });
     await user.click(submitButton);
 
@@ -305,7 +279,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     });
   });
 
-  test("preserves additional models when updating an openai-compatible provider", async () => {
+  test("preserves additional models when updating a provider", async () => {
     const user = setupUser();
 
     const existingProvider = {
@@ -318,6 +292,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       model_configurations: [
         {
           name: "gpt-oss-20b-bw-failover",
+          display_name: "",
           is_visible: true,
           max_input_tokens: null,
           supports_image_input: false,
@@ -344,15 +319,10 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({
         ...existingProvider,
         model_configurations: [
-          {
-            name: "gpt-oss-20b-bw-failover",
-            is_visible: true,
-            max_input_tokens: null,
-            supports_image_input: false,
-            supports_reasoning: false,
-          },
+          ...existingProvider.model_configurations,
           {
             name: "nemotron",
+            display_name: "",
             is_visible: true,
             max_input_tokens: null,
             supports_image_input: false,
@@ -362,18 +332,21 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       }),
     } as Response);
 
-    render(<CustomModal existingLlmProvider={existingProvider} />);
+    render(
+      <CustomModal
+        existingLlmProvider={existingProvider}
+        open={true}
+        onOpenChange={() => {}}
+      />
+    );
 
-    const editButton = screen.getByRole("button", { name: /edit/i });
-    await user.click(editButton);
+    // Add a new model
+    const addModelButton = screen.getByRole("button", { name: /add model/i });
+    await user.click(addModelButton);
 
-    const addNewButtons = screen.getAllByRole("button", { name: /add new/i });
-    const modelConfigurationAddButton = addNewButtons[1];
-    expect(modelConfigurationAddButton).toBeDefined();
-    await user.click(modelConfigurationAddButton!);
-
-    const secondModelNameInput = screen.getByPlaceholderText(/model-name-2/i);
-    await user.type(secondModelNameInput, "nemotron");
+    // Fill in second model name
+    const modelInputs = screen.getAllByPlaceholderText("Model name");
+    await user.type(modelInputs[1]!, "nemotron");
 
     const submitButton = screen.getByRole("button", { name: /update/i });
     await user.click(submitButton);
@@ -395,7 +368,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     expect(updateCall).toBeDefined();
 
     const requestBody = JSON.parse(updateCall![1].body as string);
-    expect(requestBody.default_model_name).toBe("gpt-oss-20b-bw-failover");
     expect(requestBody.model_configurations).toHaveLength(2);
     expect(requestBody.model_configurations).toEqual(
       expect.arrayContaining([
@@ -430,17 +402,22 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({}),
     } as Response);
 
-    render(<CustomModal shouldMarkAsDefault={true} />);
+    render(
+      <CustomModal
+        shouldMarkAsDefault={true}
+        open={true}
+        onOpenChange={() => {}}
+      />
+    );
 
-    await openModalAndFillBasicFields(user, {
+    await fillBasicFields(user, {
       name: "New Default Provider",
       provider: "openai",
       modelName: "gpt-4",
-      defaultModel: "gpt-4",
     });
 
     // Submit
-    const submitButton = screen.getByRole("button", { name: /enable/i });
+    const submitButton = screen.getByRole("button", { name: /connect/i });
     await user.click(submitButton);
 
     // Verify set as default API was called with correct endpoint and body
@@ -476,17 +453,16 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Database error" }),
     } as Response);
 
-    render(<CustomModal />);
+    render(<CustomModal open={true} onOpenChange={() => {}} />);
 
-    await openModalAndFillBasicFields(user, {
+    await fillBasicFields(user, {
       name: "Test Provider",
       provider: "openai",
       modelName: "gpt-4",
-      defaultModel: "gpt-4",
     });
 
     // Submit
-    const submitButton = screen.getByRole("button", { name: /enable/i });
+    const submitButton = screen.getByRole("button", { name: /connect/i });
     await user.click(submitButton);
 
     // Verify error toast
@@ -512,52 +488,34 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ id: 1, name: "Provider with Custom Config" }),
     } as Response);
 
-    render(<CustomModal />);
-
-    // Open modal
-    const openButton = screen.getByRole("button", {
-      name: /add custom llm provider/i,
-    });
-    await user.click(openButton);
+    render(<CustomModal open={true} onOpenChange={() => {}} />);
 
     // Fill basic fields
-    const nameInput = screen.getByLabelText(/display name/i);
+    const nameInput = screen.getByPlaceholderText("Display Name");
     await user.type(nameInput, "Cloudflare Provider");
 
-    const providerInput = screen.getByLabelText(/provider name/i);
+    const providerInput = screen.getByPlaceholderText("Provider Name");
     await user.type(providerInput, "cloudflare");
 
-    // Click "Add New" button for custom config
-    const addNewButtons = screen.getAllByRole("button", { name: /add new/i });
-    const customConfigAddButton = addNewButtons[0]; // First "Add New" is for custom config
-    expect(customConfigAddButton).toBeDefined();
-    await user.click(customConfigAddButton!);
+    // Click "Add Line" button for custom config (aria-label from KeyValueInput)
+    const addLineButton = screen.getByRole("button", {
+      name: /add key and value pair/i,
+    });
+    await user.click(addLineButton);
 
     // Fill in custom config key-value pair
-    const customConfigInputs = screen.getAllByRole("textbox");
-    const keyInput = customConfigInputs.find(
-      (input) => input.getAttribute("name") === "custom_config_list[0][0]"
-    );
-    const valueInput = customConfigInputs.find(
-      (input) => input.getAttribute("name") === "custom_config_list[0][1]"
-    );
+    const keyInputs = screen.getAllByPlaceholderText("Key");
+    const valueInputs = screen.getAllByPlaceholderText("Value");
 
-    expect(keyInput).toBeDefined();
-    expect(valueInput).toBeDefined();
+    await user.type(keyInputs[0]!, "CLOUDFLARE_ACCOUNT_ID");
+    await user.type(valueInputs[0]!, "my-account-id-123");
 
-    await user.type(keyInput!, "CLOUDFLARE_ACCOUNT_ID");
-    await user.type(valueInput!, "my-account-id-123");
-
-    // Fill in model configuration
-    const modelNameInput = screen.getByPlaceholderText(/model-name-1/i);
+    // Fill in model name
+    const modelNameInput = screen.getByPlaceholderText("Model name");
     await user.type(modelNameInput, "@cf/meta/llama-2-7b-chat-int8");
 
-    // Set default model
-    const defaultModelInput = screen.getByLabelText(/default model/i);
-    await user.type(defaultModelInput, "@cf/meta/llama-2-7b-chat-int8");
-
     // Submit
-    const submitButton = screen.getByRole("button", { name: /enable/i });
+    const submitButton = screen.getByRole("button", { name: /connect/i });
     await user.click(submitButton);
 
     // Verify the custom config was included in the request

@@ -711,7 +711,13 @@ export function LLMConfigurationModalWrapper({
             </Button>
             <Disabled disabled={!isFormValid || isTesting}>
               <Button type="submit">
-                {isTesting ? "Connecting..." : "Connect"}
+                {existingProviderName
+                  ? isTesting
+                    ? "Updating..."
+                    : "Update"
+                  : isTesting
+                    ? "Connecting..."
+                    : "Connect"}
               </Button>
             </Disabled>
           </Modal.Footer>
