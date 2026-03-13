@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { Formik } from "formik";
+import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
+  LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
 import { fetchLiteLLMProxyModels } from "@/app/admin/configuration/llm/utils";
@@ -29,16 +30,127 @@ import {
   DisplayNameField,
   ModelsAccessField,
   FieldSeparator,
-  FetchModelsButton,
+  FieldWrapper,
   SingleDefaultModelField,
 } from "@/sections/modals/llmConfig/shared";
+import { toast } from "@/hooks/useToast";
 
-const LITELLM_PROXY_DISPLAY_NAME = "LiteLLM Proxy";
 const DEFAULT_API_BASE = "http://localhost:4000";
 
 interface LiteLLMProxyModalValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
+}
+
+interface LiteLLMProxyModalInternalsProps {
+  formikProps: FormikProps<LiteLLMProxyModalValues>;
+  existingLlmProvider: LLMProviderView | undefined;
+  fetchedModels: ModelConfiguration[];
+  setFetchedModels: (models: ModelConfiguration[]) => void;
+  modelConfigurations: ModelConfiguration[];
+  isTesting: boolean;
+  onClose: () => void;
+  isOnboarding: boolean;
+}
+
+function LiteLLMProxyModalInternals({
+  formikProps,
+  existingLlmProvider,
+  fetchedModels,
+  setFetchedModels,
+  modelConfigurations,
+  isTesting,
+  onClose,
+  isOnboarding,
+}: LiteLLMProxyModalInternalsProps) {
+  const currentModels =
+    fetchedModels.length > 0
+      ? fetchedModels
+      : existingLlmProvider?.model_configurations || modelConfigurations;
+
+  const isFetchDisabled =
+    !formikProps.values.api_base || !formikProps.values.api_key;
+
+  const handleFetchModels = async () => {
+    const { models, error } = await fetchLiteLLMProxyModels({
+      api_base: formikProps.values.api_base,
+      api_key: formikProps.values.api_key,
+      provider_name: existingLlmProvider?.name,
+    });
+    if (error) {
+      throw new Error(error);
+    }
+    setFetchedModels(models);
+  };
+
+  // Auto-fetch models on initial load when editing an existing provider
+  useEffect(() => {
+    if (existingLlmProvider && !isFetchDisabled) {
+      handleFetchModels().catch((err) => {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to fetch models"
+        );
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <LLMConfigurationModalWrapper
+      providerEndpoint={LLMProviderName.LITELLM_PROXY}
+      existingProviderName={existingLlmProvider?.name}
+      onClose={onClose}
+      isFormValid={formikProps.isValid}
+      isTesting={isTesting}
+    >
+      <FieldWrapper>
+        <InputLayouts.Vertical
+          name="api_base"
+          title="API Base URL"
+          subDescription="The base URL for your LiteLLM Proxy server."
+        >
+          <InputTypeInField
+            name="api_base"
+            placeholder="https://your-litellm-proxy.com"
+          />
+        </InputLayouts.Vertical>
+      </FieldWrapper>
+
+      <APIKeyField providerName="LiteLLM Proxy" />
+
+      {!isOnboarding && (
+        <>
+          <FieldSeparator />
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
+      )}
+
+      <FieldSeparator />
+
+      {isOnboarding ? (
+        <SingleDefaultModelField placeholder="E.g. gpt-4o" />
+      ) : (
+        <ModelsField
+          modelConfigurations={currentModels}
+          formikProps={formikProps}
+          noModelConfigurationsMessage={
+            "Fetch available models first, then you'll be able to select " +
+            "the models you want to make available in Onyx."
+          }
+          recommendedDefaultModel={null}
+          shouldShowAutoUpdateToggle={false}
+          onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+        />
+      )}
+
+      {!isOnboarding && (
+        <>
+          <FieldSeparator />
+          <ModelsAccessField formikProps={formikProps} />
+        </>
+      )}
+    </LLMConfigurationModalWrapper>
+  );
 }
 
 export function LiteLLMProxyModal({
@@ -135,82 +247,18 @@ export function LiteLLMProxyModal({
         }
       }}
     >
-      {(formikProps) => {
-        const currentModels =
-          fetchedModels.length > 0
-            ? fetchedModels
-            : existingLlmProvider?.model_configurations || modelConfigurations;
-
-        const isFetchDisabled =
-          !formikProps.values.api_base || !formikProps.values.api_key;
-
-        return (
-          <LLMConfigurationModalWrapper
-            providerEndpoint={LLMProviderName.LITELLM_PROXY}
-            providerName={LITELLM_PROXY_DISPLAY_NAME}
-            existingProviderName={existingLlmProvider?.name}
-            onClose={onClose}
-            isFormValid={formikProps.isValid}
-            isTesting={isTesting}
-          >
-            {!isOnboarding && (
-              <DisplayNameField disabled={!!existingLlmProvider} />
-            )}
-
-            <InputLayouts.Vertical
-              name="api_base"
-              title="API Base URL"
-              description="The base URL for your LiteLLM Proxy server (e.g., http://localhost:4000)"
-            >
-              <InputTypeInField
-                name="api_base"
-                placeholder={DEFAULT_API_BASE}
-              />
-            </InputLayouts.Vertical>
-
-            <APIKeyField providerName="LiteLLM Proxy" />
-
-            <FetchModelsButton
-              onFetch={() =>
-                fetchLiteLLMProxyModels({
-                  api_base: formikProps.values.api_base,
-                  api_key: formikProps.values.api_key,
-                  provider_name: existingLlmProvider?.name,
-                })
-              }
-              isDisabled={isFetchDisabled}
-              disabledHint={
-                !formikProps.values.api_base
-                  ? "Enter the API base URL first."
-                  : !formikProps.values.api_key
-                    ? "Enter your API key first."
-                    : undefined
-              }
-              onModelsFetched={setFetchedModels}
-              autoFetchOnInitialLoad={!!existingLlmProvider}
-            />
-
-            <FieldSeparator />
-
-            {isOnboarding ? (
-              <SingleDefaultModelField placeholder="E.g. gpt-4o" />
-            ) : (
-              <ModelsField
-                modelConfigurations={currentModels}
-                formikProps={formikProps}
-                noModelConfigurationsMessage={
-                  "Fetch available models first, then you'll be able to select " +
-                  "the models you want to make available in Onyx."
-                }
-                recommendedDefaultModel={null}
-                shouldShowAutoUpdateToggle={false}
-              />
-            )}
-
-            {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
-          </LLMConfigurationModalWrapper>
-        );
-      }}
+      {(formikProps) => (
+        <LiteLLMProxyModalInternals
+          formikProps={formikProps}
+          existingLlmProvider={existingLlmProvider}
+          fetchedModels={fetchedModels}
+          setFetchedModels={setFetchedModels}
+          modelConfigurations={modelConfigurations}
+          isTesting={isTesting}
+          onClose={onClose}
+          isOnboarding={isOnboarding}
+        />
+      )}
     </Formik>
   );
 }
