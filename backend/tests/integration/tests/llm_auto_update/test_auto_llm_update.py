@@ -112,8 +112,7 @@ def wait_for_model_sync(
             return provider
 
         print(
-            f"Waiting for model sync... "
-            f"Current: {current_models}, Expected: {expected_model_names}"
+            f"Waiting for model sync... Current: {current_models}, Expected: {expected_model_names}"
         )
         time.sleep(POLL_INTERVAL_SECONDS)
 
@@ -124,13 +123,12 @@ def wait_for_model_sync(
         else set()
     )
     raise AssertionError(
-        f"Model sync timed out after {max_wait_seconds}s. "
-        f"Current models: {current_models}, Expected: {expected_model_names}"
+        f"Model sync timed out after {max_wait_seconds}s. Current models: {current_models}, Expected: {expected_model_names}"
     )
 
 
 def test_auto_mode_provider_gets_synced_from_github_config(
-    reset: None,  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
     admin_user: DATestUser,
 ) -> None:
     """
@@ -219,7 +217,7 @@ def test_auto_mode_provider_gets_synced_from_github_config(
 
 
 def test_manual_mode_provider_not_affected_by_auto_sync(
-    reset: None,  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
     admin_user: DATestUser,
 ) -> None:
     """
@@ -258,7 +256,6 @@ def test_manual_mode_provider_not_affected_by_auto_sync(
     updated_provider = _get_provider_by_id(admin_user, provider["id"])
     current_models = {m["name"] for m in updated_provider["model_configurations"]}
 
-    assert current_models == initial_models, (
-        f"Manual mode provider models should not change. "
-        f"Initial: {initial_models}, Current: {current_models}"
-    )
+    assert (
+        current_models == initial_models
+    ), f"Manual mode provider models should not change. Initial: {initial_models}, Current: {current_models}"

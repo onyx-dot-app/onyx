@@ -239,8 +239,7 @@ class MockLLM(LLM, MockLLMController):
 
         if len(tool_calls) != len(responses):
             raise ValueError(
-                "add_responses_together currently only supports "
-                "multiple tool call responses"
+                "add_responses_together currently only supports multiple tool call responses"
             )
 
         # Create combined first item with all tool call initial info

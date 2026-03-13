@@ -193,8 +193,7 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
         _skip_or_fail(
             strict=config.strict,
             message=(
-                f"{_ENV_API_KEY} or {_ENV_CUSTOM_CONFIG_JSON} is required for "
-                f"provider '{config.provider}'"
+                f"{_ENV_API_KEY} or {_ENV_CUSTOM_CONFIG_JSON} is required for provider '{config.provider}'"
             ),
         )
 
@@ -310,10 +309,9 @@ def _ensure_provider_is_default(
     list_response.raise_for_status()
     default_text = list_response.json().get("default_text")
     assert default_text is not None, "Expected a default provider after setting default"
-    assert default_text.get("provider_id") == provider_id, (
-        f"Expected provider {provider_id} to be default, "
-        f"found {default_text.get('provider_id')}"
-    )
+    assert (
+        default_text.get("provider_id") == provider_id
+    ), f"Expected provider {provider_id} to be default, found {default_text.get('provider_id')}"
     assert (
         default_text.get("model_name") == model_name
     ), f"Expected default model {model_name}, found {default_text.get('model_name')}"
@@ -362,10 +360,7 @@ def _run_chat_assertions(
                 f"tool_call_debug={response.tool_call_debug}"
             )
         else:
-            last_error = (
-                f"attempt={attempt} provider={provider} model={model_name} "
-                f"stream_error={response.error.error}"
-            )
+            last_error = f"attempt={attempt} provider={provider} model={model_name} stream_error={response.error.error}"
 
         time.sleep(attempt)
 

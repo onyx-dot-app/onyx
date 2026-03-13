@@ -118,10 +118,7 @@ def execute_control_plane_query(
     psql_flags = "-t" if tuple_only else ""
 
     # Build the SSH command with proper escaping
-    full_cmd = (
-        f"ssh -i {pem_file_location} ec2-user@{bastion_host} "
-        f'"psql {db_url} {psql_flags} -c \\"{query}\\""'
-    )
+    full_cmd = f'ssh -i {pem_file_location} ec2-user@{bastion_host} "psql {db_url} {psql_flags} -c \\"{query}\\""'
 
     result = subprocess.run(
         full_cmd,

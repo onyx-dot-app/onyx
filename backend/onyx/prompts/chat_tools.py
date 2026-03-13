@@ -2,10 +2,7 @@
 # The current generation of LLM is too unreliable for this task.
 # Onyx retrieval call as a tool option
 DANSWER_TOOL_NAME = "Current Search"
-DANSWER_TOOL_DESCRIPTION = (
-    "A search tool that can find information on any topic "
-    "including up to date and proprietary knowledge."
-)
+DANSWER_TOOL_DESCRIPTION = "A search tool that can find information on any topic including up to date and proprietary knowledge."
 
 
 # Tool calling format inspired from LangChain

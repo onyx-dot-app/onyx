@@ -95,7 +95,8 @@ class TestGuildDataIsolation:
     """Tests for guild data isolation between tenants via API."""
 
     def test_tenant_cannot_see_other_tenant_guilds(
-        self, reset_multitenant: None  # noqa: ARG002
+        self,
+        reset_multitenant: None,  # noqa: ARG002
     ) -> None:
         """Guilds created in tenant 1 are not visible from tenant 2.
 
@@ -159,7 +160,8 @@ class TestGuildDataIsolation:
             )
 
     def test_guild_list_returns_only_own_tenant(
-        self, reset_multitenant: None  # noqa: ARG002
+        self,
+        reset_multitenant: None,  # noqa: ARG002
     ) -> None:
         """List guilds returns exactly the guilds for that tenant.
 
@@ -258,14 +260,12 @@ class TestGuildDataIsolation:
             assert (
                 tenant1_guild["id"] == guild1_id
             ), "Tenant 1 should see their own guild"
-            assert tenant1_guild["guild_id"] == 111111111111111111, (
-                f"Tenant 1's guild should have guild_id 111111111111111111, "
-                f"got {tenant1_guild['guild_id']}"
-            )
-            assert tenant1_guild["guild_name"] == "Tenant 1 Server", (
-                f"Tenant 1's guild should have name 'Tenant 1 Server', "
-                f"got {tenant1_guild['guild_name']}"
-            )
+            assert (
+                tenant1_guild["guild_id"] == 111111111111111111
+            ), f"Tenant 1's guild should have guild_id 111111111111111111, got {tenant1_guild['guild_id']}"
+            assert (
+                tenant1_guild["guild_name"] == "Tenant 1 Server"
+            ), f"Tenant 1's guild should have name 'Tenant 1 Server', got {tenant1_guild['guild_name']}"
             assert (
                 tenant1_guild["registered_at"] is not None
             ), "Tenant 1's guild should be registered"
@@ -296,14 +296,12 @@ class TestGuildDataIsolation:
             assert (
                 tenant2_guild["id"] == guild2_id
             ), "Tenant 2 should see their own guild"
-            assert tenant2_guild["guild_id"] == 222222222222222222, (
-                f"Tenant 2's guild should have guild_id 222222222222222222, "
-                f"got {tenant2_guild['guild_id']}"
-            )
-            assert tenant2_guild["guild_name"] == "Tenant 2 Server", (
-                f"Tenant 2's guild should have name 'Tenant 2 Server', "
-                f"got {tenant2_guild['guild_name']}"
-            )
+            assert (
+                tenant2_guild["guild_id"] == 222222222222222222
+            ), f"Tenant 2's guild should have guild_id 222222222222222222, got {tenant2_guild['guild_id']}"
+            assert (
+                tenant2_guild["guild_name"] == "Tenant 2 Server"
+            ), f"Tenant 2's guild should have name 'Tenant 2 Server', got {tenant2_guild['guild_name']}"
             assert (
                 tenant2_guild["registered_at"] is not None
             ), "Tenant 2's guild should be registered"
@@ -340,7 +338,8 @@ class TestGuildAccessIsolation:
     """Tests for guild access isolation between tenants."""
 
     def test_tenant_cannot_access_other_tenant_guild(
-        self, reset_multitenant: None  # noqa: ARG002
+        self,
+        reset_multitenant: None,  # noqa: ARG002
     ) -> None:
         """Tenant 2 cannot access or modify tenant 1's guild by ID.
 

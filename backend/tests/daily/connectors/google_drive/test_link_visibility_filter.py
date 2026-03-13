@@ -11,7 +11,8 @@ from onyx.connectors.google_drive.models import RetrievedDriveFile
 
 
 def _stub_run_functions(
-    func_with_args: Iterable[tuple], max_workers: int = 8  # noqa: ARG001
+    func_with_args: Iterable[tuple],
+    max_workers: int = 8,  # noqa: ARG001, W291
 ) -> list[Any]:
     return [func(*args) for func, args in func_with_args]
 

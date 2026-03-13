@@ -897,7 +897,7 @@ def test_temporary_env_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
     def on_litellm_completion(
-        **kwargs: dict[str, Any],  # noqa: ARG001
+        **kwargs: dict[str, Any],  # noqa: ARG001, W291
     ) -> list[litellm.ModelResponse]:
         # Validate that the environment variables are those in custom config
         for env_var, value in CUSTOM_CONFIG.items():
@@ -966,7 +966,9 @@ def test_temporary_env_cleanup_on_exception(monkeypatch: pytest.MonkeyPatch) -> 
         custom_config=CUSTOM_CONFIG,
     )
 
-    def on_litellm_completion_raises(**kwargs: dict[str, Any]) -> None:  # noqa: ARG001
+    def on_litellm_completion_raises(
+        **kwargs: dict[str, Any],  # noqa: ARG001
+    ) -> None:  # noqa: ARG001, W291
         # Validate that the environment variables are those in custom config
         for env_var, value in CUSTOM_CONFIG.items():
             assert env_var in os.environ

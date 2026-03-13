@@ -1144,7 +1144,7 @@ def test_code_interpreter_receives_chat_files(
     db_session: Session,
     mock_ci_server: MockCodeInterpreterServer,
     _attach_python_tool_to_default_persona: None,
-    initialize_file_store: None,  # noqa: ARG001
+    initialize_file_store: None,  # noqa: ARG001, W291
 ) -> None:
     mock_ci_server.captured_requests.clear()
     mock_ci_server._file_counter = 0
@@ -1241,7 +1241,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
     db_session: Session,
     mock_ci_server: MockCodeInterpreterServer,
     _attach_python_tool_to_default_persona: None,
-    initialize_file_store: None,  # noqa: ARG001
+    initialize_file_store: None,  # noqa: ARG001, W291
 ) -> None:
     """After a code interpreter message completes, retrieving the message
     via translate_assistant_message_to_packets should emit PythonToolStart
@@ -1359,10 +1359,9 @@ def test_code_interpreter_replay_packets_include_code_and_output(
 
     # Extract PythonToolStart packets – these must contain the code
     start_packets = [p for p in packets if isinstance(p.obj, PythonToolStart)]
-    assert len(start_packets) == 1, (
-        f"Expected 1 PythonToolStart packet, got {len(start_packets)}. "
-        f"Packet types: {[type(p.obj).__name__ for p in packets]}"
-    )
+    assert (
+        len(start_packets) == 1
+    ), f"Expected 1 PythonToolStart packet, got {len(start_packets)}. Packet types: {[type(p.obj).__name__ for p in packets]}"
     start_obj = start_packets[0].obj
     assert isinstance(start_obj, PythonToolStart)
     assert start_obj.code == code
@@ -1383,7 +1382,7 @@ def test_code_interpreter_streaming_fallback_to_batch(
     db_session: Session,
     mock_ci_server: MockCodeInterpreterServer,
     _attach_python_tool_to_default_persona: None,
-    initialize_file_store: None,  # noqa: ARG001
+    initialize_file_store: None,  # noqa: ARG001, W291
 ) -> None:
     """When the streaming endpoint is not available (older code-interpreter),
     execute_streaming should fall back to the batch /v1/execute endpoint."""

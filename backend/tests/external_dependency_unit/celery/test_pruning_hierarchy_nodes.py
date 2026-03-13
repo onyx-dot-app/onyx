@@ -126,7 +126,8 @@ class MockSlimConnectorWithPermSync(SlimConnectorWithPermSync):
     """Yields a batch containing interleaved hierarchy nodes and slim docs."""
 
     def load_credentials(
-        self, credentials: dict[str, Any]  # noqa: ARG002
+        self,
+        credentials: dict[str, Any],  # noqa: ARG002
     ) -> dict[str, Any] | None:  # noqa: ARG002
         return None
 
@@ -252,7 +253,9 @@ def _create_test_documents(db_session: Session) -> list[DbDocument]:
 # ---------------------------------------------------------------------------
 
 
-def test_pruning_extracts_hierarchy_nodes(db_session: Session) -> None:  # noqa: ARG001
+def test_pruning_extracts_hierarchy_nodes(
+    db_session: Session,  # noqa: ARG001
+) -> None:  # noqa: ARG001, W291
     """extract_ids_from_runnable_connector must separate hierarchy node IDs and
     document IDs into the correct buckets of the SlimConnectorExtractionResult."""
     connector = MockSlimConnectorWithPermSync()
@@ -456,7 +459,7 @@ def test_pruning_hierarchy_node_upsert_updates_fields(db_session: Session) -> No
 
 
 def test_extraction_preserves_parent_hierarchy_raw_node_id(
-    db_session: Session,  # noqa: ARG001
+    db_session: Session,  # noqa: ARG001, W291
 ) -> None:
     """extract_ids_from_runnable_connector should carry the
     parent_hierarchy_raw_node_id from SlimDocument into the raw_id_to_parent dict."""

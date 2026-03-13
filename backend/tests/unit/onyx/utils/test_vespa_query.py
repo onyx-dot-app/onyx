@@ -250,10 +250,7 @@ class TestBuildVespaFilters:
         result = build_vespa_filters(filters)
 
         expected = f"!({HIDDEN}=true) and "
-        expected += (
-            '(access_control_list contains "user1" or '
-            'access_control_list contains "group1") and '
-        )
+        expected += '(access_control_list contains "user1" or access_control_list contains "group1") and '
         expected += f'({SOURCE_TYPE} contains "web") and '
         expected += f'({METADATA_LIST} contains "color{INDEX_SEPARATOR}red") and '
         # Knowledge scope filters are OR'd together
@@ -290,12 +287,7 @@ class TestBuildVespaFilters:
             user_file_ids=[id1],
         )
         result = build_vespa_filters(filters)
-        expected = (
-            f"!({HIDDEN}=true) and "
-            f'(({DOCUMENT_SETS} contains "engineering")'
-            f' or ({DOCUMENT_ID} contains "{str(id1)}")'
-            f") and "
-        )
+        expected = f'!({HIDDEN}=true) and (({DOCUMENT_SETS} contains "engineering") or ({DOCUMENT_ID} contains "{str(id1)}")) and '
         assert expected == result
 
     def test_empty_or_none_values(self) -> None:

@@ -18,7 +18,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 
 @pytest.fixture
-def setup_chat_session(reset: None) -> tuple[DATestUser, str]:  # noqa: ARG001
+def setup_chat_session(reset: None) -> tuple[DATestUser, str]:  # noqa: ARG001, W291
     # Create admin user and required resources
     admin_user: DATestUser = UserManager.create(name="admin_user")
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
@@ -69,7 +69,8 @@ def setup_chat_session(reset: None) -> tuple[DATestUser, str]:  # noqa: ARG001
     reason="Chat history tests are enterprise only",
 )
 def test_chat_history_endpoints(
-    reset: None, setup_chat_session: tuple[DATestUser, str]  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    setup_chat_session: tuple[DATestUser, str],  # noqa: W291
 ) -> None:
     admin_user, first_chat_id = setup_chat_session
 
@@ -126,7 +127,8 @@ def test_chat_history_endpoints(
     reason="Chat history tests are enterprise only",
 )
 def test_chat_history_csv_export(
-    reset: None, setup_chat_session: tuple[DATestUser, str]  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    setup_chat_session: tuple[DATestUser, str],  # noqa: W291
 ) -> None:
     admin_user, _ = setup_chat_session
 

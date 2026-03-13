@@ -218,8 +218,7 @@ def extract_date_range_from_query(
             days_back = data.get("days_back")
             if days_back is None:
                 logger.debug(
-                    f"LLM date extraction returned null for query: '{query}', "
-                    f"using default: {default_search_days} days"
+                    f"LLM date extraction returned null for query: '{query}', using default: {default_search_days} days"
                 )
                 return default_search_days
 

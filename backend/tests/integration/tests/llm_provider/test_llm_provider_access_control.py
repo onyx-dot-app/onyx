@@ -90,7 +90,7 @@ def _create_persona(
 
 
 @pytest.fixture()
-def users(reset: None) -> tuple[DATestUser, DATestUser]:  # noqa: ARG001
+def users(reset: None) -> tuple[DATestUser, DATestUser]:  # noqa: ARG001, W291
     admin_user = UserManager.create(name="admin_user")
     basic_user = UserManager.create(name="basic_user")
     return admin_user, basic_user
@@ -486,7 +486,9 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
     assert non_public_provider.name in admin_provider_names
 
 
-def test_provider_delete_clears_persona_references(reset: None) -> None:  # noqa: ARG001
+def test_provider_delete_clears_persona_references(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001, W291
     """Test that deleting a provider automatically clears persona references."""
     admin_user = UserManager.create(name="admin_user")
 

@@ -19,7 +19,7 @@ def test_validate_rejects_missing_scheme() -> None:
 
 
 @patch("onyx.connectors.slab.connector.get_all_post_ids", return_value=["id1"])
-def test_validate_success(mock_get_posts: object) -> None:  # noqa: ARG001
+def test_validate_success(mock_get_posts: object) -> None:  # noqa: ARG001, W291
     connector = _build_connector()
     connector.validate_connector_settings()
 
@@ -28,7 +28,9 @@ def test_validate_success(mock_get_posts: object) -> None:  # noqa: ARG001
     "onyx.connectors.slab.connector.get_all_post_ids",
     side_effect=Exception("401 Unauthorized"),
 )
-def test_validate_bad_token_raises(mock_get_posts: object) -> None:  # noqa: ARG001
+def test_validate_bad_token_raises(
+    mock_get_posts: object,  # noqa: ARG001
+) -> None:  # noqa: ARG001, W291
     connector = _build_connector()
     with pytest.raises(ConnectorValidationError, match="Failed to fetch posts"):
         connector.validate_connector_settings()

@@ -359,8 +359,7 @@ class KubernetesSandboxManager(SandboxManager):
         self._skills_path = Path(__file__).parent / "docker" / "skills"
 
         logger.info(
-            f"KubernetesSandboxManager initialized: "
-            f"namespace={self._namespace}, image={self._image}"
+            f"KubernetesSandboxManager initialized: namespace={self._namespace}, image={self._image}"
         )
 
     def _get_pod_name(self, sandbox_id: str) -> str:
@@ -785,10 +784,7 @@ done
                         container_name = init_status.name
                         reason = init_status.state.waiting.reason
                         message = init_status.state.waiting.message or ""
-                        return (
-                            f"Init container '{container_name}' is in '{reason}' state. "
-                            f"Message: {message}"
-                        )
+                        return f"Init container '{container_name}' is in '{reason}' state. Message: {message}"
 
         return None
 
@@ -836,8 +832,7 @@ done
 
                 if phase == "Succeeded":
                     raise RuntimeError(
-                        f"Pod {pod_name} completed unexpectedly "
-                        "(sandbox pods should run indefinitely)"
+                        f"Pod {pod_name} completed unexpectedly (sandbox pods should run indefinitely)"
                     )
 
                 # Check if running and ready
@@ -939,8 +934,7 @@ done
             RuntimeError: If provisioning fails
         """
         logger.info(
-            f"Starting Kubernetes sandbox provisioning for sandbox {sandbox_id}, "
-            f"user {user_id}, tenant {tenant_id}"
+            f"Starting Kubernetes sandbox provisioning for sandbox {sandbox_id}, user {user_id}, tenant {tenant_id}"
         )
 
         pod_name = self._get_pod_name(str(sandbox_id))
@@ -1000,8 +994,7 @@ done
                         # Pod exists but is not healthy - this shouldn't happen often
                         # but could occur if a previous provision failed mid-way
                         logger.warning(
-                            f"Pod {pod_name} exists but is not healthy, "
-                            "waiting for it to become ready or fail"
+                            f"Pod {pod_name} exists but is not healthy, waiting for it to become ready or fail"
                         )
                 else:
                     raise
@@ -1017,8 +1010,7 @@ done
                 )
 
             logger.info(
-                f"Provisioned Kubernetes sandbox {sandbox_id}, pod: {pod_name} "
-                "(no sessions yet)"
+                f"Provisioned Kubernetes sandbox {sandbox_id}, pod: {pod_name} (no sessions yet)"
             )
 
             return SandboxInfo(
@@ -1095,8 +1087,7 @@ done
                 time.sleep(RESOURCE_DELETION_POLL_INTERVAL_SECONDS)
 
         logger.warning(
-            f"Timeout waiting for {resource_type} {name} to be deleted "
-            f"after {timeout}s"
+            f"Timeout waiting for {resource_type} {name} to be deleted after {timeout}s"
         )
         return False
 
@@ -1497,10 +1488,7 @@ echo "Session cleanup complete"
 
         # Use shlex.quote for safety (UUIDs are safe but good practice)
         safe_session_path = shlex.quote(f"/workspace/sessions/{session_id_str}")
-        s3_path = (
-            f"s3://{self._s3_bucket}/{tenant_id}/snapshots/"
-            f"{session_id_str}/{snapshot_id}.tar.gz"
-        )
+        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/snapshots/{session_id_str}/{snapshot_id}.tar.gz"
 
         # Create tar and upload to S3 via file-sync container.
         # .opencode-data/ is already on the shared workspace volume because we set
@@ -1609,8 +1597,7 @@ echo "SNAPSHOT_CREATED"
 
             result = "WORKSPACE_FOUND" in resp
             logger.info(
-                f"[WORKSPACE_CHECK] session={session_id}, "
-                f"path={session_path}, raw_resp={resp!r}, result={result}"
+                f"[WORKSPACE_CHECK] session={session_id}, path={session_path}, raw_resp={resp!r}, result={result}"
             )
             return result
 
@@ -1856,9 +1843,7 @@ echo "Session config regeneration complete"
         acp_client.start(cwd=session_path)
 
         logger.info(
-            f"[SANDBOX-ACP] Created ephemeral ACP client: "
-            f"sandbox={sandbox_id} pod={pod_name} "
-            f"api_pod={_API_SERVER_HOSTNAME}"
+            f"[SANDBOX-ACP] Created ephemeral ACP client: sandbox={sandbox_id} pod={pod_name} api_pod={_API_SERVER_HOSTNAME}"
         )
         return acp_client
 
@@ -1896,9 +1881,7 @@ echo "Session config regeneration complete"
             acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
 
             logger.info(
-                f"[SANDBOX-ACP] Sending message: "
-                f"session={session_id} acp_session={acp_session_id} "
-                f"api_pod={_API_SERVER_HOSTNAME}"
+                f"[SANDBOX-ACP] Sending message: session={session_id} acp_session={acp_session_id} api_pod={_API_SERVER_HOSTNAME}"
             )
 
             # Log the send_message call at sandbox manager level
@@ -1925,15 +1908,13 @@ echo "Session config regeneration complete"
                 )
             except GeneratorExit:
                 logger.warning(
-                    f"[SANDBOX-ACP] GeneratorExit: session={session_id} "
-                    f"events={events_count}, sending session/cancel"
+                    f"[SANDBOX-ACP] GeneratorExit: session={session_id} events={events_count}, sending session/cancel"
                 )
                 try:
                     acp_client.cancel(session_id=acp_session_id)
                 except Exception as cancel_err:
                     logger.warning(
-                        f"[SANDBOX-ACP] session/cancel failed on GeneratorExit: "
-                        f"{cancel_err}"
+                        f"[SANDBOX-ACP] session/cancel failed on GeneratorExit: {cancel_err}"
                     )
                 packet_logger.log_session_end(
                     session_id,
@@ -1944,15 +1925,13 @@ echo "Session config regeneration complete"
                 raise
             except Exception as e:
                 logger.error(
-                    f"[SANDBOX-ACP] Exception: session={session_id} "
-                    f"events={events_count} error={e}, sending session/cancel"
+                    f"[SANDBOX-ACP] Exception: session={session_id} events={events_count} error={e}, sending session/cancel"
                 )
                 try:
                     acp_client.cancel(session_id=acp_session_id)
                 except Exception as cancel_err:
                     logger.warning(
-                        f"[SANDBOX-ACP] session/cancel failed on Exception: "
-                        f"{cancel_err}"
+                        f"[SANDBOX-ACP] session/cancel failed on Exception: {cancel_err}"
                     )
                 packet_logger.log_session_end(
                     session_id,
@@ -1963,8 +1942,7 @@ echo "Session config regeneration complete"
                 raise
             except BaseException as e:
                 logger.error(
-                    f"[SANDBOX-ACP] {type(e).__name__}: session={session_id} "
-                    f"error={e}"
+                    f"[SANDBOX-ACP] {type(e).__name__}: session={session_id} error={e}"
                 )
                 packet_logger.log_session_end(
                     session_id,
@@ -1980,8 +1958,7 @@ echo "Session config regeneration complete"
                 acp_client.stop()
             except Exception as e:
                 logger.warning(
-                    f"[SANDBOX-ACP] Failed to stop ephemeral ACP client: "
-                    f"session={session_id} error={e}"
+                    f"[SANDBOX-ACP] Failed to stop ephemeral ACP client: session={session_id} error={e}"
                 )
 
     def list_directory(
@@ -2438,8 +2415,7 @@ fi
                 tty=False,
             )
             logger.debug(
-                f"Ensure AGENTS.md attachments section for session {session_id}: "
-                f"{resp.strip()}"
+                f"Ensure AGENTS.md attachments section for session {session_id}: {resp.strip()}"
             )
         except ApiException as e:
             logger.warning(f"Failed to ensure AGENTS.md attachments section: {e}")
@@ -2566,8 +2542,7 @@ echo "$base"
                 )
 
             logger.info(
-                f"Uploaded file to session {session_id}: attachments/{final_filename} "
-                f"({len(content)} bytes)"
+                f"Uploaded file to session {session_id}: attachments/{final_filename} ({len(content)} bytes)"
             )
 
             # Ensure AGENTS.md has the attachments section

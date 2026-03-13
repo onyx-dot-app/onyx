@@ -66,7 +66,7 @@ def build_connection_string(
     db: str = POSTGRES_DB,
     app_name: str | None = None,
     use_iam_auth: bool = USE_IAM_AUTH,
-    region: str = "us-west-2",  # noqa: ARG001
+    region: str = "us-west-2",  # noqa: ARG001, W291
 ) -> str:
     if use_iam_auth:
         base_conn_str = f"postgresql+{db_api}://{user}@{host}:{port}/{db}"
@@ -86,13 +86,23 @@ if LOG_POSTGRES_LATENCY:
 
     @event.listens_for(Engine, "before_cursor_execute")
     def before_cursor_execute(  # type: ignore
-        conn, cursor, statement, parameters, context, executemany  # noqa: ARG001
+        conn,
+        cursor,  # noqa: ARG001, W291
+        statement,  # noqa: ARG001, W291
+        parameters,  # noqa: ARG001, W291
+        context,  # noqa: ARG001, W291
+        executemany,  # noqa: ARG001, W291
     ):
         conn.info["query_start_time"] = time.time()
 
     @event.listens_for(Engine, "after_cursor_execute")
     def after_cursor_execute(  # type: ignore
-        conn, cursor, statement, parameters, context, executemany  # noqa: ARG001
+        conn,
+        cursor,  # noqa: ARG001, W291
+        statement,
+        parameters,  # noqa: ARG001, W291
+        context,  # noqa: ARG001, W291
+        executemany,  # noqa: ARG001, W291
     ):
         total_time = time.time() - conn.info["query_start_time"]
         if total_time > 0.1:
@@ -106,7 +116,7 @@ if LOG_POSTGRES_CONN_COUNTS:
     checkin_count = 0
 
     @event.listens_for(Engine, "checkout")
-    def log_checkout(dbapi_connection, connection_record, connection_proxy):  # type: ignore  # noqa: ARG001
+    def log_checkout(dbapi_connection, connection_record, connection_proxy):  # type: ignore  # noqa: ARG001, W291
         global checkout_count
         checkout_count += 1
 
@@ -122,7 +132,7 @@ if LOG_POSTGRES_CONN_COUNTS:
         )
 
     @event.listens_for(Engine, "checkin")
-    def log_checkin(dbapi_connection, connection_record):  # type: ignore  # noqa: ARG001
+    def log_checkin(dbapi_connection, connection_record):  # type: ignore  # noqa: ARG001, W291
         global checkin_count
         checkin_count += 1
         logger.debug(f"Total connection checkins: {checkin_count}")

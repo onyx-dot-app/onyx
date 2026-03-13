@@ -84,7 +84,7 @@ _hold_seconds = Histogram(
 
 
 def pool_timeout_handler(
-    request: Request,  # noqa: ARG001
+    request: Request,  # noqa: ARG001, W291
     exc: Exception,
 ) -> JSONResponse:
     """Increment the checkout timeout counter and return 503."""
@@ -159,9 +159,9 @@ def _register_pool_events(engine: Engine, label: str) -> None:
 
     @event.listens_for(engine, "checkout")
     def on_checkout(
-        dbapi_conn: DBAPIConnection,  # noqa: ARG001
+        dbapi_conn: DBAPIConnection,  # noqa: ARG001, W291
         conn_record: ConnectionPoolEntry,
-        conn_proxy: PoolProxiedConnection,  # noqa: ARG001
+        conn_proxy: PoolProxiedConnection,  # noqa: ARG001, W291
     ) -> None:
         handler = CURRENT_ENDPOINT_CONTEXTVAR.get() or "unknown"
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get() or "unknown"
@@ -175,7 +175,7 @@ def _register_pool_events(engine: Engine, label: str) -> None:
 
     @event.listens_for(engine, "checkin")
     def on_checkin(
-        dbapi_conn: DBAPIConnection,  # noqa: ARG001
+        dbapi_conn: DBAPIConnection,  # noqa: ARG001, W291
         conn_record: ConnectionPoolEntry,
     ) -> None:
         handler = conn_record.info.pop("_metrics_endpoint", "unknown")
@@ -192,16 +192,16 @@ def _register_pool_events(engine: Engine, label: str) -> None:
 
     @event.listens_for(engine, "connect")
     def on_connect(
-        dbapi_conn: DBAPIConnection,  # noqa: ARG001
-        conn_record: ConnectionPoolEntry,  # noqa: ARG001
+        dbapi_conn: DBAPIConnection,  # noqa: ARG001, W291
+        conn_record: ConnectionPoolEntry,  # noqa: ARG001, W291
     ) -> None:
         _connections_created_total.labels(engine=label).inc()
 
     @event.listens_for(engine, "invalidate")
     def on_invalidate(
-        dbapi_conn: DBAPIConnection,  # noqa: ARG001
+        dbapi_conn: DBAPIConnection,  # noqa: ARG001, W291
         conn_record: ConnectionPoolEntry,
-        exception: BaseException | None,  # noqa: ARG001
+        exception: BaseException | None,  # noqa: ARG001, W291
     ) -> None:
         _invalidations_total.labels(engine=label).inc()
         # Defensively clean up the held-connections gauge in case checkin
@@ -240,8 +240,7 @@ def setup_postgres_connection_pool_metrics(
         pool = sync_engine.pool
         if not isinstance(pool, QueuePool):
             logger.info(
-                f"Skipping pool metrics for engine '{label}' "
-                f"({type(pool).__name__} — no pool state)"
+                f"Skipping pool metrics for engine '{label}' ({type(pool).__name__} — no pool state)"
             )
             continue
 

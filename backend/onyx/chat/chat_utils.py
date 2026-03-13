@@ -270,7 +270,10 @@ def extract_headers(
 
 
 def process_kg_commands(
-    message: str, persona_name: str, tenant_id: str, db_session: Session  # noqa: ARG001
+    message: str,
+    persona_name: str,
+    tenant_id: str,  # noqa: ARG001, W291
+    db_session: Session,  # noqa: W291
 ) -> None:
     # Temporarily, until we have a draft UI for the KG Operations/Management
     # TODO: move to api endpoint once we get frontend

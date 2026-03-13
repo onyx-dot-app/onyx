@@ -74,7 +74,6 @@ def _create_test_connector_credential_pair(
 
 
 class TestDocPermissionSyncAttempt:
-
     def test_create_doc_permission_sync_attempt(self, db_session: Session) -> None:
         """Test creating a new doc permission sync attempt."""
         cc_pair = _create_test_connector_credential_pair(db_session)

@@ -534,7 +534,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             timeout_occurred = [False]  # Using list for mutability in closure
 
             def _timeout_handler(
-                index: int, func: Any, args: tuple[Any, ...]  # noqa: ARG001
+                index: int,  # noqa: ARG001, W291
+                func: Any,  # noqa: ARG001, W291
+                args: tuple[Any, ...],  # noqa: ARG001, W291
             ) -> None:
                 timeout_occurred[0] = True
                 return None

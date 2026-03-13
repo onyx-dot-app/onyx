@@ -96,7 +96,7 @@ def test_jira_doc_sync(
 
         # Mock functions - we don't have existing docs in the test DB
         def fetch_all_existing_docs_fn(
-            sort_order: SortOrder | None = None,  # noqa: ARG001
+            sort_order: SortOrder | None = None,  # noqa: ARG001, W291
         ) -> list[DocumentRow]:
             return []
 
@@ -132,9 +132,9 @@ def test_jira_doc_sync(
             for doc in doc_sync_iter
             if isinstance(doc, DocExternalAccess)
         }
-        assert expected_docs == actual_docs, (
-            f"Expected docs: {expected_docs}\n" f"Actual docs: {actual_docs}"
-        )
+        assert (
+            expected_docs == actual_docs
+        ), f"Expected docs: {expected_docs}\nActual docs: {actual_docs}"
     finally:
         db_session.rollback()
 
@@ -191,7 +191,7 @@ def test_jira_doc_sync_with_specific_permissions(
 
         # Mock functions
         def fetch_all_existing_docs_fn(
-            sort_order: SortOrder | None = None,  # noqa: ARG001
+            sort_order: SortOrder | None = None,  # noqa: ARG001, W291
         ) -> list[DocumentRow]:
             return []
 

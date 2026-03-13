@@ -37,7 +37,7 @@ from scripts.tenant_cleanup.cleanup_utils import read_tenant_ids_from_csv
 from scripts.tenant_cleanup.cleanup_utils import TenantNotFoundInControlPlaneError
 
 
-def signal_handler(signum: int, frame: object) -> None:  # noqa: ARG001
+def signal_handler(signum: int, frame: object) -> None:  # noqa: ARG001, W291
     """Handle termination signals by killing active subprocess."""
     sys.exit(1)
 

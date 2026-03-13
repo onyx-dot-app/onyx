@@ -111,23 +111,20 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
 
     if cc_pair.access_type != AccessType.SYNC:
         task_logger.error(
-            f"Received non-sync CC Pair {cc_pair.id} for external "
-            f"group sync. Actual access type: {cc_pair.access_type}"
+            f"Received non-sync CC Pair {cc_pair.id} for external group sync. Actual access type: {cc_pair.access_type}"
         )
         return False
 
     if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
         task_logger.debug(
-            f"Skipping group sync for CC Pair {cc_pair.id} - "
-            f"CC Pair is being deleted"
+            f"Skipping group sync for CC Pair {cc_pair.id} - CC Pair is being deleted"
         )
         return False
 
     sync_config = get_source_perm_sync_config(cc_pair.connector.source)
     if sync_config is None:
         task_logger.debug(
-            f"Skipping group sync for CC Pair {cc_pair.id} - "
-            f"no sync config found for {cc_pair.connector.source}"
+            f"Skipping group sync for CC Pair {cc_pair.id} - no sync config found for {cc_pair.connector.source}"
         )
         return False
 
@@ -135,8 +132,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     # This is fine because all sources dont necessarily have a concept of groups
     if sync_config.group_sync_config is None:
         task_logger.debug(
-            f"Skipping group sync for CC Pair {cc_pair.id} - "
-            f"no group sync config found for {cc_pair.connector.source}"
+            f"Skipping group sync for CC Pair {cc_pair.id} - no group sync config found for {cc_pair.connector.source}"
         )
         return False
 
@@ -259,7 +255,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
 def try_creating_external_group_sync_task(
     app: Celery,
     cc_pair_id: int,
-    r: Redis,  # noqa: ARG001
+    r: Redis,  # noqa: ARG001, W291
     tenant_id: str,
 ) -> str | None:
     """Returns an int if syncing is needed. The int represents the number of sync tasks generated.
@@ -344,7 +340,7 @@ def try_creating_external_group_sync_task(
     bind=True,
 )
 def connector_external_group_sync_generator_task(
-    self: Task,  # noqa: ARG001
+    self: Task,  # noqa: ARG001, W291
     cc_pair_id: int,
     tenant_id: str,
 ) -> None:
@@ -605,8 +601,8 @@ def _perform_external_group_sync(
 
 def validate_external_group_sync_fences(
     tenant_id: str,
-    celery_app: Celery,  # noqa: ARG001
-    r: Redis,  # noqa: ARG001
+    celery_app: Celery,  # noqa: ARG001, W291
+    r: Redis,  # noqa: ARG001, W291
     r_replica: Redis,
     r_celery: Redis,
     lock_beat: RedisLock,

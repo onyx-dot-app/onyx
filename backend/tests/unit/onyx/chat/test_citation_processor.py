@@ -657,7 +657,8 @@ def test_citation_not_in_mapping_skipped(
 
 
 def test_invalid_citation_format_skipped(
-    mock_search_docs: CitationMapping, caplog: pytest.LogCaptureFixture  # noqa: ARG001
+    mock_search_docs: CitationMapping,
+    caplog: pytest.LogCaptureFixture,  # noqa: ARG001, W291
 ) -> None:
     """Test that invalid citation number formats are skipped."""
     processor = DynamicCitationProcessor()
@@ -683,7 +684,8 @@ def test_empty_citation_content_handled(mock_search_docs: CitationMapping) -> No
 
 
 def test_citation_with_non_integer_skipped(
-    mock_search_docs: CitationMapping, caplog: pytest.LogCaptureFixture  # noqa: ARG001
+    mock_search_docs: CitationMapping,
+    caplog: pytest.LogCaptureFixture,  # noqa: ARG001, W291
 ) -> None:
     """Test that citations with non-integer content are skipped."""
     processor = DynamicCitationProcessor()
@@ -791,7 +793,7 @@ def test_citation_inside_code_block_not_processed(
 
 
 def test_code_block_plaintext_added(
-    mock_search_docs: CitationMapping,  # noqa: ARG001
+    mock_search_docs: CitationMapping,  # noqa: ARG001, W291
 ) -> None:
     """Test that code blocks with ``` followed by \\n get 'plaintext' added."""
     processor = DynamicCitationProcessor()
@@ -956,7 +958,7 @@ def test_none_token_flushes_remaining_segment(
 
 
 def test_very_long_citation_numbers(
-    mock_search_docs: CitationMapping,  # noqa: ARG001
+    mock_search_docs: CitationMapping,  # noqa: ARG001, W291
 ) -> None:
     """Test citations with very long citation numbers."""
     processor = DynamicCitationProcessor()
@@ -2025,7 +2027,8 @@ class TestCitationModeEdgeCases:
         assert len(citations) == 0
 
     def test_hyperlink_mode_citation_with_special_chars_in_url(
-        self, mock_search_docs: CitationMapping  # noqa: ARG002
+        self,
+        mock_search_docs: CitationMapping,  # noqa: ARG002
     ) -> None:
         """Test HYPERLINK mode with special characters in URL."""
         special_doc = create_test_search_doc(
@@ -2041,7 +2044,8 @@ class TestCitationModeEdgeCases:
         assert len(citations) == 1
 
     def test_hyperlink_mode_citation_with_no_url(
-        self, mock_search_docs: CitationMapping  # noqa: ARG002
+        self,
+        mock_search_docs: CitationMapping,  # noqa: ARG002
     ) -> None:
         """Test HYPERLINK mode when document has no URL."""
         no_url_doc = create_test_search_doc(
@@ -2112,7 +2116,8 @@ class TestCitationModeEdgeCases:
         # Tab should be handled appropriately
 
     def test_citation_number_zero(
-        self, mock_search_docs: CitationMapping  # noqa: ARG002
+        self,
+        mock_search_docs: CitationMapping,  # noqa: ARG002
     ) -> None:
         """Test handling of citation number 0."""
         zero_doc = create_test_search_doc(
@@ -2128,7 +2133,8 @@ class TestCitationModeEdgeCases:
         assert citations[0].citation_number == 0
 
     def test_large_citation_numbers(
-        self, mock_search_docs: CitationMapping  # noqa: ARG002
+        self,
+        mock_search_docs: CitationMapping,  # noqa: ARG002
     ) -> None:
         """Test handling of large citation numbers."""
         large_doc = create_test_search_doc(

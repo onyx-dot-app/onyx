@@ -192,10 +192,7 @@ def document_by_cc_pair_cleanup_task(
 
             elapsed = time.monotonic() - start
             task_logger.info(
-                f"doc={document_id} "
-                f"action={action} "
-                f"refcount={count} "
-                f"elapsed={elapsed:.2f}"
+                f"doc={document_id} action={action} refcount={count} elapsed={elapsed:.2f}"
             )
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
@@ -218,9 +215,7 @@ def document_by_cc_pair_cleanup_task(
             if isinstance(e, httpx.HTTPStatusError):
                 if e.response.status_code == HTTPStatus.BAD_REQUEST:
                     task_logger.exception(
-                        f"Non-retryable HTTPStatusError: "
-                        f"doc={document_id} "
-                        f"status={e.response.status_code}"
+                        f"Non-retryable HTTPStatusError: doc={document_id} status={e.response.status_code}"
                     )
                 completion_status = (
                     OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
@@ -239,8 +234,7 @@ def document_by_cc_pair_cleanup_task(
                 # This is the last attempt! mark the document as dirty in the db so that it
                 # eventually gets fixed out of band via stale document reconciliation
                 task_logger.warning(
-                    f"Max celery task retries reached. Marking doc as dirty for reconciliation: "
-                    f"doc={document_id}"
+                    f"Max celery task retries reached. Marking doc as dirty for reconciliation: doc={document_id}"
                 )
                 with get_session_with_current_tenant() as db_session:
                     # delete the cc pair relationship now and let reconciliation clean it up
@@ -276,7 +270,7 @@ def document_by_cc_pair_cleanup_task(
 
 
 @shared_task(name=OnyxCeleryTask.CELERY_BEAT_HEARTBEAT, ignore_result=True, bind=True)
-def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
+def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001, W291
     """When this task runs, it writes a key to Redis with a TTL.
 
     An external observer can check this key to figure out if the celery beat is still running.
@@ -285,4 +279,4 @@ def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:  # noqa: ARG00
     r: Redis = get_redis_client()
     r.set(ONYX_CELERY_BEAT_HEARTBEAT_KEY, 1, ex=600)
     time_elapsed = time.monotonic() - time_start
-    task_logger.info(f"celery_beat_heartbeat finished: " f"elapsed={time_elapsed:.2f}")
+    task_logger.info(f"celery_beat_heartbeat finished: elapsed={time_elapsed:.2f}")

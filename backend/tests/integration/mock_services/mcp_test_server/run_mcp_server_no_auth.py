@@ -15,7 +15,7 @@ def hello(name: str) -> str:
 def make_many_tools() -> None:
     def make_tool(i: int) -> None:
         @mcp.tool(name=f"tool_{i}", description=f"Get secret value {i}")
-        def tool_name(name: str) -> str:  # noqa: ARG001
+        def tool_name(name: str) -> str:  # noqa: ARG001, W291
             """Get secret value."""
             return f"Secret value {100 - i}!"
 
@@ -24,7 +24,6 @@ def make_many_tools() -> None:
 
 
 if __name__ == "__main__":
-
     # Get port from command-line argument first (passed by test)
     port_from_arg = int(sys.argv[1]) if len(sys.argv) > 1 else None
     # Streamable HTTP transport (recommended)

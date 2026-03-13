@@ -146,8 +146,7 @@ def upload_files_to_user_files_with_indexing(
                 priority=OnyxCeleryPriority.HIGH,
             )
             logger.info(
-                f"Triggered indexing for user_file_id={user_file.id} "
-                f"with task_id={task.id}"
+                f"Triggered indexing for user_file_id={user_file.id} with task_id={task.id}"
             )
 
     return CategorizedFilesResult(

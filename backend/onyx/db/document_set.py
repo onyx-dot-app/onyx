@@ -171,10 +171,10 @@ def get_document_sets_by_ids(
 
 
 def make_doc_set_private(
-    document_set_id: int,  # noqa: ARG001
+    document_set_id: int,  # noqa: ARG001, W291
     user_ids: list[UUID] | None,
     group_ids: list[int] | None,
-    db_session: Session,  # noqa: ARG001
+    db_session: Session,  # noqa: ARG001, W291
 ) -> None:
     # May cause error if someone switches down to MIT from EE
     if user_ids or group_ids:
@@ -215,8 +215,7 @@ def _check_if_cc_pairs_are_owned_by_groups(
         for cc_pair in cc_pairs:
             if cc_pair.access_type == AccessType.PRIVATE:
                 raise ValueError(
-                    f"Connector Credential Pair with ID: '{cc_pair.id}'"
-                    " is not owned by the specified groups"
+                    f"Connector Credential Pair with ID: '{cc_pair.id}' is not owned by the specified groups"
                 )
 
 
@@ -333,8 +332,7 @@ def update_document_set(
             )
         if not document_set_row.is_up_to_date:
             raise ValueError(
-                "Cannot update document set while it is syncing. Please wait "
-                "for it to finish syncing, and then try again."
+                "Cannot update document set while it is syncing. Please wait for it to finish syncing, and then try again."
             )
 
         document_set_row.description = document_set_update_request.description
@@ -443,8 +441,7 @@ def mark_document_set_as_to_be_deleted(
             raise ValueError(error_msg)
         if not document_set_row.is_up_to_date:
             raise ValueError(
-                "Cannot delete document set while it is syncing. Please wait "
-                "for it to finish syncing, and then try again."
+                "Cannot delete document set while it is syncing. Please wait for it to finish syncing, and then try again."
             )
 
         # delete all relationships to CC pairs
@@ -494,7 +491,7 @@ def delete_document_set_cc_pair_relationship__no_commit(
 
 
 def fetch_document_sets(
-    user_id: UUID | None,  # noqa: ARG001
+    user_id: UUID | None,  # noqa: ARG001, W291
     db_session: Session,
     include_outdated: bool = False,
 ) -> list[tuple[DocumentSetDBModel, list[ConnectorCredentialPair]]]:
@@ -756,8 +753,7 @@ def fetch_document_sets_for_documents(
 def get_or_create_document_set_by_name(
     db_session: Session,
     document_set_name: str,
-    document_set_description: str = "Default Persona created Document-Set, "
-    "please update description",
+    document_set_description: str = "Default Persona created Document-Set, please update description",
 ) -> DocumentSetDBModel:
     """This is used by the default personas which need to attach to document sets
     on server startup"""

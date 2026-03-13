@@ -41,12 +41,12 @@ def _setup_common_patches(monkeypatch: Any, document_set: Any) -> dict[str, bool
         lambda db_session, document_set_id: document_set,  # noqa: ARG005
     )
 
-    def _delete(document_set_row: Any, db_session: Any) -> None:  # noqa: ARG001
+    def _delete(document_set_row: Any, db_session: Any) -> None:  # noqa: ARG001, W291
         calls["deleted"] = True
 
     monkeypatch.setattr(vespa_tasks, "delete_document_set", _delete)
 
-    def _mark(document_set_id: Any, db_session: Any) -> None:  # noqa: ARG001
+    def _mark(document_set_id: Any, db_session: Any) -> None:  # noqa: ARG001, W291
         calls["synced"] = True
 
     monkeypatch.setattr(vespa_tasks, "mark_document_set_as_synced", _mark)

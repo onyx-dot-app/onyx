@@ -98,7 +98,9 @@ def http_server_context(
         server_thread.join()
 
 
-def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:  # noqa: ARG001
+def test_web_pruning(
+    reset: None, vespa_client: vespa_fixture  # noqa: ARG001
+) -> None:  # noqa: ARG001, W291
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
 

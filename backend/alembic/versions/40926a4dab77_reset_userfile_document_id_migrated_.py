@@ -18,8 +18,7 @@ depends_on = None
 def upgrade() -> None:
     # Set all existing records to not migrated
     op.execute(
-        "UPDATE user_file SET document_id_migrated = FALSE "
-        "WHERE document_id_migrated IS DISTINCT FROM FALSE;"
+        "UPDATE user_file SET document_id_migrated = FALSE WHERE document_id_migrated IS DISTINCT FROM FALSE;"
     )
 
 

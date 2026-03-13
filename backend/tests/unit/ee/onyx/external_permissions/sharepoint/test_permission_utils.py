@@ -108,8 +108,8 @@ def _mock_graph_get_for_enumeration(
 
     def side_effect(
         url: str,
-        get_access_token: Any,  # noqa: ARG001
-        params: dict[str, str] | None = None,  # noqa: ARG001
+        get_access_token: Any,  # noqa: ARG001, W291
+        params: dict[str, str] | None = None,  # noqa: ARG001, W291
     ) -> dict[str, Any]:
         if "/members" in url:
             group_id = url.split("/groups/")[1].split("/members")[0]
@@ -197,7 +197,8 @@ def _stub_role_assignment_resolution(
 @patch(f"{MODULE}._get_groups_and_members_recursively")
 @patch(f"{MODULE}.sleep_and_retry")
 def test_default_skips_ad_enumeration(
-    mock_sleep: MagicMock, mock_recursive: MagicMock  # noqa: ARG001
+    mock_sleep: MagicMock,  # noqa: ARG001, W291
+    mock_recursive: MagicMock,  # noqa: W291
 ) -> None:
     mock_recursive.return_value = GroupsResult(
         groups_to_emails={"SiteGroup_abc": {"alice@contoso.com"}},
@@ -219,7 +220,7 @@ def test_default_skips_ad_enumeration(
 @patch(f"{MODULE}._get_groups_and_members_recursively")
 @patch(f"{MODULE}.sleep_and_retry")
 def test_enumerate_all_includes_ad_groups(
-    mock_sleep: MagicMock,  # noqa: ARG001
+    mock_sleep: MagicMock,  # noqa: ARG001, W291
     mock_recursive: MagicMock,
     mock_enum: MagicMock,
 ) -> None:
@@ -251,7 +252,7 @@ def test_enumerate_all_includes_ad_groups(
 @patch(f"{MODULE}._get_groups_and_members_recursively")
 @patch(f"{MODULE}.sleep_and_retry")
 def test_enumerate_all_without_token_skips(
-    mock_sleep: MagicMock,  # noqa: ARG001
+    mock_sleep: MagicMock,  # noqa: ARG001, W291
     mock_recursive: MagicMock,
     mock_enum: MagicMock,
 ) -> None:
@@ -302,7 +303,7 @@ def test_enumerate_all_without_token_skips(
 @patch(f"{MODULE}._get_groups_and_members_recursively")
 @patch(f"{MODULE}.sleep_and_retry")
 def test_site_page_url_not_duplicated(
-    mock_sleep: MagicMock,  # noqa: ARG001
+    mock_sleep: MagicMock,  # noqa: ARG001, W291
     mock_recursive: MagicMock,
     site_base_url: str,
     web_url: str,

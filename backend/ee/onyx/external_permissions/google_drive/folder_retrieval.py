@@ -18,10 +18,7 @@ logger = setup_logger()
 # Only include fields we need - folder ID and permissions
 # IMPORTANT: must fetch permissionIds, since sometimes the drive API
 # seems to miss permissions when requesting them directly
-FOLDER_PERMISSION_FIELDS = (
-    "nextPageToken, files(id, name, permissionIds, "
-    "permissions(id, emailAddress, type, domain, permissionDetails))"
-)
+FOLDER_PERMISSION_FIELDS = "nextPageToken, files(id, name, permissionIds, permissions(id, emailAddress, type, domain, permissionDetails))"
 
 
 def get_folder_permissions_by_ids(

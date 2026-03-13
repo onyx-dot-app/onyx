@@ -42,7 +42,7 @@ def _make_http_error(
 
 
 def _setup_connector(
-    monkeypatch: pytest.MonkeyPatch,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,  # noqa: ARG001, W291
 ) -> SharepointConnector:
     """Create a connector with the graph client and site resolution mocked."""
     connector = SharepointConnector(sites=[SITE_URL])
@@ -82,9 +82,9 @@ class TestFetchSitePages404:
         connector = _setup_connector(monkeypatch)
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
-            url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            self: SharepointConnector,  # noqa: ARG001, W291
+            url: str,  # noqa: ARG001, W291
+            params: dict[str, str] | None = None,  # noqa: ARG001, W291
         ) -> dict[str, Any]:
             raise _make_http_error(404)
 
@@ -98,9 +98,9 @@ class TestFetchSitePages404:
         connector = _setup_connector(monkeypatch)
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
-            url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            self: SharepointConnector,  # noqa: ARG001, W291
+            url: str,  # noqa: ARG001, W291
+            params: dict[str, str] | None = None,  # noqa: ARG001, W291
         ) -> dict[str, Any]:
             raise _make_http_error(404)
 
@@ -116,9 +116,9 @@ class TestFetchSitePages404:
         connector = _setup_connector(monkeypatch)
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
-            url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            self: SharepointConnector,  # noqa: ARG001, W291
+            url: str,  # noqa: ARG001, W291
+            params: dict[str, str] | None = None,  # noqa: ARG001, W291
         ) -> dict[str, Any]:
             raise _make_http_error(403)
 
@@ -141,9 +141,9 @@ class TestFetchSitePages404:
         }
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
-            url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            self: SharepointConnector,  # noqa: ARG001, W291
+            url: str,  # noqa: ARG001, W291
+            params: dict[str, str] | None = None,  # noqa: ARG001, W291
         ) -> dict[str, Any]:
             return {"value": [fake_page]}
 
@@ -169,9 +169,9 @@ class TestFetchSitePages404:
         }
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
-            url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            self: SharepointConnector,  # noqa: ARG001, W291
+            url: str,  # noqa: ARG001, W291
+            params: dict[str, str] | None = None,  # noqa: ARG001, W291
         ) -> dict[str, Any]:
             nonlocal call_count
             call_count += 1
@@ -222,7 +222,7 @@ class TestFetchSitePages400Fallback:
         good_page_expanded = self.GOOD_PAGE_EXPANDED
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
+            self: SharepointConnector,  # noqa: ARG001, W291
             url: str,
             params: dict[str, str] | None = None,
         ) -> dict[str, Any]:
@@ -270,7 +270,7 @@ class TestFetchSitePages400Fallback:
         next_link = "https://graph.microsoft.com/v1.0/next-page-link"
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
+            self: SharepointConnector,  # noqa: ARG001, W291
             url: str,
             params: dict[str, str] | None = None,
         ) -> dict[str, Any]:
@@ -313,9 +313,9 @@ class TestFetchSitePages400Fallback:
         connector = _setup_connector(monkeypatch)
 
         def fake_get_json(
-            self: SharepointConnector,  # noqa: ARG001
-            url: str,  # noqa: ARG001
-            params: dict[str, str] | None = None,  # noqa: ARG001
+            self: SharepointConnector,  # noqa: ARG001, W291
+            url: str,  # noqa: ARG001, W291
+            params: dict[str, str] | None = None,  # noqa: ARG001, W291
         ) -> dict[str, Any]:
             raise _make_http_error(400, "badRequest", "Something else went wrong")
 

@@ -27,8 +27,8 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 def test_answer_with_only_anthropic_provider(
     db_session: Session,
-    full_deployment_setup: None,  # noqa: ARG001
-    mock_external_deps: None,  # noqa: ARG001
+    full_deployment_setup: None,  # noqa: ARG001, W291
+    mock_external_deps: None,  # noqa: ARG001, W291
 ) -> None:
     """Ensure chat still streams answers when only an Anthropic provider is configured."""
 

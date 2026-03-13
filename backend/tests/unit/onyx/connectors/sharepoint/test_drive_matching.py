@@ -76,22 +76,22 @@ def _build_connector(drives: Sequence[_FakeDrive]) -> SharepointConnector:
 
 
 def _fake_iter_drive_items_paged(
-    self: SharepointConnector,  # noqa: ARG001
-    drive_id: str,  # noqa: ARG001
-    folder_path: str | None = None,  # noqa: ARG001
-    start: datetime | None = None,  # noqa: ARG001
-    end: datetime | None = None,  # noqa: ARG001
-    page_size: int = 200,  # noqa: ARG001
+    self: SharepointConnector,  # noqa: ARG001, W291
+    drive_id: str,  # noqa: ARG001, W291
+    folder_path: str | None = None,  # noqa: ARG001, W291
+    start: datetime | None = None,  # noqa: ARG001, W291
+    end: datetime | None = None,  # noqa: ARG001, W291
+    page_size: int = 200,  # noqa: ARG001, W291
 ) -> Generator[DriveItemData, None, None]:
     yield _SAMPLE_ITEM
 
 
 def _fake_iter_drive_items_delta(
-    self: SharepointConnector,  # noqa: ARG001
-    drive_id: str,  # noqa: ARG001
-    start: datetime | None = None,  # noqa: ARG001
-    end: datetime | None = None,  # noqa: ARG001
-    page_size: int = 200,  # noqa: ARG001
+    self: SharepointConnector,  # noqa: ARG001, W291
+    drive_id: str,  # noqa: ARG001, W291
+    start: datetime | None = None,  # noqa: ARG001, W291
+    end: datetime | None = None,  # noqa: ARG001, W291
+    page_size: int = 200,  # noqa: ARG001, W291
 ) -> Generator[DriveItemData, None, None]:
     yield _SAMPLE_ITEM
 
@@ -182,8 +182,8 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     )
 
     def fake_resolve_drive(
-        self: SharepointConnector,  # noqa: ARG001
-        site_descriptor: SiteDescriptor,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
+        site_descriptor: SiteDescriptor,  # noqa: ARG001, W291
         drive_name: str,
     ) -> tuple[str, str | None]:
         assert drive_name == "Documents"
@@ -193,24 +193,24 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         )
 
     def fake_fetch_one_delta_page(
-        self: SharepointConnector,  # noqa: ARG001
-        page_url: str,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
+        page_url: str,  # noqa: ARG001, W291
+        drive_id: str,  # noqa: ARG001, W291
+        start: datetime | None = None,  # noqa: ARG001, W291
+        end: datetime | None = None,  # noqa: ARG001, W291
+        page_size: int = 200,  # noqa: ARG001, W291
     ) -> tuple[list[DriveItemData], str | None]:
         return [sample_item], None
 
     def fake_convert(
-        driveitem: DriveItemData,  # noqa: ARG001
+        driveitem: DriveItemData,  # noqa: ARG001, W291
         drive_name: str,
-        ctx: Any,  # noqa: ARG001
-        graph_client: Any,  # noqa: ARG001
-        graph_api_base: str,  # noqa: ARG001
-        include_permissions: bool,  # noqa: ARG001
-        parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
-        access_token: str | None = None,  # noqa: ARG001
+        ctx: Any,  # noqa: ARG001, W291
+        graph_client: Any,  # noqa: ARG001, W291
+        graph_api_base: str,  # noqa: ARG001, W291
+        include_permissions: bool,  # noqa: ARG001, W291
+        parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001, W291
+        access_token: str | None = None,  # noqa: ARG001, W291
     ) -> Document:
         captured_drive_names.append(drive_name)
         return Document(
@@ -221,7 +221,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
             sections=[TextSection(link="https://example.com", text="content")],
         )
 
-    def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
+    def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001, W291
         return "fake-access-token"
 
     monkeypatch.setattr(
@@ -293,22 +293,22 @@ def test_get_drive_items_uses_delta_when_no_folder_path(
     called_method: list[str] = []
 
     def fake_delta(
-        self: SharepointConnector,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
+        drive_id: str,  # noqa: ARG001, W291
+        start: datetime | None = None,  # noqa: ARG001, W291
+        end: datetime | None = None,  # noqa: ARG001, W291
+        page_size: int = 200,  # noqa: ARG001, W291
     ) -> Generator[DriveItemData, None, None]:
         called_method.append("delta")
         yield _SAMPLE_ITEM
 
     def fake_paged(
-        self: SharepointConnector,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        folder_path: str | None = None,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
+        drive_id: str,  # noqa: ARG001, W291
+        folder_path: str | None = None,  # noqa: ARG001, W291
+        start: datetime | None = None,  # noqa: ARG001, W291
+        end: datetime | None = None,  # noqa: ARG001, W291
+        page_size: int = 200,  # noqa: ARG001, W291
     ) -> Generator[DriveItemData, None, None]:
         called_method.append("paged")
         yield _SAMPLE_ITEM
@@ -336,22 +336,22 @@ def test_get_drive_items_uses_paged_when_folder_path_set(
     called_method: list[str] = []
 
     def fake_delta(
-        self: SharepointConnector,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
+        drive_id: str,  # noqa: ARG001, W291
+        start: datetime | None = None,  # noqa: ARG001, W291
+        end: datetime | None = None,  # noqa: ARG001, W291
+        page_size: int = 200,  # noqa: ARG001, W291
     ) -> Generator[DriveItemData, None, None]:
         called_method.append("delta")
         yield _SAMPLE_ITEM
 
     def fake_paged(
-        self: SharepointConnector,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        folder_path: str | None = None,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
+        drive_id: str,  # noqa: ARG001, W291
+        folder_path: str | None = None,  # noqa: ARG001, W291
+        start: datetime | None = None,  # noqa: ARG001, W291
+        end: datetime | None = None,  # noqa: ARG001, W291
+        page_size: int = 200,  # noqa: ARG001, W291
     ) -> Generator[DriveItemData, None, None]:
         called_method.append("paged")
         yield _SAMPLE_ITEM
@@ -374,9 +374,9 @@ def test_iter_drive_items_delta_uses_timestamp_token(
     captured_urls: list[str] = []
 
     def fake_graph_api_get_json(
-        self: SharepointConnector,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
         url: str,
-        params: dict[str, str] | None = None,  # noqa: ARG001
+        params: dict[str, str] | None = None,  # noqa: ARG001, W291
     ) -> dict[str, Any]:
         captured_urls.append(url)
         return {
@@ -417,9 +417,9 @@ def test_iter_drive_items_delta_full_crawl_when_no_start(
     captured_urls: list[str] = []
 
     def fake_graph_api_get_json(
-        self: SharepointConnector,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
         url: str,
-        params: dict[str, str] | None = None,  # noqa: ARG001
+        params: dict[str, str] | None = None,  # noqa: ARG001, W291
     ) -> dict[str, Any]:
         captured_urls.append(url)
         return {
@@ -445,9 +445,9 @@ def test_iter_drive_items_delta_skips_folders_and_deleted(
     connector = SharepointConnector()
 
     def fake_graph_api_get_json(
-        self: SharepointConnector,  # noqa: ARG001
-        url: str,  # noqa: ARG001
-        params: dict[str, str] | None = None,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
+        url: str,  # noqa: ARG001, W291
+        params: dict[str, str] | None = None,  # noqa: ARG001, W291
     ) -> dict[str, Any]:
         return {
             "value": [
@@ -485,9 +485,9 @@ def test_iter_drive_items_delta_handles_410_gone(
     call_count = 0
 
     def fake_graph_api_get_json(
-        self: SharepointConnector,  # noqa: ARG001
+        self: SharepointConnector,  # noqa: ARG001, W291
         url: str,
-        params: dict[str, str] | None = None,  # noqa: ARG001
+        params: dict[str, str] | None = None,  # noqa: ARG001, W291
     ) -> dict[str, Any]:
         nonlocal call_count
         call_count += 1

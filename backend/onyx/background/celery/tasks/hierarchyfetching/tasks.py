@@ -127,9 +127,7 @@ def _try_creating_hierarchy_fetching_task(
             raise RuntimeError("send_task for hierarchy_fetching_task failed.")
 
         task_logger.info(
-            f"Created hierarchy fetching task: "
-            f"cc_pair={cc_pair.id} "
-            f"celery_task_id={custom_task_id}"
+            f"Created hierarchy fetching task: cc_pair={cc_pair.id} celery_task_id={custom_task_id}"
         )
 
         return custom_task_id
@@ -215,8 +213,7 @@ def check_for_hierarchy_fetching(self: Task, *, tenant_id: str) -> int | None:
 
     time_elapsed = time.monotonic() - time_start
     task_logger.info(
-        f"check_for_hierarchy_fetching finished: "
-        f"tasks_created={tasks_created} elapsed={time_elapsed:.2f}s"
+        f"check_for_hierarchy_fetching finished: tasks_created={tasks_created} elapsed={time_elapsed:.2f}s"
     )
     return tasks_created
 
@@ -331,7 +328,7 @@ def _run_hierarchy_extraction(
     bind=True,
 )
 def connector_hierarchy_fetching_task(
-    self: Task,  # noqa: ARG001
+    self: Task,  # noqa: ARG001, W291
     *,
     cc_pair_id: int,
     tenant_id: str,
@@ -342,8 +339,7 @@ def connector_hierarchy_fetching_task(
     from the connector source and stores it in the database.
     """
     task_logger.info(
-        f"connector_hierarchy_fetching_task starting: "
-        f"cc_pair={cc_pair_id} tenant={tenant_id}"
+        f"connector_hierarchy_fetching_task starting: cc_pair={cc_pair_id} tenant={tenant_id}"
     )
 
     try:
@@ -361,8 +357,7 @@ def connector_hierarchy_fetching_task(
 
             if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
                 task_logger.info(
-                    f"Skipping hierarchy fetching for deleting connector: "
-                    f"cc_pair={cc_pair_id}"
+                    f"Skipping hierarchy fetching for deleting connector: cc_pair={cc_pair_id}"
                 )
                 return
 
@@ -375,8 +370,7 @@ def connector_hierarchy_fetching_task(
             )
 
             task_logger.info(
-                f"connector_hierarchy_fetching_task: "
-                f"Extracted {total_nodes} hierarchy nodes for cc_pair={cc_pair_id}"
+                f"connector_hierarchy_fetching_task: Extracted {total_nodes} hierarchy nodes for cc_pair={cc_pair_id}"
             )
 
             # Update the last fetch time to prevent re-running until next interval

@@ -67,7 +67,7 @@ def _check_for_error(
     return_value=None,
 )
 def test_all(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
     google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_all")
@@ -110,7 +110,7 @@ def test_all(
     return_value=None,
 )
 def test_shared_drives_only(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
     google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_drives_only")
@@ -149,7 +149,7 @@ def test_shared_drives_only(
     return_value=None,
 )
 def test_shared_with_me_only(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
     google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_with_me_only")
@@ -181,7 +181,7 @@ def test_shared_with_me_only(
     return_value=None,
 )
 def test_my_drive_only(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
     google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_my_drive_only")
@@ -213,7 +213,7 @@ def test_my_drive_only(
     return_value=None,
 )
 def test_shared_my_drive_folder(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
     google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_my_drive_folder")
@@ -245,7 +245,7 @@ def test_shared_my_drive_folder(
     return_value=None,
 )
 def test_shared_drive_folder(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
     google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_drive_folder")

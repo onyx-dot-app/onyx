@@ -25,9 +25,9 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 def run_functions_tuples_sequential(
     functions_with_args: list[tuple[Callable, tuple]],
     allow_failures: bool = False,
-    max_workers: int | None = None,  # noqa: ARG001
-    timeout: float | None = None,  # noqa: ARG001
-    timeout_callback: Callable | None = None,  # noqa: ARG001
+    max_workers: int | None = None,  # noqa: ARG001, W291
+    timeout: float | None = None,  # noqa: ARG001, W291
+    timeout_callback: Callable | None = None,  # noqa: ARG001, W291
 ) -> list[Any]:
     """
     A sequential replacement for run_functions_tuples_in_parallel.
@@ -117,38 +117,38 @@ def use_mock_search_pipeline(
     """
     controller = SearchPipelineController()
 
-    def mock_check_connectors_exist(db_session: Session) -> bool:  # noqa: ARG001
+    def mock_check_connectors_exist(db_session: Session) -> bool:  # noqa: ARG001, W291
         return len(connectors) > 0
 
     def mock_check_federated_connectors_exist(
-        db_session: Session,  # noqa: ARG001
+        db_session: Session,  # noqa: ARG001, W291
     ) -> bool:
         # For now, federated connectors are not mocked as available
         return False
 
-    def mock_check_user_files_exist(db_session: Session) -> bool:  # noqa: ARG001
+    def mock_check_user_files_exist(db_session: Session) -> bool:  # noqa: ARG001, W291
         # For now, user files are not mocked as available
         return False
 
     def mock_fetch_unique_document_sources(
-        db_session: Session,  # noqa: ARG001
+        db_session: Session,  # noqa: ARG001, W291
     ) -> list[DocumentSource]:
         return connectors
 
     def override_search_pipeline(
         chunk_search_request: ChunkSearchRequest,
-        document_index: DocumentIndex,  # noqa: ARG001
-        user: User | None,  # noqa: ARG001
-        persona: Persona | None,  # noqa: ARG001
-        db_session: Session | None = None,  # noqa: ARG001
-        auto_detect_filters: bool = False,  # noqa: ARG001
-        llm: LLM | None = None,  # noqa: ARG001
-        project_id: int | None = None,  # noqa: ARG001
-        persona_id: int | None = None,  # noqa: ARG001
+        document_index: DocumentIndex,  # noqa: ARG001, W291
+        user: User | None,  # noqa: ARG001, W291
+        persona: Persona | None,  # noqa: ARG001, W291
+        db_session: Session | None = None,  # noqa: ARG001, W291
+        auto_detect_filters: bool = False,  # noqa: ARG001, W291
+        llm: LLM | None = None,  # noqa: ARG001, W291
+        project_id: int | None = None,  # noqa: ARG001, W291
+        persona_id: int | None = None,  # noqa: ARG001, W291
         # Pre-fetched data (used by SearchTool to avoid DB access in parallel calls)
-        acl_filters: list[str] | None = None,  # noqa: ARG001
-        embedding_model: EmbeddingModel | None = None,  # noqa: ARG001
-        prefetched_federated_retrieval_infos: (  # noqa: ARG001
+        acl_filters: list[str] | None = None,  # noqa: ARG001, W291
+        embedding_model: EmbeddingModel | None = None,  # noqa: ARG001, W291
+        prefetched_federated_retrieval_infos: (  # noqa: ARG001, W291
             list[FederatedRetrievalInfo] | None
         ) = None,
     ) -> list[InferenceChunk]:

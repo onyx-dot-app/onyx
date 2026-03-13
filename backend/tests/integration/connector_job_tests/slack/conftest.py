@@ -22,8 +22,7 @@ def _provision_slack_channels(
     user_map = SlackManager.build_slack_user_email_id_map(slack_client)
     if SLACK_ADMIN_EMAIL not in user_map:
         raise KeyError(
-            f"'{SLACK_ADMIN_EMAIL}' not found in Slack workspace. "
-            f"Available emails: {sorted(user_map.keys())}"
+            f"'{SLACK_ADMIN_EMAIL}' not found in Slack workspace. Available emails: {sorted(user_map.keys())}"
         )
     admin_user_id = user_map[SLACK_ADMIN_EMAIL]
 

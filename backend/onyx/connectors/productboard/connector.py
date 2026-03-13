@@ -75,8 +75,7 @@ class ProductboardConnector(PollConnector):
                 # The delay in this retry should handle this while this is
                 # not parallelized.
                 raise ProductboardApiError(
-                    "Failed to fetch from productboard - status code:"
-                    f" {response.status_code} - response: {response.text}"
+                    f"Failed to fetch from productboard - status code: {response.status_code} - response: {response.text}"
                 )
 
             return response.json()

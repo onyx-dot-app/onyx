@@ -796,8 +796,7 @@ def handle_stream_message_objects(
 
         if all_injected_file_metadata:
             logger.debug(
-                "FileReader: file metadata for LLM: "
-                f"{[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
+                f"FileReader: file metadata for LLM: {[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
             )
 
         # Prepend summary message if compression exists

@@ -639,9 +639,7 @@ async def process_oauth_callback(
     db_session.commit()
 
     logger.info(
-        f"server_id={str(mcp_server.id)} "
-        f"server_name={mcp_server.name} "
-        f"return_path={state_data.return_path}"
+        f"server_id={str(mcp_server.id)} server_name={mcp_server.name} return_path={state_data.return_path}"
     )
 
     return MCPOAuthCallbackResponse(
@@ -1031,7 +1029,7 @@ def get_mcp_servers_for_user(
 
 def _get_connection_config(
     mcp_server: DbMCPServer,
-    is_admin: bool,  # noqa: ARG001
+    is_admin: bool,  # noqa: ARG001, W291
     user: User,
     db_session: Session,
 ) -> MCPConnectionConfig | None:
@@ -1495,7 +1493,6 @@ def _upsert_mcp_server(
             # registration; otherwise, the provider will attempt it.
             cfg: MCPConnectionData = MCPConnectionData(headers={})
             if request.oauth_client_id:
-
                 client_info = OAuthClientInformationFull(
                     client_id=request.oauth_client_id,
                     client_secret=request.oauth_client_secret,
@@ -1600,7 +1597,7 @@ def get_mcp_server_detail(
 @admin_router.get("/tools")
 def get_all_mcp_tools(
     db: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001, W291
 ) -> list:
     """Get all tools associated with MCP servers, including both enabled and disabled tools"""
     from sqlalchemy import select

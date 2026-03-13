@@ -123,7 +123,8 @@ async def get_or_provision_tenant(
 
 
 async def create_tenant(
-    email: str, referral_source: str | None = None  # noqa: ARG001
+    email: str,
+    referral_source: str | None = None,  # noqa: ARG001, W291
 ) -> str:
     """
     Create a new tenant on-demand when no pre-provisioned tenants are available.
@@ -679,7 +680,9 @@ async def setup_tenant(tenant_id: str) -> None:
 
 
 async def assign_tenant_to_user(
-    tenant_id: str, email: str, referral_source: str | None = None  # noqa: ARG001
+    tenant_id: str,
+    email: str,
+    referral_source: str | None = None,  # noqa: ARG001, W291
 ) -> None:
     """
     Assign a tenant to a user and perform necessary operations.

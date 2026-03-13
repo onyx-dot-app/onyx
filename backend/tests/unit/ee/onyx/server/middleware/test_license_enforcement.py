@@ -98,7 +98,7 @@ class TestLicenseEnforcementMiddleware:
         captured_middleware: Any = None
 
         def capture_middleware(
-            middleware_type: str,  # noqa: ARG001
+            middleware_type: str,  # noqa: ARG001, W291
         ) -> Callable[[Any], Any]:
             def decorator(func: Any) -> Any:
                 nonlocal captured_middleware
@@ -110,7 +110,7 @@ class TestLicenseEnforcementMiddleware:
         app.middleware = capture_middleware
         add_license_enforcement_middleware(app, logger)
 
-        async def call_next(req: Request) -> Response:  # noqa: ARG001
+        async def call_next(req: Request) -> Response:  # noqa: ARG001, W291
             response = MagicMock()
             response.status_code = 200
             return response

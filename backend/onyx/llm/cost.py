@@ -33,7 +33,6 @@ def calculate_llm_cost_cents(
     except Exception as e:
         # Log but don't fail - unknown models or errors shouldn't block usage
         logger.debug(
-            f"Could not calculate cost for model {model_name}: {e}. "
-            "Assuming cost is 0."
+            f"Could not calculate cost for model {model_name}: {e}. Assuming cost is 0."
         )
         return 0.0

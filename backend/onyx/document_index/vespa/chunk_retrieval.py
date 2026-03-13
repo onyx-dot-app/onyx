@@ -353,9 +353,7 @@ def get_all_chunks_paginated(
                 f"{continuation_token} in {time.monotonic() - start_time:.3f} seconds."
             )
             logger.exception(
-                f"Request URL: {e.request.url}\n"
-                f"Request Headers: {e.request.headers}\n"
-                f"Request Payload: {params}\n"
+                f"Request URL: {e.request.url}\nRequest Headers: {e.request.headers}\nRequest Payload: {params}\n"
             )
             error_message = (
                 response.json().get("message") if response else "No response"

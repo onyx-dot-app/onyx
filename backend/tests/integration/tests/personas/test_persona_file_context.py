@@ -55,8 +55,7 @@ def _poll_file_statuses(
             return
         time.sleep(FILE_PROCESSING_POLL_INTERVAL)
     raise TimeoutError(
-        f"Files {user_file_ids} did not reach {target_status.value} "
-        f"within {timeout}s"
+        f"Files {user_file_ids} did not reach {target_status.value} within {timeout}s"
     )
 
 
@@ -67,15 +66,14 @@ def _poll_file_statuses(
 
 def test_persona_with_files_chat_no_error(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """Upload files, attach them to a persona, wait for processing,
     then send a chat message.  Verify no error is returned."""
 
     # Upload files (creates UserFile records)
     text_file = create_test_text_file(
-        "The secret project codename is NIGHTINGALE. "
-        "It was started in 2024 by the Advanced Research division."
+        "The secret project codename is NIGHTINGALE. It was started in 2024 by the Advanced Research division."
     )
     file_descriptors, error = FileManager.upload_files(
         files=[("nightingale_brief.txt", text_file)],
@@ -122,7 +120,7 @@ def test_persona_with_files_chat_no_error(
 
 def test_persona_without_files_still_works(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """A persona with no attached files should still chat normally."""
     persona = PersonaManager.create(
@@ -149,7 +147,7 @@ def test_persona_without_files_still_works(
 
 def test_persona_files_override_project_files(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """When a custom persona (with its own files) is used inside a project,
     the persona's files take precedence — the project's files are invisible.
@@ -211,15 +209,14 @@ def test_persona_files_override_project_files(
     assert response.error is None, f"Chat should succeed, got error: {response.error}"
     # The persona's file should be what the model sees, not the project's
     message_lower = response.full_message.lower()
-    assert "albatross" in message_lower, (
-        "Response should reference the persona file's secret word (ALBATROSS), "
-        f"but got: {response.full_message}"
-    )
+    assert (
+        "albatross" in message_lower
+    ), f"Response should reference the persona file's secret word (ALBATROSS), but got: {response.full_message}"
 
 
 def test_default_persona_in_project_uses_project_files(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """When the default persona (id=0) is used inside a project,
     the project's files should be used for context."""
@@ -255,15 +252,14 @@ def test_default_persona_in_project_uses_project_files(
     )
 
     assert response.error is None
-    assert "pangolin" in response.full_message.lower(), (
-        "Response should reference the project file content (PANGOLIN), "
-        f"but got: {response.full_message}"
-    )
+    assert (
+        "pangolin" in response.full_message.lower()
+    ), f"Response should reference the project file content (PANGOLIN), but got: {response.full_message}"
 
 
 def test_custom_persona_no_files_in_project_ignores_project(
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """A custom persona with NO files, used inside a project with files,
     should NOT see the project's files.  The project is purely organizational.

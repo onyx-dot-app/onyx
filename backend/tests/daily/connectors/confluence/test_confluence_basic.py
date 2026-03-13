@@ -55,7 +55,7 @@ def confluence_connector_scoped(space: str) -> ConfluenceConnector:
     return_value=None,
 )
 def test_confluence_connector_basic(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
     confluence_connector: ConfluenceConnector,
 ) -> None:
     _test_confluence_connector_basic(confluence_connector)
@@ -67,7 +67,7 @@ def test_confluence_connector_basic(
     return_value=None,
 )
 def test_confluence_connector_basic_scoped(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
     confluence_connector_scoped: ConfluenceConnector,
 ) -> None:
     _test_confluence_connector_basic(
@@ -183,7 +183,7 @@ def _test_confluence_connector_basic(
     return_value=None,
 )
 def test_confluence_connector_skip_images(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
     confluence_connector: ConfluenceConnector,
 ) -> None:
     confluence_connector.set_allow_images(False)
@@ -206,7 +206,8 @@ def test_confluence_connector_skip_images(
 
 
 def mock_process_image_attachment(
-    *args: Any, **kwargs: Any  # noqa: ARG001
+    *args: Any,  # noqa: ARG001, W291
+    **kwargs: Any,  # noqa: ARG001, W291
 ) -> AttachmentProcessingResult:
     """We need this mock to bypass DB access happening in the connector. Which shouldn't
     be done as a rule to begin with, but life is not perfect. Fix it later"""
@@ -228,8 +229,8 @@ def mock_process_image_attachment(
     side_effect=mock_process_image_attachment,
 )
 def test_confluence_connector_allow_images(
-    mock_get_api_key: MagicMock,  # noqa: ARG001
-    mock_process_image_attachment: MagicMock,  # noqa: ARG001
+    mock_get_api_key: MagicMock,  # noqa: ARG001, W291
+    mock_process_image_attachment: MagicMock,  # noqa: ARG001, W291
     confluence_connector: ConfluenceConnector,
 ) -> None:
     confluence_connector.set_allow_images(True)

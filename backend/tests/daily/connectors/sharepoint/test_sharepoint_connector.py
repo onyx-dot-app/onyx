@@ -148,7 +148,7 @@ def sharepoint_credentials() -> dict[str, str]:
 
 
 def test_sharepoint_connector_all_sites__docs_only(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -175,7 +175,7 @@ def test_sharepoint_connector_all_sites__docs_only(
 
 
 def test_sharepoint_connector_all_sites__pages_only(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -202,7 +202,7 @@ def test_sharepoint_connector_all_sites__pages_only(
 
 
 def test_sharepoint_connector_specific_folder(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -244,7 +244,7 @@ def test_sharepoint_connector_specific_folder(
 
 
 def test_sharepoint_connector_root_folder__docs_only(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -280,7 +280,7 @@ def test_sharepoint_connector_root_folder__docs_only(
 
 
 def test_sharepoint_connector_other_library(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -322,7 +322,7 @@ def test_sharepoint_connector_other_library(
 
 
 def test_sharepoint_connector_poll(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -364,7 +364,7 @@ def test_sharepoint_connector_poll(
 
 
 def test_sharepoint_connector_pages(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -418,10 +418,9 @@ def verify_hierarchy_nodes(
 
     # Verify expected site is in hierarchy
     site_node_ids = {n.raw_node_id for n in site_nodes}
-    assert expected_site_url in site_node_ids, (
-        f"Expected site {expected_site_url} not found in hierarchy nodes. "
-        f"Found sites: {site_node_ids}"
-    )
+    assert (
+        expected_site_url in site_node_ids
+    ), f"Expected site {expected_site_url} not found in hierarchy nodes. Found sites: {site_node_ids}"
 
     # Verify no duplicate raw_node_ids
     assert len(all_node_ids) == len(
@@ -460,14 +459,13 @@ def verify_hierarchy_nodes(
     # Verify documents have parent_hierarchy_raw_node_id set
     for doc in documents:
         if doc.parent_hierarchy_raw_node_id:
-            assert doc.parent_hierarchy_raw_node_id in all_node_ids, (
-                f"Document {doc.semantic_identifier} parent "
-                f"{doc.parent_hierarchy_raw_node_id} should exist in hierarchy"
-            )
+            assert (
+                doc.parent_hierarchy_raw_node_id in all_node_ids
+            ), f"Document {doc.semantic_identifier} parent {doc.parent_hierarchy_raw_node_id} should exist in hierarchy"
 
 
 def test_sharepoint_connector_hierarchy_nodes(
-    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001, W291
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -518,10 +516,9 @@ def test_sharepoint_connector_hierarchy_nodes(
 
         # Verify all documents have parent_hierarchy_raw_node_id set
         for doc in found_documents:
-            assert doc.parent_hierarchy_raw_node_id is not None, (
-                f"Document {doc.semantic_identifier} should have "
-                "parent_hierarchy_raw_node_id set"
-            )
+            assert (
+                doc.parent_hierarchy_raw_node_id is not None
+            ), f"Document {doc.semantic_identifier} should have parent_hierarchy_raw_node_id set"
 
 
 @pytest.fixture

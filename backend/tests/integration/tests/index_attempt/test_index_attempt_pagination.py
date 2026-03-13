@@ -51,7 +51,7 @@ def _verify_index_attempt_pagination(
     assert all_expected_attempts == all_retrieved_attempts
 
 
-def test_index_attempt_pagination(reset: None) -> None:  # noqa: ARG001
+def test_index_attempt_pagination(reset: None) -> None:  # noqa: ARG001, W291
     MAX_WAIT = 60
     all_attempt_ids: list[int] = []
 

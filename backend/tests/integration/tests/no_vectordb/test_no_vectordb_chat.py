@@ -50,9 +50,9 @@ def _wait_for_file_processed(
 
 
 def test_chat_with_small_project_file(
-    reset: None,  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """Upload a small text file to a project and send a chat message.
 
@@ -106,9 +106,9 @@ def test_chat_with_small_project_file(
 
 
 def test_persona_with_user_files_chat(
-    reset: None,  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """Create a persona with attached user files and verify chat works."""
     # Upload a file first
@@ -207,7 +207,7 @@ def _base_persona_body(**overrides: object) -> dict:
 
 
 def test_persona_rejects_document_sets_without_vector_db(
-    reset: None,  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
     admin_user: DATestUser,
 ) -> None:
     """Creating a persona with document_set_ids should fail with 400."""
@@ -222,7 +222,7 @@ def test_persona_rejects_document_sets_without_vector_db(
 
 
 def test_persona_rejects_document_ids_without_vector_db(
-    reset: None,  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
     admin_user: DATestUser,
 ) -> None:
     """Creating a persona with document_ids should fail with 400."""

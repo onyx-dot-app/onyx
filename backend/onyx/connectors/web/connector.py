@@ -92,10 +92,7 @@ JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
 BOT_DETECTION_GRACE_PERIOD_MS = 5000
 
 # Define common headers that mimic a real browser
-DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-)
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
 DEFAULT_HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
     "Accept": (
@@ -476,14 +473,13 @@ class WebConnector(LoadConnector):
                 )
 
             logger.warning(
-                "This is not a UI supported Web Connector flow, "
-                "are you sure you want to do this?"
+                "This is not a UI supported Web Connector flow, are you sure you want to do this?"
             )
             self.to_visit_list = _read_urls_file(base_url)
 
         else:
             raise ValueError(
-                "Invalid Web Connector Config, must choose a valid type between: " ""
+                "Invalid Web Connector Config, must choose a valid type between: "
             )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:

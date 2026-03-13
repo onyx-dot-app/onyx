@@ -39,7 +39,7 @@ _print_lock: Lock = Lock()
 _csv_lock: Lock = Lock()
 
 
-def signal_handler(signum: int, frame: object) -> None:  # noqa: ARG001
+def signal_handler(signum: int, frame: object) -> None:  # noqa: ARG001, W291
     """Handle termination signals by killing active subprocess."""
     sys.exit(1)
 

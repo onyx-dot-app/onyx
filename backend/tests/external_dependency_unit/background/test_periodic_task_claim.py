@@ -55,7 +55,7 @@ def _make_task(
 
 @pytest.fixture(autouse=True)
 def _cleanup_kv(
-    tenant_context: None,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001, W291
 ) -> Generator[None, None, None]:
     yield
     with get_session_with_current_tenant() as db_session:

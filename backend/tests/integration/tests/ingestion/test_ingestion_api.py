@@ -11,7 +11,8 @@ from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def test_ingestion_api_crud(
-    reset: None, vespa_client: vespa_fixture  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    vespa_client: vespa_fixture,  # noqa: W291
 ) -> None:
     """Test create, list, and delete via the ingestion API."""
     admin_user: DATestUser = UserManager.create(email="admin@onyx.app")

@@ -93,15 +93,11 @@ def tenant_schema_at_head(
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(
             text(
-                f'CREATE TABLE "{schema}".alembic_version '
-                f"(version_num VARCHAR(32) NOT NULL)"
+                f'CREATE TABLE "{schema}".alembic_version (version_num VARCHAR(32) NOT NULL)'
             )
         )
         conn.execute(
-            text(
-                f'INSERT INTO "{schema}".alembic_version (version_num) '
-                f"VALUES (:rev)"
-            ),
+            text(f'INSERT INTO "{schema}".alembic_version (version_num) VALUES (:rev)'),
             {"rev": current_head_rev},
         )
         conn.commit()
@@ -142,14 +138,12 @@ def tenant_schema_bad_rev(engine: Engine) -> Generator[str, None, None]:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(
             text(
-                f'CREATE TABLE "{schema}".alembic_version '
-                f"(version_num VARCHAR(32) NOT NULL)"
+                f'CREATE TABLE "{schema}".alembic_version (version_num VARCHAR(32) NOT NULL)'
             )
         )
         conn.execute(
             text(
-                f'INSERT INTO "{schema}".alembic_version (version_num) '
-                f"VALUES ('00000bad0000')"
+                f"INSERT INTO \"{schema}\".alembic_version (version_num) VALUES ('00000bad0000')"
             )
         )
         conn.commit()

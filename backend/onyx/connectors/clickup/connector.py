@@ -68,7 +68,7 @@ class ClickupConnector(LoadConnector, PollConnector):
         response = self._make_request(url_endpoint)
         comments = [
             TextSection(
-                link=f'https://app.clickup.com/t/{task_id}?comment={comment_dict["id"]}',
+                link=f"https://app.clickup.com/t/{task_id}?comment={comment_dict['id']}",
                 text=comment_dict["comment_text"],
             )
             for comment_dict in response["comments"]

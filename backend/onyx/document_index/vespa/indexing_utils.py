@@ -256,8 +256,7 @@ def _index_vespa_chunk(
                     continue
                 else:
                     raise RuntimeError(
-                        f"Failed to index document '{document.id}' after {INDEXING_MAX_RETRIES} attempts "
-                        f"due to rate limiting"
+                        f"Failed to index document '{document.id}' after {INDEXING_MAX_RETRIES} attempts due to rate limiting"
                     ) from e
             elif e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
                 logger.error(

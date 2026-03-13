@@ -70,8 +70,7 @@ def weighted_reciprocal_rank_fusion(
     """
     if len(ranked_results) != len(weights):
         raise ValueError(
-            f"Number of ranked results ({len(ranked_results)}) must match "
-            f"number of weights ({len(weights)})"
+            f"Number of ranked results ({len(ranked_results)}) must match number of weights ({len(weights)})"
         )
 
     # Track RRF scores for each unique item (identified by ID)

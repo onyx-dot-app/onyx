@@ -263,8 +263,7 @@ class ImageGenerationTool(Tool[ImageGenerationToolOverrideKwargs | None]):
             ):
                 raise ToolCallException(
                     message=(
-                        f"Invalid {REFERENCE_IMAGE_FILE_IDS_FIELD}: expected array of strings, "
-                        f"got {type(raw_reference_ids)}"
+                        f"Invalid {REFERENCE_IMAGE_FILE_IDS_FIELD}: expected array of strings, got {type(raw_reference_ids)}"
                     ),
                     llm_facing_message=(
                         f"The '{REFERENCE_IMAGE_FILE_IDS_FIELD}' field must be an array of file_id strings."
@@ -300,8 +299,7 @@ class ImageGenerationTool(Tool[ImageGenerationToolOverrideKwargs | None]):
         if not self.img_provider.supports_reference_images:
             raise ToolCallException(
                 message=(
-                    f"Reference images requested but provider '{self.provider}' "
-                    "does not support image-editing context."
+                    f"Reference images requested but provider '{self.provider}' does not support image-editing context."
                 ),
                 llm_facing_message=(
                     "This image provider does not support editing from previous image context. "
@@ -344,8 +342,7 @@ class ImageGenerationTool(Tool[ImageGenerationToolOverrideKwargs | None]):
                 raise ToolCallException(
                     message=f"Unsupported reference image format for '{file_id}': {e}",
                     llm_facing_message=(
-                        f"Reference image '{file_id}' has an unsupported format. "
-                        "Only PNG, JPEG, GIF, and WEBP are supported."
+                        f"Reference image '{file_id}' has an unsupported format. Only PNG, JPEG, GIF, and WEBP are supported."
                     ),
                 )
 

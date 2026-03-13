@@ -137,8 +137,7 @@ class MCPTool(Tool[None]):
                 ]
                 if denylisted_provided:
                     logger.warning(
-                        f"MCP tool '{self._name}' received denylisted headers that were filtered: "
-                        f"{denylisted_provided}"
+                        f"MCP tool '{self._name}' received denylisted headers that were filtered: {denylisted_provided}"
                     )
 
             # Priority 2: Base headers from connection config (DB) - overrides request

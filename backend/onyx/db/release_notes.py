@@ -87,8 +87,7 @@ def create_release_notifications_for_versions(
         total_created += created_count
 
         logger.debug(
-            f"Created {created_count} release notes notifications "
-            f"(version {entry.version}, {len(user_ids)} eligible users)"
+            f"Created {created_count} release notes notifications (version {entry.version}, {len(user_ids)} eligible users)"
         )
 
     return total_created

@@ -26,7 +26,7 @@ logger = setup_logger()
     trail=False,
 )
 def eval_run_task(
-    self: Task,  # noqa: ARG001
+    self: Task,  # noqa: ARG001, W291
     *,
     configuration_dict: dict[str, Any],
 ) -> None:
@@ -48,7 +48,7 @@ def eval_run_task(
     bind=True,
     trail=False,
 )
-def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
+def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001, W291
     """
     Scheduled task to run evaluations on configured datasets.
     Runs weekly on Sunday at midnight UTC.
@@ -84,8 +84,7 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
     run_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     logger.info(
-        f"Starting scheduled eval pipeline for project '{project_name}' "
-        f"with {len(dataset_names)} dataset(s): {dataset_names}"
+        f"Starting scheduled eval pipeline for project '{project_name}' with {len(dataset_names)} dataset(s): {dataset_names}"
     )
 
     pipeline_start = datetime.now(timezone.utc)
@@ -101,8 +100,7 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
 
         try:
             logger.info(
-                f"Running scheduled eval for dataset: {dataset_name} "
-                f"(project: {project_name})"
+                f"Running scheduled eval for dataset: {dataset_name} (project: {project_name})"
             )
 
             configuration = EvalConfigurationOptions(
@@ -142,6 +140,5 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
 
     passed_count = sum(1 for r in results if r["success"])
     logger.info(
-        f"Scheduled eval pipeline completed: {passed_count}/{len(results)} passed "
-        f"in {total_duration:.1f}s"
+        f"Scheduled eval pipeline completed: {passed_count}/{len(results)} passed in {total_duration:.1f}s"
     )

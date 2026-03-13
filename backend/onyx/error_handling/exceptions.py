@@ -84,7 +84,7 @@ def register_onyx_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(OnyxError)
     async def _handle_onyx_error(
-        request: Request,  # noqa: ARG001
+        request: Request,  # noqa: ARG001, W291
         exc: OnyxError,
     ) -> JSONResponse:
         log_onyx_error(exc)

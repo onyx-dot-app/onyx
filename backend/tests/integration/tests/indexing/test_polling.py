@@ -20,7 +20,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 def _setup_mock_connector(
     mock_server_client: httpx.Client,
-    admin_user: DATestUser,  # noqa: ARG001
+    admin_user: DATestUser,  # noqa: ARG001, W291
 ) -> None:
     test_doc = create_test_document()
     successful_response = {

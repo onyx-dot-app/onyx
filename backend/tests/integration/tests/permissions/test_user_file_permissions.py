@@ -29,7 +29,7 @@ class UserFileTestSetup(NamedTuple):
 
 
 @pytest.fixture
-def user_file_setup(reset: None) -> UserFileTestSetup:  # noqa: ARG001
+def user_file_setup(reset: None) -> UserFileTestSetup:  # noqa: ARG001, W291
     """
     Common setup for user file permission tests.
     Creates users, files, and a public assistant with files.
@@ -106,10 +106,9 @@ def test_public_assistant_with_user_files(
     )
 
     # Verify the message was processed without errors
-    assert response.error is None, (
-        f"Expected no error when user2 uses public assistant with user1's files, "
-        f"but got error: {response.error}"
-    )
+    assert (
+        response.error is None
+    ), f"Expected no error when user2 uses public assistant with user1's files, but got error: {response.error}"
     assert len(response.full_message) > 0, "Expected a response from the assistant"
 
     # Verify chat history is accessible

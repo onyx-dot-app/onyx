@@ -372,7 +372,7 @@ def select_sections_for_expansion(
             # Check if in valid range
             if section_id_int < 0 or section_id_int >= num_sections:
                 logger.warning(
-                    f"Section ID {section_id_int} is out of range [0, {num_sections-1}], skipping"
+                    f"Section ID {section_id_int} is out of range [0, {num_sections - 1}], skipping"
                 )
                 continue
 

@@ -105,7 +105,8 @@ def _create_mock_slack_request(
 
 
 def _create_mock_slack_client(
-    channel_id: str = "C1234567890", slack_bot_id: int = 12345  # noqa: ARG001
+    channel_id: str = "C1234567890",  # noqa: ARG001, W291
+    slack_bot_id: int = 12345,  # noqa: W291
 ) -> Mock:
     """Create a mock Slack client"""
     mock_client = Mock()
@@ -314,7 +315,9 @@ class TestSlackBotFederatedSearch:
         mock_get_query_embeddings.return_value = [[0.1] * 768]  # 768-dimensional vector
 
     def _setup_slack_api_mocks(
-        self, mock_search_messages: Mock, mock_conversations_info: Mock  # noqa: ARG002
+        self,
+        mock_search_messages: Mock,
+        mock_conversations_info: Mock,  # noqa: ARG002
     ) -> None:
         """Setup Slack API mocks to return controlled data for testing filtering"""
         mock_search_response = Mock()
@@ -364,15 +367,15 @@ class TestSlackBotFederatedSearch:
         from onyx.context.search.federated.slack_search import SlackQueryResult
 
         def mock_query_slack_capture_params(
-            query_string: str,  # noqa: ARG001
-            access_token: str,  # noqa: ARG001
-            limit: int | None = None,  # noqa: ARG001
+            query_string: str,  # noqa: ARG001, W291
+            access_token: str,  # noqa: ARG001, W291
+            limit: int | None = None,  # noqa: ARG001, W291
             allowed_private_channel: str | None = None,
-            bot_token: str | None = None,  # noqa: ARG001
+            bot_token: str | None = None,  # noqa: ARG001, W291
             include_dm: bool = False,
-            entities: dict | None = None,  # noqa: ARG001
-            available_channels: list | None = None,  # noqa: ARG001
-            channel_metadata_dict: dict | None = None,  # noqa: ARG001
+            entities: dict | None = None,  # noqa: ARG001, W291
+            available_channels: list | None = None,  # noqa: ARG001, W291
+            channel_metadata_dict: dict | None = None,  # noqa: ARG001, W291
         ) -> SlackQueryResult:
             self._captured_filtering_params = {
                 "allowed_private_channel": allowed_private_channel,
@@ -385,12 +388,15 @@ class TestSlackBotFederatedSearch:
         mock_query_slack.side_effect = mock_query_slack_capture_params
 
     def _setup_channel_type_mock(
-        self, mock_get_channel_type_from_id: Mock, channel_name: str  # noqa: ARG002
+        self,
+        mock_get_channel_type_from_id: Mock,
+        channel_name: str,  # noqa: ARG002
     ) -> None:
         """Setup get_channel_type_from_id mock to return correct channel types"""
 
         def mock_channel_type_response(
-            web_client: Mock, channel_id: str  # noqa: ARG001
+            web_client: Mock,  # noqa: ARG001, W291
+            channel_id: str,  # noqa: W291
         ) -> ChannelType:
             if channel_id == "C1234567890":  # general - public
                 return ChannelType.PUBLIC_CHANNEL
@@ -640,7 +646,8 @@ def test_missing_scope_resilience(
     attempted_types: list[str] = []
 
     def mock_conversations_list(
-        types: str | None = None, **kwargs: Any  # noqa: ARG001
+        types: str | None = None,
+        **kwargs: Any,  # noqa: ARG001, W291
     ) -> MagicMock:
         if types:
             attempted_types.append(types)
@@ -730,7 +737,8 @@ def test_multiple_missing_scopes_resilience(
     attempted_types: list[str] = []
 
     def mock_conversations_list(
-        types: str | None = None, **kwargs: Any  # noqa: ARG001
+        types: str | None = None,
+        **kwargs: Any,  # noqa: ARG001, W291
     ) -> MagicMock:
         if types:
             attempted_types.append(types)

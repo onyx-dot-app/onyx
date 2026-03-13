@@ -227,7 +227,7 @@ def respond_in_thread_or_channel(
     receiver_ids: list[str] | None = None,
     metadata: Metadata | None = None,
     unfurl: bool = True,
-    send_as_ephemeral: bool | None = True,  # noqa: ARG001
+    send_as_ephemeral: bool | None = True,  # noqa: ARG001, W291
 ) -> list[str]:
     if not text and not blocks:
         raise ValueError("One of `text` or `blocks` must be provided")
@@ -669,8 +669,7 @@ class SlackRateLimiter:
             client=client,
             channel=channel,
             receiver_ids=None,
-            text=f"Your question has been queued. You are in position {position}.\n"
-            f"Please wait a moment :hourglass_flowing_sand:",
+            text=f"Your question has been queued. You are in position {position}.\nPlease wait a moment :hourglass_flowing_sand:",
             thread_ts=thread_ts,
         )
 

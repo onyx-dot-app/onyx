@@ -243,14 +243,15 @@ class DocumentChunk(BaseModel):
             return value
         if not isinstance(value, int):
             raise ValueError(
-                f"Bug: Expected an int for the last_updated property from OpenSearch, got "
-                f"{type(value)} instead."
+                f"Bug: Expected an int for the last_updated property from OpenSearch, got {type(value)} instead."
             )
         return datetime.fromtimestamp(value, tz=timezone.utc)
 
     @field_serializer("tenant_id", mode="wrap")
     def serialize_tenant_state(
-        self, value: TenantState, handler: SerializerFunctionWrapHandler  # noqa: ARG002
+        self,
+        value: TenantState,
+        handler: SerializerFunctionWrapHandler,  # noqa: ARG002
     ) -> str | None:
         """
         Serializes tenant_state to the tenant str if multitenant, or None if
@@ -292,8 +293,7 @@ class DocumentChunk(BaseModel):
             return value
         elif not isinstance(value, str):
             raise ValueError(
-                f"Bug: Expected a str for the tenant_id property from OpenSearch, got "
-                f"{type(value)} instead."
+                f"Bug: Expected a str for the tenant_id property from OpenSearch, got {type(value)} instead."
             )
         else:
             if not MULTI_TENANT:

@@ -257,7 +257,10 @@ def test_load_from_checkpoint_with_issue_processing_error(
 
     # Mock process_jira_issue to succeed for some issues and fail for others
     def mock_process_side_effect(
-        jira_base_url: str, issue: Issue, *args: Any, **kwargs: Any  # noqa: ARG001
+        jira_base_url: str,  # noqa: ARG001, W291
+        issue: Issue,
+        *args: Any,  # noqa: ARG001, W291
+        **kwargs: Any,  # noqa: ARG001, W291
     ) -> Document | None:
         if issue.key in ["TEST-1", "TEST-3"]:
             return Document(

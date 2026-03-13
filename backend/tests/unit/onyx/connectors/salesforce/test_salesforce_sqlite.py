@@ -1068,7 +1068,6 @@ def test_salesforce_connector_single() -> None:
 
     child_relationships_batch = []
     for child_relationship in child_relationships:
-
         # this is binary content, skip it
         if child_relationship == "Attachments":
             continue

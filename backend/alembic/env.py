@@ -57,7 +57,7 @@ if USE_IAM_AUTH:
 
 
 def include_object(
-    object: SchemaItem,  # noqa: ARG001
+    object: SchemaItem,  # noqa: ARG001, W291
     name: str | None,
     type_: Literal[
         "schema",
@@ -67,8 +67,8 @@ def include_object(
         "unique_constraint",
         "foreign_key_constraint",
     ],
-    reflected: bool,  # noqa: ARG001
-    compare_to: SchemaItem | None,  # noqa: ARG001
+    reflected: bool,  # noqa: ARG001, W291
+    compare_to: SchemaItem | None,  # noqa: ARG001, W291
 ) -> bool:
     if type_ == "table" and name in EXCLUDE_TABLES:
         return False
@@ -244,7 +244,10 @@ def do_run_migrations(
 
 
 def provide_iam_token_for_alembic(
-    dialect: Any, conn_rec: Any, cargs: Any, cparams: Any  # noqa: ARG001
+    dialect: Any,  # noqa: ARG001, W291
+    conn_rec: Any,  # noqa: ARG001, W291
+    cargs: Any,  # noqa: ARG001, W291
+    cparams: Any,  # noqa: W291
 ) -> None:
     if USE_IAM_AUTH:
         # Database connection settings
@@ -360,8 +363,7 @@ async def run_async_migrations() -> None:
         # upgrade_all_tenants=true or schemas in multi-tenant mode
         # and for non-multi-tenant mode, we should use schemas with the default schema
         raise ValueError(
-            "No migration target specified. Use either upgrade_all_tenants=true for all tenants "
-            "or schemas for specific schemas."
+            "No migration target specified. Use either upgrade_all_tenants=true for all tenants or schemas for specific schemas."
         )
 
     await engine.dispose()
@@ -457,8 +459,7 @@ def run_migrations_offline() -> None:
     else:
         # This should not happen in the new design
         raise ValueError(
-            "No migration target specified. Use either upgrade_all_tenants=true for all tenants "
-            "or schemas for specific schemas."
+            "No migration target specified. Use either upgrade_all_tenants=true for all tenants or schemas for specific schemas."
         )
 
 

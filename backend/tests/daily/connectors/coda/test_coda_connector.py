@@ -141,7 +141,9 @@ class TestLoadFromState:
         assert isinstance(gen, Generator), "load_from_state should return a Generator"
 
     def test_batch_sizes_respect_config(
-        self, connector: CodaConnector, reference_data: dict[str, Any]  # noqa: ARG002
+        self,
+        connector: CodaConnector,
+        reference_data: dict[str, Any],  # noqa: ARG002
     ) -> None:
         """Test that batches respect the configured batch_size."""
         batch_size = connector.batch_size
@@ -180,7 +182,9 @@ class TestLoadFromState:
         )
 
     def test_document_required_fields(
-        self, connector: CodaConnector, reference_data: dict[str, Any]  # noqa: ARG002
+        self,
+        connector: CodaConnector,
+        reference_data: dict[str, Any],  # noqa: ARG002
     ) -> None:
         """Test that all documents have required fields with valid values."""
         gen = connector.load_from_state()
@@ -250,7 +254,9 @@ class TestLoadFromState:
         ), f"Expected {reference_data['total_tables']} table documents, got {len(table_docs)}"
 
     def test_no_duplicate_documents(
-        self, connector: CodaConnector, reference_data: dict[str, Any]  # noqa: ARG002
+        self,
+        connector: CodaConnector,
+        reference_data: dict[str, Any],  # noqa: ARG002
     ) -> None:
         """Test that no documents are yielded twice."""
         document_ids = []
@@ -285,7 +291,9 @@ class TestLoadFromState:
         ), f"Not all docs with content were processed. Expected {expected_doc_ids_with_content}, got {processed_doc_ids}"
 
     def test_document_content_not_empty(
-        self, connector: CodaConnector, reference_data: dict[str, Any]  # noqa: ARG002
+        self,
+        connector: CodaConnector,
+        reference_data: dict[str, Any],  # noqa: ARG002
     ) -> None:
         """Test that all documents have meaningful content."""
         for doc in connector_doc_generator(connector):

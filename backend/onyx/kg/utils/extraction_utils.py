@@ -520,8 +520,7 @@ def kg_deep_extract_chunks(
     except Exception as e:
         failed_chunks = [chunk.chunk_id for chunk in chunk_batch]
         logger.error(
-            f"Failed to process chunks {failed_chunks} "
-            f"from document {document_entity}. Error: {str(e)}"
+            f"Failed to process chunks {failed_chunks} from document {document_entity}. Error: {str(e)}"
         )
     return None
 

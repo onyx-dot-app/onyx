@@ -103,7 +103,7 @@ def _fetch_channel_permissions(
 
 def _get_slack_document_access(
     slack_connector: SlackConnector,
-    channel_permissions: dict[str, ExternalAccess],  # noqa: ARG001
+    channel_permissions: dict[str, ExternalAccess],  # noqa: ARG001, W291
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     slim_doc_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
@@ -136,8 +136,8 @@ def _get_slack_document_access(
 
 def slack_doc_sync(
     cc_pair: ConnectorCredentialPair,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
-    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001, W291
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001, W291
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     """
@@ -166,8 +166,7 @@ def slack_doc_sync(
     user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
     if not user_id_to_email_map:
         raise ValueError(
-            "No user id to email map found. Please check to make sure that "
-            "your Slack bot token has the `users:read.email` scope"
+            "No user id to email map found. Please check to make sure that your Slack bot token has the `users:read.email` scope"
         )
 
     workspace_permissions = _fetch_workspace_permissions(

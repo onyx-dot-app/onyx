@@ -83,11 +83,11 @@ def ensure_mcp_server_exists() -> None:
 
 
 def test_mcp_client_no_auth_flow(
-    mcp_no_auth_server: None,  # noqa: ARG001
-    reset: None,  # noqa: ARG001
+    mcp_no_auth_server: None,  # noqa: ARG001, W291
+    reset: None,  # noqa: ARG001, W291
     admin_user: DATestUser,
     basic_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     # Step a) Create a no-auth MCP server via the admin API
     create_response = requests.post(

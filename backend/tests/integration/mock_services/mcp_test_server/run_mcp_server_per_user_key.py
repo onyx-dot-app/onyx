@@ -95,7 +95,7 @@ class ApiKeyVerifier(TokenVerifier):
 def make_many_tools(mcp: FastMCP) -> None:
     def make_tool(i: int) -> None:
         @mcp.tool(name=f"tool_{i}", description=f"Get secret value {i}")
-        def tool_name(name: str) -> str:  # noqa: ARG001
+        def tool_name(name: str) -> str:  # noqa: ARG001, W291
             """Get secret value."""
             return f"Secret value {400 - i}!"
 
@@ -104,7 +104,6 @@ def make_many_tools(mcp: FastMCP) -> None:
 
 
 if __name__ == "__main__":
-
     if len(sys.argv) > 1:
         port = int(sys.argv[1])
     else:

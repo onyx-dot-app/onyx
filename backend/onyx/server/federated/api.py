@@ -71,8 +71,7 @@ def create_federated_connector(
     tenant_id = get_current_tenant_id()
 
     logger.info(
-        f"Creating federated connector: source={federated_connector_data.source}, "
-        f"user={user.email}, tenant_id={tenant_id}"
+        f"Creating federated connector: source={federated_connector_data.source}, user={user.email}, tenant_id={tenant_id}"
     )
 
     try:
@@ -431,8 +430,7 @@ def handle_oauth_callback_generic(
     # Store OAuth token in database if we have an access token
     if oauth_result.access_token:
         logger.info(
-            f"Storing OAuth token for federated_connector_id={federated_connector_id}, "
-            f"user_id={oauth_session.user_id}"
+            f"Storing OAuth token for federated_connector_id={federated_connector_id}, user_id={oauth_session.user_id}"
         )
         update_federated_connector_oauth_token(
             db_session=db_session,

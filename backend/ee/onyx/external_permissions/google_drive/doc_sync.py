@@ -115,8 +115,7 @@ def get_external_access_for_raw_gdrive_file(
         )
         if len(permissions_list) != len(permission_ids) and retriever_drive_service:
             logger.warning(
-                f"Failed to get all permissions for file {doc_id} with retriever service, "
-                "trying admin service"
+                f"Failed to get all permissions for file {doc_id} with retriever service, trying admin service"
             )
             backup_permissions_list = _get_permissions(admin_drive_service)
             permissions_list = _merge_permissions_lists(
@@ -166,9 +165,7 @@ def get_external_access_for_raw_gdrive_file(
                 user_emails.add(permission.email_address)
             else:
                 logger.error(
-                    "Permission is type `user` but no email address is "
-                    f"provided for document {doc_id}"
-                    f"\n {permission}"
+                    f"Permission is type `user` but no email address is provided for document {doc_id}\n {permission}"
                 )
         elif permission.type == PermissionType.GROUP:
             # groups are represented as email addresses within Drive
@@ -176,17 +173,14 @@ def get_external_access_for_raw_gdrive_file(
                 group_emails.add(permission.email_address)
             else:
                 logger.error(
-                    "Permission is type `group` but no email address is "
-                    f"provided for document {doc_id}"
-                    f"\n {permission}"
+                    f"Permission is type `group` but no email address is provided for document {doc_id}\n {permission}"
                 )
         elif permission.type == PermissionType.DOMAIN and company_domain:
             if permission.domain == company_domain:
                 public = True
             else:
                 logger.warning(
-                    "Permission is type domain but does not match company domain:"
-                    f"\n {permission}"
+                    f"Permission is type domain but does not match company domain:\n {permission}"
                 )
         elif permission.type == PermissionType.ANYONE:
             public = True
@@ -308,8 +302,8 @@ def get_external_access_for_folder(
 
 def gdrive_doc_sync(
     cc_pair: ConnectorCredentialPair,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
-    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001, W291
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001, W291
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[ElementExternalAccess, None, None]:
     """

@@ -62,9 +62,9 @@ def _file_is_gone(file_id: UUID, user: DATestUser, timeout: int = 15) -> None:
 
 
 def test_file_upload_process_delete_lifecycle(
-    reset: None,  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """Full lifecycle: upload → COMPLETED → unlink → delete → 404.
 
@@ -123,9 +123,9 @@ def test_file_upload_process_delete_lifecycle(
 
 
 def test_delete_blocked_while_associated(
-    reset: None,  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
     admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """Deleting a file that still belongs to a project should return
     has_associations=True without actually deleting the file."""

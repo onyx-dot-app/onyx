@@ -296,8 +296,7 @@ class OnyxConfluence:
         except HTTPError as e:
             if e.response.status_code == 404 and use_v2:
                 logger.warning(
-                    "v2 spaces API returned 404, falling back to v1 API. "
-                    "This may indicate an older Confluence Cloud instance."
+                    "v2 spaces API returned 404, falling back to v1 API. This may indicate an older Confluence Cloud instance."
                 )
                 # Fallback to v1
                 yield from self._paginate_spaces_for_endpoint(
@@ -354,9 +353,7 @@ class OnyxConfluence:
 
         if not first_space:
             raise RuntimeError(
-                f"No spaces found at {self._url}! "
-                "Check your credentials and wiki_base and make sure "
-                "is_cloud is set correctly."
+                f"No spaces found at {self._url}! Check your credentials and wiki_base and make sure is_cloud is set correctly."
             )
 
         logger.info("Confluence probe succeeded.")
@@ -461,8 +458,7 @@ class OnyxConfluence:
                 except HTTPError as e:
                     delay_until = _handle_http_error(e, attempt)
                     logger.warning(
-                        f"HTTPError in confluence call. "
-                        f"Retrying in {delay_until} seconds..."
+                        f"HTTPError in confluence call. Retrying in {delay_until} seconds..."
                     )
                     while time.monotonic() < delay_until:
                         # in the future, check a signal here to exit
@@ -544,8 +540,7 @@ class OnyxConfluence:
                 if not latest_results:
                     # no more results, break out of the loop
                     logger.info(
-                        f"No results found for call '{temp_url_suffix}'"
-                        "Stopping pagination."
+                        f"No results found for call '{temp_url_suffix}'Stopping pagination."
                     )
                     found_empty_page = True
                     break
@@ -606,8 +601,7 @@ class OnyxConfluence:
                 # If that fails, raise the error
                 if _PROBLEMATIC_EXPANSIONS in url_suffix:
                     logger.warning(
-                        f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS}"
-                        " and trying again."
+                        f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS} and trying again."
                     )
                     url_suffix = url_suffix.replace(
                         _PROBLEMATIC_EXPANSIONS,
@@ -711,8 +705,7 @@ class OnyxConfluence:
             # stop paginating.
             if url_suffix and not results:
                 logger.info(
-                    f"No results found for call '{old_url_suffix}' despite next link "
-                    "being present. Stopping pagination."
+                    f"No results found for call '{old_url_suffix}' despite next link being present. Stopping pagination."
                 )
                 break
 
@@ -934,8 +927,7 @@ class OnyxConfluence:
         logger.debug(f"jsonrpc response: {response}")
         if not response.get("result"):
             logger.warning(
-                f"No jsonrpc response for space permissions for space {space_key}"
-                f"\nResponse: {response}"
+                f"No jsonrpc response for space permissions for space {space_key}\nResponse: {response}"
             )
 
         return response.get("result", [])
@@ -978,8 +970,7 @@ def get_user_email_from_username__server(
         except HTTPError as e:
             status_code = e.response.status_code if e.response is not None else "N/A"
             logger.warning(
-                f"Failed to get confluence email for {user_name}: "
-                f"HTTP {status_code} - {e}"
+                f"Failed to get confluence email for {user_name}: HTTP {status_code} - {e}"
             )
             # For now, we'll just return None and log a warning. This means
             # we will keep retrying to get the email every group sync.
@@ -1060,7 +1051,7 @@ def extract_text_from_confluence_html(
         )
         if not user_id:
             logger.warning(
-                "ri:userkey not found in ri:user element. " f"Found attrs: {user.attrs}"
+                f"ri:userkey not found in ri:user element. Found attrs: {user.attrs}"
             )
             continue
         # Include @ sign for tagging, more clear for LLM

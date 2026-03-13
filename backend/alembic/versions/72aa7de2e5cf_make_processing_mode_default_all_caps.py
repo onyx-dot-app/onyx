@@ -24,12 +24,10 @@ depends_on = None
 def upgrade() -> None:
     # Convert existing lowercase values to uppercase to match enum member names
     op.execute(
-        "UPDATE connector_credential_pair SET processing_mode = 'REGULAR' "
-        "WHERE processing_mode = 'regular'"
+        "UPDATE connector_credential_pair SET processing_mode = 'REGULAR' WHERE processing_mode = 'regular'"
     )
     op.execute(
-        "UPDATE connector_credential_pair SET processing_mode = 'FILE_SYSTEM' "
-        "WHERE processing_mode = 'file_system'"
+        "UPDATE connector_credential_pair SET processing_mode = 'FILE_SYSTEM' WHERE processing_mode = 'file_system'"
     )
 
     # Update the server default to use uppercase

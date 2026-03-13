@@ -91,14 +91,12 @@ class ProcessManager:
                     f"Check the terminal or logs in {web_dir} for details."
                 )
                 raise RuntimeError(
-                    f"Next.js server process died with code {process.returncode}. "
-                    f"Check server logs for details."
+                    f"Next.js server process died with code {process.returncode}. Check server logs for details."
                 )
 
             # Process still running but server not responding
             logger.error(
-                f"Next.js server failed to respond within {timeout} seconds "
-                f"(process still running with PID {process.pid})"
+                f"Next.js server failed to respond within {timeout} seconds (process still running with PID {process.pid})"
             )
 
             raise RuntimeError(
@@ -153,24 +151,21 @@ class ProcessManager:
                 # Log HTTP errors (server responding but with error)
                 if time.time() - last_log_time >= 10:
                     logger.debug(
-                        f"HTTP error {e.code} from {url} after {elapsed:.1f}s "
-                        f"({attempt_count} attempts)"
+                        f"HTTP error {e.code} from {url} after {elapsed:.1f}s ({attempt_count} attempts)"
                     )
                     last_log_time = time.time()
             except (urllib.error.URLError, TimeoutError) as e:
                 # Log connection errors periodically (every 10 seconds)
                 if time.time() - last_log_time >= 10:
                     logger.debug(
-                        f"Still waiting for {url} after {elapsed:.1f}s "
-                        f"({attempt_count} attempts): {type(e).__name__}"
+                        f"Still waiting for {url} after {elapsed:.1f}s ({attempt_count} attempts): {type(e).__name__}"
                     )
                     last_log_time = time.time()
 
             time.sleep(poll_interval)
 
         logger.warning(
-            f"Server at {url} did not become available within {timeout}s "
-            f"({attempt_count} attempts)"
+            f"Server at {url} did not become available within {timeout}s ({attempt_count} attempts)"
         )
         return False
 

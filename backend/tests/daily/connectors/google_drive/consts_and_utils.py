@@ -654,14 +654,12 @@ def assert_hierarchy_nodes_match_expected(
         ), f"Node {node.raw_node_id} ({node.display_name}) not found in expected_nodes"
         expected = expected_nodes[node.raw_node_id]
 
-        assert node.display_name == expected.display_name, (
-            f"Display name mismatch for node {node.raw_node_id}: "
-            f"expected '{expected.display_name}', got '{node.display_name}'"
-        )
-        assert node.node_type == expected.node_type, (
-            f"Node type mismatch for node {node.raw_node_id}: "
-            f"expected '{expected.node_type}', got '{node.node_type}'"
-        )
+        assert (
+            node.display_name == expected.display_name
+        ), f"Display name mismatch for node {node.raw_node_id}: expected '{expected.display_name}', got '{node.display_name}'"
+        assert (
+            node.node_type == expected.node_type
+        ), f"Node type mismatch for node {node.raw_node_id}: expected '{expected.node_type}', got '{node.node_type}'"
         if expected.raw_parent_id is not None:
             assert node.raw_parent_id == expected.raw_parent_id, (
                 f"Parent mismatch for node {node.raw_node_id} ({node.display_name}): "

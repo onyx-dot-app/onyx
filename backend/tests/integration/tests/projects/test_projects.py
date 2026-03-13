@@ -18,9 +18,9 @@ def reset_for_module() -> None:
 
 
 def test_projects_flow(
-    reset_for_module: None,  # noqa: ARG001
+    reset_for_module: None,  # noqa: ARG001, W291
     basic_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """End-to-end project flow covering creation, listing, files, instructions, deletion, and edge cases."""
     # Case 1: Project creation and listing

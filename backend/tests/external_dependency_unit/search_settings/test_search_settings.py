@@ -129,7 +129,7 @@ def _run_indexing_pipeline_with_mocks(
 
 @pytest.fixture()
 def baseline_search_settings(
-    tenant_context: None,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001, W291
     db_session: Session,
 ) -> None:
     """Ensure a baseline PRESENT search settings row exists in the DB,
@@ -157,10 +157,10 @@ def baseline_search_settings(
 def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
-    mock_get_doc_index: MagicMock,  # noqa: ARG001
-    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001
+    mock_get_doc_index: MagicMock,  # noqa: ARG001, W291
+    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001, W291
     mock_get_all_doc_indices: MagicMock,
-    baseline_search_settings: None,  # noqa: ARG001
+    baseline_search_settings: None,  # noqa: ARG001, W291
     db_session: Session,
 ) -> None:
     """After creating FUTURE settings and swapping to PRESENT,
@@ -208,10 +208,10 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
 def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
-    mock_get_doc_index: MagicMock,  # noqa: ARG001
-    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001
+    mock_get_doc_index: MagicMock,  # noqa: ARG001, W291
+    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001, W291
     mock_get_all_doc_indices: MagicMock,
-    baseline_search_settings: None,  # noqa: ARG001
+    baseline_search_settings: None,  # noqa: ARG001, W291
     db_session: Session,
 ) -> None:
     """After creating FUTURE settings, swapping to PRESENT, then updating
@@ -278,9 +278,9 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
 def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
-    mock_get_doc_index: MagicMock,  # noqa: ARG001
-    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001
-    baseline_search_settings: None,  # noqa: ARG001
+    mock_get_doc_index: MagicMock,  # noqa: ARG001, W291
+    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001, W291
+    baseline_search_settings: None,  # noqa: ARG001, W291
     db_session: Session,
 ) -> None:
     """When contextual RAG is disabled in search settings,

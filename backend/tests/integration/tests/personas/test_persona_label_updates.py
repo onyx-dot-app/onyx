@@ -11,7 +11,8 @@ from tests.integration.common_utils.test_models import DATestUser
 
 
 def test_update_persona_with_null_label_ids_preserves_labels(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: W291
 ) -> None:
     persona_label = PersonaLabelManager.create(
         label=DATestPersonaLabel(name=f"Test label {uuid4()}"),

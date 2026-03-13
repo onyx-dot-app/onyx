@@ -98,7 +98,7 @@ def _build_connector(
 
 def test_gdrive_perm_sync_with_real_data(
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
-    enable_ee: None,  # noqa: ARG001
+    enable_ee: None,  # noqa: ARG001, W291
 ) -> None:
     """
     Test gdrive_doc_sync and gdrive_group_sync with real data from the test drive.
@@ -138,7 +138,7 @@ def test_gdrive_perm_sync_with_real_data(
     ):
         # Call the function under test
         def mock_fetch_all_docs_fn(
-            sort_order: SortOrder | None = None,  # noqa: ARG001
+            sort_order: SortOrder | None = None,  # noqa: ARG001, W291
         ) -> list[DocumentRow]:
             return []
 

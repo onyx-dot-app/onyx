@@ -72,10 +72,10 @@ class SyncConfig(BaseModel):
 
 # Mock doc sync function for testing (no-op)
 def mock_doc_sync(
-    cc_pair: "ConnectorCredentialPair",  # noqa: ARG001
-    fetch_all_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
-    fetch_all_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
-    callback: Optional["IndexingHeartbeatInterface"],  # noqa: ARG001
+    cc_pair: "ConnectorCredentialPair",  # noqa: ARG001, W291
+    fetch_all_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001, W291
+    fetch_all_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001, W291
+    callback: Optional["IndexingHeartbeatInterface"],  # noqa: ARG001, W291
 ) -> Generator["DocExternalAccess", None, None]:
     """Mock doc sync function for testing - returns empty list since permissions are fetched during indexing"""
     yield from []

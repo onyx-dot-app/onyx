@@ -153,8 +153,7 @@ class SensitiveValue(Generic[T]):
     def __str__(self) -> NoReturn:
         """Prevent accidental string conversion."""
         raise SensitiveAccessError(
-            "Cannot convert SensitiveValue to string. "
-            "Use .get_value(apply_mask=True/False) to access the value."
+            "Cannot convert SensitiveValue to string. Use .get_value(apply_mask=True/False) to access the value."
         )
 
     def __repr__(self) -> str:
@@ -164,15 +163,13 @@ class SensitiveValue(Generic[T]):
     def __iter__(self) -> NoReturn:
         """Prevent iteration over the value."""
         raise SensitiveAccessError(
-            "Cannot iterate over SensitiveValue. "
-            "Use .get_value(apply_mask=True/False) to access the value."
+            "Cannot iterate over SensitiveValue. Use .get_value(apply_mask=True/False) to access the value."
         )
 
     def __getitem__(self, key: Any) -> NoReturn:
         """Prevent subscript access."""
         raise SensitiveAccessError(
-            "Cannot subscript SensitiveValue. "
-            "Use .get_value(apply_mask=True/False) to access the value."
+            "Cannot subscript SensitiveValue. Use .get_value(apply_mask=True/False) to access the value."
         )
 
     def __eq__(self, other: Any) -> bool:
@@ -195,8 +192,7 @@ class SensitiveValue(Generic[T]):
     def __json__(self) -> Any:
         """Prevent JSON serialization."""
         raise SensitiveAccessError(
-            "Cannot serialize SensitiveValue to JSON. "
-            "Use .get_value(apply_mask=True/False) to access the value."
+            "Cannot serialize SensitiveValue to JSON. Use .get_value(apply_mask=True/False) to access the value."
         )
 
     # For Pydantic compatibility

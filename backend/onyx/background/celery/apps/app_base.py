@@ -94,12 +94,12 @@ class TenantAwareTask(Task):
 
 @task_prerun.connect
 def on_task_prerun(
-    sender: Any | None = None,  # noqa: ARG001
-    task_id: str | None = None,  # noqa: ARG001
-    task: Task | None = None,  # noqa: ARG001
-    args: tuple[Any, ...] | None = None,  # noqa: ARG001
-    kwargs: dict[str, Any] | None = None,  # noqa: ARG001
-    **other_kwargs: Any,  # noqa: ARG001
+    sender: Any | None = None,  # noqa: ARG001, W291
+    task_id: str | None = None,  # noqa: ARG001, W291
+    task: Task | None = None,  # noqa: ARG001, W291
+    args: tuple[Any, ...] | None = None,  # noqa: ARG001, W291
+    kwargs: dict[str, Any] | None = None,  # noqa: ARG001, W291
+    **other_kwargs: Any,  # noqa: ARG001, W291
 ) -> None:
     # Reset any per-task logging context so that prefixes (e.g. pruning_ctx)
     # from a previous task executed in the same worker process do not leak
@@ -111,14 +111,14 @@ def on_task_prerun(
 
 
 def on_task_postrun(
-    sender: Any | None = None,  # noqa: ARG001
+    sender: Any | None = None,  # noqa: ARG001, W291
     task_id: str | None = None,
     task: Task | None = None,
-    args: tuple | None = None,  # noqa: ARG001
+    args: tuple | None = None,  # noqa: ARG001, W291
     kwargs: dict[str, Any] | None = None,
-    retval: Any | None = None,  # noqa: ARG001
+    retval: Any | None = None,  # noqa: ARG001, W291
     state: str | None = None,
-    **kwds: Any,  # noqa: ARG001
+    **kwds: Any,  # noqa: ARG001, W291
 ) -> None:
     """We handle this signal in order to remove completed tasks
     from their respective tasksets. This allows us to track the progress of document set
@@ -154,8 +154,7 @@ def on_task_postrun(
         tenant_id = cast(str, kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
 
     task_logger.debug(
-        f"Task {task.name} (ID: {task_id}) completed with state: {state} "
-        f"{f'for tenant_id={tenant_id}' if tenant_id else ''}"
+        f"Task {task.name} (ID: {task_id}) completed with state: {state} {f'for tenant_id={tenant_id}' if tenant_id else ''}"
     )
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -211,7 +210,9 @@ def on_task_postrun(
 
 
 def on_celeryd_init(
-    sender: str, conf: Any = None, **kwargs: Any  # noqa: ARG001
+    sender: str,  # noqa: ARG001, W291
+    conf: Any = None,  # noqa: ARG001, W291
+    **kwargs: Any,  # noqa: ARG001, W291
 ) -> None:
     """The first signal sent on celery worker startup"""
 
@@ -245,7 +246,7 @@ def on_celeryd_init(
     setup_tracing()
 
 
-def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001, W291
     """Waits for redis to become ready subject to a hardcoded timeout.
     Will raise WorkerShutdown to kill the celery worker if the timeout
     is reached."""
@@ -277,10 +278,7 @@ def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
         time.sleep(WAIT_INTERVAL)
 
     if not ready:
-        msg = (
-            f"Redis: Readiness probe did not succeed within the timeout "
-            f"({WAIT_LIMIT} seconds). Exiting..."
-        )
+        msg = f"Redis: Readiness probe did not succeed within the timeout ({WAIT_LIMIT} seconds). Exiting..."
         logger.error(msg)
         raise WorkerShutdown(msg)
 
@@ -288,7 +286,7 @@ def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
     return
 
 
-def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001, W291
     """Waits for the db to become ready subject to a hardcoded timeout.
     Will raise WorkerShutdown to kill the celery worker if the timeout is reached."""
 
@@ -319,10 +317,7 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
         time.sleep(WAIT_INTERVAL)
 
     if not ready:
-        msg = (
-            f"Database: Readiness probe did not succeed within the timeout "
-            f"({WAIT_LIMIT} seconds). Exiting..."
-        )
+        msg = f"Database: Readiness probe did not succeed within the timeout ({WAIT_LIMIT} seconds). Exiting..."
         logger.error(msg)
         raise WorkerShutdown(msg)
 
@@ -330,7 +325,7 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
     return
 
 
-def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001, W291
     logger.info(f"Running as a secondary celery worker: pid={os.getpid()}")
 
     # Set up variables for waiting on primary worker
@@ -349,10 +344,7 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
             f"Primary worker is not ready yet. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
         )
         if time_elapsed > WAIT_LIMIT:
-            msg = (
-                f"Primary worker was not ready within the timeout. "
-                f"({WAIT_LIMIT} seconds). Exiting..."
-            )
+            msg = f"Primary worker was not ready within the timeout. ({WAIT_LIMIT} seconds). Exiting..."
             logger.error(msg)
             raise WorkerShutdown(msg)
 
@@ -362,7 +354,7 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
     return
 
 
-def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001, W291
     task_logger.info("worker_ready signal received.")
 
     # file based way to do readiness/liveness probes
@@ -375,7 +367,7 @@ def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
     logger.info(f"Readiness signal touched at {path}.")
 
 
-def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001, W291
     HttpxPool.close_all()
 
     hostname: str = cast(str, sender.hostname)
@@ -408,9 +400,9 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
 def on_setup_logging(
     loglevel: int,
     logfile: str | None,
-    format: str,  # noqa: ARG001
-    colorize: bool,  # noqa: ARG001
-    **kwargs: Any,  # noqa: ARG001
+    format: str,  # noqa: ARG001, W291
+    colorize: bool,  # noqa: ARG001, W291
+    **kwargs: Any,  # noqa: ARG001, W291
 ) -> None:
     # TODO: could unhardcode format and colorize and accept these as options from
     # celery's config
@@ -511,18 +503,20 @@ class TenantContextFilter(logging.Filter):
 
 @task_postrun.connect
 def reset_tenant_id(
-    sender: Any | None = None,  # noqa: ARG001
-    task_id: str | None = None,  # noqa: ARG001
-    task: Task | None = None,  # noqa: ARG001
-    args: tuple[Any, ...] | None = None,  # noqa: ARG001
-    kwargs: dict[str, Any] | None = None,  # noqa: ARG001
-    **other_kwargs: Any,  # noqa: ARG001
+    sender: Any | None = None,  # noqa: ARG001, W291
+    task_id: str | None = None,  # noqa: ARG001, W291
+    task: Task | None = None,  # noqa: ARG001, W291
+    args: tuple[Any, ...] | None = None,  # noqa: ARG001, W291
+    kwargs: dict[str, Any] | None = None,  # noqa: ARG001, W291
+    **other_kwargs: Any,  # noqa: ARG001, W291
 ) -> None:
     """Signal handler to reset tenant ID in context var after task ends."""
     CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
 
 
-def wait_for_vespa_or_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+def wait_for_vespa_or_shutdown(
+    sender: Any, **kwargs: Any  # noqa: ARG001
+) -> None:  # noqa: ARG001, W291
     """Waits for Vespa to become ready subject to a timeout.
     Raises WorkerShutdown if the timeout is reached."""
 

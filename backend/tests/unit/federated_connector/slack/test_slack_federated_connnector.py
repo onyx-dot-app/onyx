@@ -237,7 +237,8 @@ class TestSlackEntitiesValidation:
     def test_search_all_channels_true(self) -> None:
         """Test search_all_channels=True ignores channels list"""
         entities = SlackEntities(
-            search_all_channels=True, channels=["general"]  # Should be ignored
+            search_all_channels=True,
+            channels=["general"],  # Should be ignored
         )
 
         assert entities.search_all_channels is True

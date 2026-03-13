@@ -57,7 +57,8 @@ def _get_agents_admin_paginated(
 
 
 def test_persona_pagination_basic(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: W291
 ) -> None:
     """Test basic pagination - verify correct items and total count."""
     # Preconditions
@@ -93,7 +94,8 @@ def test_persona_pagination_basic(
 
 
 def test_persona_pagination_ordering(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: W291
 ) -> None:
     """Test ordering - display_priority ASC nulls last, then ID ASC."""
     # Preconditions
@@ -144,7 +146,8 @@ def test_persona_pagination_ordering(
 
 
 def test_persona_pagination_admin_endpoint(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: W291
 ) -> None:
     """Test admin paginated endpoint returns PersonaSnapshot format."""
     # Preconditions
@@ -174,7 +177,8 @@ def test_persona_pagination_admin_endpoint(
 
 
 def test_persona_pagination_with_deleted(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: W291
 ) -> None:
     """Test pagination with include_deleted parameter."""
     # Preconditions
@@ -205,7 +209,8 @@ def test_persona_pagination_with_deleted(
 
 
 def test_persona_pagination_page_size_limits(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: W291
 ) -> None:
     """Test page_size parameter validation (max 1000)."""
     # Preconditions
@@ -236,7 +241,8 @@ def test_persona_pagination_page_size_limits(
 
 
 def test_persona_pagination_count_accuracy(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    admin_user: DATestUser,  # noqa: W291
 ) -> None:
     """Test that total_items count is consistent across pages."""
     # Preconditions
@@ -274,7 +280,9 @@ def test_persona_pagination_count_accuracy(
 
 
 def test_persona_pagination_user_permissions(
-    reset: None, admin_user: DATestUser, basic_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001, W291
+    admin_user: DATestUser,
+    basic_user: DATestUser,  # noqa: W291
 ) -> None:
     """Test that pagination respects user permissions."""
     # Preconditions

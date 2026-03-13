@@ -98,7 +98,8 @@ def remove_scheduled_feedback_reminder(
 
     try:
         client.chat_deleteScheduledMessage(
-            channel=channel, scheduled_message_id=msg_id  # type:ignore
+            channel=channel,
+            scheduled_message_id=msg_id,  # type:ignore
         )
         logger.info("Scheduled feedback reminder deleted")
     except SlackApiError as e:
@@ -228,8 +229,7 @@ def handle_message(
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
                     logger.info(
-                        f"Blocked new Slack user {message_info.email}: "
-                        f"{seat_result.error_message}"
+                        f"Blocked new Slack user {message_info.email}: {seat_result.error_message}"
                     )
                     respond_in_thread_or_channel(
                         client=client,
@@ -257,8 +257,7 @@ def handle_message(
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
                     logger.info(
-                        f"Blocked inactive Slack user {message_info.email}: "
-                        f"{seat_result.error_message}"
+                        f"Blocked inactive Slack user {message_info.email}: {seat_result.error_message}"
                     )
                     respond_in_thread_or_channel(
                         client=client,

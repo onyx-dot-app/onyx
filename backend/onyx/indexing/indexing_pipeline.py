@@ -250,8 +250,7 @@ def index_doc_batch_prepare(
             doc.id for doc in documents if doc.id not in updatable_doc_ids
         ]
         logger.info(
-            f"Skipping {len(skipped_doc_ids)} documents "
-            f"because they are up to date. Skipped doc IDs: {skipped_doc_ids}"
+            f"Skipping {len(skipped_doc_ids)} documents because they are up to date. Skipped doc IDs: {skipped_doc_ids}"
         )
 
     # for all updatable docs, upsert into the DB
@@ -264,8 +263,7 @@ def index_doc_batch_prepare(
         )
 
     logger.info(
-        f"Upserted {len(updatable_docs)} changed docs out of "
-        f"{len(documents)} total docs into the DB"
+        f"Upserted {len(updatable_docs)} changed docs out of {len(documents)} total docs into the DB"
     )
 
     # for all docs, upsert the document to cc pair relationship

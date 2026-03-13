@@ -122,8 +122,7 @@ async def handle_streaming_transcription(
             if result.text and (result.text != last_transcript or result.is_vad_end):
                 last_transcript = result.text
                 logger.debug(
-                    f"Streaming transcription: got transcript: {result.text[:50]}... "
-                    f"(is_vad_end={result.is_vad_end})"
+                    f"Streaming transcription: got transcript: {result.text[:50]}... (is_vad_end={result.is_vad_end})"
                 )
                 await websocket.send_json(
                     {
@@ -647,8 +646,7 @@ async def handle_chunked_synthesis(
                 data = json.loads(message["text"])
             except json.JSONDecodeError:
                 logger.warning(
-                    "Chunked synthesis: failed to parse JSON: "
-                    f"{message.get('text', '')[:100]}"
+                    f"Chunked synthesis: failed to parse JSON: {message.get('text', '')[:100]}"
                 )
                 continue
 
@@ -667,8 +665,7 @@ async def handle_chunked_synthesis(
                 if text:
                     text_buffer.append(text)
                     logger.debug(
-                        f"Chunked synthesis: buffered text ({len(text)} chars), "
-                        f"total buffered: {len(text_buffer)} chunks"
+                        f"Chunked synthesis: buffered text ({len(text)} chars), total buffered: {len(text_buffer)} chunks"
                     )
                 if isinstance(data.get("voice"), str) and data["voice"]:
                     voice = data["voice"]

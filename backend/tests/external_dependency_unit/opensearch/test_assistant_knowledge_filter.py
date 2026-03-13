@@ -85,10 +85,9 @@ class TestAssistantKnowledgeFilter:
 
         # The knowledge filter should have 3 should clauses (user files, attached docs, hierarchy nodes)
         should_clauses = knowledge_filter["bool"]["should"]
-        assert len(should_clauses) == 3, (
-            f"Expected 3 should clauses (user_file, attached_doc, hierarchy_node), "
-            f"got {len(should_clauses)}"
-        )
+        assert (
+            len(should_clauses) == 3
+        ), f"Expected 3 should clauses (user_file, attached_doc, hierarchy_node), got {len(should_clauses)}"
 
         # Verify user_file_id is in one of the should clauses
         user_file_filter_found = False
@@ -130,10 +129,9 @@ class TestAssistantKnowledgeFilter:
                 user_file_filter_found = True
                 break
 
-        assert user_file_filter_found, (
-            f"Expected user_file_id {USER_FILE_ID} to be in the filter clauses. "
-            f"Got: {filter_clauses}"
-        )
+        assert (
+            user_file_filter_found
+        ), f"Expected user_file_id {USER_FILE_ID} to be in the filter clauses. Got: {filter_clauses}"
 
     def test_no_separate_user_file_filter_when_assistant_has_knowledge(self) -> None:
         """

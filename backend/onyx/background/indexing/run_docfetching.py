@@ -226,15 +226,13 @@ def _check_failure_threshold(
     FAILURE_RATIO_THRESHOLD = 0.1
     if total_failures > FAILURE_THRESHOLD and failure_ratio > FAILURE_RATIO_THRESHOLD:
         logger.error(
-            f"Connector run failed with '{total_failures}' errors "
-            f"after '{batch_num}' batches."
+            f"Connector run failed with '{total_failures}' errors after '{batch_num}' batches."
         )
         if last_failure and last_failure.exception:
             raise last_failure.exception from last_failure.exception
 
         raise RuntimeError(
-            f"Connector run encountered too many errors, aborting. "
-            f"Last error: {last_failure}"
+            f"Connector run encountered too many errors, aborting. Last error: {last_failure}"
         )
 
 
@@ -609,8 +607,7 @@ def connector_document_extraction(
                         )
 
                     logger.debug(
-                        f"Persisted and cached {len(hierarchy_node_batch_cleaned)} hierarchy nodes "
-                        f"for attempt={index_attempt_id}"
+                        f"Persisted and cached {len(hierarchy_node_batch_cleaned)} hierarchy nodes for attempt={index_attempt_id}"
                     )
 
                 # below is all document processing task, so if no batch we can just continue
@@ -812,15 +809,12 @@ def connector_document_extraction(
                     queue=OnyxCeleryQueues.SANDBOX,
                 )
                 logger.info(
-                    f"Triggered sandbox file sync for user {creator_id} "
-                    f"source={source_value} after indexing complete"
+                    f"Triggered sandbox file sync for user {creator_id} source={source_value} after indexing complete"
                 )
 
     except Exception as e:
         logger.exception(
-            f"Document extraction failed: "
-            f"attempt={index_attempt_id} "
-            f"error={str(e)}"
+            f"Document extraction failed: attempt={index_attempt_id} error={str(e)}"
         )
 
         # Do NOT clean up batches on failure; future runs will use those batches
@@ -956,7 +950,6 @@ def reissue_old_batches(
     # is still in the filestore waiting for processing or not.
     last_batch_num = len(old_batches) + recent_batches
     logger.info(
-        f"Starting from batch {last_batch_num} due to "
-        f"re-issued batches: {old_batches}, completed batches: {recent_batches}"
+        f"Starting from batch {last_batch_num} due to re-issued batches: {old_batches}, completed batches: {recent_batches}"
     )
     return len(old_batches), recent_batches

@@ -24,8 +24,7 @@ TOOL_DESCRIPTIONS = {
         "The action will be used when the user asks the agent to generate an image."
     ),
     "WebSearchTool": (
-        "The Web Search Action allows the agent "
-        "to perform internet searches for up-to-date information."
+        "The Web Search Action allows the agent to perform internet searches for up-to-date information."
     ),
     "KnowledgeGraphTool": (
         "The Knowledge Graph Search Action allows the agent to search the "

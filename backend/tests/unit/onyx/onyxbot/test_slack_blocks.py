@@ -61,7 +61,7 @@ def test_build_documents_blocks_formats_naive_timestamp(
     section_block = blocks[1].to_dict()
     assert "result" in captured
     expected_text = (
-        "<https://example.com|Example Doc>\n_Updated " f"{captured['result']}_\n>"
+        f"<https://example.com|Example Doc>\n_Updated {captured['result']}_\n>"
     )
     assert section_block["text"]["text"] == expected_text
 

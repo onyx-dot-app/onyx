@@ -449,8 +449,7 @@ def _apply_group_remove(
     match = _MEMBER_FILTER_RE.match(op.path)
     if not match:
         raise ScimPatchError(
-            f"Unsupported remove path '{op.path}'. "
-            'Expected: members[value eq "user-id"]'
+            f"Unsupported remove path '{op.path}'. Expected: members[value eq \"user-id\"]"
         )
 
     target_id = match.group(1)

@@ -155,10 +155,7 @@ def process_attachment(
                 )
 
         logger.info(
-            f"Downloading attachment: "
-            f"title={attachment['title']} "
-            f"length={attachment_size} "
-            f"link={attachment_link}"
+            f"Downloading attachment: title={attachment['title']} length={attachment_size} link={attachment_link}"
         )
 
         # Download the attachment
@@ -213,7 +210,7 @@ def process_attachment(
 
 
 def _process_image_attachment(
-    confluence_client: "OnyxConfluence",  # noqa: ARG001
+    confluence_client: "OnyxConfluence",  # noqa: ARG001, W291
     attachment: dict[str, Any],
     raw_bytes: bytes,
     media_type: str,
@@ -368,8 +365,7 @@ def handle_confluence_rate_limit(confluence_call: F) -> F:
             except requests.HTTPError as e:
                 delay_until = _handle_http_error(e, attempt)
                 logger.warning(
-                    f"HTTPError in confluence call. "
-                    f"Retrying in {delay_until} seconds..."
+                    f"HTTPError in confluence call. Retrying in {delay_until} seconds..."
                 )
                 while time.monotonic() < delay_until:
                     # in the future, check a signal here to exit

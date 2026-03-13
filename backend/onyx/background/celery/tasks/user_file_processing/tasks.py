@@ -285,8 +285,7 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
             lock.release()
 
     task_logger.info(
-        f"check_user_file_processing - Enqueued {enqueued} skipped_guard={skipped_guard} "
-        f"tasks for tenant={tenant_id}"
+        f"check_user_file_processing - Enqueued {enqueued} skipped_guard={skipped_guard} tasks for tenant={tenant_id}"
     )
     return None
 
@@ -317,8 +316,7 @@ def _process_user_file_without_vector_db(
         token_count: int | None = len(encode(combined_text))
     except Exception:
         task_logger.warning(
-            f"_process_user_file_without_vector_db - "
-            f"Failed to compute token count for {uf.id}, falling back to None"
+            f"_process_user_file_without_vector_db - Failed to compute token count for {uf.id}, falling back to None"
         )
         token_count = None
 
@@ -338,8 +336,7 @@ def _process_user_file_without_vector_db(
     db_session.commit()
 
     task_logger.info(
-        f"_process_user_file_without_vector_db - "
-        f"Completed id={uf.id} tokens={token_count}"
+        f"_process_user_file_without_vector_db - Completed id={uf.id} tokens={token_count}"
     )
 
 
@@ -366,8 +363,7 @@ def _process_user_file_with_indexing(
     )
     if current_search_settings is None:
         raise RuntimeError(
-            f"_process_user_file_with_indexing - "
-            f"No current search settings found for tenant={tenant_id}"
+            f"_process_user_file_with_indexing - No current search settings found for tenant={tenant_id}"
         )
 
     adapter = UserFileIndexingAdapter(
@@ -397,8 +393,7 @@ def _process_user_file_with_indexing(
     )
 
     task_logger.info(
-        f"_process_user_file_with_indexing - "
-        f"Indexing pipeline completed ={index_pipeline_result}"
+        f"_process_user_file_with_indexing - Indexing pipeline completed ={index_pipeline_result}"
     )
 
     if (
@@ -407,8 +402,7 @@ def _process_user_file_with_indexing(
         or index_pipeline_result.total_chunks == 0
     ):
         task_logger.error(
-            f"_process_user_file_with_indexing - "
-            f"Indexing pipeline failed id={user_file_id}"
+            f"_process_user_file_with_indexing - Indexing pipeline failed id={user_file_id}"
         )
         if uf.status != UserFileStatus.DELETING:
             uf.status = UserFileStatus.FAILED
@@ -535,7 +529,10 @@ def process_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001, W291
+    *,
+    user_file_id: str,
+    tenant_id: str,  # noqa: W291
 ) -> None:
     process_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
@@ -691,7 +688,10 @@ def delete_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file_delete(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001, W291
+    *,
+    user_file_id: str,
+    tenant_id: str,  # noqa: W291
 ) -> None:
     delete_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
@@ -761,8 +761,7 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
             lock.release()
 
     task_logger.info(
-        f"Enqueued {enqueued} "
-        f"Skipped guard {skipped_guard} tasks for tenant={tenant_id}"
+        f"Enqueued {enqueued} Skipped guard {skipped_guard} tasks for tenant={tenant_id}"
     )
     return None
 
@@ -876,7 +875,10 @@ def project_sync_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file_project_sync(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001, W291
+    *,
+    user_file_id: str,
+    tenant_id: str,  # noqa: W291
 ) -> None:
     project_sync_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True

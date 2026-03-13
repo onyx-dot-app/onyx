@@ -87,8 +87,7 @@ def _create_and_link_tool_calls(
             tool_call_tokens = len(default_tokenizer.encode(arguments_json_str))
         except Exception as e:
             logger.warning(
-                f"Failed to tokenize tool call arguments for {tool_call_info.tool_call_id}: {e}. "
-                f"Using length as (over) estimate."
+                f"Failed to tokenize tool call arguments for {tool_call_info.tool_call_id}: {e}. Using length as (over) estimate."
             )
             arguments_json_str = json.dumps(tool_call_info.tool_call_arguments)
             tool_call_tokens = len(arguments_json_str)

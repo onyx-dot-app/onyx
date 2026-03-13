@@ -22,7 +22,8 @@ def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
 
 
 def test_soft_delete_chat_session(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
+    basic_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """
     Test soft deletion of a chat session.
@@ -76,7 +77,8 @@ def test_soft_delete_chat_session(
 
 
 def test_hard_delete_chat_session(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
+    basic_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """
     Test hard deletion of a chat session.
@@ -136,7 +138,8 @@ def test_hard_delete_chat_session(
 
 
 def test_multiple_soft_deletions(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
+    basic_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """
     Test multiple chat session soft deletions to ensure proper handling
@@ -183,7 +186,8 @@ def test_multiple_soft_deletions(
 
 
 def test_multiple_hard_deletions_with_agent_data(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
+    basic_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """
     Test multiple chat session hard deletions to ensure CASCADE deletes work correctly
@@ -230,7 +234,8 @@ def test_multiple_hard_deletions_with_agent_data(
 
 
 def test_soft_vs_hard_delete_edge_cases(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
+    basic_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001, W291
 ) -> None:
     """
     Test edge cases for both soft and hard deletion to ensure robustness.

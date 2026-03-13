@@ -258,7 +258,7 @@ def full_deployment_setup() -> Generator[None, None, None]:
 
 @pytest.fixture(scope="module")
 def db_session(
-    full_deployment_setup: None,  # noqa: ARG001
+    full_deployment_setup: None,  # noqa: ARG001, W291
 ) -> Generator[Session, None, None]:
     """
     NOTE: We deliberately duplicate this logic from
@@ -274,7 +274,7 @@ def db_session(
 @pytest.fixture(scope="module")
 def vespa_document_index(
     db_session: Session,
-    full_deployment_setup: None,  # noqa: ARG001
+    full_deployment_setup: None,  # noqa: ARG001, W291
 ) -> Generator[VespaDocumentIndex, None, None]:
     """Creates a Vespa document index for the test tenant."""
     active = get_active_search_settings(db_session)
@@ -288,7 +288,7 @@ def vespa_document_index(
 @pytest.fixture(scope="module")
 def opensearch_client(
     db_session: Session,
-    full_deployment_setup: None,  # noqa: ARG001
+    full_deployment_setup: None,  # noqa: ARG001, W291
 ) -> Generator[OpenSearchIndexClient, None, None]:
     """Creates an OpenSearch client for the test tenant."""
     active = get_active_search_settings(db_session)
@@ -307,7 +307,7 @@ def opensearch_available(
 
 @pytest.fixture(scope="module")
 def vespa_available(
-    full_deployment_setup: None,  # noqa: ARG001
+    full_deployment_setup: None,  # noqa: ARG001, W291
 ) -> Generator[None, None, None]:
     """Verifies Vespa is running, fails the test if not."""
     # Try 90 seconds for testing in CI.
