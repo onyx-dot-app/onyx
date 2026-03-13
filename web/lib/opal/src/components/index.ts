@@ -45,9 +45,3 @@ export {
   EmptyMessageCard,
   type EmptyMessageCardProps,
 } from "@opal/components/cards/empty-message-card/components";
-
-/* NameCard */
-export {
-  NameCard,
-  type NameCardProps,
-} from "@opal/components/cards/name-card/components";
