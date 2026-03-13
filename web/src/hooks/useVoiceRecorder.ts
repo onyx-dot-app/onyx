@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 // Target format for OpenAI Realtime API
 const TARGET_SAMPLE_RATE = 24000;
 const CHUNK_INTERVAL_MS = 250;
+const DUPLICATE_FINAL_TRANSCRIPT_WINDOW_MS = 1500;
 
 interface TranscriptMessage {
   type: "transcript" | "error";
@@ -53,6 +54,8 @@ class VoiceRecorderSession {
   // Prevents the same transcript from being delivered twice when VAD-triggered
   // stop causes the server to echo the final transcript a second time.
   private finalTranscriptDelivered = false;
+  private lastDeliveredFinalText: string | null = null;
+  private lastDeliveredFinalAtMs = 0;
 
   // Callbacks to update React state
   private onTranscriptChange: (text: string) => void;
@@ -104,6 +107,8 @@ class VoiceRecorderSession {
     this.transcript = "";
     this.audioBuffer = [];
     this.finalTranscriptDelivered = false;
+    this.lastDeliveredFinalText = null;
+    this.lastDeliveredFinalAtMs = 0;
 
     // Get microphone
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -280,8 +285,20 @@ class VoiceRecorderSession {
 
         if (data.is_final && data.text) {
           // VAD detected silence - trigger callback (only once per utterance)
-          if (this.onFinalTranscript && !this.finalTranscriptDelivered) {
+          const now = Date.now();
+          const isLikelyDuplicateFinal =
+            this.lastDeliveredFinalText === data.text &&
+            now - this.lastDeliveredFinalAtMs <
+              DUPLICATE_FINAL_TRANSCRIPT_WINDOW_MS;
+
+          if (
+            this.onFinalTranscript &&
+            !this.finalTranscriptDelivered &&
+            !isLikelyDuplicateFinal
+          ) {
             this.finalTranscriptDelivered = true;
+            this.lastDeliveredFinalText = data.text;
+            this.lastDeliveredFinalAtMs = now;
             this.onFinalTranscript(data.text);
           }
 

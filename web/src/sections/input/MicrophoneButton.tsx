@@ -274,6 +274,7 @@ function MicrophoneButton({
     isRecording,
     startRecording,
     manualStopCount,
+    currentMessage,
   ]);
 
   // New sessions must start with an explicit manual mic press.

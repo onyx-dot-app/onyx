@@ -152,6 +152,11 @@ const AppInputBar = React.memo(
       isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
     const isVoicePlaybackControllable = isVoicePlaybackActive && !isRecording;
     const isTTSActuallySpeaking = isTTSPlaying || isManualTTSPlaying;
+    const appFocus = useAppFocus();
+    const isNewSession = appFocus.isNewSession();
+    const appMode = state.phase === "idle" ? state.appMode : undefined;
+    const isSearchMode =
+      (isNewSession && appMode === "search") || isSearchActive;
 
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
       setIsRecording((prevIsRecording) => {
@@ -170,13 +175,12 @@ const AppInputBar = React.memo(
       },
       [stopTTS, onSubmit]
     );
-    const submitAndClear = useCallback(
+    const submitMessage = useCallback(
       (text: string) => {
         if (!text.trim()) {
           return;
         }
         handleSubmit(text);
-        setMessage("");
       },
       [handleSubmit]
     );
@@ -199,21 +203,16 @@ const AppInputBar = React.memo(
         setMessage(initialMessage);
       }
     }, [initialMessage]);
-    const appFocus = useAppFocus();
-    const isNewSession = appFocus.isNewSession();
-    const appMode = state.phase === "idle" ? state.appMode : undefined;
-    const isSearchMode =
-      (isNewSession && appMode === "search") || isSearchActive;
     const shouldShowRecordingWaveformBelow =
       isRecording &&
       !isVoicePlaybackActive &&
       (isNewSession || recordingCycleCount === 1);
 
     useEffect(() => {
-      if (isNewSession) {
+      if (isNewSession && !initialMessage) {
         setMessage("");
       }
-    }, [isNewSession]);
+    }, [isNewSession, initialMessage]);
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
@@ -640,7 +639,7 @@ const AppInputBar = React.memo(
                 currentMessage={message}
                 onRecordingStart={() => {}}
                 onAutoSend={(text) => {
-                  submitAndClear(text);
+                  submitMessage(text);
                 }}
                 onMuteChange={setIsMuted}
                 setMutedRef={setMutedRef}
@@ -682,7 +681,7 @@ const AppInputBar = React.memo(
                 } else if (isVoicePlaybackControllable) {
                   stopTTS({ manual: true });
                 } else if (message) {
-                  submitAndClear(message);
+                  submitMessage(message);
                 }
               }}
             />
@@ -810,7 +809,7 @@ const AppInputBar = React.memo(
                           !isClassifying &&
                           !hasUploadingFiles
                         ) {
-                          submitAndClear(message);
+                          submitMessage(message);
                         }
                       }
                     }}
@@ -877,7 +876,7 @@ const AppInputBar = React.memo(
                       if (chatState == "streaming") {
                         stopGenerating();
                       } else if (message) {
-                        submitAndClear(message);
+                        submitMessage(message);
                       }
                     }}
                     prominence="tertiary"

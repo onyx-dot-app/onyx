@@ -222,6 +222,11 @@ export default function VoiceProviderSetupModal({
   const isEditing = !!existingProvider;
   const label = PROVIDER_LABELS[providerType] ?? providerType;
   const isProcessing = phase !== "idle";
+  const hasNonEmptyApiKey = apiKey.trim().length > 0;
+  const shouldSendApiKey =
+    !selectedLlmProviderId && apiKeyChanged && hasNonEmptyApiKey;
+  const shouldUseStoredKey =
+    isEditing && !selectedLlmProviderId && !shouldSendApiKey;
 
   const canConnect = (() => {
     if (selectedLlmProviderId) return true;
@@ -280,9 +285,9 @@ export default function VoiceProviderSetupModal({
 
         const testResponse = await testVoiceProvider({
           provider_type: providerType,
-          api_key: apiKeyChanged ? apiKey : undefined,
+          api_key: shouldSendApiKey ? apiKey : undefined,
           target_uri: targetUri || undefined,
-          use_stored_key: isEditing && !apiKeyChanged,
+          use_stored_key: shouldUseStoredKey,
         });
 
         if (!testResponse.ok) {
@@ -308,12 +313,8 @@ export default function VoiceProviderSetupModal({
         id: existingProvider?.id,
         name: label,
         provider_type: providerType,
-        api_key: selectedLlmProviderId
-          ? undefined
-          : apiKeyChanged
-            ? apiKey
-            : undefined,
-        api_key_changed: selectedLlmProviderId ? false : apiKeyChanged,
+        api_key: shouldSendApiKey ? apiKey : undefined,
+        api_key_changed: shouldSendApiKey,
         target_uri: targetUri || undefined,
         llm_provider_id: selectedLlmProviderId,
         stt_model: sttModel,
@@ -543,7 +544,10 @@ export default function VoiceProviderSetupModal({
             Cancel
           </Button>
           <Disabled disabled={!canConnect || isProcessing}>
-            <Button onClick={handleSubmit}>
+            <Button
+              onClick={handleSubmit}
+              disabled={!canConnect || isProcessing}
+            >
               {isProcessing ? "Connecting..." : isEditing ? "Save" : "Connect"}
             </Button>
           </Disabled>

@@ -219,6 +219,7 @@ def update_voice_settings(
         auto_playback=request.auto_playback,
         playback_speed=request.playback_speed,
     )
+    db_session.commit()
     return {"status": "ok"}
 
 
