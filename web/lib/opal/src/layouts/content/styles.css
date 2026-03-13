@@ -224,7 +224,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md {
-  @apply flex flex-row items-start min-w-0;
+  @apply flex flex-row items-start;
 }
 
 /* ---------------------------------------------------------------------------
@@ -311,7 +311,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md-description {
-  @apply text-left w-full truncate;
+  @apply text-left w-full;
   padding: 0 0.125rem;
 }
 
