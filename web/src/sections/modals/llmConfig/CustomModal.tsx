@@ -26,7 +26,7 @@ import KeyValueInput, {
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/refresh-components/texts/Text";
-import { Button, EmptyMessageCard } from "@opal/components";
+import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { toast } from "@/hooks/useToast";
@@ -374,8 +374,8 @@ export default function CustomModal({
 
           <FieldSeparator />
 
-          <FieldWrapper>
-            <Section gap={0.75}>
+          <Section gap={0.5}>
+            <FieldWrapper>
               <Content
                 title="Models"
                 description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
@@ -383,10 +383,12 @@ export default function CustomModal({
                 sizePreset="main-content"
                 widthVariant="full"
               />
+            </FieldWrapper>
 
+            <Card>
               <ModelConfigurationList formikProps={formikProps as any} />
-            </Section>
-          </FieldWrapper>
+            </Card>
+          </Section>
 
           {!isOnboarding && (
             <>
