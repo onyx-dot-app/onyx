@@ -273,13 +273,17 @@ def test_url_lookup_variants_includes_trailing_slash_versions() -> None:
 
 
 def test_url_lookup_variants_strips_query_and_fragment() -> None:
-    """Test that variants strip query parameters and fragments."""
+    """Test that variants include both query-stripped and query-preserved forms.
+    Query-stripped variants match indexed connectors (Google Drive, Notion, etc.)
+    Query-preserved variants match web URLs where query params are part of identity."""
     variants = _url_lookup_variants("https://example.com/path?a=1#section")
+    # Query-stripped variants (for indexed connectors)
     assert "https://example.com/path" in variants
     assert "https://example.com/path/" in variants
-    # Should not include query/fragment variants
-    assert "https://example.com/path?a=1" not in variants
-    assert "https://example.com/path#section" not in variants
+    # Query-preserved, fragment-stripped variants (for web URLs)
+    assert "https://example.com/path?a=1" in variants
+    # Fragment should never appear in any variant
+    assert not any("#" in v for v in variants)
 
 
 def test_url_lookup_variants_handles_normalized_urls() -> None:
@@ -288,3 +292,23 @@ def test_url_lookup_variants_handles_normalized_urls() -> None:
     variants = _url_lookup_variants("https://docs.google.com/document/d/abc123def456")
     assert "https://docs.google.com/document/d/abc123def456" in variants
     assert "https://docs.google.com/document/d/abc123def456/" in variants
+
+
+def test_url_lookup_variants_preserves_query_params_for_web_urls() -> None:
+    """URLs with query parameters (e.g. HN item pages) were silently dropped
+    because _url_lookup_variants stripped query strings before DB lookup,
+    causing 0 document requests to be generated."""
+    url = "https://news.ycombinator.com/item?id=46821482"
+    variants = _url_lookup_variants(url)
+    # Must include query-preserved form so DB lookup can match
+    assert "https://news.ycombinator.com/item?id=46821482" in variants
+    # Query-stripped form still included for fallback matching
+    assert "https://news.ycombinator.com/item" in variants
+
+
+def test_url_lookup_variants_no_query_unchanged() -> None:
+    """URLs without query params should produce same variants as before."""
+    variants = _url_lookup_variants("https://example.com/path")
+    assert "https://example.com/path" in variants
+    assert "https://example.com/path/" in variants
+    assert len(variants) == 2
