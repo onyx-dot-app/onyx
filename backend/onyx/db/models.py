@@ -2937,17 +2937,8 @@ class LLMProvider(Base):
         postgresql.JSONB(), nullable=True
     )
 
-    # Deprecated: use LLMModelFlow with CHAT flow type instead
-    default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
-
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Deprecated: use LLMModelFlow.is_default with CHAT flow type instead
-    is_default_provider: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    # Deprecated: use LLMModelFlow.is_default with VISION flow type instead
-    is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
-    # Deprecated: use LLMModelFlow with VISION flow type instead
-    default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Auto mode: models, visibility, and defaults are managed by GitHub config
