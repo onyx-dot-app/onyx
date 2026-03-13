@@ -8,69 +8,8 @@ import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
 import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent } from "@opal/types";
-import "@opal/components/tooltip.css";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cn } from "@opal/utils";
-import { useCallback, useEffect, useRef, useState } from "react";
-
-// ---------------------------------------------------------------------------
-// Overflow tooltip helper
-// ---------------------------------------------------------------------------
-
-/** Returns a ref + boolean indicating whether the element's text is clipped. */
-function useIsOverflowing<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [overflowing, setOverflowing] = useState(false);
-
-  const check = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    // Check both axes: scrollWidth covers `white-space: nowrap` truncation,
-    // scrollHeight covers `-webkit-line-clamp` vertical clipping.
-    setOverflowing(
-      el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight
-    );
-  }, []);
-
-  useEffect(() => {
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, [check]);
-
-  return { ref, overflowing, check };
-}
-
-/**
- * Wraps children in a Radix tooltip that only appears when the element is
- * overflowing (text truncated). Uses the same opal-tooltip styling as Button.
- */
-function OverflowTooltip({
-  text,
-  overflowing,
-  children,
-}: {
-  text: string;
-  overflowing: boolean;
-  children: React.ReactNode;
-}) {
-  if (!overflowing) return children;
-
-  return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side="top"
-          sideOffset={4}
-        >
-          {text}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
-  );
-}
+import { useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -203,8 +142,6 @@ function ContentMd({
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
-  const titleOverflow = useIsOverflowing<HTMLSpanElement>();
-  const descOverflow = useIsOverflowing<HTMLDivElement>();
 
   const config = CONTENT_MD_PRESETS[sizePreset];
 
@@ -274,24 +211,18 @@ function ContentMd({
               />
             </div>
           ) : (
-            <OverflowTooltip
-              text={title}
-              overflowing={titleOverflow.overflowing}
+            <span
+              className={cn(
+                "opal-content-md-title",
+                config.titleFont,
+                "text-text-04",
+                editable && "cursor-pointer"
+              )}
+              onClick={editable ? startEditing : undefined}
+              style={{ height: config.lineHeight }}
             >
-              <span
-                ref={titleOverflow.ref}
-                className={cn(
-                  "opal-content-md-title",
-                  config.titleFont,
-                  "text-text-04",
-                  editable && "cursor-pointer"
-                )}
-                onClick={editable ? startEditing : undefined}
-                style={{ height: config.lineHeight }}
-              >
-                {title}
-              </span>
-            </OverflowTooltip>
+              {title}
+            </span>
           )}
 
           {optional && (
@@ -344,17 +275,9 @@ function ContentMd({
         </div>
 
         {description && (
-          <OverflowTooltip
-            text={description}
-            overflowing={descOverflow.overflowing}
-          >
-            <div
-              ref={descOverflow.ref}
-              className="opal-content-md-description font-secondary-body text-text-03"
-            >
-              {description}
-            </div>
-          </OverflowTooltip>
+          <div className="opal-content-md-description font-secondary-body text-text-03">
+            {description}
+          </div>
         )}
       </div>
     </div>
