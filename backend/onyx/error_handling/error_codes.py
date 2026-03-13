@@ -67,6 +67,11 @@ class OnyxErrorCode(Enum):
     SEAT_LIMIT_EXCEEDED = ("SEAT_LIMIT_EXCEEDED", 402)
 
     # ------------------------------------------------------------------
+    # Payload (413)
+    # ------------------------------------------------------------------
+    PAYLOAD_TOO_LARGE = ("PAYLOAD_TOO_LARGE", 413)
+
+    # ------------------------------------------------------------------
     # Connector / Credential Errors (400-range)
     # ------------------------------------------------------------------
     CONNECTOR_VALIDATION_FAILED = ("CONNECTOR_VALIDATION_FAILED", 400)

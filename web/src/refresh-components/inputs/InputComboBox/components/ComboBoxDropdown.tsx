@@ -27,6 +27,8 @@ interface ComboBoxDropdownProps {
   allowCreate: boolean;
   /** Whether to show create option (pre-computed by parent) */
   showCreateOption: boolean;
+  /** Show "Add" prefix in create option */
+  showAddPrefix: boolean;
 }
 
 /**
@@ -58,6 +60,7 @@ export const ComboBoxDropdown = forwardRef<
       inputValue,
       allowCreate,
       showCreateOption,
+      showAddPrefix,
     },
     ref
   ) => {
@@ -132,6 +135,7 @@ export const ComboBoxDropdown = forwardRef<
           inputValue={inputValue}
           allowCreate={allowCreate}
           showCreateOption={showCreateOption}
+          showAddPrefix={showAddPrefix}
         />
       </div>,
       document.body

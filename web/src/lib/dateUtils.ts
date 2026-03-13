@@ -151,6 +151,17 @@ export function formatMmDdYyyy(d: string): string {
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
 }
 
+/**
+ * Format a duration in seconds as MM:SS (e.g. 65 → "01:05").
+ */
+export function formatElapsedTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`;
+}
+
 export const getFormattedDateTime = (date: Date | null) => {
   if (!date) return null;
 

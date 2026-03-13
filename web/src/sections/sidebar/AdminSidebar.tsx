@@ -19,7 +19,35 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { CombinedSettings } from "@/interfaces/settings";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
-import { SvgArrowUpCircle } from "@opal/icons";
+import {
+  SvgActions,
+  SvgActivity,
+  SvgArrowUpCircle,
+  SvgBarChart,
+  SvgCpu,
+  SvgFileText,
+  SvgFolder,
+  SvgGlobe,
+  SvgArrowExchange,
+  SvgImage,
+  SvgKey,
+  SvgOnyxLogo,
+  SvgOnyxOctagon,
+  SvgSearch,
+  SvgServer,
+  SvgSettings,
+  SvgShield,
+  SvgThumbsUp,
+  SvgUploadCloud,
+  SvgUser,
+  SvgUsers,
+  SvgZoomIn,
+  SvgPaintBrush,
+  SvgDiscordMono,
+  SvgWallet,
+  SvgAudio,
+} from "@opal/icons";
+import SvgMcp from "@opal/icons/mcp";
 import { ADMIN_PATHS, sidebarItem } from "@/lib/admin-routes";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 
@@ -105,6 +133,11 @@ const collections = (
               sidebarItem(ADMIN_PATHS.LLM_MODELS),
               sidebarItem(ADMIN_PATHS.WEB_SEARCH),
               sidebarItem(ADMIN_PATHS.IMAGE_GENERATION),
+              {
+                name: "Voice",
+                icon: SvgAudio,
+                link: "/admin/configuration/voice",
+              },
               sidebarItem(ADMIN_PATHS.CODE_INTERPRETER),
               ...(!enableCloud && vectorDbEnabled
                 ? [
