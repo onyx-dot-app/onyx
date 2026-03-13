@@ -36,7 +36,7 @@ export function NameCard({
   rightChildren,
 }: NameCardProps) {
   return (
-    <Card backgroundVariant="heavy" borderVariant="none">
+    <Card backgroundVariant="light" borderVariant="none">
       <ContentAction
         icon={customIcon ? () => <>{customIcon}</> : icon}
         title={title}
