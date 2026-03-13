@@ -54,12 +54,18 @@ export class UsersAdminPage {
   // ---------------------------------------------------------------------------
 
   /**
-   * Returns a locator scoped to the first visible Radix popper wrapper.
-   * React StrictMode can duplicate these elements; `.first()` avoids
-   * strict-mode violations when interacting with popover content.
+   * Returns a locator scoped to the currently open Radix popper content.
+   * Filters for wrappers containing an open dialog element, which excludes
+   * tooltip wrappers (role="tooltip") and stale/closing popovers
+   * (data-state="closed").
    */
   get popover(): Locator {
-    return this.page.locator("[data-radix-popper-content-wrapper]").first();
+    return this.page
+      .locator("[data-radix-popper-content-wrapper]")
+      .filter({
+        has: this.page.locator('[role="dialog"][data-state="open"]'),
+      })
+      .first();
   }
 
   // ---------------------------------------------------------------------------
@@ -201,8 +207,14 @@ export class UsersAdminPage {
   // Confirmation modals
   // ---------------------------------------------------------------------------
 
+  /**
+   * Returns the most recently opened dialog (modal).
+   * Uses `.last()` because confirmation modals are portaled after row-action
+   * popovers, and a closing popover (role="dialog") may briefly remain in the
+   * DOM during its exit animation.
+   */
   get dialog(): Locator {
-    return this.page.getByRole("dialog");
+    return this.page.getByRole("dialog").last();
   }
 
   async confirmModalAction(buttonName: string) {
