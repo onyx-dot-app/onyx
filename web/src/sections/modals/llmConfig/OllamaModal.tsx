@@ -27,14 +27,19 @@ import {
   ModelsField,
   DisplayNameField,
   ModelsAccessField,
+  FieldSeparator,
   SingleDefaultModelField,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
-import { ScopedMutator } from "swr";
+import Tabs from "@/refresh-components/Tabs";
+import { Card } from "@opal/components";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
+
+const TAB_SELF_HOSTED = "self-hosted";
+const TAB_CLOUD = "cloud";
 
 interface OllamaModalValues extends BaseLLMFormValues {
   api_base: string;
@@ -43,30 +48,28 @@ interface OllamaModalValues extends BaseLLMFormValues {
   };
 }
 
-interface OllamaModalContentProps {
+interface OllamaModalInternalsProps {
   formikProps: FormikProps<OllamaModalValues>;
-  existingLlmProvider?: LLMProviderView;
+  existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
   isTesting: boolean;
   onClose: () => void;
-  isFormValid: boolean;
   isOnboarding: boolean;
 }
 
-function OllamaModalContent({
+function OllamaModalInternals({
   formikProps,
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
   isTesting,
   onClose,
-  isFormValid,
   isOnboarding,
-}: OllamaModalContentProps) {
+}: OllamaModalInternalsProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
-  const fetchModels = useCallback(
+  const doFetchModels = useCallback(
     (apiBase: string, signal: AbortSignal) => {
       setIsLoadingModels(true);
       fetchOllamaModels({
@@ -93,8 +96,8 @@ function OllamaModalContent({
   );
 
   const debouncedFetchModels = useMemo(
-    () => debounce(fetchModels, 500),
-    [fetchModels]
+    () => debounce(doFetchModels, 500),
+    [doFetchModels]
   );
 
   useEffect(() => {
@@ -116,35 +119,62 @@ function OllamaModalContent({
       ? fetchedModels
       : existingLlmProvider?.model_configurations || [];
 
+  const hasApiKey = !!formikProps.values.custom_config?.OLLAMA_API_KEY;
+  const defaultTab =
+    existingLlmProvider && hasApiKey ? TAB_CLOUD : TAB_SELF_HOSTED;
+
   return (
     <LLMConfigurationModalWrapper
       providerEndpoint={OLLAMA_PROVIDER_NAME}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
-      isFormValid={isFormValid}
+      isFormValid={formikProps.isValid}
       isTesting={isTesting}
     >
-      {!isOnboarding && <DisplayNameField disabled={!!existingLlmProvider} />}
+      <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
+        <Tabs defaultValue={defaultTab}>
+          <Tabs.List>
+            <Tabs.Trigger value={TAB_SELF_HOSTED}>
+              Self-hosted Ollama
+            </Tabs.Trigger>
+            <Tabs.Trigger value={TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.Content value={TAB_SELF_HOSTED}>
+            <InputLayouts.Vertical
+              name="api_base"
+              title="API Base URL"
+              subDescription="The base URL for your Ollama instance."
+            >
+              <InputTypeInField
+                name="api_base"
+                placeholder="Your Ollama API base URL"
+              />
+            </InputLayouts.Vertical>
+          </Tabs.Content>
 
-      <InputLayouts.Vertical
-        name="api_base"
-        title="API Base URL"
-        description="The base URL for your Ollama instance (e.g., http://127.0.0.1:11434)"
-      >
-        <InputTypeInField name="api_base" placeholder={DEFAULT_API_BASE} />
-      </InputLayouts.Vertical>
+          <Tabs.Content value={TAB_CLOUD}>
+            <InputLayouts.Vertical
+              name="custom_config.OLLAMA_API_KEY"
+              title="API Key"
+              subDescription="Your Ollama Cloud API key."
+            >
+              <PasswordInputTypeInField
+                name="custom_config.OLLAMA_API_KEY"
+                placeholder="API Key"
+              />
+            </InputLayouts.Vertical>
+          </Tabs.Content>
+        </Tabs>
+      </Card>
 
-      <InputLayouts.Vertical
-        name="custom_config.OLLAMA_API_KEY"
-        title="API Key"
-        description="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
-        optional
-      >
-        <PasswordInputTypeInField
-          name="custom_config.OLLAMA_API_KEY"
-          placeholder="API Key"
-        />
-      </InputLayouts.Vertical>
+      {!isOnboarding && (
+        <>
+          <FieldSeparator />
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
+      )}
+
+      <FieldSeparator />
 
       {isOnboarding ? (
         <SingleDefaultModelField placeholder="E.g. llama3.1" />
@@ -159,7 +189,12 @@ function OllamaModalContent({
         />
       )}
 
-      {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
+      {!isOnboarding && (
+        <>
+          <FieldSeparator />
+          <ModelsAccessField formikProps={formikProps} />
+        </>
+      )}
     </LLMConfigurationModalWrapper>
   );
 }
@@ -274,14 +309,13 @@ export function OllamaModal({
       }}
     >
       {(formikProps) => (
-        <OllamaModalContent
+        <OllamaModalInternals
           formikProps={formikProps}
           existingLlmProvider={existingLlmProvider}
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}
           isTesting={isTesting}
           onClose={onClose}
-          isFormValid={formikProps.isValid}
           isOnboarding={isOnboarding}
         />
       )}
