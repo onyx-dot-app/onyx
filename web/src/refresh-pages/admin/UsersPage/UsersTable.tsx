@@ -250,6 +250,24 @@ export default function UsersTable({
           ),
         }}
       />
+      {filteredUsers.length === 0 && (
+        <div className="flex justify-center">
+          <Button
+            icon={SvgDownload}
+            prominence="tertiary"
+            size="sm"
+            onClick={() => {
+              downloadUsersCsv().catch((err) => {
+                toast.error(
+                  err instanceof Error ? err.message : "Failed to download CSV"
+                );
+              });
+            }}
+          >
+            Download All Users CSV
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
