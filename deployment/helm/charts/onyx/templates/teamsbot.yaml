@@ -1,0 +1,131 @@
+{{- if .Values.teamsbot.enabled }}
+# Teams bot receives webhooks via HTTP POST - supports multiple replicas behind a load balancer.
+# Unlike Discord (WebSocket, single replica), Teams is horizontally scalable.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.fullname" . }}-teamsbot
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.teamsbot.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.teamsbot.replicaCount | default 1 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      {{- if .Values.teamsbot.deploymentLabels }}
+      {{- toYaml .Values.teamsbot.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.teamsbot.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.teamsbot.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.teamsbot.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.teamsbot.podSecurityContext | nindent 8 }}
+      {{- with .Values.teamsbot.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.teamsbot.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.teamsbot.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: teamsbot
+          securityContext:
+            {{- toYaml .Values.teamsbot.securityContext | nindent 12 }}
+          image: "{{ .Values.teamsbot.image.repository }}:{{ .Values.teamsbot.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command: ["python", "onyx/onyxbot/teams/server.py"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.teamsbot.port | default 3978 }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.teamsbot.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            {{- include "onyx.envSecrets" . | nindent 12}}
+            # Teams bot App ID
+            {{- if .Values.teamsbot.appId }}
+            - name: TEAMS_BOT_APP_ID
+              value: {{ .Values.teamsbot.appId | quote }}
+            {{- end }}
+            {{- if .Values.teamsbot.appIdSecretName }}
+            - name: TEAMS_BOT_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.teamsbot.appIdSecretName }}
+                  key: {{ .Values.teamsbot.appIdSecretKey | default "app-id" }}
+            {{- end }}
+            # Teams bot App Secret
+            {{- if .Values.teamsbot.appSecret }}
+            - name: TEAMS_BOT_APP_SECRET
+              value: {{ .Values.teamsbot.appSecret | quote }}
+            {{- end }}
+            {{- if .Values.teamsbot.appSecretSecretName }}
+            - name: TEAMS_BOT_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.teamsbot.appSecretSecretName }}
+                  key: {{ .Values.teamsbot.appSecretSecretKey | default "app-secret" }}
+            {{- end }}
+            # Azure tenant ID (optional, for single-tenant bots)
+            {{- if .Values.teamsbot.azureTenantId }}
+            - name: TEAMS_BOT_AZURE_TENANT_ID
+              value: {{ .Values.teamsbot.azureTenantId | quote }}
+            {{- end }}
+            # Bot port
+            - name: TEAMS_BOT_PORT
+              value: {{ .Values.teamsbot.port | default 3978 | quote }}
+          {{- with .Values.teamsbot.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.teamsbot.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

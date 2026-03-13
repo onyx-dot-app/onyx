@@ -1,0 +1,26 @@
+{{- if .Values.teamsbot.enabled }}
+# Service to expose the Teams bot /api/messages endpoint.
+# Unlike Discord (outbound WebSocket only), Teams requires an inbound HTTP endpoint
+# that Azure Bot Service can POST Activities to.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.fullname" . }}-teamsbot
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.teamsbot.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.teamsbot.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.teamsbot.service.port | default 80 }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    {{- if .Values.teamsbot.deploymentLabels }}
+    {{- toYaml .Values.teamsbot.deploymentLabels | nindent 4 }}
+    {{- end }}
+{{- end }}
