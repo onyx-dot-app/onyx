@@ -141,6 +141,8 @@ export interface DataTableFooterSelection {
 
 export interface DataTableFooterSummary {
   mode: "summary";
+  /** Optional extra element rendered after the summary text (e.g. a download icon). */
+  leftExtra?: ReactNode;
 }
 
 export type DataTableFooterConfig =
