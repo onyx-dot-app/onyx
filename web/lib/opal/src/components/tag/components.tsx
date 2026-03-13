@@ -9,8 +9,6 @@ import { cn } from "@opal/utils";
 
 type TagColor = "green" | "purple" | "blue" | "gray" | "amber";
 
-type TagSize = "sm" | "md";
-
 interface TagProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
@@ -20,9 +18,6 @@ interface TagProps {
 
   /** Color variant. Default: `"gray"`. */
   color?: TagColor;
-
-  /** Size variant. Default: `"sm"`. */
-  size?: TagSize;
 }
 
 // ---------------------------------------------------------------------------
@@ -41,11 +36,11 @@ const COLOR_CONFIG: Record<TagColor, { bg: string; text: string }> = {
 // Tag
 // ---------------------------------------------------------------------------
 
-function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
+function Tag({ icon: Icon, title, color = "gray" }: TagProps) {
   const config = COLOR_CONFIG[color];
 
   return (
-    <div className={cn("opal-auxiliary-tag", config.bg)} data-size={size}>
+    <div className={cn("opal-auxiliary-tag", config.bg)}>
       {Icon && (
         <div className="opal-auxiliary-tag-icon-container">
           <Icon className={cn("opal-auxiliary-tag-icon", config.text)} />
@@ -53,8 +48,7 @@ function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
       )}
       <span
         className={cn(
-          "opal-auxiliary-tag-title px-[2px]",
-          size === "md" ? "font-secondary-body" : "font-figure-small-value",
+          "opal-auxiliary-tag-title px-[2px] font-figure-small-value",
           config.text
         )}
       >
@@ -64,4 +58,4 @@ function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
   );
 }
 
-export { Tag, type TagProps, type TagColor, type TagSize };
+export { Tag, type TagProps, type TagColor };
