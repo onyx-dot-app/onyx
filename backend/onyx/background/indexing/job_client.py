@@ -74,10 +74,10 @@ def _initializer(
     # Optionally set a custom app name for database logging purposes
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME)
 
-    # Initialize a new engine with desired parameters
-    SqlEngine.init_engine(
-        pool_size=4, max_overflow=12, pool_recycle=60, pool_pre_ping=True
-    )
+    # Initialize a new engine with desired parameters.
+    # pool_recycle=60 keeps connections fresh in the child process since it's
+    # short-lived; the global idle_in_transaction timeout applies automatically.
+    SqlEngine.init_engine(pool_size=4, max_overflow=12, pool_recycle=60)
 
     # Proceed with executing the target function
     try:

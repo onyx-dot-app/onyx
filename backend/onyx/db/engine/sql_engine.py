@@ -19,6 +19,7 @@ from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
 from onyx.configs.app_configs import LOG_POSTGRES_LATENCY
 from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
+from onyx.configs.app_configs import POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
@@ -188,6 +189,21 @@ class SqlEngine:
                 # any passed in kwargs override the defaults
                 final_engine_kwargs.update(extra_engine_kwargs)
 
+            # Apply idle-in-transaction timeout via psycopg2 connection options.
+            # This is enforced server-side by PostgreSQL, so it catches leaked connections
+            # even when the Python process is hung. We merge rather than overwrite so that
+            # callers can still pass their own connect_args overrides if needed.
+            if POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS > 0:
+                pg_options = f"-c idle_in_transaction_session_timeout={POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS}"
+                existing_connect_args: dict[str, Any] = final_engine_kwargs.pop(
+                    "connect_args", {}
+                )
+                existing_options = existing_connect_args.get("options", "")
+                if existing_options:
+                    pg_options = f"{existing_options} {pg_options}"
+                existing_connect_args["options"] = pg_options
+                final_engine_kwargs["connect_args"] = existing_connect_args
+
             logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
             # echo=True here for inspecting all emitted db queries
             engine = create_engine(connection_string, **final_engine_kwargs)
@@ -247,6 +263,15 @@ class SqlEngine:
 
                 # any passed in kwargs override the defaults
                 final_engine_kwargs.update(extra_engine_kwargs)
+
+            if POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS > 0:
+                pg_options = f"-c idle_in_transaction_session_timeout={POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS}"
+                existing_connect_args = final_engine_kwargs.pop("connect_args", {})
+                existing_options = existing_connect_args.get("options", "")
+                if existing_options:
+                    pg_options = f"{existing_options} {pg_options}"
+                existing_connect_args["options"] = pg_options
+                final_engine_kwargs["connect_args"] = existing_connect_args
 
             logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
             # echo=True here for inspecting all emitted db queries

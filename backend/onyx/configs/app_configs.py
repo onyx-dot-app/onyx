@@ -371,8 +371,11 @@ POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
 # generally should only be used for
 POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
 
-# defaults to False
-POSTGRES_POOL_PRE_PING = os.environ.get("POSTGRES_POOL_PRE_PING", "").lower() == "true"
+# defaults to True — adds a lightweight SELECT 1 before each connection checkout
+# to detect stale connections and prevent errors from reusing dead connections
+POSTGRES_POOL_PRE_PING = (
+    os.environ.get("POSTGRES_POOL_PRE_PING", "true").lower() == "true"
+)
 
 # recycle timeout in seconds
 POSTGRES_POOL_RECYCLE_DEFAULT = 60 * 20  # 20 minutes
@@ -382,6 +385,29 @@ try:
     )
 except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
+
+# How long (ms) a session may sit idle inside an open transaction before PostgreSQL
+# forcibly closes it. This is enforced server-side regardless of client behavior, so
+# it catches leaked connections even when the Python process is hung or deadlocked.
+#
+# Default: 30 minutes. This is intentionally conservative — some legitimate paths
+# (LLM streaming, large embedding batches) hold a session open while waiting for an
+# external service to respond. A tighter value (e.g. 10 min) is achievable once those
+# paths are refactored to close the session before calling external services.
+#
+# Set to 0 to disable (not recommended in production).
+_POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_DEFAULT = 60 * 30 * 1000  # 30 min in ms
+try:
+    POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = int(
+        os.environ.get(
+            "POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS",
+            _POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_DEFAULT,
+        )
+    )
+except ValueError:
+    POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = (
+        _POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_DEFAULT
+    )
 
 # RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
