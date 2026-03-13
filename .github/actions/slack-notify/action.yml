@@ -36,8 +36,8 @@ runs:
         GITHUB_REF_NAME: ${{ github.ref_name }}
       run: |
         if [ -z "$SLACK_WEBHOOK_URL" ]; then
-          echo "::error::SLACK_WEBHOOK_URL is not configured."
-          exit 1
+          echo "webhook-url input or SLACK_WEBHOOK_URL env var is not set, skipping notification"
+          exit 0
         fi
 
         # Build workflow URL
