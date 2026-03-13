@@ -33,6 +33,7 @@ from office365.runtime.queries.client_query import ClientQuery  # type: ignore[i
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from pydantic import BaseModel
 from pydantic import Field
+from requests.exceptions import HTTPError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
@@ -277,7 +278,7 @@ def _log_and_raise_for_status(response: requests.Response) -> None:
     try:
         response.raise_for_status()
     except Exception:
-        logger.error(f"Graph API request failed: {response.text}")
+        logger.error(f"HTTP request failed: {response.text}")
         raise
 
 
@@ -1258,7 +1259,14 @@ class SharepointConnector(
         total_yielded = 0
 
         while page_url:
-            data = self._graph_api_get_json(page_url, params)
+            try:
+                data = self._graph_api_get_json(page_url, params)
+            except HTTPError as e:
+                if e.response.status_code == 404:
+                    logger.warning(f"Site page not found: {page_url}")
+                    break
+                raise
+
             params = None  # nextLink already embeds query params
 
             for page in data.get("value", []):
