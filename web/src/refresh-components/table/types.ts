@@ -192,4 +192,6 @@ export interface DataTableProps<TData> {
    * - Fires separate callbacks for sorting, pagination, and search changes
    */
   serverSide?: ServerSideConfig;
+  /** Content to render inside the table body when there are no rows. */
+  emptyState?: React.ReactNode;
 }

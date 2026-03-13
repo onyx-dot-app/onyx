@@ -133,6 +133,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     height,
     headerBackground,
     serverSide,
+    emptyState,
   } = props;
 
   const effectivePageSize = pageSize ?? (footer ? 10 : data.length);
@@ -447,6 +448,13 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                   : undefined
               }
             >
+              {emptyState && table.getRowModel().rows.length === 0 && (
+                <tr>
+                  <td colSpan={table.getVisibleLeafColumns().length}>
+                    {emptyState}
+                  </td>
+                </tr>
+              )}
               {table.getRowModel().rows.map((row) => {
                 const rowId = hasDraggable ? getRowId(row.original) : undefined;
 
