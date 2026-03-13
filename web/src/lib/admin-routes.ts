@@ -20,6 +20,7 @@ import {
   SvgOnyxOctagon,
   SvgPaintBrush,
   SvgSearch,
+  SvgSearchMenu,
   SvgServer,
   SvgShield,
   SvgSlack,
@@ -171,7 +172,7 @@ export const ADMIN_ROUTE_CONFIG: Record<string, AdminRouteConfig> = {
     sidebarLabel: "Code Interpreter",
   },
   [ADMIN_PATHS.SEARCH_SETTINGS]: {
-    icon: SvgSearch,
+    icon: SvgSearchMenu,
     title: "Search Settings",
     sidebarLabel: "Search Settings",
   },

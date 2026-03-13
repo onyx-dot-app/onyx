@@ -112,16 +112,16 @@ function buildCollections(
       name: "Integrations",
       items: [
         {
+          ...sidebarItem(ADMIN_PATHS.API_KEYS),
+          name: "Service Accounts",
+        },
+        {
           ...sidebarItem(ADMIN_PATHS.SLACK_BOTS),
           name: "Slack Integration",
         },
         {
           ...sidebarItem(ADMIN_PATHS.DISCORD_BOTS),
           name: "Discord Integration",
-        },
-        {
-          ...sidebarItem(ADMIN_PATHS.API_KEYS),
-          name: "Service Accounts",
         },
       ],
     });
@@ -283,7 +283,16 @@ export default function AdminSidebar({
     el?.focus();
   };
 
-  const handleTabKeyDown = (e: React.KeyboardEvent, itemIndex: number) => {
+  const handleTabKeyDown = (
+    e: React.KeyboardEvent,
+    itemIndex: number,
+    link: string | undefined
+  ) => {
+    if (e.key === "Enter" && link) {
+      window.location.href = link;
+      return;
+    }
+
     if (e.key !== "Tab" || !query) return;
 
     e.preventDefault();
@@ -354,7 +363,7 @@ export default function AdminSidebar({
                 const tab = (
                   <div
                     key={link}
-                    tabIndex={query ? 0 : -1}
+                    tabIndex={-1}
                     ref={(el) => {
                       if (el) {
                         tabRefsRef.current.set(link, el);
@@ -362,7 +371,13 @@ export default function AdminSidebar({
                         tabRefsRef.current.delete(link);
                       }
                     }}
-                    onKeyDown={(e) => handleTabKeyDown(e, itemIndex)}
+                    onKeyDown={(e) =>
+                      handleTabKeyDown(
+                        e,
+                        itemIndex,
+                        disabled ? undefined : link
+                      )
+                    }
                     className="outline-none"
                   >
                     {disabled ? (
