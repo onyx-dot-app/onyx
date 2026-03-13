@@ -458,7 +458,9 @@ test.describe("Users page — cancel invite", () => {
     await usersPage.openRowActions(email);
     await usersPage.clickRowAction("Cancel Invite");
 
-    await expect(usersPage.dialog.getByText("Cancel Invite")).toBeVisible();
+    await expect(
+      usersPage.dialog.getByText("Cancel Invite").first()
+    ).toBeVisible();
 
     await usersPage.confirmModalAction("Cancel Invite");
     await usersPage.expectToast("Invite cancelled");

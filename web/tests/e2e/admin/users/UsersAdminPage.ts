@@ -54,18 +54,14 @@ export class UsersAdminPage {
   // ---------------------------------------------------------------------------
 
   /**
-   * Returns a locator scoped to the currently open Radix popper content.
-   * Filters for wrappers containing an open dialog element, which excludes
-   * tooltip wrappers (role="tooltip") and stale/closing popovers
-   * (data-state="closed").
+   * Returns a locator for the currently open popover / filter dropdown.
+   * Radix Popover renders its content with `role="dialog"`. Using
+   * `getByRole("dialog").first()` targets the oldest open dialog, which is
+   * always the popover during row-action or filter flows (confirmation
+   * modals open later and would be `.last()`).
    */
   get popover(): Locator {
-    return this.page
-      .locator("[data-radix-popper-content-wrapper]")
-      .filter({
-        has: this.page.locator('[role="dialog"][data-state="open"]'),
-      })
-      .first();
+    return this.page.getByRole("dialog").first();
   }
 
   // ---------------------------------------------------------------------------
@@ -136,7 +132,7 @@ export class UsersAdminPage {
 
   async closePopover() {
     await this.page.keyboard.press("Escape");
-    await expect(this.popover).not.toBeVisible();
+    await expect(this.page.getByRole("dialog")).not.toBeVisible();
   }
 
   // ---------------------------------------------------------------------------
