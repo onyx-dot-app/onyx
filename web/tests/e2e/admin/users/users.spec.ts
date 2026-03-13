@@ -142,10 +142,10 @@ test.describe("Users page — filters", () => {
     await usersPage.openAccountTypesFilter();
 
     await expect(
-      usersPage.popover.getByText("All Account Types")
+      usersPage.popover.getByText("All Account Types").first()
     ).toBeVisible();
-    await expect(usersPage.popover.getByText("Admin")).toBeVisible();
-    await expect(usersPage.popover.getByText("Basic")).toBeVisible();
+    await expect(usersPage.popover.getByText("Admin").first()).toBeVisible();
+    await expect(usersPage.popover.getByText("Basic").first()).toBeVisible();
 
     await usersPage.closePopover();
   });
