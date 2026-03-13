@@ -22,6 +22,7 @@ import {
   APIKeyField,
   DisplayNameField,
   FieldSeparator,
+  FieldWrapper,
   ModelsAccessField,
   SingleDefaultModelField,
 } from "@/sections/modals/llmConfig/shared";
@@ -31,7 +32,6 @@ import {
 } from "@/lib/azureTargetUri";
 
 export const AZURE_PROVIDER_NAME = "azure";
-const AZURE_DISPLAY_NAME = "Microsoft Azure Cloud";
 
 interface AzureModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -50,6 +50,26 @@ function buildTargetUri(existingLlmProvider?: LLMProviderView): string {
     existingLlmProvider.deployment_name || "your-deployment";
   return `${existingLlmProvider.api_base}/openai/deployments/${deploymentName}/chat/completions?api-version=${existingLlmProvider.api_version}`;
 }
+
+const processValues = (values: AzureModalValues): AzureModalValues => {
+  let processedValues = { ...values };
+  if (values.target_uri) {
+    try {
+      const { url, apiVersion, deploymentName } = parseAzureTargetUri(
+        values.target_uri
+      );
+      processedValues = {
+        ...processedValues,
+        api_base: url.origin,
+        api_version: apiVersion,
+        deployment_name: deploymentName || processedValues.deployment_name,
+      };
+    } catch (error) {
+      console.error("Failed to parse target_uri:", error);
+    }
+  }
+  return processedValues;
+};
 
 export function AzureModal({
   variant = "llm-configuration",
@@ -113,26 +133,6 @@ export function AzureModal({
           ),
       });
 
-  const processValues = (values: AzureModalValues): AzureModalValues => {
-    let processedValues = { ...values };
-    if (values.target_uri) {
-      try {
-        const { url, apiVersion, deploymentName } = parseAzureTargetUri(
-          values.target_uri
-        );
-        processedValues = {
-          ...processedValues,
-          api_base: url.origin,
-          api_version: apiVersion,
-          deployment_name: deploymentName || processedValues.deployment_name,
-        };
-      } catch (error) {
-        console.error("Failed to parse target_uri:", error);
-      }
-    }
-    return processedValues;
-  };
-
   return (
     <Formik
       initialValues={initialValues}
@@ -178,34 +178,42 @@ export function AzureModal({
       {(formikProps) => (
         <LLMConfigurationModalWrapper
           providerEndpoint={AZURE_PROVIDER_NAME}
-          providerName={AZURE_DISPLAY_NAME}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
           isFormValid={formikProps.isValid}
           isTesting={isTesting}
         >
-          {!isOnboarding && (
-            <DisplayNameField disabled={!!existingLlmProvider} />
-          )}
-
           <APIKeyField providerName="Azure" />
 
-          <InputLayouts.Vertical
-            name="target_uri"
-            title="Target URI"
-            description="The complete target URI for your deployment from the Azure AI portal."
-          >
-            <InputTypeInField
+          <FieldWrapper>
+            <InputLayouts.Vertical
               name="target_uri"
-              placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-            />
-          </InputLayouts.Vertical>
+              title="Target URI"
+              subDescription="The complete target URI for your deployment from the Azure AI portal."
+            >
+              <InputTypeInField
+                name="target_uri"
+                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+              />
+            </InputLayouts.Vertical>
+          </FieldWrapper>
+
+          {!isOnboarding && (
+            <>
+              <FieldSeparator />
+              <DisplayNameField disabled={!!existingLlmProvider} />
+            </>
+          )}
 
           <FieldSeparator />
           <SingleDefaultModelField placeholder="E.g. gpt-4o" />
-          <FieldSeparator />
 
-          {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
+          {!isOnboarding && (
+            <>
+              <FieldSeparator />
+              <ModelsAccessField formikProps={formikProps} />
+            </>
+          )}
         </LLMConfigurationModalWrapper>
       )}
     </Formik>
