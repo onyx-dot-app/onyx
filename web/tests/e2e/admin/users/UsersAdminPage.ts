@@ -34,11 +34,9 @@ export class UsersAdminPage {
     this.inviteButton = page.getByRole("button", { name: "Invite Users" });
     this.searchInput = page.getByPlaceholder("Search users...");
 
-    this.accountTypesFilter = page.getByRole("button", {
-      name: /Account Types/,
-    });
-    this.groupsFilter = page.getByRole("button", { name: /Groups/ });
-    this.statusFilter = page.getByRole("button", { name: /Status/ });
+    this.accountTypesFilter = page.getByTestId("filter-role");
+    this.groupsFilter = page.getByTestId("filter-group");
+    this.statusFilter = page.getByTestId("filter-status");
 
     this.table = page.getByRole("table");
     this.tableRows = page.getByRole("table").locator("tbody tr");
@@ -284,7 +282,9 @@ export class UsersAdminPage {
   }
 
   async toggleGroupInModal(groupName: string) {
-    await this.dialog.getByText(groupName).first().click();
+    await this.dialog
+      .getByRole("button", { name: new RegExp(groupName) })
+      .click();
   }
 
   async saveGroupsModal() {
