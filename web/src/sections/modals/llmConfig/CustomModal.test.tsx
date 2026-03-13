@@ -188,9 +188,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       );
     });
 
-    // Verify error toast is displayed
+    // Verify error toast is displayed with the API error message
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalledWith("Invalid API key");
     });
 
     // Verify create API was NOT called
