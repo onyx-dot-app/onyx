@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import NameCard from "./NameCard";
+import { NameCard } from "./components";
 import { SvgUser, SvgSettings } from "@opal/icons";
 import { Button } from "@opal/components";
 
 const meta: Meta<typeof NameCard> = {
-  title: "refresh-components/cards/NameCard",
+  title: "opal/cards/NameCard",
   component: NameCard,
   tags: ["autodocs"],
 };
