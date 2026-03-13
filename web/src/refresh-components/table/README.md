@@ -44,15 +44,15 @@ function PeopleTable({ data }: { data: Person[] }) {
 
 Leading column for avatars, icons, images, or checkboxes.
 
-| Option              | Type                                                              | Default    | Description                                   |
-| ------------------- | ----------------------------------------------------------------- | ---------- | --------------------------------------------- |
-| `content`           | `"simple" \| "icon" \| "image" \| "avatar-icon" \| "avatar-user"` | `"simple"` | Body row content type                         |
-| `headerContentType` | same as `content`                                                 | `"simple"` | Header row content type                       |
-| `getInitials`       | `(row: TData) => string`                                          | -          | Extract initials (for `"avatar-user"`)        |
-| `getIcon`           | `(row: TData) => IconFunctionComponent`                           | -          | Extract icon (for `"icon"` / `"avatar-icon"`) |
-| `getImageSrc`       | `(row: TData) => string`                                          | -          | Extract image src (for `"image"`)             |
-| `selectable`        | `boolean`                                                         | `true`     | Show selection checkboxes                     |
-| `header`            | `boolean`                                                         | `true`     | Render qualifier content in the header        |
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `content` | `"simple" \| "icon" \| "image" \| "avatar-icon" \| "avatar-user"` | `"simple"` | Body row content type |
+| `headerContentType` | same as `content` | `"simple"` | Header row content type |
+| `getInitials` | `(row: TData) => string` | - | Extract initials (for `"avatar-user"`) |
+| `getIcon` | `(row: TData) => IconFunctionComponent` | - | Extract icon (for `"icon"` / `"avatar-icon"`) |
+| `getImageSrc` | `(row: TData) => string` | - | Extract image src (for `"image"`) |
+| `selectable` | `boolean` | `true` | Show selection checkboxes |
+| `header` | `boolean` | `true` | Render qualifier content in the header |
 
 Width is fixed: 56px at `"regular"` size, 40px at `"small"`.
 
@@ -60,23 +60,23 @@ Width is fixed: 56px at `"regular"` size, 40px at `"small"`.
 tc.qualifier({
   content: "avatar-user",
   getInitials: (row) => row.initials,
-});
+})
 ```
 
 ### `tc.column(accessor, config)`
 
 Data column with sorting, resizing, and hiding. The `accessor` is a type-safe deep key into `TData`.
 
-| Option           | Type                                               | Default                 | Description                      |
-| ---------------- | -------------------------------------------------- | ----------------------- | -------------------------------- |
-| `header`         | `string`                                           | **required**            | Column header label              |
-| `cell`           | `(value: TValue, row: TData) => ReactNode`         | renders value as string | Custom cell renderer             |
-| `enableSorting`  | `boolean`                                          | `true`                  | Allow sorting                    |
-| `enableResizing` | `boolean`                                          | `true`                  | Allow column resize              |
-| `enableHiding`   | `boolean`                                          | `true`                  | Allow hiding via actions popover |
-| `icon`           | `(sorted: SortDirection) => IconFunctionComponent` | -                       | Override the sort indicator icon |
-| `weight`         | `number`                                           | `20`                    | Proportional width weight        |
-| `minWidth`       | `number`                                           | `50`                    | Minimum width in pixels          |
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `header` | `string` | **required** | Column header label |
+| `cell` | `(value: TValue, row: TData) => ReactNode` | renders value as string | Custom cell renderer |
+| `enableSorting` | `boolean` | `true` | Allow sorting |
+| `enableResizing` | `boolean` | `true` | Allow column resize |
+| `enableHiding` | `boolean` | `true` | Allow hiding via actions popover |
+| `icon` | `(sorted: SortDirection) => IconFunctionComponent` | - | Override the sort indicator icon |
+| `weight` | `number` | `20` | Proportional width weight |
+| `minWidth` | `number` | `50` | Minimum width in pixels |
 
 ```ts
 tc.column("email", {
@@ -91,13 +91,13 @@ tc.column("email", {
 
 Non-accessor column for custom content (e.g. computed values, action buttons per row).
 
-| Option         | Type                        | Default      | Description                            |
-| -------------- | --------------------------- | ------------ | -------------------------------------- |
-| `id`           | `string`                    | **required** | Unique column ID                       |
-| `header`       | `string`                    | -            | Optional header label                  |
-| `cell`         | `(row: TData) => ReactNode` | **required** | Cell renderer                          |
-| `width`        | `ColumnWidth`               | **required** | `{ weight, minWidth? }` or `{ fixed }` |
-| `enableHiding` | `boolean`                   | `true`       | Allow hiding                           |
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `id` | `string` | **required** | Unique column ID |
+| `header` | `string` | - | Optional header label |
+| `cell` | `(row: TData) => ReactNode` | **required** | Cell renderer |
+| `width` | `ColumnWidth` | **required** | `{ weight, minWidth? }` or `{ fixed }` |
+| `enableHiding` | `boolean` | `true` | Allow hiding |
 
 ```ts
 tc.displayColumn({
@@ -105,26 +105,26 @@ tc.displayColumn({
   header: "Full Name",
   cell: (row) => `${row.firstName} ${row.lastName}`,
   width: { weight: 25, minWidth: 100 },
-});
+})
 ```
 
 ### `tc.actions(config?)`
 
 Fixed-width column rendered at the trailing edge. Houses column visibility and sorting popovers in the header.
 
-| Option                 | Type                        | Default | Description                                |
-| ---------------------- | --------------------------- | ------- | ------------------------------------------ |
-| `showColumnVisibility` | `boolean`                   | `true`  | Show the column visibility popover         |
-| `showSorting`          | `boolean`                   | `true`  | Show the sorting popover                   |
-| `sortingFooterText`    | `string`                    | -       | Footer text inside the sorting popover     |
-| `cell`                 | `(row: TData) => ReactNode` | -       | Row-level cell renderer for action buttons |
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `showColumnVisibility` | `boolean` | `true` | Show the column visibility popover |
+| `showSorting` | `boolean` | `true` | Show the sorting popover |
+| `sortingFooterText` | `string` | - | Footer text inside the sorting popover |
+| `cell` | `(row: TData) => ReactNode` | - | Row-level cell renderer for action buttons |
 
 Width is fixed: 88px at `"regular"`, 20px at `"small"`.
 
 ```ts
 tc.actions({
   sortingFooterText: "Everyone will see agents in this order.",
-});
+})
 ```
 
 Row-level actions — the `cell` callback receives the row data and renders content in each body row. Clicks inside the cell automatically call `stopPropagation`, so they won't trigger row selection.
@@ -137,28 +137,28 @@ tc.actions({
       <IconButton icon={SvgTrash} onClick={() => confirmDelete(row.id)} />
     </div>
   ),
-});
+})
 ```
 
 ## DataTable Props
 
 `DataTableProps<TData>`:
 
-| Prop                      | Type                              | Default                                       | Description                                                                                            |
-| ------------------------- | --------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `data`                    | `TData[]`                         | **required**                                  | Row data                                                                                               |
-| `columns`                 | `OnyxColumnDef<TData>[]`          | **required**                                  | Columns from `createTableColumns()`                                                                    |
-| `pageSize`                | `number`                          | `10` (with footer) or `data.length` (without) | Rows per page. `Infinity` disables pagination                                                          |
-| `initialSorting`          | `SortingState`                    | `[]`                                          | TanStack sorting state                                                                                 |
-| `initialColumnVisibility` | `VisibilityState`                 | `{}`                                          | Map of column ID to `false` to hide initially                                                          |
-| `draggable`               | `DataTableDraggableConfig<TData>` | -                                             | Enable drag-and-drop (see below)                                                                       |
-| `footer`                  | `DataTableFooterConfig`           | -                                             | Footer mode (see below)                                                                                |
-| `size`                    | `"regular" \| "small"`            | `"regular"`                                   | Table density variant                                                                                  |
-| `onRowClick`              | `(row: TData) => void`            | toggles selection                             | Called on row click, replaces default selection toggle                                                 |
-| `height`                  | `number \| string`                | -                                             | Max height for scrollable body (header stays pinned). `300` or `"50vh"`                                |
-| `headerBackground`        | `string`                          | -                                             | CSS color for the sticky header (prevents content showing through)                                     |
-| `searchTerm`              | `string`                          | -                                             | Search term for client-side global text filtering (case-insensitive match across all accessor columns) |
-| `serverSide`              | `ServerSideConfig`                | -                                             | Enable server-side mode for manual pagination, sorting, and filtering ([see below](#server-side-mode)) |
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `data` | `TData[]` | **required** | Row data |
+| `columns` | `OnyxColumnDef<TData>[]` | **required** | Columns from `createTableColumns()` |
+| `pageSize` | `number` | `10` (with footer) or `data.length` (without) | Rows per page. `Infinity` disables pagination |
+| `initialSorting` | `SortingState` | `[]` | TanStack sorting state |
+| `initialColumnVisibility` | `VisibilityState` | `{}` | Map of column ID to `false` to hide initially |
+| `draggable` | `DataTableDraggableConfig<TData>` | - | Enable drag-and-drop (see below) |
+| `footer` | `DataTableFooterConfig` | - | Footer mode (see below) |
+| `size` | `"regular" \| "small"` | `"regular"` | Table density variant |
+| `onRowClick` | `(row: TData) => void` | toggles selection | Called on row click, replaces default selection toggle |
+| `height` | `number \| string` | - | Max height for scrollable body (header stays pinned). `300` or `"50vh"` |
+| `headerBackground` | `string` | - | CSS color for the sticky header (prevents content showing through) |
+| `searchTerm` | `string` | - | Search term for client-side global text filtering (case-insensitive match across all accessor columns) |
+| `serverSide` | `ServerSideConfig` | - | Enable server-side mode for manual pagination, sorting, and filtering ([see below](#server-side-mode)) |
 
 ## Footer Config
 
@@ -204,10 +204,10 @@ Enable drag-and-drop row reordering. DnD is automatically disabled when column s
 />
 ```
 
-| Option      | Type                                                                              | Description                              |
-| ----------- | --------------------------------------------------------------------------------- | ---------------------------------------- |
-| `getRowId`  | `(row: TData) => string`                                                          | Extract a unique string ID from each row |
-| `onReorder` | `(ids: string[], changedOrders: Record<string, number>) => void \| Promise<void>` | Called after a successful reorder        |
+| Option | Type | Description |
+|---|---|---|
+| `getRowId` | `(row: TData) => string` | Extract a unique string ID from each row |
+| `onReorder` | `(ids: string[], changedOrders: Record<string, number>) => void \| Promise<void>` | Called after a successful reorder |
 
 ## Server-Side Mode
 
@@ -215,13 +215,13 @@ Pass the `serverSide` prop to switch from client-side to server-side pagination,
 
 ### `ServerSideConfig`
 
-| Prop                 | Type                                            | Description                                                                         |
-| -------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `totalItems`         | `number`                                        | Total row count from the server, used to compute page count                         |
-| `isLoading`          | `boolean`                                       | Shows a loading overlay (opacity + pointer-events-none) while data is being fetched |
-| `onSortingChange`    | `(sorting: SortingState) => void`               | Fired when the user clicks a column header                                          |
-| `onPaginationChange` | `(pageIndex: number, pageSize: number) => void` | Fired on page navigation and on automatic resets from sort/search changes           |
-| `onSearchTermChange` | `(searchTerm: string) => void`                  | Fired when the `searchTerm` prop changes                                            |
+| Prop | Type | Description |
+|---|---|---|
+| `totalItems` | `number` | Total row count from the server, used to compute page count |
+| `isLoading` | `boolean` | Shows a loading overlay (opacity + pointer-events-none) while data is being fetched |
+| `onSortingChange` | `(sorting: SortingState) => void` | Fired when the user clicks a column header |
+| `onPaginationChange` | `(pageIndex: number, pageSize: number) => void` | Fired on page navigation and on automatic resets from sort/search changes |
+| `onSearchTermChange` | `(searchTerm: string) => void` | Fired when the `searchTerm` prop changes |
 
 ### Callback contract
 
@@ -326,10 +326,10 @@ Column widths can be responsive to size using a function:
 
 ```ts
 // In types.ts, width accepts:
-width: ColumnWidth | ((size: TableSize) => ColumnWidth);
+width: ColumnWidth | ((size: TableSize) => ColumnWidth)
 
 // Example (this is what qualifier/actions use internally):
-width: (size) => (size === "small" ? { fixed: 40 } : { fixed: 56 });
+width: (size) => size === "small" ? { fixed: 40 } : { fixed: 56 }
 ```
 
 ### Width system
@@ -385,7 +385,7 @@ tc.column("status", {
       title={value.charAt(0).toUpperCase() + value.slice(1)}
     />
   ),
-});
+})
 ```
 
 ### Non-selectable qualifier with icons
@@ -396,7 +396,7 @@ tc.qualifier({
   getIcon: (row) => row.icon,
   selectable: false,
   header: false,
-});
+})
 ```
 
 ### Small variant in a bordered container
@@ -450,13 +450,13 @@ Minimal wiring for server-side mode — manage sorting/pagination state external
 
 ## Source Files
 
-| File                        | Purpose                          |
-| --------------------------- | -------------------------------- |
-| `DataTable.tsx`             | Main component                   |
-| `columns.ts`                | `createTableColumns` builder     |
-| `types.ts`                  | All TypeScript interfaces        |
-| `hooks/useDataTable.ts`     | TanStack table wrapper hook      |
-| `hooks/useColumnWidths.ts`  | Weight-based width system        |
-| `hooks/useDraggableRows.ts` | DnD hook (`@dnd-kit`)            |
-| `Footer.tsx`                | Selection / Summary footer modes |
-| `TableSizeContext.tsx`      | Size context provider            |
+| File | Purpose |
+|---|---|
+| `DataTable.tsx` | Main component |
+| `columns.ts` | `createTableColumns` builder |
+| `types.ts` | All TypeScript interfaces |
+| `hooks/useDataTable.ts` | TanStack table wrapper hook |
+| `hooks/useColumnWidths.ts` | Weight-based width system |
+| `hooks/useDraggableRows.ts` | DnD hook (`@dnd-kit`) |
+| `Footer.tsx` | Selection / Summary footer modes |
+| `TableSizeContext.tsx` | Size context provider |
