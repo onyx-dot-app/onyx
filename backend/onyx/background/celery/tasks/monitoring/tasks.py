@@ -116,8 +116,7 @@ class Metric(BaseModel):
             string_value = self.value
         else:
             task_logger.error(
-                f"Invalid metric value type: {type(self.value)} "
-                f"({self.value}) for metric {self.name}."
+                f"Invalid metric value type: {type(self.value)} ({self.value}) for metric {self.name}."
             )
             return
 
@@ -260,8 +259,7 @@ def _build_connector_final_metrics(
         )
         if _has_metric_been_emitted(redis_std, metric_key):
             task_logger.info(
-                f"Skipping final metrics for connector {cc_pair.connector.id} "
-                f"index attempt {attempt.id}, already emitted."
+                f"Skipping final metrics for connector {cc_pair.connector.id} index attempt {attempt.id}, already emitted."
             )
             continue
 
@@ -1036,8 +1034,7 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG0
                 if process_name in cmdline:
                     if process_type in supervisor_processes.values():
                         task_logger.error(
-                            f"Duplicate process type for type {process_type} "
-                            f"with cmd {cmdline} with pid={proc.pid}."
+                            f"Duplicate process type for type {process_type} with cmd {cmdline} with pid={proc.pid}."
                         )
                         continue
 
@@ -1046,8 +1043,7 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG0
 
         if len(supervisor_processes) != len(process_type_mapping):
             task_logger.error(
-                "Missing processes: "
-                f"{set(process_type_mapping.keys()).symmetric_difference(supervisor_processes.values())}"
+                f"Missing processes: {set(process_type_mapping.keys()).symmetric_difference(supervisor_processes.values())}"
             )
 
         # Log memory usage for each process
@@ -1101,9 +1097,7 @@ def cloud_monitor_celery_pidbox(
 
         r_celery.delete(key)
         task_logger.info(
-            f"Deleted idle pidbox: pidbox={key_str} "
-            f"idletime={idletime} "
-            f"max_idletime={MAX_PIDBOX_IDLE}"
+            f"Deleted idle pidbox: pidbox={key_str} idletime={idletime} max_idletime={MAX_PIDBOX_IDLE}"
         )
         num_deleted += 1
 

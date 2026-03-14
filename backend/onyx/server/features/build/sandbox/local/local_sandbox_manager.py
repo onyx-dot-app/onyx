@@ -303,8 +303,7 @@ class LocalSandboxManager(SandboxManager):
             RuntimeError: If provisioning fails
         """
         logger.info(
-            f"Starting sandbox provisioning for sandbox {sandbox_id}, "
-            f"user {user_id}, tenant {tenant_id}"
+            f"Starting sandbox provisioning for sandbox {sandbox_id}, user {user_id}, tenant {tenant_id}"
         )
 
         # Create sandbox directory structure (user-level only)
@@ -351,8 +350,7 @@ class LocalSandboxManager(SandboxManager):
                     self._nextjs_processes.pop(key, None)
             except Exception as e:
                 logger.warning(
-                    f"Failed to stop Next.js for sandbox {sandbox_id}, "
-                    f"session {session_id}: {e}"
+                    f"Failed to stop Next.js for sandbox {sandbox_id}, session {session_id}: {e}"
                 )
 
         # Stop all ACP clients for this sandbox (keyed by (sandbox_id, session_id))
@@ -367,8 +365,7 @@ class LocalSandboxManager(SandboxManager):
                 del self._acp_clients[key]
             except Exception as e:
                 logger.warning(
-                    f"Failed to stop ACP client for sandbox {sandbox_id}, "
-                    f"session {key[1]}: {e}"
+                    f"Failed to stop ACP client for sandbox {sandbox_id}, session {key[1]}: {e}"
                 )
 
         # Cleanup directory
@@ -436,8 +433,7 @@ class LocalSandboxManager(SandboxManager):
             )
 
         logger.info(
-            f"Setting up session workspace for session {session_id} "
-            f"in sandbox {sandbox_id}"
+            f"Setting up session workspace for session {session_id} in sandbox {sandbox_id}"
         )
 
         # Create session directory
@@ -506,8 +502,7 @@ class LocalSandboxManager(SandboxManager):
 
             # Setup opencode.json with LLM provider configuration
             logger.debug(
-                f"Setting up opencode config with provider: {llm_config.provider}, "
-                f"model: {llm_config.model_name}"
+                f"Setting up opencode config with provider: {llm_config.provider}, model: {llm_config.model_name}"
             )
             self._directory_manager.setup_opencode_config(
                 sandbox_path=session_path,
@@ -626,8 +621,7 @@ class LocalSandboxManager(SandboxManager):
         if process.poll() is not None:
             # Process already terminated
             logger.debug(
-                f"Next.js server for session {session_id} already terminated "
-                f"(exit code: {process.returncode})"
+                f"Next.js server for session {session_id} already terminated (exit code: {process.returncode})"
             )
             return
 
@@ -671,14 +665,12 @@ class LocalSandboxManager(SandboxManager):
                 ]
                 if pids:
                     logger.info(
-                        f"Found {len(pids)} process(es) on port {port} for session {session_id}, "
-                        f"stopping all"
+                        f"Found {len(pids)} process(es) on port {port} for session {session_id}, stopping all"
                     )
                     for pid in pids:
                         try:
                             logger.debug(
-                                f"Stopping Next.js server (PID {pid}) on port {port} "
-                                f"for session {session_id}"
+                                f"Stopping Next.js server (PID {pid}) on port {port} for session {session_id}"
                             )
                             self._process_manager.terminate_process(pid)
                         except Exception as e:
@@ -692,8 +684,7 @@ class LocalSandboxManager(SandboxManager):
                 )
         except subprocess.TimeoutExpired:
             logger.warning(
-                f"lsof timed out after {LSOF_TIMEOUT_SECONDS}s while looking for "
-                f"process on port {port} for session {session_id}"
+                f"lsof timed out after {LSOF_TIMEOUT_SECONDS}s while looking for process on port {port} for session {session_id}"
             )
         except FileNotFoundError:
             # lsof not available, try psutil
@@ -717,14 +708,12 @@ class LocalSandboxManager(SandboxManager):
 
                 if pids_to_stop:
                     logger.info(
-                        f"Found {len(pids_to_stop)} process(es) on port {port} for session {session_id}, "
-                        f"stopping all"
+                        f"Found {len(pids_to_stop)} process(es) on port {port} for session {session_id}, stopping all"
                     )
                     for pid in pids_to_stop:
                         try:
                             logger.debug(
-                                f"Stopping Next.js server (PID {pid}) on port {port} "
-                                f"for session {session_id}"
+                                f"Stopping Next.js server (PID {pid}) on port {port} for session {session_id}"
                             )
                             self._process_manager.terminate_process(pid)
                         except Exception as e:
@@ -759,8 +748,7 @@ class LocalSandboxManager(SandboxManager):
         This should never be called for local backend.
         """
         raise NotImplementedError(
-            "create_snapshot is not supported for local backend. "
-            "Local sandboxes persist on disk and don't use snapshots."
+            "create_snapshot is not supported for local backend. Local sandboxes persist on disk and don't use snapshots."
         )
 
     def session_workspace_exists(
@@ -822,8 +810,7 @@ class LocalSandboxManager(SandboxManager):
                     with httpx.Client(timeout=1.0) as client:
                         client.get(f"http://localhost:{nextjs_port}")
                     logger.info(
-                        f"Port {nextjs_port} already alive for session {session_id} "
-                        "(orphan process) — skipping restart"
+                        f"Port {nextjs_port} already alive for session {session_id} (orphan process) — skipping restart"
                     )
                     return
                 except Exception:
@@ -838,8 +825,7 @@ class LocalSandboxManager(SandboxManager):
                 )
                 if not web_dir.exists():
                     logger.warning(
-                        f"Web dir missing for session {session_id}: {web_dir} — "
-                        "cannot restart Next.js"
+                        f"Web dir missing for session {session_id}: {web_dir} — cannot restart Next.js"
                     )
                     return
                 process = self._process_manager.start_nextjs_server(
@@ -848,8 +834,7 @@ class LocalSandboxManager(SandboxManager):
                 with self._nextjs_lock:
                     self._nextjs_processes[process_key] = process
                 logger.info(
-                    f"Auto-restarted Next.js for session {session_id} "
-                    f"on port {nextjs_port}"
+                    f"Auto-restarted Next.js for session {session_id} on port {nextjs_port}"
                 )
             except Exception as e:
                 logger.error(
@@ -876,8 +861,7 @@ class LocalSandboxManager(SandboxManager):
         This should never be called for local backend.
         """
         raise NotImplementedError(
-            "restore_snapshot is not supported for local backend. "
-            "Local sandboxes persist on disk and don't use snapshots."
+            "restore_snapshot is not supported for local backend. Local sandboxes persist on disk and don't use snapshots."
         )
 
     def health_check(
@@ -1135,8 +1119,7 @@ class LocalSandboxManager(SandboxManager):
         target_path.chmod(0o644)
 
         logger.info(
-            f"Uploaded file to session {session_id}: attachments/{filename} "
-            f"({len(content)} bytes)"
+            f"Uploaded file to session {session_id}: attachments/{filename} ({len(content)} bytes)"
         )
 
         # Inject attachments section into AGENTS.md if not already present
@@ -1337,8 +1320,7 @@ class LocalSandboxManager(SandboxManager):
             )
         except FileNotFoundError:
             raise ValueError(
-                "LibreOffice (soffice) is not installed. "
-                "PPTX preview requires LibreOffice."
+                "LibreOffice (soffice) is not installed. PPTX preview requires LibreOffice."
             )
         except subprocess.TimeoutExpired:
             raise ValueError("PPTX conversion timed out")
@@ -1368,8 +1350,7 @@ class LocalSandboxManager(SandboxManager):
             )
         except FileNotFoundError:
             raise ValueError(
-                "pdftoppm (poppler-utils) is not installed. "
-                "PPTX preview requires poppler."
+                "pdftoppm (poppler-utils) is not installed. PPTX preview requires poppler."
             )
         except subprocess.CalledProcessError as e:
             raise ValueError(f"PDF to image conversion failed: {e.stderr.decode()}")

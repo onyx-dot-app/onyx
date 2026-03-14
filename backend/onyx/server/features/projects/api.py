@@ -488,8 +488,7 @@ def delete_user_file(
             priority=OnyxCeleryPriority.HIGH,
         )
         logger.info(
-            f"Triggered delete for user_file_id={user_file.id} "
-            f"with task_id={task.id}"
+            f"Triggered delete for user_file_id={user_file.id} with task_id={task.id}"
         )
 
     return UserFileDeleteResult(

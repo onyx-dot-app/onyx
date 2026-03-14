@@ -283,8 +283,7 @@ class Chunker:
             # If there is no useful content, skip
             if not section_text and (not document.title or section_idx > 0):
                 logger.warning(
-                    f"Skipping empty or irrelevant section in doc "
-                    f"{document.semantic_identifier}, link={section_link_text}"
+                    f"Skipping empty or irrelevant section in doc {document.semantic_identifier}, link={section_link_text}"
                 )
                 continue
 

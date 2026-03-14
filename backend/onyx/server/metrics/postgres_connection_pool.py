@@ -240,8 +240,7 @@ def setup_postgres_connection_pool_metrics(
         pool = sync_engine.pool
         if not isinstance(pool, QueuePool):
             logger.info(
-                f"Skipping pool metrics for engine '{label}' "
-                f"({type(pool).__name__} — no pool state)"
+                f"Skipping pool metrics for engine '{label}' ({type(pool).__name__} — no pool state)"
             )
             continue
 

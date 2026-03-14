@@ -685,10 +685,9 @@ class TestAutoModeMissingFlows:
                 flow_type_filter=[LLMModelFlowType.CHAT],
             )
             listed_provider_names = {p.name for p in listed_providers}
-            assert provider_name in listed_provider_names, (
-                f"Provider '{provider_name}' not returned by "
-                f"fetch_existing_llm_providers — models are missing flow rows"
-            )
+            assert (
+                provider_name in listed_provider_names
+            ), f"Provider '{provider_name}' not returned by fetch_existing_llm_providers — models are missing flow rows"
 
         finally:
             db_session.rollback()
@@ -782,10 +781,9 @@ class TestAutoModeTransitionsAndResync:
             assert (
                 default_after.llm_provider_id == provider.id
             ), "Default should still belong to the same provider after transition"
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to the recommended model 'gpt-4o-mini', "
-                f"got '{default_after.name}'"
-            )
+            assert (
+                default_after.name == "gpt-4o-mini"
+            ), f"Default should be updated to the recommended model 'gpt-4o-mini', got '{default_after.name}'"
 
         finally:
             db_session.rollback()
@@ -1140,14 +1138,12 @@ class TestAutoModeTransitionsAndResync:
             # (gpt-4o-mini) so that it is not silently lost.
             db_session.expire_all()
             default_after = fetch_default_llm_model(db_session)
-            assert default_after is not None, (
-                "Default model should not be None — sync should set the new "
-                "recommended default when the old one is hidden"
-            )
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to the new recommended model "
-                f"'gpt-4o-mini', but got '{default_after.name}'"
-            )
+            assert (
+                default_after is not None
+            ), "Default model should not be None — sync should set the new recommended default when the old one is hidden"
+            assert (
+                default_after.name == "gpt-4o-mini"
+            ), f"Default should be updated to the new recommended model 'gpt-4o-mini', but got '{default_after.name}'"
 
         finally:
             db_session.rollback()
@@ -1315,10 +1311,9 @@ class TestAutoModeTransitionsAndResync:
                 provider=provider,
                 llm_recommendations=config,
             )
-            assert changes == 0, (
-                f"Expected 0 changes when default already matches recommended, "
-                f"got {changes}"
-            )
+            assert (
+                changes == 0
+            ), f"Expected 0 changes when default already matches recommended, got {changes}"
 
             # Default should still be gpt-4o
             default_model = fetch_default_llm_model(db_session)

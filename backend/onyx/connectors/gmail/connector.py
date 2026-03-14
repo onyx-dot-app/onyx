@@ -351,9 +351,7 @@ class GmailConnector(
     def primary_admin_email(self) -> str:
         if self._primary_admin_email is None:
             raise RuntimeError(
-                "Primary admin email missing, "
-                "should not call this property "
-                "before calling load_credentials"
+                "Primary admin email missing, should not call this property before calling load_credentials"
             )
         return self._primary_admin_email
 
@@ -361,9 +359,7 @@ class GmailConnector(
     def google_domain(self) -> str:
         if self._primary_admin_email is None:
             raise RuntimeError(
-                "Primary admin email missing, "
-                "should not call this property "
-                "before calling load_credentials"
+                "Primary admin email missing, should not call this property before calling load_credentials"
             )
         return self._primary_admin_email.split("@")[-1]
 
@@ -371,9 +367,7 @@ class GmailConnector(
     def creds(self) -> OAuthCredentials | ServiceAccountCredentials:
         if self._creds is None:
             raise RuntimeError(
-                "Creds missing, "
-                "should not call this property "
-                "before calling load_credentials"
+                "Creds missing, should not call this property before calling load_credentials"
             )
         return self._creds
 

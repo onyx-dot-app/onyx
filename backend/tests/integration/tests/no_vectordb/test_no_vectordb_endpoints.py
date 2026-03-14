@@ -26,7 +26,8 @@ def _headers(user: DATestUser) -> dict[str, str]:
 
 
 def test_admin_search_returns_501(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.post(
         f"{API_SERVER_URL}/admin/search",
@@ -37,7 +38,8 @@ def test_admin_search_returns_501(
 
 
 def test_document_size_info_returns_501(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/document/document-size-info",
@@ -48,7 +50,8 @@ def test_document_size_info_returns_501(
 
 
 def test_document_chunk_info_returns_501(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/document/chunk-info",
@@ -59,7 +62,8 @@ def test_document_chunk_info_returns_501(
 
 
 def test_set_new_search_settings_returns_501(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.post(
         f"{API_SERVER_URL}/search-settings/set-new-search-settings",
@@ -70,7 +74,8 @@ def test_set_new_search_settings_returns_501(
 
 
 def test_cancel_new_embedding_returns_501(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.post(
         f"{API_SERVER_URL}/search-settings/cancel-new-embedding",
@@ -80,7 +85,8 @@ def test_cancel_new_embedding_returns_501(
 
 
 def test_connector_router_returns_501(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     """The entire /manage router is gated — any connector endpoint should 501."""
     resp = requests.get(
@@ -91,7 +97,8 @@ def test_connector_router_returns_501(
 
 
 def test_ingestion_post_returns_501(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.post(
         f"{API_SERVER_URL}/onyx-api/ingestion",
@@ -102,7 +109,8 @@ def test_ingestion_post_returns_501(
 
 
 def test_ingestion_delete_returns_501(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.delete(
         f"{API_SERVER_URL}/onyx-api/ingestion/fake-doc-id",
@@ -117,7 +125,8 @@ def test_ingestion_delete_returns_501(
 
 
 def test_settings_endpoint_works(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/settings",
@@ -129,7 +138,8 @@ def test_settings_endpoint_works(
 
 
 def test_document_set_list_works(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/manage/document-set",
@@ -139,7 +149,8 @@ def test_document_set_list_works(
 
 
 def test_persona_list_works(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/admin/persona",
@@ -148,7 +159,9 @@ def test_persona_list_works(
     assert resp.status_code == 200
 
 
-def test_tool_list_works(reset: None, admin_user: DATestUser) -> None:  # noqa: ARG001
+def test_tool_list_works(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:  # noqa: ARG001
     resp = requests.get(
         f"{API_SERVER_URL}/tool",
         headers=_headers(admin_user),

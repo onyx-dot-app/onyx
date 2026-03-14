@@ -888,7 +888,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             document_chunk_source: dict[str, Any] | None = hit.get("_source")
             if not document_chunk_source:
                 raise RuntimeError(
-                    f"Document chunk with ID \"{hit.get('_id', '')}\" has no data."
+                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
                 )
             document_chunk_score = hit.get("_score", None)
             match_highlights: dict[str, list[str]] = hit.get("highlight", {})
@@ -1095,8 +1095,7 @@ def wait_for_opensearch_with_timeout(
             time_elapsed = time.monotonic() - time_start
             if time_elapsed > wait_limit_s:
                 logger.info(
-                    f"[OpenSearch] Readiness probe did not succeed within the timeout "
-                    f"({wait_limit_s} seconds)."
+                    f"[OpenSearch] Readiness probe did not succeed within the timeout ({wait_limit_s} seconds)."
                 )
                 return False
             logger.info(

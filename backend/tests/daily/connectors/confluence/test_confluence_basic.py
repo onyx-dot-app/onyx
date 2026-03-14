@@ -206,7 +206,8 @@ def test_confluence_connector_skip_images(
 
 
 def mock_process_image_attachment(
-    *args: Any, **kwargs: Any  # noqa: ARG001
+    *args: Any,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
 ) -> AttachmentProcessingResult:
     """We need this mock to bypass DB access happening in the connector. Which shouldn't
     be done as a rule to begin with, but life is not perfect. Fix it later"""

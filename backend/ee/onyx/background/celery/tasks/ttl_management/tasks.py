@@ -74,8 +74,7 @@ def perform_ttl_management_task(
 
     except Exception:
         logger.exception(
-            "delete_chat_session exceptioned. "
-            f"user_id={user_id} session_id={session_id}"
+            f"delete_chat_session exceptioned. user_id={user_id} session_id={session_id}"
         )
         with get_session_with_current_tenant() as db_session:
             mark_task_as_finished_with_id(

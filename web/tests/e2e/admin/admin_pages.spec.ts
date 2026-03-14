@@ -52,9 +52,9 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
     },
   },
   {
-    name: "Custom Agents - Slack Bots",
+    name: "Integrations - Slack Integration",
     path: "bots",
-    pageTitle: "Slack Bots",
+    pageTitle: "Slack Integration",
     options: {
       paragraphText:
         "Setup Slack bots that connect to Onyx. Once setup, you will be able to ask questions to Onyx directly from Slack. Additionally, you can:",
@@ -96,9 +96,9 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
     pageTitle: "Appearance & Theming",
   },
   {
-    name: "Configuration - Search Settings",
+    name: "Documents & Knowledge - Index Settings",
     path: "configuration/search",
-    pageTitle: "Search Settings",
+    pageTitle: "Index Settings",
   },
   {
     name: "Custom Agents - MCP Actions",
@@ -111,9 +111,9 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
     pageTitle: "OpenAPI Actions",
   },
   {
-    name: "User Management - Token Rate Limits",
+    name: "Organization - Spending Limits",
     path: "token-rate-limits",
-    pageTitle: "Token Rate Limits",
+    pageTitle: "Spending Limits",
     options: {
       paragraphText:
         "Token rate limits enable you control how many tokens can be spent in a given time period. With token rate limits, you can:",

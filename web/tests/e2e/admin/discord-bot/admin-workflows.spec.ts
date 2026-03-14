@@ -28,7 +28,7 @@ test.describe("Admin Workflow E2E Flows", () => {
     await expect(
       adminPage
         .locator('[aria-label="admin-page-title"]')
-        .getByText("Discord Bots")
+        .getByText("Discord Integration")
     ).toBeVisible();
     await expect(
       adminPage.locator("text=Server Configurations").first()

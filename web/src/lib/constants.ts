@@ -108,7 +108,6 @@ export const CREDENTIAL_JSON = "credential_json";
 
 export const MODAL_ROOT_ID = "modal-root";
 
-export const ANONYMOUS_USER_NAME = "Anonymous";
 export const UNNAMED_CHAT = "New Chat";
 
 export const DEFAULT_AGENT_ID = 0;
@@ -131,3 +130,5 @@ export const LOGO_UNFOLDED_SIZE_PX = 88;
 
 export const DEFAULT_CONTEXT_TOKENS = 120_000;
 export const MAX_CHUNKS_FED_TO_CHAT = 25;
+
+export const APP_SLOGAN = "Open Source AI Platform";

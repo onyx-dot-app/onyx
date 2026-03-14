@@ -220,7 +220,6 @@ def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk
 
 
 class VespaIndex(DocumentIndex):
-
     VESPA_SCHEMA_JINJA_FILENAME = "danswer_chunk.sd.jinja"
 
     def __init__(
@@ -604,10 +603,7 @@ class VespaIndex(DocumentIndex):
                     try:
                         res.raise_for_status()
                     except requests.HTTPError as e:
-                        failure_msg = (
-                            f"Failed to update document {future_to_document_id[future]}\n"
-                            f"Response: {res.text}"
-                        )
+                        failure_msg = f"Failed to update document {future_to_document_id[future]}\nResponse: {res.text}"
                         raise requests.HTTPError(failure_msg) from e
 
     def kg_chunk_updates(
@@ -1107,7 +1103,4 @@ class _VespaDeleteRequest:
         self.document_id = document_id
         # Encode the document ID to ensure it's safe for use in the URL
         encoded_doc_id = urllib.parse.quote_plus(self.document_id)
-        self.url = (
-            f"{VESPA_APPLICATION_ENDPOINT}/document/v1/"
-            f"{index_name}/{index_name}/docid/{encoded_doc_id}"
-        )
+        self.url = f"{VESPA_APPLICATION_ENDPOINT}/document/v1/{index_name}/{index_name}/docid/{encoded_doc_id}"

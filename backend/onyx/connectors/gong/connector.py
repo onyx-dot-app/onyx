@@ -250,7 +250,7 @@ class GongConnector(LoadConnector, PollConnector):
                     f"_get_call_details_by_ids waiting to retry: "
                     f"wait={wait_seconds}s "
                     f"current_attempt={current_attempt} "
-                    f"next_attempt={current_attempt+1} "
+                    f"next_attempt={current_attempt + 1} "
                     f"max_attempts={self.MAX_CALL_DETAILS_ATTEMPTS}"
                 )
                 time.sleep(wait_seconds)
@@ -283,8 +283,7 @@ class GongConnector(LoadConnector, PollConnector):
                 call_time_str = call_metadata["started"]
                 call_title = call_metadata["title"]
                 logger.info(
-                    f"{num_calls+1}: Indexing Gong call id {call_id} "
-                    f"from {call_time_str.split('T', 1)[0]}: {call_title}"
+                    f"{num_calls + 1}: Indexing Gong call id {call_id} from {call_time_str.split('T', 1)[0]}: {call_title}"
                 )
 
                 call_parties = cast(list[dict] | None, call_details.get("parties"))
@@ -352,7 +351,7 @@ class GongConnector(LoadConnector, PollConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         combined = (
-            f'{credentials["gong_access_key"]}:{credentials["gong_access_key_secret"]}'
+            f"{credentials['gong_access_key']}:{credentials['gong_access_key_secret']}"
         )
         self.auth_token_basic = base64.b64encode(combined.encode("utf-8")).decode(
             "utf-8"

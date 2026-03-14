@@ -128,8 +128,7 @@ async def handle_registration_command(
         if not message.author.guild_permissions.administrator:
             if not message.author.guild_permissions.manage_guild:
                 raise RegistrationError(
-                    "You need **Administrator** or **Manage Server** permissions "
-                    "to register this bot."
+                    "You need **Administrator** or **Manage Server** permissions to register this bot."
                 )
 
         await _register_guild(message, registration_key, cache)
@@ -147,8 +146,7 @@ async def handle_registration_command(
         logger.exception(f"Registration failed unexpectedly: {guild_name}")
         await _try_dm_author(
             message,
-            ":x: **Registration failed.**\n\n"
-            "An unexpected error occurred. Please try again later.",
+            ":x: **Registration failed.**\n\nAn unexpected error occurred. Please try again later.",
         )
         await _try_delete_message(message)
 
@@ -187,8 +185,7 @@ async def _register_guild(
             f"Guild {guild_id} is already registered to tenant {existing_tenant}"
         )
         raise RegistrationError(
-            "This server is already registered.\n\n"
-            "OnyxBot can only connect one Discord server to one Onyx workspace."
+            "This server is already registered.\n\nOnyxBot can only connect one Discord server to one Onyx workspace."
         )
 
     context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -254,8 +251,7 @@ def get_text_channels(guild: discord.Guild) -> list[DiscordChannelView]:
             is_private = not everyone_perms.view_channel
 
             logger.debug(
-                f"Found channel: #{channel.name}, "
-                f"type={channel.type.name}, is_private={is_private}"
+                f"Found channel: #{channel.name}, type={channel.type.name}, is_private={is_private}"
             )
 
             channels.append(
@@ -314,8 +310,7 @@ async def handle_sync_channels_command(
         if not message.author.guild_permissions.administrator:
             if not message.author.guild_permissions.manage_guild:
                 raise SyncChannelsError(
-                    "You need **Administrator** or **Manage Server** permissions "
-                    "to sync channels."
+                    "You need **Administrator** or **Manage Server** permissions to sync channels."
                 )
 
         # Get guild config ID
@@ -340,8 +335,7 @@ async def handle_sync_channels_command(
             guild_config_id, tenant_id, bot
         )
         logger.info(
-            f"Sync-channels successful: {guild_name}, "
-            f"added={added}, removed={removed}, updated={updated}"
+            f"Sync-channels successful: {guild_name}, added={added}, removed={removed}, updated={updated}"
         )
         await message.reply(
             f":white_check_mark: **Channel sync complete!**\n\n"
@@ -358,8 +352,7 @@ async def handle_sync_channels_command(
         logger.exception(f"Sync-channels failed unexpectedly: {guild_name}")
         await _try_dm_author(
             message,
-            ":x: **Channel sync failed.**\n\n"
-            "An unexpected error occurred. Please try again later.",
+            ":x: **Channel sync failed.**\n\nAn unexpected error occurred. Please try again later.",
         )
         await _try_react_x(message)
 
@@ -427,8 +420,7 @@ async def sync_guild_channels(
         added, removed, updated = await asyncio.to_thread(_sync)
 
         logger.info(
-            f"Channel sync complete for guild '{guild.name}': "
-            f"added={added}, removed={removed}, updated={updated}"
+            f"Channel sync complete for guild '{guild.name}': added={added}, removed={removed}, updated={updated}"
         )
 
         return added, removed, updated

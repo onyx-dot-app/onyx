@@ -418,10 +418,9 @@ def verify_hierarchy_nodes(
 
     # Verify expected site is in hierarchy
     site_node_ids = {n.raw_node_id for n in site_nodes}
-    assert expected_site_url in site_node_ids, (
-        f"Expected site {expected_site_url} not found in hierarchy nodes. "
-        f"Found sites: {site_node_ids}"
-    )
+    assert (
+        expected_site_url in site_node_ids
+    ), f"Expected site {expected_site_url} not found in hierarchy nodes. Found sites: {site_node_ids}"
 
     # Verify no duplicate raw_node_ids
     assert len(all_node_ids) == len(
@@ -460,10 +459,9 @@ def verify_hierarchy_nodes(
     # Verify documents have parent_hierarchy_raw_node_id set
     for doc in documents:
         if doc.parent_hierarchy_raw_node_id:
-            assert doc.parent_hierarchy_raw_node_id in all_node_ids, (
-                f"Document {doc.semantic_identifier} parent "
-                f"{doc.parent_hierarchy_raw_node_id} should exist in hierarchy"
-            )
+            assert (
+                doc.parent_hierarchy_raw_node_id in all_node_ids
+            ), f"Document {doc.semantic_identifier} parent {doc.parent_hierarchy_raw_node_id} should exist in hierarchy"
 
 
 def test_sharepoint_connector_hierarchy_nodes(
@@ -518,10 +516,9 @@ def test_sharepoint_connector_hierarchy_nodes(
 
         # Verify all documents have parent_hierarchy_raw_node_id set
         for doc in found_documents:
-            assert doc.parent_hierarchy_raw_node_id is not None, (
-                f"Document {doc.semantic_identifier} should have "
-                "parent_hierarchy_raw_node_id set"
-            )
+            assert (
+                doc.parent_hierarchy_raw_node_id is not None
+            ), f"Document {doc.semantic_identifier} should have parent_hierarchy_raw_node_id set"
 
 
 @pytest.fixture

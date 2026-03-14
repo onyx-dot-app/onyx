@@ -23,8 +23,7 @@ def _delete_connector_credential_pair_user_groups_relationship__no_commit(
     )
     if cc_pair is None:
         raise ValueError(
-            f"ConnectorCredentialPair with connector_id: {connector_id} "
-            f"and credential_id: {credential_id} not found"
+            f"ConnectorCredentialPair with connector_id: {connector_id} and credential_id: {credential_id} not found"
         )
 
     stmt = delete(UserGroup__ConnectorCredentialPair).where(

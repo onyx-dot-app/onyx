@@ -216,15 +216,13 @@ def mark_tenant_connectors_for_deletion(
 def main() -> None:
     if len(sys.argv) < 2:
         print(
-            "Usage: PYTHONPATH=. python scripts/tenant_cleanup/"
-            "no_bastion_mark_connectors.py <tenant_id> \\"
+            "Usage: PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py <tenant_id> \\"
         )
         print(
             "           --data-plane-context <context> --control-plane-context <context> [--force]"
         )
         print(
-            "       PYTHONPATH=. python scripts/tenant_cleanup/"
-            "no_bastion_mark_connectors.py --csv <csv_file_path> \\"
+            "       PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py --csv <csv_file_path> \\"
         )
         print(
             "           --data-plane-context <context> --control-plane-context <context> [--force] [--concurrency N]"

@@ -180,7 +180,6 @@ def fetch_and_cache_channel_metadata(
 
             # Check if this is a missing_scope error
             if error_response == "missing_scope":
-
                 # Get the channel type that requires this scope
                 missing_channel_type = get_channel_type_for_missing_scope(needed_scope)
 
@@ -220,8 +219,7 @@ def fetch_and_cache_channel_metadata(
     # If we have some channel metadata despite errors, return it with a warning
     if channel_metadata:
         logger.warning(
-            f"Returning partial channel metadata ({len(channel_metadata)} channels) despite errors. "
-            f"Last error: {last_exception}"
+            f"Returning partial channel metadata ({len(channel_metadata)} channels) despite errors. Last error: {last_exception}"
         )
         return channel_metadata
 
@@ -480,8 +478,7 @@ def query_slack(
     except SlackApiError as slack_error:
         logger.error(f"Slack API error in search_messages: {slack_error}")
         logger.error(
-            f"Slack API error details: status={slack_error.response.status_code}, "
-            f"error={slack_error.response.get('error')}"
+            f"Slack API error details: status={slack_error.response.status_code}, error={slack_error.response.get('error')}"
         )
         if "not_allowed_token_type" in str(slack_error):
             # Log token type prefix

@@ -105,10 +105,7 @@ def test_snippet_provided_in_middle() -> None:
     tartan_text = get_tartan_text()
     web_content = create_web_content_object(tartan_text)
 
-    snippet = (
-        "marketing as a district tartan for Ulster, Scottish weavers (and in two cases English, and "
-        "in another American)"
-    )
+    snippet = "marketing as a district tartan for Ulster, Scottish weavers (and in two cases English, and in another American)"
 
     SNIPPET_START_LOCATION_IN_TEXT = 215398
 
@@ -176,10 +173,7 @@ def test_similar_snippet_in_middle_fuzzy_match() -> None:
 
     # In the actual text, the word "English" is used instead of "British"
     # This is very similar though, so we expect a fuzzy match to occur
-    snippet = (
-        "marketing as a district tartan for Ulster, Scottish weavers (and in two cases British, and "
-        "in another American)"
-    )
+    snippet = "marketing as a district tartan for Ulster, Scottish weavers (and in two cases British, and in another American)"
 
     SNIPPET_START_LOCATION_IN_TEXT = 215398
 

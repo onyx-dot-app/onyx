@@ -13,7 +13,7 @@ import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   getProviderDisplayName,
@@ -47,7 +47,7 @@ import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import { Section } from "@/layouts/general-layouts";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.LLM_MODELS]!;
+const route = ADMIN_ROUTES.LLM_MODELS;
 
 // ============================================================================
 // Provider form mapping (keyed by provider name from the API)

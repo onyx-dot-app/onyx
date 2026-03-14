@@ -33,8 +33,7 @@ def _build_redis_mock_with_lock() -> tuple[MagicMock, MagicMock]:
 
 
 @patch(
-    "onyx.background.celery.tasks.user_file_processing.tasks."
-    "get_user_file_project_sync_queue_depth"
+    "onyx.background.celery.tasks.user_file_processing.tasks.get_user_file_project_sync_queue_depth"
 )
 @patch("onyx.background.celery.tasks.user_file_processing.tasks.get_redis_client")
 def test_check_for_user_file_project_sync_applies_queue_backpressure(
@@ -54,16 +53,13 @@ def test_check_for_user_file_project_sync_applies_queue_backpressure(
 
 
 @patch(
-    "onyx.background.celery.tasks.user_file_processing.tasks."
-    "enqueue_user_file_project_sync_task"
+    "onyx.background.celery.tasks.user_file_processing.tasks.enqueue_user_file_project_sync_task"
 )
 @patch(
-    "onyx.background.celery.tasks.user_file_processing.tasks."
-    "get_user_file_project_sync_queue_depth"
+    "onyx.background.celery.tasks.user_file_processing.tasks.get_user_file_project_sync_queue_depth"
 )
 @patch(
-    "onyx.background.celery.tasks.user_file_processing.tasks."
-    "get_session_with_current_tenant"
+    "onyx.background.celery.tasks.user_file_processing.tasks.get_session_with_current_tenant"
 )
 @patch("onyx.background.celery.tasks.user_file_processing.tasks.get_redis_client")
 def test_check_for_user_file_project_sync_skips_duplicates(

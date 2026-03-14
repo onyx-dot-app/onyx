@@ -95,7 +95,6 @@ def _get_page_id(page: dict[str, Any], allow_missing: bool = False) -> str:
 
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
-
     next_page_url: str | None
 
 

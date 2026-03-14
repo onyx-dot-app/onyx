@@ -186,7 +186,7 @@ class CodeInterpreterClient:
 
         if response.status_code == 404:
             logger.info(
-                "Streaming endpoint not available, " "falling back to batch execution"
+                "Streaming endpoint not available, falling back to batch execution"
             )
             response.close()
             yield from self._batch_as_stream(code, stdin, timeout_ms, files)
@@ -233,8 +233,7 @@ class CodeInterpreterClient:
 
         if event_type is not None or data_lines:
             logger.warning(
-                f"SSE stream ended with incomplete event: "
-                f"event_type={event_type}, data_lines={data_lines}"
+                f"SSE stream ended with incomplete event: event_type={event_type}, data_lines={data_lines}"
             )
 
     def _batch_as_stream(

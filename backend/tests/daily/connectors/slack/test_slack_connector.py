@@ -79,10 +79,9 @@ def test_indexing_channels_with_message_count(
 
     # Verify the expected channel appears in the hierarchy nodes
     channel_display_names = {node.display_name for node in hierarchy_nodes}
-    assert f"#{expected_channel_name}" in channel_display_names, (
-        f"Expected channel '#{expected_channel_name}' not found in hierarchy nodes. "
-        f"Found: {channel_display_names}"
-    )
+    assert (
+        f"#{expected_channel_name}" in channel_display_names
+    ), f"Expected channel '#{expected_channel_name}' not found in hierarchy nodes. Found: {channel_display_names}"
 
     # Verify documents reference their parent channel
     channel_ids = {node.raw_node_id for node in hierarchy_nodes}

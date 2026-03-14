@@ -156,8 +156,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                         QUERIES_FIELD: {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "One or more queries to look up on the web. "
-                            "Must contain only printable characters",
+                            "description": "One or more queries to look up on the web. Must contain only printable characters",
                         },
                     },
                     "required": [QUERIES_FIELD],
@@ -216,8 +215,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         if not queries:
             raise ToolCallException(
                 message=(
-                    "No valid web search queries provided; all queries were empty or "
-                    "whitespace-only after trimming."
+                    "No valid web search queries provided; all queries were empty or whitespace-only after trimming."
                 ),
                 llm_facing_message=(
                     "No valid web search queries were provided (they were empty or "

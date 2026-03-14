@@ -397,8 +397,7 @@ def update_connector_credential_pair_from_id(
     )
     if not cc_pair:
         logger.warning(
-            f"Attempted to update pair for Connector Credential Pair '{cc_pair_id}'"
-            f" but it does not exist"
+            f"Attempted to update pair for Connector Credential Pair '{cc_pair_id}' but it does not exist"
         )
         return
 
@@ -426,8 +425,7 @@ def update_connector_credential_pair(
     )
     if not cc_pair:
         logger.warning(
-            f"Attempted to update pair for connector id {connector_id} "
-            f"and credential id {credential_id}"
+            f"Attempted to update pair for connector id {connector_id} and credential id {credential_id}"
         )
         return
 

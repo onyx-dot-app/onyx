@@ -91,24 +91,21 @@ def _validate_vector_db_knowledge(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Cannot attach document sets to an assistant when "
-                "the vector database is disabled (DISABLE_VECTOR_DB is set)."
+                "Cannot attach document sets to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
             ),
         )
     if persona_upsert_request.hierarchy_node_ids:
         raise HTTPException(
             status_code=400,
             detail=(
-                "Cannot attach hierarchy nodes to an assistant when "
-                "the vector database is disabled (DISABLE_VECTOR_DB is set)."
+                "Cannot attach hierarchy nodes to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
             ),
         )
     if persona_upsert_request.document_ids:
         raise HTTPException(
             status_code=400,
             detail=(
-                "Cannot attach documents to an assistant when "
-                "the vector database is disabled (DISABLE_VECTOR_DB is set)."
+                "Cannot attach documents to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
             ),
         )
 

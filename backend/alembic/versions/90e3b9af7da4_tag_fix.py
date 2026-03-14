@@ -160,7 +160,7 @@ def remove_old_tags() -> None:
                     f"""
                     DELETE FROM document__tag
                     WHERE document_id = '{document_id}'
-                    AND tag_id IN ({','.join(to_delete)})
+                    AND tag_id IN ({",".join(to_delete)})
                     """
                 )
             )
@@ -239,7 +239,7 @@ def _get_batch_documents_with_multiple_tags(
         ).fetchall()
         if not batch:
             break
-        doc_ids = [document_id for document_id, in batch]
+        doc_ids = [document_id for (document_id,) in batch]
         yield doc_ids
         offset_clause = f"AND document__tag.document_id > '{doc_ids[-1]}'"
 

@@ -289,7 +289,7 @@ test.describe("Guilds List Page", () => {
     await expect(
       adminPage
         .locator('[aria-label="admin-page-title"]')
-        .getByText("Discord Bots")
+        .getByText("Discord Integration")
     ).toBeVisible();
   });
 

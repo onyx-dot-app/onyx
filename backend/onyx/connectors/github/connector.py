@@ -865,8 +865,7 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
                     total_count = org.get_repos().totalCount
                     if total_count == 0:
                         raise ConnectorValidationError(
-                            f"Found no repos for organization: {self.repo_owner}. "
-                            "Does the credential have the right scopes?"
+                            f"Found no repos for organization: {self.repo_owner}. Does the credential have the right scopes?"
                         )
                 except GithubException as e:
                     # Check for missing SSO
@@ -889,8 +888,7 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
                     total_count = user.get_repos().totalCount
                     if total_count == 0:
                         raise ConnectorValidationError(
-                            f"Found no repos for user: {self.repo_owner}. "
-                            "Does the credential have the right scopes?"
+                            f"Found no repos for user: {self.repo_owner}. Does the credential have the right scopes?"
                         )
 
         except RateLimitExceededException:

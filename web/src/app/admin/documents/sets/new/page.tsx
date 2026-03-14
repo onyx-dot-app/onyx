@@ -1,7 +1,7 @@
 "use client";
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -10,6 +10,8 @@ import { useRouter } from "next/navigation";
 import { refreshDocumentSets } from "../hooks";
 import CardSection from "@/components/admin/CardSection";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+
+const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 function Main() {
   const router = useRouter();
@@ -58,8 +60,6 @@ function Main() {
 }
 
 export default function Page() {
-  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DOCUMENT_SETS]!;
-
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header

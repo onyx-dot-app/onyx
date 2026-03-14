@@ -132,9 +132,9 @@ def test_jira_doc_sync(
             for doc in doc_sync_iter
             if isinstance(doc, DocExternalAccess)
         }
-        assert expected_docs == actual_docs, (
-            f"Expected docs: {expected_docs}\n" f"Actual docs: {actual_docs}"
-        )
+        assert (
+            expected_docs == actual_docs
+        ), f"Expected docs: {expected_docs}\nActual docs: {actual_docs}"
     finally:
         db_session.rollback()
 

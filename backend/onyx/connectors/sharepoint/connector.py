@@ -233,8 +233,7 @@ def sleep_and_retry(
             # Non-retryable error or retries exhausted — log details and raise.
             if e.response is not None:
                 logger.error(
-                    f"SharePoint request failed for {method_name}: "
-                    f"status={status}, "
+                    f"SharePoint request failed for {method_name}: status={status}, "
                 )
             raise e
 
@@ -984,8 +983,7 @@ class SharepointConnector(
 
         if self._credential_json:
             logger.info(
-                "Rebuilding SharePoint REST client context "
-                "(elapsed=%.0fs, site_changed=%s)",
+                "Rebuilding SharePoint REST client context (elapsed=%.0fs, site_changed=%s)",
                 elapsed,
                 self._cached_rest_ctx_url != site_url,
             )
@@ -1392,8 +1390,7 @@ class SharepointConnector(
             ):
                 page_name = fallback_page.get("name", page_id)
                 logger.warning(
-                    f"$expand=canvasLayout failed for page '{page_name}' "
-                    f"({page_id}). Indexing metadata only."
+                    f"$expand=canvasLayout failed for page '{page_name}' ({page_id}). Indexing metadata only."
                 )
                 return fallback_page
             raise
@@ -1441,8 +1438,7 @@ class SharepointConnector(
                         )
                         wait = min(retry_after, 60)
                         logger.warning(
-                            f"Graph API {response.status_code} on attempt {attempt + 1}, "
-                            f"retrying in {wait}s: {url}"
+                            f"Graph API {response.status_code} on attempt {attempt + 1}, retrying in {wait}s: {url}"
                         )
                         time.sleep(wait)
                         # Re-acquire token in case it expired during a long traversal
@@ -1455,8 +1451,7 @@ class SharepointConnector(
                 if attempt < GRAPH_API_MAX_RETRIES:
                     wait = min(2**attempt, 60)
                     logger.warning(
-                        f"Graph API connection error on attempt {attempt + 1}, "
-                        f"retrying in {wait}s: {url}"
+                        f"Graph API connection error on attempt {attempt + 1}, retrying in {wait}s: {url}"
                     )
                     time.sleep(wait)
                     continue
@@ -1581,8 +1576,7 @@ class SharepointConnector(
                     if not allow_full_resync:
                         raise
                     logger.warning(
-                        "Delta token expired (410 Gone) for drive '%s'. "
-                        "Falling back to full delta enumeration.",
+                        "Delta token expired (410 Gone) for drive '%s'. Falling back to full delta enumeration.",
                         drive_id,
                     )
                     yield from self._iter_delta_pages(
@@ -1658,14 +1652,10 @@ class SharepointConnector(
         except requests.HTTPError as e:
             if e.response is not None and e.response.status_code == 410:
                 logger.warning(
-                    "Delta token expired (410 Gone) for drive '%s'. "
-                    "Will restart with full delta enumeration.",
+                    "Delta token expired (410 Gone) for drive '%s'. Will restart with full delta enumeration.",
                     drive_id,
                 )
-                full_url = (
-                    f"{self.graph_api_base}/drives/{drive_id}/root/delta"
-                    f"?$top={page_size}"
-                )
+                full_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta?$top={page_size}"
                 return [], full_url
             raise
 
@@ -2161,8 +2151,7 @@ class SharepointConnector(
             site_descriptor = checkpoint.current_site_descriptor
 
             logger.info(
-                f"Processing drive '{checkpoint.current_drive_name}' "
-                f"in site: {site_descriptor.url}"
+                f"Processing drive '{checkpoint.current_drive_name}' in site: {site_descriptor.url}"
             )
             logger.debug(f"Time range: {start_dt} to {end_dt}")
 
@@ -2186,13 +2175,11 @@ class SharepointConnector(
                 checkpoint.current_drive_web_url = drive_web_url
             except Exception as e:
                 logger.error(
-                    f"Failed to retrieve items from drive '{current_drive_name}' "
-                    f"in site: {site_descriptor.url}: {e}"
+                    f"Failed to retrieve items from drive '{current_drive_name}' in site: {site_descriptor.url}: {e}"
                 )
                 yield _create_entity_failure(
                     f"{site_descriptor.url}|{current_drive_name}",
-                    f"Failed to access drive '{current_drive_name}' "
-                    f"in site '{site_descriptor.url}': {str(e)}",
+                    f"Failed to access drive '{current_drive_name}' in site '{site_descriptor.url}': {str(e)}",
                     (start_dt, end_dt),
                     e,
                 )
@@ -2249,13 +2236,11 @@ class SharepointConnector(
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to fetch delta page for drive "
-                        f"'{current_drive_name}': {e}"
+                        f"Failed to fetch delta page for drive '{current_drive_name}': {e}"
                     )
                     yield _create_entity_failure(
                         f"{site_descriptor.url}|{current_drive_name}",
-                        f"Failed to fetch delta page for drive "
-                        f"'{current_drive_name}': {str(e)}",
+                        f"Failed to fetch delta page for drive '{current_drive_name}': {str(e)}",
                         (start_dt, end_dt),
                         e,
                     )
@@ -2281,8 +2266,7 @@ class SharepointConnector(
 
                 if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
                     logger.debug(
-                        f"Skipping duplicate document {driveitem.id} "
-                        f"({driveitem.name})"
+                        f"Skipping duplicate document {driveitem.id} ({driveitem.name})"
                     )
                     continue
 

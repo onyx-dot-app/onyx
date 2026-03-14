@@ -4,7 +4,7 @@ import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Link from "next/link";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
@@ -17,6 +17,8 @@ import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import { IndexingStatusRequest } from "@/lib/types";
+
+const route = ADMIN_ROUTES.INDEXING_STATUS;
 
 function Main() {
   const vectorDbEnabled = useVectorDbEnabled();
@@ -204,8 +206,6 @@ function Main() {
 }
 
 export default function Status() {
-  const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.INDEXING_STATUS]!;
-
   useToastFromQuery({
     "connector-created": {
       message: "Connector created successfully",

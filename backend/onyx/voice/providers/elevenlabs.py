@@ -277,8 +277,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                 elif msg.type == aiohttp.WSMsgType.CLOSED:
                     close_code = self._ws.close_code if self._ws else "N/A"
                     self._logger.info(
-                        "ElevenLabsStreamingTranscriber: WebSocket closed by "
-                        f"server, close_code={close_code}"
+                        f"ElevenLabsStreamingTranscriber: WebSocket closed by server, close_code={close_code}"
                     )
                     break
                 elif msg.type == aiohttp.WSMsgType.ERROR:
@@ -488,8 +487,7 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
             async for msg in self._ws:
                 if self._closed:
                     self._logger.info(
-                        "ElevenLabsStreamingSynthesizer: closed flag set, stopping "
-                        "receive loop"
+                        "ElevenLabsStreamingSynthesizer: closed flag set, stopping receive loop"
                     )
                     break
                 if msg.type == aiohttp.WSMsgType.TEXT:
@@ -588,8 +586,7 @@ class ElevenLabsStreamingSynthesizer(StreamingSynthesizerProtocol):
             self._logger.info("ElevenLabsStreamingSynthesizer: end-of-input sent")
         else:
             self._logger.warning(
-                f"ElevenLabsStreamingSynthesizer: skipping flush - "
-                f"ws={self._ws is not None}, closed={self._closed}"
+                f"ElevenLabsStreamingSynthesizer: skipping flush - ws={self._ws is not None}, closed={self._closed}"
             )
 
     async def close(self) -> None:
@@ -733,8 +730,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         url = f"{self.api_base}/v1/text-to-speech/{voice_id}/stream"
 
         logger.info(
-            f"ElevenLabs TTS: starting synthesis, text='{text[:50]}...', "
-            f"voice={voice_id}, model={self.tts_model}, speed={speed}"
+            f"ElevenLabs TTS: starting synthesis, text='{text[:50]}...', voice={voice_id}, model={self.tts_model}, speed={speed}"
         )
 
         headers = {
@@ -756,8 +752,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, json=payload) as response:
                 logger.info(
-                    f"ElevenLabs TTS: got response status={response.status}, "
-                    f"content-type={response.headers.get('content-type')}"
+                    f"ElevenLabs TTS: got response status={response.status}, content-type={response.headers.get('content-type')}"
                 )
                 if response.status != 200:
                     error_text = await response.text()
@@ -773,8 +768,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
                         total_bytes += len(chunk)
                         yield chunk
                 logger.info(
-                    f"ElevenLabs TTS: streaming complete, {chunk_count} chunks, "
-                    f"{total_bytes} total bytes"
+                    f"ElevenLabs TTS: streaming complete, {chunk_count} chunks, {total_bytes} total bytes"
                 )
 
     async def validate_credentials(self) -> None:

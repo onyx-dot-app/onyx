@@ -104,7 +104,6 @@ def make_many_tools(mcp: FastMCP) -> None:
 
 
 if __name__ == "__main__":
-
     if len(sys.argv) > 1:
         port = int(sys.argv[1])
     else:

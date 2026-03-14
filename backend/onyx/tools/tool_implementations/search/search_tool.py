@@ -221,8 +221,7 @@ def _trim_sections_by_tokens(
             break
 
     logger.debug(
-        f"Trimmed sections from {len(sections)} to {len(trimmed_sections)} "
-        f"({total_tokens} tokens, budget: {max_tokens})"
+        f"Trimmed sections from {len(sections)} to {len(trimmed_sections)} ({total_tokens} tokens, budget: {max_tokens})"
     )
 
     return trimmed_sections
@@ -315,8 +314,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             if not found_slack_connector:
                 logger.debug(
-                    "Skipping Slack federated search: no Slack federated connector "
-                    f"linked to document sets {document_set_names}"
+                    f"Skipping Slack federated search: no Slack federated connector linked to document sets {document_set_names}"
                 )
                 return None, None, {}
 
@@ -719,8 +717,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 seen_lower.add(query_lower)
 
         logger.debug(
-            f"All Queries (sorted by weight): {all_queries}, "
-            f"Keyword queries: {[q for q, _ in deduplicated_keyword_queries]}"
+            f"All Queries (sorted by weight): {all_queries}, Keyword queries: {[q for q, _ in deduplicated_keyword_queries]}"
         )
 
         # Emit the queries early so the UI can display them immediately

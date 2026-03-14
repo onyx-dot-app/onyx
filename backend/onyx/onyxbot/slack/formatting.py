@@ -226,7 +226,10 @@ class SlackRenderer(HTMLRenderer):
     # -- Table rendering (converts markdown tables to vertical cards) --
 
     def table_cell(
-        self, text: str, align: str | None = None, head: bool = False  # noqa: ARG002
+        self,
+        text: str,
+        align: str | None = None,  # noqa: ARG002
+        head: bool = False,  # noqa: ARG002
     ) -> str:
         if head:
             self._table_headers.append(text.strip())

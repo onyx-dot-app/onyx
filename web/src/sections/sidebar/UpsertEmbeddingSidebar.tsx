@@ -9,7 +9,7 @@ export default function EmbeddingSidebar() {
 
   return (
     <StepSidebar
-      buttonName="Search Settings"
+      buttonName="Index Settings"
       buttonIcon={SvgSettings}
       buttonHref="/admin/configuration/search"
     >

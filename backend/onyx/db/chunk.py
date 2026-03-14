@@ -26,7 +26,7 @@ def update_chunk_boost_components__no_commit(
         if chunk_in_doc_id < 0:
             raise ValueError(f"Chunk ID is empty for chunk {data}")
 
-        chunk_document_id = f"{data.document_id}" f"__{chunk_in_doc_id}"
+        chunk_document_id = f"{data.document_id}__{chunk_in_doc_id}"
         chunk_stats = (
             db_session.query(ChunkStats)
             .filter(

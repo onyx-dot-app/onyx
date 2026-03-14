@@ -102,8 +102,7 @@ class SnapshotManager:
                 )
 
             logger.info(
-                f"Created snapshot {snapshot_id} for sandbox {sandbox_id}, "
-                f"size: {size_bytes} bytes"
+                f"Created snapshot {snapshot_id} for sandbox {sandbox_id}, size: {size_bytes} bytes"
             )
 
             return snapshot_id, storage_path, size_bytes

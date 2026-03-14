@@ -51,10 +51,7 @@ def upgrade() -> None:
                 next_email = f"{username.lower()}_{attempt}@{domain.lower()}"
                 # Email conflict occurred, append `_1`, `_2`, etc., to the username
                 logger.warning(
-                    f"Conflict while lowercasing email: "
-                    f"old_email={email} "
-                    f"conflicting_email={new_email} "
-                    f"next_email={next_email}"
+                    f"Conflict while lowercasing email: old_email={email} conflicting_email={new_email} next_email={next_email}"
                 )
                 new_email = next_email
                 attempt += 1

@@ -306,8 +306,7 @@ def handle_regular_answer(
 
     except Exception as e:
         logger.exception(
-            f"Unable to process message - did not successfully answer "
-            f"in {num_retries} attempts"
+            f"Unable to process message - did not successfully answer in {num_retries} attempts"
         )
         # Optionally, respond in thread with the error message, Used primarily
         # for debugging purposes
@@ -344,8 +343,7 @@ def handle_regular_answer(
 
     if not answer.answer and disable_docs_only_answer:
         logger.notice(
-            "Unable to find answer - not responding since the "
-            "`ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
+            "Unable to find answer - not responding since the `ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
         )
         return True
 

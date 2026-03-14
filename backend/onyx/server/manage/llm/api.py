@@ -81,6 +81,7 @@ from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.server.manage.llm.utils import generate_bedrock_display_name
 from onyx.server.manage.llm.utils import generate_ollama_display_name
 from onyx.server.manage.llm.utils import infer_vision_support
+from onyx.server.manage.llm.utils import is_embedding_model
 from onyx.server.manage.llm.utils import is_reasoning_model
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
@@ -417,14 +418,12 @@ def put_llm_provider(
     if existing_provider and is_creation:
         raise OnyxError(
             OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"LLM Provider with name {llm_provider_upsert_request.name} and "
-            f"id={llm_provider_upsert_request.id} already exists",
+            f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} already exists",
         )
     elif not existing_provider and not is_creation:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
-            f"LLM Provider with name {llm_provider_upsert_request.name} and "
-            f"id={llm_provider_upsert_request.id} does not exist",
+            f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} does not exist",
         )
 
     # SSRF Protection: Validate api_base and custom_config match stored values
@@ -1376,6 +1375,10 @@ def get_litellm_available_models(
         try:
             model_details = LitellmModelDetails.model_validate(model)
 
+            # Skip embedding models
+            if is_embedding_model(model_details.id):
+                continue
+
             results.append(
                 LitellmFinalModelResponse(
                     provider_name=model_details.owned_by,
@@ -1438,8 +1441,7 @@ def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
         elif e.response.status_code == 404:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
-                f"LiteLLM models endpoint not found at {url}. "
-                "Please verify the API base URL.",
+                f"LiteLLM models endpoint not found at {url}. Please verify the API base URL.",
             )
         else:
             raise OnyxError(
