@@ -7,8 +7,6 @@ are the DocumentSource tag and the connector's constructor parameter name
 (``jira_service_management_base_url`` instead of ``jira_base_url``).
 """
 
-from typing import Any
-
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -53,6 +51,3 @@ class JiraServiceManagementConnector(JiraConnector):
     @override
     def document_source(self) -> DocumentSource:
         return DocumentSource.JIRA_SERVICE_MANAGEMENT
-
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        return super().load_credentials(credentials)
