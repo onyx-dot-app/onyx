@@ -81,6 +81,7 @@ from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.server.manage.llm.utils import generate_bedrock_display_name
 from onyx.server.manage.llm.utils import generate_ollama_display_name
 from onyx.server.manage.llm.utils import infer_vision_support
+from onyx.server.manage.llm.utils import is_embedding_model
 from onyx.server.manage.llm.utils import is_reasoning_model
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
@@ -1373,6 +1374,10 @@ def get_litellm_available_models(
     for model in models:
         try:
             model_details = LitellmModelDetails.model_validate(model)
+
+            # Skip embedding models
+            if is_embedding_model(model_details.id):
+                continue
 
             results.append(
                 LitellmFinalModelResponse(
