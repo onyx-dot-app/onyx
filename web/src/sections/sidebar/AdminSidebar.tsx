@@ -72,10 +72,6 @@ function buildCollections(
       });
     }
 
-    if (settings?.settings.opensearch_indexing_enabled) {
-      items.push(sidebarItem(ADMIN_ROUTES.INDEX_MIGRATION));
-    }
-
     collections.push({ name: "", items });
   }
 
@@ -101,6 +97,9 @@ function buildCollections(
         ...sidebarItem(ADMIN_ROUTES.SEARCH_SETTINGS),
         error: settings?.settings.needs_reindexing,
       });
+    }
+    if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
+      docsItems.push(sidebarItem(ADMIN_ROUTES.INDEX_MIGRATION));
     }
     collections.push({ name: "Documents & Knowledge", items: docsItems });
   }
