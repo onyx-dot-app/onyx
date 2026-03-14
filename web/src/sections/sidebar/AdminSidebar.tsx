@@ -3,7 +3,6 @@
 import { useCallback, useRef, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import Text from "@/refresh-components/texts/Text";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
@@ -16,11 +15,15 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Disabled } from "@opal/core";
-import { SvgX } from "@opal/icons";
+import { SvgUserManage, SvgX } from "@opal/icons";
+import { Content } from "@opal/layouts";
 import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
-import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
+import { Section } from "@/layouts/general-layouts";
+import Text from "@/refresh-components/texts/Text";
+import { getUserDisplayName } from "@/lib/user";
+import { APP_SLOGAN } from "@/lib/constants";
 
 interface SidebarItemEntry {
   name: string;
@@ -330,14 +333,40 @@ export default function AdminSidebar({
           </div>
         }
         footer={
-          <div className="flex flex-col gap-2">
-            {settings.webVersion && (
-              <Text as="p" text02 secondaryBody className="px-2">
-                {`Onyx version: ${settings.webVersion}`}
+          <Section padding={0.5} gap={0.5} height="fit" alignItems="start">
+            <div className="px-[0.38rem]">
+              <Content
+                icon={SvgUserManage}
+                title={getUserDisplayName(user)}
+                sizePreset="main-ui"
+                variant="body"
+                prominence="muted"
+              />
+            </div>
+            <div className="flex flex-row gap-1 px-[0.38rem]">
+              <Text text03 secondaryAction>
+                <a
+                  className="underline"
+                  href="https://onyx.app"
+                  target="_blank"
+                >
+                  Onyx
+                </a>
               </Text>
-            )}
-            <UserAvatarPopover />
-          </div>
+              <Text text03 secondaryBody>
+                |
+              </Text>
+              {settings.webVersion ? (
+                <Text text03 secondaryBody>
+                  {settings.webVersion}
+                </Text>
+              ) : (
+                <Text text03 secondaryBody>
+                  {APP_SLOGAN}
+                </Text>
+              )}
+            </div>
+          </Section>
         }
       >
         {filteredCollections.map((collection, collectionIndex) => {
