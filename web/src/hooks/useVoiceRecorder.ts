@@ -140,7 +140,7 @@ class VoiceRecorderSession {
     this.websocket.onerror = () => this.onError("Connection failed");
 
     // Set up audio capture
-    this.audioContext = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
+    this.audioContext = new AudioContext();
     this.sourceNode = this.audioContext.createMediaStreamSource(
       this.mediaStream
     );
