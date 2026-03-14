@@ -320,6 +320,14 @@ export const connectorConfigs: Record<
         description: "Index issues from repositories",
         default: true,
       },
+      {
+        type: "checkbox",
+        query: "Include code files?",
+        label: "Include Code Files",
+        name: "include_code_files",
+        description: "Index repository files (code, documentation, configs)",
+        default: false,
+      },
     ],
   },
   bitbucket: {
@@ -1896,6 +1904,7 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+  include_code_files: boolean;
 }
 
 export interface BitbucketConfig {
