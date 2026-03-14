@@ -756,7 +756,7 @@ export const connectorConfigs: Record<
         name: "jira_service_management_base_url",
         optional: false,
         description:
-          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+          "The base URL of your Jira Service Management instance (e.g., https://your-domain.atlassian.net)",
       },
       {
         type: "checkbox",
