@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 
 from ee.onyx.server.tenants.models import ApproveUserRequest
 from ee.onyx.server.tenants.models import PendingUserSnapshot
@@ -13,6 +12,8 @@ from onyx.auth.invited_users import get_pending_users
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
 from onyx.auth.users import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -32,7 +33,7 @@ async def request_invite(
         logger.exception(
             f"Failed to invite self to tenant {invite_request.tenant_id}: {e}"
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
 
 @router.get("/users/pending")
@@ -64,7 +65,7 @@ async def accept_invite(
         accept_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
         logger.exception(f"Failed to accept invite: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to accept invitation")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to accept invitation")
 
 
 @router.post("/users/invite/deny")
@@ -79,4 +80,4 @@ async def deny_invite(
         deny_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
         logger.exception(f"Failed to deny invite: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to deny invitation")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to deny invitation")

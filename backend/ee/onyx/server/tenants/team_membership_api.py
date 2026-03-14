@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
@@ -12,6 +11,8 @@ from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import UserByEmail
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -30,13 +31,14 @@ async def leave_organization(
     tenant_id = get_current_tenant_id()
 
     if current_user.email != user_email.user_email:
-        raise HTTPException(
-            status_code=403, detail="You can only leave the organization as yourself"
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only leave the organization as yourself",
         )
 
     user_to_delete = get_user_by_email(user_email.user_email, db_session)
     if user_to_delete is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.USER_NOT_FOUND, "User not found")
 
     num_admin_users = await get_user_count(only_admin_users=True)
 
@@ -53,9 +55,9 @@ async def leave_organization(
             logger.exception(
                 f"Failed to delete user from control plane for tenant {tenant_id}: {e}"
             )
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to remove user from control plane: {str(e)}",
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                f"Failed to remove user from control plane: {str(e)}",
             )
 
     db_session.expunge(user_to_delete)
