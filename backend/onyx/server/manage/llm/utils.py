@@ -373,4 +373,9 @@ def is_embedding_model(model_name: str) -> bool:
     Naive implementation of checking if a model is an
     embedding model by checking if embedding is in the name
     """
-    return "embedding" in model_name
+    from litellm import get_model_info
+
+    model_info = get_model_info(model_name)
+    is_embedding_mode = model_info.get("mode") == "embedding"
+
+    return is_embedding_mode

@@ -3,6 +3,7 @@
 from onyx.server.manage.llm.utils import generate_bedrock_display_name
 from onyx.server.manage.llm.utils import generate_ollama_display_name
 from onyx.server.manage.llm.utils import infer_vision_support
+from onyx.server.manage.llm.utils import is_embedding_model
 from onyx.server.manage.llm.utils import is_reasoning_model
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
@@ -209,3 +210,31 @@ class TestIsReasoningModel:
             is_reasoning_model("anthropic/claude-3-5-sonnet", "Claude 3.5 Sonnet")
             is False
         )
+
+
+class TestIsEmbeddingModel:
+    """Tests for embedding model detection."""
+
+    def test_openai_embedding_ada(self) -> None:
+        assert is_embedding_model("text-embedding-ada-002") is True
+
+    def test_openai_embedding_3_small(self) -> None:
+        assert is_embedding_model("text-embedding-3-small") is True
+
+    def test_openai_embedding_3_large(self) -> None:
+        assert is_embedding_model("text-embedding-3-large") is True
+
+    def test_cohere_embed_model(self) -> None:
+        assert is_embedding_model("embed-english-v3.0") is True
+
+    def test_bedrock_titan_embed(self) -> None:
+        assert is_embedding_model("amazon.titan-embed-text-v1") is True
+
+    def test_gpt4o_not_embedding(self) -> None:
+        assert is_embedding_model("gpt-4o") is False
+
+    def test_gpt4_not_embedding(self) -> None:
+        assert is_embedding_model("gpt-4") is False
+
+    def test_dall_e_not_embedding(self) -> None:
+        assert is_embedding_model("dall-e-3") is False
