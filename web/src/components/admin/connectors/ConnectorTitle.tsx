@@ -65,12 +65,29 @@ export const ConnectorTitle = ({
         typedConnector.connector_specific_config.page_id
       );
     }
-  } else if (connector.source === "jira") {
+  } else if (
+    connector.source === "jira" ||
+    connector.source === "jira_service_management"
+  ) {
     const typedConnector = connector as Connector<JiraConfig>;
-    additionalMetadata.set(
-      "Jira Project URL",
-      typedConnector.connector_specific_config.jira_project_url
-    );
+    const jiraBaseUrl =
+      typedConnector.connector_specific_config.jira_base_url ||
+      typedConnector.connector_specific_config.jira_project_url;
+    const projectKey = typedConnector.connector_specific_config.project_key;
+    if (jiraBaseUrl) {
+      additionalMetadata.set(
+        "Jira Base URL",
+        jiraBaseUrl
+      );
+    }
+    if (projectKey) {
+      additionalMetadata.set(
+        connector.source === "jira_service_management"
+          ? "Service Desk Project"
+          : "Project Key",
+        projectKey
+      );
+    }
   } else if (connector.source === "slack") {
     const typedConnector = connector as Connector<SlackConfig>;
     if (
