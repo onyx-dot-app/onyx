@@ -166,6 +166,7 @@ export default function UserFilters({
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
+            data-testid="filter-role"
             leftIcon={SvgUsers}
             active={hasRoleFilter}
             onClear={() => onRolesChange([])}
@@ -213,6 +214,7 @@ export default function UserFilters({
       >
         <Popover.Trigger asChild>
           <FilterButton
+            data-testid="filter-group"
             leftIcon={SvgUsers}
             active={hasGroupFilter}
             onClear={() => onGroupsChange([])}
@@ -267,6 +269,7 @@ export default function UserFilters({
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
+            data-testid="filter-status"
             leftIcon={SvgUsers}
             active={hasStatusFilter}
             onClear={() => onStatusesChange([])}
