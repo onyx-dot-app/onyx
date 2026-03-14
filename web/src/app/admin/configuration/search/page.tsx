@@ -131,7 +131,7 @@ function Main() {
 
           <div className="mt-4">
             <Button variant="action" href="/admin/embeddings">
-              Update Search Settings
+              Update Index Settings
             </Button>
           </div>
         </>
