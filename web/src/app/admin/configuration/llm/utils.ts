@@ -31,13 +31,14 @@ import {
   OpenRouterFetchParams,
   LiteLLMProxyFetchParams,
 } from "@/interfaces/llm";
-import { SvgAws, SvgOpenrouter } from "@opal/icons";
+import { SvgAvian, SvgAws, SvgOpenrouter } from "@opal/icons";
 
 // Aggregator providers that host models from multiple vendors
 export const AGGREGATOR_PROVIDERS = new Set([
   "bedrock",
   "bedrock_converse",
   "openrouter",
+  "avian",
   "ollama_chat",
   "lm_studio",
   "litellm_proxy",
@@ -78,6 +79,7 @@ export const getProviderIcon = (
     bedrock_converse: SvgAws,
     openrouter: SvgOpenrouter,
     litellm_proxy: LiteLLMIcon,
+    avian: SvgAvian,
     vertex_ai: GeminiIcon,
   };
 

@@ -42,6 +42,7 @@ import { AzureModal } from "@/sections/modals/llmConfig/AzureModal";
 import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
 import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
 import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
+import { AvianModal } from "@/sections/modals/llmConfig/AvianModal";
 import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
 import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
 import { LiteLLMProxyModal } from "@/sections/modals/llmConfig/LiteLLMProxyModal";
@@ -105,6 +106,13 @@ const PROVIDER_MODAL_MAP: Record<
   ),
   openrouter: (d, open, onOpenChange) => (
     <OpenRouterModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  avian: (d, open, onOpenChange) => (
+    <AvianModal
       shouldMarkAsDefault={d}
       open={open}
       onOpenChange={onOpenChange}

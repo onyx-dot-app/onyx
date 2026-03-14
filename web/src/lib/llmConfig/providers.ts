@@ -6,6 +6,7 @@ import {
   SvgOllama,
   SvgCloud,
   SvgAws,
+  SvgAvian,
   SvgOpenrouter,
   SvgServer,
   SvgAzure,
@@ -25,6 +26,7 @@ const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   [LLMProviderName.LITELLM_PROXY]: SvgLitellm,
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
+  [LLMProviderName.AVIAN]: SvgAvian,
   [LLMProviderName.LM_STUDIO]: SvgLmStudio,
 
   // fallback
@@ -41,6 +43,7 @@ const PROVIDER_PRODUCT_NAMES: Record<string, string> = {
   [LLMProviderName.LITELLM_PROXY]: "LiteLLM Proxy",
   [LLMProviderName.OLLAMA_CHAT]: "Ollama",
   [LLMProviderName.OPENROUTER]: "OpenRouter",
+  [LLMProviderName.AVIAN]: "Avian",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
 
   // fallback
@@ -57,6 +60,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   [LLMProviderName.LITELLM_PROXY]: "LiteLLM Proxy",
   [LLMProviderName.OLLAMA_CHAT]: "Ollama",
   [LLMProviderName.OPENROUTER]: "OpenRouter",
+  [LLMProviderName.AVIAN]: "Avian",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
 
   // fallback
