@@ -339,6 +339,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -427,7 +428,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -484,6 +485,10 @@ class JiraConnector(
         self._project_permissions_cache: dict[str, Any] = {}
 
     @property
+    def document_source(self) -> DocumentSource:
+        return DocumentSource.JIRA
+
+    @property
     def comment_email_blacklist(self) -> tuple:
         return tuple(email.strip() for email in self._comment_email_blacklist)
 
@@ -520,6 +525,7 @@ class JiraConnector(
                 jira_client=self.jira_client,
                 jira_project=project_key,
                 add_prefix=add_prefix,
+                source=self.document_source,
             )
         return self._project_permissions_cache[cache_key]
 
@@ -776,6 +782,7 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source=self.document_source,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
