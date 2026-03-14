@@ -25,6 +25,7 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
+from onyx.onyxbot.slack.blocks import CodeSnippet
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.models import SlackMessageInfo
@@ -132,6 +133,65 @@ def build_slack_context_str(
         message_strs.append(message_text)
 
     return slack_context_str + "\n\n".join(message_strs)
+
+
+# Normalize common LLM language aliases to Slack's expected snippet_type values.
+# Slack silently falls back to plain text for unrecognized types, so this map
+# only needs to cover the most common mismatches.
+_SNIPPET_TYPE_MAP: dict[str, str] = {
+    "py": "python",
+    "js": "javascript",
+    "ts": "typescript",
+    "tsx": "typescript",
+    "jsx": "javascript",
+    "sh": "shell",
+    "bash": "shell",
+    "zsh": "shell",
+    "yml": "yaml",
+    "rb": "ruby",
+    "rs": "rust",
+    "cs": "csharp",
+    "md": "markdown",
+    "txt": "text",
+    "text": "plain_text",
+}
+
+
+def _upload_code_snippets(
+    client: WebClient,
+    channel: str,
+    thread_ts: str,
+    snippets: list[CodeSnippet],
+    logger: OnyxLoggingAdapter,
+    receiver_ids: list[str] | None = None,
+    send_as_ephemeral: bool | None = None,
+) -> None:
+    """Upload extracted code blocks as Slack file snippets in the thread."""
+    for snippet in snippets:
+        try:
+            snippet_type = _SNIPPET_TYPE_MAP.get(snippet.language, snippet.language)
+            client.files_upload_v2(
+                channel=channel,
+                thread_ts=thread_ts,
+                content=snippet.code,
+                filename=snippet.filename,
+                snippet_type=snippet_type,
+            )
+        except Exception:
+            logger.warning(
+                f"Failed to upload code snippet {snippet.filename}, "
+                "falling back to inline code block"
+            )
+            # Fall back to posting as a regular message with code fences,
+            # preserving the same visibility as the primary response.
+            respond_in_thread_or_channel(
+                client=client,
+                channel=channel,
+                receiver_ids=receiver_ids,
+                text=f"```{snippet.language}\n{snippet.code}\n```",
+                thread_ts=thread_ts,
+                send_as_ephemeral=send_as_ephemeral,
+            )
 
 
 def handle_regular_answer(
@@ -385,7 +445,7 @@ def handle_regular_answer(
         offer_ephemeral_publication = False
         skip_ai_feedback = False
 
-    all_blocks = build_slack_response_blocks(
+    all_blocks, code_snippets = build_slack_response_blocks(
         message_info=message_info,
         answer=answer,
         channel_conf=channel_conf,
@@ -411,6 +471,20 @@ def handle_regular_answer(
             unfurl=False,
             send_as_ephemeral=send_as_ephemeral,
         )
+
+        # Upload extracted code blocks as Slack file snippets so they
+        # render as collapsible, syntax-highlighted blocks in the thread.
+        snippet_thread_ts = target_thread_ts or message_ts_to_respond_to
+        if code_snippets and snippet_thread_ts:
+            _upload_code_snippets(
+                client=client,
+                channel=channel,
+                thread_ts=snippet_thread_ts,
+                snippets=code_snippets,
+                logger=logger,
+                receiver_ids=target_receiver_ids,
+                send_as_ephemeral=send_as_ephemeral,
+            )
 
         # For DM (ephemeral message), we need to create a thread via a normal message so the user can see
         # the ephemeral message. This also will give the user a notification which ephemeral message does not.
