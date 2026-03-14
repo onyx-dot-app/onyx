@@ -124,7 +124,7 @@ function InputChipField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={chips.length === 0 ? placeholder : undefined}
+        placeholder={placeholder}
         className={cn(
           "flex-1 min-w-[80px] h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
           innerClasses[variant],

@@ -7,6 +7,7 @@ import { Disabled } from "@opal/core";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
+import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
 import { inviteUsers } from "./svc";
 
@@ -148,6 +149,11 @@ export default function InviteUsersModal({
             placeholder="Add emails to invite, comma separated"
             layout="stacked"
           />
+          {chips.some((c) => c.error) && (
+            <Text secondaryBody className="text-status-warning-text pt-1">
+              Some email addresses are invalid and will be skipped.
+            </Text>
+          )}
         </Modal.Body>
 
         <Modal.Footer>

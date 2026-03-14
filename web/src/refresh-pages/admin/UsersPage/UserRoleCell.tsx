@@ -90,46 +90,45 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
   const currentIcon = ROLE_ICONS[user.role] ?? SvgUser;
 
   return (
-    <div className="[&_button]:rounded-08">
-      <Disabled disabled={isUpdating}>
-        <Popover open={open} onOpenChange={setOpen}>
-          <Popover.Trigger asChild>
-            <OpenButton
-              icon={currentIcon}
-              variant="select-tinted"
-              width="full"
-              justifyContent="between"
-            >
-              {USER_ROLE_LABELS[user.role]}
-            </OpenButton>
-          </Popover.Trigger>
-          <Popover.Content align="start">
-            <div className="flex flex-col gap-1 p-1 min-w-[160px]">
-              {SELECTABLE_ROLES.map((role) => {
-                if (
-                  role === UserRole.GLOBAL_CURATOR &&
-                  !isPaidEnterpriseFeaturesEnabled
-                ) {
-                  return null;
-                }
-                const isSelected = user.role === role;
-                const icon = ROLE_ICONS[role] ?? SvgUser;
-                return (
-                  <LineItem
-                    key={role}
-                    icon={isSelected ? SvgCheck : icon}
-                    selected={isSelected}
-                    emphasized={isSelected}
-                    onClick={() => handleSelect(role)}
-                  >
-                    {USER_ROLE_LABELS[role]}
-                  </LineItem>
-                );
-              })}
-            </div>
-          </Popover.Content>
-        </Popover>
-      </Disabled>
-    </div>
+    <Disabled disabled={isUpdating}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <Popover.Trigger asChild>
+          <OpenButton
+            icon={currentIcon}
+            variant="select-tinted"
+            width="full"
+            justifyContent="between"
+            roundingVariant="compact"
+          >
+            {USER_ROLE_LABELS[user.role]}
+          </OpenButton>
+        </Popover.Trigger>
+        <Popover.Content align="start">
+          <div className="flex flex-col gap-1 p-1 min-w-[160px]">
+            {SELECTABLE_ROLES.map((role) => {
+              if (
+                role === UserRole.GLOBAL_CURATOR &&
+                !isPaidEnterpriseFeaturesEnabled
+              ) {
+                return null;
+              }
+              const isSelected = user.role === role;
+              const icon = ROLE_ICONS[role] ?? SvgUser;
+              return (
+                <LineItem
+                  key={role}
+                  icon={isSelected ? SvgCheck : icon}
+                  selected={isSelected}
+                  emphasized={isSelected}
+                  onClick={() => handleSelect(role)}
+                >
+                  {USER_ROLE_LABELS[role]}
+                </LineItem>
+              );
+            })}
+          </div>
+        </Popover.Content>
+      </Popover>
+    </Disabled>
   );
 }
