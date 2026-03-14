@@ -26,7 +26,11 @@ def jira_service_management_doc_sync(
     jsm_connector = JiraServiceManagementConnector(
         **cc_pair.connector.connector_specific_config,
     )
-    credential_json = cc_pair.credential.credential_json.get_value(apply_mask=False) if cc_pair.credential.credential_json else {}
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
     jsm_connector.load_credentials(credential_json)
 
     yield from generic_doc_sync(
