@@ -1,3 +1,5 @@
+export const IS_DEV = process.env.NODE_ENV === "development";
+
 export enum AuthType {
   BASIC = "basic",
   GOOGLE_OAUTH = "google_oauth",

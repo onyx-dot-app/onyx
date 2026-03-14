@@ -3,6 +3,8 @@
  * Plays audio chunks as they arrive for smooth, low-latency playback.
  */
 
+import { IS_DEV } from "@/lib/constants";
+
 /**
  * HTTPStreamingTTSPlayer - Uses HTTP streaming with MediaSource Extensions
  * for smooth, gapless audio playback. This is the recommended approach for
@@ -382,9 +384,8 @@ export class WebSocketStreamingTTSPlayer {
     const { token } = await tokenResponse.json();
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const isDev = window.location.port === "3000";
-    const host = isDev ? "localhost:8080" : window.location.host;
-    const path = isDev
+    const host = IS_DEV ? "localhost:8080" : window.location.host;
+    const path = IS_DEV
       ? "/voice/synthesize/stream"
       : "/api/voice/synthesize/stream";
     return `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`;
