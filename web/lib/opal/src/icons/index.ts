@@ -133,7 +133,6 @@ export { default as SvgPieChart } from "@opal/icons/pie-chart";
 export { default as SvgPin } from "@opal/icons/pin";
 export { default as SvgPinned } from "@opal/icons/pinned";
 export { default as SvgPlayCircle } from "@opal/icons/play-circle";
-export { default as SvgProgressBars } from "@opal/icons/progress-bars";
 export { default as SvgPlug } from "@opal/icons/plug";
 export { default as SvgPlus } from "@opal/icons/plus";
 export { default as SvgPlusCircle } from "@opal/icons/plus-circle";
