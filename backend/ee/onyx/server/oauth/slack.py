@@ -4,7 +4,6 @@ from typing import cast
 
 import requests
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -19,6 +18,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from shared_configs.contextvars import get_current_tenant_id
@@ -103,9 +104,9 @@ def handle_slack_oauth_callback(
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     if not SlackOAuth.CLIENT_ID or not SlackOAuth.CLIENT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Slack client ID or client secret is not configured.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Slack client ID or client secret is not configured.",
         )
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -126,9 +127,9 @@ def handle_slack_oauth_callback(
 
     session_json_bytes = cast(bytes, r.get(r_key))
     if not session_json_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Slack OAuth failed - OAuth state key not found: key={r_key}",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Slack OAuth failed - OAuth state key not found: key={r_key}",
         )
 
     session_json = session_json_bytes.decode("utf-8")
@@ -155,9 +156,9 @@ def handle_slack_oauth_callback(
         response_data = response.json()
 
         if not response_data.get("ok"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Slack OAuth failed: {response_data.get('error')}",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"Slack OAuth failed: {response_data.get('error')}",
             )
 
         # Extract token and team information
@@ -173,6 +174,8 @@ def handle_slack_oauth_callback(
         )
 
         create_credential(credential_info, user, db_session)
+    except OnyxError:
+        raise
     except Exception as e:
         return JSONResponse(
             status_code=500,
