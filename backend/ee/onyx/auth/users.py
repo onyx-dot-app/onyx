@@ -3,9 +3,7 @@ from datetime import datetime
 
 import jwt
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Request
-from fastapi import status
 
 from ee.onyx.configs.app_configs import SUPER_CLOUD_API_KEY
 from ee.onyx.configs.app_configs import SUPER_USERS
@@ -14,6 +12,8 @@ from onyx.auth.users import current_admin_user
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 
@@ -43,12 +43,12 @@ async def current_cloud_superuser(
 ) -> User:
     api_key = request.headers.get("Authorization", "").replace("Bearer ", "")
     if api_key != SUPER_CLOUD_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Invalid API key")
 
     if user and user.email not in SUPER_USERS:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. User must be a cloud superuser to perform this action.",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Access denied. User must be a cloud superuser to perform this action.",
         )
     return user
 
