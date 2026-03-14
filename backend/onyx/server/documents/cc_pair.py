@@ -3,7 +3,6 @@ from http import HTTPStatus
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
@@ -53,6 +52,8 @@ from onyx.db.permission_sync_attempt import (
 from onyx.db.permission_sync_attempt import (
     get_recent_doc_permission_sync_attempts_for_cc_pair,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
@@ -87,8 +88,9 @@ def get_cc_pair_index_attempts(
             cc_pair_id, db_session, user, get_editable=False
         )
         if not user_has_access:
-            raise HTTPException(
-                status_code=400, detail="CC Pair not found for current user permissions"
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                "CC Pair not found for current user permissions",
             )
 
     total_count = count_index_attempts_for_cc_pair(
@@ -123,8 +125,9 @@ def get_cc_pair_permission_sync_attempts(
             cc_pair_id, db_session, user, get_editable=False
         )
         if not user_has_access:
-            raise HTTPException(
-                status_code=400, detail="CC Pair not found for current user permissions"
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                "CC Pair not found for current user permissions",
             )
 
     # Get all permission sync attempts for this cc pair
@@ -160,8 +163,9 @@ def get_cc_pair_full_info(
         cc_pair_id, db_session, user, get_editable=False
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=404, detail="CC Pair not found for current user permissions"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
         )
     editable_cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id, db_session, user, get_editable=True
@@ -264,9 +268,9 @@ def update_cc_pair_status(
     )
 
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Connection not found for current user's permissions",
         )
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
@@ -339,8 +343,9 @@ def update_cc_pair_name(
         get_editable=True,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400, detail="CC Pair not found for current user's permissions"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user's permissions",
         )
 
     try:
@@ -351,7 +356,7 @@ def update_cc_pair_name(
         )
     except IntegrityError:
         db_session.rollback()
-        raise HTTPException(status_code=400, detail="Name must be unique")
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Name must be unique")
 
 
 @router.put("/admin/cc-pair/{cc_pair_id}/property")
@@ -368,8 +373,9 @@ def update_cc_pair_property(
         get_editable=True,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400, detail="CC Pair not found for current user's permissions"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user's permissions",
         )
 
     # Can we centralize logic for updating connector properties
@@ -387,8 +393,9 @@ def update_cc_pair_property(
 
         msg = "Pruning frequency updated successfully"
     else:
-        raise HTTPException(
-            status_code=400, detail=f"Property name {update_request.name} is not valid."
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Property name {update_request.name} is not valid.",
         )
 
     return StatusResponse(success=True, message=msg, data=cc_pair_id)
@@ -407,9 +414,9 @@ def get_cc_pair_last_pruned(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="cc_pair not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "cc_pair not found for current user's permissions",
         )
 
     return cc_pair.last_pruned
@@ -431,19 +438,16 @@ def prune_cc_pair(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Connection not found for current user's permissions",
         )
 
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.prune.fenced:
-        raise HTTPException(
-            status_code=HTTPStatus.CONFLICT,
-            detail="Pruning task already in progress.",
-        )
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Pruning task already in progress.")
 
     logger.info(
         f"Pruning cc_pair: cc_pair={cc_pair_id} "
@@ -455,10 +459,7 @@ def prune_cc_pair(
         client_app, cc_pair, db_session, r, tenant_id
     )
     if not payload_id:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail="Pruning task creation failed.",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Pruning task creation failed.")
 
     logger.info(f"Pruning queued: cc_pair={cc_pair.id} id={payload_id}")
 
@@ -587,20 +588,21 @@ def associate_credential_to_connector(
         delete_connector(db_session, connector_id)
         db_session.commit()
 
-        raise HTTPException(
-            status_code=400, detail="Connector validation error: " + str(e)
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
+            "Connector validation error: " + str(e),
         )
     except IntegrityError as e:
         logger.error(f"IntegrityError: {e}")
         delete_connector(db_session, connector_id)
         db_session.commit()
 
-        raise HTTPException(status_code=400, detail="Name must be unique")
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Name must be unique")
 
     except Exception as e:
         logger.exception(f"Unexpected error: {e}")
 
-        raise HTTPException(status_code=500, detail="Unexpected error")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Unexpected error")
 
 
 @router.delete(
