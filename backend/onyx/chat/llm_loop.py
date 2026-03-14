@@ -72,6 +72,19 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
+class EmptyLLMResponseError(RuntimeError):
+    """Raised when the upstream model stream completes without any usable output."""
+
+    def __init__(self, provider: str, model: str, tool_choice: ToolChoiceOptions):
+        self.provider = provider
+        self.model = model
+        self.tool_choice = tool_choice.value
+        super().__init__(
+            "The model returned an empty response "
+            "(no text, reasoning, or tool calls)."
+        )
+
+
 def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
     """Detect XML-style marshaled tool calls emitted as plain text."""
     if not text:
@@ -613,7 +626,12 @@ def run_llm_loop(
             )
             citation_processor.update_citation_mapping(project_citation_mapping)
 
-        llm_step_result: LlmStepResult | None = None
+        llm_step_result = LlmStepResult(
+            reasoning=None,
+            answer=None,
+            tool_calls=None,
+            raw_answer=None,
+        )
 
         # Pass the total budget to construct_message_history, which will handle token allocation
         available_tokens = llm.config.max_input_tokens
@@ -1084,12 +1102,18 @@ def run_llm_loop(
                 # As long as 1 tool with citeable documents is called at any point, we ask the LLM to try to cite
                 should_cite_documents = True
 
-        if not llm_step_result or not llm_step_result.answer:
+        if not llm_step_result.answer and not llm_step_result.tool_calls:
+            raise EmptyLLMResponseError(
+                provider=llm.config.model_provider,
+                model=llm.config.model_name,
+                tool_choice=tool_choice,
+            )
+
+        if not llm_step_result.answer:
             raise RuntimeError(
-                "The LLM did not return an answer. "
-                "Typically this is an issue with LLMs that do not support tool calling natively, "
-                "or the model serving API is not configured correctly. "
-                "This may also happen with models that are lower quality outputting invalid tool calls."
+                "The LLM did not return a final answer after tool execution. "
+                "Typically this indicates invalid tool-call output, a model/provider mismatch, "
+                "or serving API misconfiguration."
             )
 
         emitter.emit(

@@ -29,6 +29,7 @@ from onyx.chat.compression import compress_chat_history
 from onyx.chat.compression import find_summary_for_branch
 from onyx.chat.compression import get_compression_params
 from onyx.chat.emitter import get_default_emitter
+from onyx.chat.llm_loop import EmptyLLMResponseError
 from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
@@ -926,9 +927,34 @@ def handle_stream_message_objects(
         return
 
     except Exception as e:
-        logger.exception(f"Failed to process chat message due to {e}")
-        error_msg = str(e)
         stack_trace = traceback.format_exc()
+
+        if isinstance(e, EmptyLLMResponseError):
+            logger.warning(
+                "LLM returned an empty response "
+                f"(provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})"
+            )
+
+            yield StreamingError(
+                error=(
+                    "The selected model returned an empty response "
+                    "(no text, reasoning, or tool calls). "
+                    "This is usually caused by upstream model/provider behavior "
+                    "or output-token settings."
+                ),
+                stack_trace=stack_trace,
+                error_code="EMPTY_LLM_RESPONSE",
+                is_retryable=True,
+                details={
+                    "model": e.model,
+                    "provider": e.provider,
+                    "tool_choice": e.tool_choice,
+                },
+            )
+            db_session.rollback()
+            return
+
+        logger.exception(f"Failed to process chat message due to {e}")
 
         if llm:
             client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
@@ -1087,8 +1113,12 @@ def gather_stream(
         raise ValueError("Message ID is required")
 
     if answer is None:
-        # This should never be the case as these non-streamed flows do not have a stop-generation signal
-        raise RuntimeError("Answer was not generated")
+        if error_msg is not None:
+            answer = ""
+        else:
+            # This should never be the case as these non-streamed flows do not
+            # have a stop-generation signal
+            raise RuntimeError("Answer was not generated")
 
     return ChatBasicResponse(
         answer=answer,
