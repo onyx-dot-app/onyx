@@ -589,6 +589,34 @@ export class OnyxApiClient {
   }
 
   /**
+   * Polls until a user group has finished syncing (is_up_to_date === true).
+   * Newly created groups start syncing immediately; many mutation endpoints
+   * reject requests while the group is still syncing.
+   */
+  async waitForGroupSync(
+    groupId: number,
+    timeout: number = 30000
+  ): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const res = await this.get("/manage/admin/user-group");
+          const groups = await res.json();
+          const group = groups.find(
+            (g: { id: number; is_up_to_date: boolean }) => g.id === groupId
+          );
+          return group?.is_up_to_date ?? false;
+        },
+        {
+          message: `User group ${groupId} did not finish syncing`,
+          timeout,
+        }
+      )
+      .toBe(true);
+    this.log(`User group ${groupId} finished syncing`);
+  }
+
+  /**
    * Deletes a user group.
    *
    * @param groupId - The user group ID to delete

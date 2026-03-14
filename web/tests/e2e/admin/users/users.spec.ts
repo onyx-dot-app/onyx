@@ -531,6 +531,7 @@ test.describe("Users page — group management", () => {
     await withApiContext(browser, async (api) => {
       await api.registerUser(testUserEmail, TEST_PASSWORD);
       testGroupId = await api.createUserGroup(groupName);
+      await api.waitForGroupSync(testGroupId);
     });
   });
 
