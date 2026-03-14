@@ -2024,6 +2024,7 @@ export interface JiraServiceManagementConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+  scoped_token?: boolean;
 }
 
 export interface SalesforceConfig {
