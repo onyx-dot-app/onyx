@@ -10,7 +10,6 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 export interface ClientLayoutProps {
   children: React.ReactNode;
-  enableEnterprise: boolean;
   enableCloud: boolean;
 }
 
@@ -48,11 +47,7 @@ const SETTINGS_LAYOUT_PREFIXES = [
   ADMIN_ROUTES.SCIM.path,
 ];
 
-export function ClientLayout({
-  children,
-  enableEnterprise,
-  enableCloud,
-}: ClientLayoutProps) {
+export function ClientLayout({ children, enableCloud }: ClientLayoutProps) {
   const pathname = usePathname();
   const settings = useSettingsContext();
 
@@ -86,10 +81,7 @@ export function ClientLayout({
         <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">{children}</div>
       ) : (
         <>
-          <AdminSidebar
-            enableCloudSS={enableCloud}
-            enableEnterpriseSS={enableEnterprise}
-          />
+          <AdminSidebar enableCloudSS={enableCloud} />
           <div
             data-main-container
             className={cn(

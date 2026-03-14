@@ -176,21 +176,15 @@ function buildCollections(
 
 interface AdminSidebarProps {
   enableCloudSS: boolean;
-  enableEnterpriseSS: boolean;
 }
 
-export default function AdminSidebar({
-  enableCloudSS,
-  enableEnterpriseSS,
-}: AdminSidebarProps) {
+export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
   const { kgExposed } = useIsKGExposed();
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
-
   const enableEnterprise = usePaidEnterpriseFeaturesEnabled();
-
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
 
