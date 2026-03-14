@@ -4,10 +4,11 @@ from typing import Any
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter
-from fastapi import HTTPException
 from fastapi import Request
 
 from model_server.utils import simple_log_function_time
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding
@@ -188,7 +189,7 @@ async def process_embed_request(
         )
 
     if not embed_request.texts:
-        raise HTTPException(status_code=400, detail="No texts to be embedded")
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "No texts to be embedded")
 
     if not all(embed_request.texts):
         raise ValueError("Empty strings are not allowed for embedding.")
@@ -211,14 +212,12 @@ async def process_embed_request(
         )
         return EmbedResponse(embeddings=embeddings)
     except RateLimitError as e:
-        raise HTTPException(
-            status_code=429,
-            detail=str(e),
-        )
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, str(e))
     except Exception as e:
         logger.exception(
             f"Error during embedding process: provider={embed_request.provider_type} model={embed_request.model_name}"
         )
-        raise HTTPException(
-            status_code=500, detail=f"Error during embedding process: {e}"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"Error during embedding process: {e}",
         )

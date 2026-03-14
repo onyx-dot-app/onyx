@@ -18,6 +18,7 @@ from model_server.encoders import router as encoders_router
 from model_server.management_endpoints import router as management_router
 from model_server.utils import get_gpu_type
 from onyx import __version__
+from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_onyx_request_id_middleware
@@ -107,6 +108,8 @@ def get_model_app() -> FastAPI:
 
     application.include_router(management_router)
     application.include_router(encoders_router)
+
+    register_onyx_exception_handlers(application)
 
     request_id_prefix = "INF"
     if INDEXING_ONLY:
