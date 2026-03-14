@@ -96,7 +96,7 @@ function buildCollections(
       sidebarItem(ADMIN_ROUTES.ADD_CONNECTOR),
       sidebarItem(ADMIN_ROUTES.DOCUMENT_SETS),
     ];
-    if (!enableCloud) {
+    if (!isCurator && !enableCloud) {
       docsItems.push({
         ...sidebarItem(ADMIN_ROUTES.SEARCH_SETTINGS),
         error: settings?.settings.needs_reindexing,
