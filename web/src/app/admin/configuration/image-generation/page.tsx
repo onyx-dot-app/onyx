@@ -2,9 +2,9 @@
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import ImageGenerationContent from "./ImageGenerationContent";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.IMAGE_GENERATION]!;
+const route = ADMIN_ROUTES.IMAGE_GENERATION;
 
 export default function Page() {
   return (

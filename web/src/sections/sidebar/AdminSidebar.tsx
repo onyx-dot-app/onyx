@@ -1,90 +1,55 @@
 "use client";
 
+import { useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { CgArrowsExpandUpLeft } from "react-icons/cg";
-import Text from "@/refresh-components/texts/Text";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { CombinedSettings } from "@/interfaces/settings";
+import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import SidebarBody from "@/sections/sidebar/SidebarBody";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { Disabled } from "@opal/core";
+import { SvgArrowUpCircle, SvgUserManage, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
   useLicense,
   hasActiveSubscription,
 } from "@/lib/billing";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { CombinedSettings } from "@/interfaces/settings";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import SidebarBody from "@/sections/sidebar/SidebarBody";
-import {
-  SvgActions,
-  SvgActivity,
-  SvgArrowUpCircle,
-  SvgBarChart,
-  SvgCpu,
-  SvgFileText,
-  SvgFolder,
-  SvgGlobe,
-  SvgArrowExchange,
-  SvgImage,
-  SvgKey,
-  SvgOnyxLogo,
-  SvgOnyxOctagon,
-  SvgSearch,
-  SvgServer,
-  SvgSettings,
-  SvgShield,
-  SvgThumbsUp,
-  SvgUploadCloud,
-  SvgUser,
-  SvgUsers,
-  SvgZoomIn,
-  SvgPaintBrush,
-  SvgDiscordMono,
-  SvgWallet,
-  SvgAudio,
-} from "@opal/icons";
-import SvgMcp from "@opal/icons/mcp";
-import { ADMIN_PATHS, sidebarItem } from "@/lib/admin-routes";
-import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+import { Content } from "@opal/layouts";
+import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
+import useFilter from "@/hooks/useFilter";
+import { IconFunctionComponent } from "@opal/types";
+import { Section } from "@/layouts/general-layouts";
+import Text from "@/refresh-components/texts/Text";
+import { getUserDisplayName } from "@/lib/user";
+import { APP_SLOGAN } from "@/lib/constants";
 
-const connectors_items = () => [
-  sidebarItem(ADMIN_PATHS.INDEXING_STATUS),
-  sidebarItem(ADMIN_PATHS.ADD_CONNECTOR),
-];
+const SECTIONS = {
+  UNLABELED: "",
+  AGENTS_AND_ACTIONS: "Agents & Actions",
+  DOCUMENTS_AND_KNOWLEDGE: "Documents & Knowledge",
+  INTEGRATIONS: "Integrations",
+  PERMISSIONS: "Permissions",
+  ORGANIZATION: "Organization",
+  USAGE: "Usage",
+} as const;
 
-const document_management_items = () => [
-  sidebarItem(ADMIN_PATHS.DOCUMENT_SETS),
-  sidebarItem(ADMIN_PATHS.DOCUMENT_EXPLORER),
-  sidebarItem(ADMIN_PATHS.DOCUMENT_FEEDBACK),
-];
+interface SidebarItemEntry {
+  section: string;
+  name: string;
+  icon: IconFunctionComponent;
+  link: string;
+  error?: boolean;
+  disabled?: boolean;
+}
 
-const custom_agents_items = (isCurator: boolean, enableEnterprise: boolean) => {
-  const items = [sidebarItem(ADMIN_PATHS.AGENTS)];
-
-  if (!isCurator) {
-    items.push(
-      sidebarItem(ADMIN_PATHS.SLACK_BOTS),
-      sidebarItem(ADMIN_PATHS.DISCORD_BOTS)
-    );
-  }
-
-  items.push(
-    sidebarItem(ADMIN_PATHS.MCP_ACTIONS),
-    sidebarItem(ADMIN_PATHS.OPENAPI_ACTIONS)
-  );
-
-  if (enableEnterprise) {
-    items.push(sidebarItem(ADMIN_PATHS.STANDARD_ANSWERS));
-  }
-
-  return items;
-};
-
-const collections = (
+function buildItems(
   isCurator: boolean,
   enableCloud: boolean,
   enableEnterprise: boolean,
@@ -92,204 +57,260 @@ const collections = (
   kgExposed: boolean,
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean
-) => {
+): SidebarItemEntry[] {
   const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const items: SidebarItemEntry[] = [];
 
-  return [
-    ...(vectorDbEnabled
-      ? [
-          {
-            name: "Connectors",
-            items: connectors_items(),
-          },
-        ]
-      : []),
-    ...(vectorDbEnabled
-      ? [
-          {
-            name: "Document Management",
-            items: document_management_items(),
-          },
-        ]
-      : []),
-    {
-      name: "Custom Agents",
-      items: custom_agents_items(isCurator, enableEnterprise),
-    },
-    ...(isCurator && enableEnterprise
-      ? [
-          {
-            name: "User Management",
-            items: [sidebarItem(ADMIN_PATHS.GROUPS)],
-          },
-        ]
-      : []),
-    ...(!isCurator
-      ? [
-          {
-            name: "Configuration",
-            items: [
-              sidebarItem(ADMIN_PATHS.CHAT_PREFERENCES),
-              sidebarItem(ADMIN_PATHS.LLM_MODELS),
-              sidebarItem(ADMIN_PATHS.WEB_SEARCH),
-              sidebarItem(ADMIN_PATHS.IMAGE_GENERATION),
-              {
-                name: "Voice",
-                icon: SvgAudio,
-                link: "/admin/configuration/voice",
-              },
-              sidebarItem(ADMIN_PATHS.CODE_INTERPRETER),
-              ...(!enableCloud && vectorDbEnabled
-                ? [
-                    {
-                      ...sidebarItem(ADMIN_PATHS.SEARCH_SETTINGS),
-                      error: settings?.settings.needs_reindexing,
-                    },
-                  ]
-                : []),
-              sidebarItem(ADMIN_PATHS.DOCUMENT_PROCESSING),
-              ...(kgExposed ? [sidebarItem(ADMIN_PATHS.KNOWLEDGE_GRAPH)] : []),
-            ],
-          },
-          {
-            name: "User Management",
-            items: [
-              ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.GROUPS)] : []),
-              sidebarItem(ADMIN_PATHS.API_KEYS),
-              sidebarItem(ADMIN_PATHS.TOKEN_RATE_LIMITS),
-            ],
-          },
-          {
-            name: "Permissions",
-            items: [
-              sidebarItem(ADMIN_PATHS.USERS),
-              ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.SCIM)] : []),
-            ],
-          },
-          ...(enableEnterprise
-            ? [
-                {
-                  name: "Performance",
-                  items: [
-                    sidebarItem(ADMIN_PATHS.USAGE),
-                    ...(settings?.settings.query_history_type !== "disabled"
-                      ? [sidebarItem(ADMIN_PATHS.QUERY_HISTORY)]
-                      : []),
-                    ...(!enableCloud && customAnalyticsEnabled
-                      ? [sidebarItem(ADMIN_PATHS.CUSTOM_ANALYTICS)]
-                      : []),
-                  ],
-                },
-              ]
-            : []),
-          {
-            name: "Settings",
-            items: [
-              ...(enableEnterprise ? [sidebarItem(ADMIN_PATHS.THEME)] : []),
-              // Always show billing/upgrade - community users need access to upgrade
-              {
-                ...sidebarItem(ADMIN_PATHS.BILLING),
-                ...(hasSubscription
-                  ? {}
-                  : { name: "Upgrade Plan", icon: SvgArrowUpCircle }),
-              },
-              ...(settings?.settings.opensearch_indexing_enabled
-                ? [sidebarItem(ADMIN_PATHS.INDEX_MIGRATION)]
-                : []),
-            ],
-          },
-        ]
-      : []),
-  ];
-};
+  const add = (section: string, route: Parameters<typeof sidebarItem>[0]) => {
+    items.push({ ...sidebarItem(route), section });
+  };
 
-interface AdminSidebarProps {
-  // Cloud flag is passed from server component (Layout.tsx) since it's a build-time constant
-  enableCloudSS: boolean;
-  // Enterprise flag is also passed but we override it with runtime license check below
-  enableEnterpriseSS: boolean;
+  const addDisabled = (
+    section: string,
+    route: Parameters<typeof sidebarItem>[0],
+    isDisabled: boolean
+  ) => {
+    items.push({ ...sidebarItem(route), section, disabled: isDisabled });
+  };
+
+  // 1. No header — core configuration (admin only)
+  if (!isCurator) {
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.LLM_MODELS);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.WEB_SEARCH);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.IMAGE_GENERATION);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.VOICE);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.CODE_INTERPRETER);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
+
+    if (vectorDbEnabled && kgExposed) {
+      add(SECTIONS.UNLABELED, ADMIN_ROUTES.KNOWLEDGE_GRAPH);
+    }
+
+    if (!enableCloud && customAnalyticsEnabled) {
+      addDisabled(
+        SECTIONS.UNLABELED,
+        ADMIN_ROUTES.CUSTOM_ANALYTICS,
+        !enableEnterprise
+      );
+    }
+  }
+
+  // 2. Agents & Actions
+  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.AGENTS);
+  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.MCP_ACTIONS);
+  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
+
+  // 3. Documents & Knowledge
+  if (vectorDbEnabled) {
+    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
+    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
+    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
+    if (!isCurator && !enableCloud) {
+      items.push({
+        ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
+        section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
+        error: settings?.settings.needs_reindexing,
+      });
+    }
+    if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
+      add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEX_MIGRATION);
+    }
+  }
+
+  // 4. Integrations (admin only)
+  if (!isCurator) {
+    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS);
+    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.SLACK_BOTS);
+    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.DISCORD_BOTS);
+  }
+
+  // 5. Permissions
+  if (!isCurator) {
+    add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.USERS);
+    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, !enableEnterprise);
+    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, !enableEnterprise);
+  } else if (enableEnterprise) {
+    add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
+  }
+
+  // 6. Organization (admin only)
+  if (!isCurator) {
+    if (hasSubscription) {
+      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
+    } else {
+      items.push({
+        section: SECTIONS.ORGANIZATION,
+        name: "Upgrade Plan",
+        icon: SvgArrowUpCircle,
+        link: ADMIN_ROUTES.BILLING.path,
+      });
+    }
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.TOKEN_RATE_LIMITS);
+    addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
+  }
+
+  // 7. Usage (admin only)
+  if (!isCurator) {
+    addDisabled(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, !enableEnterprise);
+    if (settings?.settings.query_history_type !== "disabled") {
+      addDisabled(
+        SECTIONS.USAGE,
+        ADMIN_ROUTES.QUERY_HISTORY,
+        !enableEnterprise
+      );
+    }
+  }
+
+  return items;
 }
 
-export default function AdminSidebar({
-  enableCloudSS,
-  enableEnterpriseSS,
-}: AdminSidebarProps) {
+/** Preserve section ordering while grouping consecutive items by section. */
+function groupBySection(items: SidebarItemEntry[]) {
+  const groups: { section: string; items: SidebarItemEntry[] }[] = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (last && last.section === item.section) {
+      last.items.push(item);
+    } else {
+      groups.push({ section: item.section, items: [item] });
+    }
+  }
+  return groups;
+}
+
+interface AdminSidebarProps {
+  enableCloudSS: boolean;
+}
+
+export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
   const { kgExposed } = useIsKGExposed();
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
-  const { data: billingData } = useBillingInformation();
-  const { data: licenseData } = useLicense();
-
-  // Use runtime license check for enterprise features
-  // This checks settings.ee_features_enabled (set by backend based on license status)
-  // Falls back to build-time check if LICENSE_ENFORCEMENT_ENABLED=false
   const enableEnterprise = usePaidEnterpriseFeaturesEnabled();
-
+  const { data: billingData, isLoading: billingLoading } =
+    useBillingInformation();
+  const { data: licenseData, isLoading: licenseLoading } = useLicense();
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
+  // Default to true while loading to avoid flashing "Upgrade Plan"
+  const hasSubscriptionOrLicense =
+    billingLoading || licenseLoading
+      ? true
+      : Boolean(
+          (billingData && hasActiveSubscription(billingData)) ||
+            licenseData?.has_license
+        );
 
-  // Check if user has an active subscription or license for billing link text
-  // Show "Plans & Billing" if they have either (even if Stripe connection fails)
-  const hasSubscription = Boolean(
-    (billingData && hasActiveSubscription(billingData)) ||
-      licenseData?.has_license
-  );
-
-  const items = collections(
+  const allItems = buildItems(
     isCurator,
     enableCloudSS,
     enableEnterprise,
     settings,
     kgExposed,
     customAnalyticsEnabled,
-    hasSubscription
+    hasSubscriptionOrLicense
   );
+
+  const itemExtractor = useCallback((item: SidebarItemEntry) => item.name, []);
+
+  const { query, setQuery, filtered } = useFilter(allItems, itemExtractor);
+
+  const groups = groupBySection(filtered);
 
   return (
     <SidebarWrapper>
       <SidebarBody
         scrollKey="admin-sidebar"
         actionButtons={
-          <SidebarTab
-            icon={({ className }) => (
-              <CgArrowsExpandUpLeft className={className} size={16} />
-            )}
-            href="/app"
-          >
-            Exit Admin
-          </SidebarTab>
-        }
-        footer={
-          <div className="flex flex-col gap-2">
-            {settings.webVersion && (
-              <Text as="p" text02 secondaryBody className="px-2">
-                {`Onyx version: ${settings.webVersion}`}
-              </Text>
-            )}
-            <UserAvatarPopover />
+          <div className="flex flex-col w-full">
+            <SidebarTab
+              icon={({ className }) => <SvgX className={className} size={16} />}
+              href="/app"
+              lowlight
+            >
+              Exit Admin Panel
+            </SidebarTab>
+            <InputTypeIn
+              variant="internal"
+              leftSearchIcon
+              placeholder="Search..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
           </div>
         }
+        footer={
+          <Section gap={0} height="fit" alignItems="start">
+            <div className="p-[0.38rem] w-full">
+              <Content
+                icon={SvgUserManage}
+                title={getUserDisplayName(user)}
+                sizePreset="main-ui"
+                variant="body"
+                prominence="muted"
+                widthVariant="full"
+              />
+            </div>
+            <div className="flex flex-row gap-1 p-[0.38rem] w-full">
+              <Text text03 secondaryAction>
+                <a
+                  className="underline"
+                  href="https://onyx.app"
+                  target="_blank"
+                >
+                  Onyx
+                </a>
+              </Text>
+              <Text text03 secondaryBody>
+                |
+              </Text>
+              {settings.webVersion ? (
+                <Text text03 secondaryBody>
+                  {settings.webVersion}
+                </Text>
+              ) : (
+                <Text text03 secondaryBody>
+                  {APP_SLOGAN}
+                </Text>
+              )}
+            </div>
+          </Section>
+        }
       >
-        {items.map((collection, index) => (
-          <SidebarSection key={index} title={collection.name}>
-            <div className="flex flex-col w-full">
-              {collection.items.map(({ link, icon: Icon, name }, index) => (
+        {groups.map((group, groupIndex) => {
+          const tabs = group.items.map(({ link, icon, name, disabled }) => (
+            <Disabled key={link} disabled={disabled}>
+              {/*
+                # NOTE (@raunakab)
+                We intentionally add a `div` intermediary here.
+                Without it, the disabled styling that is default provided by the `Disabled` component (which we want here) would be overridden by the custom disabled styling provided by the `SidebarTab`.
+                Therefore, in order to avoid that overriding, we add a layer of indirection.
+              */}
+              <div>
                 <SidebarTab
-                  key={index}
-                  href={link}
-                  selected={pathname.startsWith(link)}
-                  icon={({ className }) => (
-                    <Icon className={className} size={16} />
-                  )}
+                  lowlight={disabled}
+                  icon={icon}
+                  href={disabled ? undefined : link}
+                  selected={!disabled && pathname.startsWith(link)}
                 >
                   {name}
                 </SidebarTab>
-              ))}
-            </div>
-          </SidebarSection>
-        ))}
+              </div>
+            </Disabled>
+          ));
+
+          if (!group.section) {
+            return <div key={groupIndex}>{tabs}</div>;
+          }
+
+          return (
+            <SidebarSection key={groupIndex} title={group.section}>
+              {tabs}
+            </SidebarSection>
+          );
+        })}
       </SidebarBody>
     </SidebarWrapper>
   );

@@ -8,11 +8,11 @@ import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
+const route = ADMIN_ROUTES.GROUPS;
 
 function Main() {
   const [showForm, setShowForm] = useState(false);

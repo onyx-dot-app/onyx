@@ -2,9 +2,9 @@
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import OpenApiPageContent from "@/sections/actions/OpenApiPageContent";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.OPENAPI_ACTIONS]!;
+const route = ADMIN_ROUTES.OPENAPI_ACTIONS;
 
 export default function Main() {
   return (

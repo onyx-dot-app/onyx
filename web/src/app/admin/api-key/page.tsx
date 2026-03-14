@@ -32,9 +32,9 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.API_KEYS]!;
+const route = ADMIN_ROUTES.API_KEYS;
 
 function Main() {
   const {

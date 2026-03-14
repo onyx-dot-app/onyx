@@ -6,7 +6,7 @@ import Card from "@/refresh-components/cards/Card";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
-import { ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 // ---------------------------------------------------------------------------
 // Stats cell — number + label + hover filter icon
@@ -67,7 +67,7 @@ function ScimCard() {
         variant="section"
         paddingVariant="fit"
         rightChildren={
-          <Link href={ADMIN_PATHS.SCIM}>
+          <Link href={ADMIN_ROUTES.SCIM.path}>
             <Button prominence="tertiary" rightIcon={SvgArrowUpRight} size="sm">
               Manage
             </Button>

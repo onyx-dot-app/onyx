@@ -31,9 +31,9 @@ import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgSettings } from "@opal/icons";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.KNOWLEDGE_GRAPH]!;
+const route = ADMIN_ROUTES.KNOWLEDGE_GRAPH;
 
 function createDomainField(
   name: string,
