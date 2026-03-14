@@ -238,3 +238,7 @@ class TestIsEmbeddingModel:
 
     def test_dall_e_not_embedding(self) -> None:
         assert is_embedding_model("dall-e-3") is False
+
+    def test_unknown_custom_model_not_embedding(self) -> None:
+        """Custom/local models not in litellm's model DB should default to False."""
+        assert is_embedding_model("my-custom-local-model-v1") is False
