@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
@@ -25,7 +25,18 @@ import Text from "@/refresh-components/texts/Text";
 import { getUserDisplayName } from "@/lib/user";
 import { APP_SLOGAN } from "@/lib/constants";
 
+const SECTIONS = {
+  UNLABELED: "",
+  AGENTS_AND_ACTIONS: "Agents & Actions",
+  DOCUMENTS_AND_KNOWLEDGE: "Documents & Knowledge",
+  INTEGRATIONS: "Integrations",
+  PERMISSIONS: "Permissions",
+  ORGANIZATION: "Organization",
+  USAGE: "Usage",
+} as const;
+
 interface SidebarItemEntry {
+  section: string;
   name: string;
   icon: IconFunctionComponent;
   link: string;
@@ -33,145 +44,123 @@ interface SidebarItemEntry {
   disabled?: boolean;
 }
 
-interface SidebarCollection {
-  name: string;
-  items: SidebarItemEntry[];
-}
-
-function buildCollections(
+function buildItems(
   isCurator: boolean,
   enableCloud: boolean,
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
   kgExposed: boolean,
   customAnalyticsEnabled: boolean
-): SidebarCollection[] {
+): SidebarItemEntry[] {
   const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const items: SidebarItemEntry[] = [];
 
-  const collections: SidebarCollection[] = [];
+  const add = (section: string, route: Parameters<typeof sidebarItem>[0]) => {
+    items.push({ ...sidebarItem(route), section });
+  };
 
-  // 1. No header — core configuration + remaining tabs (admin only)
+  const addDisabled = (
+    section: string,
+    route: Parameters<typeof sidebarItem>[0],
+    isDisabled: boolean
+  ) => {
+    items.push({ ...sidebarItem(route), section, disabled: isDisabled });
+  };
+
+  // 1. No header — core configuration (admin only)
   if (!isCurator) {
-    const items: SidebarItemEntry[] = [
-      sidebarItem(ADMIN_ROUTES.LLM_MODELS),
-      sidebarItem(ADMIN_ROUTES.WEB_SEARCH),
-      sidebarItem(ADMIN_ROUTES.IMAGE_GENERATION),
-      sidebarItem(ADMIN_ROUTES.VOICE),
-      sidebarItem(ADMIN_ROUTES.CODE_INTERPRETER),
-      sidebarItem(ADMIN_ROUTES.CHAT_PREFERENCES),
-    ];
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.LLM_MODELS);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.WEB_SEARCH);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.IMAGE_GENERATION);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.VOICE);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.CODE_INTERPRETER);
+    add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
 
     if (vectorDbEnabled && kgExposed) {
-      items.push(sidebarItem(ADMIN_ROUTES.KNOWLEDGE_GRAPH));
+      add(SECTIONS.UNLABELED, ADMIN_ROUTES.KNOWLEDGE_GRAPH);
     }
 
     if (!enableCloud && customAnalyticsEnabled) {
-      items.push({
-        ...sidebarItem(ADMIN_ROUTES.CUSTOM_ANALYTICS),
-        disabled: !enableEnterprise,
-      });
+      addDisabled(
+        SECTIONS.UNLABELED,
+        ADMIN_ROUTES.CUSTOM_ANALYTICS,
+        !enableEnterprise
+      );
     }
-
-    collections.push({ name: "", items });
   }
 
   // 2. Agents & Actions
-  collections.push({
-    name: "Agents & Actions",
-    items: [
-      sidebarItem(ADMIN_ROUTES.AGENTS),
-      sidebarItem(ADMIN_ROUTES.MCP_ACTIONS),
-      sidebarItem(ADMIN_ROUTES.OPENAPI_ACTIONS),
-    ],
-  });
+  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.AGENTS);
+  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.MCP_ACTIONS);
+  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
 
   // 3. Documents & Knowledge
   if (vectorDbEnabled) {
-    const docsItems: SidebarItemEntry[] = [
-      sidebarItem(ADMIN_ROUTES.INDEXING_STATUS),
-      sidebarItem(ADMIN_ROUTES.ADD_CONNECTOR),
-      sidebarItem(ADMIN_ROUTES.DOCUMENT_SETS),
-    ];
+    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
+    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
+    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
     if (!isCurator && !enableCloud) {
-      docsItems.push({
+      items.push({
         ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
+        section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
         error: settings?.settings.needs_reindexing,
       });
     }
     if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
-      docsItems.push(sidebarItem(ADMIN_ROUTES.INDEX_MIGRATION));
+      add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEX_MIGRATION);
     }
-    collections.push({ name: "Documents & Knowledge", items: docsItems });
   }
 
   // 4. Integrations (admin only)
   if (!isCurator) {
-    collections.push({
-      name: "Integrations",
-      items: [
-        sidebarItem(ADMIN_ROUTES.API_KEYS),
-        sidebarItem(ADMIN_ROUTES.SLACK_BOTS),
-        sidebarItem(ADMIN_ROUTES.DISCORD_BOTS),
-      ],
-    });
+    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS);
+    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.SLACK_BOTS);
+    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.DISCORD_BOTS);
   }
 
   // 5. Permissions
   if (!isCurator) {
-    collections.push({
-      name: "Permissions",
-      items: [
-        sidebarItem(ADMIN_ROUTES.USERS),
-        {
-          ...sidebarItem(ADMIN_ROUTES.GROUPS),
-          disabled: !enableEnterprise,
-        },
-        {
-          ...sidebarItem(ADMIN_ROUTES.SCIM),
-          disabled: !enableEnterprise,
-        },
-      ],
-    });
+    add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.USERS);
+    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, !enableEnterprise);
+    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, !enableEnterprise);
   } else if (enableEnterprise) {
-    collections.push({
-      name: "Permissions",
-      items: [sidebarItem(ADMIN_ROUTES.GROUPS)],
-    });
+    add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
   }
 
   // 6. Organization (admin only)
   if (!isCurator) {
-    collections.push({
-      name: "Organization",
-      items: [
-        sidebarItem(ADMIN_ROUTES.BILLING),
-        sidebarItem(ADMIN_ROUTES.TOKEN_RATE_LIMITS),
-        {
-          ...sidebarItem(ADMIN_ROUTES.THEME),
-          disabled: !enableEnterprise,
-        },
-      ],
-    });
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.TOKEN_RATE_LIMITS);
+    addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
   }
 
   // 7. Usage (admin only)
   if (!isCurator) {
-    const usageItems: SidebarItemEntry[] = [
-      {
-        ...sidebarItem(ADMIN_ROUTES.USAGE),
-        disabled: !enableEnterprise,
-      },
-    ];
+    addDisabled(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, !enableEnterprise);
     if (settings?.settings.query_history_type !== "disabled") {
-      usageItems.push({
-        ...sidebarItem(ADMIN_ROUTES.QUERY_HISTORY),
-        disabled: !enableEnterprise,
-      });
+      addDisabled(
+        SECTIONS.USAGE,
+        ADMIN_ROUTES.QUERY_HISTORY,
+        !enableEnterprise
+      );
     }
-    collections.push({ name: "Usage", items: usageItems });
   }
 
-  return collections;
+  return items;
+}
+
+/** Preserve section ordering while grouping consecutive items by section. */
+function groupBySection(items: SidebarItemEntry[]) {
+  const groups: { section: string; items: SidebarItemEntry[] }[] = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (last && last.section === item.section) {
+      last.items.push(item);
+    } else {
+      groups.push({ section: item.section, items: [item] });
+    }
+  }
+  return groups;
 }
 
 interface AdminSidebarProps {
@@ -188,7 +177,7 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
 
-  const allCollections = buildCollections(
+  const allItems = buildItems(
     isCurator,
     enableCloudSS,
     enableEnterprise,
@@ -197,42 +186,11 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
     customAnalyticsEnabled
   );
 
-  // Flatten all items for filtering, then reconstruct collections
-  const allItems = useMemo(
-    () =>
-      allCollections.flatMap((collection) =>
-        collection.items.map((item) => ({
-          ...item,
-          _collectionName: collection.name,
-        }))
-      ),
-    [allCollections]
-  );
+  const itemExtractor = useCallback((item: SidebarItemEntry) => item.name, []);
 
-  const itemExtractor = useCallback(
-    (item: SidebarItemEntry & { _collectionName: string }) => item.name,
-    []
-  );
+  const { query, setQuery, filtered } = useFilter(allItems, itemExtractor);
 
-  const {
-    query,
-    setQuery,
-    filtered: filteredItems,
-  } = useFilter(allItems, itemExtractor);
-
-  const filteredCollections = useMemo(() => {
-    const collectionMap = new Map<string, SidebarItemEntry[]>();
-    for (const collection of allCollections) {
-      collectionMap.set(collection.name, []);
-    }
-    for (const item of filteredItems) {
-      const { _collectionName, ...entry } = item;
-      collectionMap.get(_collectionName)!.push(entry);
-    }
-    return allCollections
-      .map((c) => ({ name: c.name, items: collectionMap.get(c.name)! }))
-      .filter((c) => c.items.length > 0);
-  }, [allCollections, filteredItems]);
+  const groups = groupBySection(filtered);
 
   return (
     <SidebarWrapper>
@@ -294,10 +252,16 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
           </Section>
         }
       >
-        {filteredCollections.map((collection, collectionIndex) => {
-          const tabs = collection.items.map(
-            ({ link, icon, name, disabled }) => (
-              <Disabled key={link} disabled={disabled}>
+        {groups.map((group, groupIndex) => {
+          const tabs = group.items.map(({ link, icon, name, disabled }) => (
+            <Disabled key={link} disabled={disabled}>
+              {/*
+                # NOTE (@raunakab)
+                We intentionally add a `div` intermediary here.
+                Without it, the disabled styling that is default provided by the `Disabled` component (which we want here) would be overridden by the custom disabled styling provided by the `SidebarTab`.
+                Therefore, in order to avoid that overriding, we add a layer of indirection.
+              */}
+              <div>
                 <SidebarTab
                   lowlight={disabled}
                   icon={icon}
@@ -306,16 +270,16 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
                 >
                   {name}
                 </SidebarTab>
-              </Disabled>
-            )
-          );
+              </div>
+            </Disabled>
+          ));
 
-          if (!collection.name) {
-            return <div key={collectionIndex}>{tabs}</div>;
+          if (!group.section) {
+            return <div key={groupIndex}>{tabs}</div>;
           }
 
           return (
-            <SidebarSection key={collectionIndex} title={collection.name}>
+            <SidebarSection key={groupIndex} title={group.section}>
               {tabs}
             </SidebarSection>
           );
