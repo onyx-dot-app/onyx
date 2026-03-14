@@ -46,7 +46,7 @@ attrs==25.4.0
     #   aiohttp
     #   jsonschema
     #   referencing
-black==25.1.0
+black==26.3.1
     # via onyx
 boto3==1.39.11
     # via
