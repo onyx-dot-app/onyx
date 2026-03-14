@@ -236,6 +236,8 @@ def full_deployment_setup() -> Generator[None, None, None]:
     NOTE: We deliberately duplicate this logic from
     backend/tests/external_dependency_unit/conftest.py because we need to set
     opensearch_available just for this module, not the entire test session.
+
+    TODO(ENG-3764)(andrei): Consolidate some of these test fixtures.
     """
     # Patch ENABLE_OPENSEARCH_INDEXING_FOR_ONYX just for this test because we
     # don't yet want that enabled for all tests.
