@@ -94,7 +94,7 @@ function buildCollections(
     ];
     if (!isCurator && !enableCloud) {
       docsItems.push({
-        ...sidebarItem(ADMIN_ROUTES.SEARCH_SETTINGS),
+        ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
         error: settings?.settings.needs_reindexing,
       });
     }
@@ -145,6 +145,7 @@ function buildCollections(
       name: "Organization",
       items: [
         sidebarItem(ADMIN_ROUTES.BILLING),
+        sidebarItem(ADMIN_ROUTES.TOKEN_RATE_LIMITS),
         {
           ...sidebarItem(ADMIN_ROUTES.THEME),
           disabled: !enableEnterprise,
@@ -167,7 +168,6 @@ function buildCollections(
         disabled: !enableEnterprise,
       });
     }
-    usageItems.push(sidebarItem(ADMIN_ROUTES.TOKEN_RATE_LIMITS));
     collections.push({ name: "Usage", items: usageItems });
   }
 

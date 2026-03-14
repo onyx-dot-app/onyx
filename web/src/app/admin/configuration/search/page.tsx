@@ -21,7 +21,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { useToastFromQuery } from "@/hooks/useToast";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const route = ADMIN_ROUTES.SEARCH_SETTINGS;
+const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
 export interface EmbeddingDetails {
   api_key: string;
