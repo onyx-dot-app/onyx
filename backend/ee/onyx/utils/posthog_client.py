@@ -9,6 +9,7 @@ from ee.onyx.configs.app_configs import POSTHOG_API_KEY
 from ee.onyx.configs.app_configs import POSTHOG_DEBUG_LOGS_ENABLED
 from ee.onyx.configs.app_configs import POSTHOG_HOST
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -18,12 +19,19 @@ def posthog_on_error(error: Any, items: Any) -> None:
     logger.error(f"PostHog error: {error}, items: {items}")
 
 
-posthog = Posthog(
-    project_api_key=POSTHOG_API_KEY,
-    host=POSTHOG_HOST,
-    debug=POSTHOG_DEBUG_LOGS_ENABLED,
-    on_error=posthog_on_error,
-)
+posthog: Posthog | None = None
+if POSTHOG_API_KEY:
+    posthog = Posthog(
+        project_api_key=POSTHOG_API_KEY,
+        host=POSTHOG_HOST,
+        debug=POSTHOG_DEBUG_LOGS_ENABLED,
+        on_error=posthog_on_error,
+    )
+elif MULTI_TENANT:
+    logger.warning(
+        "POSTHOG_API_KEY is not set but MULTI_TENANT is enabled — "
+        "PostHog telemetry and feature flags will be disabled"
+    )
 
 # For cross referencing between cloud and www Onyx sites
 # NOTE: These clients are separate because they are separate posthog projects.
@@ -60,7 +68,7 @@ def capture_and_sync_with_alternate_posthog(
         logger.error(f"Error capturing marketing posthog event: {e}")
 
     try:
-        if cloud_user_id := props.get("onyx_cloud_user_id"):
+        if posthog and (cloud_user_id := props.get("onyx_cloud_user_id")):
             cloud_props = props.copy()
             cloud_props.pop("onyx_cloud_user_id", None)
 
