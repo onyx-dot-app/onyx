@@ -135,7 +135,7 @@ backend = [
 
 # Dev tools
 dev = [
-    "black==25.1.0",
+    "black==26.3.1",
     "celery-types==0.19.0",
     "faker==40.1.2",
     "hatchling==1.28.0",
