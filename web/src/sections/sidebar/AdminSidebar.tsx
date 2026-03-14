@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
@@ -50,8 +50,8 @@ function buildCollections(
 
   const collections: SidebarCollection[] = [];
 
-  // 1. No header — core configuration + all remaining tabs
-  {
+  // 1. No header — core configuration + remaining tabs (admin only)
+  if (!isCurator) {
     const items: SidebarItemEntry[] = [
       sidebarItem(ADMIN_ROUTES.LLM_MODELS),
       sidebarItem(ADMIN_ROUTES.WEB_SEARCH),
@@ -154,22 +154,22 @@ function buildCollections(
     });
   }
 
-  // 7. Usage
+  // 7. Usage (admin only)
   if (!isCurator) {
-    collections.push({
-      name: "Usage",
-      items: [
-        {
-          ...sidebarItem(ADMIN_ROUTES.USAGE),
-          disabled: !enableEnterprise,
-        },
-        {
-          ...sidebarItem(ADMIN_ROUTES.QUERY_HISTORY),
-          disabled: !enableEnterprise,
-        },
-        sidebarItem(ADMIN_ROUTES.TOKEN_RATE_LIMITS),
-      ],
-    });
+    const usageItems: SidebarItemEntry[] = [
+      {
+        ...sidebarItem(ADMIN_ROUTES.USAGE),
+        disabled: !enableEnterprise,
+      },
+    ];
+    if (settings?.settings.query_history_type !== "disabled") {
+      usageItems.push({
+        ...sidebarItem(ADMIN_ROUTES.QUERY_HISTORY),
+        disabled: !enableEnterprise,
+      });
+    }
+    usageItems.push(sidebarItem(ADMIN_ROUTES.TOKEN_RATE_LIMITS));
+    collections.push({ name: "Usage", items: usageItems });
   }
 
   return collections;
@@ -229,7 +229,6 @@ export default function AdminSidebar({
 
   const filteredCollections = useMemo(() => {
     const collectionMap = new Map<string, SidebarItemEntry[]>();
-    // Preserve original collection order
     for (const collection of allCollections) {
       collectionMap.set(collection.name, []);
     }
@@ -241,73 +240,6 @@ export default function AdminSidebar({
       .map((c) => ({ name: c.name, items: collectionMap.get(c.name)! }))
       .filter((c) => c.items.length > 0);
   }, [allCollections, filteredItems]);
-
-  // Flat list of visible items for keyboard navigation
-  const visibleItems = useMemo(
-    () => filteredCollections.flatMap((c) => c.items),
-    [filteredCollections]
-  );
-
-  const focusIndexRef = useRef(-1);
-  const tabRefsRef = useRef<Map<string, HTMLElement>>(new Map());
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== "Tab" || !query) return;
-
-    e.preventDefault();
-
-    const len = visibleItems.length;
-    if (len === 0) return;
-
-    if (e.shiftKey) {
-      focusIndexRef.current =
-        focusIndexRef.current <= 0 ? len - 1 : focusIndexRef.current - 1;
-    } else {
-      focusIndexRef.current =
-        focusIndexRef.current >= len - 1 ? 0 : focusIndexRef.current + 1;
-    }
-
-    const item = visibleItems[focusIndexRef.current];
-    if (!item) return;
-    const el = tabRefsRef.current.get(item.link);
-    el?.focus();
-  };
-
-  const handleTabKeyDown = (
-    e: React.KeyboardEvent,
-    itemIndex: number,
-    link: string | undefined
-  ) => {
-    if (e.key === "Enter" && link) {
-      window.location.href = link;
-      return;
-    }
-
-    if (e.key !== "Tab" || !query) return;
-
-    e.preventDefault();
-
-    const len = visibleItems.length;
-    if (e.shiftKey) {
-      focusIndexRef.current = itemIndex <= 0 ? len - 1 : itemIndex - 1;
-    } else {
-      focusIndexRef.current = itemIndex >= len - 1 ? 0 : itemIndex + 1;
-    }
-
-    const item = visibleItems[focusIndexRef.current];
-    if (!item) return;
-    const el = tabRefsRef.current.get(item.link);
-    el?.focus();
-  };
-
-  // Reset focus index when query changes
-  const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setQuery(e.target.value);
-    focusIndexRef.current = -1;
-  };
-
-  // Track running index across collections for keyboard nav
-  let runningIndex = 0;
 
   return (
     <SidebarWrapper>
@@ -327,23 +259,23 @@ export default function AdminSidebar({
               leftSearchIcon
               placeholder="Search..."
               value={query}
-              onChange={handleQueryChange}
-              onKeyDown={handleSearchKeyDown}
+              onChange={(e) => setQuery(e.target.value)}
             />
           </div>
         }
         footer={
-          <Section padding={0.5} gap={0.5} height="fit" alignItems="start">
-            <div className="px-[0.38rem]">
+          <Section gap={0} height="fit" alignItems="start">
+            <div className="p-[0.38rem] w-full">
               <Content
                 icon={SvgUserManage}
                 title={getUserDisplayName(user)}
                 sizePreset="main-ui"
                 variant="body"
                 prominence="muted"
+                widthVariant="full"
               />
             </div>
-            <div className="flex flex-row gap-1 px-[0.38rem]">
+            <div className="flex flex-row gap-1 p-[0.38rem] w-full">
               <Text text03 secondaryAction>
                 <a
                   className="underline"
@@ -370,62 +302,19 @@ export default function AdminSidebar({
         }
       >
         {filteredCollections.map((collection, collectionIndex) => {
-          const tabs = (
-            <div className="flex flex-col w-full">
-              {collection.items.map((item) => {
-                const { link, icon: Icon, name, disabled } = item;
-                const itemIndex = runningIndex++;
-
-                const tab = (
-                  <div
-                    key={link}
-                    tabIndex={-1}
-                    ref={(el) => {
-                      if (el) {
-                        tabRefsRef.current.set(link, el);
-                      } else {
-                        tabRefsRef.current.delete(link);
-                      }
-                    }}
-                    onKeyDown={(e) =>
-                      handleTabKeyDown(
-                        e,
-                        itemIndex,
-                        disabled ? undefined : link
-                      )
-                    }
-                    className="outline-none"
-                  >
-                    {disabled ? (
-                      <Disabled disabled>
-                        <div>
-                          <SidebarTab
-                            lowlight
-                            icon={({ className }) => (
-                              <Icon className={className} size={16} />
-                            )}
-                          >
-                            {name}
-                          </SidebarTab>
-                        </div>
-                      </Disabled>
-                    ) : (
-                      <SidebarTab
-                        href={link}
-                        selected={pathname.startsWith(link)}
-                        icon={({ className }) => (
-                          <Icon className={className} size={16} />
-                        )}
-                      >
-                        {name}
-                      </SidebarTab>
-                    )}
-                  </div>
-                );
-
-                return tab;
-              })}
-            </div>
+          const tabs = collection.items.map(
+            ({ link, icon, name, disabled }) => (
+              <Disabled key={link} disabled={disabled}>
+                <SidebarTab
+                  lowlight={disabled}
+                  icon={icon}
+                  href={disabled ? undefined : link}
+                  selected={!disabled && pathname.startsWith(link)}
+                >
+                  {name}
+                </SidebarTab>
+              </Disabled>
+            )
           );
 
           if (!collection.name) {
