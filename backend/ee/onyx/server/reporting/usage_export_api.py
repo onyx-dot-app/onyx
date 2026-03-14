@@ -3,7 +3,6 @@ from datetime import datetime
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -17,6 +16,8 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -39,7 +40,7 @@ def generate_report(
             datetime.fromisoformat(params.period_from)
             datetime.fromisoformat(params.period_to)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     tenant_id = get_current_tenant_id()
     client_app.send_task(
@@ -64,7 +65,7 @@ def read_usage_report(
     try:
         file = get_usage_report_data(report_name)
     except (ValueError, RuntimeError) as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
     def iterfile() -> Generator[bytes, None, None]:
         while True:
@@ -88,4 +89,4 @@ def fetch_usage_reports(
     try:
         return get_all_usage_reports(db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))

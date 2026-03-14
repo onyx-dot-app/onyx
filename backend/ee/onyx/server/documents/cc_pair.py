@@ -1,9 +1,7 @@
 from datetime import datetime
-from http import HTTPStatus
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
@@ -19,6 +17,8 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.models import StatusResponse
@@ -42,9 +42,9 @@ def get_cc_pair_latest_sync(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="cc_pair not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "cc_pair not found for current user's permissions",
         )
 
     return cc_pair.last_time_perm_sync
@@ -66,18 +66,18 @@ def sync_cc_pair(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Connection not found for current user's permissions",
         )
 
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.permissions.fenced:
-        raise HTTPException(
-            status_code=HTTPStatus.CONFLICT,
-            detail="Permissions sync task already in progress.",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Permissions sync task already in progress.",
         )
 
     logger.info(
@@ -90,9 +90,9 @@ def sync_cc_pair(
         client_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail="Permissions sync task creation failed.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Permissions sync task creation failed.",
         )
 
     logger.info(f"Permissions sync queued: cc_pair={cc_pair_id} id={payload_id}")
@@ -116,9 +116,9 @@ def get_cc_pair_latest_group_sync(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="cc_pair not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "cc_pair not found for current user's permissions",
         )
 
     return cc_pair.last_time_external_group_sync
@@ -140,18 +140,18 @@ def sync_cc_pair_groups(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Connection not found for current user's permissions",
         )
 
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.external_group_sync.fenced:
-        raise HTTPException(
-            status_code=HTTPStatus.CONFLICT,
-            detail="External group sync task already in progress.",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "External group sync task already in progress.",
         )
 
     logger.info(
@@ -164,9 +164,9 @@ def sync_cc_pair_groups(
         client_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail="External group sync task creation failed.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "External group sync task creation failed.",
         )
 
     logger.info(f"External group sync queued: cc_pair={cc_pair_id} id={payload_id}")
