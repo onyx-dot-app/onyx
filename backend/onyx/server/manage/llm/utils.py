@@ -369,10 +369,7 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
 
 
 def is_embedding_model(model_name: str) -> bool:
-    """
-    Naive implementation of checking if a model is an
-    embedding model by checking if embedding is in the name
-    """
+    """Checks for if a model is an embedding model"""
     from litellm import get_model_info
 
     model_info = get_model_info(model_name)
