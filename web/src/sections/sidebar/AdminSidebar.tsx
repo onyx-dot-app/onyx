@@ -15,7 +15,12 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Disabled } from "@opal/core";
-import { SvgUserManage, SvgX } from "@opal/icons";
+import { SvgArrowUpCircle, SvgUserManage, SvgX } from "@opal/icons";
+import {
+  useBillingInformation,
+  useLicense,
+  hasActiveSubscription,
+} from "@/lib/billing";
 import { Content } from "@opal/layouts";
 import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
 import useFilter from "@/hooks/useFilter";
@@ -50,7 +55,8 @@ function buildItems(
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
   kgExposed: boolean,
-  customAnalyticsEnabled: boolean
+  customAnalyticsEnabled: boolean,
+  hasSubscription: boolean
 ): SidebarItemEntry[] {
   const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
   const items: SidebarItemEntry[] = [];
@@ -129,7 +135,16 @@ function buildItems(
 
   // 6. Organization (admin only)
   if (!isCurator) {
-    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
+    if (hasSubscription) {
+      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
+    } else {
+      items.push({
+        section: SECTIONS.ORGANIZATION,
+        name: "Upgrade Plan",
+        icon: SvgArrowUpCircle,
+        link: ADMIN_ROUTES.BILLING.path,
+      });
+    }
     add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.TOKEN_RATE_LIMITS);
     addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
   }
@@ -174,8 +189,14 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
   const { user } = useUser();
   const settings = useSettingsContext();
   const enableEnterprise = usePaidEnterpriseFeaturesEnabled();
+  const { data: billingData } = useBillingInformation();
+  const { data: licenseData } = useLicense();
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
+  const hasSubscriptionOrLicense = Boolean(
+    (billingData && hasActiveSubscription(billingData)) ||
+      licenseData?.has_license
+  );
 
   const allItems = buildItems(
     isCurator,
@@ -183,7 +204,8 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
     enableEnterprise,
     settings,
     kgExposed,
-    customAnalyticsEnabled
+    customAnalyticsEnabled,
+    hasSubscriptionOrLicense
   );
 
   const itemExtractor = useCallback((item: SidebarItemEntry) => item.name, []);
