@@ -189,14 +189,19 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
   const { user } = useUser();
   const settings = useSettingsContext();
   const enableEnterprise = usePaidEnterpriseFeaturesEnabled();
-  const { data: billingData } = useBillingInformation();
-  const { data: licenseData } = useLicense();
+  const { data: billingData, isLoading: billingLoading } =
+    useBillingInformation();
+  const { data: licenseData, isLoading: licenseLoading } = useLicense();
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
-  const hasSubscriptionOrLicense = Boolean(
-    (billingData && hasActiveSubscription(billingData)) ||
-      licenseData?.has_license
-  );
+  // Default to true while loading to avoid flashing "Upgrade Plan"
+  const hasSubscriptionOrLicense =
+    billingLoading || licenseLoading
+      ? true
+      : Boolean(
+          (billingData && hasActiveSubscription(billingData)) ||
+            licenseData?.has_license
+        );
 
   const allItems = buildItems(
     isCurator,
