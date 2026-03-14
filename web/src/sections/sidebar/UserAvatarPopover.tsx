@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
+import { LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/interfaces/settings";
 import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { checkUserIsNoAuthUser, logout } from "@/lib/user";
+import { checkUserIsNoAuthUser, getUserDisplayName, logout } from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import Text from "@/refresh-components/texts/Text";
@@ -26,20 +26,6 @@ import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
-
-function getDisplayName(email?: string, personalName?: string): string {
-  // Prioritize custom personal name if set
-  if (personalName && personalName.trim()) {
-    return personalName.trim();
-  }
-
-  // Fallback to email-derived username
-  if (!email) return ANONYMOUS_USER_NAME;
-  const atIndex = email.indexOf("@");
-  if (atIndex <= 0) return ANONYMOUS_USER_NAME;
-
-  return email.substring(0, atIndex);
-}
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
@@ -175,7 +161,7 @@ export default function UserAvatarPopover({
     errorHandlingFetcher
   );
 
-  const displayName = getDisplayName(user?.email, user?.personalization?.name);
+  const userDisplayName = getUserDisplayName(user);
   const undismissedCount =
     notifications?.filter((n) => !n.dismissed).length ?? 0;
   const hasNotifications = undismissedCount > 0;
@@ -209,7 +195,7 @@ export default function UserAvatarPopover({
                 )}
               >
                 <Text as="p" inverted secondaryBody>
-                  {displayName[0]?.toUpperCase()}
+                  {userDisplayName[0]?.toUpperCase()}
                 </Text>
               </InputAvatar>
             )}
@@ -231,7 +217,7 @@ export default function UserAvatarPopover({
             // Specifying a dummy `onClick` handler solves that.
             onClick={() => undefined}
           >
-            {displayName}
+            {userDisplayName}
           </SidebarTab>
         </div>
       </Popover.Trigger>

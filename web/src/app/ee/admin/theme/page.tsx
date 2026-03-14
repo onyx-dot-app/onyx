@@ -1,7 +1,7 @@
 "use client";
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import {
@@ -16,7 +16,7 @@ import * as Yup from "yup";
 import { EnterpriseSettings } from "@/interfaces/settings";
 import { useRouter } from "next/navigation";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.THEME]!;
+const route = ADMIN_ROUTES.THEME;
 
 const CHAR_LIMITS = {
   application_name: 50,

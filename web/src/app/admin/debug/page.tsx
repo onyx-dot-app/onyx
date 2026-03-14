@@ -16,9 +16,9 @@ import { Card } from "@/components/ui/card";
 import Text from "@/components/ui/text";
 import { Spinner } from "@/components/Spinner";
 import { SvgDownloadCloud } from "@opal/icons";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.DEBUG]!;
+const route = ADMIN_ROUTES.DEBUG;
 
 function Main() {
   const [categories, setCategories] = useState<string[]>([]);

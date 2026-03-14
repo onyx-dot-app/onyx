@@ -6,11 +6,11 @@ import { useSpecificUserGroup } from "./hook";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus } from "@/lib/hooks";
 import useUsers from "@/hooks/useUsers";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.GROUPS]!;
+const route = ADMIN_ROUTES.GROUPS;
 
 function Main({ groupId }: { groupId: string }) {
   const vectorDbEnabled = useVectorDbEnabled();

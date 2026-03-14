@@ -26,7 +26,7 @@ test.describe("Bot Configuration Page", () => {
     await expect(
       adminPage
         .locator('[aria-label="admin-page-title"]')
-        .getByText("Discord Bots")
+        .getByText("Discord Integration")
     ).toBeVisible();
   });
 

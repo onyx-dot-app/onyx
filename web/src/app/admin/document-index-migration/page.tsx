@@ -3,9 +3,9 @@
 import { useState } from "react";
 import useSWR from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.INDEX_MIGRATION]!;
+const route = ADMIN_ROUTES.INDEX_MIGRATION;
 
 import Card from "@/refresh-components/cards/Card";
 import { Content, ContentAction } from "@opal/layouts";
