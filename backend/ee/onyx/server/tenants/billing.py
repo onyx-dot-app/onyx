@@ -32,7 +32,7 @@ def fetch_stripe_checkout_session(
         "billing_period": billing_period,
         "seats": seats,
     }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=payload, timeout=10.0)
     if not response.ok:
         try:
             data = response.json()
@@ -57,7 +57,7 @@ def fetch_tenant_stripe_information(tenant_id: str) -> dict:
     }
     url = f"{CONTROL_PLANE_API_BASE_URL}/tenant-stripe-information"
     params = {"tenant_id": tenant_id}
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(url, headers=headers, params=params, timeout=10.0)
     response.raise_for_status()
     return response.json()
 
