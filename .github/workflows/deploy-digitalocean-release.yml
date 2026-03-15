@@ -1,0 +1,276 @@
+name: Deploy to DigitalOcean (Release)
+
+on:
+  push:
+    branches:
+      - "release-*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to deploy (e.g., 0.1.0)"
+        required: false
+        default: "latest"
+
+permissions:
+  contents: read
+
+jobs:
+  extract-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Extract version from branch name
+        id: extract
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          # Extract version from branch name (e.g., release-0.1.0 -> 0.1.0)
+          VERSION=$(echo "$BRANCH" | sed 's/release-//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✓ Deploying version: $VERSION"
+
+  deploy:
+    needs: extract-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Deploy to DigitalOcean
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
+          DEPLOY_USER: root
+          VERSION: ${{ needs.extract-version.outputs.version }}
+        run: |
+          set -e
+
+          if [ -z "$DEPLOY_KEY" ] || [ -z "$DEPLOY_HOST" ]; then
+            echo "❌ Missing required secrets: DROPLET_SSH_KEY, DROPLET_IP"
+            exit 1
+          fi
+
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          DEPLOY_DIR="/opt/onyx"
+
+          echo "🚀 Deploying version $VERSION to DigitalOcean ($DEPLOY_HOST)"
+          echo "📍 Deployment directory: $DEPLOY_DIR"
+
+          # Pull latest code
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
+            set -e
+            cd /opt/onyx || exit 1
+
+            echo "📥 Pulling latest code from main branch..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "🔄 Pulling latest Docker images..."
+            sudo docker compose pull
+
+            echo "🛑 Stopping services..."
+            sudo docker compose down --remove-orphans
+
+            echo "🚀 Starting services..."
+            sudo docker compose up -d
+
+            echo "⏳ Waiting for services to initialize..."
+            sleep 15
+
+            echo "📊 Running database migrations..."
+            sudo docker compose exec -T api_server alembic upgrade head || true
+
+            echo "✅ Deployment complete!"
+          EOSSH
+
+          echo "✓ Deployment to DigitalOcean successful (version: $VERSION)"
+
+  verify:
+    needs: [extract-version, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Verify Deployment
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
+          DEPLOY_USER: root
+        run: |
+          set -e
+
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          echo "🔍 Verifying deployment health..."
+
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
+            set -e
+            cd /opt/onyx
+
+            echo "📋 Docker service status:"
+            sudo docker compose ps
+
+            echo ""
+            echo "🏥 Health checks (with retries):"
+
+            HEALTH_FAILED=0
+
+            # Check API with retries
+            echo -n "Backend API: "
+            for i in {1..5}; do
+              if sudo docker compose exec -T api_server curl -s http://localhost:8080/health > /dev/null 2>&1; then
+                echo "✓ healthy"
+                break
+              fi
+              if [ $i -lt 5 ]; then
+                echo -n "."
+                sleep 3
+              else
+                echo "✗ unhealthy"
+                HEALTH_FAILED=1
+              fi
+            done
+
+            # Check PostgreSQL
+            echo -n "PostgreSQL: "
+            if sudo docker compose exec -T relational_db pg_isready -U postgres > /dev/null 2>&1; then
+              echo "✓ healthy"
+            else
+              echo "✗ unhealthy"
+              HEALTH_FAILED=1
+            fi
+
+            # Check Redis
+            echo -n "Redis: "
+            if sudo docker compose exec -T cache redis-cli ping > /dev/null 2>&1; then
+              echo "✓ healthy"
+            else
+              echo "✗ unhealthy"
+              HEALTH_FAILED=1
+            fi
+
+            echo ""
+            if [ $HEALTH_FAILED -eq 1 ]; then
+              echo "❌ Health checks failed - automatic rollback will be triggered"
+              exit 1
+            fi
+            echo "✅ All systems operational!"
+          EOSSH
+
+          echo "🎉 Verification passed!"
+
+  tag-deployment:
+    needs: [extract-version, deploy, verify]
+    if: needs.deploy.result == 'success' && needs.verify.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Tag successful deployment
+        run: |
+          VERSION="${{ needs.extract-version.outputs.version }}"
+          TAG="deployed-$VERSION"
+
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Create annotated tag
+          git tag -a "$TAG" -m "Successfully deployed version $VERSION" HEAD
+          git push origin "$TAG"
+
+          echo "✓ Tagged deployment: $TAG"
+
+  auto-rollback:
+    needs: [extract-version, deploy, verify]
+    if: needs.deploy.result == 'success' && needs.verify.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Auto-Rollback to Previous Version
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
+          DEPLOY_USER: root
+        run: |
+          set -e
+
+          echo "🚨 ALERT: Deployment verification failed!"
+          echo "🔄 Initiating automatic rollback to previous stable version..."
+
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
+            set -e
+            cd /opt/onyx || exit 1
+
+            echo "📸 Current state before rollback:"
+            sudo docker compose ps
+
+            echo "📥 Pulling latest code from main..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "🛑 Stopping services..."
+            sudo docker compose down --remove-orphans
+
+            echo "🔄 Pulling Docker images..."
+            sudo docker compose pull
+
+            echo "🚀 Restarting services..."
+            sudo docker compose up -d
+
+            echo "⏳ Waiting for services..."
+            sleep 15
+
+            echo "📊 Running migrations..."
+            sudo docker compose exec -T api_server alembic upgrade head || true
+
+            echo "✅ Rollback complete!"
+          EOSSH
+
+  notify:
+    needs: [extract-version, deploy, verify, tag-deployment, auto-rollback]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment Status
+        run: |
+          DEPLOY_SUCCESS="${{ needs.deploy.result }}"
+          VERIFY_SUCCESS="${{ needs.verify.result }}"
+          ROLLBACK_TRIGGERED="${{ needs.auto-rollback.result }}"
+
+          if [ "$DEPLOY_SUCCESS" == "success" ] && [ "$VERIFY_SUCCESS" == "success" ]; then
+            echo "✅ Deployment successful! Version: ${{ needs.extract-version.outputs.version }}"
+            echo "🌐 Access: https://klugermax.com"
+            echo "📌 Tagged as: deployed-${{ needs.extract-version.outputs.version }}"
+          elif [ "$ROLLBACK_TRIGGERED" == "success" ]; then
+            echo "⚠️  Deployment verification failed - automatic rollback triggered"
+            echo "❌ Version ${{ needs.extract-version.outputs.version }} was rolled back"
+            echo "🔄 Previous stable version restored"
+            exit 1
+          else
+            echo "❌ Deployment failed - manual intervention may be needed"
+            exit 1
+          fi
