@@ -81,9 +81,10 @@ jobs:
             echo "  ✓ nginx-simple.conf found"
             echo "  ✓ docker-compose.yml found"
 
-            echo "📥 Using code from release branch (already checked out)..."
-            # NOTE: GitHub Actions has already checked out the correct release branch
-            # Do NOT reset to main - use the release-specific code which may have hotfixes
+            echo "📥 Pulling latest code from release branch..."
+            # Fetch and checkout the latest release branch code
+            git fetch origin release-0.0.1
+            git checkout origin/release-0.0.1
             git log -1 --oneline
 
             echo "🔄 Pulling latest Docker images..."
