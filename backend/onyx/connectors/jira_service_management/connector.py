@@ -319,7 +319,7 @@ class JiraServiceManagementConnector(JiraConnector):
                         f"service desk {service_desk_id}: {exc}"
                     ),
                 )
-                request_types = []
+                return {}
 
             self._request_types_by_service_desk_id[service_desk_id] = {
                 request_type.request_type_id: request_type for request_type in request_types
@@ -384,7 +384,7 @@ class JiraServiceManagementConnector(JiraConnector):
                         f"service desk {service_desk_id}: {exc}"
                     ),
                 )
-                self._queue_membership_by_service_desk_id[service_desk_id] = {}
+                return []
 
         return self._queue_membership_by_service_desk_id[service_desk_id].get(
             issue_key,

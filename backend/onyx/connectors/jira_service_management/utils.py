@@ -155,6 +155,58 @@ def iter_jsm_paginated_values(
         )
 
 
+def iter_jsm_paginated_values_optional(
+    jira_client: JIRA,
+    path: str,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    page_size: int = JSM_API_PAGE_SIZE,
+    allowed_status_codes: tuple[int, ...] = (403, 404),
+) -> Iterator[dict[str, Any]]:
+    start = 0
+
+    for _page_number in range(JSM_MAX_PAGINATION_PAGES):
+        page_params = dict(params or {})
+        page_params["start"] = start
+        page_params["limit"] = page_size
+
+        page = jsm_get_json_optional(
+            jira_client=jira_client,
+            path=path,
+            params=page_params,
+            headers=headers,
+            allowed_status_codes=allowed_status_codes,
+        )
+        if page is None:
+            break
+
+        raw_values = page.get("values", [])
+        if not isinstance(raw_values, list):
+            raise RuntimeError(f"Unexpected paginated JSM response for path '{path}'")
+
+        values = [value for value in raw_values if isinstance(value, dict)]
+        for value in values:
+            yield value
+
+        if not values:
+            break
+
+        if page.get("isLastPage") is True:
+            break
+
+        size = page.get("size")
+        if isinstance(size, int) and size > 0:
+            start += size
+        else:
+            start += len(values)
+    else:
+        logger.warning(
+            "Stopping optional JSM pagination for path %s after reaching page limit %s",
+            path,
+            JSM_MAX_PAGINATION_PAGES,
+        )
+
+
 def list_service_desks(jira_client: JIRA) -> list[JSMServiceDesk]:
     service_desks: list[JSMServiceDesk] = []
 
@@ -243,38 +295,26 @@ def list_request_slas(
     jira_client: JIRA,
     issue_id_or_key: str,
 ) -> list[dict[str, Any]]:
-    payload = jsm_get_json_optional(
-        jira_client=jira_client,
-        path=f"request/{issue_id_or_key}/sla",
-        allowed_status_codes=(403, 404),
+    return list(
+        iter_jsm_paginated_values_optional(
+            jira_client=jira_client,
+            path=f"request/{issue_id_or_key}/sla",
+            allowed_status_codes=(403, 404),
+        )
     )
-    if payload is None:
-        return []
-
-    raw_values = payload.get("values", [])
-    if not isinstance(raw_values, list):
-        return []
-
-    return [value for value in raw_values if isinstance(value, dict)]
 
 
 def list_request_approvals(
     jira_client: JIRA,
     issue_id_or_key: str,
 ) -> list[dict[str, Any]]:
-    payload = jsm_get_json_optional(
-        jira_client=jira_client,
-        path=f"request/{issue_id_or_key}/approval",
-        allowed_status_codes=(403, 404),
+    return list(
+        iter_jsm_paginated_values_optional(
+            jira_client=jira_client,
+            path=f"request/{issue_id_or_key}/approval",
+            allowed_status_codes=(403, 404),
+        )
     )
-    if payload is None:
-        return []
-
-    raw_values = payload.get("values", [])
-    if not isinstance(raw_values, list):
-        return []
-
-    return [value for value in raw_values if isinstance(value, dict)]
 
 
 def get_approval(
@@ -479,7 +519,6 @@ def format_approval_summaries(approvals: list[dict[str, Any]]) -> list[str]:
 
         decision = _coerce_optional_str(
             approval.get("finalDecision")
-            or approval.get("canAnswerApproval")
             or approval.get("status")
         )
         decision_text = decision or "pending"

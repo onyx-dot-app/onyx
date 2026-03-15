@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+import requests
 from jira import JIRA
 from jira.resources import Issue
 
@@ -293,3 +294,55 @@ def test_process_issue_uses_issue_reporter_in_text_when_request_reporter_missing
     assert isinstance(section, TextSection)
     assert "Customer: Alice Customer (alice@example.com)" in section.text
     assert document.metadata["jsm_customer"] == "Alice Customer"
+
+
+def test_get_request_type_map_retries_after_transient_http_error(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    response = requests.Response()
+    response.status_code = 429
+    response._content = b"{}"
+    error = requests.HTTPError(response=response)
+    expected = JSMRequestType(
+        request_type_id="11",
+        name="Access Request",
+        description=None,
+        help_text=None,
+        issue_type_id=None,
+        group_ids=(),
+    )
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector.list_request_types",
+        side_effect=[error, [expected]],
+    ):
+        first = jsm_connector._get_request_type_map("1")
+        second = jsm_connector._get_request_type_map("1")
+
+    assert first == {}
+    assert second == {"11": expected}
+
+
+def test_get_request_queues_retries_after_transient_http_error(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    response = requests.Response()
+    response.status_code = 503
+    response._content = b"{}"
+    error = requests.HTTPError(response=response)
+    queue = JSMQueue(
+        queue_id="3",
+        name="Waiting for support",
+        jql="project = HELP",
+        issue_count=12,
+    )
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector.build_queue_membership_map",
+        side_effect=[error, {"HELP-1": [queue]}],
+    ):
+        first = jsm_connector._get_request_queues("1", "HELP-1")
+        second = jsm_connector._get_request_queues("1", "HELP-1")
+
+    assert first == []
+    assert second == [queue]

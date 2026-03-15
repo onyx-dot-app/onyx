@@ -8,8 +8,11 @@ from jira import JIRA
 from onyx.connectors.jira_service_management import utils as jsm_utils
 from onyx.connectors.jira_service_management.utils import append_with_byte_limit
 from onyx.connectors.jira_service_management.utils import build_queue_membership_map
+from onyx.connectors.jira_service_management.utils import format_approval_summaries
 from onyx.connectors.jira_service_management.utils import get_customer_request
 from onyx.connectors.jira_service_management.utils import iter_jsm_paginated_values
+from onyx.connectors.jira_service_management.utils import list_request_approvals
+from onyx.connectors.jira_service_management.utils import list_request_slas
 from onyx.connectors.jira_service_management.utils import JSMQueue
 
 
@@ -117,3 +120,53 @@ def test_iter_jsm_paginated_values_stops_after_page_limit() -> None:
     assert values == [{"id": "1"}, {"id": "1"}]
     assert mock_get_json.call_count == 2
     mock_warn.assert_called_once()
+
+
+def test_list_request_slas_uses_optional_pagination() -> None:
+    jira_client = MagicMock(spec=JIRA)
+
+    with patch(
+        "onyx.connectors.jira_service_management.utils.iter_jsm_paginated_values_optional",
+        return_value=iter([{"name": "Time to first response"}, {"name": "Time to resolution"}]),
+    ) as mock_iter:
+        slas = list_request_slas(jira_client=jira_client, issue_id_or_key="HELP-1")
+
+    assert slas == [{"name": "Time to first response"}, {"name": "Time to resolution"}]
+    mock_iter.assert_called_once()
+
+
+def test_list_request_approvals_uses_optional_pagination() -> None:
+    jira_client = MagicMock(spec=JIRA)
+
+    with patch(
+        "onyx.connectors.jira_service_management.utils.iter_jsm_paginated_values_optional",
+        return_value=iter([{"id": "1"}, {"id": "2"}]),
+    ) as mock_iter:
+        approvals = list_request_approvals(
+            jira_client=jira_client,
+            issue_id_or_key="HELP-1",
+        )
+
+    assert approvals == [{"id": "1"}, {"id": "2"}]
+    mock_iter.assert_called_once()
+
+
+def test_format_approval_summaries_ignores_can_answer_approval_boolean() -> None:
+    summaries = format_approval_summaries(
+        [
+            {
+                "name": "Manager approval",
+                "canAnswerApproval": True,
+                "approvers": [
+                    {
+                        "approver": {
+                            "displayName": "Dana Manager",
+                            "emailAddress": "dana@example.com",
+                        }
+                    }
+                ],
+            }
+        ]
+    )
+
+    assert summaries == ["Manager approval: pending (Dana Manager)"]
