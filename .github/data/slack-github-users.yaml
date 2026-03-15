@@ -1,0 +1,21 @@
+# Slack ID -> GitHub username mapping for the eng team.
+# Used by .github/scripts/resolve-user.py and workflows that need
+# to resolve between Slack and GitHub identities.
+
+user_mappings:
+  U05SAGZPEA1: yuhongsun96     # Yuhong Sun
+  U05SAH6UGUD: Weves           # Chris Weaver
+  U07PWEQB7A5: evan-onyx       # Evan Lohn
+  U07V1SM68KF: joachim-danswer # Joachim
+  U08JZ9N3QNN: raunakab        # Raunak Bhagat
+  U08L24NCLJE: Subash-Mohan    # Subash Mohan
+  U090B9M07B2: wenxi-onyx      # Wenxi Huang
+  U094RASDP0Q: duo-onyx        # Duo Yang
+  U096L8ZQ85B: justin-tahara   # Justin Tahara
+  U09AHV8UBQX: jessicasingh7   # Jessica Singh
+  U09KAL5T3C2: nmgarza5        # Nikolas Garza
+  U09KPGVQ70R: acaprau         # Andrei Caprau
+  U09QR8KTSJH: rohoswagger     # Roshan Desai
+  U09RB4NTXA4: jmelahman       # Jamison Lahman
+  U0A6K9VCY6A: Danelegend      # Dane Urban
+  U0AGC4KH71A: Bo-Onyx         # Bo

@@ -23,10 +23,19 @@ jobs:
       pr_number: ${{ steps.gate.outputs.pr_number }}
       merge_commit_sha: ${{ steps.gate.outputs.merge_commit_sha }}
       merged_by: ${{ steps.gate.outputs.merged_by }}
+      merged_by_slack_id: ${{ steps.gate.outputs.merged_by_slack_id }}
       gate_error: ${{ steps.gate.outputs.gate_error }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout repository (for shared data and scripts)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          sparse-checkout: |
+            .github/data
+            .github/scripts
+          persist-credentials: false
+
       - name: Resolve merged PR and checkbox state
         id: gate
         env:
@@ -37,27 +46,6 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
-          # Explicit merger allowlist used because pull_request_target runs with
-          # the default GITHUB_TOKEN, which cannot reliably read org/team
-          # membership for this repository context.
-          ALLOWED_MERGERS: |
-            acaprau
-            bo-onyx
-            danelegend
-            duo-onyx
-            evan-onyx
-            jessicasingh7
-            jmelahman
-            joachim-danswer
-            justin-tahara
-            nmgarza5
-            raunakab
-            rohoswagger
-            subash-mohan
-            trial2onyx
-            wenxi-onyx
-            weves
-            yuhongsun96
         run: |
           echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           echo "merged_by=${MERGED_BY}" >> "$GITHUB_OUTPUT"
@@ -81,12 +69,17 @@ jobs:
 
           echo "merge_commit_sha=${MERGE_COMMIT_SHA}" >> "$GITHUB_OUTPUT"
 
-          normalized_merged_by="$(printf '%s' "${MERGED_BY}" | tr '[:upper:]' '[:lower:]')"
-          normalized_allowed_mergers="$(printf '%s\n' "${ALLOWED_MERGERS}" | tr '[:upper:]' '[:lower:]')"
-          if ! printf '%s\n' "${normalized_allowed_mergers}" | grep -Fxq "${normalized_merged_by}"; then
+          # Check merger against the shared allowlist (case-insensitive)
+          if ! python3 .github/scripts/resolve-user.py --allowed-mergers | tr '[:upper:]' '[:lower:]' | grep -Fxq "$(printf '%s' "${MERGED_BY}" | tr '[:upper:]' '[:lower:]')"; then
             echo "gate_error=not-allowed-merger" >> "$GITHUB_OUTPUT"
             echo "::error::${MERGED_BY} is not in the explicit cherry-pick merger allowlist. Failing cherry-pick gate."
             exit 1
+          fi
+
+          # Resolve merger's Slack ID for notifications
+          slack_id="$(python3 .github/scripts/resolve-user.py --github-to-slack "${MERGED_BY}")" || true
+          if [ -n "${slack_id}" ]; then
+            echo "merged_by_slack_id=${slack_id}" >> "$GITHUB_OUTPUT"
           fi
 
           exit 0
@@ -205,9 +198,16 @@ jobs:
           SOURCE_PR_NUMBER: ${{ needs.resolve-cherry-pick-request.outputs.pr_number }}
           MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
           CHERRY_PICK_PR_URL: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_pr_url }}
+          MERGED_BY_SLACK_ID: ${{ needs.resolve-cherry-pick-request.outputs.merged_by_slack_id }}
+          MERGED_BY: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
         run: |
           source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
-          details="*Cherry-pick PR opened successfully.*\\n• source PR: ${source_pr_url}"
+          if [ -n "${MERGED_BY_SLACK_ID}" ]; then
+            merger_mention="<@${MERGED_BY_SLACK_ID}>"
+          else
+            merger_mention="${MERGED_BY}"
+          fi
+          details="*Cherry-pick PR opened successfully.*\\n• author: ${merger_mention}\\n• source PR: ${source_pr_url}"
           if [ -n "${CHERRY_PICK_PR_URL}" ]; then
             details="${details}\\n• cherry-pick PR: ${CHERRY_PICK_PR_URL}"
           fi
@@ -255,8 +255,15 @@ jobs:
           GATE_ERROR: ${{ needs.resolve-cherry-pick-request.outputs.gate_error }}
           CHERRY_PICK_REASON: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_reason }}
           CHERRY_PICK_DETAILS: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_details }}
+          MERGED_BY_SLACK_ID: ${{ needs.resolve-cherry-pick-request.outputs.merged_by_slack_id }}
+          MERGED_BY: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
         run: |
           source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
+          if [ -n "${MERGED_BY_SLACK_ID}" ]; then
+            merger_mention="<@${MERGED_BY_SLACK_ID}>"
+          else
+            merger_mention="${MERGED_BY}"
+          fi
 
           reason_text="cherry-pick command failed"
           if [ "${GATE_ERROR}" = "missing-merge-commit-sha" ]; then
@@ -275,7 +282,7 @@ jobs:
           else
             failed_job_label="cherry-pick-to-latest-release"
           fi
-          failed_jobs="• ${failed_job_label}\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
+          failed_jobs="• ${failed_job_label}\\n• author: ${merger_mention}\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
           if [ -n "${MERGE_COMMIT_SHA}" ]; then
             failed_jobs="${failed_jobs}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
           fi
