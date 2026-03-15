@@ -26,7 +26,7 @@ from onyx.utils.logger import setup_logger
 from .utils import absolute_jsm_link
 from .utils import append_with_byte_limit
 from .utils import build_queue_membership_map
-from .utils import _coerce_optional_str
+from .utils import coerce_optional_str
 from .utils import format_approval_summaries
 from .utils import format_queue_summaries
 from .utils import format_request_field_values
@@ -363,10 +363,10 @@ class JiraServiceManagementConnector(JiraConnector):
 
         return JSMRequestType(
             request_type_id=str(derived_request_type_id),
-            name=_coerce_optional_str(raw_request_type.get("name")),
-            description=_coerce_optional_str(raw_request_type.get("description")),
-            help_text=_coerce_optional_str(raw_request_type.get("helpText")),
-            issue_type_id=_coerce_optional_str(raw_request_type.get("issueTypeId")),
+            name=coerce_optional_str(raw_request_type.get("name")),
+            description=coerce_optional_str(raw_request_type.get("description")),
+            help_text=coerce_optional_str(raw_request_type.get("helpText")),
+            issue_type_id=coerce_optional_str(raw_request_type.get("issueTypeId")),
             group_ids=group_ids,
         )
 
@@ -508,7 +508,7 @@ class JiraServiceManagementConnector(JiraConnector):
         raw_service_desk = request.get("serviceDesk")
         service_desk_name = None
         if isinstance(raw_service_desk, dict):
-            service_desk_name = _coerce_optional_str(
+            service_desk_name = coerce_optional_str(
                 raw_service_desk.get("projectName") or raw_service_desk.get("name")
             )
         if service_desk_name is None:
@@ -516,13 +516,13 @@ class JiraServiceManagementConnector(JiraConnector):
         if service_desk_name:
             metadata[_METADATA_SERVICE_DESK] = service_desk_name
 
-        request_id = _coerce_optional_str(request.get("issueId"))
+        request_id = coerce_optional_str(request.get("issueId"))
         if request_id:
             metadata[_METADATA_REQUEST_ID] = request_id
 
         current_status = request.get("currentStatus")
         if isinstance(current_status, dict):
-            current_status_str = _coerce_optional_str(
+            current_status_str = coerce_optional_str(
                 current_status.get("status") or current_status.get("statusCategory")
             )
             if current_status_str:
@@ -551,7 +551,7 @@ class JiraServiceManagementConnector(JiraConnector):
             if requester_info.display_name is None and requester_info.email:
                 metadata[_METADATA_CUSTOMER] = requester_info.email
 
-        requester_account_id = _coerce_optional_str(
+        requester_account_id = coerce_optional_str(
             request.get("reporter", {}).get("accountId")
             if isinstance(request.get("reporter"), dict)
             else None
@@ -757,4 +757,4 @@ def _extract_portal_link(request: dict[str, Any]) -> str | None:
         return None
 
     portal_link = links.get("web") or links.get("agent")
-    return _coerce_optional_str(portal_link)
+    return coerce_optional_str(portal_link)

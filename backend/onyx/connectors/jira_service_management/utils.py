@@ -638,12 +638,15 @@ def absolute_jsm_link(base_url: str, maybe_relative_url: str | None) -> str | No
     return urljoin(base_url.rstrip("/") + "/", maybe_relative_url.lstrip("/"))
 
 
-def _coerce_optional_str(value: Any) -> str | None:
+def coerce_optional_str(value: Any) -> str | None:
     if value is None:
         return None
 
     coerced = str(value).strip()
     return coerced or None
+
+
+_coerce_optional_str = coerce_optional_str
 
 
 def _extract_friendly_time(value: Any) -> str | None:
