@@ -51,6 +51,7 @@ export default function EditUserModal({
 }: EditUserModalProps) {
   const { data: allGroups, isLoading: groupsLoading } = useGroups();
   const [searchTerm, setSearchTerm] = useState("");
+  const [groupPopoverOpen, setGroupPopoverOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole | "">(
     user.role ?? ""
@@ -177,11 +178,18 @@ export default function EditUserModal({
               alignItems="stretch"
               justifyContent="start"
             >
-              <Popover>
+              <Popover
+                open={groupPopoverOpen}
+                onOpenChange={setGroupPopoverOpen}
+              >
                 <Popover.Trigger>
                   <InputTypeIn
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setGroupPopoverOpen(true);
+                    }}
+                    onFocus={() => setGroupPopoverOpen(true)}
                     placeholder="Search groups to join..."
                     leftSearchIcon
                   />

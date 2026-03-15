@@ -100,12 +100,7 @@ export default function UserRowActions({
             </Button>
           )}
           <Disabled disabled>
-            <Button
-              prominence="tertiary"
-              variant="danger"
-              icon={SvgUserX}
-              onClick={() => openModal(Modal.DEACTIVATE)}
-            >
+            <Button prominence="tertiary" variant="danger" icon={SvgUserX}>
               Deactivate User
             </Button>
           </Disabled>
