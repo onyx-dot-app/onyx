@@ -90,11 +90,12 @@ export const heightClassmap: Record<Length, string> = {
  * @remarks
  * - The component defaults to column layout when no direction is specified
  * - Full width and height by default
- * - Prevents style overrides (className and style props are not available)
+ * - Accepts className for additional styling; style prop is not available
  * - Import using namespace import for consistent usage: `import * as GeneralLayouts from "@/layouts/general-layouts"`
  */
 export interface SectionProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+  className?: string;
   flexDirection?: FlexDirection;
   justifyContent?: JustifyContent;
   alignItems?: AlignItems;
@@ -116,6 +117,7 @@ export interface SectionProps
  * wrap a `Section` without affecting layout.
  */
 function Section({
+  className,
   flexDirection = "column",
   justifyContent = "center",
   alignItems = "center",
@@ -142,7 +144,8 @@ function Section({
         typeof height === "number" && "overflow-hidden",
 
         wrap && "flex-wrap",
-        dbg && "dbg-red"
+        dbg && "dbg-red",
+        className
       )}
       style={{
         gap: `${gap}rem`,

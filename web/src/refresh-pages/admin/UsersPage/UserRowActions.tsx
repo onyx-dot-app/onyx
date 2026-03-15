@@ -250,7 +250,7 @@ export default function UserRowActions({
             <SvgUserX {...props} className="text-action-danger-05" />
           )}
           title="Cancel Invite"
-          onClose={() => setModal(null)}
+          onClose={isSubmitting ? undefined : () => setModal(null)}
           submit={
             <Disabled disabled={isSubmitting}>
               <Button
@@ -376,10 +376,14 @@ export default function UserRowActions({
         <ConfirmationModalLayout
           icon={SvgKey}
           title={newPassword ? "Password Reset" : "Reset Password"}
-          onClose={() => {
-            setModal(null);
-            setNewPassword(null);
-          }}
+          onClose={
+            isSubmitting
+              ? undefined
+              : () => {
+                  setModal(null);
+                  setNewPassword(null);
+                }
+          }
           submit={
             newPassword ? (
               <Button

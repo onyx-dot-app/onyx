@@ -6,13 +6,13 @@ import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
-import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Separator from "@/refresh-components/Separator";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
@@ -152,7 +152,11 @@ export default function EditUserModal({
   const displayName = user.personal_name ?? user.email;
 
   return (
-    <Modal open onOpenChange={(isOpen) => !isOpen && onClose()} modal={false}>
+    <Modal
+      open
+      onOpenChange={(isOpen) => !isOpen && !isSubmitting && onClose()}
+      modal={false}
+    >
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgUsers}
@@ -165,17 +169,14 @@ export default function EditUserModal({
           onClose={onClose}
         />
         <Modal.Body twoTone>
-          <Section
-            gap={1}
-            height="auto"
-            alignItems="stretch"
-            justifyContent="start"
-          >
+          <Section padding={0} height="auto" alignItems="stretch">
             <Section
               gap={0.5}
+              padding={0.25}
               height={joinedGroups.length === 0 ? "auto" : 12.5}
               alignItems="stretch"
               justifyContent="start"
+              className="bg-background-tint-02 rounded-08"
             >
               <Popover>
                 <Popover.Trigger>
@@ -222,32 +223,47 @@ export default function EditUserModal({
                 </Popover.Content>
               </Popover>
 
-              {joinedGroups.length === 0 ? (
-                <LineItem
-                  icon={SvgUsers}
-                  skeleton
-                  interactive={false}
-                  description={`${displayName} is not in any groups.`}
-                >
-                  No groups found
-                </LineItem>
-              ) : (
-                <ShadowDiv className="max-h-[10rem]">
-                  {joinedGroups.map((group) => (
-                    <LineItem
+              <ShadowDiv
+                className=" max-h-[9rem] flex flex-col gap-1 rounded-08"
+                shadowHeight="0.75rem"
+              >
+                {joinedGroups.length === 0 ? (
+                  <LineItem
+                    icon={SvgUsers}
+                    skeleton
+                    interactive={false}
+                    description={`${displayName} is not in any groups.`}
+                  >
+                    No groups found
+                  </LineItem>
+                ) : (
+                  joinedGroups.map((group) => (
+                    <div
                       key={group.id}
-                      icon={SvgUsers}
-                      description={`${group.users.length} ${
-                        group.users.length === 1 ? "user" : "users"
-                      }`}
-                      rightChildren={<SvgLogOut height={16} width={16} />}
-                      onClick={() => toggleGroup(group.id)}
+                      className="bg-background-tint-01 rounded-08"
                     >
-                      {group.name}
-                    </LineItem>
-                  ))}
-                </ShadowDiv>
-              )}
+                      <LineItem
+                        key={group.id}
+                        icon={SvgUsers}
+                        description={`${group.users.length} ${
+                          group.users.length === 1 ? "user" : "users"
+                        }`}
+                        rightChildren={
+                          <SimpleTooltip
+                            tooltip="Remove from group"
+                            side="left"
+                          >
+                            <SvgLogOut height={16} width={16} />
+                          </SimpleTooltip>
+                        }
+                        onClick={() => toggleGroup(group.id)}
+                      >
+                        {group.name}
+                      </LineItem>
+                    </div>
+                  ))
+                )}
+              </ShadowDiv>
             </Section>
             {user.role && (
               <>
