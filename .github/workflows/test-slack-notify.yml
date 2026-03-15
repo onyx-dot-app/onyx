@@ -1,0 +1,39 @@
+name: Test Slack Notification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          sparse-checkout: |
+            .github/actions
+            .github/data
+            .github/scripts
+          persist-credentials: false
+
+      - name: Resolve Slack ID
+        id: resolve
+        run: |
+          slack_id="$(python3 .github/scripts/resolve-user.py --github-to-slack "${{ github.actor }}")" || true
+          if [ -n "${slack_id}" ]; then
+            echo "mention=<@${slack_id}>" >> "$GITHUB_OUTPUT"
+          else
+            echo "mention=${{ github.actor }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send test notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
+          title: "🧪 Slack Integration Test"
+          details: "GitHub → Slack alerting is working! :tada:\\n• triggered by: ${{ steps.resolve.outputs.mention }}"
+          ref-name: ${{ github.ref_name }}
