@@ -5,8 +5,11 @@ import pytest
 import requests
 from jira import JIRA
 
+from onyx.connectors.jira_service_management import utils as jsm_utils
+from onyx.connectors.jira_service_management.utils import append_with_byte_limit
 from onyx.connectors.jira_service_management.utils import build_queue_membership_map
 from onyx.connectors.jira_service_management.utils import get_customer_request
+from onyx.connectors.jira_service_management.utils import iter_jsm_paginated_values
 from onyx.connectors.jira_service_management.utils import JSMQueue
 
 
@@ -81,3 +84,36 @@ def test_build_queue_membership_map_keeps_known_issues_after_limit() -> None:
     }
     assert "HELP-2" not in membership
 
+
+@pytest.mark.parametrize("max_bytes", [0, 1, 2, 3])
+def test_append_with_byte_limit_respects_tiny_byte_limits(max_bytes: int) -> None:
+    result = append_with_byte_limit(
+        existing_text="",
+        text_to_append="abcdef",
+        max_bytes=max_bytes,
+    )
+
+    assert len(result.encode("utf-8")) <= max_bytes
+
+
+def test_iter_jsm_paginated_values_stops_after_page_limit() -> None:
+    jira_client = MagicMock(spec=JIRA)
+
+    with (
+        patch.object(jsm_utils, "JSM_MAX_PAGINATION_PAGES", 2),
+        patch(
+            "onyx.connectors.jira_service_management.utils.jsm_get_json",
+            return_value={"values": [{"id": "1"}], "size": 1},
+        ) as mock_get_json,
+        patch("onyx.connectors.jira_service_management.utils.logger.warning") as mock_warn,
+    ):
+        values = list(
+            iter_jsm_paginated_values(
+                jira_client=jira_client,
+                path="servicedesk/1/queue",
+            )
+        )
+
+    assert values == [{"id": "1"}, {"id": "1"}]
+    assert mock_get_json.call_count == 2
+    mock_warn.assert_called_once()

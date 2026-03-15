@@ -19,6 +19,7 @@ logger = setup_logger()
 JSM_API_PAGE_SIZE = 50
 JSM_QUEUE_ISSUE_SCAN_LIMIT = 5000
 JSM_REQUEST_EXPAND = "participant,status,requestType,serviceDesk"
+JSM_MAX_PAGINATION_PAGES = 10000
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,7 @@ def iter_jsm_paginated_values(
 ) -> Iterator[dict[str, Any]]:
     start = 0
 
-    while True:
+    for _page_number in range(JSM_MAX_PAGINATION_PAGES):
         page_params = dict(params or {})
         page_params["start"] = start
         page_params["limit"] = page_size
@@ -146,6 +147,12 @@ def iter_jsm_paginated_values(
             start += size
         else:
             start += len(values)
+    else:
+        logger.warning(
+            "Stopping JSM pagination for path %s after reaching page limit %s",
+            path,
+            JSM_MAX_PAGINATION_PAGES,
+        )
 
 
 def list_service_desks(jira_client: JIRA) -> list[JSMServiceDesk]:
@@ -613,9 +620,15 @@ def _strip_html(value: str) -> str:
 
 
 def _truncate_to_byte_limit(value: str, max_bytes: int) -> str:
+    if max_bytes <= 0:
+        return ""
+
     encoded = value.encode("utf-8")
     if len(encoded) <= max_bytes:
         return value
+
+    if max_bytes < 4:
+        return encoded[:max_bytes].decode("utf-8", errors="ignore").rstrip()
 
     truncated = encoded[: max(0, max_bytes - 3)].decode("utf-8", errors="ignore")
     return truncated.rstrip() + "..."

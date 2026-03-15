@@ -251,3 +251,45 @@ def test_process_issue_skips_non_request_issues(
         )
 
     assert document is None
+
+
+def test_process_issue_uses_issue_reporter_in_text_when_request_reporter_missing(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    issue = _create_mock_issue()
+
+    with (
+        patch(
+            "onyx.connectors.jira_service_management.connector.get_customer_request",
+            return_value={
+                "issueId": "10001",
+                "requestFieldValues": [],
+                "_links": {"web": "/servicedesk/customer/portal/1/HELP-1"},
+                "reporter": {},
+            },
+        ),
+        patch(
+            "onyx.connectors.jira_service_management.connector.list_request_participants",
+            return_value=[],
+        ),
+        patch(
+            "onyx.connectors.jira_service_management.connector.list_request_slas",
+            return_value=[],
+        ),
+        patch(
+            "onyx.connectors.jira_service_management.connector.list_request_approvals",
+            return_value=[],
+        ),
+        patch.object(jsm_connector, "_get_request_type_map", return_value={}),
+        patch.object(jsm_connector, "_get_request_queues", return_value=[]),
+    ):
+        document = jsm_connector._process_issue(
+            issue=issue,
+            parent_hierarchy_raw_node_id="HELP",
+        )
+
+    assert document is not None
+    section = document.sections[0]
+    assert isinstance(section, TextSection)
+    assert "Customer: Alice Customer (alice@example.com)" in section.text
+    assert document.metadata["jsm_customer"] == "Alice Customer"

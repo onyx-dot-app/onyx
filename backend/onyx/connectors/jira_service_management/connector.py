@@ -230,6 +230,7 @@ class JiraServiceManagementConnector(JiraConnector):
         document.metadata.update(jsm_metadata)
 
         jsm_text = self._build_jsm_text(
+            issue=issue,
             service_desk=service_desk,
             request=request,
             request_type=request_type,
@@ -239,7 +240,7 @@ class JiraServiceManagementConnector(JiraConnector):
             queues=queues,
         )
 
-        existing_section = document.sections[0]
+        existing_section = document.sections[0] if document.sections else None
         if isinstance(existing_section, TextSection):
             existing_section.text = append_with_byte_limit(
                 existing_text=existing_section.text,
@@ -571,6 +572,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
     def _build_jsm_text(
         self,
+        issue: Issue | None,
         service_desk: JSMServiceDesk,
         request: dict[str, Any],
         request_type: JSMRequestType | None,
@@ -592,7 +594,7 @@ class JiraServiceManagementConnector(JiraConnector):
                 f"Request type: {stringify_jsm_value(request.get('requestType'))}"
             )
 
-        requester_info = self._get_requester_info(None, request)
+        requester_info = self._get_requester_info(issue, request)
         if requester_info is not None:
             requester_name = requester_info.get_semantic_name()
             if requester_info.email:
