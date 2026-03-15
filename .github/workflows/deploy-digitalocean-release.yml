@@ -43,6 +43,7 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
           DEPLOY_USER: root
           VERSION: ${{ needs.extract-version.outputs.version }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           set -e
 
@@ -81,10 +82,10 @@ jobs:
             echo "  ✓ nginx-simple.conf found"
             echo "  ✓ docker-compose.yml found"
 
-            echo "📥 Pulling latest code from release branch..."
+            echo "📥 Pulling latest code from release branch ($BRANCH)..."
             # Fetch and checkout the latest release branch code
-            git fetch origin release-0.0.1
-            git checkout origin/release-0.0.1
+            git fetch origin "$BRANCH"
+            git checkout "origin/$BRANCH"
             git log -1 --oneline
 
             echo "🔄 Pulling latest Docker images..."
