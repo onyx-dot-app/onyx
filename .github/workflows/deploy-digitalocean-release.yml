@@ -114,15 +114,15 @@ jobs:
 
             # Phase 4: Clean up any corrupted nginx state
             echo "🧹 Cleaning up previous nginx state..."
-            sudo rm -rf nginx-simple.conf 2>/dev/null || true
+            # Only remove if it's a directory (corrupted), NOT if it's a valid file
             if [ -d nginx-simple.conf ]; then
               echo "  ✗ nginx-simple.conf is a directory (corrupted state), removing..."
               sudo rm -rf nginx-simple.conf
             fi
 
-            # Re-verify nginx-simple.conf exists after fresh pull
+            # Verify nginx-simple.conf exists
             if [ ! -f nginx-simple.conf ]; then
-              echo "❌ ERROR: nginx-simple.conf missing after git pull"
+              echo "❌ ERROR: nginx-simple.conf not found"
               exit 1
             fi
 
