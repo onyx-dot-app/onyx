@@ -76,6 +76,8 @@ jobs:
 
             echo "🛑 Stopping services..."
             sudo docker compose down --remove-orphans
+            sudo docker stop onyx-proxy 2>/dev/null || true
+            sudo docker rm onyx-proxy 2>/dev/null || true
 
             echo "🚀 Starting services..."
             sudo docker compose up -d
@@ -85,6 +87,20 @@ jobs:
 
             echo "📊 Running database migrations..."
             sudo docker compose exec -T api_server alembic upgrade head || true
+
+            echo "🔄 Restarting nginx reverse proxy..."
+            sudo docker run -d \
+              --name onyx-proxy \
+              --network onyx_default \
+              -p 80:80 \
+              -p 443:443 \
+              -v $(pwd)/nginx-simple.conf:/etc/nginx/nginx.conf:ro \
+              -v /etc/letsencrypt:/etc/letsencrypt:ro \
+              -v /var/www/certbot:/var/www/certbot \
+              nginx:alpine
+
+            echo "⏳ Waiting for nginx to start..."
+            sleep 3
 
             echo "✅ Deployment complete!"
           EOSSH
