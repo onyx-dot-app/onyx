@@ -1,0 +1,28 @@
+name: Test Slack Notification (jq parsing)
+
+on:
+  push:
+    branches:
+      - nikg/slack-id-cp
+
+permissions:
+  contents: read
+
+jobs:
+  test-notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Send test notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
+          mention: ${{ github.actor }}
+          title: "🧪 Slack Integration Test (jq parsing)"
+          details: "GitHub → Slack alerting is working! :tada:\\n• triggered by: {mention}\\n• branch: ${{ github.ref_name }}"
+          ref-name: ${{ github.ref_name }}
