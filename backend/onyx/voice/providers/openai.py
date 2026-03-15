@@ -56,6 +56,17 @@ def _http_to_ws_url(http_url: str) -> str:
     return http_url
 
 
+_USER_FACING_ERROR_MESSAGES: dict[str, str] = {
+    "input_audio_buffer_commit_empty": (
+        "No audio was recorded. Please check your microphone and try again."
+    ),
+    "invalid_api_key": "Voice service authentication failed. Please contact support.",
+    "rate_limit_exceeded": "Voice service is temporarily busy. Please try again shortly.",
+}
+
+_DEFAULT_USER_ERROR = "A voice transcription error occurred. Please try again."
+
+
 class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
     """Streaming transcription using OpenAI Realtime API."""
 
@@ -142,6 +153,17 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     if msg_type == OpenAIRealtimeMessageType.ERROR:
                         error = data.get("error", {})
                         self._logger.error(f"OpenAI error: {error}")
+                        error_code = error.get("code", "")
+                        user_message = _USER_FACING_ERROR_MESSAGES.get(
+                            error_code, _DEFAULT_USER_ERROR
+                        )
+                        await self._transcript_queue.put(
+                            TranscriptResult(
+                                text="",
+                                is_vad_end=False,
+                                error=user_message,
+                            )
+                        )
                         continue
 
                     # Handle VAD events
