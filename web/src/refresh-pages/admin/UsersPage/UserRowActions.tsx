@@ -176,23 +176,6 @@ export default function UserRowActions({
       case UserStatus.INACTIVE:
         return (
           <>
-            {user.id && (
-              <Button
-                prominence="tertiary"
-                icon={SvgUsers}
-                onClick={() => openModal(Modal.EDIT_GROUPS)}
-              >
-                Groups &amp; Roles
-              </Button>
-            )}
-            <Button
-              prominence="tertiary"
-              icon={SvgKey}
-              onClick={() => openModal(Modal.RESET_PASSWORD)}
-            >
-              Reset Password
-            </Button>
-            <Separator paddingXRem={0.5} />
             <Button
               prominence="tertiary"
               icon={SvgUserPlus}
