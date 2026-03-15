@@ -79,8 +79,13 @@ jobs:
             sudo docker stop onyx-proxy 2>/dev/null || true
             sudo docker rm onyx-proxy 2>/dev/null || true
 
-            echo "🚀 Starting services..."
-            sudo docker compose up -d
+            # Clean up any lingering port bindings
+            sleep 2
+
+            echo "🚀 Starting services (without nginx)..."
+            # Disable nginx service in docker-compose for production
+            # We use a standalone nginx-proxy container instead
+            sudo docker compose up -d --scale nginx=0 2>/dev/null || sudo docker compose up -d
 
             echo "⏳ Waiting for services to initialize..."
             sleep 15
@@ -88,7 +93,7 @@ jobs:
             echo "📊 Running database migrations..."
             sudo docker compose exec -T api_server alembic upgrade head || true
 
-            echo "🔄 Restarting nginx reverse proxy..."
+            echo "🔄 Starting nginx reverse proxy..."
             sudo docker run -d \
               --name onyx-proxy \
               --network onyx_default \
