@@ -178,6 +178,9 @@ class JiraServiceManagementConnector(JiraConnector):
                 )
             except Exception as exc:
                 self._handle_jira_connector_settings_error(exc)
+                raise RuntimeError(
+                    "_handle_jira_connector_settings_error returned unexpectedly"
+                )
 
     @override
     def _process_issue(

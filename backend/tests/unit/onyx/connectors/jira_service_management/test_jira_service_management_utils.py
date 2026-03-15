@@ -12,6 +12,7 @@ from onyx.connectors.jira_service_management.utils import format_approval_summar
 from onyx.connectors.jira_service_management.utils import get_customer_request
 from onyx.connectors.jira_service_management.utils import iter_jsm_paginated_values
 from onyx.connectors.jira_service_management.utils import list_request_approvals
+from onyx.connectors.jira_service_management.utils import list_request_participants
 from onyx.connectors.jira_service_management.utils import list_request_slas
 from onyx.connectors.jira_service_management.utils import JSMQueue
 
@@ -132,6 +133,22 @@ def test_list_request_slas_uses_optional_pagination() -> None:
         slas = list_request_slas(jira_client=jira_client, issue_id_or_key="HELP-1")
 
     assert slas == [{"name": "Time to first response"}, {"name": "Time to resolution"}]
+    mock_iter.assert_called_once()
+
+
+def test_list_request_participants_uses_optional_pagination() -> None:
+    jira_client = MagicMock(spec=JIRA)
+
+    with patch(
+        "onyx.connectors.jira_service_management.utils.iter_jsm_paginated_values_optional",
+        return_value=iter([{"displayName": "Alice"}, {"displayName": "Bob"}]),
+    ) as mock_iter:
+        participants = list_request_participants(
+            jira_client=jira_client,
+            issue_id_or_key="HELP-1",
+        )
+
+    assert participants == [{"displayName": "Alice"}, {"displayName": "Bob"}]
     mock_iter.assert_called_once()
 
 

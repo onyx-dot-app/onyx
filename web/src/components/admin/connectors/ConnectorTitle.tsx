@@ -76,7 +76,9 @@ export const ConnectorTitle = ({
     const projectKey = typedConnector.connector_specific_config.project_key;
     if (jiraBaseUrl) {
       additionalMetadata.set(
-        "Jira Base URL",
+        connector.source === "jira_service_management"
+          ? "Jira Base URL"
+          : "Jira Project URL",
         jiraBaseUrl
       );
     }

@@ -284,9 +284,10 @@ def list_request_participants(
     issue_id_or_key: str,
 ) -> list[dict[str, Any]]:
     return list(
-        iter_jsm_paginated_values(
+        iter_jsm_paginated_values_optional(
             jira_client=jira_client,
             path=f"request/{issue_id_or_key}/participant",
+            allowed_status_codes=(403, 404),
         )
     )
 
