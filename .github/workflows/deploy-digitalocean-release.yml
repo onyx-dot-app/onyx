@@ -105,21 +105,12 @@ jobs:
             echo "⏳ Waiting for services to initialize..."
             sleep 15
 
-            echo "📊 Running database migrations..."
-            # Set timeout to prevent migrations from hanging
-            timeout 120 sudo docker compose exec -T api_server alembic upgrade head || {
-              MIGRATION_EXIT=$?
-              if [ $MIGRATION_EXIT -eq 124 ]; then
-                echo "⚠️  Migrations timed out (120s) - continuing anyway"
-              elif [ $MIGRATION_EXIT -ne 0 ]; then
-                echo "⚠️  Migrations failed with code $MIGRATION_EXIT - continuing"
-              fi
-            }
+            echo "📊 Running database migrations (in background)..."
+            # Run migrations in background - don't block nginx startup
+            # Migrations can take a very long time and were causing nginx to never start
+            sudo docker compose exec -d api_server alembic upgrade head 2>/dev/null || true
+            echo "  ⚠️  Migrations started in background (may still be running)"
             sleep 2
-            echo "✓ Migrations complete (or skipped)"
-
-            # Flush output immediately
-            sync
 
             # Phase 4: Clean up any corrupted nginx state
             echo "🧹 Cleaning up previous nginx state..."
