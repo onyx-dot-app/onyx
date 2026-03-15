@@ -395,9 +395,10 @@ def build_queue_membership_map(
                         queue_scan_limit,
                     )
                     limit_reached = True
-                # Bound queue scans once the unique-issue cap is reached instead of
-                # paginating the rest of a queue that can no longer add tracked issues.
-                break
+                # Keep scanning the rest of the queue so already-tracked issues that
+                # appear later can still accumulate queue membership, but do not add
+                # any new issues after the cap is reached.
+                continue
             membership[issue_key].append(queue)
 
     return dict(membership)

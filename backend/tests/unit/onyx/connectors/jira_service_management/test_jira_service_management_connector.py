@@ -376,6 +376,33 @@ def test_get_request_type_map_retries_after_transient_http_error(
     assert second == {"11": expected}
 
 
+def test_get_request_type_map_retries_after_request_timeout_http_error(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    response = requests.Response()
+    response.status_code = 408
+    response._content = b"{}"
+    error = requests.HTTPError(response=response)
+    expected = JSMRequestType(
+        request_type_id="11",
+        name="Access Request",
+        description=None,
+        help_text=None,
+        issue_type_id=None,
+        group_ids=(),
+    )
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector.list_request_types",
+        side_effect=[error, [expected]],
+    ):
+        first = jsm_connector._get_request_type_map("1")
+        second = jsm_connector._get_request_type_map("1")
+
+    assert first == {}
+    assert second == {"11": expected}
+
+
 def test_get_request_type_map_stops_retrying_after_second_http_error(
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
@@ -483,3 +510,45 @@ def test_get_request_queues_stop_after_first_non_retryable_http_error(
     assert first == []
     assert second == []
     assert mock_build_queue_membership_map.call_count == 1
+
+
+def test_get_request_participants_retries_once_after_transient_http_error(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    response = requests.Response()
+    response.status_code = 503
+    response._content = b"{}"
+    error = requests.HTTPError(response=response)
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector.list_request_participants",
+        side_effect=[error, [{"displayName": "Alice"}]],
+    ) as mock_list_request_participants:
+        first = jsm_connector._get_request_participants("1", "HELP-1")
+        second = jsm_connector._get_request_participants("1", "HELP-2")
+
+    assert first == []
+    assert second == [{"displayName": "Alice"}]
+    assert mock_list_request_participants.call_count == 2
+
+
+def test_get_request_participants_stop_after_second_transient_http_error(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    response = requests.Response()
+    response.status_code = 503
+    response._content = b"{}"
+    error = requests.HTTPError(response=response)
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector.list_request_participants",
+        side_effect=[error, error],
+    ) as mock_list_request_participants:
+        first = jsm_connector._get_request_participants("1", "HELP-1")
+        second = jsm_connector._get_request_participants("1", "HELP-2")
+        third = jsm_connector._get_request_participants("1", "HELP-3")
+
+    assert first == []
+    assert second == []
+    assert third == []
+    assert mock_list_request_participants.call_count == 2

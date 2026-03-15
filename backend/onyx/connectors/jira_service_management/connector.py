@@ -72,7 +72,7 @@ JiraServiceManagementConnectorCheckpoint = JiraConnectorCheckpoint
 def _should_retry_service_desk_fetch(exc: requests.HTTPError) -> bool:
     response = exc.response
     status_code = response.status_code if response is not None else None
-    return status_code is None or status_code == 429 or status_code >= 500
+    return status_code is None or status_code in {408, 429} or status_code >= 500
 
 
 class JiraServiceManagementConnector(JiraConnector):
@@ -108,6 +108,10 @@ class JiraServiceManagementConnector(JiraConnector):
             str, dict[str, list[JSMQueue]]
         ] = {}
         self._queue_membership_retry_allowed_by_service_desk_id: dict[str, bool] = {}
+        self._participants_retry_allowed_by_service_desk_id: dict[str, bool] = {}
+        self._slas_retry_allowed_by_service_desk_id: dict[str, bool] = {}
+        self._approvals_retry_allowed_by_service_desk_id: dict[str, bool] = {}
+        self._approval_detail_retry_allowed_by_service_desk_id: dict[str, bool] = {}
         self._warning_cache: set[str] = set()
 
     @property
@@ -122,8 +126,41 @@ class JiraServiceManagementConnector(JiraConnector):
         self._request_type_retry_allowed_by_service_desk_id.clear()
         self._queue_membership_by_service_desk_id.clear()
         self._queue_membership_retry_allowed_by_service_desk_id.clear()
+        self._participants_retry_allowed_by_service_desk_id.clear()
+        self._slas_retry_allowed_by_service_desk_id.clear()
+        self._approvals_retry_allowed_by_service_desk_id.clear()
+        self._approval_detail_retry_allowed_by_service_desk_id.clear()
         self._warning_cache.clear()
         return super().load_credentials(credentials)
+
+    def _should_short_circuit_service_desk_fetch(
+        self,
+        retry_allowed_by_service_desk_id: dict[str, bool],
+        service_desk_id: str,
+    ) -> bool:
+        return retry_allowed_by_service_desk_id.get(service_desk_id) is False
+
+    def _record_service_desk_fetch_failure(
+        self,
+        retry_allowed_by_service_desk_id: dict[str, bool],
+        service_desk_id: str,
+        exc: requests.HTTPError,
+    ) -> None:
+        # Allow exactly one retry for transient 408/429/5xx failures. On the first
+        # failure the key is absent, so a transient error stores True. If the retry
+        # fails, the key already exists and the stored value flips to False, which
+        # permanently short-circuits the rest of the run for this service desk.
+        retry_allowed_by_service_desk_id[service_desk_id] = (
+            _should_retry_service_desk_fetch(exc)
+            and service_desk_id not in retry_allowed_by_service_desk_id
+        )
+
+    def _clear_service_desk_fetch_failure(
+        self,
+        retry_allowed_by_service_desk_id: dict[str, bool],
+        service_desk_id: str,
+    ) -> None:
+        retry_allowed_by_service_desk_id.pop(service_desk_id, None)
 
     @override
     def _get_document_external_access(
@@ -218,8 +255,10 @@ class JiraServiceManagementConnector(JiraConnector):
             issue_id_or_key=issue.key,
         )
         if request is None:
+            # Only customer-request issues are indexable by this connector. If the JSM
+            # request endpoint returns no data, treat the Jira issue as out of scope.
             logger.debug(
-                "Skipping Jira issue %s because its JSM request details were unavailable",
+                "Skipping Jira issue %s because it is not indexable as a JSM request",
                 issue.key,
             )
             return None
@@ -324,9 +363,9 @@ class JiraServiceManagementConnector(JiraConnector):
         self,
         service_desk_id: str,
     ) -> dict[str, JSMRequestType]:
-        if (
-            self._request_type_retry_allowed_by_service_desk_id.get(service_desk_id)
-            is False
+        if self._should_short_circuit_service_desk_fetch(
+            self._request_type_retry_allowed_by_service_desk_id,
+            service_desk_id,
         ):
             return {}
 
@@ -337,10 +376,10 @@ class JiraServiceManagementConnector(JiraConnector):
                     service_desk_id=service_desk_id,
                 )
             except requests.HTTPError as exc:
-                self._request_type_retry_allowed_by_service_desk_id[service_desk_id] = (
-                    _should_retry_service_desk_fetch(exc)
-                    and service_desk_id
-                    not in self._request_type_retry_allowed_by_service_desk_id
+                self._record_service_desk_fetch_failure(
+                    self._request_type_retry_allowed_by_service_desk_id,
+                    service_desk_id,
+                    exc,
                 )
                 self._warn_once(
                     warning_key=f"request_types:{service_desk_id}",
@@ -351,9 +390,9 @@ class JiraServiceManagementConnector(JiraConnector):
                 )
                 return {}
 
-            self._request_type_retry_allowed_by_service_desk_id.pop(
+            self._clear_service_desk_fetch_failure(
+                self._request_type_retry_allowed_by_service_desk_id,
                 service_desk_id,
-                None,
             )
             self._request_types_by_service_desk_id[service_desk_id] = {
                 request_type.request_type_id: request_type for request_type in request_types
@@ -402,9 +441,9 @@ class JiraServiceManagementConnector(JiraConnector):
         service_desk_id: str,
         issue_key: str,
     ) -> list[JSMQueue]:
-        if (
-            self._queue_membership_retry_allowed_by_service_desk_id.get(service_desk_id)
-            is False
+        if self._should_short_circuit_service_desk_fetch(
+            self._queue_membership_retry_allowed_by_service_desk_id,
+            service_desk_id,
         ):
             return []
 
@@ -417,12 +456,10 @@ class JiraServiceManagementConnector(JiraConnector):
                     )
                 )
             except requests.HTTPError as exc:
-                self._queue_membership_retry_allowed_by_service_desk_id[
-                    service_desk_id
-                ] = (
-                    _should_retry_service_desk_fetch(exc)
-                    and service_desk_id
-                    not in self._queue_membership_retry_allowed_by_service_desk_id
+                self._record_service_desk_fetch_failure(
+                    self._queue_membership_retry_allowed_by_service_desk_id,
+                    service_desk_id,
+                    exc,
                 )
                 self._warn_once(
                     warning_key=f"queues:{service_desk_id}",
@@ -433,9 +470,9 @@ class JiraServiceManagementConnector(JiraConnector):
                 )
                 return []
 
-            self._queue_membership_retry_allowed_by_service_desk_id.pop(
+            self._clear_service_desk_fetch_failure(
+                self._queue_membership_retry_allowed_by_service_desk_id,
                 service_desk_id,
-                None,
             )
         return self._queue_membership_by_service_desk_id[service_desk_id].get(
             issue_key,
@@ -447,12 +484,27 @@ class JiraServiceManagementConnector(JiraConnector):
         service_desk_id: str,
         issue_key: str,
     ) -> list[dict[str, Any]]:
+        if self._should_short_circuit_service_desk_fetch(
+            self._participants_retry_allowed_by_service_desk_id,
+            service_desk_id,
+        ):
+            return []
         try:
-            return list_request_participants(
+            participants = list_request_participants(
                 jira_client=self.jira_client,
                 issue_id_or_key=issue_key,
             )
+            self._clear_service_desk_fetch_failure(
+                self._participants_retry_allowed_by_service_desk_id,
+                service_desk_id,
+            )
+            return participants
         except requests.HTTPError as exc:
+            self._record_service_desk_fetch_failure(
+                self._participants_retry_allowed_by_service_desk_id,
+                service_desk_id,
+                exc,
+            )
             self._warn_once(
                 warning_key=f"participants:{service_desk_id}",
                 message=(
@@ -467,12 +519,27 @@ class JiraServiceManagementConnector(JiraConnector):
         service_desk_id: str,
         issue_key: str,
     ) -> list[dict[str, Any]]:
+        if self._should_short_circuit_service_desk_fetch(
+            self._slas_retry_allowed_by_service_desk_id,
+            service_desk_id,
+        ):
+            return []
         try:
-            return list_request_slas(
+            slas = list_request_slas(
                 jira_client=self.jira_client,
                 issue_id_or_key=issue_key,
             )
+            self._clear_service_desk_fetch_failure(
+                self._slas_retry_allowed_by_service_desk_id,
+                service_desk_id,
+            )
+            return slas
         except requests.HTTPError as exc:
+            self._record_service_desk_fetch_failure(
+                self._slas_retry_allowed_by_service_desk_id,
+                service_desk_id,
+                exc,
+            )
             self._warn_once(
                 warning_key=f"slas:{service_desk_id}",
                 message=(
@@ -487,12 +554,22 @@ class JiraServiceManagementConnector(JiraConnector):
         service_desk_id: str,
         issue_key: str,
     ) -> list[dict[str, Any]]:
+        if self._should_short_circuit_service_desk_fetch(
+            self._approvals_retry_allowed_by_service_desk_id,
+            service_desk_id,
+        ):
+            return []
         try:
             approvals = list_request_approvals(
                 jira_client=self.jira_client,
                 issue_id_or_key=issue_key,
             )
         except requests.HTTPError as exc:
+            self._record_service_desk_fetch_failure(
+                self._approvals_retry_allowed_by_service_desk_id,
+                service_desk_id,
+                exc,
+            )
             self._warn_once(
                 warning_key=f"approvals:{service_desk_id}",
                 message=(
@@ -502,6 +579,10 @@ class JiraServiceManagementConnector(JiraConnector):
             )
             return []
 
+        self._clear_service_desk_fetch_failure(
+            self._approvals_retry_allowed_by_service_desk_id,
+            service_desk_id,
+        )
         detailed_approvals: list[dict[str, Any]] = []
         for approval in approvals:
             approval_id = approval.get("id")
@@ -513,6 +594,13 @@ class JiraServiceManagementConnector(JiraConnector):
                 detailed_approvals.append(approval)
                 continue
 
+            if self._should_short_circuit_service_desk_fetch(
+                self._approval_detail_retry_allowed_by_service_desk_id,
+                service_desk_id,
+            ):
+                detailed_approvals.append(approval)
+                continue
+
             try:
                 approval_detail = get_approval(
                     jira_client=self.jira_client,
@@ -520,6 +608,11 @@ class JiraServiceManagementConnector(JiraConnector):
                     approval_id=str(approval_id),
                 )
             except requests.HTTPError as exc:
+                self._record_service_desk_fetch_failure(
+                    self._approval_detail_retry_allowed_by_service_desk_id,
+                    service_desk_id,
+                    exc,
+                )
                 self._warn_once(
                     warning_key=f"approval-detail:{service_desk_id}",
                     message=(
@@ -529,6 +622,11 @@ class JiraServiceManagementConnector(JiraConnector):
                     ),
                 )
                 approval_detail = None
+            else:
+                self._clear_service_desk_fetch_failure(
+                    self._approval_detail_retry_allowed_by_service_desk_id,
+                    service_desk_id,
+                )
 
             detailed_approvals.append(approval_detail or approval)
 
