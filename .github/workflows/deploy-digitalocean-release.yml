@@ -105,7 +105,20 @@ jobs:
             sleep 15
 
             echo "📊 Running database migrations..."
-            sudo docker compose exec -T api_server alembic upgrade head || true
+            # Set timeout to prevent migrations from hanging
+            timeout 120 sudo docker compose exec -T api_server alembic upgrade head || {
+              MIGRATION_EXIT=$?
+              if [ $MIGRATION_EXIT -eq 124 ]; then
+                echo "⚠️  Migrations timed out (120s) - continuing anyway"
+              elif [ $MIGRATION_EXIT -ne 0 ]; then
+                echo "⚠️  Migrations failed with code $MIGRATION_EXIT - continuing"
+              fi
+            }
+            sleep 2
+            echo "✓ Migrations complete (or skipped)"
+
+            # Flush output immediately
+            sync
 
             # Phase 4: Clean up any corrupted nginx state
             echo "🧹 Cleaning up previous nginx state..."
