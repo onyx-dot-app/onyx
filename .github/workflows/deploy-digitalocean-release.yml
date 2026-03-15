@@ -123,7 +123,7 @@ jobs:
 
             echo "🔄 Starting nginx reverse proxy..."
             # Use hop_default network (matches docker-compose.yml name: hop)
-            sudo docker run -d \
+            CONTAINER_ID=$(sudo docker run -d \
               --name onyx-proxy \
               --network hop_default \
               -p 80:80 \
@@ -131,7 +131,15 @@ jobs:
               -v $(pwd)/nginx-simple.conf:/etc/nginx/nginx.conf:ro \
               -v /etc/letsencrypt:/etc/letsencrypt:ro \
               -v /var/www/certbot:/var/www/certbot \
-              nginx:alpine
+              nginx:alpine 2>&1)
+
+            RUN_EXIT_CODE=$?
+            if [ $RUN_EXIT_CODE -ne 0 ]; then
+              echo "❌ ERROR: docker run failed with exit code $RUN_EXIT_CODE"
+              echo "Output: $CONTAINER_ID"
+              exit 1
+            fi
+            echo "  Container ID: $CONTAINER_ID"
 
             echo "⏳ Waiting for nginx to start..."
             sleep 3
@@ -142,8 +150,10 @@ jobs:
               echo "❌ ERROR: onyx-proxy container not running"
               echo "Docker container status:"
               sudo docker ps
+              echo "All containers (including stopped):"
+              sudo docker ps -a | grep onyx-proxy || echo "No onyx-proxy containers"
               echo "Recent docker logs:"
-              sudo docker logs onyx-proxy 2>&1 | tail -20
+              sudo docker logs onyx-proxy 2>&1 | tail -30 || echo "No logs available"
               exit 1
             fi
             echo "  ✓ onyx-proxy container is running"
@@ -223,19 +233,36 @@ jobs:
 
             # Phase 2: Verify nginx proxy is responding (critical for accessibility)
             echo -n "Nginx Proxy: "
-            for i in {1..5}; do
-              if curl -s http://localhost/ >/dev/null 2>&1; then
-                echo "✓ healthy"
-                break
-              fi
-              if [ $i -lt 5 ]; then
-                echo -n "."
-                sleep 3
-              else
-                echo "✗ unhealthy"
+            # First check: container must exist
+            if ! sudo docker ps -a | grep -q onyx-proxy; then
+              echo "✗ container not found"
+              HEALTH_FAILED=1
+            else
+              # Second check: container must be running (not exited)
+              if ! sudo docker ps | grep -q onyx-proxy; then
+                echo "✗ container not running (exited)"
+                echo "Container status:"
+                sudo docker ps -a | grep onyx-proxy
+                echo "Container logs:"
+                sudo docker logs onyx-proxy 2>&1 | tail -20
                 HEALTH_FAILED=1
+              else
+                # Third check: nginx must respond to HTTP
+                for i in {1..5}; do
+                  if curl -s http://localhost/ >/dev/null 2>&1; then
+                    echo "✓ healthy"
+                    break
+                  fi
+                  if [ $i -lt 5 ]; then
+                    echo -n "."
+                    sleep 3
+                  else
+                    echo "✗ unhealthy (no HTTP response)"
+                    HEALTH_FAILED=1
+                  fi
+                done
               fi
-            done
+            fi
 
             echo ""
             if [ $HEALTH_FAILED -eq 1 ]; then
