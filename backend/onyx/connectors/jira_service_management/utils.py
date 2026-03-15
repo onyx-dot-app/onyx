@@ -4,12 +4,13 @@ import html
 import re
 from collections import defaultdict
 from collections.abc import Iterator
-from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin
 
 import requests
 from jira import JIRA
+from pydantic import BaseModel
+from pydantic import ConfigDict
 
 from onyx.connectors.jira.utils import extract_text_from_adf
 from onyx.utils.logger import setup_logger
@@ -22,8 +23,9 @@ JSM_REQUEST_EXPAND = "participant,status,requestType,serviceDesk"
 JSM_MAX_PAGINATION_PAGES = 10000
 
 
-@dataclass(frozen=True)
-class JSMServiceDesk:
+class JSMServiceDesk(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     service_desk_id: str
     project_key: str | None
     project_name: str | None
@@ -31,8 +33,9 @@ class JSMServiceDesk:
     portal_id: str | None
 
 
-@dataclass(frozen=True)
-class JSMRequestType:
+class JSMRequestType(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     request_type_id: str
     name: str | None
     description: str | None
@@ -41,8 +44,9 @@ class JSMRequestType:
     group_ids: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class JSMQueue:
+class JSMQueue(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     queue_id: str
     name: str | None
     jql: str | None
@@ -375,8 +379,6 @@ def build_queue_membership_map(
     limit_reached = False
     for queue in queues:
         path = f"servicedesk/{service_desk_id}/queue/{queue.queue_id}/issue"
-        # Keep scanning later queues after hitting the unique-issue cap so already-seen
-        # issues can still accumulate their full queue memberships across the service desk.
         for raw_issue in iter_jsm_paginated_values(
             jira_client=jira_client,
             path=path,
@@ -393,7 +395,9 @@ def build_queue_membership_map(
                         queue_scan_limit,
                     )
                     limit_reached = True
-                continue
+                # Bound queue scans once the unique-issue cap is reached instead of
+                # paginating the rest of a queue that can no longer add tracked issues.
+                break
             membership[issue_key].append(queue)
 
     return dict(membership)
@@ -589,7 +593,10 @@ def stringify_jsm_value(value: Any) -> str:
                 if adf_text:
                     return adf_text
             except Exception:
-                pass
+                logger.debug(
+                    "Failed to extract ADF text from JSM value; falling back",
+                    exc_info=True,
+                )
 
         parts = []
         for nested_key in ("label", "status", "statusCategory", "currentStatus"):

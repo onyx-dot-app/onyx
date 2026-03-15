@@ -398,6 +398,26 @@ def test_get_request_type_map_stops_retrying_after_second_http_error(
     assert mock_list_request_types.call_count == 2
 
 
+def test_get_request_type_map_stops_after_first_non_retryable_http_error(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    response = requests.Response()
+    response.status_code = 403
+    response._content = b"{}"
+    error = requests.HTTPError(response=response)
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector.list_request_types",
+        side_effect=error,
+    ) as mock_list_request_types:
+        first = jsm_connector._get_request_type_map("1")
+        second = jsm_connector._get_request_type_map("1")
+
+    assert first == {}
+    assert second == {}
+    assert mock_list_request_types.call_count == 1
+
+
 def test_get_request_queues_retries_after_transient_http_error(
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
@@ -443,3 +463,23 @@ def test_get_request_queues_stop_retrying_after_second_http_error(
     assert second == []
     assert third == []
     assert mock_build_queue_membership_map.call_count == 2
+
+
+def test_get_request_queues_stop_after_first_non_retryable_http_error(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    response = requests.Response()
+    response.status_code = 403
+    response._content = b"{}"
+    error = requests.HTTPError(response=response)
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector.build_queue_membership_map",
+        side_effect=error,
+    ) as mock_build_queue_membership_map:
+        first = jsm_connector._get_request_queues("1", "HELP-1")
+        second = jsm_connector._get_request_queues("1", "HELP-1")
+
+    assert first == []
+    assert second == []
+    assert mock_build_queue_membership_map.call_count == 1
