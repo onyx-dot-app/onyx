@@ -79,6 +79,26 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
 
   const currentIcon = ROLE_ICONS[user.role] ?? SvgUser;
 
+  const visibleRoles = isPaidEnterpriseFeaturesEnabled
+    ? SELECTABLE_ROLES
+    : SELECTABLE_ROLES.filter((r) => r !== UserRole.GLOBAL_CURATOR);
+
+  const roleItems = visibleRoles.map((role) => {
+    const isSelected = user.role === role;
+    const icon = ROLE_ICONS[role] ?? SvgUser;
+    return (
+      <LineItem
+        key={role}
+        icon={isSelected ? SvgCheck : icon}
+        selected={isSelected}
+        emphasized={isSelected}
+        onClick={() => handleSelect(role)}
+      >
+        {USER_ROLE_LABELS[role]}
+      </LineItem>
+    );
+  });
+
   return (
     <Disabled disabled={isUpdating}>
       <Popover open={open} onOpenChange={setOpen}>
@@ -95,27 +115,7 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
         </Popover.Trigger>
         <Popover.Content align="start">
           <div className="flex flex-col gap-1 p-1 min-w-[160px]">
-            {SELECTABLE_ROLES.map((role) => {
-              if (
-                role === UserRole.GLOBAL_CURATOR &&
-                !isPaidEnterpriseFeaturesEnabled
-              ) {
-                return null;
-              }
-              const isSelected = user.role === role;
-              const icon = ROLE_ICONS[role] ?? SvgUser;
-              return (
-                <LineItem
-                  key={role}
-                  icon={isSelected ? SvgCheck : icon}
-                  selected={isSelected}
-                  emphasized={isSelected}
-                  onClick={() => handleSelect(role)}
-                >
-                  {USER_ROLE_LABELS[role]}
-                </LineItem>
-              );
-            })}
+            {roleItems}
           </div>
         </Popover.Content>
       </Popover>

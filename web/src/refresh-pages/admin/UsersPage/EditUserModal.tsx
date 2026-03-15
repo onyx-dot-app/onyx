@@ -171,7 +171,6 @@ export default function EditUserModal({
             alignItems="stretch"
             justifyContent="start"
           >
-            {/* Claude code start here */}
             <Section
               gap={0.5}
               height={joinedGroups.length === 0 ? "auto" : 12.5}
@@ -250,100 +249,6 @@ export default function EditUserModal({
                 </ShadowDiv>
               )}
             </Section>
-            {/* Claude code end  here */}
-            {/* Subsection: white card behind search + groups */}
-            {/* <div className="relative">
-              <div className="absolute -inset-2 bg-background-neutral-00 rounded-12" />
-              <Section
-                gap={0.5}
-                height="auto"
-                alignItems="stretch"
-                justifyContent="start"
-              >
-                <div ref={containerRef} className="relative">
-                  <InputTypeIn
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      if (!dropdownOpen) setDropdownOpen(true);
-                    }}
-                    onFocus={() => setDropdownOpen(true)}
-                    onBlur={closeDropdown}
-                    placeholder="Search groups to join..."
-                    leftSearchIcon
-                  />
-                  {dropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-background-neutral-00 border border-border-02 rounded-12 shadow-md p-1">
-                      {groupsLoading ? (
-                        <Text as="p" text03 secondaryBody className="px-3 py-2">
-                          Loading groups...
-                        </Text>
-                      ) : dropdownGroups.length === 0 ? (
-                        <Text as="p" text03 secondaryBody className="px-3 py-2">
-                          No groups found
-                        </Text>
-                      ) : (
-                        <ShadowDiv className="max-h-[200px] flex flex-col gap-1">
-                          {dropdownGroups.map((group) => {
-                            const isMember = memberGroupIds.has(group.id);
-                            return (
-                              <LineItem
-                                key={group.id}
-                                icon={isMember ? SvgCheck : SvgUsers}
-                                description={`${group.users.length} ${
-                                  group.users.length === 1 ? "user" : "users"
-                                }`}
-                                selected={isMember}
-                                emphasized={isMember}
-                                onMouseDown={(e: React.MouseEvent) =>
-                                  e.preventDefault()
-                                }
-                                onClick={() => toggleGroup(group.id)}
-                              >
-                                {group.name}
-                              </LineItem>
-                            );
-                          })}
-                        </ShadowDiv>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {joinedGroups.length === 0 ? (
-                  <LineItem
-                    icon={SvgUsers}
-                    description={`${displayName} is not in any groups.`}
-                    muted
-                  >
-                    No groups joined
-                  </LineItem>
-                ) : (
-                  <ShadowDiv className="flex flex-col gap-1 max-h-[200px]">
-                    {joinedGroups.map((group) => (
-                      <div
-                        key={group.id}
-                        className="bg-background-tint-01 rounded-08"
-                      >
-                        <LineItem
-                          icon={SvgUsers}
-                          description={`${group.users.length} ${
-                            group.users.length === 1 ? "user" : "users"
-                          }`}
-                          rightChildren={
-                            <SvgLogOut className="w-4 h-4 text-text-03" />
-                          }
-                          onClick={() => toggleGroup(group.id)}
-                        >
-                          {group.name}
-                        </LineItem>
-                      </div>
-                    ))}
-                  </ShadowDiv>
-                )}
-              </Section>
-            </div> */}
-
             {user.role && (
               <>
                 <Separator noPadding />

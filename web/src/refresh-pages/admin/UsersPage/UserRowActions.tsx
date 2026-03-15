@@ -34,14 +34,14 @@ import type { UserRow } from "./interfaces";
 // Types
 // ---------------------------------------------------------------------------
 
-type ModalType =
-  | "deactivate"
-  | "activate"
-  | "delete"
-  | "cancelInvite"
-  | "editGroups"
-  | "resetPassword"
-  | null;
+enum Modal {
+  DEACTIVATE = "deactivate",
+  ACTIVATE = "activate",
+  DELETE = "delete",
+  CANCEL_INVITE = "cancelInvite",
+  EDIT_GROUPS = "editGroups",
+  RESET_PASSWORD = "resetPassword",
+}
 
 interface UserRowActionsProps {
   user: UserRow;
@@ -56,7 +56,7 @@ export default function UserRowActions({
   user,
   onMutate,
 }: UserRowActionsProps) {
-  const [modal, setModal] = useState<ModalType>(null);
+  const [modal, setModal] = useState<Modal | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newPassword, setNewPassword] = useState<string | null>(null);
@@ -78,7 +78,7 @@ export default function UserRowActions({
     }
   }
 
-  const openModal = (type: ModalType) => {
+  const openModal = (type: Modal) => {
     setPopoverOpen(false);
     setModal(type);
   };
@@ -94,7 +94,7 @@ export default function UserRowActions({
             <Button
               prominence="tertiary"
               icon={SvgUsers}
-              onClick={() => openModal("editGroups")}
+              onClick={() => openModal(Modal.EDIT_GROUPS)}
             >
               Groups &amp; Roles
             </Button>
@@ -104,7 +104,7 @@ export default function UserRowActions({
               prominence="tertiary"
               variant="danger"
               icon={SvgUserX}
-              onClick={() => openModal("deactivate")}
+              onClick={() => openModal(Modal.DEACTIVATE)}
             >
               Deactivate User
             </Button>
@@ -124,7 +124,7 @@ export default function UserRowActions({
             prominence="tertiary"
             variant="danger"
             icon={SvgXCircle}
-            onClick={() => openModal("cancelInvite")}
+            onClick={() => openModal(Modal.CANCEL_INVITE)}
           >
             Cancel Invite
           </Button>
@@ -154,7 +154,7 @@ export default function UserRowActions({
               <Button
                 prominence="tertiary"
                 icon={SvgUsers}
-                onClick={() => openModal("editGroups")}
+                onClick={() => openModal(Modal.EDIT_GROUPS)}
               >
                 Groups &amp; Roles
               </Button>
@@ -162,7 +162,7 @@ export default function UserRowActions({
             <Button
               prominence="tertiary"
               icon={SvgKey}
-              onClick={() => openModal("resetPassword")}
+              onClick={() => openModal(Modal.RESET_PASSWORD)}
             >
               Reset Password
             </Button>
@@ -171,7 +171,7 @@ export default function UserRowActions({
               prominence="tertiary"
               variant="danger"
               icon={SvgUserX}
-              onClick={() => openModal("deactivate")}
+              onClick={() => openModal(Modal.DEACTIVATE)}
             >
               Deactivate User
             </Button>
@@ -185,7 +185,7 @@ export default function UserRowActions({
               <Button
                 prominence="tertiary"
                 icon={SvgUsers}
-                onClick={() => openModal("editGroups")}
+                onClick={() => openModal(Modal.EDIT_GROUPS)}
               >
                 Groups &amp; Roles
               </Button>
@@ -193,7 +193,7 @@ export default function UserRowActions({
             <Button
               prominence="tertiary"
               icon={SvgKey}
-              onClick={() => openModal("resetPassword")}
+              onClick={() => openModal(Modal.RESET_PASSWORD)}
             >
               Reset Password
             </Button>
@@ -201,7 +201,7 @@ export default function UserRowActions({
             <Button
               prominence="tertiary"
               icon={SvgUserPlus}
-              onClick={() => openModal("activate")}
+              onClick={() => openModal(Modal.ACTIVATE)}
             >
               Activate User
             </Button>
@@ -209,7 +209,7 @@ export default function UserRowActions({
               prominence="tertiary"
               variant="danger"
               icon={SvgUserX}
-              onClick={() => openModal("delete")}
+              onClick={() => openModal(Modal.DELETE)}
             >
               Delete User
             </Button>
@@ -241,7 +241,7 @@ export default function UserRowActions({
         </Popover.Content>
       </Popover>
 
-      {modal === "editGroups" && user.id && (
+      {modal === Modal.EDIT_GROUPS && user.id && (
         <EditUserModal
           user={user as UserRow & { id: string }}
           onClose={() => setModal(null)}
@@ -249,7 +249,7 @@ export default function UserRowActions({
         />
       )}
 
-      {modal === "cancelInvite" && (
+      {modal === Modal.CANCEL_INVITE && (
         <ConfirmationModalLayout
           icon={(props) => (
             <SvgUserX {...props} className="text-action-danger-05" />
@@ -281,7 +281,7 @@ export default function UserRowActions({
         </ConfirmationModalLayout>
       )}
 
-      {modal === "deactivate" && (
+      {modal === Modal.DEACTIVATE && (
         <ConfirmationModalLayout
           icon={(props) => (
             <SvgUserX {...props} className="text-action-danger-05" />
@@ -315,7 +315,7 @@ export default function UserRowActions({
         </ConfirmationModalLayout>
       )}
 
-      {modal === "activate" && (
+      {modal === Modal.ACTIVATE && (
         <ConfirmationModalLayout
           icon={SvgUserPlus}
           title="Activate User"
@@ -344,7 +344,7 @@ export default function UserRowActions({
         </ConfirmationModalLayout>
       )}
 
-      {modal === "delete" && (
+      {modal === Modal.DELETE && (
         <ConfirmationModalLayout
           icon={(props) => (
             <SvgUserX {...props} className="text-action-danger-05" />
@@ -377,7 +377,7 @@ export default function UserRowActions({
         </ConfirmationModalLayout>
       )}
 
-      {modal === "resetPassword" && (
+      {modal === Modal.RESET_PASSWORD && (
         <ConfirmationModalLayout
           icon={SvgKey}
           title={newPassword ? "Password Reset" : "Reset Password"}
