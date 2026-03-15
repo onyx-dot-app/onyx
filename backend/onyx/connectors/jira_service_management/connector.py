@@ -11,13 +11,14 @@ from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
 from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import ConnectorMissingCredentialError
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import _perform_jql_search
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.jira.utils import best_effort_basic_expert_info
 from onyx.connectors.jira.utils import best_effort_get_field_from_issue
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
@@ -127,7 +128,9 @@ class JiraServiceManagementConnector(JiraConnector):
         return None
 
     @override
-    def _get_jql_query(self, start: float, end: float) -> str:
+    def _get_jql_query(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> str:
         scope_jql = self._get_service_desk_scope_jql()
         time_jql = self._build_time_jql(start=start, end=end)
 
@@ -198,12 +201,19 @@ class JiraServiceManagementConnector(JiraConnector):
             issue_id_or_key=issue.key,
         )
         if request is None:
-            logger.debug("Skipping Jira issue %s because it is not a JSM request", issue.key)
+            logger.debug(
+                "Skipping Jira issue %s because its JSM request details were unavailable",
+                issue.key,
+            )
             return None
 
-        participants = self._get_request_participants(issue.key)
-        slas = self._get_request_slas(issue.key)
-        approvals = self._get_request_approvals(issue.key)
+        participants = self._get_request_participants(
+            service_desk.service_desk_id, issue.key
+        )
+        slas = self._get_request_slas(service_desk.service_desk_id, issue.key)
+        approvals = self._get_request_approvals(
+            service_desk.service_desk_id, issue.key
+        )
         request_type = self._get_request_type(service_desk.service_desk_id, request)
         queues = self._get_request_queues(service_desk.service_desk_id, issue.key)
 
@@ -380,7 +390,11 @@ class JiraServiceManagementConnector(JiraConnector):
             [],
         )
 
-    def _get_request_participants(self, issue_key: str) -> list[dict[str, Any]]:
+    def _get_request_participants(
+        self,
+        service_desk_id: str,
+        issue_key: str,
+    ) -> list[dict[str, Any]]:
         try:
             return list_request_participants(
                 jira_client=self.jira_client,
@@ -388,14 +402,19 @@ class JiraServiceManagementConnector(JiraConnector):
             )
         except requests.HTTPError as exc:
             self._warn_once(
-                warning_key=f"participants:{issue_key}",
+                warning_key=f"participants:{service_desk_id}",
                 message=(
-                    f"Unable to fetch Jira Service Management participants for {issue_key}: {exc}"
+                    "Unable to fetch Jira Service Management participants for "
+                    f"service desk {service_desk_id} (latest issue {issue_key}): {exc}"
                 ),
             )
             return []
 
-    def _get_request_slas(self, issue_key: str) -> list[dict[str, Any]]:
+    def _get_request_slas(
+        self,
+        service_desk_id: str,
+        issue_key: str,
+    ) -> list[dict[str, Any]]:
         try:
             return list_request_slas(
                 jira_client=self.jira_client,
@@ -403,12 +422,19 @@ class JiraServiceManagementConnector(JiraConnector):
             )
         except requests.HTTPError as exc:
             self._warn_once(
-                warning_key=f"slas:{issue_key}",
-                message=f"Unable to fetch Jira Service Management SLAs for {issue_key}: {exc}",
+                warning_key=f"slas:{service_desk_id}",
+                message=(
+                    "Unable to fetch Jira Service Management SLAs for "
+                    f"service desk {service_desk_id} (latest issue {issue_key}): {exc}"
+                ),
             )
             return []
 
-    def _get_request_approvals(self, issue_key: str) -> list[dict[str, Any]]:
+    def _get_request_approvals(
+        self,
+        service_desk_id: str,
+        issue_key: str,
+    ) -> list[dict[str, Any]]:
         try:
             approvals = list_request_approvals(
                 jira_client=self.jira_client,
@@ -416,9 +442,10 @@ class JiraServiceManagementConnector(JiraConnector):
             )
         except requests.HTTPError as exc:
             self._warn_once(
-                warning_key=f"approvals:{issue_key}",
+                warning_key=f"approvals:{service_desk_id}",
                 message=(
-                    f"Unable to fetch Jira Service Management approvals for {issue_key}: {exc}"
+                    "Unable to fetch Jira Service Management approvals for "
+                    f"service desk {service_desk_id} (latest issue {issue_key}): {exc}"
                 ),
             )
             return []
@@ -442,10 +469,11 @@ class JiraServiceManagementConnector(JiraConnector):
                 )
             except requests.HTTPError as exc:
                 self._warn_once(
-                    warning_key=f"approval:{issue_key}:{approval_id}",
+                    warning_key=f"approval-detail:{service_desk_id}",
                     message=(
                         "Unable to fetch Jira Service Management approval detail for "
-                        f"{issue_key}/{approval_id}: {exc}"
+                        f"service desk {service_desk_id} "
+                        f"(latest issue {issue_key}/{approval_id}): {exc}"
                     ),
                 )
                 approval_detail = None
