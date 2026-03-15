@@ -68,6 +68,19 @@ jobs:
             set -e
             cd /opt/onyx || exit 1
 
+            # Phase 1: Validate required files exist before deployment
+            echo "✓ Validating deployment prerequisites..."
+            if [ ! -f nginx-simple.conf ]; then
+              echo "❌ CRITICAL: nginx-simple.conf not found in $(pwd)"
+              exit 1
+            fi
+            if [ ! -f docker-compose.yml ]; then
+              echo "❌ CRITICAL: docker-compose.yml not found in $(pwd)"
+              exit 1
+            fi
+            echo "  ✓ nginx-simple.conf found"
+            echo "  ✓ docker-compose.yml found"
+
             echo "📥 Pulling latest code from main branch..."
             git fetch origin main
             git reset --hard origin/main
@@ -94,6 +107,20 @@ jobs:
             echo "📊 Running database migrations..."
             sudo docker compose exec -T api_server alembic upgrade head || true
 
+            # Phase 4: Clean up any corrupted nginx state
+            echo "🧹 Cleaning up previous nginx state..."
+            sudo rm -rf nginx-simple.conf 2>/dev/null || true
+            if [ -d nginx-simple.conf ]; then
+              echo "  ✗ nginx-simple.conf is a directory (corrupted state), removing..."
+              sudo rm -rf nginx-simple.conf
+            fi
+
+            # Re-verify nginx-simple.conf exists after fresh pull
+            if [ ! -f nginx-simple.conf ]; then
+              echo "❌ ERROR: nginx-simple.conf missing after git pull"
+              exit 1
+            fi
+
             echo "🔄 Starting nginx reverse proxy..."
             sudo docker run -d \
               --name onyx-proxy \
@@ -107,6 +134,18 @@ jobs:
 
             echo "⏳ Waiting for nginx to start..."
             sleep 3
+
+            # Phase 3: Verify nginx container is running
+            echo "✓ Verifying nginx proxy container started..."
+            if ! sudo docker ps | grep -q onyx-proxy; then
+              echo "❌ ERROR: onyx-proxy container not running"
+              echo "Docker container status:"
+              sudo docker ps
+              echo "Recent docker logs:"
+              sudo docker logs onyx-proxy 2>&1 | tail -20
+              exit 1
+            fi
+            echo "  ✓ onyx-proxy container is running"
 
             echo "✅ Deployment complete!"
           EOSSH
@@ -180,6 +219,22 @@ jobs:
               echo "✗ unhealthy"
               HEALTH_FAILED=1
             fi
+
+            # Phase 2: Verify nginx proxy is responding (critical for accessibility)
+            echo -n "Nginx Proxy: "
+            for i in {1..5}; do
+              if curl -s http://localhost/ >/dev/null 2>&1; then
+                echo "✓ healthy"
+                break
+              fi
+              if [ $i -lt 5 ]; then
+                echo -n "."
+                sleep 3
+              else
+                echo "✗ unhealthy"
+                HEALTH_FAILED=1
+              fi
+            done
 
             echo ""
             if [ $HEALTH_FAILED -eq 1 ]; then

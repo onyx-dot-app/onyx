@@ -88,12 +88,28 @@ jobs:
             sudo cp -r . "$BACKUP_DIR"
             echo "✓ Backup created at: $BACKUP_DIR"
 
+            # Pre-flight validation
+            echo "✓ Validating rollback prerequisites..."
+            if [ ! -f docker-compose.yml ]; then
+              echo "❌ CRITICAL: docker-compose.yml not found in $(pwd)"
+              exit 1
+            fi
+            echo "  ✓ docker-compose.yml found"
+
             echo "📥 Pulling latest code from main..."
             git fetch origin main
             git reset --hard origin/main
 
             echo "🛑 Stopping services..."
             sudo docker compose down --remove-orphans
+
+            # Clean up any corrupted nginx state
+            echo "🧹 Cleaning up previous nginx state..."
+            sudo rm -rf nginx-simple.conf 2>/dev/null || true
+            if [ -d nginx-simple.conf ]; then
+              echo "  ✗ nginx-simple.conf is a directory (corrupted state), removing..."
+              sudo rm -rf nginx-simple.conf
+            fi
 
             echo "🔄 Pulling Docker images..."
             sudo docker compose pull
