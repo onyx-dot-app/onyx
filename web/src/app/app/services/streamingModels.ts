@@ -61,6 +61,10 @@ export enum PacketType {
   INTERMEDIATE_REPORT_START = "intermediate_report_start",
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
+
+  // GenUI packets
+  GENUI_START = "genui_start",
+  GENUI_DELTA = "genui_delta",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -299,6 +303,16 @@ export interface IntermediateReportCitedDocs extends BaseObj {
   cited_docs: OnyxDocument[] | null;
 }
 
+// GenUI Packets
+export interface GenUIStart extends BaseObj {
+  type: "genui_start";
+}
+
+export interface GenUIDelta extends BaseObj {
+  type: "genui_delta";
+  content: string;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
@@ -384,6 +398,8 @@ export type ResearchAgentObj =
   | IntermediateReportCitedDocs
   | SectionEnd;
 
+export type GenUIObj = GenUIStart | GenUIDelta | SectionEnd | PacketError;
+
 // Union type for all possible streaming objects
 export type ObjTypes =
   | ChatObj
@@ -395,6 +411,7 @@ export type ObjTypes =
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
+  | GenUIObj
   | PacketErrorObj
   | CitationObj;
 
@@ -484,4 +501,9 @@ export interface DeepResearchPlanPacket {
 export interface ResearchAgentPacket {
   placement: Placement;
   obj: ResearchAgentObj;
+}
+
+export interface GenUIPacket {
+  placement: Placement;
+  obj: GenUIObj;
 }

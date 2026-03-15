@@ -200,6 +200,7 @@ def build_system_prompt(
     tools: Sequence[Tool] | None = None,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
+    genui_prompt: str | None = None,
 ) -> str:
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
@@ -287,5 +288,8 @@ def build_system_prompt(
 
         if tool_guidance_sections:
             system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
+
+    if genui_prompt:
+        system_prompt += "\n\n" + genui_prompt
 
     return system_prompt

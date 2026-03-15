@@ -19,7 +19,12 @@ const cspHeader = `
 const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
-  transpilePackages: ["@onyx/opal"],
+  transpilePackages: [
+    "@onyx/opal",
+    "@onyx/genui",
+    "@onyx/genui-react",
+    "@onyx/genui-onyx",
+  ],
   typedRoutes: true,
   reactCompiler: true,
   images: {

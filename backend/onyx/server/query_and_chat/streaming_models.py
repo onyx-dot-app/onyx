@@ -55,6 +55,9 @@ class StreamingType(Enum):
     INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
     INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
+    GENUI_START = "genui_start"
+    GENUI_DELTA = "genui_delta"
+
 
 class BaseObj(BaseModel):
     type: str = ""
@@ -368,6 +371,18 @@ class IntermediateReportCitedDocs(BaseObj):
 
 
 ################################################
+# GenUI Packets
+################################################
+class GenUIStart(BaseObj):
+    type: Literal["genui_start"] = StreamingType.GENUI_START.value
+
+
+class GenUIDelta(BaseObj):
+    type: Literal["genui_delta"] = StreamingType.GENUI_DELTA.value
+    content: str
+
+
+################################################
 # Packet Object
 ################################################
 # Discriminated union of all possible packet object types
@@ -415,6 +430,9 @@ PacketObj = Union[
     IntermediateReportStart,
     IntermediateReportDelta,
     IntermediateReportCitedDocs,
+    # GenUI Packets
+    GenUIStart,
+    GenUIDelta,
 ]
 
 

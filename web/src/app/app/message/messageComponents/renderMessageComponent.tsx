@@ -29,6 +29,7 @@ import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/Deep
 import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
 import { WebSearchToolRenderer } from "./timeline/renderers/search/WebSearchToolRenderer";
 import { InternalSearchToolRenderer } from "./timeline/renderers/search/InternalSearchToolRenderer";
+import { GenUIRenderer } from "./renderers/GenUIRenderer";
 
 // Different types of chat packets using discriminated unions
 interface GroupedPackets {
@@ -101,6 +102,10 @@ function isDeepResearchPlanPacket(packet: Packet) {
   );
 }
 
+function isGenUIPacket(packet: Packet) {
+  return packet.obj.type === PacketType.GENUI_START;
+}
+
 function isResearchAgentPacket(packet: Packet) {
   // Check for any packet type that indicates a research agent group
   return (
@@ -157,6 +162,9 @@ export function findRenderer(
   }
   if (groupedPackets.packets.some((packet) => isReasoningPacket(packet))) {
     return ReasoningRenderer;
+  }
+  if (groupedPackets.packets.some((packet) => isGenUIPacket(packet))) {
+    return GenUIRenderer;
   }
   return null;
 }
