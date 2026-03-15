@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Button } from "@opal/components";
-import { SvgUsers } from "@opal/icons";
+import { SvgUsers, SvgAlertTriangle } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
@@ -146,13 +146,19 @@ export default function InviteUsersModal({
             onAdd={addEmail}
             value={inputValue}
             onChange={setInputValue}
-            placeholder="Add emails to invite, comma separated"
+            placeholder="Add an email and press enter"
             layout="stacked"
           />
           {chips.some((c) => c.error) && (
-            <Text secondaryBody className="text-status-warning-text pt-1">
-              Some email addresses are invalid and will be skipped.
-            </Text>
+            <div className="flex items-center gap-1 pt-1">
+              <SvgAlertTriangle
+                size={14}
+                className="text-status-warning-05 shrink-0"
+              />
+              <Text secondaryBody text03>
+                Some email addresses are invalid and will be skipped.
+              </Text>
+            </div>
           )}
         </Modal.Body>
 

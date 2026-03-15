@@ -51,16 +51,6 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
     );
   }
 
-  if (user.is_scim_synced) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <Text as="span" mainUiBody text03>
-          {USER_ROLE_LABELS[user.role] ?? user.role}
-        </Text>
-      </div>
-    );
-  }
-
   const applyRole = async (newRole: UserRole) => {
     if (isUpdatingRef.current) return;
     isUpdatingRef.current = true;

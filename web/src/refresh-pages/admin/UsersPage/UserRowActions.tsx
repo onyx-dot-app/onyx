@@ -6,12 +6,16 @@ import {
   SvgMoreHorizontal,
   SvgUsers,
   SvgXCircle,
-  SvgTrash,
-  SvgCheck,
+  SvgUserCheck,
+  SvgUserPlus,
+  SvgUserX,
+  SvgKey,
 } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import Popover from "@/refresh-components/Popover";
+import Separator from "@/refresh-components/Separator";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
@@ -21,8 +25,9 @@ import {
   deleteUser,
   cancelInvite,
   approveRequest,
+  resetPassword,
 } from "./svc";
-import EditGroupsModal from "./EditGroupsModal";
+import EditUserModal from "./EditUserModal";
 import type { UserRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
@@ -35,6 +40,7 @@ type ModalType =
   | "delete"
   | "cancelInvite"
   | "editGroups"
+  | "resetPassword"
   | null;
 
 interface UserRowActionsProps {
@@ -53,6 +59,7 @@ export default function UserRowActions({
   const [modal, setModal] = useState<ModalType>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newPassword, setNewPassword] = useState<string | null>(null);
 
   async function handleAction(
     action: () => Promise<void>,
@@ -78,6 +85,38 @@ export default function UserRowActions({
 
   // Status-aware action menus
   const actionButtons = (() => {
+    // SCIM-managed users get limited actions — most changes would be
+    // overwritten on the next IdP sync.
+    if (user.is_scim_synced) {
+      return (
+        <>
+          {user.id && (
+            <Button
+              prominence="tertiary"
+              icon={SvgUsers}
+              onClick={() => openModal("editGroups")}
+            >
+              Groups &amp; Roles
+            </Button>
+          )}
+          <Disabled disabled>
+            <Button
+              prominence="tertiary"
+              variant="danger"
+              icon={SvgUserX}
+              onClick={() => openModal("deactivate")}
+            >
+              Deactivate User
+            </Button>
+          </Disabled>
+          <Separator paddingXRem={0.5} />
+          <Text as="p" secondaryBody text03 className="px-3 py-1">
+            This is a synced SCIM user managed by your identity provider.
+          </Text>
+        </>
+      );
+    }
+
     switch (user.status) {
       case UserStatus.INVITED:
         return (
@@ -95,7 +134,7 @@ export default function UserRowActions({
         return (
           <Button
             prominence="tertiary"
-            icon={SvgCheck}
+            icon={SvgUserCheck}
             onClick={() => {
               setPopoverOpen(false);
               handleAction(
@@ -117,12 +156,21 @@ export default function UserRowActions({
                 icon={SvgUsers}
                 onClick={() => openModal("editGroups")}
               >
-                Groups
+                Groups &amp; Roles
               </Button>
             )}
             <Button
               prominence="tertiary"
-              icon={SvgXCircle}
+              icon={SvgKey}
+              onClick={() => openModal("resetPassword")}
+            >
+              Reset Password
+            </Button>
+            <Separator paddingXRem={0.5} />
+            <Button
+              prominence="tertiary"
+              variant="danger"
+              icon={SvgUserX}
               onClick={() => openModal("deactivate")}
             >
               Deactivate User
@@ -139,12 +187,20 @@ export default function UserRowActions({
                 icon={SvgUsers}
                 onClick={() => openModal("editGroups")}
               >
-                Groups
+                Groups &amp; Roles
               </Button>
             )}
             <Button
               prominence="tertiary"
-              icon={SvgCheck}
+              icon={SvgKey}
+              onClick={() => openModal("resetPassword")}
+            >
+              Reset Password
+            </Button>
+            <Separator paddingXRem={0.5} />
+            <Button
+              prominence="tertiary"
+              icon={SvgUserPlus}
               onClick={() => openModal("activate")}
             >
               Activate User
@@ -152,7 +208,7 @@ export default function UserRowActions({
             <Button
               prominence="tertiary"
               variant="danger"
-              icon={SvgTrash}
+              icon={SvgUserX}
               onClick={() => openModal("delete")}
             >
               Delete User
@@ -167,25 +223,26 @@ export default function UserRowActions({
     }
   })();
 
-  // SCIM-managed users cannot be modified from the UI — changes would be
-  // overwritten on the next IdP sync.
-  if (user.is_scim_synced) {
-    return null;
-  }
-
   return (
     <>
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <Popover.Trigger asChild>
           <Button prominence="tertiary" icon={SvgMoreHorizontal} />
         </Popover.Trigger>
-        <Popover.Content align="end">
-          <div className="flex flex-col gap-0.5 p-1">{actionButtons}</div>
+        <Popover.Content align="end" width="sm">
+          <Section
+            gap={0.5}
+            height="auto"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            {actionButtons}
+          </Section>
         </Popover.Content>
       </Popover>
 
       {modal === "editGroups" && user.id && (
-        <EditGroupsModal
+        <EditUserModal
           user={user as UserRow & { id: string }}
           onClose={() => setModal(null)}
           onMutate={onMutate}
@@ -194,7 +251,9 @@ export default function UserRowActions({
 
       {modal === "cancelInvite" && (
         <ConfirmationModalLayout
-          icon={SvgXCircle}
+          icon={(props) => (
+            <SvgUserX {...props} className="text-action-danger-05" />
+          )}
           title="Cancel Invite"
           onClose={() => setModal(null)}
           submit={
@@ -224,7 +283,9 @@ export default function UserRowActions({
 
       {modal === "deactivate" && (
         <ConfirmationModalLayout
-          icon={SvgXCircle}
+          icon={(props) => (
+            <SvgUserX {...props} className="text-action-danger-05" />
+          )}
           title="Deactivate User"
           onClose={isSubmitting ? undefined : () => setModal(null)}
           submit={
@@ -256,7 +317,7 @@ export default function UserRowActions({
 
       {modal === "activate" && (
         <ConfirmationModalLayout
-          icon={SvgCheck}
+          icon={SvgUserPlus}
           title="Activate User"
           onClose={isSubmitting ? undefined : () => setModal(null)}
           submit={
@@ -285,7 +346,9 @@ export default function UserRowActions({
 
       {modal === "delete" && (
         <ConfirmationModalLayout
-          icon={SvgTrash}
+          icon={(props) => (
+            <SvgUserX {...props} className="text-action-danger-05" />
+          )}
           title="Delete User"
           onClose={isSubmitting ? undefined : () => setModal(null)}
           submit={
@@ -311,6 +374,76 @@ export default function UserRowActions({
             will be permanently removed from Onyx. All of their session history
             will be deleted. Deletion cannot be undone.
           </Text>
+        </ConfirmationModalLayout>
+      )}
+
+      {modal === "resetPassword" && (
+        <ConfirmationModalLayout
+          icon={SvgKey}
+          title={newPassword ? "Password Reset" : "Reset Password"}
+          onClose={() => {
+            setModal(null);
+            setNewPassword(null);
+          }}
+          submit={
+            newPassword ? (
+              <Button
+                onClick={() => {
+                  setModal(null);
+                  setNewPassword(null);
+                }}
+              >
+                Done
+              </Button>
+            ) : (
+              <Disabled disabled={isSubmitting}>
+                <Button
+                  variant="danger"
+                  onClick={async () => {
+                    setIsSubmitting(true);
+                    try {
+                      const result = await resetPassword(user.email);
+                      setNewPassword(result.new_password);
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : "Failed to reset password"
+                      );
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                >
+                  Reset Password
+                </Button>
+              </Disabled>
+            )
+          }
+        >
+          {newPassword ? (
+            <div className="flex flex-col gap-2">
+              <Text as="p" text03>
+                The password for{" "}
+                <Text as="span" text05>
+                  {user.email}
+                </Text>{" "}
+                has been reset. Copy the new password below — it will not be
+                shown again.
+              </Text>
+              <code className="rounded-sm bg-background-neutral-02 px-3 py-2 text-sm select-all">
+                {newPassword}
+              </code>
+            </div>
+          ) : (
+            <Text as="p" text03>
+              This will generate a new random password for{" "}
+              <Text as="span" text05>
+                {user.email}
+              </Text>
+              . Their current password will stop working immediately.
+            </Text>
+          )}
         </ConfirmationModalLayout>
       )}
     </>

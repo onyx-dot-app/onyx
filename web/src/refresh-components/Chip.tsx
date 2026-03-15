@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
@@ -10,6 +11,8 @@ export interface ChipProps {
   rightIcon?: React.FunctionComponent<IconProps>;
   onRemove?: () => void;
   smallLabel?: boolean;
+  /** When true, applies error styling (red tint background + red right icon). */
+  error?: boolean;
 }
 
 /**
@@ -29,16 +32,27 @@ export default function Chip({
   rightIcon: RightIcon,
   onRemove,
   smallLabel = true,
+  error = false,
 }: ChipProps) {
   return (
-    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-08 bg-background-tint-02">
+    <div
+      className={cn(
+        "flex items-center gap-1 px-1.5 py-0.5 rounded-08",
+        "bg-background-tint-02"
+      )}
+    >
       {Icon && <Icon size={12} className="text-text-03" />}
       {children && (
         <Text figureSmallLabel={smallLabel} text03>
           {children}
         </Text>
       )}
-      {RightIcon && <RightIcon size={14} className="text-text-03" />}
+      {RightIcon && (
+        <RightIcon
+          size={14}
+          className={cn(error ? "text-status-warning-05" : "text-text-03")}
+        />
+      )}
       {onRemove && (
         <Button
           onClick={(e) => {

@@ -9,7 +9,7 @@ import React from "react";
 export type FlexDirection = "row" | "column";
 export type JustifyContent = "start" | "center" | "end" | "between";
 export type AlignItems = "start" | "center" | "end" | "stretch";
-export type Length = "auto" | "fit" | "full";
+export type Length = "auto" | "fit" | "full" | number;
 
 const flexDirectionClassMap: Record<FlexDirection, string> = {
   row: "flex-row",
@@ -137,13 +137,19 @@ function Section({
         flexDirectionClassMap[flexDirection],
         justifyClassMap[justifyContent],
         alignClassMap[alignItems],
-        widthClassmap[width],
-        heightClassmap[height],
+        typeof width === "string" && widthClassmap[width],
+        typeof height === "string" && heightClassmap[height],
+        typeof height === "number" && "overflow-hidden",
 
         wrap && "flex-wrap",
         dbg && "dbg-red"
       )}
-      style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
+      style={{
+        gap: `${gap}rem`,
+        padding: `${padding}rem`,
+        ...(typeof width === "number" && { width: `${width}rem` }),
+        ...(typeof height === "number" && { height: `${height}rem` }),
+      }}
       {...rest}
     />
   );

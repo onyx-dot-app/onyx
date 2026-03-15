@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { Disabled } from "@opal/core";
@@ -9,6 +9,7 @@ import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Separator from "@/refresh-components/Separator";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
@@ -33,7 +34,7 @@ const ASSIGNABLE_ROLES: UserRole[] = [
 // Types
 // ---------------------------------------------------------------------------
 
-interface EditGroupsModalProps {
+interface EditUserModalProps {
   user: UserRow & { id: string };
   onClose: () => void;
   onMutate: () => void;
@@ -43,25 +44,14 @@ interface EditGroupsModalProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function EditGroupsModal({
+export default function EditUserModal({
   user,
   onClose,
   onMutate,
-}: EditGroupsModalProps) {
+}: EditUserModalProps) {
   const { data: allGroups, isLoading: groupsLoading } = useGroups();
   const [searchTerm, setSearchTerm] = useState("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const closeDropdown = useCallback(() => {
-    // Delay to allow click events on dropdown items to fire before closing
-    setTimeout(() => {
-      if (!containerRef.current?.contains(document.activeElement)) {
-        setDropdownOpen(false);
-      }
-    }, 0);
-  }, []);
   const [selectedRole, setSelectedRole] = useState<UserRole | "">(
     user.role ?? ""
   );
@@ -162,7 +152,7 @@ export default function EditGroupsModal({
   const displayName = user.personal_name ?? user.email;
 
   return (
-    <Modal open onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Modal open onOpenChange={(isOpen) => !isOpen && onClose()} modal={false}>
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgUsers}
@@ -181,8 +171,88 @@ export default function EditGroupsModal({
             alignItems="stretch"
             justifyContent="start"
           >
+            {/* Claude code start here */}
+            <Section
+              gap={0.5}
+              height={joinedGroups.length === 0 ? "auto" : 12.5}
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              <Popover>
+                <Popover.Trigger>
+                  <InputTypeIn
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search groups to join..."
+                    leftSearchIcon
+                  />
+                </Popover.Trigger>
+                <Popover.Content width="trigger" align="start">
+                  {groupsLoading ? (
+                    <LineItem skeleton description="Loading groups...">
+                      Loading...
+                    </LineItem>
+                  ) : dropdownGroups.length === 0 ? (
+                    <LineItem
+                      skeleton
+                      description="Try a different search term."
+                    >
+                      No groups found
+                    </LineItem>
+                  ) : (
+                    <ShadowDiv className="flex flex-col gap-1 max-h-[15rem]">
+                      {dropdownGroups.map((group) => {
+                        const isMember = memberGroupIds.has(group.id);
+                        return (
+                          <LineItem
+                            key={group.id}
+                            icon={isMember ? SvgCheck : SvgUsers}
+                            description={`${group.users.length} ${
+                              group.users.length === 1 ? "user" : "users"
+                            }`}
+                            selected={isMember}
+                            emphasized={isMember}
+                            onClick={() => toggleGroup(group.id)}
+                          >
+                            {group.name}
+                          </LineItem>
+                        );
+                      })}
+                    </ShadowDiv>
+                  )}
+                </Popover.Content>
+              </Popover>
+
+              {joinedGroups.length === 0 ? (
+                <LineItem
+                  icon={SvgUsers}
+                  skeleton
+                  interactive={false}
+                  description={`${displayName} is not in any groups.`}
+                >
+                  No groups found
+                </LineItem>
+              ) : (
+                <ShadowDiv className="max-h-[10rem]">
+                  {joinedGroups.map((group) => (
+                    <LineItem
+                      key={group.id}
+                      icon={SvgUsers}
+                      description={`${group.users.length} ${
+                        group.users.length === 1 ? "user" : "users"
+                      }`}
+                      rightChildren={<SvgLogOut height={16} width={16} />}
+                      onClick={() => toggleGroup(group.id)}
+                    >
+                      {group.name}
+                    </LineItem>
+                  ))}
+                </ShadowDiv>
+              )}
+            </Section>
+            {/* Claude code end  here */}
             {/* Subsection: white card behind search + groups */}
-            <div className="relative">
+            {/* <div className="relative">
               <div className="absolute -inset-2 bg-background-neutral-00 rounded-12" />
               <Section
                 gap={0.5}
@@ -272,7 +342,7 @@ export default function EditGroupsModal({
                   </ShadowDiv>
                 )}
               </Section>
-            </div>
+            </div> */}
 
             {user.role && (
               <>

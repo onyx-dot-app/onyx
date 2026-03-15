@@ -97,16 +97,8 @@ function InputChipField({
           <Chip
             key={chip.id}
             onRemove={disabled ? undefined : () => onRemoveChip(chip.id)}
-            rightIcon={
-              chip.error
-                ? (props) => (
-                    <SvgAlertTriangle
-                      {...props}
-                      className="text-status-warning-text"
-                    />
-                  )
-                : undefined
-            }
+            rightIcon={chip.error ? SvgAlertTriangle : undefined}
+            error={chip.error}
             smallLabel={layout === "stacked"}
           >
             {chip.label}
