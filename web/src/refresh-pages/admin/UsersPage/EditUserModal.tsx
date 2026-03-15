@@ -248,7 +248,6 @@ export default function EditUserModal({
                 </Popover.Content>
               </Popover>
 
-<<<<<<< HEAD
               <ShadowDiv
                 className={cn(" max-h-[11rem] flex flex-col gap-1 rounded-08")}
                 shadowHeight="0.75rem"
