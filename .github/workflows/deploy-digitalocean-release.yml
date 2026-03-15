@@ -1,0 +1,394 @@
+name: Deploy to DigitalOcean (Release)
+
+on:
+  push:
+    branches:
+      - "release-*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to deploy (e.g., 0.1.0)"
+        required: false
+        default: "latest"
+
+permissions:
+  contents: read
+
+jobs:
+  extract-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Extract version from branch name
+        id: extract
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          # Extract version from branch name (e.g., release-0.1.0 -> 0.1.0)
+          VERSION=$(echo "$BRANCH" | sed 's/release-//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✓ Deploying version: $VERSION"
+
+  deploy:
+    needs: extract-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Deploy to DigitalOcean
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
+          DEPLOY_USER: root
+          VERSION: ${{ needs.extract-version.outputs.version }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -e
+
+          if [ -z "$DEPLOY_KEY" ] || [ -z "$DEPLOY_HOST" ]; then
+            echo "❌ Missing required secrets: DROPLET_SSH_KEY, DROPLET_IP"
+            exit 1
+          fi
+
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
+
+          DEPLOY_DIR="/opt/onyx"
+
+          echo "🚀 Deploying version $VERSION to DigitalOcean ($DEPLOY_HOST)"
+          echo "📍 Deployment directory: $DEPLOY_DIR"
+
+          # Pull latest code
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- "$BRANCH" <<'EOSSH'
+            BRANCH="$1"
+            set -e
+            cd /opt/onyx || exit 1
+
+            echo "📥 Pulling latest code from release branch ($BRANCH)..."
+            # Fetch and checkout the latest release branch code FIRST
+            git fetch origin "$BRANCH"
+            git checkout "origin/$BRANCH"
+            git log -1 --oneline
+
+            # Phase 1: Validate required files exist after pulling latest code
+            echo "✓ Validating deployment prerequisites..."
+            if [ ! -f nginx-simple.conf ]; then
+              echo "❌ CRITICAL: nginx-simple.conf not found in $(pwd)"
+              exit 1
+            fi
+            if [ ! -f docker-compose.yml ]; then
+              echo "❌ CRITICAL: docker-compose.yml not found in $(pwd)"
+              exit 1
+            fi
+            echo "  ✓ nginx-simple.conf found"
+            echo "  ✓ docker-compose.yml found"
+
+            echo "🔄 Pulling latest Docker images..."
+            sudo docker compose pull
+
+            echo "🛑 Stopping services..."
+            sudo docker compose down --remove-orphans
+            sudo docker stop onyx-proxy 2>/dev/null || true
+            sudo docker rm onyx-proxy 2>/dev/null || true
+
+            # Clean up any lingering port bindings
+            sleep 2
+
+            echo "🚀 Starting services (without nginx)..."
+            # Disable nginx service in docker-compose for production
+            # We use a standalone nginx-proxy container instead
+            sudo docker compose up -d --scale nginx=0 2>/dev/null || sudo docker compose up -d
+
+            echo "⏳ Waiting for services to initialize..."
+            sleep 15
+
+            echo "📊 Running database migrations (in background)..."
+            # Run migrations in background - don't block nginx startup
+            # Migrations can take a very long time and were causing nginx to never start
+            sudo docker compose exec -d api_server alembic upgrade head 2>/dev/null || true
+            echo "  ⚠️  Migrations started in background (may still be running)"
+            sleep 2
+
+            # Phase 4: Clean up any corrupted nginx state
+            echo "🧹 Cleaning up previous nginx state..."
+            # Only remove if it's a directory (corrupted), NOT if it's a valid file
+            if [ -d nginx-simple.conf ]; then
+              echo "  ✗ nginx-simple.conf is a directory (corrupted state), removing..."
+              sudo rm -rf nginx-simple.conf
+            fi
+
+            # Verify nginx-simple.conf exists
+            if [ ! -f nginx-simple.conf ]; then
+              echo "❌ ERROR: nginx-simple.conf not found"
+              exit 1
+            fi
+
+            echo "🔄 Starting nginx reverse proxy..."
+            # Use hop_default network (matches docker-compose.yml name: hop)
+            CONTAINER_ID=$(sudo docker run -d \
+              --name onyx-proxy \
+              --network hop_default \
+              -p 80:80 \
+              -p 443:443 \
+              -v $(pwd)/nginx-simple.conf:/etc/nginx/nginx.conf:ro \
+              -v /etc/letsencrypt:/etc/letsencrypt:ro \
+              -v /var/www/certbot:/var/www/certbot \
+              nginx:alpine 2>&1)
+
+            RUN_EXIT_CODE=$?
+            if [ $RUN_EXIT_CODE -ne 0 ]; then
+              echo "❌ ERROR: docker run failed with exit code $RUN_EXIT_CODE"
+              echo "Output: $CONTAINER_ID"
+              exit 1
+            fi
+            echo "  Container ID: $CONTAINER_ID"
+
+            echo "⏳ Waiting for nginx to start..."
+            sleep 3
+
+            # Phase 3: Verify nginx container is running
+            echo "✓ Verifying nginx proxy container started..."
+            if ! sudo docker ps | grep -q onyx-proxy; then
+              echo "❌ ERROR: onyx-proxy container not running"
+              echo "Docker container status:"
+              sudo docker ps
+              echo "All containers (including stopped):"
+              sudo docker ps -a | grep onyx-proxy || echo "No onyx-proxy containers"
+              echo "Recent docker logs:"
+              sudo docker logs onyx-proxy 2>&1 | tail -30 || echo "No logs available"
+              exit 1
+            fi
+            echo "  ✓ onyx-proxy container is running"
+
+            echo "✅ Deployment complete!"
+          EOSSH
+
+          echo "✓ Deployment to DigitalOcean successful (version: $VERSION)"
+
+  verify:
+    needs: [extract-version, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Verify Deployment
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
+          DEPLOY_USER: root
+        run: |
+          set -e
+
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
+
+          echo "🔍 Verifying deployment health..."
+
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
+            set -e
+            cd /opt/onyx
+
+            echo "📋 Docker service status:"
+            sudo docker compose ps
+
+            echo ""
+            echo "🏥 Health checks (with retries):"
+
+            HEALTH_FAILED=0
+
+            # Check API with retries
+            echo -n "Backend API: "
+            for i in {1..5}; do
+              if sudo docker compose exec -T api_server curl -s http://localhost:8080/health > /dev/null 2>&1; then
+                echo "✓ healthy"
+                break
+              fi
+              if [ $i -lt 5 ]; then
+                echo -n "."
+                sleep 3
+              else
+                echo "✗ unhealthy"
+                HEALTH_FAILED=1
+              fi
+            done
+
+            # Check PostgreSQL
+            echo -n "PostgreSQL: "
+            if sudo docker compose exec -T relational_db pg_isready -U postgres > /dev/null 2>&1; then
+              echo "✓ healthy"
+            else
+              echo "✗ unhealthy"
+              HEALTH_FAILED=1
+            fi
+
+            # Check Redis
+            echo -n "Redis: "
+            if sudo docker compose exec -T cache redis-cli ping > /dev/null 2>&1; then
+              echo "✓ healthy"
+            else
+              echo "✗ unhealthy"
+              HEALTH_FAILED=1
+            fi
+
+            # Phase 2: Verify nginx proxy is responding (critical for accessibility)
+            echo -n "Nginx Proxy: "
+            # First check: container must exist
+            if ! sudo docker ps -a | grep -q onyx-proxy; then
+              echo "✗ container not found"
+              HEALTH_FAILED=1
+            else
+              # Second check: container must be running (not exited)
+              if ! sudo docker ps | grep -q onyx-proxy; then
+                echo "✗ container not running (exited)"
+                echo "Container status:"
+                sudo docker ps -a | grep onyx-proxy
+                echo "Container logs:"
+                sudo docker logs onyx-proxy 2>&1 | tail -20
+                HEALTH_FAILED=1
+              else
+                # Third check: nginx must respond to HTTP
+                for i in {1..5}; do
+                  if curl -s http://localhost/ >/dev/null 2>&1; then
+                    echo "✓ healthy"
+                    break
+                  fi
+                  if [ $i -lt 5 ]; then
+                    echo -n "."
+                    sleep 3
+                  else
+                    echo "✗ unhealthy (no HTTP response)"
+                    HEALTH_FAILED=1
+                  fi
+                done
+              fi
+            fi
+
+            echo ""
+            if [ $HEALTH_FAILED -eq 1 ]; then
+              echo "❌ Health checks failed - automatic rollback will be triggered"
+              exit 1
+            fi
+            echo "✅ All systems operational!"
+          EOSSH
+
+          echo "🎉 Verification passed!"
+
+  tag-deployment:
+    needs: [extract-version, deploy, verify]
+    if: needs.deploy.result == 'success' && needs.verify.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Tag successful deployment
+        run: |
+          VERSION="${{ needs.extract-version.outputs.version }}"
+          TAG="deployed-$VERSION"
+
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Create annotated tag (or skip if already exists on remote)
+          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            echo "✓ Tag $TAG already exists on remote, skipping"
+          else
+            git tag -a "$TAG" -m "Successfully deployed version $VERSION" HEAD
+            git push origin "$TAG"
+            echo "✓ Tagged deployment: $TAG"
+          fi
+
+  auto-rollback:
+    needs: [extract-version, deploy, verify]
+    if: needs.deploy.result == 'success' && needs.verify.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Auto-Rollback to Previous Version
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
+          DEPLOY_USER: root
+        run: |
+          set -e
+
+          echo "🚨 ALERT: Deployment verification failed!"
+          echo "🔄 Initiating automatic rollback to previous stable version..."
+
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
+
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
+            set -e
+            cd /opt/onyx || exit 1
+
+            echo "📸 Current state before rollback:"
+            sudo docker compose ps
+
+            echo "📥 Pulling latest code from main..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "🛑 Stopping services..."
+            sudo docker compose down --remove-orphans
+
+            echo "🔄 Pulling Docker images..."
+            sudo docker compose pull
+
+            echo "🚀 Restarting services..."
+            sudo docker compose up -d
+
+            echo "⏳ Waiting for services..."
+            sleep 15
+
+            echo "📊 Running migrations..."
+            sudo docker compose exec -T api_server alembic upgrade head || true
+
+            echo "✅ Rollback complete!"
+          EOSSH
+
+  notify:
+    needs: [extract-version, deploy, verify, tag-deployment, auto-rollback]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment Status
+        run: |
+          DEPLOY_SUCCESS="${{ needs.deploy.result }}"
+          VERIFY_SUCCESS="${{ needs.verify.result }}"
+          ROLLBACK_TRIGGERED="${{ needs.auto-rollback.result }}"
+
+          if [ "$DEPLOY_SUCCESS" == "success" ] && [ "$VERIFY_SUCCESS" == "success" ]; then
+            echo "✅ Deployment successful! Version: ${{ needs.extract-version.outputs.version }}"
+            echo "🌐 Access: https://klugermax.com"
+            echo "📌 Tagged as: deployed-${{ needs.extract-version.outputs.version }}"
+          elif [ "$ROLLBACK_TRIGGERED" == "success" ]; then
+            echo "⚠️  Deployment verification failed - automatic rollback triggered"
+            echo "❌ Version ${{ needs.extract-version.outputs.version }} was rolled back"
+            echo "🔄 Previous stable version restored"
+            exit 1
+          else
+            echo "❌ Deployment failed - manual intervention may be needed"
+            exit 1
+          fi
