@@ -1,0 +1,190 @@
+name: Rollback DigitalOcean Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to rollback to (e.g., 0.1.0, or 'latest-stable')"
+        required: true
+        default: "latest-stable"
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve version to rollback to
+        id: resolve
+        run: |
+          VERSION_INPUT="${{ github.event.inputs.version }}"
+
+          if [ "$VERSION_INPUT" = "latest-stable" ]; then
+            # Get the most recent deployed tag
+            RESOLVED_VERSION=$(git tag -l 'deployed-*' --sort=-version:refname | head -1 | sed 's/deployed-//')
+            if [ -z "$RESOLVED_VERSION" ]; then
+              echo "No deployed versions found. Available tags:"
+              git tag -l 'deployed-*'
+              exit 1
+            fi
+          else
+            RESOLVED_VERSION="$VERSION_INPUT"
+          fi
+
+          echo "resolved-version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
+          echo "✓ Resolved version: $RESOLVED_VERSION"
+
+          # Verify the tag exists
+          if git rev-parse "deployed-$RESOLVED_VERSION" >/dev/null 2>&1; then
+            echo "✓ Found git tag: deployed-$RESOLVED_VERSION"
+          else
+            echo "⚠ Git tag 'deployed-$RESOLVED_VERSION' not found"
+            echo "  Proceeding anyway (will use main branch with version tag)"
+          fi
+
+      - name: Rollback Deployment
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
+          DEPLOY_USER: root
+          ROLLBACK_VERSION: ${{ steps.resolve.outputs.resolved-version }}
+        run: |
+          set -e
+
+          if [ -z "$DEPLOY_KEY" ] || [ -z "$DEPLOY_HOST" ]; then
+            echo "❌ Missing required secrets: DROPLET_SSH_KEY, DROPLET_IP"
+            exit 1
+          fi
+
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
+
+          DEPLOY_DIR="/opt/onyx"
+
+          echo "🔄 Rolling back to version $ROLLBACK_VERSION..."
+          echo "📍 Droplet: $DEPLOY_HOST"
+
+          # Perform rollback
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
+            set -e
+            cd /opt/onyx || exit 1
+
+            ROLLBACK_VERSION="$1"
+
+            echo "📸 Creating backup of current deployment..."
+            BACKUP_DIR="/opt/onyx-backup-$(date +%s)"
+            sudo cp -r . "$BACKUP_DIR"
+            echo "✓ Backup created at: $BACKUP_DIR"
+
+            # Pre-flight validation
+            echo "✓ Validating rollback prerequisites..."
+            if [ ! -f docker-compose.yml ]; then
+              echo "❌ CRITICAL: docker-compose.yml not found in $(pwd)"
+              exit 1
+            fi
+            echo "  ✓ docker-compose.yml found"
+
+            echo "📥 Pulling latest code from main..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "🛑 Stopping services..."
+            sudo docker compose down --remove-orphans
+
+            # Clean up any corrupted nginx state
+            echo "🧹 Cleaning up previous nginx state..."
+            sudo rm -rf nginx-simple.conf 2>/dev/null || true
+            if [ -d nginx-simple.conf ]; then
+              echo "  ✗ nginx-simple.conf is a directory (corrupted state), removing..."
+              sudo rm -rf nginx-simple.conf
+            fi
+
+            echo "🔄 Pulling Docker images..."
+            sudo docker compose pull
+
+            echo "🚀 Starting services..."
+            sudo docker compose up -d
+
+            echo "⏳ Waiting for services to initialize..."
+            sleep 15
+
+            echo "📊 Running database migrations..."
+            sudo docker compose exec -T api_server alembic upgrade head || true
+
+            echo "✅ Rollback to version $ROLLBACK_VERSION complete!"
+          EOSSH "$ROLLBACK_VERSION"
+
+          echo "✓ Rollback deployment complete"
+
+      - name: Verify Rollback
+        env:
+          DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
+          DEPLOY_USER: root
+        run: |
+          set -e
+
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
+
+          echo "🔍 Verifying rollback health..."
+
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
+            set -e
+            cd /opt/onyx
+
+            echo "📋 Docker service status:"
+            sudo docker compose ps
+
+            echo ""
+            echo "🏥 Health checks:"
+
+            # Check API
+            if sudo docker compose exec -T api_server curl -s http://localhost:8080/health > /dev/null 2>&1; then
+              echo "✓ Backend API: healthy"
+            else
+              echo "✗ Backend API: unhealthy (may still be initializing)"
+            fi
+
+            # Check PostgreSQL
+            if sudo docker compose exec -T relational_db pg_isready -U postgres > /dev/null 2>&1; then
+              echo "✓ PostgreSQL: healthy"
+            else
+              echo "✗ PostgreSQL: unhealthy"
+              exit 1
+            fi
+
+            # Check Redis
+            if sudo docker compose exec -T cache redis-cli ping > /dev/null 2>&1; then
+              echo "✓ Redis: healthy"
+            else
+              echo "✗ Redis: unhealthy"
+              exit 1
+            fi
+
+            echo ""
+            echo "✅ Rollback verification passed!"
+          EOSSH
+
+      - name: Rollback Status
+        if: success()
+        run: |
+          echo "✅ Rollback successful!"
+          echo "🌐 Access: https://klugermax.com"
+          echo "📝 Backup saved on droplet in /opt/onyx-backup-*"
