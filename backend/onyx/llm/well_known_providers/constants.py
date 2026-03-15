@@ -24,6 +24,8 @@ OPENROUTER_PROVIDER_NAME = "openrouter"
 
 ANTHROPIC_PROVIDER_NAME = "anthropic"
 
+MINIMAX_PROVIDER_NAME = "minimax"
+
 AZURE_PROVIDER_NAME = "azure"
 
 

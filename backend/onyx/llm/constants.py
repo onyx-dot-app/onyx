@@ -24,6 +24,7 @@ class LlmProviderNames(str, Enum):
     OLLAMA_CHAT = "ollama_chat"
     LM_STUDIO = "lm_studio"
     MISTRAL = "mistral"
+    MINIMAX = "minimax"
     LITELLM_PROXY = "litellm_proxy"
 
     def __str__(self) -> str:
@@ -43,6 +44,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.AZURE,
     LlmProviderNames.OLLAMA_CHAT,
     LlmProviderNames.LM_STUDIO,
+    LlmProviderNames.MINIMAX,
     LlmProviderNames.LITELLM_PROXY,
 ]
 
@@ -61,6 +63,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
     LlmProviderNames.LM_STUDIO: "LM Studio",
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
+    LlmProviderNames.MINIMAX: "MiniMax",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -100,6 +103,7 @@ VENDOR_BRAND_NAMES: dict[str, str] = {
     "qwen": "Qwen",
     "alibaba": "Qwen",
     "writer": "Palmyra",
+    "minimax": "MiniMax",
 }
 
 # Aggregator providers that host models from multiple vendors
@@ -221,7 +225,7 @@ BEDROCK_MODEL_TOKEN_LIMITS: dict[str, int] = {
     # Moonshot Kimi
     "kimi": 128000,
     # Minimax
-    "minimax": 128000,
+    "minimax": 204000,
     # OpenAI (via Bedrock)
     "gpt-oss": 128000,
     # AI21 models (from LiteLLM: Jamba 1.5 = 256K, Jamba Instruct = 70K)
@@ -282,6 +286,8 @@ MODEL_PREFIX_TO_VENDOR: dict[str, str] = {
     "nemotron": "nvidia",
     # xAI
     "grok": "xai",
+    # MiniMax
+    "minimax": "minimax",
 }
 
 

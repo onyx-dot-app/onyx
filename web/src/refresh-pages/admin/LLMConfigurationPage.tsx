@@ -35,16 +35,17 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
 import { getModalForExistingProvider } from "@/sections/modals/llmConfig/getModal";
-import OpenAIModal from "@/sections/modals/llmConfig/OpenAIModal";
-import AnthropicModal from "@/sections/modals/llmConfig/AnthropicModal";
-import OllamaModal from "@/sections/modals/llmConfig/OllamaModal";
-import AzureModal from "@/sections/modals/llmConfig/AzureModal";
-import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
-import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
-import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
-import CustomModal from "@/sections/modals/llmConfig/CustomModal";
-import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
-import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import { OpenAIModal } from "@/sections/modals/llmConfig/OpenAIModal";
+import { AnthropicModal } from "@/sections/modals/llmConfig/AnthropicModal";
+import { OllamaModal } from "@/sections/modals/llmConfig/OllamaModal";
+import { AzureModal } from "@/sections/modals/llmConfig/AzureModal";
+import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
+import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
+import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
+import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
+import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
+import { LiteLLMProxyModal } from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import { MiniMaxModal } from "@/sections/modals/llmConfig/MiniMaxModal";
 import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
@@ -126,6 +127,13 @@ const PROVIDER_MODAL_MAP: Record<
   ),
   lm_studio: (d, open, onOpenChange) => (
     <LMStudioForm
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  minimax: (d, open, onOpenChange) => (
+    <MiniMaxModal
       shouldMarkAsDefault={d}
       open={open}
       onOpenChange={onOpenChange}

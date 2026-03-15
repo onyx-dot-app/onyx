@@ -17,6 +17,7 @@ from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LITELLM_PROXY_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LM_STUDIO_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import MINIMAX_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
@@ -48,6 +49,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
         LM_STUDIO_PROVIDER_NAME: [],  # Dynamic - fetched from LM Studio API
         OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
+        MINIMAX_PROVIDER_NAME: get_minimax_model_names(),
         LITELLM_PROXY_PROVIDER_NAME: [],  # Dynamic - fetched from LiteLLM proxy API
     }
 
@@ -242,6 +244,24 @@ def get_vertexai_model_names() -> list[str]:
     )
 
 
+def get_minimax_model_names() -> list[str]:
+    """Get MiniMax model names dynamically from litellm.
+
+    MiniMax provides an OpenAI-compatible API at https://api.minimax.io/v1.
+    Filters out speech/TTS models since those are not chat models.
+    """
+    import litellm
+
+    return sorted(
+        [
+            model.removeprefix("minimax/")
+            for model in litellm.minimax_models
+            if "speech" not in model.lower()
+        ],
+        reverse=True,
+    )
+
+
 def model_configurations_for_provider(
     provider_name: str, llm_recommendations: LLMRecommendations
 ) -> list[ModelConfigurationView]:
@@ -333,6 +353,7 @@ def get_provider_display_name(provider_name: str) -> str:
         BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
+        MINIMAX_PROVIDER_NAME: "MiniMax",
         LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
     }
 

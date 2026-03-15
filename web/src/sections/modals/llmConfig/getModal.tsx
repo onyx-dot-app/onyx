@@ -1,14 +1,15 @@
 import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
-import AnthropicModal from "@/sections/modals/llmConfig/AnthropicModal";
-import OpenAIModal from "@/sections/modals/llmConfig/OpenAIModal";
-import OllamaModal from "@/sections/modals/llmConfig/OllamaModal";
-import AzureModal from "@/sections/modals/llmConfig/AzureModal";
-import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
-import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
-import CustomModal from "@/sections/modals/llmConfig/CustomModal";
-import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
-import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
-import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import { AnthropicModal } from "@/sections/modals/llmConfig/AnthropicModal";
+import { OpenAIModal } from "@/sections/modals/llmConfig/OpenAIModal";
+import { OllamaModal } from "@/sections/modals/llmConfig/OllamaModal";
+import { AzureModal } from "@/sections/modals/llmConfig/AzureModal";
+import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
+import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
+import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
+import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
+import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
+import { LiteLLMProxyModal } from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import { MiniMaxModal } from "@/sections/modals/llmConfig/MiniMaxModal";
 
 function detectIfRealOpenAIProvider(provider: LLMProviderView) {
   return (
@@ -50,6 +51,8 @@ export function getModalForExistingProvider(
       return <LMStudioForm {...props} />;
     case LLMProviderName.LITELLM_PROXY:
       return <LiteLLMProxyModal {...props} />;
+    case LLMProviderName.MINIMAX:
+      return <MiniMaxModal {...props} />;
     default:
       return <CustomModal {...props} />;
   }

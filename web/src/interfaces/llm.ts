@@ -12,6 +12,7 @@ export enum LLMProviderName {
   OPENROUTER = "openrouter",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
+  MINIMAX = "minimax",
   LITELLM_PROXY = "litellm_proxy",
   CUSTOM = "custom",
 }
