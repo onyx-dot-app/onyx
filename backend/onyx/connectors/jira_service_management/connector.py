@@ -25,6 +25,7 @@ from onyx.utils.logger import setup_logger
 from .utils import absolute_jsm_link
 from .utils import append_with_byte_limit
 from .utils import build_queue_membership_map
+from .utils import _coerce_optional_str
 from .utils import format_approval_summaries
 from .utils import format_queue_summaries
 from .utils import format_request_field_values
@@ -144,6 +145,9 @@ class JiraServiceManagementConnector(JiraConnector):
             service_desk_by_project_key = self._get_service_desk_by_project_key()
         except Exception as exc:
             self._handle_jira_connector_settings_error(exc)
+            raise RuntimeError(
+                "_handle_jira_connector_settings_error returned unexpectedly"
+            )
 
         if not service_desk_by_project_key:
             raise ConnectorValidationError(
@@ -194,10 +198,7 @@ class JiraServiceManagementConnector(JiraConnector):
             issue_id_or_key=issue.key,
         )
         if request is None:
-            logger.debug(
-                "Skipping Jira issue %s because it is not accessible as a JSM request",
-                issue.key,
-            )
+            logger.debug("Skipping Jira issue %s because it is not a JSM request", issue.key)
             return None
 
         participants = self._get_request_participants(issue.key)
@@ -711,14 +712,6 @@ class JiraServiceManagementConnector(JiraConnector):
 
         self._warning_cache.add(warning_key)
         logger.warning(message)
-
-
-def _coerce_optional_str(value: Any) -> str | None:
-    if value is None:
-        return None
-
-    coerced = str(value).strip()
-    return coerced or None
 
 
 def _extract_portal_link(request: dict[str, Any]) -> str | None:

@@ -2013,7 +2013,7 @@ export interface ConfluenceConfig {
 }
 
 export interface JiraConfig {
-  jira_base_url: string;
+  jira_base_url?: string;
   jira_project_url?: string;
   project_key?: string;
   comment_email_blacklist?: string[];

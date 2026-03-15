@@ -216,7 +216,7 @@ def get_customer_request(
         jira_client=jira_client,
         path=f"request/{issue_id_or_key}",
         params={"expand": expand},
-        allowed_status_codes=(403, 404),
+        allowed_status_codes=(404,),
     )
 
 
@@ -323,16 +323,6 @@ def build_queue_membership_map(
     queue_scan_limit: int = JSM_QUEUE_ISSUE_SCAN_LIMIT,
 ) -> dict[str, list[JSMQueue]]:
     queues = list_queues(jira_client=jira_client, service_desk_id=service_desk_id)
-    total_issue_refs = sum(queue.issue_count or 0 for queue in queues)
-    if total_issue_refs > queue_scan_limit:
-        logger.info(
-            "Skipping JSM queue membership scan for service desk %s because %s issue references exceed limit %s",
-            service_desk_id,
-            total_issue_refs,
-            queue_scan_limit,
-        )
-        return {}
-
     membership: defaultdict[str, list[JSMQueue]] = defaultdict(list)
     for queue in queues:
         path = f"servicedesk/{service_desk_id}/queue/{queue.queue_id}/issue"
@@ -343,6 +333,14 @@ def build_queue_membership_map(
             issue_key = extract_queue_issue_key(raw_issue)
             if not issue_key:
                 continue
+            if issue_key not in membership and len(membership) >= queue_scan_limit:
+                logger.info(
+                    "Stopping JSM queue membership scan for service desk %s after %s unique issues reached limit %s",
+                    service_desk_id,
+                    len(membership),
+                    queue_scan_limit,
+                )
+                return dict(membership)
             membership[issue_key].append(queue)
 
     return dict(membership)
