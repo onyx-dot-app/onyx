@@ -142,6 +142,14 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     if msg_type == OpenAIRealtimeMessageType.ERROR:
                         error = data.get("error", {})
                         self._logger.error(f"OpenAI error: {error}")
+                        error_message = error.get("message", "Unknown OpenAI error")
+                        await self._transcript_queue.put(
+                            TranscriptResult(
+                                text="",
+                                is_vad_end=False,
+                                error=error_message,
+                            )
+                        )
                         continue
 
                     # Handle VAD events

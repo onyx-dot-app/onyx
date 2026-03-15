@@ -118,6 +118,12 @@ async def handle_streaming_transcription(
             if result is None:  # End of stream
                 logger.info("Streaming transcription: transcript stream ended")
                 break
+            if result.error:
+                logger.warning(
+                    f"Streaming transcription: provider error: {result.error}"
+                )
+                await websocket.send_json({"type": "error", "message": result.error})
+                continue
             # Send if text changed OR if VAD detected end of speech (for auto-send trigger)
             if result.text and (result.text != last_transcript or result.is_vad_end):
                 last_transcript = result.text

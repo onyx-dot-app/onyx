@@ -15,6 +15,9 @@ class TranscriptResult(BaseModel):
     is_vad_end: bool = False
     """True if VAD detected end of speech (silence). Use for auto-send."""
 
+    error: str | None = None
+    """Provider error message to forward to the client, if any."""
+
 
 class StreamingTranscriberProtocol(Protocol):
     """Protocol for streaming transcription sessions."""
