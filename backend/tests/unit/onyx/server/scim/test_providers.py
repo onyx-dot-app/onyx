@@ -109,7 +109,7 @@ class TestOktaProvider:
         result = provider.build_user_resource(user, None)
 
         assert result.name == ScimName(
-            givenName="Madonna", familyName=None, formatted="Madonna"
+            givenName="Madonna", familyName="", formatted="Madonna"
         )
 
     def test_build_user_resource_no_name(self) -> None:
@@ -117,7 +117,10 @@ class TestOktaProvider:
         user = _make_mock_user(personal_name=None)
         result = provider.build_user_resource(user, None)
 
-        assert result.name is None
+        # Falls back to deriving name from email local part
+        assert result.name == ScimName(
+            givenName="test", familyName="", formatted="test"
+        )
         assert result.displayName is None
 
     def test_build_user_resource_scim_username_preserves_case(self) -> None:

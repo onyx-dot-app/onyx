@@ -191,8 +191,7 @@ def create_initial_default_standard_answer_category(db_session: Session) -> None
     if default_category is not None:
         if default_category.name != default_category_name:
             raise ValueError(
-                "DB is not in a valid initial state. "
-                "Default standard answer category does not have expected name."
+                "DB is not in a valid initial state. Default standard answer category does not have expected name."
             )
         return
 

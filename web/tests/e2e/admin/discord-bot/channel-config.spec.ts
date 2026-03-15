@@ -51,9 +51,7 @@ test.describe("Guild Detail Page & Channel Configuration", () => {
     });
 
     // Find the persona/agent dropdown (InputSelect)
-    const agentDropdown = adminPage.locator(
-      'button:has-text("Default Assistant")'
-    );
+    const agentDropdown = adminPage.locator('button:has-text("Default Agent")');
 
     if (await agentDropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
       await agentDropdown.click();

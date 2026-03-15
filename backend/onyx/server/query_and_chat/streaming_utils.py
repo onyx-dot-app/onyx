@@ -8,8 +8,6 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CustomToolDelta
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
@@ -29,7 +27,8 @@ _CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
 
 
 def _adjust_message_text_for_agent_search_results(
-    adjusted_message_text: str, final_documents: list[SavedSearchDoc]  # noqa: ARG001
+    adjusted_message_text: str,
+    final_documents: list[SavedSearchDoc],  # noqa: ARG001
 ) -> str:
     # Remove all [Q<integer>] patterns (sub-question citations)
     return re.sub(r"\[Q\d+\]", "", adjusted_message_text)
@@ -157,39 +156,6 @@ def create_image_generation_packets(
         Packet(
             placement=Placement(turn_index=turn_index),
             obj=ImageGenerationFinal(images=images),
-        ),
-    )
-
-    packets.append(Packet(placement=Placement(turn_index=turn_index), obj=SectionEnd()))
-
-    return packets
-
-
-def create_custom_tool_packets(
-    tool_name: str,
-    response_type: str,
-    turn_index: int,
-    data: dict | list | str | int | float | bool | None = None,
-    file_ids: list[str] | None = None,
-) -> list[Packet]:
-    packets: list[Packet] = []
-
-    packets.append(
-        Packet(
-            placement=Placement(turn_index=turn_index),
-            obj=CustomToolStart(tool_name=tool_name),
-        )
-    )
-
-    packets.append(
-        Packet(
-            placement=Placement(turn_index=turn_index),
-            obj=CustomToolDelta(
-                tool_name=tool_name,
-                response_type=response_type,
-                data=data,
-                file_ids=file_ids,
-            ),
         ),
     )
 

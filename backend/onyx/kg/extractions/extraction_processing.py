@@ -279,8 +279,7 @@ def kg_extraction(
 
             if len(unprocessed_document_batch) == 0:
                 logger.info(
-                    f"No unprocessed documents found for connector {connector_id}. "
-                    f"Processed {document_batch_counter} batches."
+                    f"No unprocessed documents found for connector {connector_id}. Processed {document_batch_counter} batches."
                 )
                 break
 

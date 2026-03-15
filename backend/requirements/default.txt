@@ -65,8 +65,10 @@ attrs==25.4.0
     #   jsonschema
     #   referencing
     #   zeep
-authlib==1.6.6
+authlib==1.6.7
     # via fastmcp
+azure-cognitiveservices-speech==1.38.0
+    # via onyx
 babel==2.17.0
     # via courlan
 backoff==2.2.1
@@ -109,9 +111,7 @@ brotli==1.2.0
 bytecode==0.17.0
     # via ddtrace
 cachetools==6.2.2
-    # via
-    #   google-auth
-    #   py-key-value-aio
+    # via py-key-value-aio
 caio==0.9.25
     # via aiofile
 celery==5.5.1
@@ -190,6 +190,7 @@ courlan==1.3.2
 cryptography==46.0.5
     # via
     #   authlib
+    #   google-auth
     #   msal
     #   msoffcrypto-tool
     #   pdfminer-six
@@ -230,9 +231,7 @@ distro==1.9.0
 dnspython==2.8.0
     # via email-validator
 docstring-parser==0.17.0
-    # via
-    #   cyclopts
-    #   google-cloud-aiplatform
+    # via cyclopts
 docutils==0.22.3
     # via rich-rst
 dropbox==12.0.2
@@ -297,26 +296,15 @@ gitdb==4.0.12
 gitpython==3.1.45
     # via braintrust
 google-api-core==2.28.1
-    # via
-    #   google-api-python-client
-    #   google-cloud-aiplatform
-    #   google-cloud-bigquery
-    #   google-cloud-core
-    #   google-cloud-resource-manager
-    #   google-cloud-storage
+    # via google-api-python-client
 google-api-python-client==2.86.0
     # via onyx
-google-auth==2.43.0
+google-auth==2.48.0
     # via
     #   google-api-core
     #   google-api-python-client
     #   google-auth-httplib2
     #   google-auth-oauthlib
-    #   google-cloud-aiplatform
-    #   google-cloud-bigquery
-    #   google-cloud-core
-    #   google-cloud-resource-manager
-    #   google-cloud-storage
     #   google-genai
     #   kubernetes
 google-auth-httplib2==0.1.0
@@ -325,51 +313,16 @@ google-auth-httplib2==0.1.0
     #   onyx
 google-auth-oauthlib==1.0.0
     # via onyx
-google-cloud-aiplatform==1.121.0
-    # via onyx
-google-cloud-bigquery==3.38.0
-    # via google-cloud-aiplatform
-google-cloud-core==2.5.0
-    # via
-    #   google-cloud-bigquery
-    #   google-cloud-storage
-google-cloud-resource-manager==1.15.0
-    # via google-cloud-aiplatform
-google-cloud-storage==2.19.0
-    # via google-cloud-aiplatform
-google-crc32c==1.7.1
-    # via
-    #   google-cloud-storage
-    #   google-resumable-media
 google-genai==1.52.0
-    # via
-    #   google-cloud-aiplatform
-    #   onyx
-google-resumable-media==2.7.2
-    # via
-    #   google-cloud-bigquery
-    #   google-cloud-storage
+    # via onyx
 googleapis-common-protos==1.72.0
     # via
     #   google-api-core
-    #   grpc-google-iam-v1
-    #   grpcio-status
     #   opentelemetry-exporter-otlp-proto-http
 greenlet==3.2.4
     # via
     #   playwright
     #   sqlalchemy
-grpc-google-iam-v1==0.14.3
-    # via google-cloud-resource-manager
-grpcio==1.76.0
-    # via
-    #   google-api-core
-    #   google-cloud-resource-manager
-    #   googleapis-common-protos
-    #   grpc-google-iam-v1
-    #   grpcio-status
-grpcio-status==1.76.0
-    # via google-api-core
 h11==0.16.0
     # via
     #   httpcore
@@ -528,7 +481,7 @@ lxml==5.3.0
     #   unstructured
     #   xmlsec
     #   zeep
-lxml-html-clean==0.4.3
+lxml-html-clean==0.4.4
     # via lxml
 magika==0.6.3
     # via markitdown
@@ -596,7 +549,7 @@ mypy-extensions==1.0.0
     #   typing-inspect
 nest-asyncio==1.6.0
     # via onyx
-nltk==3.9.1
+nltk==3.9.3
     # via unstructured
 numpy==2.4.1
     # via
@@ -663,15 +616,13 @@ opentelemetry-sdk==1.39.1
     #   opentelemetry-exporter-otlp-proto-http
 opentelemetry-semantic-conventions==0.60b1
     # via opentelemetry-sdk
-orjson==3.11.4 ; platform_python_implementation != 'PyPy'
+orjson==3.11.6 ; platform_python_implementation != 'PyPy'
     # via langsmith
 packaging==24.2
     # via
     #   dask
     #   distributed
     #   fastmcp
-    #   google-cloud-aiplatform
-    #   google-cloud-bigquery
     #   huggingface-hub
     #   jira
     #   kombu
@@ -721,19 +672,12 @@ propcache==0.4.1
     #   aiohttp
     #   yarl
 proto-plus==1.26.1
-    # via
-    #   google-api-core
-    #   google-cloud-aiplatform
-    #   google-cloud-resource-manager
+    # via google-api-core
 protobuf==6.33.5
     # via
     #   ddtrace
     #   google-api-core
-    #   google-cloud-aiplatform
-    #   google-cloud-resource-manager
     #   googleapis-common-protos
-    #   grpc-google-iam-v1
-    #   grpcio-status
     #   onnxruntime
     #   opentelemetry-proto
     #   proto-plus
@@ -771,7 +715,6 @@ pydantic==2.11.7
     #   exa-py
     #   fastapi
     #   fastmcp
-    #   google-cloud-aiplatform
     #   google-genai
     #   langchain-core
     #   langfuse
@@ -794,7 +737,7 @@ pygithub==2.5.0
     # via onyx
 pygments==2.19.2
     # via rich
-pyjwt==2.11.0
+pyjwt==2.12.0
     # via
     #   fastapi-users
     #   mcp
@@ -809,7 +752,7 @@ pypandoc-binary==1.16.2
     # via onyx
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.7.3
+pypdf==6.8.0
     # via
     #   onyx
     #   unstructured-client
@@ -835,7 +778,6 @@ python-dateutil==2.8.2
     #   botocore
     #   celery
     #   dateparser
-    #   google-cloud-bigquery
     #   htmldate
     #   hubspot-api-client
     #   kubernetes
@@ -927,8 +869,6 @@ requests==2.32.5
     #   dropbox
     #   exa-py
     #   google-api-core
-    #   google-cloud-bigquery
-    #   google-cloud-storage
     #   google-genai
     #   hubspot-api-client
     #   huggingface-hub
@@ -1002,9 +942,7 @@ sendgrid==6.12.5
 sentry-sdk==2.14.0
     # via onyx
 shapely==2.0.6
-    # via
-    #   google-cloud-aiplatform
-    #   onyx
+    # via onyx
 shellingham==1.5.4
     # via typer
 simple-salesforce==1.12.6
@@ -1084,7 +1022,7 @@ toolz==1.1.0
     #   dask
     #   distributed
     #   partd
-tornado==6.5.2
+tornado==6.5.5
     # via distributed
 tqdm==4.67.1
     # via
@@ -1118,9 +1056,7 @@ typing-extensions==4.15.0
     #   exa-py
     #   exceptiongroup
     #   fastapi
-    #   google-cloud-aiplatform
     #   google-genai
-    #   grpcio
     #   huggingface-hub
     #   jira
     #   langchain-core

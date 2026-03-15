@@ -25,6 +25,7 @@ from sqlalchemy import desc
 from sqlalchemy import Enum
 from sqlalchemy import Float
 from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
@@ -36,9 +37,11 @@ from sqlalchemy import Text
 from sqlalchemy import text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
+from sqlalchemy import event
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import LargeBinary
@@ -117,13 +120,57 @@ class Base(DeclarativeBase):
     __abstract__ = True
 
 
-class EncryptedString(TypeDecorator):
+class _EncryptedBase(TypeDecorator):
+    """Base for encrypted column types that wrap values in SensitiveValue."""
+
     impl = LargeBinary
-    # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
+    _is_json: bool = False
+
+    def wrap_raw(self, value: Any) -> SensitiveValue:
+        """Encrypt a raw value and wrap it in SensitiveValue.
+
+        Called by the attribute set event so the Python-side type is always
+        SensitiveValue, regardless of whether the value was loaded from the DB
+        or assigned in application code.
+        """
+        if self._is_json:
+            if not isinstance(value, dict):
+                raise TypeError(
+                    f"EncryptedJson column expected dict, got {type(value).__name__}"
+                )
+            raw_str = json.dumps(value)
+        else:
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"EncryptedString column expected str, got {type(value).__name__}"
+                )
+            raw_str = value
+        return SensitiveValue(
+            encrypted_bytes=encrypt_string_to_bytes(raw_str),
+            decrypt_fn=decrypt_bytes_to_string,
+            is_json=self._is_json,
+        )
+
+    def compare_values(self, x: Any, y: Any) -> bool:
+        if x is None or y is None:
+            return x == y
+        if isinstance(x, SensitiveValue):
+            x = x.get_value(apply_mask=False)
+        if isinstance(y, SensitiveValue):
+            y = y.get_value(apply_mask=False)
+        return x == y
+
+
+class EncryptedString(_EncryptedBase):
+    # Must redeclare cache_ok in this child class since we explicitly redeclare _is_json
+    cache_ok = True
+    _is_json: bool = False
 
     def process_bind_param(
-        self, value: str | SensitiveValue[str] | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: str | SensitiveValue[str] | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
             # Handle both raw strings and SensitiveValue wrappers
@@ -134,7 +181,9 @@ class EncryptedString(TypeDecorator):
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: bytes | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> SensitiveValue[str] | None:
         if value is not None:
             return SensitiveValue(
@@ -144,20 +193,10 @@ class EncryptedString(TypeDecorator):
             )
         return None
 
-    def compare_values(self, x: Any, y: Any) -> bool:
-        if x is None or y is None:
-            return x == y
-        if isinstance(x, SensitiveValue):
-            x = x.get_value(apply_mask=False)
-        if isinstance(y, SensitiveValue):
-            y = y.get_value(apply_mask=False)
-        return x == y
 
-
-class EncryptedJson(TypeDecorator):
-    impl = LargeBinary
-    # This type's behavior is fully deterministic and doesn't depend on any external factors.
+class EncryptedJson(_EncryptedBase):
     cache_ok = True
+    _is_json: bool = True
 
     def process_bind_param(
         self,
@@ -165,16 +204,16 @@ class EncryptedJson(TypeDecorator):
         dialect: Dialect,  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
-            # Handle both raw dicts and SensitiveValue wrappers
             if isinstance(value, SensitiveValue):
-                # Get raw value for storage
                 value = value.get_value(apply_mask=False)
             json_str = json.dumps(value)
             return encrypt_string_to_bytes(json_str)
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: bytes | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> SensitiveValue[dict[str, Any]] | None:
         if value is not None:
             return SensitiveValue(
@@ -184,14 +223,40 @@ class EncryptedJson(TypeDecorator):
             )
         return None
 
-    def compare_values(self, x: Any, y: Any) -> bool:
-        if x is None or y is None:
-            return x == y
-        if isinstance(x, SensitiveValue):
-            x = x.get_value(apply_mask=False)
-        if isinstance(y, SensitiveValue):
-            y = y.get_value(apply_mask=False)
-        return x == y
+
+_REGISTERED_ATTRS: set[str] = set()
+
+
+@event.listens_for(Mapper, "mapper_configured")
+def _register_sensitive_value_set_events(
+    mapper: Mapper,
+    class_: type,
+) -> None:
+    """Auto-wrap raw values in SensitiveValue when assigned to encrypted columns."""
+    for prop in mapper.column_attrs:
+        for col in prop.columns:
+            if isinstance(col.type, _EncryptedBase):
+                col_type = col.type
+                attr = getattr(class_, prop.key)
+
+                # Guard against double-registration (e.g. if mapper is
+                # re-configured in test setups)
+                attr_key = f"{class_.__qualname__}.{prop.key}"
+                if attr_key in _REGISTERED_ATTRS:
+                    continue
+                _REGISTERED_ATTRS.add(attr_key)
+
+                @event.listens_for(attr, "set", retval=True)
+                def _wrap_value(
+                    target: Any,  # noqa: ARG001
+                    value: Any,
+                    oldvalue: Any,  # noqa: ARG001
+                    initiator: Any,  # noqa: ARG001
+                    _col_type: _EncryptedBase = col_type,
+                ) -> Any:
+                    if value is not None and not isinstance(value, SensitiveValue):
+                        return _col_type.wrap_raw(value)
+                    return value
 
 
 class NullFilteredString(TypeDecorator):
@@ -200,7 +265,9 @@ class NullFilteredString(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(
-        self, value: str | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: str | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> str | None:
         if value is not None and "\x00" in value:
             logger.warning(f"NUL characters found in value: {value}")
@@ -208,7 +275,9 @@ class NullFilteredString(TypeDecorator):
         return value
 
     def process_result_value(
-        self, value: str | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: str | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> str | None:
         return value
 
@@ -280,9 +349,24 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         TIMESTAMPAware(timezone=True), nullable=True
     )
 
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
     default_model: Mapped[str] = mapped_column(Text, nullable=True)
     # organized in typical structured fashion
     # formatted as `displayName__provider__modelName`
+
+    # Voice preferences
+    voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
+    voice_auto_playback: Mapped[bool] = mapped_column(Boolean, default=False)
+    voice_playback_speed: Mapped[float] = mapped_column(Float, default=1.0)
 
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(
@@ -1688,8 +1772,7 @@ class ChunkStats(Base):
         NullFilteredString,
         primary_key=True,
         default=lambda context: (
-            f"{context.get_current_parameters()['document_id']}"
-            f"__{context.get_current_parameters()['chunk_in_doc_id']}"
+            f"{context.get_current_parameters()['document_id']}__{context.get_current_parameters()['chunk_in_doc_id']}"
         ),
         index=True,
     )
@@ -2370,6 +2453,38 @@ class SyncRecord(Base):
     )
 
 
+class HierarchyNodeByConnectorCredentialPair(Base):
+    """Tracks which cc_pairs reference each hierarchy node.
+
+    During pruning, stale entries are removed for the current cc_pair.
+    Hierarchy nodes with zero remaining entries are then deleted.
+    """
+
+    __tablename__ = "hierarchy_node_by_connector_credential_pair"
+
+    hierarchy_node_id: Mapped[int] = mapped_column(
+        ForeignKey("hierarchy_node.id", ondelete="CASCADE"), primary_key=True
+    )
+    connector_id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(primary_key=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["connector_id", "credential_id"],
+            [
+                "connector_credential_pair.connector_id",
+                "connector_credential_pair.credential_id",
+            ],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_hierarchy_node_cc_pair_connector_credential",
+            "connector_id",
+            "credential_id",
+        ),
+    )
+
+
 class DocumentByConnectorCredentialPair(Base):
     """Represents an indexing of a document by a specific connector / credential pair"""
 
@@ -2960,6 +3075,65 @@ class ImageGenerationConfig(Base):
         Index(
             "ix_image_generation_config_model_configuration_id",
             "model_configuration_id",
+        ),
+    )
+
+
+class VoiceProvider(Base):
+    """Configuration for voice services (STT and TTS)."""
+
+    __tablename__ = "voice_provider"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    provider_type: Mapped[str] = mapped_column(
+        String
+    )  # "openai", "azure", "elevenlabs"
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    api_base: Mapped[str | None] = mapped_column(String, nullable=True)
+    custom_config: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    # Model/voice configuration
+    stt_model: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # e.g., "whisper-1"
+    tts_model: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # e.g., "tts-1", "tts-1-hd"
+    default_voice: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # e.g., "alloy", "echo"
+
+    # STT and TTS can use different providers - only one provider per type
+    is_default_stt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_default_tts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Enforce only one default STT provider and one default TTS provider at DB level
+    __table_args__ = (
+        Index(
+            "ix_voice_provider_one_default_stt",
+            "is_default_stt",
+            unique=True,
+            postgresql_where=(is_default_stt == True),  # noqa: E712
+        ),
+        Index(
+            "ix_voice_provider_one_default_tts",
+            "is_default_tts",
+            unique=True,
+            postgresql_where=(is_default_tts == True),  # noqa: E712
         ),
     )
 
@@ -4536,7 +4710,7 @@ class DocPermissionSyncAttempt(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<DocPermissionSyncAttempt(id={self.id!r}, " f"status={self.status!r})>"
+        return f"<DocPermissionSyncAttempt(id={self.id!r}, status={self.status!r})>"
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
@@ -4605,10 +4779,7 @@ class ExternalGroupPermissionSyncAttempt(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<ExternalGroupPermissionSyncAttempt(id={self.id!r}, "
-            f"status={self.status!r})>"
-        )
+        return f"<ExternalGroupPermissionSyncAttempt(id={self.id!r}, status={self.status!r})>"
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
@@ -4926,7 +5097,9 @@ class ScimUserMapping(Base):
     __tablename__ = "scim_user_mapping"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), unique=True, nullable=False
     )
@@ -4983,3 +5156,25 @@ class CodeInterpreterServer(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     server_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class CacheStore(Base):
+    """Key-value cache table used by ``PostgresCacheBackend``.
+
+    Replaces Redis for simple KV caching, locks, and list operations
+    when ``CACHE_BACKEND=postgres`` (NO_VECTOR_DB deployments).
+
+    Intentionally separate from ``KVStore``:
+    - Stores raw bytes (LargeBinary) vs JSONB, matching Redis semantics.
+    - Has ``expires_at`` for TTL; rows are periodically garbage-collected.
+    - Holds ephemeral data (tokens, stop signals, lock state) not
+      persistent application config, so cleanup can be aggressive.
+    """
+
+    __tablename__ = "cache_store"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

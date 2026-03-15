@@ -154,10 +154,7 @@ def create_deletion_attempt_for_connector_id(
         get_editable=True,
     )
     if cc_pair is None:
-        error = (
-            f"Connector with ID '{connector_id}' and credential ID "
-            f"'{credential_id}' does not exist. Has it already been deleted?"
-        )
+        error = f"Connector with ID '{connector_id}' and credential ID '{credential_id}' does not exist. Has it already been deleted?"
         logger.error(error)
         raise HTTPException(
             status_code=404,
@@ -200,8 +197,7 @@ def create_deletion_attempt_for_connector_id(
     )
 
     logger.info(
-        f"create_deletion_attempt_for_connector_id - running check_for_connector_deletion: "
-        f"cc_pair={cc_pair.id}"
+        f"create_deletion_attempt_for_connector_id - running check_for_connector_deletion: cc_pair={cc_pair.id}"
     )
 
     if cc_pair.connector.source == DocumentSource.FILE:

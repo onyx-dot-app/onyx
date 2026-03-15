@@ -146,6 +146,10 @@ class TestDocprocessingPriorityInDocumentExtraction:
     @patch("onyx.background.indexing.run_docfetching.MemoryTracer")
     @patch("onyx.background.indexing.run_docfetching._get_connector_runner")
     @patch(
+        "onyx.background.indexing.run_docfetching.strip_null_characters",
+        side_effect=lambda batch: batch,
+    )
+    @patch(
         "onyx.background.indexing.run_docfetching.get_recent_completed_attempts_for_cc_pair"
     )
     @patch(
@@ -169,6 +173,7 @@ class TestDocprocessingPriorityInDocumentExtraction:
         mock_save_checkpoint: MagicMock,  # noqa: ARG002
         mock_get_last_successful_attempt_poll_range_end: MagicMock,
         mock_get_recent_completed_attempts: MagicMock,
+        mock_strip_null_characters: MagicMock,  # noqa: ARG002
         mock_get_connector_runner: MagicMock,
         mock_memory_tracer_class: MagicMock,
         mock_get_batch_storage: MagicMock,
@@ -284,7 +289,6 @@ class TestDocprocessingPriorityInDocumentExtraction:
         assert mock_celery_app.send_task.called, "send_task should have been called"
         call_kwargs = mock_celery_app.send_task.call_args
         actual_priority = call_kwargs.kwargs["priority"]
-        assert actual_priority == expected_priority, (
-            f"Expected priority {expected_priority} for has_successful_index={has_successful_index}, "
-            f"but got {actual_priority}"
-        )
+        assert (
+            actual_priority == expected_priority
+        ), f"Expected priority {expected_priority} for has_successful_index={has_successful_index}, but got {actual_priority}"

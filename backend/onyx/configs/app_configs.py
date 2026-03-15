@@ -6,6 +6,7 @@ from datetime import timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
+from onyx.cache.interface import CacheBackendType
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
@@ -54,12 +55,22 @@ DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() ==
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
 
+# Which backend to use for caching, locks, and ephemeral state.
+# "redis" (default) or "postgres" (only valid when DISABLE_VECTOR_DB=true).
+CACHE_BACKEND = CacheBackendType(
+    os.environ.get("CACHE_BACKEND", CacheBackendType.REDIS)
+)
+
 # Maximum token count for a single uploaded file. Files exceeding this are rejected.
 # Defaults to 100k tokens (or 10M when vector DB is disabled).
 _DEFAULT_FILE_TOKEN_LIMIT = 10_000_000 if DISABLE_VECTOR_DB else 100_000
 FILE_TOKEN_COUNT_THRESHOLD = int(
     os.environ.get("FILE_TOKEN_COUNT_THRESHOLD", str(_DEFAULT_FILE_TOKEN_LIMIT))
 )
+
+# Maximum upload size for a single user file (chat/projects) in MB.
+USER_FILE_MAX_UPLOAD_SIZE_MB = int(os.environ.get("USER_FILE_MAX_UPLOAD_SIZE_MB") or 50)
+USER_FILE_MAX_UPLOAD_SIZE_BYTES = USER_FILE_MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
@@ -85,19 +96,12 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 #####
 # Auth Configs
 #####
-# Upgrades users from disabled auth to basic auth and shows warning.
-_auth_type_str = (os.environ.get("AUTH_TYPE") or "basic").lower()
-if _auth_type_str == "disabled":
-    logger.warning(
-        "AUTH_TYPE='disabled' is no longer supported. "
-        "Defaulting to 'basic'. Please update your configuration. "
-        "Your existing data will be migrated automatically."
-    )
-    _auth_type_str = AuthType.BASIC.value
-try:
+# Silently default to basic - warnings/errors logged in verify_auth_setting()
+# which only runs on app startup, not during migrations/scripts
+_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
+if _auth_type_str in [auth_type.value for auth_type in AuthType]:
     AUTH_TYPE = AuthType(_auth_type_str)
-except ValueError:
-    logger.error(f"Invalid AUTH_TYPE: {_auth_type_str}. Defaulting to 'basic'.")
+else:
     AUTH_TYPE = AuthType.BASIC
 
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
@@ -192,6 +196,10 @@ if _OIDC_SCOPE_OVERRIDE:
     except Exception:
         pass
 
+# Enables PKCE for OIDC login flow. Disabled by default to preserve
+# backwards compatibility for existing OIDC deployments.
+OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
+
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
 
@@ -199,6 +207,12 @@ SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_confi
 JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
+
+if AUTH_TYPE == AuthType.BASIC and not USER_AUTH_SECRET:
+    logger.warning(
+        "USER_AUTH_SECRET is not set. This is required for secure password reset "
+        "and email verification tokens. Please set USER_AUTH_SECRET in production."
+    )
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
 # By default, this is set to match the Redis expiry time for consistency.
@@ -281,8 +295,9 @@ OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "englis
 # environments we always want to be dual indexing into both OpenSearch and Vespa
 # to stress test the new codepaths. Only enable this if there is some instance
 # of OpenSearch running for the relevant Onyx instance.
+# NOTE: Now enabled on by default, unless the env indicates otherwise.
 ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
-    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "").lower() == "true"
+    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "true").lower() == "true"
 )
 # NOTE: This effectively does nothing anymore, admins can now toggle whether
 # retrieval is through OpenSearch. This value is only used as a final fallback
@@ -299,6 +314,12 @@ ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
     os.environ.get("VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT", "true").lower()
     == "true"
+)
+OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
+    os.environ.get("OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE") or 500
+)
+OPENSEARCH_OVERRIDE_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES = int(
+    os.environ.get("OPENSEARCH_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES") or 0
 )
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
@@ -488,14 +509,7 @@ CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
     os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
 )
 
-# Consolidated background worker (light, docprocessing, docfetching, heavy, monitoring, user_file_processing)
-# separate workers' defaults: light=24, docprocessing=6, docfetching=1, heavy=4, kg=2, monitoring=1, user_file=2
-# Total would be 40, but we use a more conservative default of 20 for the consolidated worker
-CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_BACKGROUND_CONCURRENCY") or 20
-)
-
-# Individual worker concurrency settings (used when USE_LIGHTWEIGHT_BACKGROUND_WORKER is False or on Kuberenetes deployments)
+# Individual worker concurrency settings
 CELERY_WORKER_HEAVY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_HEAVY_CONCURRENCY") or 4
 )
@@ -812,7 +826,9 @@ RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 # Tool Configs
 #####
 # Code Interpreter Service Configuration
-CODE_INTERPRETER_BASE_URL = os.environ.get("CODE_INTERPRETER_BASE_URL")
+CODE_INTERPRETER_BASE_URL = os.environ.get(
+    "CODE_INTERPRETER_BASE_URL", "http://localhost:8000"
+)
 
 CODE_INTERPRETER_DEFAULT_TIMEOUT_MS = int(
     os.environ.get("CODE_INTERPRETER_DEFAULT_TIMEOUT_MS") or 60_000
@@ -893,6 +909,9 @@ CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
 )
 
 VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
+VESPA_MIGRATION_REQUEST_TIMEOUT_S = int(
+    os.environ.get("VESPA_MIGRATION_REQUEST_TIMEOUT_S") or "120"
+)
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
 

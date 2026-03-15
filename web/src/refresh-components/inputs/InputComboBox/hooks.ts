@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, RefObject } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ComboBoxOption } from "./types";
 
 // =============================================================================
@@ -19,22 +19,28 @@ export function useComboBoxState({ value, options }: UseComboBoxStateProps) {
   const [inputValue, setInputValue] = useState(value);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);
+  const prevIsOpenRef = useRef(false);
 
-  // State synchronization logic
-  // Only sync when the dropdown is closed or when value changes significantly
+  // Sync inputValue with the external value prop.
+  // When the dropdown is closed, always reflect the controlled value.
+  // When the dropdown is open, only sync if the *value prop itself* changes
+  // (e.g. parent programmatically updates it), not when inputValue changes
+  // (e.g. user clears the field on focus to browse all options).
   useEffect(() => {
-    // If dropdown is closed, always sync with prop value
     if (!isOpen) {
       setInputValue(value);
-    } else {
-      // If dropdown is open, only sync if the new value is an exact match with an option
-      // This prevents interference when user is typing
+    }
+  }, [value, isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
       const isExactOptionMatch = options.some((opt) => opt.value === value);
-      if (isExactOptionMatch && inputValue !== value) {
+      if (isExactOptionMatch) {
         setInputValue(value);
       }
     }
-  }, [value, isOpen, options, inputValue]);
+    // Only react to value prop changes while open, not inputValue changes
+  }, [value]);
 
   // Reset highlight and keyboard nav when closing dropdown
   useEffect(() => {

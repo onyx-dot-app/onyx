@@ -39,6 +39,8 @@ import document360Icon from "@public/Document360.png";
 import dropboxIcon from "@public/Dropbox.png";
 import drupalwikiIcon from "@public/DrupalWiki.png";
 import egnyteIcon from "@public/Egnyte.png";
+import elevenLabsDarkSVG from "@public/ElevenLabsDark.svg";
+import elevenLabsSVG from "@public/ElevenLabs.svg";
 import firefliesIcon from "@public/Fireflies.png";
 import freshdeskIcon from "@public/Freshdesk.png";
 import geminiSVG from "@public/Gemini.svg";
@@ -56,6 +58,7 @@ import jiraSVG from "@public/Jira.svg";
 import kimiIcon from "@public/Kimi.png";
 import linearIcon from "@public/Linear.png";
 import litellmIcon from "@public/litellm.png";
+import lmStudioIcon from "@public/lm_studio.png";
 import mediawikiIcon from "@public/MediaWiki.svg";
 import metaSVG from "@public/Meta.svg";
 import microsoftIcon from "@public/microsoft.png";
@@ -842,6 +845,9 @@ export const Document360Icon = createLogoIcon(document360Icon);
 export const DropboxIcon = createLogoIcon(dropboxIcon);
 export const DrupalWikiIcon = createLogoIcon(drupalwikiIcon);
 export const EgnyteIcon = createLogoIcon(egnyteIcon);
+export const ElevenLabsIcon = createLogoIcon(elevenLabsSVG, {
+  darkSrc: elevenLabsDarkSVG,
+});
 export const FirefliesIcon = createLogoIcon(firefliesIcon);
 export const FreshdeskIcon = createLogoIcon(freshdeskIcon);
 export const GeminiIcon = createLogoIcon(geminiSVG);
@@ -880,6 +886,7 @@ export const CodaIcon = createLogoIcon(codaIcon);
 export const NotionIcon = createLogoIcon(notionIcon, { monochromatic: true });
 export const OCIStorageIcon = createLogoIcon(OCIStorageSVG);
 export const OllamaIcon = createLogoIcon(ollamaIcon);
+export const LMStudioIcon = createLogoIcon(lmStudioIcon);
 export const TestRailIcon = createLogoIcon(testrailSVG);
 export const OpenAIISVG = ({
   size = 16,

@@ -29,20 +29,32 @@ jobs:
       build-backend-craft: ${{ steps.check.outputs.build-backend-craft }}
       build-model-server: ${{ steps.check.outputs.build-model-server }}
       is-cloud-tag: ${{ steps.check.outputs.is-cloud-tag }}
-      is-stable: ${{ steps.check.outputs.is-stable }}
       is-beta: ${{ steps.check.outputs.is-beta }}
-      is-stable-standalone: ${{ steps.check.outputs.is-stable-standalone }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
-      is-craft-latest: ${{ steps.check.outputs.is-craft-latest }}
+      is-latest: ${{ steps.check.outputs.is-latest }}
       is-test-run: ${{ steps.check.outputs.is-test-run }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
       short-sha: ${{ steps.check.outputs.short-sha }}
     steps:
+      - name: Checkout (for git tags)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # ratchet:astral-sh/setup-uv@v7
+        with:
+          version: "0.9.9"
+          enable-cache: false
+
       - name: Check which components to build and version info
         id: check
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
+          set -eo pipefail
           TAG="${GITHUB_REF_NAME}"
           # Sanitize tag name by replacing slashes with hyphens (for Docker tag compatibility)
           SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
@@ -54,9 +66,8 @@ jobs:
           IS_VERSION_TAG=false
           IS_STABLE=false
           IS_BETA=false
-          IS_STABLE_STANDALONE=false
           IS_BETA_STANDALONE=false
-          IS_CRAFT_LATEST=false
+          IS_LATEST=false
           IS_PROD_TAG=false
           IS_TEST_RUN=false
           BUILD_DESKTOP=false
@@ -67,9 +78,6 @@ jobs:
           BUILD_MODEL_SERVER=true
 
           # Determine tag type based on pattern matching (do regex checks once)
-          if [[ "$TAG" == craft-* ]]; then
-            IS_CRAFT_LATEST=true
-          fi
           if [[ "$TAG" == *cloud* ]]; then
             IS_CLOUD=true
           fi
@@ -97,18 +105,26 @@ jobs:
             fi
           fi
 
-          # Craft-latest builds backend with Craft enabled
-          if [[ "$IS_CRAFT_LATEST" == "true" ]]; then
-            BUILD_BACKEND_CRAFT=true
-            BUILD_BACKEND=false
-          fi
-
           # Standalone version checks (for backend/model-server - version excluding cloud tags)
-          if [[ "$IS_STABLE" == "true" ]] && [[ "$IS_CLOUD" != "true" ]]; then
-            IS_STABLE_STANDALONE=true
-          fi
           if [[ "$IS_BETA" == "true" ]] && [[ "$IS_CLOUD" != "true" ]]; then
             IS_BETA_STANDALONE=true
+          fi
+
+          # Determine if this tag should get the "latest" Docker tag.
+          # Only the highest semver stable tag (vX.Y.Z exactly) gets "latest".
+          if [[ "$IS_STABLE" == "true" ]]; then
+            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools ods latest-stable-tag) || {
+              echo "::error::Failed to determine highest stable tag via 'ods latest-stable-tag'"
+              exit 1
+            }
+            if [[ "$TAG" == "$HIGHEST_STABLE" ]]; then
+              IS_LATEST=true
+            fi
+          fi
+
+          # Build craft-latest backend alongside the regular latest.
+          if [[ "$IS_LATEST" == "true" ]]; then
+            BUILD_BACKEND_CRAFT=true
           fi
 
           # Determine if this is a production tag
@@ -129,11 +145,9 @@ jobs:
             echo "build-backend-craft=$BUILD_BACKEND_CRAFT"
             echo "build-model-server=$BUILD_MODEL_SERVER"
             echo "is-cloud-tag=$IS_CLOUD"
-            echo "is-stable=$IS_STABLE"
             echo "is-beta=$IS_BETA"
-            echo "is-stable-standalone=$IS_STABLE_STANDALONE"
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
-            echo "is-craft-latest=$IS_CRAFT_LATEST"
+            echo "is-latest=$IS_LATEST"
             echo "is-test-run=$IS_TEST_RUN"
             echo "sanitized-tag=$SANITIZED_TAG"
             echo "short-sha=$SHORT_SHA"
@@ -151,7 +165,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # ratchet:astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # ratchet:astral-sh/setup-uv@v7
         with:
           version: "0.9.9"
           # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
@@ -182,8 +196,52 @@ jobs:
           title: "🚨 Version Tag Check Failed"
           ref-name: ${{ github.ref_name }}
 
-  build-desktop:
+  # Create GitHub release first, before desktop builds start.
+  # This ensures all desktop matrix jobs upload to the same release instead of
+  # racing to create duplicate releases.
+  create-release:
     needs: determine-builds
+    if: needs.determine-builds.outputs.build-desktop == 'true'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.create-release.outputs.id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Determine release tag
+        id: release-tag
+        env:
+          IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
+          SHORT_SHA: ${{ needs.determine-builds.outputs.short-sha }}
+        run: |
+          if [ "${IS_TEST_RUN}" == "true" ]; then
+            echo "tag=v0.0.0-dev+${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        id: create-release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # ratchet:softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release-tag.outputs.tag }}
+          name: ${{ steps.release-tag.outputs.tag }}
+          body: "See the assets to download this version and install."
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-desktop:
+    needs:
+      - determine-builds
+      - create-release
     if: needs.determine-builds.outputs.build-desktop == 'true'
     permissions:
       id-token: write
@@ -208,12 +266,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6.0.2
         with:
-          # NOTE: persist-credentials is needed for tauri-action to create GitHub releases.
+          # NOTE: persist-credentials is needed for tauri-action to upload assets to GitHub releases.
           persist-credentials: true # zizmor: ignore[artipacked]
 
       - name: Configure AWS credentials
         if: startsWith(matrix.platform, 'macos-')
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -353,11 +411,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
           APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
-          releaseName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
-          releaseBody: "See the assets to download this version and install."
-          releaseDraft: true
-          prerelease: false
+          # Use the release created by the create-release job to avoid race conditions
+          # when multiple matrix jobs try to create/update the same release simultaneously
+          releaseId: ${{ needs.create-release.outputs.release-id }}
           assetNamePattern: "[name]_[arch][ext]"
           args: ${{ matrix.args }}
 
@@ -384,7 +440,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -426,8 +482,9 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64,mode=max
@@ -457,7 +514,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -499,8 +556,9 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64,mode=max
@@ -525,7 +583,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -556,7 +614,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('web-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-stable == 'true' && 'latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
 
@@ -595,7 +653,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -646,8 +704,8 @@ jobs:
             NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=true
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64,mode=max
@@ -677,7 +735,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -728,8 +786,8 @@ jobs:
             NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=true
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64,mode=max
@@ -754,7 +812,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -821,7 +879,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -862,8 +920,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64,mode=max
@@ -893,7 +952,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -934,8 +993,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64,mode=max
@@ -960,7 +1020,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -991,7 +1051,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('backend-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
@@ -1030,7 +1090,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1072,8 +1132,8 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
             ENABLE_CRAFT=true
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-amd64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-amd64,mode=max
@@ -1103,7 +1163,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1145,8 +1205,8 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
             ENABLE_CRAFT=true
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-arm64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-arm64,mode=max
@@ -1172,7 +1232,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1242,7 +1302,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1287,8 +1347,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
@@ -1321,7 +1382,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1366,8 +1427,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: |
             type=inline
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max
@@ -1394,7 +1456,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1425,7 +1487,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('model-server-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-stable-standalone == 'true' && 'latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
@@ -1459,7 +1521,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1514,7 +1576,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1574,7 +1636,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1631,7 +1693,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2

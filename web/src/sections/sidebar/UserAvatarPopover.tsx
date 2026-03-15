@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
+import { LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/interfaces/settings";
 import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { checkUserIsNoAuthUser, logout } from "@/lib/user";
+import { checkUserIsNoAuthUser, getUserDisplayName, logout } from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import Text from "@/refresh-components/texts/Text";
@@ -25,21 +25,7 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-
-function getDisplayName(email?: string, personalName?: string): string {
-  // Prioritize custom personal name if set
-  if (personalName && personalName.trim()) {
-    return personalName.trim();
-  }
-
-  // Fallback to email-derived username
-  if (!email) return ANONYMOUS_USER_NAME;
-  const atIndex = email.indexOf("@");
-  if (atIndex <= 0) return ANONYMOUS_USER_NAME;
-
-  return email.substring(0, atIndex);
-}
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
@@ -103,7 +89,11 @@ function SettingsPopover({
       <PopoverMenu>
         {[
           <div key="user-settings" data-testid="Settings/user-settings">
-            <LineItem icon={SvgUser} onClick={onUserSettingsClick}>
+            <LineItem
+              icon={SvgUser}
+              href="/app/settings"
+              onClick={onUserSettingsClick}
+            >
               User Settings
             </LineItem>
           </div>,
@@ -119,13 +109,9 @@ function SettingsPopover({
           <LineItem
             key="help-faq"
             icon={SvgExternalLink}
-            onClick={() =>
-              window.open(
-                "https://docs.onyx.app",
-                "_blank",
-                "noopener,noreferrer"
-              )
-            }
+            href="https://docs.onyx.app"
+            target="_blank"
+            rel="noopener noreferrer"
           >
             Help & FAQ
           </LineItem>,
@@ -166,8 +152,7 @@ export default function UserAvatarPopover({
   const { user } = useUser();
   const router = useRouter();
   const appFocus = useAppFocus();
-  const settings = useSettingsContext();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
 
   // Fetch notifications for display
   // The GET endpoint also triggers a refresh if release notes are stale
@@ -176,7 +161,7 @@ export default function UserAvatarPopover({
     errorHandlingFetcher
   );
 
-  const displayName = getDisplayName(user?.email, user?.personalization?.name);
+  const userDisplayName = getUserDisplayName(user);
   const undismissedCount =
     notifications?.filter((n) => !n.dismissed).length ?? 0;
   const hasNotifications = undismissedCount > 0;
@@ -201,7 +186,7 @@ export default function UserAvatarPopover({
       <Popover.Trigger asChild>
         <div id="onyx-user-dropdown">
           <SidebarTab
-            leftIcon={({ className }) => (
+            icon={({ className }) => (
               <InputAvatar
                 className={cn(
                   "flex items-center justify-center bg-background-neutral-inverted-00",
@@ -210,7 +195,7 @@ export default function UserAvatarPopover({
                 )}
               >
                 <Text as="p" inverted secondaryBody>
-                  {displayName[0]?.toUpperCase()}
+                  {userDisplayName[0]?.toUpperCase()}
                 </Text>
               </InputAvatar>
             )}
@@ -221,10 +206,18 @@ export default function UserAvatarPopover({
                 </Section>
               ) : undefined
             }
-            transient={!!popupState || appFocus.isUserSettings()}
+            selected={!!popupState || appFocus.isUserSettings()}
             folded={folded}
+            // TODO (@raunakab)
+            //
+            // The internals of `SidebarTab` (`Interactive.Base`) was designed such that providing an `onClick` or `href` would trigger rendering a `cursor-pointer`.
+            // However, since instance is wired up as a "trigger", it doesn't have either of those explicitly specified.
+            // Therefore, the default cursor would be rendered.
+            //
+            // Specifying a dummy `onClick` handler solves that.
+            onClick={() => undefined}
           >
-            {displayName}
+            {userDisplayName}
           </SidebarTab>
         </div>
       </Popover.Trigger>
@@ -238,7 +231,6 @@ export default function UserAvatarPopover({
           <SettingsPopover
             onUserSettingsClick={() => {
               setPopupState(undefined);
-              router.push("/app/settings");
             }}
             onOpenNotifications={() => setPopupState("Notifications")}
           />

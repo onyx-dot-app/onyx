@@ -1,10 +1,18 @@
 "use client";
 
-import React, { useRef, RefObject, useMemo } from "react";
+import React, {
+  useRef,
+  RefObject,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+} from "react";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
+import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/app/interfaces";
 import { handleCopy } from "@/app/app/message/copyingUtils";
+import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
 import { useMessageSwitching } from "@/app/app/message/messageComponents/hooks/useMessageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
 import { usePacketProcessor } from "@/app/app/message/messageComponents/timeline/hooks/usePacketProcessor";
@@ -14,6 +22,9 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
+import { useVoiceMode } from "@/providers/VoiceModeProvider";
+import { getTextContent } from "@/app/app/services/packetUtils";
+import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -36,7 +47,7 @@ export interface AgentMessageProps {
   onRegenerate?: RegenerationFactory;
   // Parent message needed to construct regeneration request
   parentMessage?: Message | null;
-  // Duration in seconds for processing this message (assistant messages only)
+  // Duration in seconds for processing this message (agent messages only)
   processingDurationSeconds?: number;
 }
 
@@ -55,7 +66,7 @@ function arePropsEqual(
     // Compare packetCount (primitive) instead of rawPackets.length
     // The array is mutated in place, so reading .length from prev and next would return same value
     prev.packetCount === next.packetCount &&
-    prev.chatState.assistant?.id === next.chatState.assistant?.id &&
+    prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
     prev.chatState.overriddenModel === next.chatState.overriddenModel &&
@@ -73,6 +84,7 @@ function arePropsEqual(
 
 const AgentMessage = React.memo(function AgentMessage({
   rawPackets,
+  packetCount,
   chatState,
   nodeId,
   messageId,
@@ -137,7 +149,7 @@ const AgentMessage = React.memo(function AgentMessage({
       citations: mergedCitations,
     }),
     [
-      chatState.assistant,
+      chatState.agent,
       chatState.docs,
       chatState.setPresentingDocument,
       chatState.overriddenModel,
@@ -145,6 +157,8 @@ const AgentMessage = React.memo(function AgentMessage({
       mergedCitations,
     ]
   );
+
+  const authErrors = useAuthErrors(rawPackets);
 
   // Message switching logic
   const {
@@ -157,6 +171,80 @@ const AgentMessage = React.memo(function AgentMessage({
     otherMessagesCanSwitchTo,
     onMessageSelection,
   });
+
+  // Streaming TTS integration
+  const { streamTTS, resetTTS, stopTTS } = useVoiceMode();
+  const ttsCompletedRef = useRef(false);
+  const hasStreamedIncompleteRef = useRef(false);
+  const hasObservedPacketGrowthRef = useRef(false);
+  const lastSeenPacketCountRef = useRef(packetCount ?? rawPackets.length);
+  const streamTTSRef = useRef(streamTTS);
+
+  // Keep streamTTS ref in sync without triggering effect re-runs
+  useEffect(() => {
+    streamTTSRef.current = streamTTS;
+  }, [streamTTS]);
+
+  // Stream TTS as text content arrives - only for messages still streaming
+  // Uses ref for streamTTS to avoid re-triggering when its identity changes
+  // Note: packetCount is used instead of rawPackets because the array is mutated in place
+  useLayoutEffect(() => {
+    const effectivePacketCount = packetCount ?? rawPackets.length;
+    if (effectivePacketCount > lastSeenPacketCountRef.current) {
+      hasObservedPacketGrowthRef.current = true;
+    }
+    lastSeenPacketCountRef.current = effectivePacketCount;
+
+    // Skip if we've already finished TTS for this message
+    if (ttsCompletedRef.current) return;
+
+    // If user cancelled generation, do not send more text to TTS.
+    if (stopPacketSeen && stopReason === StopReason.USER_CANCELLED) {
+      ttsCompletedRef.current = true;
+      return;
+    }
+
+    const textContent = removeThinkingTokens(getTextContent(rawPackets));
+    if (!(typeof textContent === "string" && textContent.length > 0)) return;
+
+    // Only autoplay messages that were observed streaming in this lifecycle.
+    // Prevents historical, already-complete chats from re-triggering read-aloud on mount.
+    if (!isComplete) {
+      if (!hasObservedPacketGrowthRef.current) {
+        return;
+      }
+      hasStreamedIncompleteRef.current = true;
+      streamTTSRef.current(textContent, false, nodeId);
+      return;
+    }
+
+    if (hasStreamedIncompleteRef.current) {
+      streamTTSRef.current(textContent, true, nodeId);
+      ttsCompletedRef.current = true;
+    }
+  }, [packetCount, isComplete, rawPackets, nodeId, stopPacketSeen, stopReason]); // packetCount triggers on new packets since rawPackets is mutated in place
+
+  // Stop TTS immediately when user cancels generation.
+  useEffect(() => {
+    if (stopPacketSeen && stopReason === StopReason.USER_CANCELLED) {
+      stopTTS({ manual: true });
+    }
+  }, [stopPacketSeen, stopReason, stopTTS]);
+
+  // Reset TTS completed flag when nodeId changes (new message)
+  useEffect(() => {
+    ttsCompletedRef.current = false;
+    hasStreamedIncompleteRef.current = false;
+    hasObservedPacketGrowthRef.current = false;
+    lastSeenPacketCountRef.current = packetCount ?? rawPackets.length;
+  }, [nodeId]);
+
+  // Reset TTS when component unmounts or nodeId changes
+  useEffect(() => {
+    return () => {
+      resetTTS();
+    };
+  }, [nodeId, resetTTS]);
 
   return (
     <div
@@ -189,12 +277,23 @@ const AgentMessage = React.memo(function AgentMessage({
         }}
       >
         {pacedDisplayGroups.length > 0 && (
-          <div ref={finalAnswerRef}>
+          <div ref={finalAnswerRef} className="flex flex-col gap-3">
+            {authErrors.map((authError, i) => (
+              <CustomToolAuthCard
+                key={`auth-error-${i}`}
+                toolName={authError.toolName}
+                toolId={authError.toolId}
+                tools={effectiveChatState.agent.tools}
+                agentId={effectiveChatState.agent.id}
+              />
+            ))}
             {pacedDisplayGroups.map((displayGroup, index) => (
               <RendererComponent
                 key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
                 packets={displayGroup.packets}
                 chatState={effectiveChatState}
+                messageNodeId={nodeId}
+                hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
                 onComplete={() => {
                   // Only mark complete on the last display group
                   // Hook handles the finalAnswerComing check internally

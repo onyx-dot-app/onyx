@@ -9,11 +9,14 @@ import {
   Variants,
   wrapperClasses,
 } from "@/refresh-components/inputs/styles";
+import { SvgAlertTriangle } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 
 export interface ChipItem {
   id: string;
   label: string;
+  /** When true the chip shows a warning icon */
+  error?: boolean;
 }
 
 export interface InputChipFieldProps {
@@ -29,6 +32,8 @@ export interface InputChipFieldProps {
   variant?: Variants;
   icon?: React.FunctionComponent<IconProps>;
   className?: string;
+  /** "inline" renders chips and input in one row; "stacked" puts chips above the input */
+  layout?: "inline" | "stacked";
 }
 
 /**
@@ -61,6 +66,7 @@ function InputChipField({
   variant = "primary",
   icon: Icon,
   className,
+  layout = "inline",
 }: InputChipFieldProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -85,25 +91,32 @@ function InputChipField({
     }
   }
 
-  return (
-    <div
-      className={cn(
-        "flex flex-row items-center flex-wrap gap-1 p-1.5 rounded-08 cursor-text w-full",
-        wrapperClasses[variant],
-        className
-      )}
-      onClick={() => inputRef.current?.focus()}
-    >
+  const chipElements =
+    chips.length > 0
+      ? chips.map((chip) => (
+          <Chip
+            key={chip.id}
+            onRemove={disabled ? undefined : () => onRemoveChip(chip.id)}
+            rightIcon={
+              chip.error
+                ? (props) => (
+                    <SvgAlertTriangle
+                      {...props}
+                      className="text-status-warning-text"
+                    />
+                  )
+                : undefined
+            }
+            smallLabel={layout === "stacked"}
+          >
+            {chip.label}
+          </Chip>
+        ))
+      : null;
+
+  const inputElement = (
+    <>
       {Icon && <Icon size={16} className="text-text-04 shrink-0" />}
-      {chips.map((chip) => (
-        <Chip
-          key={chip.id}
-          onRemove={disabled ? undefined : () => onRemoveChip(chip.id)}
-          smallLabel={false}
-        >
-          {chip.label}
-        </Chip>
-      ))}
       <input
         ref={inputRef}
         type="text"
@@ -118,6 +131,36 @@ function InputChipField({
           textClasses[variant]
         )}
       />
+    </>
+  );
+
+  return (
+    <div
+      className={cn(
+        "flex p-1.5 rounded-08 cursor-text w-full",
+        layout === "stacked"
+          ? "flex-col gap-1"
+          : "flex-row flex-wrap items-center gap-1",
+        wrapperClasses[variant],
+        className
+      )}
+      onClick={() => inputRef.current?.focus()}
+    >
+      {layout === "stacked" ? (
+        <>
+          {chipElements && (
+            <div className="flex flex-row items-center flex-wrap gap-1">
+              {chipElements}
+            </div>
+          )}
+          <div className="flex flex-row items-center gap-1">{inputElement}</div>
+        </>
+      ) : (
+        <>
+          {chipElements}
+          {inputElement}
+        </>
+      )}
     </div>
   );
 }

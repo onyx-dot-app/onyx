@@ -1,0 +1,141 @@
+import React from "react";
+import type { IconProps } from "@opal/types";
+
+const SvgLmStudio = ({ size, ...props }: IconProps) => {
+  const gradientId = React.useId();
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 480 480"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <rect width={480} height={480} rx={96} fill={`url(#${gradientId})`} />
+      <rect
+        opacity={0.25}
+        x={128}
+        y={80}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.9}
+        x={64}
+        y={80}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.25}
+        x={208}
+        y={136}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.9}
+        x={144}
+        y={136}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.25}
+        x={160}
+        y={192}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.9}
+        x={96}
+        y={192}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.25}
+        x={104}
+        y={248}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.9}
+        x={40}
+        y={248}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.25}
+        x={160}
+        y={304}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.9}
+        x={96}
+        y={304}
+        width={208}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.25}
+        x={296}
+        y={360}
+        width={136}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <rect
+        opacity={0.9}
+        x={224}
+        y={360}
+        width={144}
+        height={40}
+        rx={20}
+        fill="white"
+      />
+      <defs>
+        <linearGradient
+          id={gradientId}
+          x1={-206.055}
+          y1={215.087}
+          x2={224.119}
+          y2={658.689}
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop stopColor="#6E7EF3" />
+          <stop offset={1} stopColor="#4F13BE" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+};
+
+export default SvgLmStudio;

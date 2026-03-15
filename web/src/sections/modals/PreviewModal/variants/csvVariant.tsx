@@ -34,6 +34,7 @@ export const csvVariant: PreviewVariant = {
   width: "lg",
   height: "full",
   needsTextContent: true,
+  codeBackground: false,
   headerDescription: (ctx) => {
     if (!ctx.fileContent) return "";
     const { rows } = parseCsv(ctx.fileContent);
@@ -46,7 +47,7 @@ export const csvVariant: PreviewVariant = {
     return (
       <Section justifyContent="start" alignItems="start" padding={1}>
         <Table>
-          <TableHeader className="sticky top-0 z-sticky">
+          <TableHeader className="sticky top-0 z-sticky bg-background-tint-01">
             <TableRow noHover>
               {headers.map((h: string, i: number) => (
                 <TableHead key={i}>
@@ -64,7 +65,7 @@ export const csvVariant: PreviewVariant = {
                   <TableCell
                     key={cIdx}
                     className={cn(
-                      cIdx === 0 && "sticky left-0",
+                      cIdx === 0 && "sticky left-0 bg-background-tint-01",
                       "py-4 px-4 whitespace-normal break-words"
                     )}
                   >

@@ -52,7 +52,7 @@ def create_user_files(
 ) -> CategorizedFilesResult:
 
     # Categorize the files
-    categorized_files = categorize_uploaded_files(files)
+    categorized_files = categorize_uploaded_files(files, db_session)
     # NOTE: At the moment, zip metadata is not used for user files.
     # Should revisit to decide whether this should be a feature.
     upload_response = upload_files(categorized_files.acceptable, FileOrigin.USER_FILE)
@@ -146,8 +146,7 @@ def upload_files_to_user_files_with_indexing(
                 priority=OnyxCeleryPriority.HIGH,
             )
             logger.info(
-                f"Triggered indexing for user_file_id={user_file.id} "
-                f"with task_id={task.id}"
+                f"Triggered indexing for user_file_id={user_file.id} with task_id={task.id}"
             )
 
     return CategorizedFilesResult(

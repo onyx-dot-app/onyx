@@ -4,12 +4,12 @@ import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { ApplicationStatus } from "@/interfaces/settings";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 export interface ClientLayoutProps {
   children: React.ReactNode;
-  enableEnterprise: boolean;
   enableCloud: boolean;
 }
 
@@ -18,23 +18,36 @@ export interface ClientLayoutProps {
 // the `py-10 px-4 md:px-12` padding below can be removed entirely and
 // this prefix list can be deleted.
 const SETTINGS_LAYOUT_PREFIXES = [
-  "/admin/configuration/chat-preferences",
-  "/admin/configuration/image-generation",
-  "/admin/configuration/web-search",
-  "/admin/actions/mcp",
-  "/admin/actions/open-api",
-  "/admin/billing",
-  "/admin/document-index-migration",
-  "/admin/discord-bot",
-  "/admin/theme",
-  "/admin/configuration/llm",
+  ADMIN_ROUTES.CHAT_PREFERENCES.path,
+  ADMIN_ROUTES.IMAGE_GENERATION.path,
+  ADMIN_ROUTES.WEB_SEARCH.path,
+  ADMIN_ROUTES.MCP_ACTIONS.path,
+  ADMIN_ROUTES.OPENAPI_ACTIONS.path,
+  ADMIN_ROUTES.BILLING.path,
+  ADMIN_ROUTES.INDEX_MIGRATION.path,
+  ADMIN_ROUTES.DISCORD_BOTS.path,
+  ADMIN_ROUTES.THEME.path,
+  ADMIN_ROUTES.LLM_MODELS.path,
+  ADMIN_ROUTES.AGENTS.path,
+  ADMIN_ROUTES.USERS.path,
+  ADMIN_ROUTES.TOKEN_RATE_LIMITS.path,
+  ADMIN_ROUTES.INDEX_SETTINGS.path,
+  ADMIN_ROUTES.DOCUMENT_PROCESSING.path,
+  ADMIN_ROUTES.CODE_INTERPRETER.path,
+  ADMIN_ROUTES.API_KEYS.path,
+  ADMIN_ROUTES.ADD_CONNECTOR.path,
+  ADMIN_ROUTES.INDEXING_STATUS.path,
+  ADMIN_ROUTES.DOCUMENTS.path,
+  ADMIN_ROUTES.DEBUG.path,
+  ADMIN_ROUTES.KNOWLEDGE_GRAPH.path,
+  ADMIN_ROUTES.SLACK_BOTS.path,
+  ADMIN_ROUTES.STANDARD_ANSWERS.path,
+  ADMIN_ROUTES.GROUPS.path,
+  ADMIN_ROUTES.PERFORMANCE.path,
+  ADMIN_ROUTES.SCIM.path,
 ];
 
-export function ClientLayout({
-  children,
-  enableEnterprise,
-  enableCloud,
-}: ClientLayoutProps) {
+export function ClientLayout({ children, enableCloud }: ClientLayoutProps) {
   const pathname = usePathname();
   const settings = useSettingsContext();
 
@@ -57,7 +70,7 @@ export function ClientLayout({
           <strong className="font-bold">Warning:</strong> Your trial ends in
           less than 5 days and no payment method has been added.
           <div className="mt-2">
-            <Button className="w-full" href="/admin/billing">
+            <Button width="full" href="/admin/billing">
               Update Billing Information
             </Button>
           </div>
@@ -68,10 +81,7 @@ export function ClientLayout({
         <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">{children}</div>
       ) : (
         <>
-          <AdminSidebar
-            enableCloudSS={enableCloud}
-            enableEnterpriseSS={enableEnterprise}
-          />
+          <AdminSidebar enableCloudSS={enableCloud} />
           <div
             data-main-container
             className={cn(

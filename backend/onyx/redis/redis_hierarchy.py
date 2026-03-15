@@ -16,6 +16,7 @@ Cache Strategy:
   using only the SOURCE-type node as the ancestor
 """
 
+from typing import cast
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -204,6 +205,30 @@ def cache_hierarchy_nodes_batch(
     redis_client.expire(raw_id_key, HIERARCHY_CACHE_TTL_SECONDS)
 
 
+def evict_hierarchy_nodes_from_cache(
+    redis_client: Redis,
+    source: DocumentSource,
+    raw_node_ids: list[str],
+) -> None:
+    """Remove specific hierarchy nodes from the Redis cache.
+
+    Deletes entries from both the parent-chain hash and the raw_id→node_id hash.
+    """
+    if not raw_node_ids:
+        return
+
+    cache_key = _cache_key(source)
+    raw_id_key = _raw_id_cache_key(source)
+
+    # Look up node_ids so we can remove them from the parent-chain hash
+    raw_values = cast(list[str | None], redis_client.hmget(raw_id_key, raw_node_ids))
+    node_id_strs = [v for v in raw_values if v is not None]
+
+    if node_id_strs:
+        redis_client.hdel(cache_key, *node_id_strs)
+    redis_client.hdel(raw_id_key, *raw_node_ids)
+
+
 def get_node_id_from_raw_id(
     redis_client: Redis,
     source: DocumentSource,
@@ -301,8 +326,7 @@ def refresh_hierarchy_cache_from_db(
     acquired = lock.acquire(blocking=True)
     if not acquired:
         logger.warning(
-            f"Could not acquire lock for hierarchy cache refresh "
-            f"for source {source.value} - another worker may be refreshing"
+            f"Could not acquire lock for hierarchy cache refresh for source {source.value} - another worker may be refreshing"
         )
         return
 
@@ -353,8 +377,7 @@ def _walk_ancestor_chain(
     while current_id is not None and len(ancestors) < MAX_DEPTH:
         if current_id in visited:
             logger.error(
-                f"Cycle detected in hierarchy for source {source.value} "
-                f"at node {current_id}. Ancestors so far: {ancestors}"
+                f"Cycle detected in hierarchy for source {source.value} at node {current_id}. Ancestors so far: {ancestors}"
             )
             break
 
@@ -365,8 +388,7 @@ def _walk_ancestor_chain(
 
         if not found:
             logger.debug(
-                f"Cache miss for hierarchy node {current_id} "
-                f"of source {source.value}, attempting refresh"
+                f"Cache miss for hierarchy node {current_id} of source {source.value}, attempting refresh"
             )
             refresh_hierarchy_cache_from_db(redis_client, db_session, source)
             parent_id, found = get_parent_id_from_cache(
@@ -375,8 +397,7 @@ def _walk_ancestor_chain(
 
             if not found:
                 logger.error(
-                    f"Hierarchy node {current_id} not found in cache "
-                    f"for source {source.value} even after refresh."
+                    f"Hierarchy node {current_id} not found in cache for source {source.value} even after refresh."
                 )
                 break
 
@@ -429,8 +450,7 @@ def get_ancestors_from_raw_id(
     if not found:
         # Cache miss - try refresh
         logger.debug(
-            f"Cache miss for raw_node_id '{parent_hierarchy_raw_node_id}' "
-            f"of source {source.value}, attempting refresh"
+            f"Cache miss for raw_node_id '{parent_hierarchy_raw_node_id}' of source {source.value}, attempting refresh"
         )
         refresh_hierarchy_cache_from_db(redis_client, db_session, source)
         node_id, found = get_node_id_from_raw_id(

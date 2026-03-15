@@ -244,7 +244,10 @@ def do_run_migrations(
 
 
 def provide_iam_token_for_alembic(
-    dialect: Any, conn_rec: Any, cargs: Any, cparams: Any  # noqa: ARG001
+    dialect: Any,  # noqa: ARG001
+    conn_rec: Any,  # noqa: ARG001
+    cargs: Any,  # noqa: ARG001
+    cparams: Any,
 ) -> None:
     if USE_IAM_AUTH:
         # Database connection settings
@@ -360,8 +363,7 @@ async def run_async_migrations() -> None:
         # upgrade_all_tenants=true or schemas in multi-tenant mode
         # and for non-multi-tenant mode, we should use schemas with the default schema
         raise ValueError(
-            "No migration target specified. Use either upgrade_all_tenants=true for all tenants "
-            "or schemas for specific schemas."
+            "No migration target specified. Use either upgrade_all_tenants=true for all tenants or schemas for specific schemas."
         )
 
     await engine.dispose()
@@ -457,8 +459,7 @@ def run_migrations_offline() -> None:
     else:
         # This should not happen in the new design
         raise ValueError(
-            "No migration target specified. Use either upgrade_all_tenants=true for all tenants "
-            "or schemas for specific schemas."
+            "No migration target specified. Use either upgrade_all_tenants=true for all tenants or schemas for specific schemas."
         )
 
 

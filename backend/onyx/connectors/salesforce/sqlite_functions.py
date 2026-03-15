@@ -678,10 +678,8 @@ class OnyxSalesforceSQLite:
             data = json.loads(result[0][0])
 
             if object_type != ACCOUNT_OBJECT_TYPE:
-
                 # convert any account ids of the relationships back into data fields, with name
                 for row in result:
-
                     # the following skips Account objects.
                     if len(row) < 3:
                         continue

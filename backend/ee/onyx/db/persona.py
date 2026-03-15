@@ -7,6 +7,7 @@ from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.notification import create_notification
+from onyx.db.persona import mark_persona_user_files_for_sync
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 
 
@@ -26,7 +27,9 @@ def update_persona_access(
 
     NOTE: Callers are responsible for committing."""
 
+    needs_sync = False
     if is_public is not None:
+        needs_sync = True
         persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
         if persona:
             persona.is_public = is_public
@@ -35,6 +38,7 @@ def update_persona_access(
     # and a non-empty list means "replace with these shares".
 
     if user_ids is not None:
+        needs_sync = True
         db_session.query(Persona__User).filter(
             Persona__User.persona_id == persona_id
         ).delete(synchronize_session="fetch")
@@ -54,6 +58,7 @@ def update_persona_access(
                 )
 
     if group_ids is not None:
+        needs_sync = True
         db_session.query(Persona__UserGroup).filter(
             Persona__UserGroup.persona_id == persona_id
         ).delete(synchronize_session="fetch")
@@ -63,3 +68,7 @@ def update_persona_access(
             db_session.add(
                 Persona__UserGroup(persona_id=persona_id, user_group_id=group_id)
             )
+
+    # When sharing changes, user file ACLs need to be updated in the vector DB
+    if needs_sync:
+        mark_persona_user_files_for_sync(persona_id, db_session)

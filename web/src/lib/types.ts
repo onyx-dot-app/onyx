@@ -1,15 +1,15 @@
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { Persona } from "@/app/admin/agents/interfaces";
 import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
-export interface UserSpecificAssistantPreference {
+export interface UserSpecificAgentPreference {
   disabled_tool_ids?: number[];
 }
 
-export type UserSpecificAssistantPreferences = Record<
+export type UserSpecificAgentPreferences = Record<
   number,
-  UserSpecificAssistantPreference
+  UserSpecificAgentPreference
 >;
 
 export enum ThemePreference {
@@ -19,6 +19,7 @@ export enum ThemePreference {
 }
 
 interface UserPreferences {
+  // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
   chosen_assistants: number[] | null;
   visible_assistants: number[];
   hidden_assistants: number[];
@@ -31,6 +32,10 @@ interface UserPreferences {
   theme_preference: ThemePreference | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+  // Voice preferences
+  voice_auto_send?: boolean;
+  voice_auto_playback?: boolean;
+  voice_playback_speed?: number;
 }
 
 export interface MemoryItem {
@@ -65,6 +70,20 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.LIMITED]: "Limited",
   [UserRole.EXT_PERM_USER]: "External Permissioned User",
   [UserRole.SLACK_USER]: "Slack User",
+};
+
+export enum UserStatus {
+  ACTIVE = "active",
+  INACTIVE = "inactive",
+  INVITED = "invited",
+  REQUESTED = "requested",
+}
+
+export const USER_STATUS_LABELS: Record<UserStatus, string> = {
+  [UserStatus.ACTIVE]: "Active",
+  [UserStatus.INACTIVE]: "Inactive",
+  [UserStatus.INVITED]: "Invite Pending",
+  [UserStatus.REQUESTED]: "Request to Join",
 };
 
 export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {

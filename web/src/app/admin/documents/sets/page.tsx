@@ -2,7 +2,7 @@
 
 import { ThreeDotsLoader } from "@/components/Loading";
 import { PageSelector } from "@/components/PageSelector";
-import { BookmarkIcon, InfoIcon } from "@/components/icons/icons";
+import { InfoIcon } from "@/components/icons/icons";
 import {
   Table,
   TableHead,
@@ -19,7 +19,8 @@ import { useDocumentSets } from "./hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { toast } from "@/hooks/useToast";
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   FiAlertTriangle,
   FiCheckCircle,
@@ -42,6 +43,7 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 
+const route = ADMIN_ROUTES.DOCUMENT_SETS;
 const numToDisplay = 50;
 
 // Component to display federated connectors with consistent styling
@@ -358,7 +360,7 @@ const DocumentSetTable = ({
   );
 };
 
-const Main = () => {
+function Main() {
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
@@ -418,16 +420,15 @@ const Main = () => {
       )}
     </div>
   );
-};
+}
 
-const Page = () => {
+export default function Page() {
   return (
-    <>
-      <AdminPageTitle icon={<BookmarkIcon size={32} />} title="Document Sets" />
-
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
-};
-
-export default Page;
+}

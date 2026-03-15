@@ -90,8 +90,7 @@ def parse_airtable_url(
     match = _AIRTABLE_URL_PATTERN.search(url.strip())
     if not match:
         raise ValueError(
-            f"Could not parse Airtable URL: '{url}'. "
-            "Expected format: https://airtable.com/appXXX/tblYYY[/viwZZZ]"
+            f"Could not parse Airtable URL: '{url}'. Expected format: https://airtable.com/appXXX/tblYYY[/viwZZZ]"
         )
     return match.group(1), match.group(2), match.group(3)
 
@@ -170,16 +169,14 @@ class AirtableConnector(LoadConnector):
         else:
             if not self.base_id or not self.table_name_or_id:
                 raise ConnectorValidationError(
-                    "A valid Airtable URL or base_id and table_name_or_id are required "
-                    "when not using index_all mode."
+                    "A valid Airtable URL or base_id and table_name_or_id are required when not using index_all mode."
                 )
             try:
                 table = self.airtable_client.table(self.base_id, self.table_name_or_id)
                 table.schema()
             except Exception as e:
                 raise ConnectorValidationError(
-                    f"Failed to access table '{self.table_name_or_id}' "
-                    f"in base '{self.base_id}': {e}"
+                    f"Failed to access table '{self.table_name_or_id}' in base '{self.base_id}': {e}"
                 )
 
     @classmethod
@@ -391,10 +388,7 @@ class AirtableConnector(LoadConnector):
             TextSection(
                 link=link,
                 text=(
-                    f"{field_name}:\n"
-                    "------------------------\n"
-                    f"{text}\n"
-                    "------------------------"
+                    f"{field_name}:\n------------------------\n{text}\n------------------------"
                 ),
             )
             for text, link in field_value_and_links
@@ -440,8 +434,7 @@ class AirtableConnector(LoadConnector):
             field_type = field_schema.type
 
             logger.debug(
-                f"Processing field '{field_name}' of type '{field_type}' "
-                f"for record '{record_id}'."
+                f"Processing field '{field_name}' of type '{field_type}' for record '{record_id}'."
             )
 
             field_sections, field_metadata = self._process_field(
@@ -534,8 +527,7 @@ class AirtableConnector(LoadConnector):
                 break
 
         logger.info(
-            f"Processing {len(records)} records from table "
-            f"'{table_schema.name}' in base '{base_name or base_id}'."
+            f"Processing {len(records)} records from table '{table_schema.name}' in base '{base_name or base_id}'."
         )
 
         if not records:
@@ -629,7 +621,6 @@ class AirtableConnector(LoadConnector):
                     )
                 except Exception:
                     logger.exception(
-                        f"Failed to index table '{table.name}' ({table.id}) "
-                        f"in base '{base_name}' ({base_id}), skipping."
+                        f"Failed to index table '{table.name}' ({table.id}) in base '{base_name}' ({base_id}), skipping."
                     )
                     continue

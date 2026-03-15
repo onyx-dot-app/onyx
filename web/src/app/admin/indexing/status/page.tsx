@@ -1,14 +1,15 @@
 "use client";
 
-import { NotebookIcon } from "@/components/icons/icons";
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Link from "next/link";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
 import { ValidSources } from "@/lib/types";
@@ -17,7 +18,11 @@ import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import { IndexingStatusRequest } from "@/lib/types";
 
+const route = ADMIN_ROUTES.INDEXING_STATUS;
+
 function Main() {
+  const vectorDbEnabled = useVectorDbEnabled();
+
   // State for filter management
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     accessType: null,
@@ -65,7 +70,7 @@ function Main() {
     sourcePages,
     sourceLoadingStates,
     resetPagination,
-  } = useConnectorIndexingStatusWithPagination(request, 30000);
+  } = useConnectorIndexingStatusWithPagination(request, 30000, vectorDbEnabled);
 
   // Check if filters are active
   const hasActiveFilters = useMemo(() => {
@@ -213,16 +218,18 @@ export default function Status() {
   });
 
   return (
-    <>
-      <AdminPageTitle
-        icon={<NotebookIcon size={32} />}
-        title="Existing Connectors"
-        farRightElement={
+    <SettingsLayouts.Root width="full">
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={route.title}
+        rightChildren={
           <Button href="/admin/add-connector">Add Connector</Button>
         }
+        separator
       />
-
-      <Main />
-    </>
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

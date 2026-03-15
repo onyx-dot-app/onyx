@@ -7,13 +7,16 @@ from PIL import UnidentifiedImageError
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import FILE_TOKEN_COUNT_THRESHOLD
+from onyx.configs.app_configs import USER_FILE_MAX_UPLOAD_SIZE_BYTES
+from onyx.configs.app_configs import USER_FILE_MAX_UPLOAD_SIZE_MB
+from onyx.db.llm import fetch_default_llm_model
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.password_validation import is_file_password_protected
-from onyx.llm.factory import get_default_llm
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -32,6 +35,37 @@ def get_safe_filename(upload: UploadFile) -> str:
         logger.warning("Received upload with no filename")
         return UNKNOWN_FILENAME
     return upload.filename
+
+
+def get_upload_size_bytes(upload: UploadFile) -> int | None:
+    """Best-effort file size in bytes without consuming the stream."""
+    if upload.size is not None:
+        return upload.size
+
+    try:
+        current_pos = upload.file.tell()
+        upload.file.seek(0, 2)
+        size = upload.file.tell()
+        upload.file.seek(current_pos)
+        return size
+    except Exception as e:
+        logger.warning(
+            "Could not determine upload size via stream seek "
+            f"(filename='{get_safe_filename(upload)}', "
+            f"error_type={type(e).__name__}, error={e})"
+        )
+        return None
+
+
+def is_upload_too_large(upload: UploadFile, max_bytes: int) -> bool:
+    """Return True when upload size is known and exceeds max_bytes."""
+    size_bytes = get_upload_size_bytes(upload)
+    if size_bytes is None:
+        logger.warning(
+            f"Could not determine upload size; skipping size-limit check for '{get_safe_filename(upload)}'"
+        )
+        return False
+    return size_bytes > max_bytes
 
 
 # Guard against extremely large images
@@ -116,23 +150,28 @@ def estimate_image_tokens_for_upload(
             pass
 
 
-def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
+def categorize_uploaded_files(
+    files: list[UploadFile], db_session: Session
+) -> CategorizedFiles:
     """
     Categorize uploaded files based on text extractability and tokenized length.
 
-    - Extracts text using extract_file_text for supported plain/document extensions.
+    - Images are estimated for token cost via a patch-based heuristic.
+    - All other files are run through extract_file_text, which handles known
+      document formats (.pdf, .docx, …) and falls back to a text-detection
+      heuristic for unknown extensions (.py, .js, .rs, …).
     - Uses default tokenizer to compute token length.
-    - If token length > 100,000, reject file (unless threshold skip is enabled).
-    - If extension unsupported or text cannot be extracted, reject file.
+    - If token length > threshold, reject file (unless threshold skip is enabled).
+    - If text cannot be extracted, reject file.
     - Otherwise marked as acceptable.
     """
 
     results = CategorizedFiles()
-    llm = get_default_llm()
+    default_model = fetch_default_llm_model(db_session)
 
-    tokenizer = get_tokenizer(
-        model_name=llm.config.model_name, provider_type=llm.config.model_provider
-    )
+    model_name = default_model.name if default_model else None
+    provider_type = default_model.llm_provider.provider if default_model else None
+    tokenizer = get_tokenizer(model_name=model_name, provider_type=provider_type)
 
     # Check if threshold checks should be skipped
     skip_threshold = False
@@ -156,6 +195,18 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
     for upload in files:
         try:
             filename = get_safe_filename(upload)
+
+            # Size limit is a hard safety cap and is enforced even when token
+            # threshold checks are skipped via SKIP_USERFILE_THRESHOLD settings.
+            if is_upload_too_large(upload, USER_FILE_MAX_UPLOAD_SIZE_BYTES):
+                results.rejected.append(
+                    RejectedFile(
+                        filename=filename,
+                        reason=f"Exceeds {USER_FILE_MAX_UPLOAD_SIZE_MB} MB file size limit",
+                    )
+                )
+                continue
+
             extension = get_file_ext(filename)
 
             # If image, estimate tokens via dedicated method first
@@ -168,8 +219,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                     )
                     results.rejected.append(
                         RejectedFile(
-                            filename=filename,
-                            reason=f"Unsupported file type: {extension}",
+                            filename=filename, reason="Unsupported file contents"
                         )
                     )
                     continue
@@ -186,8 +236,10 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                     results.acceptable_file_to_token_count[filename] = token_count
                 continue
 
-            # Otherwise, handle as text/document: extract text and count tokens
-            elif extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+            # Handle as text/document: attempt text extraction and count tokens.
+            # This accepts any file that extract_file_text can handle, including
+            # code files (.py, .js, .rs, etc.) via its is_text_file() fallback.
+            else:
                 if is_file_password_protected(
                     file=upload.file,
                     file_name=filename,
@@ -210,7 +262,10 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                 if not text_content:
                     logger.warning(f"No text content extracted from '{filename}'")
                     results.rejected.append(
-                        RejectedFile(filename=filename, reason="Could not read file")
+                        RejectedFile(
+                            filename=filename,
+                            reason=f"Unsupported file type: {extension}",
+                        )
                     )
                     continue
 
@@ -233,17 +288,6 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                     logger.warning(
                         f"Failed to reset file pointer for '{filename}': {str(e)}"
                     )
-                continue
-
-            # If not recognized as supported types above, mark unsupported
-            logger.warning(
-                f"Unsupported file extension '{extension}' for file '{filename}'"
-            )
-            results.rejected.append(
-                RejectedFile(
-                    filename=filename, reason=f"Unsupported file type: {extension}"
-                )
-            )
         except Exception as e:
             logger.warning(
                 f"Failed to process uploaded file '{get_safe_filename(upload)}' (error_type={type(e).__name__}, error={str(e)})"

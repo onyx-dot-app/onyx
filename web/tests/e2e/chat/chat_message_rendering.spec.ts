@@ -6,6 +6,9 @@ import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const SHORT_USER_MESSAGE = "What is Onyx?";
 
+const LONG_WORD_USER_MESSAGE =
+  "Please look into this issue: __________________________________________ and also this token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA and this URL: https://example.com/a/very/long/path/that/keeps/going/and/going/and/going/without/any/breaks/whatsoever/to/test/overflow";
+
 const LONG_USER_MESSAGE = `I've been evaluating several enterprise search and AI platforms for our organization, and I have a number of detailed questions about Onyx that I'd like to understand before we make a decision.
 
 First, can you explain how Onyx handles document indexing across multiple data sources? We currently use Confluence, Google Drive, Slack, and GitHub, and we need to ensure that all of these can be indexed simultaneously without performance degradation.
@@ -93,6 +96,22 @@ Key benefits include:
 - **Flexibility**: Connect any data source via custom connectors
 - **Extensibility**: Open-source codebase with active community`;
 
+const LATEX_AI_RESPONSE = `Here is a mix of math and plain text:
+
+Inline math should render cleanly: \\(E = mc^2\\).
+
+Display math should render on its own line:
+\\[
+\\int_0^1 x^2 \\, dx = \\frac{1}{3}
+\\]
+
+This currency value should stay plain text: $100.
+
+And this LaTeX source should remain a code block:
+\`\`\`latex
+\\int_0^1 x^2 \\, dx = \\frac{1}{3}
+\`\`\``;
+
 interface MockDocument {
   document_id: string;
   semantic_identifier: string;
@@ -116,18 +135,18 @@ let turnCounter = 0;
 function buildMockStream(content: string): string {
   turnCounter += 1;
   const userMessageId = turnCounter * 100 + 1;
-  const assistantMessageId = turnCounter * 100 + 2;
+  const agentMessageId = turnCounter * 100 + 2;
 
   const packets = [
     {
       user_message_id: userMessageId,
-      reserved_assistant_message_id: assistantMessageId,
+      reserved_assistant_message_id: agentMessageId,
     },
     {
       placement: { turn_index: 0, tab_index: 0 },
       obj: {
         type: "message_start",
-        id: `mock-${assistantMessageId}`,
+        id: `mock-${agentMessageId}`,
         content,
         final_documents: null,
       },
@@ -137,7 +156,7 @@ function buildMockStream(content: string): string {
       obj: { type: "stop", stop_reason: "finished" },
     },
     {
-      message_id: assistantMessageId,
+      message_id: agentMessageId,
       citations: {},
       files: [],
     },
@@ -149,7 +168,7 @@ function buildMockStream(content: string): string {
 function buildMockSearchStream(options: SearchMockOptions): string {
   turnCounter += 1;
   const userMessageId = turnCounter * 100 + 1;
-  const assistantMessageId = turnCounter * 100 + 2;
+  const agentMessageId = turnCounter * 100 + 2;
 
   const fullDocs = options.documents.map((doc) => ({
     ...doc,
@@ -167,7 +186,7 @@ function buildMockSearchStream(options: SearchMockOptions): string {
   const packets: Record<string, unknown>[] = [
     {
       user_message_id: userMessageId,
-      reserved_assistant_message_id: assistantMessageId,
+      reserved_assistant_message_id: agentMessageId,
     },
     {
       placement: { turn_index: 0, tab_index: 0 },
@@ -194,7 +213,7 @@ function buildMockSearchStream(options: SearchMockOptions): string {
       placement: { turn_index: 1, tab_index: 0 },
       obj: {
         type: "message_start",
-        id: `mock-${assistantMessageId}`,
+        id: `mock-${agentMessageId}`,
         content: options.content,
         final_documents: fullDocs,
       },
@@ -212,7 +231,7 @@ function buildMockSearchStream(options: SearchMockOptions): string {
       obj: { type: "stop", stop_reason: "finished" },
     },
     {
-      message_id: assistantMessageId,
+      message_id: agentMessageId,
       citations: options.citations,
       files: [],
     },
@@ -369,6 +388,36 @@ for (const theme of THEMES) {
         );
       });
 
+      test("user message with very long words wraps without overflowing", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+
+        await sendMessage(page, LONG_WORD_USER_MESSAGE);
+
+        const userMessage = page.locator("#onyx-human-message").first();
+        await expect(userMessage).toContainText("__________");
+
+        await screenshotChatContainer(
+          page,
+          `chat-long-word-user-message-${theme}`
+        );
+
+        // Assert the message bubble does not overflow horizontally.
+        const overflows = await userMessage.evaluate((el) => {
+          const bubble = el.querySelector<HTMLElement>(
+            ".whitespace-break-spaces"
+          );
+          if (!bubble)
+            throw new Error(
+              "Expected human message bubble (.whitespace-break-spaces) to exist"
+            );
+          return bubble.scrollWidth > bubble.offsetWidth;
+        });
+        expect(overflows).toBe(false);
+      });
+
       test("long user message with long AI response renders correctly", async ({
         page,
       }) => {
@@ -407,6 +456,32 @@ for (const theme of THEMES) {
         await screenshotChatContainer(
           page,
           `chat-markdown-code-response-${theme}`
+        );
+      });
+
+      test("AI response with LaTeX math renders correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, LATEX_AI_RESPONSE);
+
+        await sendMessage(page, "Show me inline and block math");
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+
+        await screenshotChatContainer(
+          page,
+          `chat-latex-math-response-${theme}`
+        );
+
+        await expect(aiMessage).toContainText("Inline math should render");
+        await expect(aiMessage).toContainText(
+          "This currency value should stay plain text: $100."
+        );
+        await expect(aiMessage.locator(".katex")).toHaveCount(2);
+        await expect(aiMessage.locator(".katex-display")).toBeVisible();
+        await expect(aiMessage.getByRole("code")).toContainText(
+          "\\int_0^1 x^2 \\, dx = \\frac{1}{3}"
         );
       });
     });

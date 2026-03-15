@@ -74,6 +74,7 @@ export default function ResetPasswordModal({
               </Text>
             </div>
           ) : (
+            // TODO(@raunakab): migrate to opal Button once it supports ReactNode children
             <Button
               onClick={handleResetPassword}
               disabled={isLoading}

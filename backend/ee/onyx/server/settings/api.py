@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus
@@ -125,7 +126,7 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                 # syncing) means indexed data may need protection.
                 settings.application_status = _BLOCKING_STATUS
             settings.ee_features_enabled = False
-    except RedisError as e:
+    except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
         # Fail closed - disable EE features if we can't verify license
         settings.ee_features_enabled = False

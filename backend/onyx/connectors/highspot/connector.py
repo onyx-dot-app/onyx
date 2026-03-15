@@ -112,8 +112,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
             ]
             if not spots_to_process:
                 raise ValueError(
-                    f"No valid spots found in Highspot. Found {spots} "
-                    f"but {self.spot_names} were requested."
+                    f"No valid spots found in Highspot. Found {spots} but {self.spot_names} were requested."
                 )
             return spots_to_process
 

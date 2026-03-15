@@ -116,8 +116,7 @@ def test_mock_llm_response_embedded_json_fallback_tool_call_debug(
         user_performing_action=admin_user,
         forced_tool_ids=[search_tool_id],
         mock_llm_response=(
-            'I will call a tool now. {"name":"internal_search",'
-            '"arguments":{"queries":["gamma"]}}'
+            'I will call a tool now. {"name":"internal_search","arguments":{"queries":["gamma"]}}'
         ),
     )
 

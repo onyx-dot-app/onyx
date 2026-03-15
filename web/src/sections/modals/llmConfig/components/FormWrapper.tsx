@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, ReactNode } from "react";
-import useSWR, { useSWRConfig, KeyedMutator } from "swr";
+import useSWR, { useSWRConfig, ScopedMutator } from "swr";
 import { toast } from "@/hooks/useToast";
 import {
   LLMProviderView,
@@ -10,16 +10,16 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { setDefaultLlmModel } from "@/lib/llmConfig/svc";
 
 export interface ProviderFormContext {
   onClose: () => void;
-  mutate: KeyedMutator<any>;
+  mutate: ScopedMutator;
   isTesting: boolean;
   setIsTesting: (testing: boolean) => void;
   testError: string;
@@ -95,7 +95,7 @@ export function ProviderFormEntrypointWrapper({
 
     try {
       await setDefaultLlmModel(existingLlmProvider.id, firstVisibleModel.name);
-      await mutate(LLM_PROVIDERS_ADMIN_URL);
+      await refreshLlmProviderCaches(mutate);
       toast.success("Provider set as default successfully!");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
@@ -142,7 +142,7 @@ export function ProviderFormEntrypointWrapper({
   if (buttonMode && !existingLlmProvider) {
     return (
       <>
-        <Button action onClick={() => setFormIsVisible(true)}>
+        <Button variant="action" onClick={() => setFormIsVisible(true)}>
           {buttonText ?? `Add ${providerName}`}
         </Button>
         {renderModal(formIsVisible, `Setup ${providerName}`)}
@@ -185,8 +185,8 @@ export function ProviderFormEntrypointWrapper({
 
             <div className="ml-auto my-auto">
               <Button
-                action={!existingLlmProvider}
-                secondary={!!existingLlmProvider}
+                variant={!existingLlmProvider ? "action" : "default"}
+                prominence={!!existingLlmProvider ? "secondary" : "primary"}
                 onClick={() => setFormIsVisible(true)}
               >
                 Edit
@@ -201,7 +201,7 @@ export function ProviderFormEntrypointWrapper({
               </Text>
             </div>
             <div className="ml-auto my-auto">
-              <Button action onClick={() => setFormIsVisible(true)}>
+              <Button variant="action" onClick={() => setFormIsVisible(true)}>
                 Set up
               </Button>
             </div>

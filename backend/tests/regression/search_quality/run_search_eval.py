@@ -207,9 +207,7 @@ class SearchAnswerAnalyzer:
                 accuracy = found_count / total_count * 100 if total_count > 0 else 0
 
                 print(
-                    f"\n{category.upper()}:"
-                    f"  total queries: {total_count}\n"
-                    f"  found: {found_count} ({accuracy:.1f}%)"
+                    f"\n{category.upper()}:  total queries: {total_count}\n  found: {found_count} ({accuracy:.1f}%)"
                 )
                 best_rank = metrics.best_rank if metrics.found_count > 0 else None
                 worst_rank = metrics.worst_rank if metrics.found_count > 0 else None
@@ -463,8 +461,7 @@ class SearchAnswerAnalyzer:
                 )
         except RequestException as e:
             raise RuntimeError(
-                f"Search failed for query '{query}': {e}."
-                f" Response: {response.json()}"
+                f"Search failed for query '{query}': {e}. Response: {response.json()}"
                 if response
                 else ""
             )
@@ -609,15 +606,13 @@ def run_search_eval(
     # check openai api key is set if doing answer eval (must be called that for ragas to recognize)
     if not config.search_only and not os.environ.get("OPENAI_API_KEY"):
         raise RuntimeError(
-            "OPENAI_API_KEY is required for answer evaluation. "
-            "Please add it to the root .vscode/.env file."
+            "OPENAI_API_KEY is required for answer evaluation. Please add it to the root .vscode/.env file."
         )
 
     # check onyx api key is set (auth is always required)
     if not os.environ.get("ONYX_API_KEY"):
         raise RuntimeError(
-            "ONYX_API_KEY is required. "
-            "Please create one in the admin panel and add it to the root .vscode/.env file."
+            "ONYX_API_KEY is required. Please create one in the admin panel and add it to the root .vscode/.env file."
         )
 
     # check onyx is running

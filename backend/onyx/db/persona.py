@@ -205,7 +205,9 @@ def update_persona_access(
 
     NOTE: Callers are responsible for committing."""
 
+    needs_sync = False
     if is_public is not None:
+        needs_sync = True
         persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
         if persona:
             persona.is_public = is_public
@@ -213,6 +215,7 @@ def update_persona_access(
     # NOTE: For user-ids and group-ids, `None` means "leave unchanged", `[]` means "clear all shares",
     # and a non-empty list means "replace with these shares".
     if user_ids is not None:
+        needs_sync = True
         db_session.query(Persona__User).filter(
             Persona__User.persona_id == persona_id
         ).delete(synchronize_session="fetch")
@@ -233,12 +236,17 @@ def update_persona_access(
     # MIT doesn't support group-based sharing, so we allow clearing (no-op since
     # there shouldn't be any) but raise an error if trying to add actual groups.
     if group_ids is not None:
+        needs_sync = True
         db_session.query(Persona__UserGroup).filter(
             Persona__UserGroup.persona_id == persona_id
         ).delete(synchronize_session="fetch")
 
         if group_ids:
             raise NotImplementedError("Onyx MIT does not support group-based sharing")
+
+    # When sharing changes, user file ACLs need to be updated in the vector DB
+    if needs_sync:
+        mark_persona_user_files_for_sync(persona_id, db_session)
 
 
 def create_update_persona(
@@ -253,7 +261,6 @@ def create_update_persona(
     try:
         # Featured persona validation
         if create_persona_request.featured:
-
             # Curators can edit featured personas, but not make them
             # TODO this will be reworked soon with RBAC permissions feature
             if user.role == UserRole.CURATOR or user.role == UserRole.GLOBAL_CURATOR:
@@ -849,6 +856,24 @@ def update_personas_display_priority(
 
     if commit_db_txn:
         db_session.commit()
+
+
+def mark_persona_user_files_for_sync(
+    persona_id: int,
+    db_session: Session,
+) -> None:
+    """When persona sharing changes, mark all of its user files for sync
+    so that their ACLs get updated in the vector DB."""
+    persona = (
+        db_session.query(Persona)
+        .options(selectinload(Persona.user_files))
+        .filter(Persona.id == persona_id)
+        .first()
+    )
+    if not persona:
+        return
+    file_ids = [uf.id for uf in persona.user_files]
+    _mark_files_need_persona_sync(db_session, file_ids)
 
 
 def _mark_files_need_persona_sync(

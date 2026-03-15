@@ -1,25 +1,25 @@
 "use client";
-import { use } from "react";
 
+import { use } from "react";
 import { GroupDisplay } from "./GroupDisplay";
 import { useSpecificUserGroup } from "./hook";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus } from "@/lib/hooks";
-import { useRouter } from "next/navigation";
 import useUsers from "@/hooks/useUsers";
-import BackButton from "@/refresh-components/buttons/BackButton";
-import { AdminPageTitle } from "@/components/admin/Title";
-import { SvgUsers } from "@opal/icons";
-const Page = (props: { params: Promise<{ groupId: string }> }) => {
-  const params = use(props.params);
-  const router = useRouter();
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 
+const route = ADMIN_ROUTES.GROUPS;
+
+function Main({ groupId }: { groupId: string }) {
+  const vectorDbEnabled = useVectorDbEnabled();
   const {
     userGroup,
     isLoading: userGroupIsLoading,
     error: userGroupError,
     refreshUserGroup,
-  } = useSpecificUserGroup(params.groupId);
+  } = useSpecificUserGroup(groupId);
   const {
     data: users,
     isLoading: userIsLoading,
@@ -29,9 +29,13 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
     data: ccPairs,
     isLoading: isCCPairsLoading,
     error: ccPairsError,
-  } = useConnectorStatus();
+  } = useConnectorStatus(30000, vectorDbEnabled);
 
-  if (userGroupIsLoading || userIsLoading || isCCPairsLoading) {
+  if (
+    userGroupIsLoading ||
+    userIsLoading ||
+    (vectorDbEnabled && isCCPairsLoading)
+  ) {
     return (
       <div className="h-full">
         <div className="my-auto">
@@ -47,28 +51,37 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
   if (!users || usersError) {
     return <div>Error loading users</div>;
   }
-  if (!ccPairs || ccPairsError) {
+  if (vectorDbEnabled && (!ccPairs || ccPairsError)) {
     return <div>Error loading connectors</div>;
   }
 
   return (
     <>
-      <BackButton />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={userGroup.name || "Unknown"}
+        separator
+        backButton
+      />
 
-      <AdminPageTitle title={userGroup.name || "Unknown"} icon={SvgUsers} />
-
-      {userGroup ? (
+      <SettingsLayouts.Body>
         <GroupDisplay
           users={users.accepted}
-          ccPairs={ccPairs}
+          ccPairs={ccPairs ?? []}
           userGroup={userGroup}
           refreshUserGroup={refreshUserGroup}
         />
-      ) : (
-        <div>Unable to fetch User Group :(</div>
-      )}
+      </SettingsLayouts.Body>
     </>
   );
-};
+}
 
-export default Page;
+export default function Page(props: { params: Promise<{ groupId: string }> }) {
+  const params = use(props.params);
+
+  return (
+    <SettingsLayouts.Root>
+      <Main groupId={params.groupId} />
+    </SettingsLayouts.Root>
+  );
+}

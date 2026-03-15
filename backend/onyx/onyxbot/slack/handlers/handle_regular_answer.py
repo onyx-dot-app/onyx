@@ -18,15 +18,18 @@ from onyx.configs.onyxbot_configs import ONYX_BOT_DISPLAY_ERROR_MSGS
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import Tag
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
+from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.models import ThreadMessage
+from onyx.onyxbot.slack.utils import get_channel_from_id
 from onyx.onyxbot.slack.utils import get_channel_name_from_id
 from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import SlackRateLimiter
@@ -39,6 +42,51 @@ from onyx.utils.logger import OnyxLoggingAdapter
 srl = SlackRateLimiter()
 
 RT = TypeVar("RT")  # return type
+
+
+def resolve_channel_references(
+    message: str,
+    client: WebClient,
+    logger: OnyxLoggingAdapter,
+) -> tuple[str, list[Tag]]:
+    """Parse Slack channel references from a message, resolve IDs to names,
+    replace the raw markup with readable #channel-name, and return channel tags
+    for search filtering."""
+    tags: list[Tag] = []
+    channel_matches = SLACK_CHANNEL_REF_PATTERN.findall(message)
+    seen_channel_ids: set[str] = set()
+
+    for channel_id, channel_name_from_markup in channel_matches:
+        if channel_id in seen_channel_ids:
+            continue
+        seen_channel_ids.add(channel_id)
+
+        channel_name = channel_name_from_markup or None
+
+        if not channel_name:
+            try:
+                channel_info = get_channel_from_id(client=client, channel_id=channel_id)
+                channel_name = channel_info.get("name") or None
+            except Exception:
+                logger.warning(f"Failed to resolve channel name for ID: {channel_id}")
+
+            if not channel_name:
+                continue
+
+        # Replace raw Slack markup with readable channel name
+        if channel_name_from_markup:
+            message = message.replace(
+                f"<#{channel_id}|{channel_name_from_markup}>",
+                f"#{channel_name}",
+            )
+        else:
+            message = message.replace(
+                f"<#{channel_id}>",
+                f"#{channel_name}",
+            )
+        tags.append(Tag(tag_key="Channel", tag_value=channel_name))
+
+    return message, tags
 
 
 def rate_limits(
@@ -157,6 +205,20 @@ def handle_regular_answer(
     user_message = messages[-1]
     history_messages = messages[:-1]
 
+    # Resolve any <#CHANNEL_ID> references in the user message to readable
+    # channel names and extract channel tags for search filtering
+    resolved_message, channel_tags = resolve_channel_references(
+        message=user_message.message,
+        client=client,
+        logger=logger,
+    )
+
+    user_message = ThreadMessage(
+        message=resolved_message,
+        sender=user_message.sender,
+        role=user_message.role,
+    )
+
     channel_name, _ = get_channel_name_from_id(
         client=client,
         channel_id=channel,
@@ -207,6 +269,7 @@ def handle_regular_answer(
             source_type=None,
             document_set=document_set_names,
             time_cutoff=None,
+            tags=channel_tags if channel_tags else None,
         )
 
         new_message_request = SendMessageRequest(
@@ -231,10 +294,19 @@ def handle_regular_answer(
             slack_context_str=slack_context_str,
         )
 
+        # If a channel filter was applied but no results were found, override
+        # the LLM response to avoid hallucinated answers about unindexed channels
+        if channel_tags and not answer.citation_info and not answer.top_documents:
+            channel_names = ", ".join(f"#{tag.tag_value}" for tag in channel_tags)
+            answer.answer = (
+                f"No indexed data found for {channel_names}. "
+                "This channel may not be indexed, or there may be no messages "
+                "matching your query within it."
+            )
+
     except Exception as e:
         logger.exception(
-            f"Unable to process message - did not successfully answer "
-            f"in {num_retries} attempts"
+            f"Unable to process message - did not successfully answer in {num_retries} attempts"
         )
         # Optionally, respond in thread with the error message, Used primarily
         # for debugging purposes
@@ -271,8 +343,7 @@ def handle_regular_answer(
 
     if not answer.answer and disable_docs_only_answer:
         logger.notice(
-            "Unable to find answer - not responding since the "
-            "`ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
+            "Unable to find answer - not responding since the `ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` env variable is set"
         )
         return True
 
@@ -285,6 +356,7 @@ def handle_regular_answer(
         only_respond_if_citations
         and not answer.citation_info
         and not message_info.bypass_filters
+        and not channel_tags
     ):
         logger.error(
             f"Unable to find citations to answer: '{answer.answer}' - not answering!"

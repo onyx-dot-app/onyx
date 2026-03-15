@@ -25,7 +25,9 @@ from tests.integration.common_utils.test_models import DATestUser
 )
 class TestUsageExportAPI:
     def test_generate_usage_report(
-        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Seed some chat history data for the report
         seed_chat_history(
@@ -81,7 +83,9 @@ class TestUsageExportAPI:
         assert new_report["report_name"].endswith(".zip")
 
     def test_generate_usage_report_with_date_range(
-        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Seed some chat history data
         seed_chat_history(
@@ -145,7 +149,9 @@ class TestUsageExportAPI:
         assert new_report["period_to"] is not None
 
     def test_generate_usage_report_invalid_dates(
-        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Test with invalid date format
         response = requests.post(
@@ -159,7 +165,9 @@ class TestUsageExportAPI:
         assert response.status_code == 400
 
     def test_fetch_usage_reports(
-        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # First generate a report to ensure we have at least one
         seed_chat_history(
@@ -221,7 +229,9 @@ class TestUsageExportAPI:
         assert report_metadata.report_name.endswith(".zip")
 
     def test_read_usage_report(
-        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # First generate a report
         seed_chat_history(
@@ -334,7 +344,9 @@ class TestUsageExportAPI:
                 ), "number_of_tokens should be non-negative"
 
     def test_read_nonexistent_report(
-        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to download a report that doesn't exist
         response = requests.get(
@@ -344,7 +356,9 @@ class TestUsageExportAPI:
         assert response.status_code == 404
 
     def test_non_admin_cannot_generate_report(
-        self, reset: None, basic_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to generate a report as non-admin
         response = requests.post(
@@ -355,7 +369,9 @@ class TestUsageExportAPI:
         assert response.status_code == 403
 
     def test_non_admin_cannot_fetch_reports(
-        self, reset: None, basic_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to fetch reports as non-admin
         response = requests.get(
@@ -365,7 +381,9 @@ class TestUsageExportAPI:
         assert response.status_code == 403
 
     def test_non_admin_cannot_download_report(
-        self, reset: None, basic_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to download a report as non-admin
         response = requests.get(
@@ -375,7 +393,9 @@ class TestUsageExportAPI:
         assert response.status_code == 403
 
     def test_concurrent_report_generation(
-        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+        self,
+        reset: None,  # noqa: ARG002
+        admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Seed some data
         seed_chat_history(

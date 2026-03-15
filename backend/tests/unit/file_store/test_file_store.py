@@ -106,7 +106,8 @@ class TestExternalStorageFileStore:
             assert call_kwargs["region_name"] == "us-west-2"
 
     def test_s3_client_initialization_with_iam_role(
-        self, db_session: Session  # noqa: ARG002
+        self,
+        db_session: Session,  # noqa: ARG002
     ) -> None:
         """Test S3 client initialization with IAM role (no explicit credentials)"""
         with patch("boto3.client") as mock_boto3:
@@ -220,7 +221,6 @@ class TestExternalStorageFileStore:
             patch("onyx.file_store.file_store.S3_AWS_ACCESS_KEY_ID", "test-key"),
             patch("onyx.file_store.file_store.S3_AWS_SECRET_ACCESS_KEY", "test-secret"),
         ):
-
             # Mock the database operation to avoid SQLAlchemy issues
             with patch("onyx.db.file_record.upsert_filerecord") as mock_upsert:
                 mock_upsert.return_value = Mock()

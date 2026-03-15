@@ -71,7 +71,7 @@ jobs:
 
       - name: Create kind cluster
         if: steps.list-changed.outputs.changed == 'true'
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # ratchet:helm/kind-action@v1.13.0
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # ratchet:helm/kind-action@v1.14.0
 
       - name: Pre-install cluster status check
         if: steps.list-changed.outputs.changed == 'true'
@@ -133,7 +133,7 @@ jobs:
           echo "=== Validating chart dependencies ==="
           cd deployment/helm/charts/onyx
           helm dependency update
-          helm lint .
+          helm lint . --set auth.userauth.values.user_auth_secret=placeholder
 
       - name: Run chart-testing (install) with enhanced monitoring
         timeout-minutes: 25
@@ -194,6 +194,7 @@ jobs:
               --set=vespa.enabled=false \
               --set=opensearch.enabled=true \
               --set=auth.opensearch.enabled=true \
+              --set=auth.userauth.values.user_auth_secret=test-secret \
               --set=slackbot.enabled=false \
               --set=postgresql.enabled=true \
               --set=postgresql.cluster.storage.storageClass=standard \
@@ -230,6 +231,10 @@ jobs:
         if: steps.list-changed.outputs.changed == 'true'
         run: |
           echo "=== Post-install verification ==="
+          if ! kubectl cluster-info >/dev/null 2>&1; then
+            echo "ERROR: Kubernetes cluster is not reachable after install"
+            exit 1
+          fi
           kubectl get pods --all-namespaces
           kubectl get services --all-namespaces
           # Only show issues if they exist
@@ -239,6 +244,10 @@ jobs:
         if: failure() && steps.list-changed.outputs.changed == 'true'
         run: |
           echo "=== Cleanup on failure ==="
+          if ! kubectl cluster-info >/dev/null 2>&1; then
+            echo "Skipping failure cleanup: Kubernetes cluster is not reachable"
+            exit 0
+          fi
           echo "=== Final cluster state ==="
           kubectl get pods --all-namespaces
           kubectl get events --all-namespaces --sort-by=.lastTimestamp | tail -10

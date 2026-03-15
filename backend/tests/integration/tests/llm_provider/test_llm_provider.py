@@ -86,19 +86,16 @@ def assert_response_is_equivalent(
         for config in model_configurations
     }
 
-    assert set(actual_by_name.keys()) == set(expected_by_name.keys()), (
-        f"Model names don't match. "
-        f"Actual: {set(actual_by_name.keys())}, Expected: {set(expected_by_name.keys())}"
-    )
+    assert set(actual_by_name.keys()) == set(
+        expected_by_name.keys()
+    ), f"Model names don't match. Actual: {set(actual_by_name.keys())}, Expected: {set(expected_by_name.keys())}"
 
     for name in actual_by_name:
         actual_config = actual_by_name[name]
         expected_config = expected_by_name[name]
-        assert actual_config == expected_config, (
-            f"Config mismatch for {name}:\n"
-            f"Actual: {actual_config}\n"
-            f"Expected: {expected_config}"
-        )
+        assert (
+            actual_config == expected_config
+        ), f"Config mismatch for {name}:\nActual: {actual_config}\nExpected: {expected_config}"
 
     # test that returned key is sanitized
     if api_key:
@@ -386,6 +383,263 @@ def test_delete_llm_provider(
     assert provider_data is None
 
 
+def test_delete_default_llm_provider_rejected(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
+    """Deleting the default LLM provider should return 400."""
+    admin_user = UserManager.create(name="admin_user")
+
+    # Create a provider
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "test-provider-default-delete",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response.status_code == 200
+    created_provider = response.json()
+
+    # Set this provider as the default
+    set_default_response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": "gpt-4o-mini",
+        },
+    )
+    assert set_default_response.status_code == 200
+
+    # Attempt to delete the default provider — should be rejected
+    delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
+        headers=admin_user.headers,
+    )
+    assert delete_response.status_code == 400
+    assert "Cannot delete the default LLM provider" in delete_response.json()["detail"]
+
+    # Verify provider still exists
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is not None
+
+
+def test_delete_non_default_llm_provider_with_default_set(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Deleting a non-default provider should succeed even when a default is set."""
+    admin_user = UserManager.create(name="admin_user")
+
+    # Create two providers
+    response_default = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "default-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response_default.status_code == 200
+    default_provider = response_default.json()
+
+    response_other = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "other-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response_other.status_code == 200
+    other_provider = response_other.json()
+
+    # Set the first provider as default
+    set_default_response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": default_provider["id"],
+            "model_name": "gpt-4o-mini",
+        },
+    )
+    assert set_default_response.status_code == 200
+
+    # Delete the non-default provider — should succeed
+    delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{other_provider['id']}",
+        headers=admin_user.headers,
+    )
+    assert delete_response.status_code == 200
+
+    # Verify the non-default provider is gone
+    provider_data = _get_provider_by_id(admin_user, other_provider["id"])
+    assert provider_data is None
+
+    # Verify the default provider still exists
+    default_data = _get_provider_by_id(admin_user, default_provider["id"])
+    assert default_data is not None
+
+
+def test_force_delete_default_llm_provider(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Force-deleting the default LLM provider should succeed."""
+    admin_user = UserManager.create(name="admin_user")
+
+    # Create a provider
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "test-provider-force-delete",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response.status_code == 200
+    created_provider = response.json()
+
+    # Set this provider as the default
+    set_default_response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": "gpt-4o-mini",
+        },
+    )
+    assert set_default_response.status_code == 200
+
+    # Attempt to delete without force — should be rejected
+    delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
+        headers=admin_user.headers,
+    )
+    assert delete_response.status_code == 400
+
+    # Force delete — should succeed
+    force_delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}?force=true",
+        headers=admin_user.headers,
+    )
+    assert force_delete_response.status_code == 200
+
+    # Verify provider is gone
+    provider_data = _get_provider_by_id(admin_user, created_provider["id"])
+    assert provider_data is None
+
+
+def test_delete_default_vision_provider_clears_vision_default(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Deleting the default vision provider should succeed and clear the vision default."""
+    admin_user = UserManager.create(name="admin_user")
+
+    # Create a text provider and set it as default (so we have a default text provider)
+    text_response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "text-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000001",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert text_response.status_code == 200
+    text_provider = text_response.json()
+    _set_default_provider(admin_user, text_provider["id"], "gpt-4o-mini")
+
+    # Create a vision provider and set it as default vision
+    vision_response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "vision-provider",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000002",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o",
+                    is_visible=True,
+                    supports_image_input=True,
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert vision_response.status_code == 200
+    vision_provider = vision_response.json()
+    _set_default_vision_provider(admin_user, vision_provider["id"], "gpt-4o")
+
+    # Verify vision default is set
+    data = _get_providers_admin(admin_user)
+    assert data is not None
+    _, _, vision_default = _unpack_data(data)
+    assert vision_default is not None
+    assert vision_default["provider_id"] == vision_provider["id"]
+
+    # Delete the vision provider — should succeed (only text default is protected)
+    delete_response = requests.delete(
+        f"{API_SERVER_URL}/admin/llm/provider/{vision_provider['id']}",
+        headers=admin_user.headers,
+    )
+    assert delete_response.status_code == 200
+
+    # Verify the vision provider is gone
+    provider_data = _get_provider_by_id(admin_user, vision_provider["id"])
+    assert provider_data is None
+
+    # Verify there is no default vision provider
+    data = _get_providers_admin(admin_user)
+    assert data is not None
+    _, text_default, vision_default = _unpack_data(data)
+    assert vision_default is None
+
+    # Verify the text default is still intact
+    assert text_default is not None
+    assert text_default["provider_id"] == text_provider["id"]
+
+
 def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
     """Creating a provider with a name that already exists should return 400."""
     admin_user = UserManager.create(name="admin_user")
@@ -418,7 +672,7 @@ def test_duplicate_provider_name_rejected(reset: None) -> None:  # noqa: ARG001
         headers=admin_user.headers,
         json=base_payload,
     )
-    assert response.status_code == 400
+    assert response.status_code == 409
     assert "already exists" in response.json()["detail"]
 
 
@@ -843,10 +1097,9 @@ def _validate_provider_data(
 
     # Validate is_public if provided (only available in admin endpoint response)
     if expected_is_public is not None and "is_public" in provider_data:
-        assert provider_data["is_public"] == expected_is_public, (
-            f"is_public mismatch. Expected: {expected_is_public}, "
-            f"Actual: {provider_data['is_public']}"
-        )
+        assert (
+            provider_data["is_public"] == expected_is_public
+        ), f"is_public mismatch. Expected: {expected_is_public}, Actual: {provider_data['is_public']}"
 
     # Validate model configurations
     _validate_model_configurations(
@@ -857,7 +1110,9 @@ def _validate_provider_data(
     )
 
 
-def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG001
+def test_default_model_persistence_and_update(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """
     Test that the default model is correctly set, persisted, and can be updated.
 
@@ -1115,7 +1370,9 @@ def _set_default_vision_provider(
     assert response.status_code == 200
 
 
-def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG001
+def test_multiple_providers_default_switching(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """
     Test switching default providers and models across multiple LLM providers.
 

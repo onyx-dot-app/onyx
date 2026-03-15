@@ -11,14 +11,16 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { SvgCpu, SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
+import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   getProviderDisplayName,
   getProviderIcon,
   getProviderProductName,
 } from "@/lib/llmConfig/providers";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import Text from "@/refresh-components/texts/Text";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
@@ -32,7 +34,6 @@ import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { getModalForExistingProvider } from "@/sections/modals/llmConfig/getModal";
 import { OpenAIModal } from "@/sections/modals/llmConfig/OpenAIModal";
 import { AnthropicModal } from "@/sections/modals/llmConfig/AnthropicModal";
@@ -42,7 +43,11 @@ import { BedrockModal } from "@/sections/modals/llmConfig/BedrockModal";
 import { VertexAIModal } from "@/sections/modals/llmConfig/VertexAIModal";
 import { OpenRouterModal } from "@/sections/modals/llmConfig/OpenRouterModal";
 import { CustomModal } from "@/sections/modals/llmConfig/CustomModal";
+import { LMStudioForm } from "@/sections/modals/llmConfig/LMStudioForm";
+import { LiteLLMProxyModal } from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import { Section } from "@/layouts/general-layouts";
+
+const route = ADMIN_ROUTES.LLM_MODELS;
 
 // ============================================================================
 // Provider form mapping (keyed by provider name from the API)
@@ -105,6 +110,20 @@ const PROVIDER_MODAL_MAP: Record<
       onOpenChange={onOpenChange}
     />
   ),
+  lm_studio: (d, open, onOpenChange) => (
+    <LMStudioForm
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  litellm_proxy: (d, open, onOpenChange) => (
+    <LiteLLMProxyModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
 };
 
 // ============================================================================
@@ -129,7 +148,7 @@ function ExistingProviderCard({
   const handleDelete = async () => {
     try {
       await deleteLlmProvider(provider.id);
-      mutate(LLM_PROVIDERS_ADMIN_URL);
+      await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
       toast.success("Provider deleted successfully!");
     } catch (e) {
@@ -334,7 +353,7 @@ export default function LLMConfigurationPage() {
 
     try {
       await setDefaultLlmModel(providerId, modelName);
-      mutate(LLM_PROVIDERS_ADMIN_URL);
+      await refreshLlmProviderCaches(mutate);
       toast.success("Default model updated successfully!");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
@@ -344,7 +363,7 @@ export default function LLMConfigurationPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={SvgCpu} title="LLM Models" separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
 
       <SettingsLayouts.Body>
         {hasProviders ? (

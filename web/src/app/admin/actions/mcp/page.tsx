@@ -1,15 +1,17 @@
 "use client";
 
-import { SvgMcp } from "@opal/icons";
 import MCPPageContent from "@/sections/actions/MCPPageContent";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTES.MCP_ACTIONS;
 
 export default function Main() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgMcp}
-        title="MCP Actions"
+        icon={route.icon}
+        title={route.title}
         description="Connect MCP (Model Context Protocol) servers to add custom actions and tools for your agents."
         separator
       />

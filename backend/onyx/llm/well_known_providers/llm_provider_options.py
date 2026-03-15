@@ -15,6 +15,8 @@ from onyx.llm.well_known_providers.auto_update_service import (
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import LITELLM_PROXY_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import LM_STUDIO_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
@@ -44,7 +46,9 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
         VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
         OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
+        LM_STUDIO_PROVIDER_NAME: [],  # Dynamic - fetched from LM Studio API
         OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
+        LITELLM_PROXY_PROVIDER_NAME: [],  # Dynamic - fetched from LiteLLM proxy API
     }
 
 
@@ -323,11 +327,13 @@ def get_provider_display_name(provider_name: str) -> str:
     _ONYX_PROVIDER_DISPLAY_NAMES: dict[str, str] = {
         OPENAI_PROVIDER_NAME: "ChatGPT (OpenAI)",
         OLLAMA_PROVIDER_NAME: "Ollama",
+        LM_STUDIO_PROVIDER_NAME: "LM Studio",
         ANTHROPIC_PROVIDER_NAME: "Claude (Anthropic)",
         AZURE_PROVIDER_NAME: "Azure OpenAI",
         BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
+        LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

@@ -2,15 +2,17 @@
 
 import { useState } from "react";
 import CardSection from "@/components/admin/CardSection";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { DocumentIcon2 } from "@/components/icons/icons";
 import useSWR from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgLock } from "@opal/icons";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTES.DOCUMENT_PROCESSING;
 
 function Main() {
   const {
@@ -127,7 +129,7 @@ function Main() {
             <div className="flex flex-col gap-2 desktop:flex-row desktop:items-center desktop:gap-2">
               {isApiKeySet ? (
                 <>
-                  <Button onClick={handleDelete} danger>
+                  <Button variant="danger" onClick={handleDelete}>
                     Delete API Key
                   </Button>
                   <Text as="p" mainContentBody text04 className="desktop:mt-0">
@@ -135,7 +137,7 @@ function Main() {
                   </Text>
                 </>
               ) : (
-                <Button onClick={handleSave} action>
+                <Button variant="action" onClick={handleSave}>
                   Save API Key
                 </Button>
               )}
@@ -149,12 +151,11 @@ function Main() {
 
 export default function Page() {
   return (
-    <>
-      <AdminPageTitle
-        title="Document Processing"
-        icon={<DocumentIcon2 size={32} className="my-auto" />}
-      />
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

@@ -14,7 +14,6 @@ from .base import BaseSchemaValidator
 
 
 class DOCXSchemaValidator(BaseSchemaValidator):
-
     WORD_2006_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
     W14_NAMESPACE = "http://schemas.microsoft.com/office/word/2010/wordml"
     W16CID_NAMESPACE = "http://schemas.microsoft.com/office/word/2016/wordml/cid"
@@ -271,19 +270,16 @@ class DOCXSchemaValidator(BaseSchemaValidator):
                             try:
                                 if self._parse_id_value(val, base=10) >= 0x7FFFFFFF:
                                     errors.append(
-                                        f"  {xml_file.name}:{elem.sourceline}: "
-                                        f"durableId={val} >= 0x7FFFFFFF"
+                                        f"  {xml_file.name}:{elem.sourceline}: durableId={val} >= 0x7FFFFFFF"
                                     )
                             except ValueError:
                                 errors.append(
-                                    f"  {xml_file.name}:{elem.sourceline}: "
-                                    f"durableId={val} must be decimal in numbering.xml"
+                                    f"  {xml_file.name}:{elem.sourceline}: durableId={val} must be decimal in numbering.xml"
                                 )
                         else:
                             if self._parse_id_value(val, base=16) >= 0x7FFFFFFF:
                                 errors.append(
-                                    f"  {xml_file.name}:{elem.sourceline}: "
-                                    f"durableId={val} >= 0x7FFFFFFF"
+                                    f"  {xml_file.name}:{elem.sourceline}: durableId={val} >= 0x7FFFFFFF"
                                 )
             except Exception:
                 pass

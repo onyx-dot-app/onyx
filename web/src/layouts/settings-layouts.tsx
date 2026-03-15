@@ -43,8 +43,11 @@ import { Content } from "@opal/layouts";
 import Spacer from "@/refresh-components/Spacer";
 
 const widthClasses = {
-  md: "w-[min(50rem,100%)]",
-  lg: "w-[min(60rem,100%)]",
+  sm: "w-[min(var(--container-sm),100%)]",
+  "sm-md": "w-[min(var(--container-sm-md),100%)]",
+  md: "w-[min(var(--container-md),100%)]",
+  lg: "w-[min(var(--container-lg),100%)]",
+  full: "w-[var(--container-full)]",
 };
 
 /**
@@ -57,18 +60,19 @@ const widthClasses = {
  * - Full height container with centered content
  * - Automatic overflow-y scrolling
  * - Contains the scroll container ID that Settings.Header uses for shadow detection
- * - Configurable width: "md" (50rem max) or "full" (full width with 4rem padding)
+ * - Configurable width via CSS variables defined in sizes.css:
+ *   "sm" (672px), "sm-md" (752px), "md" (872px, default), "lg" (992px), "full" (100%)
  *
  * @example
  * ```tsx
- * // Default medium width (50rem max)
+ * // Default medium width (872px max)
  * <SettingsLayouts.Root>
  *   <SettingsLayouts.Header {...} />
  *   <SettingsLayouts.Body>...</SettingsLayouts.Body>
  * </SettingsLayouts.Root>
  *
- * // Full width with padding
- * <SettingsLayouts.Root width="full">
+ * // Large width (992px max)
+ * <SettingsLayouts.Root width="lg">
  *   <SettingsLayouts.Header {...} />
  *   <SettingsLayouts.Body>...</SettingsLayouts.Body>
  * </SettingsLayouts.Root>
@@ -226,7 +230,7 @@ function SettingsHeader({
         </div>
       )}
 
-      <Spacer vertical rem={1} />
+      <Spacer vertical rem={2.5} />
 
       <div className="flex flex-col gap-6 px-4">
         <div className="flex w-full justify-between">

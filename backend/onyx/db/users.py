@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import case
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.elements import KeyedColumnElement
+from sqlalchemy.sql.expression import or_
 
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.schemas import UserRole
@@ -24,6 +26,7 @@ from onyx.db.models import Persona__User
 from onyx.db.models import SamlAccount
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.models import UserGroup
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
@@ -162,7 +165,13 @@ def _get_accepted_user_where_clause(
         where_clause.append(User.role != UserRole.EXT_PERM_USER)
 
     if email_filter_string is not None:
-        where_clause.append(email_col.ilike(f"%{email_filter_string}%"))
+        personal_name_col: KeyedColumnElement[Any] = User.__table__.c.personal_name
+        where_clause.append(
+            or_(
+                email_col.ilike(f"%{email_filter_string}%"),
+                personal_name_col.ilike(f"%{email_filter_string}%"),
+            )
+        )
 
     if roles_filter:
         where_clause.append(User.role.in_(roles_filter))
@@ -171,6 +180,21 @@ def _get_accepted_user_where_clause(
         where_clause.append(is_active_col.is_(is_active_filter))
 
     return where_clause
+
+
+def get_all_accepted_users(
+    db_session: Session,
+    include_external: bool = False,
+) -> Sequence[User]:
+    """Returns all accepted users without pagination.
+    Uses the same filtering as the paginated endpoint but without
+    search, role, or active filters."""
+    stmt = select(User)
+    where_clause = _get_accepted_user_where_clause(
+        include_external=include_external,
+    )
+    stmt = stmt.where(*where_clause).order_by(User.email)
+    return db_session.scalars(stmt).unique().all()
 
 
 def get_page_of_filtered_users(
@@ -216,6 +240,41 @@ def get_total_filtered_users_count(
     total_count_stmt = total_count_stmt.where(*where_clause)
 
     return db_session.scalar(total_count_stmt) or 0
+
+
+def get_user_counts_by_role_and_status(
+    db_session: Session,
+) -> dict[str, dict[str, int]]:
+    """Returns user counts grouped by role and by active/inactive status.
+
+    Excludes API key users, anonymous users, and no-auth placeholder users.
+    Uses a single query with conditional aggregation.
+    """
+    base_where = _get_accepted_user_where_clause()
+    role_col = User.__table__.c.role
+    is_active_col = User.__table__.c.is_active
+
+    stmt = (
+        select(
+            role_col,
+            func.count().label("total"),
+            func.sum(case((is_active_col.is_(True), 1), else_=0)).label("active"),
+            func.sum(case((is_active_col.is_(False), 1), else_=0)).label("inactive"),
+        )
+        .where(*base_where)
+        .group_by(role_col)
+    )
+
+    role_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {"active": 0, "inactive": 0}
+
+    for role_val, total, active, inactive in db_session.execute(stmt).all():
+        key = role_val.value if hasattr(role_val, "value") else str(role_val)
+        role_counts[key] = total
+        status_counts["active"] += active or 0
+        status_counts["inactive"] += inactive or 0
+
+    return {"role_counts": role_counts, "status_counts": status_counts}
 
 
 def get_user_by_email(email: str, db_session: Session) -> User | None:
@@ -294,24 +353,23 @@ def batch_add_ext_perm_user_if_not_exists(
     lower_emails = [email.lower() for email in emails]
     found_users, missing_lower_emails = _get_users_by_emails(db_session, lower_emails)
 
-    new_users: list[User] = []
+    # Use savepoints (begin_nested) so that a failed insert only rolls back
+    # that single user, not the entire transaction. A plain rollback() would
+    # discard all previously flushed users in the same transaction.
+    # We also avoid add_all() because SQLAlchemy 2.0's insertmanyvalues
+    # batch path hits a UUID sentinel mismatch with server_default columns.
     for email in missing_lower_emails:
-        new_users.append(_generate_ext_permissioned_user(email=email))
+        user = _generate_ext_permissioned_user(email=email)
+        savepoint = db_session.begin_nested()
+        try:
+            db_session.add(user)
+            savepoint.commit()
+        except IntegrityError:
+            savepoint.rollback()
+            if not continue_on_error:
+                raise
 
-    try:
-        db_session.add_all(new_users)
-        db_session.commit()
-    except IntegrityError:
-        db_session.rollback()
-        if not continue_on_error:
-            raise
-        for user in new_users:
-            try:
-                db_session.add(user)
-                db_session.commit()
-            except IntegrityError:
-                db_session.rollback()
-                continue
+    db_session.commit()
     # Fetch all users again to ensure we have the most up-to-date list
     all_users, _ = _get_users_by_emails(db_session, lower_emails)
     return all_users
@@ -358,3 +416,28 @@ def delete_user_from_db(
     # NOTE: edge case may exist with race conditions
     # with this `invited user` scheme generally.
     remove_user_from_invited_users(user_to_delete.email)
+
+
+def batch_get_user_groups(
+    db_session: Session,
+    user_ids: list[UUID],
+) -> dict[UUID, list[tuple[int, str]]]:
+    """Fetch group memberships for a batch of users in a single query.
+    Returns a mapping of user_id -> list of (group_id, group_name) tuples."""
+    if not user_ids:
+        return {}
+
+    rows = db_session.execute(
+        select(
+            User__UserGroup.user_id,
+            UserGroup.id,
+            UserGroup.name,
+        )
+        .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
+        .where(User__UserGroup.user_id.in_(user_ids))
+    ).all()
+
+    result: dict[UUID, list[tuple[int, str]]] = {uid: [] for uid in user_ids}
+    for user_id, group_id, group_name in rows:
+        result[user_id].append((group_id, group_name))
+    return result

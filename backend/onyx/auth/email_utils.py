@@ -353,20 +353,11 @@ def build_user_email_invite(
             "or login with Google and complete your registration.</p>"
         )
     elif auth_type == AuthType.BASIC:
-        message += (
-            "<p>To join the organization, please click the button below to set a password "
-            "and complete your registration.</p>"
-        )
+        message += "<p>To join the organization, please click the button below to set a password and complete your registration.</p>"
     elif auth_type == AuthType.GOOGLE_OAUTH:
-        message += (
-            "<p>To join the organization, please click the button below to login with Google "
-            "and complete your registration.</p>"
-        )
+        message += "<p>To join the organization, please click the button below to login with Google and complete your registration.</p>"
     elif auth_type == AuthType.OIDC or auth_type == AuthType.SAML:
-        message += (
-            "<p>To join the organization, please click the button below to"
-            " complete your registration.</p>"
-        )
+        message += "<p>To join the organization, please click the button below to complete your registration.</p>"
     else:
         raise ValueError(f"Invalid auth type: {auth_type}")
 

@@ -371,6 +371,22 @@ class OpenRouterFinalModelResponse(BaseModel):
     supports_image_input: bool
 
 
+# LM Studio dynamic models fetch
+class LMStudioModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    api_key_changed: bool = False
+    provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class LMStudioFinalModelResponse(BaseModel):
+    name: str  # Model ID from LM Studio (e.g., "lmstudio-community/Meta-Llama-3-8B")
+    display_name: str  # Human-readable name
+    max_input_tokens: int | None  # From LM Studio API or None if unavailable
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
 class DefaultModel(BaseModel):
     provider_id: int
     model_name: str
@@ -404,3 +420,32 @@ class LLMProviderResponse(BaseModel, Generic[T]):
             default_text=default_text,
             default_vision=default_vision,
         )
+
+
+class SyncModelEntry(BaseModel):
+    """Typed model for syncing fetched models to the DB."""
+
+    name: str
+    display_name: str
+    max_input_tokens: int | None = None
+    supports_image_input: bool = False
+
+
+class LitellmModelsRequest(BaseModel):
+    api_key: str
+    api_base: str
+    provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class LitellmModelDetails(BaseModel):
+    """Response model for Litellm proxy /api/v1/models endpoint"""
+
+    id: str  # Model ID (e.g. "gpt-4o")
+    object: str  # "model"
+    created: int  # Unix timestamp in seconds
+    owned_by: str  # Provider name (e.g. "openai")
+
+
+class LitellmFinalModelResponse(BaseModel):
+    provider_name: str  # Provider name (e.g. "openai")
+    model_name: str  # Model ID (e.g. "gpt-4o")

@@ -128,6 +128,8 @@ class SensitiveValue(Generic[T]):
         value = self._decrypt()
 
         if not apply_mask:
+            # Callers must not mutate the returned dict — doing so would
+            # desync the cache from the encrypted bytes and the DB.
             return value
 
         # Apply masking
@@ -151,8 +153,7 @@ class SensitiveValue(Generic[T]):
     def __str__(self) -> NoReturn:
         """Prevent accidental string conversion."""
         raise SensitiveAccessError(
-            "Cannot convert SensitiveValue to string. "
-            "Use .get_value(apply_mask=True/False) to access the value."
+            "Cannot convert SensitiveValue to string. Use .get_value(apply_mask=True/False) to access the value."
         )
 
     def __repr__(self) -> str:
@@ -162,37 +163,36 @@ class SensitiveValue(Generic[T]):
     def __iter__(self) -> NoReturn:
         """Prevent iteration over the value."""
         raise SensitiveAccessError(
-            "Cannot iterate over SensitiveValue. "
-            "Use .get_value(apply_mask=True/False) to access the value."
+            "Cannot iterate over SensitiveValue. Use .get_value(apply_mask=True/False) to access the value."
         )
 
     def __getitem__(self, key: Any) -> NoReturn:
         """Prevent subscript access."""
         raise SensitiveAccessError(
-            "Cannot subscript SensitiveValue. "
-            "Use .get_value(apply_mask=True/False) to access the value."
+            "Cannot subscript SensitiveValue. Use .get_value(apply_mask=True/False) to access the value."
         )
 
     def __eq__(self, other: Any) -> bool:
-        """Prevent direct comparison which might expose value."""
-        if isinstance(other, SensitiveValue):
-            # Compare encrypted bytes for equality check
-            return self._encrypted_bytes == other._encrypted_bytes
-        raise SensitiveAccessError(
-            "Cannot compare SensitiveValue with non-SensitiveValue. "
-            "Use .get_value(apply_mask=True/False) to access the value for comparison."
-        )
+        """Compare SensitiveValues by their decrypted content."""
+        # NOTE: if you attempt to compare a string/dict to a SensitiveValue,
+        # this comparison will return NotImplemented, which then evaluates to False.
+        # This is the convention and required for SQLAlchemy's attribute tracking.
+        if not isinstance(other, SensitiveValue):
+            return NotImplemented
+        return self._decrypt() == other._decrypt()
 
     def __hash__(self) -> int:
-        """Allow hashing based on encrypted bytes."""
-        return hash(self._encrypted_bytes)
+        """Hash based on decrypted content."""
+        value = self._decrypt()
+        if isinstance(value, dict):
+            return hash(json.dumps(value, sort_keys=True))
+        return hash(value)
 
     # Prevent JSON serialization
     def __json__(self) -> Any:
         """Prevent JSON serialization."""
         raise SensitiveAccessError(
-            "Cannot serialize SensitiveValue to JSON. "
-            "Use .get_value(apply_mask=True/False) to access the value."
+            "Cannot serialize SensitiveValue to JSON. Use .get_value(apply_mask=True/False) to access the value."
         )
 
     # For Pydantic compatibility

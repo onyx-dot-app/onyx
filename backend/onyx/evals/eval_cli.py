@@ -244,8 +244,7 @@ def main() -> None:
     elif args.remote_dataset_name:
         if args.local_only:
             raise ValueError(
-                "--local-only cannot be used with --remote-dataset-name. "
-                "Use --local-data-path with a local JSON file instead."
+                "--local-only cannot be used with --remote-dataset-name. Use --local-data-path with a local JSON file instead."
             )
         print(f"Loading data from remote dataset: {args.remote_dataset_name}")
         dataset = braintrust.init_dataset(

@@ -95,6 +95,7 @@ import { cn, noProp } from "@/lib/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { FieldMessage } from "../../messages/FieldMessage";
 
 // Hooks
@@ -129,6 +130,8 @@ const InputComboBox = ({
   leftSearchIcon = false,
   rightSection,
   separatorLabel = "Other options",
+  showAddPrefix = false,
+  showOtherOptions = false,
   ...rest
 }: WithoutStyles<InputComboBoxProps>) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -152,23 +155,22 @@ const InputComboBox = ({
   // Filtering Hook
   const { matchedOptions, unmatchedOptions, hasSearchTerm } =
     useOptionFiltering({ options, inputValue });
+  const visibleUnmatchedOptions =
+    hasSearchTerm && showOtherOptions ? unmatchedOptions : [];
 
-  // Whether to show the create option (only when no partial matches)
-  const showCreateOption =
-    !strict &&
-    hasSearchTerm &&
-    inputValue.trim() !== "" &&
-    matchedOptions.length === 0;
+  // Whether to show the create option (always show when typing in non-strict mode)
+  const showCreateOption = !strict && hasSearchTerm && inputValue.trim() !== "";
 
   // Combined list for keyboard navigation (includes create option when shown)
+  // Only show matched options when searching (hide unmatched)
   const allVisibleOptions = useMemo(() => {
-    const baseOptions = [...matchedOptions, ...unmatchedOptions];
+    const baseOptions = [...matchedOptions, ...visibleUnmatchedOptions];
     if (showCreateOption) {
       // Prepend a synthetic option for the "create new" item
       return [{ value: inputValue, label: inputValue }, ...baseOptions];
     }
     return baseOptions;
-  }, [matchedOptions, unmatchedOptions, showCreateOption, inputValue]);
+  }, [matchedOptions, visibleUnmatchedOptions, showCreateOption, inputValue]);
 
   // Floating UI for dropdown positioning
   const { refs, floatingStyles } = useFloating({
@@ -318,24 +320,32 @@ const InputComboBox = ({
 
   const handleFocus = useCallback(() => {
     if (hasOptions) {
+      setInputValue("");
       setIsOpen(true);
-      setHighlightedIndex(-1); // Start with no highlight on focus
-      setIsKeyboardNav(false); // Start with mouse mode
+      setHighlightedIndex(-1);
+      setIsKeyboardNav(false);
     }
-  }, [hasOptions, setIsOpen, setHighlightedIndex, setIsKeyboardNav]);
+  }, [
+    hasOptions,
+    setInputValue,
+    setIsOpen,
+    setHighlightedIndex,
+    setIsKeyboardNav,
+  ]);
 
   const toggleDropdown = useCallback(() => {
     if (!disabled && hasOptions) {
       setIsOpen((prev) => {
         const newOpen = !prev;
         if (newOpen) {
-          setHighlightedIndex(-1); // Reset highlight when opening
+          setInputValue("");
+          setHighlightedIndex(-1);
         }
         return newOpen;
       });
       inputRef.current?.focus();
     }
-  }, [disabled, hasOptions, setIsOpen, setHighlightedIndex]);
+  }, [disabled, hasOptions, setIsOpen, setInputValue, setHighlightedIndex]);
 
   const autoId = useId();
   const fieldId = fieldContext?.baseId || name || `combo-box-${autoId}`;
@@ -391,16 +401,17 @@ const InputComboBox = ({
                 </div>
               )}
               {hasOptions && (
-                <Button
-                  prominence="tertiary"
-                  size="sm"
-                  onClick={noProp(toggleDropdown)}
-                  disabled={disabled}
-                  icon={isOpen ? SvgChevronUp : SvgChevronDown}
-                  aria-label={isOpen ? "Close dropdown" : "Open dropdown"}
-                  tabIndex={-1}
-                  type="button"
-                />
+                <Disabled disabled={disabled}>
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={noProp(toggleDropdown)}
+                    icon={isOpen ? SvgChevronUp : SvgChevronDown}
+                    aria-label={isOpen ? "Close dropdown" : "Open dropdown"}
+                    tabIndex={-1}
+                    type="button"
+                  />
+                </Disabled>
               )}
             </>
           }
@@ -418,7 +429,7 @@ const InputComboBox = ({
           fieldId={fieldId}
           placeholder={placeholder}
           matchedOptions={matchedOptions}
-          unmatchedOptions={unmatchedOptions}
+          unmatchedOptions={visibleUnmatchedOptions}
           hasSearchTerm={hasSearchTerm}
           separatorLabel={separatorLabel}
           value={value}
@@ -437,6 +448,7 @@ const InputComboBox = ({
           inputValue={inputValue}
           allowCreate={!strict}
           showCreateOption={showCreateOption}
+          showAddPrefix={showAddPrefix}
         />
       </>
 

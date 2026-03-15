@@ -5,9 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
 import { AuthType } from "@/lib/constants";
-import Button from "@/refresh-components/buttons/Button";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
@@ -41,7 +40,7 @@ import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
-import TextViewModal from "@/sections/modals/TextViewModal";
+import PreviewModal from "@/sections/modals/PreviewModal";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { eeGated } from "@/ce";
@@ -67,8 +66,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { refreshChatSessions } = useChatSessions();
   const existingChatSessionId = null; // NRF always starts new chats
 
-  // Get agents for assistant selection
-  const { agents: availableAssistants } = useAgents();
+  // Get agents for agent selection
+  const { agents: availableAgents } = useAgents();
 
   // Projects context for file handling
   const {
@@ -92,25 +91,25 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, [lastFailedFiles, clearLastFailedFiles]);
 
   // Assistant controller
-  const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
+  const { selectedAgent, setSelectedAgentFromId, liveAgent } =
     useAgentController({
       selectedChatSession: undefined,
-      onAssistantSelect: () => {},
+      onAgentSelect: () => {},
     });
 
   // LLM manager for model selection.
   // - currentChatSession: undefined because NRF always starts new chats
-  // - liveAssistant: uses the selected assistant, or undefined to fall back
+  // - liveAgent: uses the selected assistant, or undefined to fall back
   //   to system-wide default LLM provider.
   //
   // If no LLM provider is configured (e.g., fresh signup), the input bar is
   // disabled and a "Set up an LLM" button is shown (see bottom of component).
-  const llmManager = useLlmManager(undefined, liveAssistant ?? undefined);
+  const llmManager = useLlmManager(undefined, liveAgent ?? undefined);
 
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
-    assistantId: selectedAssistant?.id,
+    agentId: selectedAgent?.id,
   });
 
   // State
@@ -169,25 +168,26 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const hasMessages = messageHistory.length > 0;
 
   // Resolved assistant to use throughout the component
-  const resolvedAssistant = liveAssistant ?? undefined;
+  const resolvedAgent = liveAgent ?? undefined;
 
   // Auto-scroll preference from user settings (matches ChatPage pattern)
   const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
   const isStreaming = currentChatState === "streaming";
 
   // Query controller for search/chat classification (EE feature)
-  const { submit: submitQuery, classification } = useQueryController();
+  const { submit: submitQuery, state } = useQueryController();
 
-  // Determine if retrieval (search) is enabled based on the assistant
+  // Determine if retrieval (search) is enabled based on the agent
   const retrievalEnabled = useMemo(() => {
-    if (liveAssistant) {
-      return personaIncludesRetrieval(liveAssistant);
+    if (liveAgent) {
+      return personaIncludesRetrieval(liveAgent);
     }
     return false;
-  }, [liveAssistant]);
+  }, [liveAgent]);
 
   // Check if we're in search mode
-  const isSearch = classification === "search";
+  const isSearch =
+    state.phase === "searching" || state.phase === "search-results";
 
   // Anchor for scroll positioning (matches ChatPage pattern)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
@@ -248,13 +248,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     useChatController({
       filterManager,
       llmManager,
-      availableAssistants: availableAssistants || [],
-      liveAssistant,
+      availableAgents: availableAgents || [],
+      liveAgent,
       existingChatSessionId,
       selectedDocuments: [],
       searchParams: searchParams!,
       resetInputBar,
-      setSelectedAssistantFromId,
+      setSelectedAgentFromId,
     });
 
   // Chat session controller for loading sessions
@@ -263,7 +263,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     searchParams: searchParams!,
     filterManager,
     firstMessage: undefined,
-    setSelectedAssistantFromId,
+    setSelectedAgentFromId,
     setSelectedDocuments: () => {}, // No-op: NRF doesn't support document selection
     setCurrentMessageFiles,
     chatSessionIdRef: { current: null },
@@ -318,7 +318,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       };
 
       // Use submitQuery which will classify the query and either:
-      // - Route to search (sets classification to "search" and shows SearchUI)
+      // - Route to search (sets phase to "searching"/"search-results" and shows SearchUI)
       // - Route to chat (calls onChat callback)
       await submitQuery(submittedMessage, onChat);
     },
@@ -418,10 +418,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {/* Settings button */}
       {!isSidePanel && (
         <div className="absolute top-0 right-0 p-4 z-10">
-          <IconButton
+          <Button
+            prominence="secondary"
             icon={SvgMenu}
             onClick={toggleSettings}
-            secondary
             tooltip="Open settings"
           />
         </div>
@@ -437,7 +437,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             )}
           >
             {/* Chat area with messages */}
-            {hasMessages && resolvedAssistant && (
+            {hasMessages && resolvedAgent && (
               <>
                 {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
                 {!isSidePanel && <Spacer rem={2} />}
@@ -449,7 +449,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   hideScrollbar={isSidePanel}
                 >
                   <ChatUI
-                    liveAssistant={resolvedAssistant}
+                    liveAgent={resolvedAgent}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}
                     setPresentingDocument={setPresentingDocument}
@@ -485,19 +485,15 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
-                toggleDocumentSidebar={() => {}}
                 filterManager={filterManager}
                 llmManager={llmManager}
-                removeDocs={() => {}}
-                retrievalEnabled={retrievalEnabled}
-                selectedDocuments={[]}
                 initialMessage={message}
                 stopGenerating={stopGenerating}
                 onSubmit={handleChatInputSubmit}
                 chatState={currentChatState}
                 currentSessionFileTokenCount={currentSessionFileTokenCount}
                 availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
-                selectedAssistant={liveAssistant ?? undefined}
+                selectedAgent={liveAgent ?? undefined}
                 handleFileUpload={handleFileUpload}
                 disabled={
                   !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
@@ -542,7 +538,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Text/document preview modal */}
       {presentingDocument && (
-        <TextViewModal
+        <PreviewModal
           presentingDocument={presentingDocument}
           onClose={() => setPresentingDocument(null)}
         />
@@ -566,10 +562,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 onClose={() => setShowTurnOffModal(false)}
               />
               <Modal.Footer>
-                <Button secondary onClick={() => setShowTurnOffModal(false)}>
+                <Button
+                  prominence="secondary"
+                  onClick={() => setShowTurnOffModal(false)}
+                >
                   Cancel
                 </Button>
-                <Button danger onClick={confirmTurnOff}>
+                <Button variant="danger" onClick={confirmTurnOff}>
                   Turn off
                 </Button>
               </Modal.Footer>
@@ -592,8 +591,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               ) : (
                 <div className="flex flex-col items-center">
                   <Button
-                    className="w-full"
-                    secondary
+                    width="full"
+                    prominence="secondary"
                     onClick={() => {
                       if (window.top) {
                         window.top.location.href = "/auth/login";
@@ -613,8 +612,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {user && !llmManager.isLoadingProviders && !llmManager.hasAnyProvider && (
         <Button
-          className="w-full"
-          secondary
+          width="full"
+          prominence="secondary"
           onClick={() => {
             window.location.href = "/admin/configuration/llm";
           }}

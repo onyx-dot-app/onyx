@@ -26,11 +26,10 @@ def get_default_document_index(
     To be used for retrieval only. Indexing should be done through both indices
     until Vespa is deprecated.
 
-    Pre-existing docstring for this function, although secondary indices are not
-    currently supported:
     Primary index is the index that is used for querying/updating etc. Secondary
     index is for when both the currently used index and the upcoming index both
-    need to be updated, updates are applied to both indices.
+    need to be updated. Updates are applied to both indices.
+    WARNING: In that case, get_all_document_indices should be used.
     """
     if DISABLE_VECTOR_DB:
         return DisabledDocumentIndex(
@@ -51,11 +50,26 @@ def get_default_document_index(
     opensearch_retrieval_enabled = get_opensearch_retrieval_state(db_session)
     if opensearch_retrieval_enabled:
         indexing_setting = IndexingSetting.from_db_model(search_settings)
+        secondary_indexing_setting = (
+            IndexingSetting.from_db_model(secondary_search_settings)
+            if secondary_search_settings
+            else None
+        )
         return OpenSearchOldDocumentIndex(
             index_name=search_settings.index_name,
             embedding_dim=indexing_setting.final_embedding_dim,
             embedding_precision=indexing_setting.embedding_precision,
             secondary_index_name=secondary_index_name,
+            secondary_embedding_dim=(
+                secondary_indexing_setting.final_embedding_dim
+                if secondary_indexing_setting
+                else None
+            ),
+            secondary_embedding_precision=(
+                secondary_indexing_setting.embedding_precision
+                if secondary_indexing_setting
+                else None
+            ),
             large_chunks_enabled=search_settings.large_chunks_enabled,
             secondary_large_chunks_enabled=secondary_large_chunks_enabled,
             multitenant=MULTI_TENANT,
@@ -86,8 +100,7 @@ def get_all_document_indices(
     Used for indexing only. Until Vespa is deprecated we will index into both
     document indices. Retrieval is done through only one index however.
 
-    Large chunks and secondary indices are not currently supported so we
-    hardcode appropriate values.
+    Large chunks are not currently supported so we hardcode appropriate values.
 
     NOTE: Make sure the Vespa index object is returned first. In the rare event
     that there is some conflict between indexing and the migration task, it is
@@ -123,13 +136,36 @@ def get_all_document_indices(
     opensearch_document_index: OpenSearchOldDocumentIndex | None = None
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         indexing_setting = IndexingSetting.from_db_model(search_settings)
+        secondary_indexing_setting = (
+            IndexingSetting.from_db_model(secondary_search_settings)
+            if secondary_search_settings
+            else None
+        )
         opensearch_document_index = OpenSearchOldDocumentIndex(
             index_name=search_settings.index_name,
             embedding_dim=indexing_setting.final_embedding_dim,
             embedding_precision=indexing_setting.embedding_precision,
-            secondary_index_name=None,
-            large_chunks_enabled=False,
-            secondary_large_chunks_enabled=None,
+            secondary_index_name=(
+                secondary_search_settings.index_name
+                if secondary_search_settings
+                else None
+            ),
+            secondary_embedding_dim=(
+                secondary_indexing_setting.final_embedding_dim
+                if secondary_indexing_setting
+                else None
+            ),
+            secondary_embedding_precision=(
+                secondary_indexing_setting.embedding_precision
+                if secondary_indexing_setting
+                else None
+            ),
+            large_chunks_enabled=search_settings.large_chunks_enabled,
+            secondary_large_chunks_enabled=(
+                secondary_search_settings.large_chunks_enabled
+                if secondary_search_settings
+                else None
+            ),
             multitenant=MULTI_TENANT,
             httpx_client=httpx_client,
         )

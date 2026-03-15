@@ -80,7 +80,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
     # Prevent overlapping runs of this task
     if not lock.acquire(blocking=False):
-        task_logger.debug("cleanup_idle_sandboxes_task - lock not acquired, skipping")
+        task_logger.info("cleanup_idle_sandboxes_task - lock not acquired, skipping")
         return
 
     try:
@@ -149,8 +149,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                                 )
                         except Exception as e:
                             task_logger.warning(
-                                f"Failed to create snapshot for session "
-                                f"{session_id_str}: {e}"
+                                f"Failed to create snapshot for session {session_id_str}: {e}"
                             )
                             # Continue with other sessions even if one fails
 
@@ -160,8 +159,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                     # Zero out nextjs ports for all sessions (ports are no longer in use)
                     cleared = clear_nextjs_ports_for_user(db_session, sandbox.user_id)
                     task_logger.debug(
-                        f"Cleared {cleared} nextjs_port allocations for user "
-                        f"{sandbox.user_id}"
+                        f"Cleared {cleared} nextjs_port allocations for user {sandbox.user_id}"
                     )
 
                     # Mark all active sessions as IDLE
@@ -169,8 +167,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                         db_session, sandbox.user_id
                     )
                     task_logger.debug(
-                        f"Marked {idled} sessions as IDLE for user "
-                        f"{sandbox.user_id}"
+                        f"Marked {idled} sessions as IDLE for user {sandbox.user_id}"
                     )
 
                     update_sandbox_status__no_commit(
@@ -351,8 +348,7 @@ def sync_sandbox_files(
     """
     source_info = f" source={source}" if source else " (all sources)"
     task_logger.info(
-        f"sync_sandbox_files starting for user {user_id} in tenant {tenant_id}"
-        f"{source_info}"
+        f"sync_sandbox_files starting for user {user_id} in tenant {tenant_id}{source_info}"
     )
 
     lock_timeout = CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT
@@ -365,8 +361,7 @@ def sync_sandbox_files(
     with _acquire_sandbox_file_sync_lock(lock) as acquired:
         if not acquired:
             task_logger.warning(
-                f"sync_sandbox_files - failed to acquire lock for user {user_id} "
-                f"after {lock_timeout}s, skipping"
+                f"sync_sandbox_files - failed to acquire lock for user {user_id} after {lock_timeout}s, skipping"
             )
             return False
 
@@ -377,8 +372,7 @@ def sync_sandbox_files(
                 return False
             if sandbox.status != SandboxStatus.RUNNING:
                 task_logger.debug(
-                    f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
-                    f"skipping sync"
+                    f"Sandbox {sandbox.id} not running (status={sandbox.status}), skipping sync"
                 )
                 return False
 

@@ -29,10 +29,7 @@ def test_normalize_citation_link_keeps_existing_angle_brackets() -> None:
 
 
 def test_normalize_citation_link_handles_multiple_links() -> None:
-    message = (
-        "[[1]](https://example.com/(USA)%20Guide.pdf) "
-        "[[2]](https://example.com/Plan(s)%20Overview.pdf)"
-    )
+    message = "[[1]](https://example.com/(USA)%20Guide.pdf) [[2]](https://example.com/Plan(s)%20Overview.pdf)"
 
     normalized = _normalize_link_destinations(message)
 
@@ -104,3 +101,76 @@ def test_format_slack_message_ampersand_not_double_escaped() -> None:
 
     assert "&amp;" in formatted
     assert "&quot;" not in formatted
+
+
+# -- Table rendering tests --
+
+
+def test_table_renders_as_vertical_cards() -> None:
+    message = "| Feature | Status | Owner |\n|---------|--------|-------|\n| Auth | Done | Alice |\n| Search | In Progress | Bob |\n"
+
+    formatted = format_slack_message(message)
+
+    assert "*Auth*\n  • Status: Done\n  • Owner: Alice" in formatted
+    assert "*Search*\n  • Status: In Progress\n  • Owner: Bob" in formatted
+    # Cards separated by blank line
+    assert "Owner: Alice\n\n*Search*" in formatted
+    # No raw pipe-and-dash table syntax
+    assert "---|" not in formatted
+
+
+def test_table_single_column() -> None:
+    message = "| Name |\n|------|\n| Alice |\n| Bob |\n"
+
+    formatted = format_slack_message(message)
+
+    assert "*Alice*" in formatted
+    assert "*Bob*" in formatted
+
+
+def test_table_embedded_in_text() -> None:
+    message = "Here are the results:\n\n| Item | Count |\n|------|-------|\n| Apples | 5 |\n\nThat's all."
+
+    formatted = format_slack_message(message)
+
+    assert "Here are the results:" in formatted
+    assert "*Apples*\n  • Count: 5" in formatted
+    assert "That's all." in formatted
+
+
+def test_table_with_formatted_cells() -> None:
+    message = "| Name | Link |\n|------|------|\n| **Alice** | [profile](https://example.com) |\n"
+
+    formatted = format_slack_message(message)
+
+    # Bold cell should not double-wrap: *Alice* not **Alice**
+    assert "*Alice*" in formatted
+    assert "**Alice**" not in formatted
+    assert "<https://example.com|profile>" in formatted
+
+
+def test_table_with_alignment_specifiers() -> None:
+    message = "| Left | Center | Right |\n|:-----|:------:|------:|\n| a | b | c |\n"
+
+    formatted = format_slack_message(message)
+
+    assert "*a*\n  • Center: b\n  • Right: c" in formatted
+
+
+def test_two_tables_in_same_message_use_independent_headers() -> None:
+    message = "| A | B |\n|---|---|\n| 1 | 2 |\n\n| X | Y | Z |\n|---|---|---|\n| p | q | r |\n"
+
+    formatted = format_slack_message(message)
+
+    assert "*1*\n  • B: 2" in formatted
+    assert "*p*\n  • Y: q\n  • Z: r" in formatted
+
+
+def test_table_empty_first_column_no_bare_asterisks() -> None:
+    message = "| Name | Status |\n|------|--------|\n| | Done |\n"
+
+    formatted = format_slack_message(message)
+
+    # Empty title should not produce "**" (bare asterisks)
+    assert "**" not in formatted
+    assert "  • Status: Done" in formatted

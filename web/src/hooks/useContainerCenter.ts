@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import useScreenSize from "@/hooks/useScreenSize";
 
 const SELECTOR = "[data-main-container]";
 
@@ -37,6 +38,7 @@ function measure(el: HTMLElement): { x: number; y: number } | null {
  */
 export default function useContainerCenter(): ContainerCenter {
   const pathname = usePathname();
+  const { isMediumScreen } = useScreenSize();
   const [center, setCenter] = useState<{ x: number | null; y: number | null }>(
     () => {
       if (typeof document === "undefined") return NULL_CENTER;
@@ -66,8 +68,10 @@ export default function useContainerCenter(): ContainerCenter {
   }, [pathname]);
 
   return {
-    centerX: center.x,
-    centerY: center.y,
-    hasContainerCenter: center.x !== null && center.y !== null,
+    centerX: isMediumScreen ? null : center.x,
+    centerY: isMediumScreen ? null : center.y,
+    hasContainerCenter: isMediumScreen
+      ? false
+      : center.x !== null && center.y !== null,
   };
 }

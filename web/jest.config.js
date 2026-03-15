@@ -53,6 +53,8 @@ const sharedConfig = {
         // Testing & Mocking
         "msw",
         "until-async",
+        // Language Detection
+        "linguist-languages",
         // Markdown & Syntax Highlighting
         "react-markdown",
         "remark-.*", // All remark packages
@@ -143,6 +145,9 @@ module.exports = {
         "**/src/app/**/utils/*.test.ts",
         "**/src/app/**/hooks/*.test.ts", // Pure packet processor tests
         "**/src/refresh-components/**/*.test.ts",
+        "**/src/refresh-pages/**/*.test.ts",
+        "**/src/sections/**/*.test.ts",
+        "**/src/components/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],
     },
@@ -155,7 +160,10 @@ module.exports = {
         "**/src/app/**/*.test.tsx",
         "**/src/components/**/*.test.tsx",
         "**/src/lib/**/*.test.tsx",
+        "**/src/providers/**/*.test.tsx",
         "**/src/refresh-components/**/*.test.tsx",
+        "**/src/hooks/**/*.test.tsx",
+        "**/src/sections/**/*.test.tsx",
         // Add more patterns here as you add more integration tests
       ],
     },

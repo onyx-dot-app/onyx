@@ -4,7 +4,9 @@ import {
   PythonToolPacket,
   PythonToolStart,
   PythonToolDelta,
+  ToolCallArgumentDelta,
   SectionEnd,
+  CODE_INTERPRETER_TOOL_TYPES,
 } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -39,6 +41,18 @@ function HighlightedPythonCode({ code }: { code: string }) {
 
 // Helper function to construct current Python execution state
 function constructCurrentPythonState(packets: PythonToolPacket[]) {
+  // Accumulate streaming code from argument deltas (arrives before PythonToolStart)
+  const streamingCode = packets
+    .filter(
+      (packet) =>
+        packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+        (packet.obj as ToolCallArgumentDelta).tool_type ===
+          CODE_INTERPRETER_TOOL_TYPES.PYTHON
+    )
+    .map((packet) =>
+      String((packet.obj as ToolCallArgumentDelta).argument_deltas.code ?? "")
+    )
+    .join("");
   const pythonStart = packets.find(
     (packet) => packet.obj.type === PacketType.PYTHON_TOOL_START
   )?.obj as PythonToolStart | null;
@@ -51,7 +65,8 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
       packet.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
-  const code = pythonStart?.code || "";
+  // Use complete code from PythonToolStart if available, else use streamed code.
+  const code = pythonStart?.code || streamingCode;
   const stdout = pythonDeltas
     .map((delta) => delta?.stdout || "")
     .filter((s) => s)
@@ -61,6 +76,7 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
     .filter((s) => s)
     .join("");
   const fileIds = pythonDeltas.flatMap((delta) => delta?.file_ids || []);
+  const isStreaming = !pythonStart && streamingCode.length > 0;
   const isExecuting = pythonStart && !pythonEnd;
   const isComplete = pythonStart && pythonEnd;
   const hasError = stderr.length > 0;
@@ -70,6 +86,7 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
     stdout,
     stderr,
     fileIds,
+    isStreaming,
     isExecuting,
     isComplete,
     hasError,
@@ -82,8 +99,16 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   renderType,
   children,
 }) => {
-  const { code, stdout, stderr, fileIds, isExecuting, isComplete, hasError } =
-    constructCurrentPythonState(packets);
+  const {
+    code,
+    stdout,
+    stderr,
+    fileIds,
+    isStreaming,
+    isExecuting,
+    isComplete,
+    hasError,
+  } = constructCurrentPythonState(packets);
 
   useEffect(() => {
     if (isComplete) {
@@ -92,6 +117,9 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   }, [isComplete, onComplete]);
 
   const status = useMemo(() => {
+    if (isStreaming) {
+      return "Writing code...";
+    }
     if (isExecuting) {
       return "Executing Python code...";
     }
@@ -102,13 +130,13 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       return "Python execution completed";
     }
     return "Python execution";
-  }, [isComplete, isExecuting, hasError]);
+  }, [isStreaming, isComplete, isExecuting, hasError]);
 
   // Shared content for all states - used by both FULL and compact modes
   const content = (
     <div className="flex flex-col mb-1 space-y-2">
-      {/* Loading indicator when executing */}
-      {isExecuting && (
+      {/* Loading indicator when streaming or executing */}
+      {(isStreaming || isExecuting) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <div className="flex gap-0.5">
             <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
@@ -121,7 +149,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
               style={{ animationDelay: "0.2s" }}
             ></div>
           </div>
-          <span>Running code...</span>
+          <span>{isStreaming ? "Writing code..." : "Running code..."}</span>
         </div>
       )}
 

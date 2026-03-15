@@ -1512,6 +1512,10 @@
     "display_name": "Claude Opus 4.5",
     "model_vendor": "anthropic"
   },
+  "claude-opus-4-6": {
+    "display_name": "Claude Opus 4.6",
+    "model_vendor": "anthropic"
+  },
   "claude-opus-4-5-20251101": {
     "display_name": "Claude Opus 4.5",
     "model_vendor": "anthropic",
@@ -1524,6 +1528,10 @@
   },
   "claude-sonnet-4-5": {
     "display_name": "Claude Sonnet 4.5",
+    "model_vendor": "anthropic"
+  },
+  "claude-sonnet-4-6": {
+    "display_name": "Claude Sonnet 4.6",
     "model_vendor": "anthropic"
   },
   "claude-sonnet-4-5-20250929": {
@@ -2515,6 +2523,10 @@
     "display_name": "GPT-5 Pro",
     "model_vendor": "openai",
     "model_version": "2025-10-06"
+  },
+  "gpt-5.4": {
+    "display_name": "GPT-5.4",
+    "model_vendor": "openai"
   },
   "gpt-5.2-pro-2025-12-11": {
     "display_name": "GPT-5.2 Pro",
@@ -3769,16 +3781,6 @@
   "vertex_ai/claude-3-5-sonnet": {
     "display_name": "Claude Sonnet 3.5",
     "model_vendor": "anthropic"
-  },
-  "vertex_ai/claude-3-5-sonnet-v2": {
-    "display_name": "Claude Sonnet 3.5",
-    "model_vendor": "anthropic",
-    "model_version": "v2"
-  },
-  "vertex_ai/claude-3-5-sonnet-v2@20241022": {
-    "display_name": "Claude Sonnet 3.5 v2",
-    "model_vendor": "anthropic",
-    "model_version": "20241022"
   },
   "vertex_ai/claude-3-5-sonnet@20240620": {
     "display_name": "Claude Sonnet 3.5",

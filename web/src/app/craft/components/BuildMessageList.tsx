@@ -78,7 +78,7 @@ interface BuildMessageListProps {
  * BuildMessageList - Displays the conversation history with FIFO rendering
  *
  * User messages are shown as right-aligned bubbles.
- * Assistant responses render streamItems in exact chronological order:
+ * Agent responses render streamItems in exact chronological order:
  * text, thinking, and tool calls appear exactly as they arrived.
  */
 export default function BuildMessageList({
@@ -161,8 +161,8 @@ export default function BuildMessageList({
     });
   };
 
-  // Helper to render an assistant message
-  const renderAssistantMessage = (message: BuildMessage) => {
+  // Helper to render an agent message
+  const renderAgentMessage = (message: BuildMessage) => {
     // Check if we have saved stream items in message_metadata
     const savedStreamItems = message.message_metadata?.streamItems as
       | StreamItem[]
@@ -189,12 +189,12 @@ export default function BuildMessageList({
   return (
     <div className="flex flex-col items-center px-4 pb-4">
       <div className="w-full max-w-2xl backdrop-blur-md rounded-16 p-4">
-        {/* Render messages in order (user and assistant interleaved) */}
+        {/* Render messages in order (user and agent interleaved) */}
         {messages.map((message) =>
           message.type === "user" ? (
             <UserMessage key={message.id} content={message.content} />
           ) : message.type === "assistant" ? (
-            renderAssistantMessage(message)
+            renderAgentMessage(message)
           ) : null
         )}
 

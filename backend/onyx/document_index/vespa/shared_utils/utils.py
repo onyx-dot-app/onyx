@@ -52,7 +52,9 @@ def replace_invalid_doc_id_characters(text: str) -> str:
     return text.replace("'", "_")
 
 
-def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx.Client:
+def get_vespa_http_client(
+    no_timeout: bool = False, http2: bool = True, timeout: int | None = None
+) -> httpx.Client:
     """
     Configures and returns an HTTP client for communicating with Vespa,
     including authentication if needed.
@@ -64,7 +66,7 @@ def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx
             else None
         ),
         verify=False if not MANAGED_VESPA else True,
-        timeout=None if no_timeout else VESPA_REQUEST_TIMEOUT,
+        timeout=None if no_timeout else (timeout or VESPA_REQUEST_TIMEOUT),
         http2=http2,
     )
 
@@ -88,15 +90,13 @@ def wait_for_vespa_with_timeout(wait_interval: int = 5, wait_limit: int = 60) ->
                 return True
         except Exception as e:
             logger.warning(
-                f"Vespa: Readiness probe failed trying to connect to {url}. "
-                f"Exception: {e}"
+                f"Vespa: Readiness probe failed trying to connect to {url}. Exception: {e}"
             )
 
         time_elapsed = time.monotonic() - time_start
         if time_elapsed > wait_limit:
             logger.info(
-                f"Vespa: Readiness probe did not succeed within the timeout "
-                f"({wait_limit} seconds)."
+                f"Vespa: Readiness probe did not succeed within the timeout ({wait_limit} seconds)."
             )
             return False
 

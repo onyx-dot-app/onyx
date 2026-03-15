@@ -86,37 +86,6 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
      - Monitoring tasks (every 5 minutes)
      - Cleanup tasks (hourly)
 
-#### Worker Deployment Modes
-
-Onyx supports two deployment modes for background workers, controlled by the `USE_LIGHTWEIGHT_BACKGROUND_WORKER` environment variable:
-
-**Lightweight Mode** (default, `USE_LIGHTWEIGHT_BACKGROUND_WORKER=true`):
-
-- Runs a single consolidated `background` worker that handles all background tasks:
-  - Light worker tasks (Vespa operations, permissions sync, deletion)
-  - Document processing (indexing pipeline)
-  - Document fetching (connector data retrieval)
-  - Pruning operations (from `heavy` worker)
-  - Knowledge graph processing (from `kg_processing` worker)
-  - Monitoring tasks (from `monitoring` worker)
-  - User file processing (from `user_file_processing` worker)
-- Lower resource footprint (fewer worker processes)
-- Suitable for smaller deployments or development environments
-- Default concurrency: 20 threads (increased to handle combined workload)
-
-**Standard Mode** (`USE_LIGHTWEIGHT_BACKGROUND_WORKER=false`):
-
-- Runs separate specialized workers as documented above (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
-- Better isolation and scalability
-- Can scale individual workers independently based on workload
-- Suitable for production deployments with higher load
-
-The deployment mode affects:
-
-- **Backend**: Worker processes spawned by supervisord or dev scripts
-- **Helm**: Which Kubernetes deployments are created
-- **Dev Environment**: Which workers `dev_run_background_jobs.py` spawns
-
 #### Key Features
 
 - **Thread-based Workers**: All workers use thread pools (not processes) for stability
@@ -135,6 +104,10 @@ The deployment mode affects:
 
 - Always use `@shared_task` rather than `@celery_app`
 - Put tasks under `background/celery/tasks/` or `ee/background/celery/tasks`
+- Never enqueue a task without an expiration. Always supply `expires=` when
+  sending tasks, either from the beat schedule or directly from another task. It
+  should never be acceptable to submit code which enqueues tasks without an
+  expiration, as doing so can lead to unbounded task queue growth.
 
 **Defining APIs**:
 When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
@@ -571,6 +544,8 @@ To run them:
 npx playwright test <TEST_NAME>
 ```
 
+For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.
+
 ## Logs
 
 When (1) writing integration tests or (2) doing live tests (e.g. curl / playwright) you can get access
@@ -616,6 +591,45 @@ This is a minimal list - feel free to include more. Do NOT write code as part of
 Keep it high level. You can reference certain files or functions though.
 
 Before writing your plan, make sure to do research. Explore the relevant sections in the codebase.
+
+## Error Handling
+
+**Always raise `OnyxError` from `onyx.error_handling.exceptions` instead of `HTTPException`.
+Never hardcode status codes or use `starlette.status` / `fastapi.status` constants directly.**
+
+A global FastAPI exception handler converts `OnyxError` into a JSON response with the standard
+`{"error_code": "...", "detail": "..."}` shape. This eliminates boilerplate and keeps error
+handling consistent across the entire backend.
+
+```python
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+
+# ✅ Good
+raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+
+# ✅ Good — no extra message needed
+raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
+
+# ✅ Good — upstream service with dynamic status code
+raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=upstream_status)
+
+# ❌ Bad — using HTTPException directly
+raise HTTPException(status_code=404, detail="Session not found")
+
+# ❌ Bad — starlette constant
+raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+```
+
+Available error codes are defined in `backend/onyx/error_handling/error_codes.py`. If a new error
+category is needed, add it there first — do not invent ad-hoc codes.
+
+**Upstream service errors:** When forwarding errors from an upstream service where the HTTP
+status code is dynamic (comes from the upstream response), use `status_code_override`:
+
+```python
+raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=e.response.status_code)
+```
 
 ## Best Practices
 

@@ -16,13 +16,14 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.api import _mask_string
 from onyx.server.manage.llm.api import put_llm_provider
@@ -100,7 +101,7 @@ class TestLLMProviderChanges:
                     api_base="https://attacker.example.com",
                 )
 
-                with pytest.raises(HTTPException) as exc_info:
+                with pytest.raises(OnyxError) as exc_info:
                     put_llm_provider(
                         llm_provider_upsert_request=update_request,
                         is_creation=False,
@@ -108,7 +109,7 @@ class TestLLMProviderChanges:
                         db_session=db_session,
                     )
 
-                assert exc_info.value.status_code == 400
+                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
                 assert "cannot be changed without changing the API key" in str(
                     exc_info.value.detail
                 )
@@ -236,7 +237,7 @@ class TestLLMProviderChanges:
                     api_base=None,
                 )
 
-                with pytest.raises(HTTPException) as exc_info:
+                with pytest.raises(OnyxError) as exc_info:
                     put_llm_provider(
                         llm_provider_upsert_request=update_request,
                         is_creation=False,
@@ -244,7 +245,7 @@ class TestLLMProviderChanges:
                         db_session=db_session,
                     )
 
-                assert exc_info.value.status_code == 400
+                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
                 assert "cannot be changed without changing the API key" in str(
                     exc_info.value.detail
                 )
@@ -339,7 +340,7 @@ class TestLLMProviderChanges:
                     custom_config_changed=True,
                 )
 
-                with pytest.raises(HTTPException) as exc_info:
+                with pytest.raises(OnyxError) as exc_info:
                     put_llm_provider(
                         llm_provider_upsert_request=update_request,
                         is_creation=False,
@@ -347,7 +348,7 @@ class TestLLMProviderChanges:
                         db_session=db_session,
                     )
 
-                assert exc_info.value.status_code == 400
+                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
                 assert "cannot be changed without changing the API key" in str(
                     exc_info.value.detail
                 )
@@ -375,7 +376,7 @@ class TestLLMProviderChanges:
                     custom_config_changed=True,
                 )
 
-                with pytest.raises(HTTPException) as exc_info:
+                with pytest.raises(OnyxError) as exc_info:
                     put_llm_provider(
                         llm_provider_upsert_request=update_request,
                         is_creation=False,
@@ -383,7 +384,7 @@ class TestLLMProviderChanges:
                         db_session=db_session,
                     )
 
-                assert exc_info.value.status_code == 400
+                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
                 assert "cannot be changed without changing the API key" in str(
                     exc_info.value.detail
                 )
@@ -600,20 +601,18 @@ def test_upload_with_custom_config_then_change(
             assert len(captured_llms) == 2, "test_llm should have been called 2 times"
 
             for llm in captured_llms:
-                assert llm.config.custom_config == custom_config, (
-                    f"Expected custom_config {custom_config}, "
-                    f"but got {llm.config.custom_config}"
-                )
+                assert (
+                    llm.config.custom_config == custom_config
+                ), f"Expected custom_config {custom_config}, but got {llm.config.custom_config}"
 
             # Check inside the database and check that custom_config is the same as the original
             db_provider = fetch_existing_llm_provider(name=name, db_session=db_session)
             if not db_provider:
                 assert False, "Provider not found in the database"
 
-            assert db_provider.custom_config == custom_config, (
-                f"Expected custom_config {custom_config}, "
-                f"but got {db_provider.custom_config}"
-            )
+            assert (
+                db_provider.custom_config == custom_config
+            ), f"Expected custom_config {custom_config}, but got {db_provider.custom_config}"
     finally:
         db_session.rollback()
         _cleanup_provider(db_session, name)

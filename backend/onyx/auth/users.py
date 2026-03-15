@@ -1,4 +1,7 @@
+import base64
+import hashlib
 import json
+import os
 import random
 import secrets
 import string
@@ -28,6 +31,8 @@ from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 from fastapi import status
+from fastapi import WebSocket
+from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import BaseUserManager
@@ -54,6 +59,7 @@ from fastapi_users.router.common import ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
+from httpx_oauth.oauth2 import GetAccessTokenError
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy import nulls_last
@@ -119,8 +125,12 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import log_onyx_error
+from onyx.error_handling.exceptions import onyx_error_to_json_response
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
-from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -146,10 +156,21 @@ def is_user_admin(user: User) -> bool:
 
 
 def verify_auth_setting() -> None:
-    if AUTH_TYPE == AuthType.CLOUD:
+    """Log warnings for AUTH_TYPE issues.
+
+    This only runs on app startup not during migrations/scripts.
+    """
+    raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
+
+    if raw_auth_type == "cloud":
         raise ValueError(
-            f"{AUTH_TYPE.value} is not a valid auth type for self-hosted deployments."
+            "'cloud' is not a valid auth type for self-hosted deployments."
         )
+    if raw_auth_type == "disabled":
+        logger.warning(
+            "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
+        )
+
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
 
 
@@ -201,13 +222,14 @@ def user_needs_to_be_verified() -> bool:
 
 
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    value = redis_client.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
+    from onyx.cache.factory import get_cache_backend
+
+    cache = get_cache_backend(tenant_id=tenant_id)
+    value = cache.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
 
     if value is None:
         return False
 
-    assert isinstance(value, bytes)
     return int(value.decode("utf-8")) == 1
 
 
@@ -589,8 +611,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             char in PASSWORD_SPECIAL_CHARS for char in password
         ):
             raise exceptions.InvalidPasswordException(
-                reason="Password must contain at least one special character from the following set: "
-                f"{PASSWORD_SPECIAL_CHARS}."
+                reason=f"Password must contain at least one special character from the following set: {PASSWORD_SPECIAL_CHARS}."
             )
         return
 
@@ -725,11 +746,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         if user_by_session:
                             user = user_by_session
 
+                # If the user is inactive, check seat availability before
+                # upgrading role — otherwise they'd become an inactive BASIC
+                # user who still can't log in.
+                if not user.is_active:
+                    with get_session_with_current_tenant() as sync_db:
+                        enforce_seat_limit(sync_db)
+
                 await self.user_db.update(
                     user,
                     {
                         "is_verified": is_verified_by_default,
                         "role": UserRole.BASIC,
+                        **({"is_active": True} if not user.is_active else {}),
                     },
                 )
 
@@ -849,7 +878,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
     async def on_after_forgot_password(
-        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
+        self,
+        user: User,
+        token: str,
+        request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
         if not EMAIL_CONFIGURED:
             logger.error(
@@ -868,7 +900,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
     async def on_after_request_verify(
-        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
+        self,
+        user: User,
+        token: str,
+        request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
         verify_email_domain(user.email)
 
@@ -1164,7 +1199,9 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
         return
 
     async def refresh_token(
-        self, token: Optional[str], user: User  # noqa: ARG002
+        self,
+        token: Optional[str],  # noqa: ARG002
+        user: User,  # noqa: ARG002
     ) -> str:
         """Issue a fresh JWT with a new expiry."""
         return await self.write_token(user)
@@ -1192,8 +1229,7 @@ def get_jwt_strategy() -> SingleTenantJWTStrategy:
 if AUTH_BACKEND == AuthBackend.JWT:
     if MULTI_TENANT or AUTH_TYPE == AuthType.CLOUD:
         raise ValueError(
-            "JWT auth backend is only supported for single-tenant, self-hosted deployments. "
-            "Use 'redis' or 'postgres' instead."
+            "JWT auth backend is only supported for single-tenant, self-hosted deployments. Use 'redis' or 'postgres' instead."
         )
     if not USER_AUTH_SECRET:
         raise ValueError("USER_AUTH_SECRET is required for JWT auth backend.")
@@ -1591,6 +1627,102 @@ async def current_admin_user(user: User = Depends(current_user)) -> User:
     return user
 
 
+async def _get_user_from_token_data(token_data: dict) -> User | None:
+    """Shared logic: token data dict → User object.
+
+    Args:
+        token_data: Decoded token data containing 'sub' (user ID).
+
+    Returns:
+        User object if found and active, None otherwise.
+    """
+    user_id = token_data.get("sub")
+    if not user_id:
+        return None
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        return None
+
+    async with get_async_session_context_manager() as async_db_session:
+        user = await async_db_session.get(User, user_uuid)
+        if user is None or not user.is_active:
+            return None
+        return user
+
+
+async def current_user_from_websocket(
+    websocket: WebSocket,
+    token: str = Query(..., description="WebSocket authentication token"),
+) -> User:
+    """
+    WebSocket authentication dependency using query parameter.
+
+    Validates the WS token from query param and returns the User.
+    Raises BasicAuthenticationError if authentication fails.
+
+    The token must be obtained from POST /voice/ws-token before connecting.
+    Tokens are single-use and expire after 60 seconds.
+
+    Usage:
+        1. POST /voice/ws-token -> {"token": "xxx"}
+        2. Connect to ws://host/path?token=xxx
+
+    This applies the same auth checks as current_user() for HTTP endpoints.
+    """
+    # Check Origin header to prevent Cross-Site WebSocket Hijacking (CSWSH)
+    # Browsers always send Origin on WebSocket connections
+    origin = websocket.headers.get("origin")
+    expected_origin = WEB_DOMAIN.rstrip("/")
+    if not origin:
+        logger.warning("WS auth: missing Origin header")
+        raise BasicAuthenticationError(detail="Access denied. Missing origin.")
+
+    actual_origin = origin.rstrip("/")
+    if actual_origin != expected_origin:
+        logger.warning(
+            f"WS auth: origin mismatch. Expected {expected_origin}, got {actual_origin}"
+        )
+        raise BasicAuthenticationError(detail="Access denied. Invalid origin.")
+
+    # Validate WS token in Redis (single-use, deleted after retrieval)
+    try:
+        token_data = await retrieve_ws_token_data(token)
+        if token_data is None:
+            raise BasicAuthenticationError(
+                detail="Access denied. Invalid or expired authentication token."
+            )
+    except BasicAuthenticationError:
+        raise
+    except Exception as e:
+        logger.error(f"WS auth: error during token validation: {e}")
+        raise BasicAuthenticationError(
+            detail="Authentication verification failed."
+        ) from e
+
+    # Get user from token data
+    user = await _get_user_from_token_data(token_data)
+    if user is None:
+        logger.warning(f"WS auth: user not found for id={token_data.get('sub')}")
+        raise BasicAuthenticationError(
+            detail="Access denied. User not found or inactive."
+        )
+
+    # Apply same checks as HTTP auth (verification, OIDC expiry, role)
+    user = await double_check_user(user)
+
+    # Block LIMITED users (same as current_user)
+    if user.role == UserRole.LIMITED:
+        logger.warning(f"WS auth: user {user.email} has LIMITED role")
+        raise BasicAuthenticationError(
+            detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
+        )
+
+    logger.debug(f"WS auth: authenticated {user.email}")
+    return user
+
+
 def get_default_admin_user_emails_() -> list[str]:
     # No default seeding available for Onyx MIT
     return []
@@ -1600,6 +1732,7 @@ STATE_TOKEN_AUDIENCE = "fastapi-users:oauth-state"
 STATE_TOKEN_LIFETIME_SECONDS = 3600
 CSRF_TOKEN_KEY = "csrftoken"
 CSRF_TOKEN_COOKIE_NAME = "fastapiusersoauthcsrf"
+PKCE_COOKIE_NAME_PREFIX = "fastapiusersoauthpkce"
 
 
 class OAuth2AuthorizeResponse(BaseModel):
@@ -1620,6 +1753,21 @@ def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def generate_pkce_pair() -> tuple[str, str]:
+    verifier = secrets.token_urlsafe(64)
+    challenge = _base64url_encode(hashlib.sha256(verifier.encode("ascii")).digest())
+    return verifier, challenge
+
+
+def get_pkce_cookie_name(state: str) -> str:
+    state_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
+    return f"{PKCE_COOKIE_NAME_PREFIX}_{state_hash}"
+
+
 # refer to https://github.com/fastapi-users/fastapi-users/blob/42ddc241b965475390e2bce887b084152ae1a2cd/fastapi_users/fastapi_users.py#L91
 def create_onyx_oauth_router(
     oauth_client: BaseOAuth2,
@@ -1628,6 +1776,7 @@ def create_onyx_oauth_router(
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
+    enable_pkce: bool = False,
 ) -> APIRouter:
     return get_oauth_router(
         oauth_client,
@@ -1637,6 +1786,7 @@ def create_onyx_oauth_router(
         redirect_url,
         associate_by_email,
         is_verified_by_default,
+        enable_pkce=enable_pkce,
     )
 
 
@@ -1655,6 +1805,7 @@ def get_oauth_router(
     csrf_token_cookie_secure: Optional[bool] = None,
     csrf_token_cookie_httponly: bool = True,
     csrf_token_cookie_samesite: Optional[Literal["lax", "strict", "none"]] = "lax",
+    enable_pkce: bool = False,
 ) -> APIRouter:
     """Generate a router with the OAuth routes."""
     router = APIRouter()
@@ -1670,6 +1821,13 @@ def get_oauth_router(
             oauth_client,
             route_name=callback_route_name,
         )
+
+    async def null_access_token_state() -> tuple[OAuth2Token, Optional[str]] | None:
+        return None
+
+    access_token_state_dependency = (
+        oauth2_authorize_callback if not enable_pkce else null_access_token_state
+    )
 
     if csrf_token_cookie_secure is None:
         csrf_token_cookie_secure = WEB_DOMAIN.startswith("https")
@@ -1704,13 +1862,26 @@ def get_oauth_router(
             CSRF_TOKEN_KEY: csrf_token,
         }
         state = generate_state_token(state_data, state_secret)
+        pkce_cookie: tuple[str, str] | None = None
 
-        # Get the basic authorization URL
-        authorization_url = await oauth_client.get_authorization_url(
-            authorize_redirect_url,
-            state,
-            scopes,
-        )
+        if enable_pkce:
+            code_verifier, code_challenge = generate_pkce_pair()
+            pkce_cookie_name = get_pkce_cookie_name(state)
+            pkce_cookie = (pkce_cookie_name, code_verifier)
+            authorization_url = await oauth_client.get_authorization_url(
+                authorize_redirect_url,
+                state,
+                scopes,
+                code_challenge=code_challenge,
+                code_challenge_method="S256",
+            )
+        else:
+            # Get the basic authorization URL
+            authorization_url = await oauth_client.get_authorization_url(
+                authorize_redirect_url,
+                state,
+                scopes,
+            )
 
         # For Google OAuth, add parameters to request refresh tokens
         if oauth_client.name == "google":
@@ -1718,11 +1889,15 @@ def get_oauth_router(
                 authorization_url, {"access_type": "offline", "prompt": "consent"}
             )
 
-        if redirect:
-            redirect_response = RedirectResponse(authorization_url, status_code=302)
-            redirect_response.set_cookie(
-                key=csrf_token_cookie_name,
-                value=csrf_token,
+        def set_oauth_cookie(
+            target_response: Response,
+            *,
+            key: str,
+            value: str,
+        ) -> None:
+            target_response.set_cookie(
+                key=key,
+                value=value,
                 max_age=STATE_TOKEN_LIFETIME_SECONDS,
                 path=csrf_token_cookie_path,
                 domain=csrf_token_cookie_domain,
@@ -1730,18 +1905,28 @@ def get_oauth_router(
                 httponly=csrf_token_cookie_httponly,
                 samesite=csrf_token_cookie_samesite,
             )
-            return redirect_response
 
-        response.set_cookie(
+        response_with_cookies: Response
+        if redirect:
+            response_with_cookies = RedirectResponse(authorization_url, status_code=302)
+        else:
+            response_with_cookies = response
+
+        set_oauth_cookie(
+            response_with_cookies,
             key=csrf_token_cookie_name,
             value=csrf_token,
-            max_age=STATE_TOKEN_LIFETIME_SECONDS,
-            path=csrf_token_cookie_path,
-            domain=csrf_token_cookie_domain,
-            secure=csrf_token_cookie_secure,
-            httponly=csrf_token_cookie_httponly,
-            samesite=csrf_token_cookie_samesite,
         )
+        if pkce_cookie is not None:
+            pkce_cookie_name, code_verifier = pkce_cookie
+            set_oauth_cookie(
+                response_with_cookies,
+                key=pkce_cookie_name,
+                value=code_verifier,
+            )
+
+        if redirect:
+            return response_with_cookies
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
@@ -1772,119 +1957,242 @@ def get_oauth_router(
     )
     async def callback(
         request: Request,
-        access_token_state: Tuple[OAuth2Token, str] = Depends(
-            oauth2_authorize_callback
+        access_token_state: Tuple[OAuth2Token, Optional[str]] | None = Depends(
+            access_token_state_dependency
         ),
+        code: Optional[str] = None,
+        state: Optional[str] = None,
+        error: Optional[str] = None,
         user_manager: BaseUserManager[models.UP, models.ID] = Depends(get_user_manager),
         strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
-    ) -> RedirectResponse:
-        token, state = access_token_state
-        account_id, account_email = await oauth_client.get_id_email(
-            token["access_token"]
-        )
+    ) -> Response:
+        pkce_cookie_name: str | None = None
 
-        if account_email is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
-            )
+        def delete_pkce_cookie(response: Response) -> None:
+            if enable_pkce and pkce_cookie_name:
+                response.delete_cookie(
+                    key=pkce_cookie_name,
+                    path=csrf_token_cookie_path,
+                    domain=csrf_token_cookie_domain,
+                    secure=csrf_token_cookie_secure,
+                    httponly=csrf_token_cookie_httponly,
+                    samesite=csrf_token_cookie_samesite,
+                )
 
-        try:
-            state_data = decode_jwt(state, state_secret, [STATE_TOKEN_AUDIENCE])
-        except jwt.DecodeError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=getattr(
-                    ErrorCode, "ACCESS_TOKEN_DECODE_ERROR", "ACCESS_TOKEN_DECODE_ERROR"
-                ),
-            )
-        except jwt.ExpiredSignatureError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=getattr(
-                    ErrorCode,
-                    "ACCESS_TOKEN_ALREADY_EXPIRED",
-                    "ACCESS_TOKEN_ALREADY_EXPIRED",
-                ),
-            )
+        def build_error_response(exc: OnyxError) -> JSONResponse:
+            log_onyx_error(exc)
+            error_response = onyx_error_to_json_response(exc)
+            delete_pkce_cookie(error_response)
+            return error_response
 
-        cookie_csrf_token = request.cookies.get(csrf_token_cookie_name)
-        state_csrf_token = state_data.get(CSRF_TOKEN_KEY)
-        if (
-            not cookie_csrf_token
-            or not state_csrf_token
-            or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
-            )
+        def decode_and_validate_state(state_value: str) -> Dict[str, str]:
+            try:
+                state_data = decode_jwt(
+                    state_value, state_secret, [STATE_TOKEN_AUDIENCE]
+                )
+            except jwt.DecodeError:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    getattr(
+                        ErrorCode,
+                        "ACCESS_TOKEN_DECODE_ERROR",
+                        "ACCESS_TOKEN_DECODE_ERROR",
+                    ),
+                )
+            except jwt.ExpiredSignatureError:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    getattr(
+                        ErrorCode,
+                        "ACCESS_TOKEN_ALREADY_EXPIRED",
+                        "ACCESS_TOKEN_ALREADY_EXPIRED",
+                    ),
+                )
+            except jwt.PyJWTError:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    getattr(
+                        ErrorCode,
+                        "ACCESS_TOKEN_DECODE_ERROR",
+                        "ACCESS_TOKEN_DECODE_ERROR",
+                    ),
+                )
 
-        next_url = state_data.get("next_url", "/")
-        referral_source = state_data.get("referral_source", None)
-        try:
-            tenant_id = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
-            )(account_email)
-        except exceptions.UserNotExists:
-            tenant_id = None
+            cookie_csrf_token = request.cookies.get(csrf_token_cookie_name)
+            state_csrf_token = state_data.get(CSRF_TOKEN_KEY)
+            if (
+                not cookie_csrf_token
+                or not state_csrf_token
+                or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
+            ):
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
+                )
 
-        request.state.referral_source = referral_source
+            return state_data
 
-        # Proceed to authenticate or create the user
-        try:
-            user = await user_manager.oauth_callback(
-                oauth_client.name,
-                token["access_token"],
-                account_id,
-                account_email,
-                token.get("expires_at"),
-                token.get("refresh_token"),
-                request,
-                associate_by_email=associate_by_email,
-                is_verified_by_default=is_verified_by_default,
-            )
-        except UserAlreadyExists:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorCode.OAUTH_USER_ALREADY_EXISTS,
-            )
+        token: OAuth2Token
+        state_data: Dict[str, str]
 
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorCode.LOGIN_BAD_CREDENTIALS,
-            )
+        # `code`, `state`, and `error` are read directly only in the PKCE path.
+        # In the non-PKCE path, `oauth2_authorize_callback` consumes them.
+        if enable_pkce:
+            if state is not None:
+                pkce_cookie_name = get_pkce_cookie_name(state)
 
-        # Login user
-        response = await backend.login(strategy, user)
-        await user_manager.on_after_login(user, request, response)
+            if error is not None:
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Authorization request failed or was denied",
+                    )
+                )
+            if code is None:
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Missing authorization code in OAuth callback",
+                    )
+                )
+            if state is None:
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Missing state parameter in OAuth callback",
+                    )
+                )
 
-        # Prepare redirect response
-        if tenant_id is None:
-            # Use URL utility to add parameters
-            redirect_url = add_url_params(next_url, {"new_team": "true"})
-            redirect_response = RedirectResponse(redirect_url, status_code=302)
-        else:
-            # No parameters to add
-            redirect_response = RedirectResponse(next_url, status_code=302)
+            state_value = state
 
-        # Copy headers from auth response to redirect response, with special handling for Set-Cookie
-        for header_name, header_value in response.headers.items():
-            # FastAPI can have multiple Set-Cookie headers as a list
-            if header_name.lower() == "set-cookie" and isinstance(header_value, list):
-                for cookie_value in header_value:
-                    redirect_response.headers.append(header_name, cookie_value)
+            if redirect_url is not None:
+                callback_redirect_url = redirect_url
             else:
+                callback_path = request.app.url_path_for(callback_route_name)
+                callback_redirect_url = f"{WEB_DOMAIN}{callback_path}"
+
+            code_verifier = request.cookies.get(cast(str, pkce_cookie_name))
+            if not code_verifier:
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Missing PKCE verifier cookie in OAuth callback",
+                    )
+                )
+
+            try:
+                state_data = decode_and_validate_state(state_value)
+            except OnyxError as e:
+                return build_error_response(e)
+
+            try:
+                token = await oauth_client.get_access_token(
+                    code, callback_redirect_url, code_verifier
+                )
+            except GetAccessTokenError:
+                return build_error_response(
+                    OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR,
+                        "Authorization code exchange failed",
+                    )
+                )
+        else:
+            if access_token_state is None:
+                raise OnyxError(
+                    OnyxErrorCode.INTERNAL_ERROR, "Missing OAuth callback state"
+                )
+            token, callback_state = access_token_state
+            if callback_state is None:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    "Missing state parameter in OAuth callback",
+                )
+            state_data = decode_and_validate_state(callback_state)
+
+        async def complete_login_flow(
+            token: OAuth2Token, state_data: Dict[str, str]
+        ) -> RedirectResponse:
+            account_id, account_email = await oauth_client.get_id_email(
+                token["access_token"]
+            )
+
+            if account_email is None:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+                )
+
+            next_url = state_data.get("next_url", "/")
+            referral_source = state_data.get("referral_source", None)
+            try:
+                tenant_id = fetch_ee_implementation_or_noop(
+                    "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+                )(account_email)
+            except exceptions.UserNotExists:
+                tenant_id = None
+
+            request.state.referral_source = referral_source
+
+            # Proceed to authenticate or create the user
+            try:
+                user = await user_manager.oauth_callback(
+                    oauth_client.name,
+                    token["access_token"],
+                    account_id,
+                    account_email,
+                    token.get("expires_at"),
+                    token.get("refresh_token"),
+                    request,
+                    associate_by_email=associate_by_email,
+                    is_verified_by_default=is_verified_by_default,
+                )
+            except UserAlreadyExists:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    ErrorCode.OAUTH_USER_ALREADY_EXISTS,
+                )
+
+            if not user.is_active:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    ErrorCode.LOGIN_BAD_CREDENTIALS,
+                )
+
+            # Login user
+            response = await backend.login(strategy, user)
+            await user_manager.on_after_login(user, request, response)
+
+            # Prepare redirect response
+            if tenant_id is None:
+                # Use URL utility to add parameters
+                redirect_destination = add_url_params(next_url, {"new_team": "true"})
+                redirect_response = RedirectResponse(
+                    redirect_destination, status_code=302
+                )
+            else:
+                # No parameters to add
+                redirect_response = RedirectResponse(next_url, status_code=302)
+
+            # Copy headers from auth response to redirect response, with special handling for Set-Cookie
+            for header_name, header_value in response.headers.items():
+                header_name_lower = header_name.lower()
+                if header_name_lower == "set-cookie":
+                    redirect_response.headers.append(header_name, header_value)
+                    continue
+                if header_name_lower in {"location", "content-length"}:
+                    continue
                 redirect_response.headers[header_name] = header_value
 
-        if hasattr(response, "body"):
-            redirect_response.body = response.body
-        if hasattr(response, "status_code"):
-            redirect_response.status_code = response.status_code
-        if hasattr(response, "media_type"):
-            redirect_response.media_type = response.media_type
+            return redirect_response
 
-        return redirect_response
+        if enable_pkce:
+            try:
+                redirect_response = await complete_login_flow(token, state_data)
+            except OnyxError as e:
+                return build_error_response(e)
+            delete_pkce_cookie(redirect_response)
+            return redirect_response
+
+        return await complete_login_flow(token, state_data)
 
     return router

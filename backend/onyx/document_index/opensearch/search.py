@@ -255,8 +255,12 @@ class DocumentQuery:
                 f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
             )
 
+        # TODO(andrei, yuhong): We can tune this more dynamically based on
+        # num_hits.
+        max_results_per_subquery = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES
+
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
-            query_text, query_vector
+            query_text, query_vector, vector_candidates=max_results_per_subquery
         )
         hybrid_search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
@@ -285,13 +289,16 @@ class DocumentQuery:
         hybrid_search_query: dict[str, Any] = {
             "hybrid": {
                 "queries": hybrid_search_subqueries,
-                # Max results per subquery per shard before aggregation. Ensures keyword and vector
-                # subqueries contribute equally to the candidate pool for hybrid fusion.
+                # Max results per subquery per shard before aggregation. Ensures
+                # keyword and vector subqueries contribute equally to the
+                # candidate pool for hybrid fusion.
                 # Sources:
                 # https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/pagination/
                 # https://opensearch.org/blog/navigating-pagination-in-hybrid-queries-with-the-pagination_depth-parameter/
-                "pagination_depth": DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
-                # Applied to all the sub-queries independently (this avoids having subqueries having a lot of results thrown out).
+                "pagination_depth": max_results_per_subquery,
+                # Applied to all the sub-queries independently (this avoids
+                # subqueries having a lot of results thrown out during
+                # aggregation).
                 # Sources:
                 # https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
                 # https://opensearch.org/blog/introducing-common-filter-support-for-hybrid-search-queries
@@ -374,9 +381,10 @@ class DocumentQuery:
     def _get_hybrid_search_subqueries(
         query_text: str,
         query_vector: list[float],
-        # The default number of neighbors to consider for knn vector similarity search.
-        # This is higher than the number of results because the scoring is hybrid.
-        # for a detailed breakdown, see where the default value is set.
+        # The default number of neighbors to consider for knn vector similarity
+        # search. This is higher than the number of results because the scoring
+        # is hybrid. For a detailed breakdown, see where the default value is
+        # set.
         vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
     ) -> list[dict[str, Any]]:
         """Returns subqueries for hybrid search.
@@ -400,20 +408,27 @@ class DocumentQuery:
         in a single hybrid query. Source:
         https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
 
-        NOTE: Each query is independent during the search phase, there is no backfilling of scores for missing query components.
-        What this means is that if a document was a good vector match but did not show up for keyword, it gets a score of 0 for
-        the keyword component of the hybrid scoring. This is not as bad as just disregarding a score though as there is
-        normalization applied after. So really it is "increasing" the missing score compared to if it was included and the range
-        was renormalized. This does however mean that between docs that have high scores for say the vector field, the keyword
-        scores between them are completely ignored unless they also showed up in the keyword query as a reasonably high match.
-        TLDR, this is a bit of unique funky behavior but it seems ok.
+        NOTE: Each query is independent during the search phase, there is no
+        backfilling of scores for missing query components. What this means is
+        that if a document was a good vector match but did not show up for
+        keyword, it gets a score of 0 for the keyword component of the hybrid
+        scoring. This is not as bad as just disregarding a score though as there
+        is normalization applied after. So really it is "increasing" the missing
+        score compared to if it was included and the range was renormalized.
+        This does however mean that between docs that have high scores for say
+        the vector field, the keyword scores between them are completely ignored
+        unless they also showed up in the keyword query as a reasonably high
+        match. TLDR, this is a bit of unique funky behavior but it seems ok.
 
         NOTE: Options considered and rejected:
-        - minimum_should_match: Since it's hybrid search and users often provide semantic queries, there is often a lot of terms,
-          and very low number of meaningful keywords (and a low ratio of keywords).
-        - fuzziness AUTO: typo tolerance (0/1/2 edit distance by term length). It's mostly for typos as the analyzer ("english by
-          default") already does some stemming and tokenization. In testing datasets, this makes recall slightly worse. It also is
-          less performant so not really any reason to do it.
+        - minimum_should_match: Since it's hybrid search and users often provide
+          semantic queries, there is often a lot of terms, and very low number
+          of meaningful keywords (and a low ratio of keywords).
+        - fuzziness AUTO: Typo tolerance (0/1/2 edit distance by term length).
+          It's mostly for typos as the analyzer ("english" by default) already
+          does some stemming and tokenization. In testing datasets, this makes
+          recall slightly worse. It also is less performant so not really any
+          reason to do it.
 
         Args:
             query_text: The text of the query to search for.
@@ -698,41 +713,6 @@ class DocumentQuery:
             """
             return {"terms": {ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: node_ids}}
 
-        def _get_assistant_knowledge_filter(
-            attached_doc_ids: list[str] | None,
-            node_ids: list[int] | None,
-            file_ids: list[UUID] | None,
-            document_sets: list[str] | None,
-        ) -> dict[str, Any]:
-            """Combined filter for assistant knowledge.
-
-            When an assistant has attached knowledge, search should be scoped to:
-            - Documents explicitly attached (by document ID), OR
-            - Documents under attached hierarchy nodes (by ancestor node IDs), OR
-            - User-uploaded files attached to the assistant, OR
-            - Documents in the assistant's document sets (if any)
-            """
-            knowledge_filter: dict[str, Any] = {
-                "bool": {"should": [], "minimum_should_match": 1}
-            }
-            if attached_doc_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_attached_document_id_filter(attached_doc_ids)
-                )
-            if node_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_hierarchy_node_filter(node_ids)
-                )
-            if file_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_user_file_id_filter(file_ids)
-                )
-            if document_sets:
-                knowledge_filter["bool"]["should"].append(
-                    _get_document_set_filter(document_sets)
-                )
-            return knowledge_filter
-
         filter_clauses: list[dict[str, Any]] = []
 
         if not include_hidden:
@@ -758,41 +738,51 @@ class DocumentQuery:
             # document's metadata list.
             filter_clauses.append(_get_tag_filter(tags))
 
-        # Check if this is an assistant knowledge search (has any assistant-scoped knowledge)
-        has_assistant_knowledge = (
+        # Knowledge scope: explicit knowledge attachments restrict what an
+        # assistant can see. When none are set the assistant searches
+        # everything.
+        #
+        # project_id / persona_id are additive: they make overflowing user files
+        # findable but must NOT trigger the restriction on their own (an agent
+        # with no explicit knowledge should search everything).
+        has_knowledge_scope = (
             attached_document_ids
             or hierarchy_node_ids
             or user_file_ids
             or document_sets
         )
 
-        if has_assistant_knowledge:
-            # If assistant has attached knowledge, scope search to that knowledge.
-            # Document sets are included in the OR filter so directly attached
-            # docs are always findable even if not in the document sets.
-            filter_clauses.append(
-                _get_assistant_knowledge_filter(
-                    attached_document_ids,
-                    hierarchy_node_ids,
-                    user_file_ids,
-                    document_sets,
+        if has_knowledge_scope:
+            knowledge_filter: dict[str, Any] = {
+                "bool": {"should": [], "minimum_should_match": 1}
+            }
+            if attached_document_ids:
+                knowledge_filter["bool"]["should"].append(
+                    _get_attached_document_id_filter(attached_document_ids)
                 )
-            )
-        elif user_file_ids:
-            # Fallback for non-assistant user file searches (e.g., project searches)
-            # If at least one user file ID is provided, the caller will only
-            # retrieve documents where the document ID is in this input list of
-            # file IDs.
-            filter_clauses.append(_get_user_file_id_filter(user_file_ids))
-
-        if project_id is not None:
-            # If a project ID is provided, the caller will only retrieve
-            # documents where the project ID provided here is present in the
-            # document's user projects list.
-            filter_clauses.append(_get_user_project_filter(project_id))
-
-        if persona_id is not None:
-            filter_clauses.append(_get_persona_filter(persona_id))
+            if hierarchy_node_ids:
+                knowledge_filter["bool"]["should"].append(
+                    _get_hierarchy_node_filter(hierarchy_node_ids)
+                )
+            if user_file_ids:
+                knowledge_filter["bool"]["should"].append(
+                    _get_user_file_id_filter(user_file_ids)
+                )
+            if document_sets:
+                knowledge_filter["bool"]["should"].append(
+                    _get_document_set_filter(document_sets)
+                )
+            # Additive: widen scope to also cover overflowing user files, but
+            # only when an explicit restriction is already in effect.
+            if project_id is not None:
+                knowledge_filter["bool"]["should"].append(
+                    _get_user_project_filter(project_id)
+                )
+            if persona_id is not None:
+                knowledge_filter["bool"]["should"].append(
+                    _get_persona_filter(persona_id)
+                )
+            filter_clauses.append(knowledge_filter)
 
         if time_cutoff is not None:
             # If a time cutoff is provided, the caller will only retrieve

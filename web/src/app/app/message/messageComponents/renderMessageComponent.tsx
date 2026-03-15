@@ -1,11 +1,14 @@
 import React, { JSX, memo } from "react";
 import {
   ChatPacket,
+  CODE_INTERPRETER_TOOL_TYPES,
   ImageGenerationToolPacket,
   Packet,
   PacketType,
   ReasoningPacket,
+  SearchToolStart,
   StopReason,
+  ToolCallArgumentDelta,
 } from "../../services/streamingModels";
 import {
   FullChatState,
@@ -26,7 +29,6 @@ import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/Deep
 import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
 import { WebSearchToolRenderer } from "./timeline/renderers/search/WebSearchToolRenderer";
 import { InternalSearchToolRenderer } from "./timeline/renderers/search/InternalSearchToolRenderer";
-import { SearchToolStart } from "../../services/streamingModels";
 
 // Different types of chat packets using discriminated unions
 interface GroupedPackets {
@@ -56,7 +58,12 @@ function isImageToolPacket(packet: Packet) {
 }
 
 function isPythonToolPacket(packet: Packet) {
-  return packet.obj.type === PacketType.PYTHON_TOOL_START;
+  return (
+    packet.obj.type === PacketType.PYTHON_TOOL_START ||
+    (packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+      (packet.obj as ToolCallArgumentDelta).tool_type ===
+        CODE_INTERPRETER_TOOL_TYPES.PYTHON)
+  );
 }
 
 function isCustomToolPacket(packet: Packet) {
@@ -159,6 +166,8 @@ function MixedContentHandler({
   chatPackets,
   imagePackets,
   chatState,
+  messageNodeId,
+  hasTimelineThinking,
   onComplete,
   animate,
   stopPacketSeen,
@@ -168,6 +177,8 @@ function MixedContentHandler({
   chatPackets: Packet[];
   imagePackets: Packet[];
   chatState: FullChatState;
+  messageNodeId?: number;
+  hasTimelineThinking?: boolean;
   onComplete: () => void;
   animate: boolean;
   stopPacketSeen: boolean;
@@ -178,6 +189,8 @@ function MixedContentHandler({
     <MessageTextRenderer
       packets={chatPackets as ChatPacket[]}
       state={chatState}
+      messageNodeId={messageNodeId}
+      hasTimelineThinking={hasTimelineThinking}
       onComplete={() => {}}
       animate={animate}
       renderType={RenderType.FULL}
@@ -205,6 +218,8 @@ function MixedContentHandler({
 interface RendererComponentProps {
   packets: Packet[];
   chatState: FullChatState;
+  messageNodeId?: number;
+  hasTimelineThinking?: boolean;
   onComplete: () => void;
   animate: boolean;
   stopPacketSeen: boolean;
@@ -222,7 +237,8 @@ function areRendererPropsEqual(
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
-    prev.chatState.assistant?.id === next.chatState.assistant?.id
+    prev.chatState.agent?.id === next.chatState.agent?.id &&
+    prev.messageNodeId === next.messageNodeId
     // Skip: onComplete, children (function refs), chatState (memoized upstream)
   );
 }
@@ -231,6 +247,8 @@ function areRendererPropsEqual(
 export const RendererComponent = memo(function RendererComponent({
   packets,
   chatState,
+  messageNodeId,
+  hasTimelineThinking,
   onComplete,
   animate,
   stopPacketSeen,
@@ -265,6 +283,8 @@ export const RendererComponent = memo(function RendererComponent({
         chatPackets={chatPackets}
         imagePackets={imagePackets}
         chatState={chatState}
+        messageNodeId={messageNodeId}
+        hasTimelineThinking={hasTimelineThinking}
         onComplete={onComplete}
         animate={animate}
         stopPacketSeen={stopPacketSeen}
@@ -285,6 +305,8 @@ export const RendererComponent = memo(function RendererComponent({
     <RendererFn
       packets={packets as any}
       state={chatState}
+      messageNodeId={messageNodeId}
+      hasTimelineThinking={hasTimelineThinking}
       onComplete={onComplete}
       animate={animate}
       renderType={RenderType.FULL}

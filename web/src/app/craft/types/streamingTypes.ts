@@ -76,7 +76,7 @@ export interface BuildMessage {
   timestamp: Date;
   /** Structured ACP event data (tool calls, thinking, plans) */
   message_metadata?: Record<string, any> | null;
-  /** Tool calls associated with this message (for assistant messages) */
+  /** Tool calls associated with this message (for agent messages) */
   toolCalls?: ToolCall[];
 }
 

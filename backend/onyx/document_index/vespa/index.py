@@ -220,7 +220,6 @@ def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk
 
 
 class VespaIndex(DocumentIndex):
-
     VESPA_SCHEMA_JINJA_FILENAME = "danswer_chunk.sd.jinja"
 
     def __init__(
@@ -465,6 +464,12 @@ class VespaIndex(DocumentIndex):
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[OldDocumentInsertionRecord]:
+        """
+        NOTE: Do NOT consider the secondary index here. A separate indexing
+        pipeline will be responsible for indexing to the secondary index. This
+        design is not ideal and we should reconsider this when revamping index
+        swapping.
+        """
         if len(index_batch_params.doc_id_to_previous_chunk_cnt) != len(
             index_batch_params.doc_id_to_new_chunk_cnt
         ):
@@ -598,10 +603,7 @@ class VespaIndex(DocumentIndex):
                     try:
                         res.raise_for_status()
                     except requests.HTTPError as e:
-                        failure_msg = (
-                            f"Failed to update document {future_to_document_id[future]}\n"
-                            f"Response: {res.text}"
-                        )
+                        failure_msg = f"Failed to update document {future_to_document_id[future]}\nResponse: {res.text}"
                         raise requests.HTTPError(failure_msg) from e
 
     def kg_chunk_updates(
@@ -659,6 +661,10 @@ class VespaIndex(DocumentIndex):
         """Note: if the document id does not exist, the update will be a no-op and the
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
+
+        NOTE: Remember to handle the secondary index here. There is no separate
+        pipeline for updating chunks in the secondary index. This design is not
+        ideal and we should reconsider this when revamping index swapping.
         """
         if fields is None and user_fields is None:
             logger.warning(
@@ -679,17 +685,13 @@ class VespaIndex(DocumentIndex):
                 f"Bug: Tenant ID mismatch. Expected {tenant_state.tenant_id}, got {tenant_id}."
             )
 
-        vespa_document_index = VespaDocumentIndex(
-            index_name=self.index_name,
-            tenant_state=tenant_state,
-            large_chunks_enabled=self.large_chunks_enabled,
-            httpx_client=self.httpx_client,
-        )
-
         project_ids: set[int] | None = None
+        # NOTE: Empty user_projects is semantically different from None
+        # user_projects.
         if user_fields is not None and user_fields.user_projects is not None:
             project_ids = set(user_fields.user_projects)
         persona_ids: set[int] | None = None
+        # NOTE: Empty personas is semantically different from None personas.
         if user_fields is not None and user_fields.personas is not None:
             persona_ids = set(user_fields.personas)
         update_request = MetadataUpdateRequest(
@@ -705,7 +707,20 @@ class VespaIndex(DocumentIndex):
             persona_ids=persona_ids,
         )
 
-        vespa_document_index.update([update_request])
+        indices = [self.index_name]
+        if self.secondary_index_name:
+            indices.append(self.secondary_index_name)
+
+        for index_name in indices:
+            vespa_document_index = VespaDocumentIndex(
+                index_name=index_name,
+                tenant_state=tenant_state,
+                large_chunks_enabled=self.index_to_large_chunks_enabled.get(
+                    index_name, False
+                ),
+                httpx_client=self.httpx_client,
+            )
+            vespa_document_index.update([update_request])
 
     def delete_single(
         self,
@@ -714,6 +729,11 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         chunk_count: int | None,
     ) -> int:
+        """
+        NOTE: Remember to handle the secondary index here. There is no separate
+        pipeline for deleting chunks in the secondary index. This design is not
+        ideal and we should reconsider this when revamping index swapping.
+        """
         tenant_state = TenantState(
             tenant_id=get_current_tenant_id(),
             multitenant=MULTI_TENANT,
@@ -726,13 +746,25 @@ class VespaIndex(DocumentIndex):
             raise ValueError(
                 f"Bug: Tenant ID mismatch. Expected {tenant_state.tenant_id}, got {tenant_id}."
             )
-        vespa_document_index = VespaDocumentIndex(
-            index_name=self.index_name,
-            tenant_state=tenant_state,
-            large_chunks_enabled=self.large_chunks_enabled,
-            httpx_client=self.httpx_client,
-        )
-        return vespa_document_index.delete(document_id=doc_id, chunk_count=chunk_count)
+        indices = [self.index_name]
+        if self.secondary_index_name:
+            indices.append(self.secondary_index_name)
+
+        total_chunks_deleted = 0
+        for index_name in indices:
+            vespa_document_index = VespaDocumentIndex(
+                index_name=index_name,
+                tenant_state=tenant_state,
+                large_chunks_enabled=self.index_to_large_chunks_enabled.get(
+                    index_name, False
+                ),
+                httpx_client=self.httpx_client,
+            )
+            total_chunks_deleted += vespa_document_index.delete(
+                document_id=doc_id, chunk_count=chunk_count
+            )
+
+        return total_chunks_deleted
 
     def id_based_retrieval(
         self,
@@ -1071,7 +1103,4 @@ class _VespaDeleteRequest:
         self.document_id = document_id
         # Encode the document ID to ensure it's safe for use in the URL
         encoded_doc_id = urllib.parse.quote_plus(self.document_id)
-        self.url = (
-            f"{VESPA_APPLICATION_ENDPOINT}/document/v1/"
-            f"{index_name}/{index_name}/docid/{encoded_doc_id}"
-        )
+        self.url = f"{VESPA_APPLICATION_ENDPOINT}/document/v1/{index_name}/{index_name}/docid/{encoded_doc_id}"

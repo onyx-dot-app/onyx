@@ -11,7 +11,8 @@ from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def test_multiple_document_sets_syncing_same_connnector(
-    reset: None, vespa_client: vespa_fixture  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,
 ) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -67,7 +68,8 @@ def test_multiple_document_sets_syncing_same_connnector(
 
 
 def test_removing_connector(
-    reset: None, vespa_client: vespa_fixture  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,
 ) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

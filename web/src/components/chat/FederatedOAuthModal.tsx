@@ -2,7 +2,7 @@
 
 import { useContext, useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/types";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { getSourceMetadata } from "@/lib/sources";
@@ -144,7 +144,7 @@ export default function FederatedOAuthModal() {
                   variant="section"
                   rightChildren={
                     <Button
-                      secondary
+                      prominence="secondary"
                       target="_blank"
                       href={connector.authorize_url}
                     >

@@ -20,10 +20,7 @@ from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
 
-VECTOR_DB_DISABLED_ERROR = (
-    "Vector DB is disabled (DISABLE_VECTOR_DB=true). "
-    "This operation requires a vector database."
-)
+VECTOR_DB_DISABLED_ERROR = "Vector DB is disabled (DISABLE_VECTOR_DB=true). This operation requires a vector database."
 
 
 class DisabledDocumentIndex(DocumentIndex):

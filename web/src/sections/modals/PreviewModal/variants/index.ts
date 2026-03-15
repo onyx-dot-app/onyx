@@ -5,7 +5,9 @@ import { pdfVariant } from "@/sections/modals/PreviewModal/variants/pdfVariant";
 import { csvVariant } from "@/sections/modals/PreviewModal/variants/csvVariant";
 import { markdownVariant } from "@/sections/modals/PreviewModal/variants/markdownVariant";
 import { dataVariant } from "@/sections/modals/PreviewModal/variants/dataVariant";
+import { textVariant } from "@/sections/modals/PreviewModal/variants/textVariant";
 import { unsupportedVariant } from "@/sections/modals/PreviewModal/variants/unsupportedVariant";
+import { docxVariant } from "@/sections/modals/PreviewModal/variants/docxVariant";
 
 // Note: Order does matter for the order that filters that are hit
 const PREVIEW_VARIANTS: PreviewVariant[] = [
@@ -13,8 +15,10 @@ const PREVIEW_VARIANTS: PreviewVariant[] = [
   imageVariant,
   pdfVariant,
   csvVariant,
-  dataVariant,
   markdownVariant,
+  docxVariant,
+  textVariant,
+  dataVariant,
 ];
 
 export function resolveVariant(

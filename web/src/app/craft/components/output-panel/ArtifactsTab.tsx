@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   SvgGlobe,
   SvgDownloadCloud,
@@ -98,7 +98,7 @@ export default function ArtifactsTab({
   const handleWebappDownload = () => {
     if (!sessionId) return;
     const link = document.createElement("a");
-    link.href = `/api/build/sessions/${sessionId}/webapp/download`;
+    link.href = `/api/build/sessions/${sessionId}/webapp-download`;
     link.download = "";
     document.body.appendChild(link);
     link.click();
@@ -162,9 +162,9 @@ export default function ArtifactsTab({
 
               <div className="flex items-center gap-2">
                 <Button
-                  tertiary
-                  action
-                  leftIcon={SvgDownloadCloud}
+                  variant="action"
+                  prominence="tertiary"
+                  icon={SvgDownloadCloud}
                   onClick={handleWebappDownload}
                 >
                   Download
@@ -263,9 +263,9 @@ function OutputEntryRow({
 
         <div className="flex items-center gap-2">
           <Button
-            tertiary
-            action
-            leftIcon={SvgDownloadCloud}
+            variant="action"
+            prominence="tertiary"
+            icon={SvgDownloadCloud}
             onClick={(e) => {
               e.stopPropagation();
               onDownload(entry.path, entry.is_directory);

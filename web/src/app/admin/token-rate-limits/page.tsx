@@ -1,7 +1,7 @@
 "use client";
 
-import { AdminPageTitle } from "@/components/admin/Title";
 import SimpleTabs from "@/refresh-components/SimpleTabs";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/components/ui/text";
 import { useState } from "react";
 import {
@@ -16,8 +16,11 @@ import { toast } from "@/hooks/useToast";
 import CreateRateLimitModal from "./CreateRateLimitModal";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgGlobe, SvgShield, SvgUser, SvgUsers } from "@opal/icons";
+import { SvgGlobe, SvgUser, SvgUsers } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTES.TOKEN_RATE_LIMITS;
 const BASE_URL = "/api/admin/token-rate-limits";
 const GLOBAL_TOKEN_FETCH_URL = `${BASE_URL}/global`;
 const USER_TOKEN_FETCH_URL = `${BASE_URL}/users`;
@@ -208,9 +211,11 @@ function Main() {
 
 export default function Page() {
   return (
-    <>
-      <AdminPageTitle title="Token Rate Limits" icon={SvgShield} />
-      <Main />
-    </>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
+      <SettingsLayouts.Body>
+        <Main />
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

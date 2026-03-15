@@ -123,15 +123,11 @@ class DocumentIndexingBatchAdapter:
         }
 
         doc_id_to_new_chunk_cnt: dict[str, int] = {
-            document_id: len(
-                [
-                    chunk
-                    for chunk in chunks_with_embeddings
-                    if chunk.source_document.id == document_id
-                ]
-            )
-            for document_id in updatable_ids
+            doc_id: 0 for doc_id in updatable_ids
         }
+        for chunk in chunks_with_embeddings:
+            if chunk.source_document.id in doc_id_to_new_chunk_cnt:
+                doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
 
         # Get ancestor hierarchy node IDs for each document
         doc_id_to_ancestor_ids = self._get_ancestor_ids_for_documents(

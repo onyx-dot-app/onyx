@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
 import { logout } from "@/lib/user";
@@ -48,7 +49,11 @@ export default function NewTenantModal({
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || "Failed to accept invitation");
+          throw new Error(
+            errorData.detail ||
+              errorData.message ||
+              "Failed to accept invitation"
+          );
         }
 
         toast.success("You have accepted the invitation.");
@@ -92,7 +97,11 @@ export default function NewTenantModal({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to decline invitation");
+        throw new Error(
+          errorData.detail ||
+            errorData.message ||
+            "Failed to decline invitation"
+        );
       }
 
       toast.info("You have declined the invitation.");
@@ -136,30 +145,29 @@ export default function NewTenantModal({
           <BasicModalFooter
             cancel={
               isInvite ? (
-                <Button
-                  onClick={handleRejectInvite}
-                  secondary
-                  disabled={isLoading}
-                  leftIcon={SvgX}
-                >
-                  Decline
-                </Button>
+                <Disabled disabled={isLoading}>
+                  <Button
+                    prominence="secondary"
+                    onClick={handleRejectInvite}
+                    icon={SvgX}
+                  >
+                    Decline
+                  </Button>
+                </Disabled>
               ) : undefined
             }
             submit={
-              <Button
-                onClick={handleJoinTenant}
-                disabled={isLoading}
-                rightIcon={SvgArrowRight}
-              >
-                {isLoading
-                  ? isInvite
-                    ? "Accepting..."
-                    : "Joining..."
-                  : isInvite
-                    ? "Accept Invitation"
-                    : "Reauthenticate"}
-              </Button>
+              <Disabled disabled={isLoading}>
+                <Button onClick={handleJoinTenant} rightIcon={SvgArrowRight}>
+                  {isLoading
+                    ? isInvite
+                      ? "Accepting..."
+                      : "Joining..."
+                    : isInvite
+                      ? "Accept Invitation"
+                      : "Reauthenticate"}
+                </Button>
+              </Disabled>
             }
           />
         </Modal.Footer>

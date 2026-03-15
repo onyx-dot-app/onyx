@@ -197,7 +197,8 @@ def _stub_role_assignment_resolution(
 @patch(f"{MODULE}._get_groups_and_members_recursively")
 @patch(f"{MODULE}.sleep_and_retry")
 def test_default_skips_ad_enumeration(
-    mock_sleep: MagicMock, mock_recursive: MagicMock  # noqa: ARG001
+    mock_sleep: MagicMock,  # noqa: ARG001
+    mock_recursive: MagicMock,
 ) -> None:
     mock_recursive.return_value = GroupsResult(
         groups_to_emails={"SiteGroup_abc": {"alice@contoso.com"}},

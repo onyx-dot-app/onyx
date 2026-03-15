@@ -1,8 +1,8 @@
 "use client";
-import { AdminPageTitle } from "@/components/admin/Title";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import {
   useCallback,
   useContext,
@@ -32,7 +32,10 @@ import { SettingsContext } from "@/providers/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
-import { SvgUploadCloud } from "@opal/icons";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+
+const route = ADMIN_ROUTES.ADD_CONNECTOR;
+
 function SourceTileTooltipWrapper({
   sourceMetadata,
   preSelect,
@@ -248,61 +251,35 @@ export default function Page() {
   };
 
   return (
-    <>
-      <AdminPageTitle
-        icon={SvgUploadCloud}
-        title="Add Connector"
-        farRightElement={
-          <Button href="/admin/indexing/status" primary>
-            See Connectors
-          </Button>
+    <SettingsLayouts.Root width="full">
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={route.title}
+        rightChildren={
+          <Button href="/admin/indexing/status">See Connectors</Button>
         }
+        separator
       />
+      <SettingsLayouts.Body>
+        <InputTypeIn
+          type="text"
+          placeholder="Search Connectors"
+          ref={searchInputRef}
+          value={rawSearchTerm} // keep the input bound to immediate state
+          onChange={(event) => setSearchTerm(event.target.value)}
+          onKeyDown={handleKeyPress}
+          className="w-96 flex-none"
+        />
 
-      <InputTypeIn
-        type="text"
-        placeholder="Search Connectors"
-        ref={searchInputRef}
-        value={rawSearchTerm} // keep the input bound to immediate state
-        onChange={(event) => setSearchTerm(event.target.value)}
-        onKeyDown={handleKeyPress}
-        className="w-96 flex-none"
-      />
-
-      {dedupedPopular.length > 0 && (
-        <div className="pt-8">
-          <Text as="p" headingH3>
-            Popular
-          </Text>
-          <div className="flex flex-wrap gap-4 p-4">
-            {dedupedPopular.map((source) => (
-              <SourceTileTooltipWrapper
-                preSelect={false}
-                key={source.internalName}
-                sourceMetadata={source}
-                federatedConnectors={federatedConnectors}
-                slackCredentials={slackCredentials}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {Object.entries(categorizedSources)
-        .filter(([_, sources]) => sources.length > 0)
-        .map(([category, sources], categoryInd) => (
-          <div key={category} className="pt-8">
+        {dedupedPopular.length > 0 && (
+          <div className="pt-8">
             <Text as="p" headingH3>
-              {category}
+              Popular
             </Text>
             <div className="flex flex-wrap gap-4 p-4">
-              {sources.map((source, sourceInd) => (
+              {dedupedPopular.map((source) => (
                 <SourceTileTooltipWrapper
-                  preSelect={
-                    (searchTerm?.length ?? 0) > 0 &&
-                    categoryInd == 0 &&
-                    sourceInd == 0
-                  }
+                  preSelect={false}
                   key={source.internalName}
                   sourceMetadata={source}
                   federatedConnectors={federatedConnectors}
@@ -311,7 +288,33 @@ export default function Page() {
               ))}
             </div>
           </div>
-        ))}
-    </>
+        )}
+
+        {Object.entries(categorizedSources)
+          .filter(([_, sources]) => sources.length > 0)
+          .map(([category, sources], categoryInd) => (
+            <div key={category} className="pt-8">
+              <Text as="p" headingH3>
+                {category}
+              </Text>
+              <div className="flex flex-wrap gap-4 p-4">
+                {sources.map((source, sourceInd) => (
+                  <SourceTileTooltipWrapper
+                    preSelect={
+                      (searchTerm?.length ?? 0) > 0 &&
+                      categoryInd == 0 &&
+                      sourceInd == 0
+                    }
+                    key={source.internalName}
+                    sourceMetadata={source}
+                    federatedConnectors={federatedConnectors}
+                    slackCredentials={slackCredentials}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

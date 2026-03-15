@@ -45,6 +45,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import ProcessingMode
+from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
 from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
@@ -58,8 +59,6 @@ from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
-from onyx.indexing.postgres_sanitization import sanitize_document_for_postgres
-from onyx.indexing.postgres_sanitization import sanitize_hierarchy_nodes_for_postgres
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import ensure_source_node_exists
 from onyx.redis.redis_hierarchy import get_node_id_from_raw_id
@@ -71,6 +70,8 @@ from onyx.server.features.build.indexing.persistent_document_writer import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
+from onyx.utils.postgres_sanitization import sanitize_document_for_postgres
+from onyx.utils.postgres_sanitization import sanitize_hierarchy_nodes_for_postgres
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
@@ -225,15 +226,13 @@ def _check_failure_threshold(
     FAILURE_RATIO_THRESHOLD = 0.1
     if total_failures > FAILURE_THRESHOLD and failure_ratio > FAILURE_RATIO_THRESHOLD:
         logger.error(
-            f"Connector run failed with '{total_failures}' errors "
-            f"after '{batch_num}' batches."
+            f"Connector run failed with '{total_failures}' errors after '{batch_num}' batches."
         )
         if last_failure and last_failure.exception:
             raise last_failure.exception from last_failure.exception
 
         raise RuntimeError(
-            f"Connector run encountered too many errors, aborting. "
-            f"Last error: {last_failure}"
+            f"Connector run encountered too many errors, aborting. Last error: {last_failure}"
         )
 
 
@@ -587,6 +586,14 @@ def connector_document_extraction(
                             is_connector_public=is_connector_public,
                         )
 
+                        upsert_hierarchy_node_cc_pair_entries(
+                            db_session=db_session,
+                            hierarchy_node_ids=[n.id for n in upserted_nodes],
+                            connector_id=db_connector.id,
+                            credential_id=db_credential.id,
+                            commit=True,
+                        )
+
                         # Cache in Redis for fast ancestor resolution during doc processing
                         redis_client = get_redis_client(tenant_id=tenant_id)
                         cache_entries = [
@@ -600,8 +607,7 @@ def connector_document_extraction(
                         )
 
                     logger.debug(
-                        f"Persisted and cached {len(hierarchy_node_batch_cleaned)} hierarchy nodes "
-                        f"for attempt={index_attempt_id}"
+                        f"Persisted and cached {len(hierarchy_node_batch_cleaned)} hierarchy nodes for attempt={index_attempt_id}"
                     )
 
                 # below is all document processing task, so if no batch we can just continue
@@ -803,15 +809,12 @@ def connector_document_extraction(
                     queue=OnyxCeleryQueues.SANDBOX,
                 )
                 logger.info(
-                    f"Triggered sandbox file sync for user {creator_id} "
-                    f"source={source_value} after indexing complete"
+                    f"Triggered sandbox file sync for user {creator_id} source={source_value} after indexing complete"
                 )
 
     except Exception as e:
         logger.exception(
-            f"Document extraction failed: "
-            f"attempt={index_attempt_id} "
-            f"error={str(e)}"
+            f"Document extraction failed: attempt={index_attempt_id} error={str(e)}"
         )
 
         # Do NOT clean up batches on failure; future runs will use those batches
@@ -947,7 +950,6 @@ def reissue_old_batches(
     # is still in the filestore waiting for processing or not.
     last_batch_num = len(old_batches) + recent_batches
     logger.info(
-        f"Starting from batch {last_batch_num} due to "
-        f"re-issued batches: {old_batches}, completed batches: {recent_batches}"
+        f"Starting from batch {last_batch_num} due to re-issued batches: {old_batches}, completed batches: {recent_batches}"
     )
     return len(old_batches), recent_batches

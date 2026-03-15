@@ -43,8 +43,7 @@ def get_credentials() -> dict[str, str]:
 
 @pytest.mark.xfail(
     reason=(
-        "Cannot get Zendesk developer account to ensure zendesk account does not "
-        "expire after 2 weeks"
+        "Cannot get Zendesk developer account to ensure zendesk account does not expire after 2 weeks"
     )
 )
 @pytest.mark.parametrize(
@@ -106,8 +105,7 @@ def test_zendesk_connector_basic(
 
 @pytest.mark.xfail(
     reason=(
-        "Cannot get Zendesk developer account to ensure zendesk account does not "
-        "expire after 2 weeks"
+        "Cannot get Zendesk developer account to ensure zendesk account does not expire after 2 weeks"
     )
 )
 def test_zendesk_connector_slim(zendesk_article_connector: ZendeskConnector) -> None:

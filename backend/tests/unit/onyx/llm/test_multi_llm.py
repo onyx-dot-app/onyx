@@ -966,7 +966,9 @@ def test_temporary_env_cleanup_on_exception(monkeypatch: pytest.MonkeyPatch) -> 
         custom_config=CUSTOM_CONFIG,
     )
 
-    def on_litellm_completion_raises(**kwargs: dict[str, Any]) -> None:  # noqa: ARG001
+    def on_litellm_completion_raises(
+        **kwargs: dict[str, Any],  # noqa: ARG001
+    ) -> None:  # noqa: ARG001
         # Validate that the environment variables are those in custom config
         for env_var, value in CUSTOM_CONFIG.items():
             assert env_var in os.environ
@@ -1214,3 +1216,218 @@ def test_multithreaded_invoke_without_custom_config_skips_env_lock() -> None:
 
     # The env lock context manager should never have been called
     mock_env_lock.assert_not_called()
+
+
+# ---- Tests for Bedrock tool content stripping ----
+
+
+def test_messages_contain_tool_content_with_tool_role() -> None:
+    from onyx.llm.multi_llm import _messages_contain_tool_content
+
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "I'll search for that."},
+        {"role": "tool", "content": "search results", "tool_call_id": "tc_1"},
+    ]
+    assert _messages_contain_tool_content(messages) is True
+
+
+def test_messages_contain_tool_content_with_tool_calls() -> None:
+    from onyx.llm.multi_llm import _messages_contain_tool_content
+
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "Hello"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "tc_1",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": "{}"},
+                }
+            ],
+        },
+    ]
+    assert _messages_contain_tool_content(messages) is True
+
+
+def test_messages_contain_tool_content_without_tools() -> None:
+    from onyx.llm.multi_llm import _messages_contain_tool_content
+
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi there!"},
+    ]
+    assert _messages_contain_tool_content(messages) is False
+
+
+def test_strip_tool_content_converts_assistant_tool_calls_to_text() -> None:
+    from onyx.llm.multi_llm import _strip_tool_content_from_messages
+
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "Search for cats"},
+        {
+            "role": "assistant",
+            "content": "Let me search.",
+            "tool_calls": [
+                {
+                    "id": "tc_1",
+                    "type": "function",
+                    "function": {
+                        "name": "search",
+                        "arguments": '{"query": "cats"}',
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "content": "Found 3 results about cats.",
+            "tool_call_id": "tc_1",
+        },
+        {"role": "assistant", "content": "Here are the results."},
+    ]
+
+    result = _strip_tool_content_from_messages(messages)
+
+    assert len(result) == 4
+
+    # First message unchanged
+    assert result[0] == {"role": "user", "content": "Search for cats"}
+
+    # Assistant with tool calls → plain text
+    assert result[1]["role"] == "assistant"
+    assert "tool_calls" not in result[1]
+    assert "Let me search." in result[1]["content"]
+    assert "[Tool Call]" in result[1]["content"]
+    assert "search" in result[1]["content"]
+    assert "tc_1" in result[1]["content"]
+
+    # Tool response → user message
+    assert result[2]["role"] == "user"
+    assert "[Tool Result]" in result[2]["content"]
+    assert "tc_1" in result[2]["content"]
+    assert "Found 3 results about cats." in result[2]["content"]
+
+    # Final assistant message unchanged
+    assert result[3] == {"role": "assistant", "content": "Here are the results."}
+
+
+def test_strip_tool_content_handles_assistant_with_no_text_content() -> None:
+    from onyx.llm.multi_llm import _strip_tool_content_from_messages
+
+    messages: list[dict[str, Any]] = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "tc_1",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": "{}"},
+                }
+            ],
+        },
+    ]
+
+    result = _strip_tool_content_from_messages(messages)
+    assert result[0]["role"] == "assistant"
+    assert "[Tool Call]" in result[0]["content"]
+    assert "tool_calls" not in result[0]
+
+
+def test_strip_tool_content_passes_through_non_tool_messages() -> None:
+    from onyx.llm.multi_llm import _strip_tool_content_from_messages
+
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": "You are helpful."},
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi!"},
+    ]
+
+    result = _strip_tool_content_from_messages(messages)
+    assert result == messages
+
+
+def test_strip_tool_content_handles_list_content_blocks() -> None:
+    from onyx.llm.multi_llm import _strip_tool_content_from_messages
+
+    messages: list[dict[str, Any]] = [
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Searching now."}],
+            "tool_calls": [
+                {
+                    "id": "tc_1",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": "{}"},
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "content": [
+                {"type": "text", "text": "result A"},
+                {"type": "text", "text": "result B"},
+            ],
+            "tool_call_id": "tc_1",
+        },
+    ]
+
+    result = _strip_tool_content_from_messages(messages)
+
+    # Assistant: list content flattened + tool call appended
+    assert result[0]["role"] == "assistant"
+    assert "Searching now." in result[0]["content"]
+    assert "[Tool Call]" in result[0]["content"]
+    assert isinstance(result[0]["content"], str)
+
+    # Tool: list content flattened into user message
+    assert result[1]["role"] == "user"
+    assert "result A" in result[1]["content"]
+    assert "result B" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
+
+
+def test_strip_tool_content_merges_consecutive_tool_results() -> None:
+    """Bedrock requires strict user/assistant alternation. Multiple parallel
+    tool results must be merged into a single user message."""
+    from onyx.llm.multi_llm import _strip_tool_content_from_messages
+
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "weather and news?"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "tc_1",
+                    "type": "function",
+                    "function": {"name": "search_weather", "arguments": "{}"},
+                },
+                {
+                    "id": "tc_2",
+                    "type": "function",
+                    "function": {"name": "search_news", "arguments": "{}"},
+                },
+            ],
+        },
+        {"role": "tool", "content": "sunny 72F", "tool_call_id": "tc_1"},
+        {"role": "tool", "content": "headline news", "tool_call_id": "tc_2"},
+        {"role": "assistant", "content": "Here are the results."},
+    ]
+
+    result = _strip_tool_content_from_messages(messages)
+
+    # user, assistant (flattened), user (merged tool results), assistant
+    assert len(result) == 4
+    roles = [m["role"] for m in result]
+    assert roles == ["user", "assistant", "user", "assistant"]
+
+    # Both tool results merged into one user message
+    merged = result[2]["content"]
+    assert "tc_1" in merged
+    assert "sunny 72F" in merged
+    assert "tc_2" in merged
+    assert "headline news" in merged

@@ -1,10 +1,8 @@
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage } from "@/lib/languages";
-import { CodeBlock } from "@/app/app/message/CodeBlock";
-import { extractCodeText } from "@/app/app/message/codeUtils";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
+import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
 import {
   CopyButton,
   DownloadButton,
@@ -15,6 +13,7 @@ export const codeVariant: PreviewVariant = {
   width: "md",
   height: "lg",
   needsTextContent: true,
+  codeBackground: true,
 
   headerDescription: (ctx) =>
     ctx.fileContent
@@ -24,20 +23,7 @@ export const codeVariant: PreviewVariant = {
       : "",
 
   renderContent: (ctx) => (
-    <MinimalMarkdown
-      content={`\`\`\`${ctx.language}\n${ctx.fileContent}\n\n\`\`\``}
-      className="w-full break-words h-full"
-      components={{
-        code: ({ node, children }: any) => {
-          const codeText = extractCodeText(node, ctx.fileContent, children);
-          return (
-            <CodeBlock className="" codeText={codeText}>
-              {children}
-            </CodeBlock>
-          );
-        },
-      }}
-    />
+    <CodePreview normalize content={ctx.fileContent} language={ctx.language} />
   ),
 
   renderFooterLeft: (ctx) => (

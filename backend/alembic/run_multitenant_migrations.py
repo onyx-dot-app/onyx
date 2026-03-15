@@ -13,6 +13,7 @@ Usage examples::
     # custom settings
     python alembic/run_multitenant_migrations.py -j 8 -b 100
 """
+
 from __future__ import annotations
 
 import argparse
@@ -117,8 +118,7 @@ def run_migrations_parallel(
     batches = [schemas[i : i + batch_size] for i in range(0, len(schemas), batch_size)]
     total_batches = len(batches)
     print(
-        f"{len(schemas)} schemas in {total_batches} batch(es) "
-        f"with {max_workers} workers (batch size: {batch_size})...",
+        f"{len(schemas)} schemas in {total_batches} batch(es) with {max_workers} workers (batch size: {batch_size})...",
         flush=True,
     )
     all_success = True
@@ -166,8 +166,7 @@ def run_migrations_parallel(
                 with lock:
                     in_flight[batch_idx] = batch
                 print(
-                    f"Batch {batch_idx + 1}/{total_batches} started "
-                    f"({len(batch)} schemas): {', '.join(batch)}",
+                    f"Batch {batch_idx + 1}/{total_batches} started ({len(batch)} schemas): {', '.join(batch)}",
                     flush=True,
                 )
                 result = run_alembic_for_batch(batch)
@@ -201,7 +200,7 @@ def run_migrations_parallel(
 
                 except Exception as e:
                     print(
-                        f"Batch {batch_idx + 1}/{total_batches} " f"✗ exception: {e}",
+                        f"Batch {batch_idx + 1}/{total_batches} ✗ exception: {e}",
                         flush=True,
                     )
                     all_success = False
@@ -268,14 +267,12 @@ def main() -> int:
 
     if not schemas_to_migrate:
         print(
-            f"All {len(tenant_schemas)} tenants are already at head "
-            f"revision ({head_rev})."
+            f"All {len(tenant_schemas)} tenants are already at head revision ({head_rev})."
         )
         return 0
 
     print(
-        f"{len(schemas_to_migrate)}/{len(tenant_schemas)} tenants need "
-        f"migration (head: {head_rev})."
+        f"{len(schemas_to_migrate)}/{len(tenant_schemas)} tenants need migration (head: {head_rev})."
     )
 
     success = run_migrations_parallel(

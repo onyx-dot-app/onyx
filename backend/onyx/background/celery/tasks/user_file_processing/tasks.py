@@ -12,9 +12,9 @@ from redis import Redis
 from redis.lock import Lock as RedisLock
 from retry import retry
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.access.access import build_access_for_user_files
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
@@ -43,7 +43,9 @@ from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
+from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.file_store.file_store import get_default_file_store
@@ -54,6 +56,7 @@ from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAd
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.redis.redis_pool import get_redis_client
+from onyx.utils.variable_functionality import global_version
 
 
 def _as_uuid(value: str | UUID) -> UUID:
@@ -282,8 +285,7 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
             lock.release()
 
     task_logger.info(
-        f"check_user_file_processing - Enqueued {enqueued} skipped_guard={skipped_guard} "
-        f"tasks for tenant={tenant_id}"
+        f"check_user_file_processing - Enqueued {enqueued} skipped_guard={skipped_guard} tasks for tenant={tenant_id}"
     )
     return None
 
@@ -314,8 +316,7 @@ def _process_user_file_without_vector_db(
         token_count: int | None = len(encode(combined_text))
     except Exception:
         task_logger.warning(
-            f"_process_user_file_without_vector_db - "
-            f"Failed to compute token count for {uf.id}, falling back to None"
+            f"_process_user_file_without_vector_db - Failed to compute token count for {uf.id}, falling back to None"
         )
         token_count = None
 
@@ -335,8 +336,7 @@ def _process_user_file_without_vector_db(
     db_session.commit()
 
     task_logger.info(
-        f"_process_user_file_without_vector_db - "
-        f"Completed id={uf.id} tokens={token_count}"
+        f"_process_user_file_without_vector_db - Completed id={uf.id} tokens={token_count}"
     )
 
 
@@ -363,8 +363,7 @@ def _process_user_file_with_indexing(
     )
     if current_search_settings is None:
         raise RuntimeError(
-            f"_process_user_file_with_indexing - "
-            f"No current search settings found for tenant={tenant_id}"
+            f"_process_user_file_with_indexing - No current search settings found for tenant={tenant_id}"
         )
 
     adapter = UserFileIndexingAdapter(
@@ -394,8 +393,7 @@ def _process_user_file_with_indexing(
     )
 
     task_logger.info(
-        f"_process_user_file_with_indexing - "
-        f"Indexing pipeline completed ={index_pipeline_result}"
+        f"_process_user_file_with_indexing - Indexing pipeline completed ={index_pipeline_result}"
     )
 
     if (
@@ -404,8 +402,7 @@ def _process_user_file_with_indexing(
         or index_pipeline_result.total_chunks == 0
     ):
         task_logger.error(
-            f"_process_user_file_with_indexing - "
-            f"Indexing pipeline failed id={user_file_id}"
+            f"_process_user_file_with_indexing - Indexing pipeline failed id={user_file_id}"
         )
         if uf.status != UserFileStatus.DELETING:
             uf.status = UserFileStatus.FAILED
@@ -520,6 +517,7 @@ def process_user_file_impl(
         task_logger.exception(
             f"process_user_file_impl - Error processing file id={user_file_id} - {e.__class__.__name__}"
         )
+        raise
     finally:
         if file_lock is not None and file_lock.owned():
             file_lock.release()
@@ -531,7 +529,10 @@ def process_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001
+    *,
+    user_file_id: str,
+    tenant_id: str,
 ) -> None:
     process_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
@@ -675,6 +676,7 @@ def delete_user_file_impl(
         task_logger.exception(
             f"delete_user_file_impl - Error processing file id={user_file_id} - {e.__class__.__name__}"
         )
+        raise
     finally:
         if file_lock is not None and file_lock.owned():
             file_lock.release()
@@ -686,7 +688,10 @@ def delete_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file_delete(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001
+    *,
+    user_file_id: str,
+    tenant_id: str,
 ) -> None:
     delete_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
@@ -756,8 +761,7 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
             lock.release()
 
     task_logger.info(
-        f"Enqueued {enqueued} "
-        f"Skipped guard {skipped_guard} tasks for tenant={tenant_id}"
+        f"Enqueued {enqueued} Skipped guard {skipped_guard} tasks for tenant={tenant_id}"
     )
     return None
 
@@ -789,11 +793,12 @@ def project_sync_user_file_impl(
 
     try:
         with get_session_with_current_tenant() as db_session:
-            user_file = db_session.execute(
-                select(UserFile)
-                .where(UserFile.id == _as_uuid(user_file_id))
-                .options(selectinload(UserFile.assistants))
-            ).scalar_one_or_none()
+            user_files = fetch_user_files_with_access_relationships(
+                [user_file_id],
+                db_session,
+                eager_load_groups=global_version.is_ee_version(),
+            )
+            user_file = user_files[0] if user_files else None
             if not user_file:
                 task_logger.info(
                     f"project_sync_user_file_impl - User file not found id={user_file_id}"
@@ -821,12 +826,21 @@ def project_sync_user_file_impl(
 
                 project_ids = [project.id for project in user_file.projects]
                 persona_ids = [p.id for p in user_file.assistants if not p.deleted]
+
+                file_id_str = str(user_file.id)
+                access_map = build_access_for_user_files([user_file])
+                access = access_map.get(file_id_str)
+
                 for retry_document_index in retry_document_indices:
                     retry_document_index.update_single(
-                        doc_id=str(user_file.id),
+                        doc_id=file_id_str,
                         tenant_id=tenant_id,
                         chunk_count=user_file.chunk_count,
-                        fields=None,
+                        fields=(
+                            VespaDocumentFields(access=access)
+                            if access is not None
+                            else None
+                        ),
                         user_fields=VespaDocumentUserFields(
                             user_projects=project_ids,
                             personas=persona_ids,
@@ -849,6 +863,7 @@ def project_sync_user_file_impl(
         task_logger.exception(
             f"project_sync_user_file_impl - Error syncing project for file id={user_file_id} - {e.__class__.__name__}"
         )
+        raise
     finally:
         if file_lock is not None and file_lock.owned():
             file_lock.release()
@@ -860,7 +875,10 @@ def project_sync_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file_project_sync(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001
+    *,
+    user_file_id: str,
+    tenant_id: str,
 ) -> None:
     project_sync_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True

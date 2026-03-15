@@ -1,6 +1,11 @@
 """CRUD operations for HierarchyNode."""
 
+from collections import defaultdict
+
+from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -8,6 +13,7 @@ from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.models import Document
 from onyx.db.models import HierarchyNode
+from onyx.db.models import HierarchyNodeByConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -120,8 +126,7 @@ def ensure_source_node_exists(
         db_session.commit()
 
     logger.info(
-        f"Created SOURCE hierarchy node for {source.value}: "
-        f"id={source_node.id}, display_name={display_name}"
+        f"Created SOURCE hierarchy node for {source.value}: id={source_node.id}, display_name={display_name}"
     )
 
     return source_node
@@ -149,8 +154,7 @@ def resolve_parent_hierarchy_node_id(
 
     # Parent not found - fall back to SOURCE node
     logger.warning(
-        f"Parent hierarchy node not found: raw_id={raw_parent_id}, source={source}. "
-        "Falling back to SOURCE node."
+        f"Parent hierarchy node not found: raw_id={raw_parent_id}, source={source}. Falling back to SOURCE node."
     )
     source_node = get_source_hierarchy_node(db_session, source)
     return source_node.id if source_node else None
@@ -388,8 +392,7 @@ def link_hierarchy_nodes_to_documents(
 
     if nodes_to_update:
         logger.debug(
-            f"Linked {len(nodes_to_update)} hierarchy nodes to documents "
-            f"for source {source.value}"
+            f"Linked {len(nodes_to_update)} hierarchy nodes to documents for source {source.value}"
         )
 
     return len(nodes_to_update)
@@ -456,7 +459,7 @@ def get_all_hierarchy_nodes_for_source(
 def _get_accessible_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,
-    user_email: str | None,  # noqa: ARG001
+    user_email: str,  # noqa: ARG001
     external_group_ids: list[str],  # noqa: ARG001
 ) -> list[HierarchyNode]:
     """
@@ -483,7 +486,7 @@ def _get_accessible_hierarchy_nodes_for_source(
 def get_accessible_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,
-    user_email: str | None,
+    user_email: str,
     external_group_ids: list[str],
 ) -> list[HierarchyNode]:
     """
@@ -525,6 +528,53 @@ def get_document_parent_hierarchy_node_ids(
     return {doc_id: parent_id for doc_id, parent_id in results}
 
 
+def update_document_parent_hierarchy_nodes(
+    db_session: Session,
+    doc_parent_map: dict[str, int | None],
+    commit: bool = True,
+) -> int:
+    """Bulk-update Document.parent_hierarchy_node_id for multiple documents.
+
+    Only updates rows whose current value differs from the desired value to
+    avoid unnecessary writes.
+
+    Args:
+        db_session: SQLAlchemy session
+        doc_parent_map: Mapping of document_id → desired parent_hierarchy_node_id
+        commit: Whether to commit the transaction
+
+    Returns:
+        Number of documents actually updated
+    """
+    if not doc_parent_map:
+        return 0
+
+    doc_ids = list(doc_parent_map.keys())
+    existing = get_document_parent_hierarchy_node_ids(db_session, doc_ids)
+
+    by_parent: dict[int | None, list[str]] = defaultdict(list)
+    for doc_id, desired_parent_id in doc_parent_map.items():
+        current = existing.get(doc_id)
+        if current == desired_parent_id or doc_id not in existing:
+            continue
+        by_parent[desired_parent_id].append(doc_id)
+
+    updated = 0
+    for desired_parent_id, ids in by_parent.items():
+        db_session.query(Document).filter(Document.id.in_(ids)).update(
+            {Document.parent_hierarchy_node_id: desired_parent_id},
+            synchronize_session=False,
+        )
+        updated += len(ids)
+
+    if commit:
+        db_session.commit()
+    elif updated:
+        db_session.flush()
+
+    return updated
+
+
 def update_hierarchy_node_permissions(
     db_session: Session,
     raw_node_id: str,
@@ -556,8 +606,7 @@ def update_hierarchy_node_permissions(
 
     if not existing_node:
         logger.warning(
-            f"Hierarchy node not found for permission update: "
-            f"raw_node_id={raw_node_id}, source={source}"
+            f"Hierarchy node not found for permission update: raw_node_id={raw_node_id}, source={source}"
         )
         return False
 
@@ -571,3 +620,154 @@ def update_hierarchy_node_permissions(
         db_session.flush()
 
     return True
+
+
+def upsert_hierarchy_node_cc_pair_entries(
+    db_session: Session,
+    hierarchy_node_ids: list[int],
+    connector_id: int,
+    credential_id: int,
+    commit: bool = True,
+) -> None:
+    """Insert rows into HierarchyNodeByConnectorCredentialPair, ignoring conflicts.
+
+    This records that the given cc_pair "owns" these hierarchy nodes. Used by
+    indexing, pruning, and hierarchy-fetching paths.
+    """
+    if not hierarchy_node_ids:
+        return
+
+    _M = HierarchyNodeByConnectorCredentialPair
+    stmt = pg_insert(_M).values(
+        [
+            {
+                _M.hierarchy_node_id: node_id,
+                _M.connector_id: connector_id,
+                _M.credential_id: credential_id,
+            }
+            for node_id in hierarchy_node_ids
+        ]
+    )
+    stmt = stmt.on_conflict_do_nothing()
+    db_session.execute(stmt)
+
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
+
+
+def remove_stale_hierarchy_node_cc_pair_entries(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    live_hierarchy_node_ids: set[int],
+    commit: bool = True,
+) -> int:
+    """Delete join-table rows for this cc_pair that are NOT in the live set.
+
+    If ``live_hierarchy_node_ids`` is empty ALL rows for the cc_pair are deleted
+    (i.e. the connector no longer has any hierarchy nodes). Callers that want a
+    no-op when there are no live nodes must guard before calling.
+
+    Returns the number of deleted rows.
+    """
+    stmt = delete(HierarchyNodeByConnectorCredentialPair).where(
+        HierarchyNodeByConnectorCredentialPair.connector_id == connector_id,
+        HierarchyNodeByConnectorCredentialPair.credential_id == credential_id,
+    )
+    if live_hierarchy_node_ids:
+        stmt = stmt.where(
+            HierarchyNodeByConnectorCredentialPair.hierarchy_node_id.notin_(
+                live_hierarchy_node_ids
+            )
+        )
+
+    result: CursorResult = db_session.execute(stmt)  # type: ignore[assignment]
+    deleted = result.rowcount
+
+    if commit:
+        db_session.commit()
+    elif deleted:
+        db_session.flush()
+
+    return deleted
+
+
+def delete_orphaned_hierarchy_nodes(
+    db_session: Session,
+    source: DocumentSource,
+    commit: bool = True,
+) -> list[str]:
+    """Delete hierarchy nodes for a source that have zero cc_pair associations.
+
+    SOURCE-type nodes are excluded (they are synthetic roots).
+
+    Returns the list of raw_node_ids that were deleted (for cache eviction).
+    """
+    # Find orphaned nodes: no rows in the join table
+    orphan_stmt = (
+        select(HierarchyNode.id, HierarchyNode.raw_node_id)
+        .outerjoin(
+            HierarchyNodeByConnectorCredentialPair,
+            HierarchyNode.id
+            == HierarchyNodeByConnectorCredentialPair.hierarchy_node_id,
+        )
+        .where(
+            HierarchyNode.source == source,
+            HierarchyNode.node_type != HierarchyNodeType.SOURCE,
+            HierarchyNodeByConnectorCredentialPair.hierarchy_node_id.is_(None),
+        )
+    )
+    orphans = db_session.execute(orphan_stmt).all()
+    if not orphans:
+        return []
+
+    orphan_ids = [row[0] for row in orphans]
+    deleted_raw_ids = [row[1] for row in orphans]
+
+    db_session.execute(delete(HierarchyNode).where(HierarchyNode.id.in_(orphan_ids)))
+
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
+
+    return deleted_raw_ids
+
+
+def reparent_orphaned_hierarchy_nodes(
+    db_session: Session,
+    source: DocumentSource,
+    commit: bool = True,
+) -> list[HierarchyNode]:
+    """Re-parent hierarchy nodes whose parent_id is NULL to the SOURCE node.
+
+    After pruning deletes stale nodes, their former children get parent_id=NULL
+    via the SET NULL cascade. This function points them back to the SOURCE root.
+
+    Returns the reparented HierarchyNode objects (with updated parent_id)
+    so callers can refresh downstream caches.
+    """
+    source_node = get_source_hierarchy_node(db_session, source)
+    if not source_node:
+        return []
+
+    stmt = select(HierarchyNode).where(
+        HierarchyNode.source == source,
+        HierarchyNode.parent_id.is_(None),
+        HierarchyNode.node_type != HierarchyNodeType.SOURCE,
+    )
+    orphans = list(db_session.execute(stmt).scalars().all())
+    if not orphans:
+        return []
+
+    for node in orphans:
+        node.parent_id = source_node.id
+
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
+
+    return orphans

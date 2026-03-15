@@ -68,6 +68,7 @@ def get_external_access_for_raw_gdrive_file(
     company_domain: str,
     retriever_drive_service: GoogleDriveService | None,
     admin_drive_service: GoogleDriveService,
+    fallback_user_email: str,
     add_prefix: bool = False,
 ) -> ExternalAccess:
     """
@@ -79,6 +80,11 @@ def get_external_access_for_raw_gdrive_file(
                 set add_prefix to True so group IDs are prefixed with the source type.
                 When invoked from doc_sync (permission sync), use the default (False)
                 since upsert_document_external_perms handles prefixing.
+    fallback_user_email: When we cannot retrieve any permission info for a file
+                (e.g. externally-owned files where the API returns no permissions
+                and permissions.list returns 403), fall back to granting access
+                to this user. This is typically the impersonated org user whose
+                drive contained the file.
     """
     doc_id = file.get("id")
     if not doc_id:
@@ -109,13 +115,32 @@ def get_external_access_for_raw_gdrive_file(
         )
         if len(permissions_list) != len(permission_ids) and retriever_drive_service:
             logger.warning(
-                f"Failed to get all permissions for file {doc_id} with retriever service, "
-                "trying admin service"
+                f"Failed to get all permissions for file {doc_id} with retriever service, trying admin service"
             )
             backup_permissions_list = _get_permissions(admin_drive_service)
             permissions_list = _merge_permissions_lists(
                 [permissions_list, backup_permissions_list]
             )
+
+    # For externally-owned files, the Drive API may return no permissions
+    # and permissions.list may return 403. In this case, fall back to
+    # granting access to the user who found the file in their drive.
+    # Note, even if other users also have access to this file,
+    # they will not be granted access in Onyx.
+    # We check permissions_list (the final result after all fetch attempts)
+    # rather than the raw fields, because permission_ids may be present
+    # but the actual fetch can still return empty due to a 403.
+    if not permissions_list:
+        logger.info(
+            f"No permission info available for file {doc_id} "
+            f"(likely owned by a user outside of your organization). "
+            f"Falling back to granting access to retriever user: {fallback_user_email}"
+        )
+        return ExternalAccess(
+            external_user_emails={fallback_user_email},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
 
     folder_ids_to_inherit_permissions_from: set[str] = set()
     user_emails: set[str] = set()
@@ -140,9 +165,7 @@ def get_external_access_for_raw_gdrive_file(
                 user_emails.add(permission.email_address)
             else:
                 logger.error(
-                    "Permission is type `user` but no email address is "
-                    f"provided for document {doc_id}"
-                    f"\n {permission}"
+                    f"Permission is type `user` but no email address is provided for document {doc_id}\n {permission}"
                 )
         elif permission.type == PermissionType.GROUP:
             # groups are represented as email addresses within Drive
@@ -150,17 +173,14 @@ def get_external_access_for_raw_gdrive_file(
                 group_emails.add(permission.email_address)
             else:
                 logger.error(
-                    "Permission is type `group` but no email address is "
-                    f"provided for document {doc_id}"
-                    f"\n {permission}"
+                    f"Permission is type `group` but no email address is provided for document {doc_id}\n {permission}"
                 )
         elif permission.type == PermissionType.DOMAIN and company_domain:
             if permission.domain == company_domain:
                 public = True
             else:
                 logger.warning(
-                    "Permission is type domain but does not match company domain:"
-                    f"\n {permission}"
+                    f"Permission is type domain but does not match company domain:\n {permission}"
                 )
         elif permission.type == PermissionType.ANYONE:
             public = True

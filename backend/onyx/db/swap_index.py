@@ -111,7 +111,7 @@ def _perform_index_swap(
         for x in range(VESPA_NUM_ATTEMPTS_ON_STARTUP):
             try:
                 logger.notice(
-                    f"Document index {document_index.__class__.__name__} swap (attempt {x+1}/{VESPA_NUM_ATTEMPTS_ON_STARTUP})..."
+                    f"Document index {document_index.__class__.__name__} swap (attempt {x + 1}/{VESPA_NUM_ATTEMPTS_ON_STARTUP})..."
                 )
                 document_index.ensure_indices_exist(
                     primary_embedding_dim=new_search_settings.final_embedding_dim,

@@ -417,8 +417,7 @@ def restore_session(
 
             if not is_healthy:
                 logger.warning(
-                    f"Sandbox {sandbox.id} marked as RUNNING but pod is "
-                    f"unhealthy/missing. Entering recovery mode."
+                    f"Sandbox {sandbox.id} marked as RUNNING but pod is unhealthy/missing. Entering recovery mode."
                 )
                 # Terminate to clean up any lingering K8s resources
                 sandbox_manager.terminate(sandbox.id)
@@ -504,8 +503,7 @@ def restore_session(
                     db_session.commit()
         else:
             logger.warning(
-                f"Sandbox {sandbox.id} status is {sandbox.status} after "
-                f"re-provision, expected RUNNING"
+                f"Sandbox {sandbox.id} status is {sandbox.status} after re-provision, expected RUNNING"
             )
 
     except Exception as e:
@@ -732,7 +730,7 @@ def get_webapp_info(
     return WebappInfo(**webapp_info)
 
 
-@router.get("/{session_id}/webapp/download")
+@router.get("/{session_id}/webapp-download")
 def download_webapp(
     session_id: UUID,
     user: User = Depends(current_user),

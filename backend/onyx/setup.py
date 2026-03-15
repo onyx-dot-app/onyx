@@ -61,7 +61,9 @@ logger = setup_logger()
 
 
 def setup_onyx(
-    db_session: Session, tenant_id: str, cohere_enabled: bool = False  # noqa: ARG001
+    db_session: Session,
+    tenant_id: str,  # noqa: ARG001
+    cohere_enabled: bool = False,  # noqa: ARG001
 ) -> None:
     """
     Setup Onyx for a particular tenant. In the Single Tenant case, it will set it up for the default schema
@@ -121,8 +123,7 @@ def setup_onyx(
 
     if DISABLE_VECTOR_DB:
         logger.notice(
-            "DISABLE_VECTOR_DB is set — skipping document index setup and "
-            "embedding model warm-up."
+            "DISABLE_VECTOR_DB is set — skipping document index setup and embedding model warm-up."
         )
     else:
         # Ensure Vespa is setup correctly, this step is relatively near the end
@@ -204,7 +205,7 @@ def setup_document_indices(
         for x in range(num_attempts):
             try:
                 logger.notice(
-                    f"Setting up document index {document_index.__class__.__name__} (attempt {x+1}/{num_attempts})..."
+                    f"Setting up document index {document_index.__class__.__name__} (attempt {x + 1}/{num_attempts})..."
                 )
                 document_index.ensure_indices_exist(
                     primary_embedding_dim=index_setting.final_embedding_dim,
@@ -275,9 +276,13 @@ def setup_postgres(db_session: Session) -> None:
             ],
             api_key_changed=True,
         )
-        new_llm_provider = upsert_llm_provider(
-            llm_provider_upsert_request=model_req, db_session=db_session
-        )
+        try:
+            new_llm_provider = upsert_llm_provider(
+                llm_provider_upsert_request=model_req, db_session=db_session
+            )
+        except ValueError as e:
+            logger.warning("Failed to upsert LLM provider during setup: %s", e)
+            return
         update_default_provider(
             provider_id=new_llm_provider.id, model_name=llm_model, db_session=db_session
         )
@@ -342,7 +347,7 @@ def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) ->
     VESPA_ATTEMPTS = 5
     for x in range(VESPA_ATTEMPTS):
         try:
-            logger.notice(f"Setting up Vespa (attempt {x+1}/{VESPA_ATTEMPTS})...")
+            logger.notice(f"Setting up Vespa (attempt {x + 1}/{VESPA_ATTEMPTS})...")
             VespaIndex.register_multitenant_indices(
                 indices=[index.index_name for index in supported_indices]
                 + [

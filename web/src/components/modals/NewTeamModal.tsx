@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Dialog } from "@headlessui/react";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "../context/ModalContext";
@@ -95,7 +96,9 @@ export default function NewTeamModal() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to request invite");
+        throw new Error(
+          errorData.detail || errorData.message || "Failed to request invite"
+        );
       }
 
       setHasRequestedInvite(true);
@@ -160,7 +163,7 @@ export default function NewTeamModal() {
               <div className="flex w-full pt-2">
                 <Button
                   onClick={handleContinueToNewOrg}
-                  className="w-full"
+                  width="full"
                   rightIcon={SvgArrowRight}
                 >
                   Continue with new team
@@ -177,7 +180,7 @@ export default function NewTeamModal() {
               <div className="flex w-full pt-2">
                 <Button
                   onClick={handleContinueToNewOrg}
-                  className="w-full"
+                  width="full"
                   rightIcon={SvgArrowRight}
                 >
                   Try Onyx while waiting
@@ -190,22 +193,23 @@ export default function NewTeamModal() {
                 Your join request can be approved by any admin of {appDomain}.
               </p>
               <div className="flex flex-col items-center justify-center gap-4 mt-4">
-                <Button
-                  onClick={handleRequestInvite}
-                  className="w-full"
-                  disabled={isSubmitting}
-                  leftIcon={isSubmitting ? SimpleLoader : SvgArrowUp}
-                >
-                  {isSubmitting
-                    ? "Sending request..."
-                    : "Request to join your team"}
-                </Button>
+                <Disabled disabled={isSubmitting}>
+                  <Button
+                    onClick={handleRequestInvite}
+                    width="full"
+                    icon={isSubmitting ? SimpleLoader : SvgArrowUp}
+                  >
+                    {isSubmitting
+                      ? "Sending request..."
+                      : "Request to join your team"}
+                  </Button>
+                </Disabled>
               </div>
               <Button
                 onClick={handleContinueToNewOrg}
-                className="w-full"
-                leftIcon={SvgPlus}
-                secondary
+                width="full"
+                icon={SvgPlus}
+                prominence="secondary"
               >
                 Continue with new team
               </Button>

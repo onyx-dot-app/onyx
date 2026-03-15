@@ -31,9 +31,9 @@ interface UserContextType {
   authTypeMetadata: AuthTypeMetadata;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
-  toggleAssistantPinnedStatus: (
-    currentPinnedAssistantIDs: number[],
-    assistantId: number,
+  toggleAgentPinnedStatus: (
+    currentPinnedAgentIDs: number[],
+    agentId: number,
     isPinned: boolean
   ) => Promise<boolean>;
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
@@ -46,6 +46,11 @@ interface UserContextType {
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
   updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
+  updateUserVoiceSettings: (settings: {
+    auto_send?: boolean;
+    auto_playback?: boolean;
+    playback_speed?: number;
+  }) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -282,9 +287,9 @@ export function UserProvider({
     }
   };
 
-  const toggleAssistantPinnedStatus = async (
-    currentPinnedAssistantIDs: number[],
-    assistantId: number,
+  const toggleAgentPinnedStatus = async (
+    currentPinnedAgentIDs: number[],
+    agentId: number,
     isPinned: boolean
   ) => {
     setUpToDateUser((prevUser) => {
@@ -294,21 +299,15 @@ export function UserProvider({
         preferences: {
           ...prevUser.preferences,
           pinned_assistants: isPinned
-            ? [...currentPinnedAssistantIDs, assistantId]
-            : currentPinnedAssistantIDs.filter((id) => id !== assistantId),
+            ? [...currentPinnedAgentIDs, agentId]
+            : currentPinnedAgentIDs.filter((id) => id !== agentId),
         },
       };
     });
 
-    let updatedPinnedAssistantsIds = currentPinnedAssistantIDs;
-
-    if (isPinned) {
-      updatedPinnedAssistantsIds.push(assistantId);
-    } else {
-      updatedPinnedAssistantsIds = updatedPinnedAssistantsIds.filter(
-        (id) => id !== assistantId
-      );
-    }
+    let updatedPinnedAgentsIds = isPinned
+      ? [...currentPinnedAgentIDs, agentId]
+      : currentPinnedAgentIDs.filter((id) => id !== agentId);
     try {
       const response = await fetch(`/api/user/pinned-assistants`, {
         method: "PATCH",
@@ -316,7 +315,7 @@ export function UserProvider({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ordered_assistant_ids: updatedPinnedAssistantsIds,
+          ordered_assistant_ids: updatedPinnedAgentsIds,
         }),
       });
 
@@ -466,6 +465,50 @@ export function UserProvider({
     }
   };
 
+  const updateUserVoiceSettings = async (settings: {
+    auto_send?: boolean;
+    auto_playback?: boolean;
+    playback_speed?: number;
+  }) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              voice_auto_send:
+                settings.auto_send ?? prevUser.preferences.voice_auto_send,
+              voice_auto_playback:
+                settings.auto_playback ??
+                prevUser.preferences.voice_auto_playback,
+              voice_playback_speed:
+                settings.playback_speed ??
+                prevUser.preferences.voice_playback_speed,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch("/api/voice/settings", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(settings),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update voice settings");
+      }
+    } catch (error) {
+      console.error("Error updating voice settings:", error);
+      throw error;
+    }
+  };
+
   const refreshUser = async () => {
     await fetchUser();
   };
@@ -484,7 +527,8 @@ export function UserProvider({
         updateUserChatBackground,
         updateUserDefaultModel,
         updateUserDefaultAppMode,
-        toggleAssistantPinnedStatus,
+        updateUserVoiceSettings,
+        toggleAgentPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator
         isCurator:

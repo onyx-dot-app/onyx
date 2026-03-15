@@ -18,15 +18,18 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
-  SvgBubbleText,
   SvgAddLines,
   SvgActions,
   SvgExpand,
   SvgFold,
   SvgExternalLink,
 } from "@opal/icons";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import {
+  useSettingsContext,
+  useVectorDbEnabled,
+} from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
@@ -49,13 +52,15 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import Disabled from "@/refresh-components/Disabled";
+import { Disabled } from "@opal/core";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
 
-interface DefaultAssistantConfiguration {
+const route = ADMIN_ROUTES.CHAT_PREFERENCES;
+
+interface DefaultAgentConfiguration {
   tool_ids: number[];
   system_prompt: string | null;
   default_system_prompt: string;
@@ -184,7 +189,7 @@ function ChatPreferencesForm() {
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = useVectorDbEnabled();
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -223,14 +228,14 @@ function ChatPreferencesForm() {
       })),
   }));
 
-  // Default assistant configuration (system prompt)
-  const { data: defaultAssistantConfig, mutate: mutateDefaultAssistant } =
-    useSWR<DefaultAssistantConfiguration>(
+  // Default agent configuration (system prompt)
+  const { data: defaultAgentConfig, mutate: mutateDefaultAgent } =
+    useSWR<DefaultAgentConfiguration>(
       "/api/admin/default-assistant/configuration",
       errorHandlingFetcher
     );
 
-  const enabledToolIds = defaultAssistantConfig?.tool_ids ?? [];
+  const enabledToolIds = defaultAgentConfig?.tool_ids ?? [];
 
   const isToolEnabled = useCallback(
     (toolDbId: number) => enabledToolIds.includes(toolDbId),
@@ -240,11 +245,11 @@ function ChatPreferencesForm() {
   const saveToolIds = useCallback(
     async (newToolIds: number[]) => {
       // Optimistic update so subsequent toggles read fresh state
-      const optimisticData = defaultAssistantConfig
-        ? { ...defaultAssistantConfig, tool_ids: newToolIds }
+      const optimisticData = defaultAgentConfig
+        ? { ...defaultAgentConfig, tool_ids: newToolIds }
         : undefined;
       try {
-        await mutateDefaultAssistant(
+        await mutateDefaultAgent(
           async () => {
             const response = await fetch("/api/admin/default-assistant", {
               method: "PATCH",
@@ -264,7 +269,7 @@ function ChatPreferencesForm() {
         toast.error("Failed to update tools");
       }
     },
-    [defaultAssistantConfig, mutateDefaultAssistant]
+    [defaultAgentConfig, mutateDefaultAgent]
   );
 
   const toggleTool = useCallback(
@@ -323,8 +328,8 @@ function ChatPreferencesForm() {
     <>
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
-          icon={SvgBubbleText}
-          title="Chat Preferences"
+          icon={route.icon}
+          title={route.title}
           description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
           separator
         />
@@ -385,8 +390,8 @@ function ChatPreferencesForm() {
               icon={SvgAddLines}
               onClick={() => {
                 setSystemPromptValue(
-                  defaultAssistantConfig?.system_prompt ??
-                    defaultAssistantConfig?.default_system_prompt ??
+                  defaultAgentConfig?.system_prompt ??
+                    defaultAgentConfig?.default_system_prompt ??
                     ""
                 );
                 setSystemPromptModalOpen(true);
@@ -472,7 +477,7 @@ function ChatPreferencesForm() {
 
                   <Section
                     flexDirection="row"
-                    justifyContent="start"
+                    justifyContent="between"
                     alignItems="center"
                     gap={0.25}
                   >
@@ -480,22 +485,29 @@ function ChatPreferencesForm() {
                       <EmptyMessage title="No connectors set up" />
                     ) : (
                       <>
-                        {uniqueSources.slice(0, 3).map((source) => {
-                          const meta = getSourceMetadata(source);
-                          return (
-                            <Card
-                              key={source}
-                              padding={0.75}
-                              className="w-[10rem]"
-                            >
-                              <Content
-                                icon={meta.icon}
-                                title={meta.displayName}
-                                sizePreset="main-ui"
-                              />
-                            </Card>
-                          );
-                        })}
+                        <Section
+                          flexDirection="row"
+                          justifyContent="start"
+                          alignItems="center"
+                          gap={0.25}
+                        >
+                          {uniqueSources.slice(0, 3).map((source) => {
+                            const meta = getSourceMetadata(source);
+                            return (
+                              <Card
+                                key={source}
+                                padding={0.75}
+                                className="w-[10rem]"
+                              >
+                                <Content
+                                  icon={meta.icon}
+                                  title={meta.displayName}
+                                  sizePreset="main-ui"
+                                />
+                              </Card>
+                            );
+                          })}
+                        </Section>
 
                         <Button
                           href="/admin/indexing/status"
@@ -784,7 +796,7 @@ function ChatPreferencesForm() {
                     const errorMsg = (await response.json()).detail;
                     throw new Error(errorMsg);
                   }
-                  await mutateDefaultAssistant();
+                  await mutateDefaultAgent();
                   setSystemPromptModalOpen(false);
                   toast.success("System prompt updated");
                 } catch {

@@ -223,12 +223,14 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
 
 
 def pytest_runtest_logstart(
-    nodeid: str, location: tuple[str, int | None, str]  # noqa: ARG001
+    nodeid: str,
+    location: tuple[str, int | None, str],  # noqa: ARG001
 ) -> None:
     print(f"\nTest start: {nodeid}")
 
 
 def pytest_runtest_logfinish(
-    nodeid: str, location: tuple[str, int | None, str]  # noqa: ARG001
+    nodeid: str,
+    location: tuple[str, int | None, str],  # noqa: ARG001
 ) -> None:
     print(f"\nTest end: {nodeid}")

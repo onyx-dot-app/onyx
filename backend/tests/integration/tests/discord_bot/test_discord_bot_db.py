@@ -64,7 +64,8 @@ class TestBotConfigAPI:
         db_session.commit()
 
         assert config is not None
-        assert config.bot_token == "test_token_123"
+        assert config.bot_token is not None
+        assert config.bot_token.get_value(apply_mask=False) == "test_token_123"
 
         # Cleanup
         delete_discord_bot_config(db_session)
@@ -150,7 +151,8 @@ class TestRegistrationKeyAPI:
         db_session.commit()
 
     def test_registration_key_is_unique(
-        self, db_session: Session  # noqa: ARG002
+        self,
+        db_session: Session,  # noqa: ARG002
     ) -> None:
         """Each generated key is unique."""
         keys = [generate_discord_registration_key("tenant") for _ in range(5)]

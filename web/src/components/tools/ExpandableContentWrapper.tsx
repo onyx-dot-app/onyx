@@ -1,12 +1,12 @@
 // ExpandableContentWrapper
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FileDescriptor } from "@/app/app/interfaces";
 import { cn } from "@/lib/utils";
-import TextViewModal from "@/sections/modals/TextViewModal";
+import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 
 export interface ExpandableContentWrapperProps {
@@ -17,8 +17,6 @@ export interface ExpandableContentWrapperProps {
 
 export interface ContentComponentProps {
   fileDescriptor: FileDescriptor;
-  isLoading: boolean;
-  fadeIn: boolean;
   expanded?: boolean;
 }
 
@@ -28,23 +26,8 @@ export default function ExpandableContentWrapper({
   ContentComponent,
 }: ExpandableContentWrapperProps) {
   const [expanded, setExpanded] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [fadeIn, setFadeIn] = useState(false);
 
   const toggleExpand = () => setExpanded((prev) => !prev);
-
-  // Prevent a jarring fade in
-  useEffect(() => {
-    setTimeout(() => setIsLoading(false), 300);
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading) {
-      setTimeout(() => setFadeIn(true), 50);
-    } else {
-      setFadeIn(false);
-    }
-  }, [isLoading]);
 
   const downloadFile = () => {
     const a = document.createElement("a");
@@ -57,12 +40,7 @@ export default function ExpandableContentWrapper({
   };
 
   const Content = (
-    <div
-      className={cn(
-        !expanded ? "w-message-default" : "w-full",
-        "!rounded !rounded-lg overflow-y-hidden h-full"
-      )}
-    >
+    <div className="w-message-default max-w-full !rounded-lg overflow-y-hidden h-full">
       <CardHeader className="w-full bg-background-tint-02 top-0 p-3">
         <div className="flex justify-between items-center">
           <Text className="text-ellipsis line-clamp-1" text03 mainUiAction>
@@ -100,14 +78,10 @@ export default function ExpandableContentWrapper({
         )}
       >
         <CardContent className="p-0">
-          {!expanded && (
-            <ContentComponent
-              fileDescriptor={fileDescriptor}
-              isLoading={isLoading}
-              fadeIn={fadeIn}
-              expanded={expanded}
-            />
-          )}
+          <ContentComponent
+            fileDescriptor={fileDescriptor}
+            expanded={expanded}
+          />
         </CardContent>
       </Card>
     </div>
@@ -121,7 +95,7 @@ export default function ExpandableContentWrapper({
   return (
     <>
       {expanded && (
-        <TextViewModal
+        <PreviewModal
           presentingDocument={presentingDocument}
           onClose={() => setExpanded(false)}
         />
