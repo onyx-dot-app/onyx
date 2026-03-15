@@ -300,9 +300,9 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-          # Create annotated tag (or skip if already exists)
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "✓ Tag $TAG already exists, skipping"
+          # Create annotated tag (or skip if already exists on remote)
+          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            echo "✓ Tag $TAG already exists on remote, skipping"
           else
             git tag -a "$TAG" -m "Successfully deployed version $VERSION" HEAD
             git push origin "$TAG"
