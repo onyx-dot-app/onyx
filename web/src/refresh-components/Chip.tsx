@@ -11,7 +11,7 @@ export interface ChipProps {
   rightIcon?: React.FunctionComponent<IconProps>;
   onRemove?: () => void;
   smallLabel?: boolean;
-  /** When true, applies warning-coloured styling to the right icon. */
+  /** When true, applies error styling (red tint background + red right icon). */
   error?: boolean;
 }
 

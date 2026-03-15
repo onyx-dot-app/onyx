@@ -107,7 +107,7 @@ const PopoverClose = PopoverPrimitive.Close;
  * </Popover.Content>
  * ```
  */
-type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "trigger";
+type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "trigger" | "anchor";
 const widthClasses: Record<PopoverWidths, string> = {
   fit: "w-fit",
   sm: "w-[10rem]",
@@ -115,6 +115,15 @@ const widthClasses: Record<PopoverWidths, string> = {
   lg: "w-[15rem]",
   xl: "w-[18rem]",
   trigger: "w-[var(--radix-popover-trigger-width)]",
+  anchor: "w-[var(--radix-popper-anchor-width)]",
+};
+type PopoverHeight = "fit" | "sm" | "md" | "lg" | "xl";
+const heightClasses: Record<PopoverHeight, string> = {
+  fit: "h-fit",
+  sm: "h-[10rem]",
+  md: "h-[12rem]",
+  lg: "h-[15rem]",
+  xl: "h-[18rem]",
 };
 interface PopoverContentProps
   extends WithoutStyles<
@@ -123,11 +132,13 @@ interface PopoverContentProps
   width?: PopoverWidths;
   /** Portal container. Set to a DOM element to render inside it (e.g. inside a modal). */
   container?: HTMLElement | null;
+  height?: PopoverHeight;
   ref?: React.Ref<React.ComponentRef<typeof PopoverPrimitive.Content>>;
 }
 function PopoverContent({
   width = "fit",
   container,
+  height = "fit",
   align = "center",
   sideOffset = 4,
   ref,
@@ -144,7 +155,8 @@ function PopoverContent({
           "bg-background-neutral-00 p-1 z-popover rounded-12 border shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           "max-h-[var(--radix-popover-content-available-height)]",
           "overflow-hidden",
-          widthClasses[width]
+          widthClasses[width],
+          heightClasses[height]
         )}
         {...props}
       />
