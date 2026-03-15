@@ -69,11 +69,7 @@ jobs:
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          cat >> ~/.ssh/config <<EOF
-Host *
-  StrictHostKeyChecking no
-  UserKnownHostsFile=/dev/null
-EOF
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
 
           DEPLOY_DIR="/opt/onyx"
 
@@ -129,11 +125,7 @@ EOF
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          cat >> ~/.ssh/config <<EOF
-Host *
-  StrictHostKeyChecking no
-  UserKnownHostsFile=/dev/null
-EOF
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
 
           echo "🔍 Verifying rollback health..."
 
