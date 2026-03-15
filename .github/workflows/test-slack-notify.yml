@@ -1,6 +1,9 @@
 name: Test Slack Notification
 
 on:
+  push:
+    branches:
+      - nikg/slack-id-cp
   workflow_dispatch:
 
 permissions:
