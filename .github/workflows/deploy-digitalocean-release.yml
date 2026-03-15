@@ -209,11 +209,14 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-          # Create annotated tag
-          git tag -a "$TAG" -m "Successfully deployed version $VERSION" HEAD
-          git push origin "$TAG"
-
-          echo "✓ Tagged deployment: $TAG"
+          # Create annotated tag (or skip if already exists)
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "✓ Tag $TAG already exists, skipping"
+          else
+            git tag -a "$TAG" -m "Successfully deployed version $VERSION" HEAD
+            git push origin "$TAG"
+            echo "✓ Tagged deployment: $TAG"
+          fi
 
   auto-rollback:
     needs: [extract-version, deploy, verify]
