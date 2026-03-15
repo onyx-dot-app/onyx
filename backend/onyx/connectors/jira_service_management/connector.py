@@ -197,6 +197,10 @@ class JiraServiceManagementConnector(JiraConnector):
 
         service_desk = self._get_service_desk_for_issue(issue)
         if service_desk is None:
+            logger.debug(
+                "Skipping Jira issue %s: could not map it to a known JSM service desk",
+                issue.key,
+            )
             return None
 
         request = get_customer_request(
@@ -649,7 +653,7 @@ class JiraServiceManagementConnector(JiraConnector):
         participants: list[dict[str, Any]],
         approvals: list[dict[str, Any]],
     ) -> list[BasicExpertInfo] | None:
-        primary_owners = set()
+        primary_owners: set[BasicExpertInfo] = set()
         reporter = best_effort_get_field_from_issue(issue, _FIELD_REPORTER)
         if reporter is not None and (
             reporter_info := best_effort_basic_expert_info(reporter)

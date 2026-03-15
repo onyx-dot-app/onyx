@@ -2021,8 +2021,6 @@ export interface JiraConfig {
   scoped_token?: boolean;
 }
 
-export interface JiraServiceManagementConfig extends JiraConfig {}
-
 export interface SalesforceConfig {
   requested_objects?: string[];
 }
