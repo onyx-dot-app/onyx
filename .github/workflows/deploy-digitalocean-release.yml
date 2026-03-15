@@ -65,7 +65,8 @@ jobs:
           echo "📍 Deployment directory: $DEPLOY_DIR"
 
           # Pull latest code
-          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- "$BRANCH" <<'EOSSH'
+            BRANCH="$1"
             set -e
             cd /opt/onyx || exit 1
 
