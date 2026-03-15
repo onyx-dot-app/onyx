@@ -10,6 +10,9 @@ inputs:
   failed-jobs:
     description: "Deprecated alias for details"
     required: false
+  mention:
+    description: "GitHub username to resolve to a Slack @-mention. Replaces {mention} in details."
+    required: false
   title:
     description: "Title for the notification"
     required: false
@@ -26,6 +29,7 @@ runs:
         SLACK_WEBHOOK_URL: ${{ inputs.webhook-url }}
         DETAILS: ${{ inputs.details }}
         FAILED_JOBS: ${{ inputs.failed-jobs }}
+        MENTION_USER: ${{ inputs.mention }}
         TITLE: ${{ inputs.title }}
         REF_NAME: ${{ inputs.ref-name }}
         REPO: ${{ github.repository }}
@@ -50,6 +54,27 @@ runs:
 
         if [ -z "$DETAILS" ]; then
           DETAILS="$FAILED_JOBS"
+        fi
+
+        # Resolve {mention} placeholder if a GitHub username was provided.
+        # Looks up the username in user-mappings.json (co-located with this action)
+        # and replaces {mention} with <@SLACK_ID> for a Slack @-mention.
+        # Falls back to the plain GitHub username if not found in the mapping.
+        if [ -n "$MENTION_USER" ]; then
+          MAPPINGS_FILE="${GITHUB_ACTION_PATH}/user-mappings.json"
+          slack_id="$(jq -r --arg gh "$MENTION_USER" 'to_entries[] | select(.value | ascii_downcase == ($gh | ascii_downcase)) | .key' "$MAPPINGS_FILE" 2>/dev/null | head -1)"
+
+          if [ -n "$slack_id" ]; then
+            mention_text="<@${slack_id}>"
+          else
+            mention_text="${MENTION_USER}"
+          fi
+
+          DETAILS="${DETAILS//\{mention\}/$mention_text}"
+          TITLE="${TITLE//\{mention\}/}"
+        else
+          DETAILS="${DETAILS//\{mention\}/}"
+          TITLE="${TITLE//\{mention\}/}"
         fi
 
         normalize_multiline() {
