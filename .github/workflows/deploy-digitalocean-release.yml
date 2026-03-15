@@ -122,9 +122,10 @@ jobs:
             fi
 
             echo "🔄 Starting nginx reverse proxy..."
+            # Use hop_default network (matches docker-compose.yml name: hop)
             sudo docker run -d \
               --name onyx-proxy \
-              --network onyx_default \
+              --network hop_default \
               -p 80:80 \
               -p 443:443 \
               -v $(pwd)/nginx-simple.conf:/etc/nginx/nginx.conf:ro \
