@@ -375,6 +375,8 @@ def build_queue_membership_map(
     limit_reached = False
     for queue in queues:
         path = f"servicedesk/{service_desk_id}/queue/{queue.queue_id}/issue"
+        # Keep scanning later queues after hitting the unique-issue cap so already-seen
+        # issues can still accumulate their full queue memberships across the service desk.
         for raw_issue in iter_jsm_paginated_values(
             jira_client=jira_client,
             path=path,

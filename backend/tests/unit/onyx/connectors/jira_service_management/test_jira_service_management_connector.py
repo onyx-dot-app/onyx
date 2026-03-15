@@ -296,6 +296,59 @@ def test_process_issue_uses_issue_reporter_in_text_when_request_reporter_missing
     assert document.metadata["jsm_customer"] == "Alice Customer"
 
 
+def test_process_issue_omits_agent_link_when_customer_portal_url_missing(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    issue = _create_mock_issue()
+
+    with (
+        patch(
+            "onyx.connectors.jira_service_management.connector.get_customer_request",
+            return_value={
+                "issueId": "10001",
+                "requestFieldValues": [],
+                "_links": {"agent": "/browse/HELP-1"},
+                "reporter": {},
+            },
+        ),
+        patch(
+            "onyx.connectors.jira_service_management.connector.list_request_participants",
+            return_value=[],
+        ),
+        patch(
+            "onyx.connectors.jira_service_management.connector.list_request_slas",
+            return_value=[],
+        ),
+        patch(
+            "onyx.connectors.jira_service_management.connector.list_request_approvals",
+            return_value=[],
+        ),
+        patch.object(jsm_connector, "_get_request_type_map", return_value={}),
+        patch.object(jsm_connector, "_get_request_queues", return_value=[]),
+    ):
+        document = jsm_connector._process_issue(
+            issue=issue,
+            parent_hierarchy_raw_node_id="HELP",
+        )
+
+    assert document is not None
+    assert "jsm_request_portal_url" not in document.metadata
+    section = document.sections[0]
+    assert isinstance(section, TextSection)
+    assert "Portal URL:" not in section.text
+
+
+def test_get_jql_query_raises_runtime_error_when_service_desks_become_unavailable(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    jsm_connector._service_desk_by_project_key = {}
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc).timestamp()
+    end = datetime(2024, 1, 2, tzinfo=timezone.utc).timestamp()
+
+    with pytest.raises(RuntimeError, match="Re-validate the connector settings"):
+        jsm_connector._get_jql_query(start, end)
+
+
 def test_get_request_type_map_retries_after_transient_http_error(
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
@@ -323,6 +376,28 @@ def test_get_request_type_map_retries_after_transient_http_error(
     assert second == {"11": expected}
 
 
+def test_get_request_type_map_stops_retrying_after_second_http_error(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    response = requests.Response()
+    response.status_code = 429
+    response._content = b"{}"
+    error = requests.HTTPError(response=response)
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector.list_request_types",
+        side_effect=[error, error],
+    ) as mock_list_request_types:
+        first = jsm_connector._get_request_type_map("1")
+        second = jsm_connector._get_request_type_map("1")
+        third = jsm_connector._get_request_type_map("1")
+
+    assert first == {}
+    assert second == {}
+    assert third == {}
+    assert mock_list_request_types.call_count == 2
+
+
 def test_get_request_queues_retries_after_transient_http_error(
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
@@ -346,3 +421,25 @@ def test_get_request_queues_retries_after_transient_http_error(
 
     assert first == []
     assert second == [queue]
+
+
+def test_get_request_queues_stop_retrying_after_second_http_error(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    response = requests.Response()
+    response.status_code = 503
+    response._content = b"{}"
+    error = requests.HTTPError(response=response)
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector.build_queue_membership_map",
+        side_effect=[error, error],
+    ) as mock_build_queue_membership_map:
+        first = jsm_connector._get_request_queues("1", "HELP-1")
+        second = jsm_connector._get_request_queues("1", "HELP-1")
+        third = jsm_connector._get_request_queues("1", "HELP-1")
+
+    assert first == []
+    assert second == []
+    assert third == []
+    assert mock_build_queue_membership_map.call_count == 2

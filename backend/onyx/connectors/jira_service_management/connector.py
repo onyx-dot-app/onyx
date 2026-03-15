@@ -97,9 +97,11 @@ class JiraServiceManagementConnector(JiraConnector):
         self._request_types_by_service_desk_id: dict[str, dict[str, JSMRequestType]] = (
             {}
         )
+        self._request_type_fetch_failures_by_service_desk_id: dict[str, int] = {}
         self._queue_membership_by_service_desk_id: dict[
             str, dict[str, list[JSMQueue]]
         ] = {}
+        self._queue_membership_fetch_failures_by_service_desk_id: dict[str, int] = {}
         self._warning_cache: set[str] = set()
 
     @property
@@ -111,7 +113,9 @@ class JiraServiceManagementConnector(JiraConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._service_desk_by_project_key = None
         self._request_types_by_service_desk_id.clear()
+        self._request_type_fetch_failures_by_service_desk_id.clear()
         self._queue_membership_by_service_desk_id.clear()
+        self._queue_membership_fetch_failures_by_service_desk_id.clear()
         self._warning_cache.clear()
         return super().load_credentials(credentials)
 
@@ -283,15 +287,17 @@ class JiraServiceManagementConnector(JiraConnector):
         if self.jira_project:
             service_desk_by_project_key = self._get_service_desk_by_project_key()
             if self.jira_project not in service_desk_by_project_key:
-                raise ConnectorValidationError(
-                    f"Project '{self.jira_project}' is not an accessible Jira Service Management service desk."
+                raise RuntimeError(
+                    f"Project '{self.jira_project}' is not an accessible Jira Service "
+                    "Management service desk. Re-validate the connector settings."
                 )
             return f'project = "{self.jira_project}"'
 
         project_keys = sorted(self._get_service_desk_by_project_key().keys())
         if not project_keys:
-            raise ConnectorValidationError(
-                "No Jira Service Management service desks were accessible with the provided credentials."
+            raise RuntimeError(
+                "No Jira Service Management service desks were accessible with the "
+                "provided credentials. Re-validate the connector settings."
             )
 
         if len(project_keys) == 1:
@@ -312,6 +318,13 @@ class JiraServiceManagementConnector(JiraConnector):
         self,
         service_desk_id: str,
     ) -> dict[str, JSMRequestType]:
+        if (
+            service_desk_id
+            in self._request_type_fetch_failures_by_service_desk_id
+            and self._request_type_fetch_failures_by_service_desk_id[service_desk_id] > 1
+        ):
+            return {}
+
         if service_desk_id not in self._request_types_by_service_desk_id:
             try:
                 request_types = list_request_types(
@@ -319,6 +332,16 @@ class JiraServiceManagementConnector(JiraConnector):
                     service_desk_id=service_desk_id,
                 )
             except requests.HTTPError as exc:
+                failure_count = (
+                    self._request_type_fetch_failures_by_service_desk_id.get(
+                        service_desk_id,
+                        0,
+                    )
+                    + 1
+                )
+                self._request_type_fetch_failures_by_service_desk_id[service_desk_id] = (
+                    failure_count
+                )
                 self._warn_once(
                     warning_key=f"request_types:{service_desk_id}",
                     message=(
@@ -328,6 +351,10 @@ class JiraServiceManagementConnector(JiraConnector):
                 )
                 return {}
 
+            self._request_type_fetch_failures_by_service_desk_id.pop(
+                service_desk_id,
+                None,
+            )
             self._request_types_by_service_desk_id[service_desk_id] = {
                 request_type.request_type_id: request_type for request_type in request_types
             }
@@ -375,6 +402,14 @@ class JiraServiceManagementConnector(JiraConnector):
         service_desk_id: str,
         issue_key: str,
     ) -> list[JSMQueue]:
+        if (
+            service_desk_id
+            in self._queue_membership_fetch_failures_by_service_desk_id
+            and self._queue_membership_fetch_failures_by_service_desk_id[service_desk_id]
+            > 1
+        ):
+            return []
+
         if service_desk_id not in self._queue_membership_by_service_desk_id:
             try:
                 self._queue_membership_by_service_desk_id[service_desk_id] = (
@@ -384,6 +419,16 @@ class JiraServiceManagementConnector(JiraConnector):
                     )
                 )
             except requests.HTTPError as exc:
+                failure_count = (
+                    self._queue_membership_fetch_failures_by_service_desk_id.get(
+                        service_desk_id,
+                        0,
+                    )
+                    + 1
+                )
+                self._queue_membership_fetch_failures_by_service_desk_id[
+                    service_desk_id
+                ] = failure_count
                 self._warn_once(
                     warning_key=f"queues:{service_desk_id}",
                     message=(
@@ -393,6 +438,10 @@ class JiraServiceManagementConnector(JiraConnector):
                 )
                 return []
 
+            self._queue_membership_fetch_failures_by_service_desk_id.pop(
+                service_desk_id,
+                None,
+            )
         return self._queue_membership_by_service_desk_id[service_desk_id].get(
             issue_key,
             [],
@@ -579,7 +628,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
     def _build_jsm_text(
         self,
-        issue: Issue | None,
+        issue: Issue,
         service_desk: JSMServiceDesk,
         request: dict[str, Any],
         request_type: JSMRequestType | None,
@@ -756,5 +805,5 @@ def _extract_portal_link(request: dict[str, Any]) -> str | None:
     if not isinstance(links, dict):
         return None
 
-    portal_link = links.get("web") or links.get("agent")
+    portal_link = links.get("web")
     return coerce_optional_str(portal_link)

@@ -31,13 +31,14 @@ def test_get_customer_request_treats_403_as_permission_boundary() -> None:
     with patch(
         "onyx.connectors.jira_service_management.utils.jsm_get_json",
         side_effect=_make_http_error(403),
-    ):
+    ) as mock_get_json:
         request = get_customer_request(
             jira_client=jira_client,
             issue_id_or_key="HELP-1",
         )
 
     assert request is None
+    mock_get_json.assert_called_once()
 
 
 def test_build_queue_membership_map_keeps_known_issues_after_limit() -> None:
@@ -133,7 +134,11 @@ def test_list_request_slas_uses_optional_pagination() -> None:
         slas = list_request_slas(jira_client=jira_client, issue_id_or_key="HELP-1")
 
     assert slas == [{"name": "Time to first response"}, {"name": "Time to resolution"}]
-    mock_iter.assert_called_once()
+    mock_iter.assert_called_once_with(
+        jira_client=jira_client,
+        path="request/HELP-1/sla",
+        allowed_status_codes=(403, 404),
+    )
 
 
 def test_list_request_participants_uses_optional_pagination() -> None:
@@ -149,7 +154,11 @@ def test_list_request_participants_uses_optional_pagination() -> None:
         )
 
     assert participants == [{"displayName": "Alice"}, {"displayName": "Bob"}]
-    mock_iter.assert_called_once()
+    mock_iter.assert_called_once_with(
+        jira_client=jira_client,
+        path="request/HELP-1/participant",
+        allowed_status_codes=(403, 404),
+    )
 
 
 def test_list_request_approvals_uses_optional_pagination() -> None:
@@ -165,7 +174,11 @@ def test_list_request_approvals_uses_optional_pagination() -> None:
         )
 
     assert approvals == [{"id": "1"}, {"id": "2"}]
-    mock_iter.assert_called_once()
+    mock_iter.assert_called_once_with(
+        jira_client=jira_client,
+        path="request/HELP-1/approval",
+        allowed_status_codes=(403, 404),
+    )
 
 
 def test_format_approval_summaries_ignores_can_answer_approval_boolean() -> None:
