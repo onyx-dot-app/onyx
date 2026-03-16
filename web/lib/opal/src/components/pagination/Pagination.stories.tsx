@@ -95,17 +95,6 @@ export const CountWithUnits: Story = {
   },
 };
 
-export const CountWithGoto: Story = {
-  args: {
-    variant: "count",
-    pageSize: 10,
-    totalItems: 95,
-    currentPage: 3,
-    totalPages: 10,
-    goto: () => alert("Go to clicked"),
-  },
-};
-
 export const CountArrowsOnly: Story = {
   args: {
     variant: "count",
@@ -220,4 +209,31 @@ function InteractiveListDemo() {
 
 export const InteractiveList: Story = {
   render: () => <InteractiveListDemo />,
+};
+
+function InteractiveCountDemo() {
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const totalItems = 95;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  return (
+    <div className="flex flex-col gap-4 items-start">
+      <Pagination
+        variant="count"
+        currentPage={page}
+        totalPages={totalPages}
+        pageSize={pageSize}
+        totalItems={totalItems}
+        onArrowClick={setPage}
+        units="items"
+      />
+      <span className="font-secondary-body text-text-03">
+        Current page: {page}
+      </span>
+    </div>
+  );
+}
+
+export const InteractiveCount: Story = {
+  render: () => <InteractiveCountDemo />,
 };

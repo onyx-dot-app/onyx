@@ -1,9 +1,16 @@
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
+import { SvgArrowRight, SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import type { WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
-import type { HTMLAttributes, ReactNode } from "react";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
+import {
+  useState,
+  type ChangeEvent,
+  type HTMLAttributes,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,8 +61,6 @@ interface CountPaginationProps
   showPages?: boolean;
   /** Unit label shown after the total count (e.g. `"items"`). Always has 4px spacing. */
   units?: string;
-  /** If provided, renders a "Go to" button that calls this callback when clicked. */
-  goto?: () => void;
 }
 
 /**
@@ -184,6 +189,99 @@ const PAGE_NUMBER_FONT: Record<
 };
 
 // ---------------------------------------------------------------------------
+// GoToPagePopup
+// ---------------------------------------------------------------------------
+
+interface GoToPagePopupProps {
+  totalPages: number;
+  onSubmit: (page: number) => void;
+  size: PaginationSize;
+  children: ReactNode;
+}
+
+function GoToPagePopup({
+  totalPages,
+  onSubmit,
+  size,
+  children,
+}: GoToPagePopupProps) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+
+  const parsed = parseInt(value, 10);
+  const isValid = !isNaN(parsed) && parsed >= 1 && parsed <= totalPages;
+
+  function handleChange(e: ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    if (raw === "" || /^\d+$/.test(raw)) {
+      setValue(raw);
+    }
+  }
+
+  function handleSubmit() {
+    if (!isValid) return;
+    onSubmit(parsed);
+    setOpen(false);
+    setValue("");
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      handleSubmit();
+    }
+  }
+
+  return (
+    <PopoverPrimitive.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setValue("");
+      }}
+    >
+      <PopoverPrimitive.Trigger asChild>{children}</PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          className={cn(
+            "flex items-center gap-1 p-1",
+            "bg-background-neutral-00 rounded-08 border border-border-01 shadow-md z-popover",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+          )}
+          sideOffset={4}
+        >
+          {/* TODO(@raunakab): migrate this input to the opal Input component once inputs have been migrated into Opal */}
+          <input
+            type="text"
+            inputMode="numeric"
+            value={value}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder={`1–${totalPages}`}
+            autoFocus
+            className={cn(
+              "w-16 bg-transparent px-1.5 py-1 rounded-04",
+              "border border-border-02 focus:outline-none focus:border-border-04",
+              monoClass(size),
+              "text-text-04 placeholder:text-text-02"
+            )}
+          />
+          <Disabled disabled={!isValid}>
+            <Button
+              icon={SvgArrowRight}
+              size={size}
+              onClick={handleSubmit}
+              tooltip="Go to page"
+            />
+          </Disabled>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Nav buttons (shared across all variants)
 // ---------------------------------------------------------------------------
 
@@ -242,6 +340,8 @@ function PaginationSimple({
 }: SimplePaginationProps) {
   const handleChange = (page: number) => onArrowClick?.(page);
 
+  const label = `${currentPage}/${totalPages}${units ? ` ${units}` : ""}`;
+
   return (
     <div {...props} className="flex items-center">
       <NavButtons
@@ -251,10 +351,15 @@ function PaginationSimple({
         size={size}
       >
         {showPages && (
-          <span className={cn(monoClass(size), "px-1 text-text-03")}>
-            {currentPage}/{totalPages}
-            {units && <span className="ml-1">{units}</span>}
-          </span>
+          <GoToPagePopup
+            totalPages={totalPages}
+            onSubmit={handleChange}
+            size={size}
+          >
+            <Button size={size} prominence="tertiary">
+              {label}
+            </Button>
+          </GoToPagePopup>
         )}
       </NavButtons>
     </div>
@@ -274,7 +379,6 @@ function PaginationCount({
   size = "lg",
   showPages = true,
   units,
-  goto: onGoto,
   ...props
 }: CountPaginationProps) {
   const handleChange = (page: number) => onArrowClick?.(page);
@@ -306,26 +410,18 @@ function PaginationCount({
           size={size}
         >
           {showPages && (
-            <span
-              className={cn(
-                "flex items-center justify-center",
-                size === "sm" ? "w-[20px]" : "w-[28px]",
-                monoClass(size),
-                "text-text-03"
-              )}
+            <GoToPagePopup
+              totalPages={totalPages}
+              onSubmit={handleChange}
+              size={size}
             >
-              {currentPage}
-            </span>
+              <Button size={size} prominence="tertiary">
+                {String(currentPage)}
+              </Button>
+            </GoToPagePopup>
           )}
         </NavButtons>
       </div>
-
-      {/* Goto */}
-      {onGoto && (
-        <Button onClick={onGoto} size={size} prominence="tertiary">
-          Go to
-        </Button>
-      )}
     </div>
   );
 }
@@ -356,16 +452,28 @@ function PaginationList({
           {pageNumbers.map((page) => {
             if (typeof page === "string") {
               return (
-                <span
+                <GoToPagePopup
                   key={page}
-                  className={cn(
-                    "flex items-center justify-center",
-                    ELLIPSIS_SIZE[size],
-                    fonts.inactive
-                  )}
+                  totalPages={totalPages}
+                  onSubmit={onPageClick}
+                  size={size}
                 >
-                  ...
-                </span>
+                  <Button
+                    size={size}
+                    prominence="tertiary"
+                    icon={({ className: iconClassName }) => (
+                      <div
+                        className={cn(
+                          iconClassName,
+                          "flex flex-col justify-center",
+                          fonts.inactive
+                        )}
+                      >
+                        ...
+                      </div>
+                    )}
+                  />
+                </GoToPagePopup>
               );
             }
 
@@ -408,6 +516,9 @@ function PaginationList({
  * - `"list"` (default) — Numbered page buttons with ellipsis truncation.
  * - `"simple"` — Compact `currentPage / totalPages` with prev/next arrows.
  * - `"count"` — Item-count display (`X~Y of Z`) with prev/next arrows.
+ *
+ * All variants include a "go to page" popup activated by clicking on the
+ * page indicator (simple/count) or the ellipsis (list).
  *
  * @example
  * ```tsx
