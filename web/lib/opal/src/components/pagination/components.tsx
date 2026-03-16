@@ -1,6 +1,9 @@
+"use client";
+
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgArrowRight, SvgChevronLeft, SvgChevronRight } from "@opal/icons";
+import { sizeVariants } from "@opal/shared";
 import type { WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
@@ -248,7 +251,8 @@ function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
             placeholder="Go to page"
             autoFocus
             className={cn(
-              "w-[7rem] h-[36px] bg-transparent px-1.5 py-1 rounded-08",
+              "w-[7rem] bg-transparent px-1.5 py-1 rounded-08",
+              sizeVariants.lg.height,
               "border border-border-02 focus:outline-none focus:border-border-04",
               "font-main-ui-body",
               "text-text-04 placeholder:text-text-02"
@@ -373,7 +377,7 @@ function PaginationCount({
       {/* Summary: range of total [units] */}
       <span
         className={cn(
-          "flex items-center gap-1",
+          "inline-flex items-center gap-1",
           monoClass(size),
           "text-text-03"
         )}
