@@ -7,6 +7,7 @@ import {
   type InteractiveStatefulInteraction,
 } from "@opal/core";
 import type { SizeVariant, WidthVariant } from "@opal/shared";
+import type { InteractiveContainerRoundingVariant } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { SvgChevronDownSmall } from "@opal/icons";
@@ -80,6 +81,9 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
+
+    /** Override the default rounding derived from `size`. */
+    roundingVariant?: InteractiveContainerRoundingVariant;
   };
 
 // ---------------------------------------------------------------------------
@@ -95,6 +99,7 @@ function OpenButton({
   justifyContent,
   tooltip,
   tooltipSide = "top",
+  roundingVariant: roundingVariantOverride,
   interaction,
   variant = "select-heavy",
   ...statefulProps
@@ -132,7 +137,8 @@ function OpenButton({
         heightVariant={size}
         widthVariant={width}
         roundingVariant={
-          isLarge ? "default" : size === "2xs" ? "mini" : "compact"
+          roundingVariantOverride ??
+          (isLarge ? "default" : size === "2xs" ? "mini" : "compact")
         }
       >
         <div

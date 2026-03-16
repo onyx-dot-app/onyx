@@ -9,7 +9,7 @@ import React from "react";
 export type FlexDirection = "row" | "column";
 export type JustifyContent = "start" | "center" | "end" | "between";
 export type AlignItems = "start" | "center" | "end" | "stretch";
-export type Length = "auto" | "fit" | "full";
+export type Length = "auto" | "fit" | "full" | number;
 
 const flexDirectionClassMap: Record<FlexDirection, string> = {
   row: "flex-row",
@@ -90,11 +90,12 @@ export const heightClassmap: Record<Length, string> = {
  * @remarks
  * - The component defaults to column layout when no direction is specified
  * - Full width and height by default
- * - Prevents style overrides (className and style props are not available)
+ * - Accepts className for additional styling; style prop is not available
  * - Import using namespace import for consistent usage: `import * as GeneralLayouts from "@/layouts/general-layouts"`
  */
 export interface SectionProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+  className?: string;
   flexDirection?: FlexDirection;
   justifyContent?: JustifyContent;
   alignItems?: AlignItems;
@@ -116,6 +117,7 @@ export interface SectionProps
  * wrap a `Section` without affecting layout.
  */
 function Section({
+  className,
   flexDirection = "column",
   justifyContent = "center",
   alignItems = "center",
@@ -137,13 +139,20 @@ function Section({
         flexDirectionClassMap[flexDirection],
         justifyClassMap[justifyContent],
         alignClassMap[alignItems],
-        widthClassmap[width],
-        heightClassmap[height],
+        typeof width === "string" && widthClassmap[width],
+        typeof height === "string" && heightClassmap[height],
+        typeof height === "number" && "overflow-hidden",
 
         wrap && "flex-wrap",
-        dbg && "dbg-red"
+        dbg && "dbg-red",
+        className
       )}
-      style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
+      style={{
+        gap: `${gap}rem`,
+        padding: `${padding}rem`,
+        ...(typeof width === "number" && { width: `${width}rem` }),
+        ...(typeof height === "number" && { height: `${height}rem` }),
+      }}
       {...rest}
     />
   );

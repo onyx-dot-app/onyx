@@ -12,7 +12,7 @@ import { Tag } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import EditGroupsModal from "./EditGroupsModal";
+import EditUserModal from "./EditUserModal";
 import type { UserRow, UserGroupInfo } from "./interfaces";
 
 interface GroupsCellProps {
@@ -184,7 +184,7 @@ export default function GroupsCell({
         )}
       </div>
       {showModal && user.id != null && (
-        <EditGroupsModal
+        <EditUserModal
           user={{ ...user, id: user.id }}
           onClose={() => setShowModal(false)}
           onMutate={onMutate}
