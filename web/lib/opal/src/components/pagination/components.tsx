@@ -243,7 +243,7 @@ function PaginationSimple({
   const handleChange = (page: number) => onArrowClick?.(page);
 
   return (
-    <div {...props} className="flex items-center gap-1">
+    <div {...props} className="flex items-center">
       <NavButtons
         currentPage={currentPage}
         totalPages={totalPages}
@@ -251,7 +251,7 @@ function PaginationSimple({
         size={size}
       >
         {showPages && (
-          <span className={cn(monoClass(size), "text-text-03")}>
+          <span className={cn(monoClass(size), "px-1 text-text-03")}>
             {currentPage}/{totalPages}
             {units && <span className="ml-1">{units}</span>}
           </span>
