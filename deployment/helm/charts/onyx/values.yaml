@@ -506,6 +506,9 @@ api:
 
   # Run update-ca-certificates before starting the server.
   # Useful when mounting custom CA certificates via volumes/volumeMounts.
+  # NOTE: Requires the container to run as root (runAsUser: 0).
+  # CA certificate files must be mounted under /usr/local/share/ca-certificates/
+  # with a .crt extension (e.g. /usr/local/share/ca-certificates/my-ca.crt).
   runUpdateCaCertificates: false
 
 
