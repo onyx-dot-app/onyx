@@ -659,8 +659,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         Args:
             chunks: Document chunks with all of the information needed for
-                indexing to the document index. Assumes chunks are in contiguous
-                blocks, grouped by document.
+                indexing to the document index.
             indexing_metadata: Information about chunk counts for efficient
                 cleaning / updating.
 

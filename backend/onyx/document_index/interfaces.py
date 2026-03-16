@@ -228,8 +228,7 @@ class Indexable(abc.ABC):
 
         Parameters:
         - chunks: Document chunks with all of the information needed for
-                indexing to the document index. Assumes chunks are in contiguous
-                blocks, grouped by document.
+                indexing to the document index.
         - tenant_id: The tenant id of the user whose chunks are being indexed
         - large_chunks_enabled: Whether large chunks are enabled
 
