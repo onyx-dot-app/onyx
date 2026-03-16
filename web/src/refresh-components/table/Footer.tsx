@@ -141,7 +141,7 @@ export default function Footer(props: FooterProps) {
             currentPage={props.currentPage}
             totalPages={props.totalPages}
             onChange={props.onPageChange}
-            units={props.totalItems === 1 ? "item" : "items"}
+            units="item(s)"
             size={isSmall ? "md" : "lg"}
           />
         ) : (

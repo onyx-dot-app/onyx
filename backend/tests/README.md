@@ -45,6 +45,21 @@ npx playwright test <TEST_NAME>
 Shared fixtures live in `backend/tests/conftest.py`. Test subdirectories can define
 their own `conftest.py` for directory-scoped fixtures.
 
+## Running Tests Repeatedly (`pytest-repeat`)
+
+Use `pytest-repeat` to catch flaky tests by running them multiple times:
+
+```bash
+# Run a specific test 50 times
+pytest --count=50 backend/tests/unit/path/to/test.py::test_name
+
+# Stop on first failure with -x
+pytest --count=50 -x backend/tests/unit/path/to/test.py::test_name
+
+# Repeat an entire test file
+pytest --count=10 backend/tests/unit/path/to/test_file.py
+```
+
 ## Best Practices
 
 ### Use `enable_ee` fixture instead of inlining
