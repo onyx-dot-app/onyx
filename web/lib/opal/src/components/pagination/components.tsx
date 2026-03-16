@@ -317,7 +317,14 @@ function PaginationCount({
           size={size}
         >
           {showSummary && (
-            <span className={cn(monoClass(size), "text-text-03")}>
+            <span
+              className={cn(
+                "flex items-center justify-center",
+                size === "sm" ? "w-[20px]" : "w-[28px]",
+                monoClass(size),
+                "text-text-03"
+              )}
+            >
               {currentPage}
             </span>
           )}
