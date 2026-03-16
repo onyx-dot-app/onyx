@@ -647,7 +647,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def index(
         self,
         chunks: Iterable[DocMetadataAwareIndexChunk],
-        indexing_metadata: IndexingMetadata,  # noqa: ARG002
+        indexing_metadata: IndexingMetadata,
     ) -> list[DocumentInsertionRecord]:
         """Indexes a list of document chunks into the document index.
 
