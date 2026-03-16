@@ -3,7 +3,7 @@ import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
-const TEST_PREFIX = "E2E-PROJECT-FILES-VISUAL";
+const PROJECT_NAME = "E2E-PROJECT-FILES-VISUAL";
 const ATTACHMENT_ITEM_TITLE_TEST_ID = "attachment-item-title";
 const ATTACHMENT_ITEM_ICON_WRAPPER_TEST_ID = "attachment-item-icon-wrapper";
 const LONG_FILE_NAME =
@@ -106,7 +106,7 @@ test.describe("Project Files visual regression", () => {
     await loginAsWorkerUser(page, workerInfo.workerIndex);
     const client = new OnyxApiClient(page.request);
 
-    projectId = await client.createProject(`${TEST_PREFIX}-${Date.now()}`);
+    projectId = await client.createProject(PROJECT_NAME);
     await uploadFileToProject(page, projectId, LONG_FILE_NAME, FILE_CONTENT);
 
     await context.close();
