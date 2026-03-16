@@ -44,7 +44,7 @@ Item-count display (`X~Y of Z`) with prev/next arrows. Designed for table footer
   onArrowClick={setPage}
 />
 
-// With units and goto
+// With units
 <Pagination
   variant="count"
   pageSize={10}
@@ -53,7 +53,6 @@ Item-count display (`X~Y of Z`) with prev/next arrows. Designed for table footer
   totalPages={10}
   onArrowClick={setPage}
   units="items"
-  goto={() => openGoToDialog()}
 />
 ```
 
@@ -87,7 +86,6 @@ Item-count display (`X~Y of Z`) with prev/next arrows. Designed for table footer
 | `size` | `PaginationSize` | `"lg"` | Button and text sizing |
 | `showPages` | `boolean` | `true` | Show current page number between arrows |
 | `units` | `string` | — | Label after the total (e.g. `"items"`), always 4px spacing |
-| `goto` | `() => void` | — | Renders a "Go to" button with matching size |
 
 ### `"list"`
 
