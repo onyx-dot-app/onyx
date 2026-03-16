@@ -173,3 +173,18 @@ def mt_cloud_telemetry(
         attribute="event_telemetry",
         fallback=noop_fallback,
     )(distinct_id, event, all_properties)
+
+
+def mt_cloud_identify(
+    distinct_id: str,
+    properties: dict | None = None,
+) -> None:
+    """Create/update a PostHog person profile (Cloud only)."""
+    if not MULTI_TENANT:
+        return
+
+    fetch_versioned_implementation_with_fallback(
+        module="onyx.utils.telemetry",
+        attribute="identify_user",
+        fallback=noop_fallback,
+    )(distinct_id, properties)

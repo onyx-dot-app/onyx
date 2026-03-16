@@ -17,3 +17,16 @@ def event_telemetry(
         posthog.flush()
     except Exception as e:
         logger.error(f"Error capturing PostHog event: {e}")
+
+
+def identify_user(distinct_id: str, properties: dict | None = None) -> None:
+    """Create/update a PostHog person profile, flushing immediately."""
+    if not posthog:
+        return
+
+    logger.info(f"Identifying PostHog user: {distinct_id} {properties}")
+    try:
+        posthog.identify(distinct_id, properties)
+        posthog.flush()
+    except Exception as e:
+        logger.error(f"Error identifying PostHog user: {e}")
