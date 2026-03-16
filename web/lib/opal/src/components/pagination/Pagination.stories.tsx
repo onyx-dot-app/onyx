@@ -148,6 +148,7 @@ export const List: Story = {
   args: {
     currentPage: 5,
     totalPages: 20,
+    onPageClick: () => {},
   },
 };
 
@@ -155,6 +156,7 @@ export const ListFewPages: Story = {
   args: {
     currentPage: 2,
     totalPages: 4,
+    onPageClick: () => {},
   },
 };
 

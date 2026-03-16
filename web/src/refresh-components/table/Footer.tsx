@@ -1,8 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@opal/components";
-import { Pagination } from "@opal/components";
+import { Button, Pagination } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { useTableSize } from "@/refresh-components/table/TableSizeContext";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";

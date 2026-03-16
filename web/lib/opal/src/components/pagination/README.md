@@ -64,7 +64,7 @@ Item-count display (`X~Y of Z`) with prev/next arrows. Designed for table footer
 | `variant` | `"list" \| "simple" \| "count"` | `"list"` | Display variant |
 | `currentPage` | `number` | **(required)** | 1-based current page number |
 | `totalPages` | `number` | **(required)** | Total number of pages |
-| `size` | `PaginationSize` | varies | Button and text sizing |
+| `size` | `PaginationSize` | `"lg"` | Button and text sizing |
 
 ## Props (variant-specific)
 
