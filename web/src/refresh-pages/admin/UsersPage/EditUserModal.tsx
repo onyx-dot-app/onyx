@@ -16,6 +16,7 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
@@ -50,6 +51,7 @@ export default function EditUserModal({
   onClose,
   onMutate,
 }: EditUserModalProps) {
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const { data: allGroups, isLoading: groupsLoading } = useGroups();
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -86,6 +88,10 @@ export default function EditUserModal({
       (id) => !initialMemberGroupIds.has(id)
     );
   }, [memberGroupIds, initialMemberGroupIds]);
+
+  const visibleRoles = isPaidEnterpriseFeaturesEnabled
+    ? ASSIGNABLE_ROLES
+    : ASSIGNABLE_ROLES.filter((r) => r !== UserRole.GLOBAL_CURATOR);
 
   const hasRoleChange =
     user.role !== null && selectedRole !== "" && selectedRole !== user.role;
@@ -301,7 +307,7 @@ export default function EditUserModal({
                     >
                       <InputSelect.Trigger />
                       <InputSelect.Content>
-                        {user.role && !ASSIGNABLE_ROLES.includes(user.role) && (
+                        {user.role && !visibleRoles.includes(user.role) && (
                           <InputSelect.Item
                             key={user.role}
                             value={user.role}
@@ -310,7 +316,7 @@ export default function EditUserModal({
                             {USER_ROLE_LABELS[user.role]}
                           </InputSelect.Item>
                         )}
-                        {ASSIGNABLE_ROLES.map((role) => (
+                        {visibleRoles.map((role) => (
                           <InputSelect.Item
                             key={role}
                             value={role}
