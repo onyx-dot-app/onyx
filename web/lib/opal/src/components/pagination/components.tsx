@@ -35,8 +35,8 @@ interface SimplePaginationProps
   onChange?: (page: number) => void;
   /** Controls button and text sizing. Default: `"lg"`. */
   size?: PaginationSize;
-  /** Whether to show the `currentPage/totalPages` summary text. Default: `true`. */
-  showPages?: boolean;
+  /** Hides the `currentPage/totalPages` summary text between arrows. Default: `false`. */
+  hidePages?: boolean;
   /** Unit label shown after the summary (e.g. `"pages"`). Always has 4px spacing. */
   units?: string;
 }
@@ -60,8 +60,8 @@ interface CountPaginationProps
   onChange?: (page: number) => void;
   /** Controls button and text sizing. Default: `"lg"`. */
   size?: PaginationSize;
-  /** Whether to show the current page number between the arrows. Default: `true`. */
-  showPages?: boolean;
+  /** Hides the current page number between the arrows. Default: `false`. */
+  hidePages?: boolean;
   /** Unit label shown after the total count (e.g. `"items"`). Always has 4px spacing. */
   units?: string;
 }
@@ -325,7 +325,7 @@ function PaginationSimple({
   totalPages,
   onChange,
   size = "lg",
-  showPages = true,
+  hidePages = false,
   units,
   ...props
 }: SimplePaginationProps) {
@@ -341,7 +341,7 @@ function PaginationSimple({
         onChange={handleChange}
         size={size}
       >
-        {showPages && (
+        {!hidePages && (
           <GoToPagePopup totalPages={totalPages} onSubmit={handleChange}>
             <Button size={size} prominence="tertiary">
               {label}
@@ -364,7 +364,7 @@ function PaginationCount({
   totalPages,
   onChange,
   size = "lg",
-  showPages = true,
+  hidePages = false,
   units,
   ...props
 }: CountPaginationProps) {
@@ -396,7 +396,7 @@ function PaginationCount({
           onChange={handleChange}
           size={size}
         >
-          {showPages && (
+          {!hidePages && (
             <GoToPagePopup totalPages={totalPages} onSubmit={handleChange}>
               <Button size={size} prominence="tertiary">
                 {String(currentPage)}
