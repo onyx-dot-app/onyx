@@ -171,7 +171,7 @@ export default function EditUserModal({
               ? `${user.personal_name} (${user.email})`
               : user.email
           }
-          onClose={onClose}
+          onClose={isSubmitting ? undefined : onClose}
         />
         <Modal.Body twoTone>
           <Section padding={0} height="auto" alignItems="stretch">
@@ -329,7 +329,10 @@ export default function EditUserModal({
         </Modal.Body>
 
         <Modal.Footer>
-          <Button prominence="secondary" onClick={onClose}>
+          <Button
+            prominence="secondary"
+            onClick={isSubmitting ? undefined : onClose}
+          >
             Cancel
           </Button>
           <Disabled disabled={isSubmitting || !hasChanges}>
