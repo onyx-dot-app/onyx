@@ -1,8 +1,9 @@
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
-import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
+import { cn } from "@opal/utils";
+import type { HTMLAttributes, ReactNode } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,10 +15,7 @@ type PaginationSize = "lg" | "md" | "sm";
  * Compact `currentPage / totalPages` display with prev/next arrows.
  */
 interface SimplePaginationProps
-  extends Omit<
-    WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
-    "onChange"
-  > {
+  extends Omit<WithoutStyles<HTMLAttributes<HTMLDivElement>>, "onChange"> {
   variant: "simple";
   /** The 1-based current page number. */
   currentPage: number;
@@ -38,10 +36,7 @@ interface SimplePaginationProps
  * Designed for table footers.
  */
 interface CountPaginationProps
-  extends Omit<
-    WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
-    "onChange"
-  > {
+  extends Omit<WithoutStyles<HTMLAttributes<HTMLDivElement>>, "onChange"> {
   variant: "count";
   /** The 1-based current page number. */
   currentPage: number;
@@ -68,10 +63,7 @@ interface CountPaginationProps
  * This is the default variant.
  */
 interface ListPaginationProps
-  extends Omit<
-    WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
-    "onChange"
-  > {
+  extends Omit<WithoutStyles<HTMLAttributes<HTMLDivElement>>, "onChange"> {
   variant?: "list";
   /** The 1-based current page number. */
   currentPage: number;
@@ -200,7 +192,7 @@ interface NavButtonsProps {
   totalPages: number;
   onChange: (page: number) => void;
   size: PaginationSize;
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
 function NavButtons({
@@ -215,7 +207,7 @@ function NavButtons({
       <Disabled disabled={currentPage <= 1}>
         <Button
           icon={SvgChevronLeft}
-          onClick={() => onChange(currentPage - 1)}
+          onClick={() => onChange(Math.max(1, currentPage - 1))}
           size={size}
           prominence="tertiary"
           tooltip="Previous page"
@@ -225,7 +217,7 @@ function NavButtons({
       <Disabled disabled={currentPage >= totalPages}>
         <Button
           icon={SvgChevronRight}
-          onClick={() => onChange(currentPage + 1)}
+          onClick={() => onChange(Math.min(totalPages, currentPage + 1))}
           size={size}
           prominence="tertiary"
           tooltip="Next page"
@@ -261,7 +253,7 @@ function PaginationSimple({
         {showPages && (
           <span className={cn(monoClass(size), "text-text-03")}>
             {currentPage}/{totalPages}
-            {units && <span style={{ marginLeft: 4 }}>{units}</span>}
+            {units && <span className="ml-1">{units}</span>}
           </span>
         )}
       </NavButtons>
@@ -290,7 +282,7 @@ function PaginationCount({
   const rangeEnd = Math.min(currentPage * pageSize, totalItems);
 
   return (
-    <div {...props} className="flex items-center gap-[4px]">
+    <div {...props} className="flex items-center gap-1">
       {/* Summary: range of total [units] */}
       <span
         className={cn(
@@ -302,7 +294,7 @@ function PaginationCount({
         {rangeStart}~{rangeEnd}
         <span className={textClasses(size, "muted")}>of</span>
         {totalItems}
-        {units && <span style={{ marginLeft: 4 }}>{units}</span>}
+        {units && <span className="ml-1">{units}</span>}
       </span>
 
       {/* Buttons: < [page] > */}
@@ -430,7 +422,11 @@ function PaginationList({
  * ```
  */
 function Pagination(props: PaginationProps) {
-  const normalized = { ...props, totalPages: Math.max(1, props.totalPages) };
+  const normalized = {
+    ...props,
+    totalPages: Math.max(1, props.totalPages),
+    currentPage: Math.max(1, props.currentPage),
+  };
   const variant = normalized.variant ?? "list";
   switch (variant) {
     case "simple":
