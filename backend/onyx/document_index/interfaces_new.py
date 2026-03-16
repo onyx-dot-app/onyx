@@ -1,4 +1,5 @@
 import abc
+from collections.abc import Iterable
 from typing import Self
 
 from pydantic import BaseModel
@@ -209,7 +210,7 @@ class Indexable(abc.ABC):
     @abc.abstractmethod
     def index(
         self,
-        chunks: list[DocMetadataAwareIndexChunk],
+        chunks: Iterable[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> list[DocumentInsertionRecord]:
         """Indexes a list of document chunks into the document index.
@@ -228,7 +229,8 @@ class Indexable(abc.ABC):
 
         Args:
             chunks: Document chunks with all of the information needed for
-                indexing to the document index.
+                indexing to the document index. Assumes chunks are in contiguous
+                blocks, grouped by document.
             indexing_metadata: Information about chunk counts for efficient
                 cleaning / updating.
 

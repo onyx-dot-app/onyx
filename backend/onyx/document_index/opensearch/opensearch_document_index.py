@@ -1,5 +1,5 @@
 import json
-from collections import defaultdict
+from collections.abc import Iterable
 from typing import Any
 
 import httpx
@@ -350,7 +350,7 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
 
     def index(
         self,
-        chunks: list[DocMetadataAwareIndexChunk],
+        chunks: Iterable[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[OldDocumentInsertionRecord]:
         """
@@ -646,7 +646,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
     def index(
         self,
-        chunks: list[DocMetadataAwareIndexChunk],
+        chunks: Iterable[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,  # noqa: ARG002
     ) -> list[DocumentInsertionRecord]:
         """Indexes a list of document chunks into the document index.
@@ -659,7 +659,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         Args:
             chunks: Document chunks with all of the information needed for
-                indexing to the document index.
+                indexing to the document index. Assumes chunks are in contiguous
+                blocks, grouped by document.
             indexing_metadata: Information about chunk counts for efficient
                 cleaning / updating.
 
@@ -672,29 +673,32 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 document is newly indexed or had already existed and was just
                 updated.
         """
-        # Group chunks by document ID.
-        doc_id_to_chunks: dict[str, list[DocMetadataAwareIndexChunk]] = defaultdict(
-            list
+        total_chunks = sum(
+            cc.new_chunk_cnt
+            for cc in indexing_metadata.doc_id_to_chunk_cnt_diff.values()
         )
-        for chunk in chunks:
-            doc_id_to_chunks[chunk.source_document.id].append(chunk)
         logger.debug(
-            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} chunks from {len(doc_id_to_chunks)} "
+            f"[OpenSearchDocumentIndex] Indexing {total_chunks} chunks from {len(indexing_metadata.doc_id_to_chunk_cnt_diff)} "
             f"documents for index {self._index_name}."
         )
 
         document_indexing_results: list[DocumentInsertionRecord] = []
-        # Try to index per-document.
-        for _, chunks in doc_id_to_chunks.items():
+        deleted_doc_ids: set[str] = set()
+        # Buffer chunks per document as they arrive from the iterable.
+        # When the document ID changes flush the buffered chunks.
+        current_doc_id: str | None = None
+        current_chunks: list[DocMetadataAwareIndexChunk] = []
+
+        def _flush_chunks(doc_chunks: list[DocMetadataAwareIndexChunk]) -> None:
             # Create a batch of OpenSearch-formatted chunks for bulk insertion.
-            # Do this before deleting existing chunks to reduce the amount of
-            # time the document index has no content for a given document, and
-            # to reduce the chance of entering a state where we delete chunks,
-            # then some error happens, and never successfully index new chunks.
+            # Since we are doing this in batches, an error occurring midway
+            # can result in a state where chunks are deleted and not all the
+            # new chunks have been indexed.
             chunk_batch: list[DocumentChunk] = [
-                _convert_onyx_chunk_to_opensearch_document(chunk) for chunk in chunks
+                _convert_onyx_chunk_to_opensearch_document(chunk)
+                for chunk in doc_chunks
             ]
-            onyx_document: Document = chunks[0].source_document
+            onyx_document: Document = doc_chunks[0].source_document
             # First delete the doc's chunks from the index. This is so that
             # there are no dangling chunks in the index, in the event that the
             # new document's content contains fewer chunks than the previous
@@ -703,22 +707,36 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # if the chunk count has actually decreased. This assumes that
             # overlapping chunks are perfectly overwritten. If we can't
             # guarantee that then we need the code as-is.
-            num_chunks_deleted = self.delete(
-                onyx_document.id, onyx_document.chunk_count
-            )
-            # If we see that chunks were deleted we assume the doc already
-            # existed.
-            document_insertion_record = DocumentInsertionRecord(
-                document_id=onyx_document.id,
-                already_existed=num_chunks_deleted > 0,
-            )
+            if onyx_document.id not in deleted_doc_ids:
+                num_chunks_deleted = self.delete(
+                    onyx_document.id, onyx_document.chunk_count
+                )
+                deleted_doc_ids.add(onyx_document.id)
+                document_indexing_results.append(
+                    DocumentInsertionRecord(
+                        document_id=onyx_document.id,
+                        already_existed=num_chunks_deleted > 0,
+                    )
+                )
             # Now index. This will raise if a chunk of the same ID exists, which
             # we do not expect because we should have deleted all chunks.
             self._client.bulk_index_documents(
                 documents=chunk_batch,
                 tenant_state=self._tenant_state,
             )
-            document_indexing_results.append(document_insertion_record)
+
+        for chunk in chunks:
+            doc_id = chunk.source_document.id
+            if doc_id != current_doc_id:
+                if current_chunks:
+                    _flush_chunks(current_chunks)
+                current_doc_id = doc_id
+                current_chunks = [chunk]
+            else:
+                current_chunks.append(chunk)
+
+        if current_chunks:
+            _flush_chunks(current_chunks)
 
         return document_indexing_results
 
