@@ -457,6 +457,7 @@ class OnyxRedisLocks:
 
     CLOUD_BEAT_TASK_GENERATOR_LOCK = "da_lock:cloud_beat_task_generator"
     CLOUD_CHECK_ALEMBIC_BEAT_LOCK = "da_lock:cloud_check_alembic"
+    CLOUD_CHECK_AUTO_LLM_UPDATE_LOCK = "da_lock:cloud_check_auto_llm_update"
 
     # User file processing
     USER_FILE_PROCESSING_BEAT_LOCK = "da_lock:check_user_file_processing_beat"
@@ -533,6 +534,9 @@ class OnyxCeleryTask:
     )
     CLOUD_MONITOR_CELERY_PIDBOX = (
         f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
+    )
+    CLOUD_CHECK_FOR_AUTO_LLM_UPDATE = (
+        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_for_auto_llm_update"
     )
 
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"

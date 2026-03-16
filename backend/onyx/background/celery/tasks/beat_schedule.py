@@ -179,8 +179,10 @@ if ENTERPRISE_EDITION_ENABLED:
         ]
     )
 
-# Add the Auto LLM update task if the config URL is set (has a default)
-if AUTO_LLM_CONFIG_URL:
+# Add the Auto LLM update task if the config URL is set (has a default).
+# In cloud multi-tenant mode we schedule a single system-wide controller task
+# instead of one periodic task per tenant.
+if AUTO_LLM_CONFIG_URL and not MULTI_TENANT:
     beat_task_templates.append(
         {
             "name": "check-for-auto-llm-update",
@@ -320,6 +322,19 @@ beat_cloud_tasks: list[dict] = [
         },
     },
 ]
+
+if AUTO_LLM_CONFIG_URL and MULTI_TENANT:
+    beat_cloud_tasks.append(
+        {
+            "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-for-auto-llm-update",
+            "task": OnyxCeleryTask.CLOUD_CHECK_FOR_AUTO_LLM_UPDATE,
+            "schedule": timedelta(seconds=AUTO_LLM_UPDATE_INTERVAL_SECONDS),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        }
+    )
 
 # tasks that only run self hosted
 tasks_to_schedule: list[dict] = []

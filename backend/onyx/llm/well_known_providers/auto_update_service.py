@@ -13,6 +13,7 @@ from datetime import datetime
 import httpx
 from sqlalchemy.orm import Session
 
+from onyx.cache.interface import CacheBackend
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.db.llm import fetch_auto_mode_providers
@@ -26,19 +27,31 @@ _CACHE_KEY_LAST_UPDATED_AT = "auto_llm_update:last_updated_at"
 _CACHE_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 
 
-def _get_cached_last_updated_at() -> datetime | None:
+def get_cached_last_updated_at(
+    cache_backend: CacheBackend | None = None,
+) -> datetime | None:
     try:
-        value = get_cache_backend().get(_CACHE_KEY_LAST_UPDATED_AT)
-        if value is not None:
-            return datetime.fromisoformat(value.decode("utf-8"))
+        backend = cache_backend or get_cache_backend()
+        cached_value = backend.get(_CACHE_KEY_LAST_UPDATED_AT)
+        if cached_value is not None:
+            value = (
+                cached_value.decode("utf-8")
+                if isinstance(cached_value, bytes)
+                else cached_value
+            )
+            return datetime.fromisoformat(value)
     except Exception as e:
         logger.warning(f"Failed to get cached last_updated_at: {e}")
     return None
 
 
-def _set_cached_last_updated_at(updated_at: datetime) -> None:
+def set_cached_last_updated_at(
+    updated_at: datetime,
+    cache_backend: CacheBackend | None = None,
+) -> None:
     try:
-        get_cache_backend().set(
+        backend = cache_backend or get_cache_backend()
+        backend.set(
             _CACHE_KEY_LAST_UPDATED_AT,
             updated_at.isoformat(),
             ex=_CACHE_TTL_SECONDS,
@@ -77,6 +90,7 @@ def fetch_llm_recommendations_from_github(
 def sync_llm_models_from_github(
     db_session: Session,
     force: bool = False,
+    cache_backend: CacheBackend | None = None,
 ) -> dict[str, int]:
     """Sync models from GitHub config to database for all Auto mode providers.
 
@@ -94,6 +108,26 @@ def sync_llm_models_from_github(
     Returns:
         Dict of provider_name -> number of changes made.
     """
+    # Fetch config from GitHub
+    config = fetch_llm_recommendations_from_github()
+    if not config:
+        logger.warning("Failed to fetch GitHub config")
+        return {}
+
+    return sync_llm_models(
+        db_session=db_session,
+        config=config,
+        force=force,
+        cache_backend=cache_backend,
+    )
+
+
+def sync_llm_models(
+    db_session: Session,
+    config: LLMRecommendations,
+    force: bool = False,
+    cache_backend: CacheBackend | None = None,
+) -> dict[str, int]:
     results: dict[str, int] = {}
 
     # Get all providers in Auto mode
@@ -102,17 +136,11 @@ def sync_llm_models_from_github(
         logger.debug("No providers in Auto mode found")
         return {}
 
-    # Fetch config from GitHub
-    config = fetch_llm_recommendations_from_github()
-    if not config:
-        logger.warning("Failed to fetch GitHub config")
-        return {}
-
     # Skip if we've already processed this version (unless forced)
-    last_updated_at = _get_cached_last_updated_at()
+    last_updated_at = get_cached_last_updated_at(cache_backend=cache_backend)
     if not force and last_updated_at and config.updated_at <= last_updated_at:
         logger.debug("GitHub config unchanged, skipping sync")
-        _set_cached_last_updated_at(config.updated_at)
+        set_cached_last_updated_at(config.updated_at, cache_backend=cache_backend)
         return {}
 
     for provider in auto_providers:
@@ -137,7 +165,7 @@ def sync_llm_models_from_github(
                 f"Applied {changes} model changes to provider '{provider.name}'"
             )
 
-    _set_cached_last_updated_at(config.updated_at)
+    set_cached_last_updated_at(config.updated_at, cache_backend=cache_backend)
     return results
 
 
