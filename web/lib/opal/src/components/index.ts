@@ -45,3 +45,10 @@ export {
   EmptyMessageCard,
   type EmptyMessageCardProps,
 } from "@opal/components/cards/empty-message-card/components";
+
+/* Pagination */
+export {
+  Pagination,
+  type PaginationProps,
+  type PaginationSize,
+} from "@opal/components/pagination/components";
