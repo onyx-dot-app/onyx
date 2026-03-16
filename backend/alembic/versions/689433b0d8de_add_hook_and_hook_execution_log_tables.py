@@ -35,9 +35,8 @@ def upgrade() -> None:
             "fail_strategy",
             sa.Enum("hard", "soft", native_enum=False),
             nullable=False,
-            server_default="hard",
         ),
-        sa.Column("timeout_seconds", sa.Float(), nullable=False, server_default="30.0"),
+        sa.Column("timeout_seconds", sa.Float(), nullable=False),
         sa.Column(
             "is_active", sa.Boolean(), nullable=False, server_default=sa.text("false")
         ),
@@ -61,11 +60,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "ix_hook_one_active_per_point",
+        "ix_hook_one_non_deleted_per_point",
         "hook",
         ["hook_point"],
         unique=True,
-        postgresql_where=sa.text("is_active = true AND deleted = false"),
+        postgresql_where=sa.text("deleted = false"),
     )
 
     op.create_table(
@@ -73,8 +72,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("hook_id", sa.Integer(), nullable=False),
         sa.Column(
-            "hook_point",
-            sa.Enum("document_ingestion", "query_processing", native_enum=False),
+            "is_success",
+            sa.Boolean(),
             nullable=False,
         ),
         sa.Column("error_message", sa.Text(), nullable=True),
@@ -100,5 +99,5 @@ def downgrade() -> None:
     op.drop_index("ix_hook_execution_log_hook_id", table_name="hook_execution_log")
     op.drop_table("hook_execution_log")
 
-    op.drop_index("ix_hook_one_active_per_point", table_name="hook")
+    op.drop_index("ix_hook_one_non_deleted_per_point", table_name="hook")
     op.drop_table("hook")

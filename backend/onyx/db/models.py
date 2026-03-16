@@ -5179,8 +5179,8 @@ class CacheStore(Base):
 class Hook(Base):
     """Pairs a HookPoint with a customer-provided API endpoint.
 
-    At most one Hook per HookPoint can be active at a time, enforced by a
-    partial unique index on (hook_point) where is_active=true AND deleted=false.
+    At most one non-deleted Hook per HookPoint is allowed, enforced by a
+    partial unique index on (hook_point) where deleted=false.
     """
 
     __tablename__ = "hook"
@@ -5201,11 +5201,8 @@ class Hook(Base):
         Enum(HookFailStrategy, native_enum=False),
         nullable=False,
         default=HookFailStrategy.HARD,
-        server_default=HookFailStrategy.HARD.value,
     )
-    timeout_seconds: Mapped[float] = mapped_column(
-        Float, nullable=False, default=30.0, server_default="30.0"
-    )
+    timeout_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=30.0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     creator_id: Mapped[UUID | None] = mapped_column(
@@ -5230,19 +5227,20 @@ class Hook(Base):
 
     __table_args__ = (
         Index(
-            "ix_hook_one_active_per_point",
+            "ix_hook_one_non_deleted_per_point",
             "hook_point",
             unique=True,
-            postgresql_where=(is_active == True) & (deleted == False),  # noqa: E712
+            postgresql_where=(deleted == False),  # noqa: E712
         ),
     )
 
 
 class HookExecutionLog(Base):
-    """Records each failed hook execution for health monitoring and debugging.
+    """Records hook executions for health monitoring and debugging.
 
-    Only failures are logged. Retention: rows older than 30 days are deleted
-    by a nightly Celery task.
+    Currently only failures are logged; the is_success column exists so
+    success logging can be added later without a schema change.
+    Retention: rows older than 30 days are deleted by a nightly Celery task.
     """
 
     __tablename__ = "hook_execution_log"
@@ -5254,9 +5252,7 @@ class HookExecutionLog(Base):
         nullable=False,
         index=True,
     )
-    hook_point: Mapped[HookPoint] = mapped_column(
-        Enum(HookPoint, native_enum=False), nullable=False
-    )  # denormalized for query convenience
+    is_success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
