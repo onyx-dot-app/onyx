@@ -136,6 +136,15 @@ class SqlEngine:
     _readonly_lock: threading.Lock = threading.Lock()
     _app_name: str = POSTGRES_UNKNOWN_APP_NAME
 
+    @staticmethod
+    def _apply_pg_options(engine_kwargs: dict[str, Any], pg_options: str) -> None:
+        existing_connect_args: dict[str, Any] = engine_kwargs.pop("connect_args", {})
+        existing_options = existing_connect_args.get("options", "")
+        if existing_options:
+            pg_options = f"{existing_options} {pg_options}"
+        existing_connect_args["options"] = pg_options
+        engine_kwargs["connect_args"] = existing_connect_args
+
     @classmethod
     def init_engine(
         cls,
@@ -195,14 +204,7 @@ class SqlEngine:
             # callers can still pass their own connect_args overrides if needed.
             if POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS > 0:
                 pg_options = f"-c idle_in_transaction_session_timeout={POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS}"
-                existing_connect_args: dict[str, Any] = final_engine_kwargs.pop(
-                    "connect_args", {}
-                )
-                existing_options = existing_connect_args.get("options", "")
-                if existing_options:
-                    pg_options = f"{existing_options} {pg_options}"
-                existing_connect_args["options"] = pg_options
-                final_engine_kwargs["connect_args"] = existing_connect_args
+                cls._apply_pg_options(final_engine_kwargs, pg_options)
 
             logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
             # echo=True here for inspecting all emitted db queries
@@ -266,12 +268,7 @@ class SqlEngine:
 
             if POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS > 0:
                 pg_options = f"-c idle_in_transaction_session_timeout={POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS}"
-                existing_connect_args = final_engine_kwargs.pop("connect_args", {})
-                existing_options = existing_connect_args.get("options", "")
-                if existing_options:
-                    pg_options = f"{existing_options} {pg_options}"
-                existing_connect_args["options"] = pg_options
-                final_engine_kwargs["connect_args"] = existing_connect_args
+                cls._apply_pg_options(final_engine_kwargs, pg_options)
 
             logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
             # echo=True here for inspecting all emitted db queries

@@ -397,14 +397,20 @@ except ValueError:
 #
 # Set to 0 to disable (not recommended in production).
 _POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_DEFAULT = 60 * 30 * 1000  # 30 min in ms
+_postgres_idle_in_transaction_session_timeout_raw = os.environ.get(
+    "POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS",
+    str(_POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_DEFAULT),
+)
 try:
     POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = int(
-        os.environ.get(
-            "POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS",
-            _POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_DEFAULT,
-        )
+        _postgres_idle_in_transaction_session_timeout_raw
     )
 except ValueError:
+    logger.warning(
+        "Invalid POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS=%r; using default %s",
+        _postgres_idle_in_transaction_session_timeout_raw,
+        _POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_DEFAULT,
+    )
     POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = (
         _POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_DEFAULT
     )
