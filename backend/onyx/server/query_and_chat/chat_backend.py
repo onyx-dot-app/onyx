@@ -561,7 +561,7 @@ def handle_send_chat_message(
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=tenant_id if user.is_anonymous else user.email,
+        distinct_id=tenant_id if user.is_anonymous else str(user.id),
         event=MilestoneRecordType.RAN_QUERY,
     )
 

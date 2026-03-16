@@ -812,9 +812,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             mt_cloud_telemetry(
                 tenant_id=tenant_id,
-                distinct_id=user.email,
+                distinct_id=str(user.id),
                 event=MilestoneRecordType.USER_SIGNED_UP,
             )
+
+            if user_count == 1:
+                mt_cloud_telemetry(
+                    tenant_id=tenant_id,
+                    distinct_id=str(user.id),
+                    event=MilestoneRecordType.TENANT_CREATED,
+                )
 
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

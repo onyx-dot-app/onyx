@@ -29,7 +29,6 @@ from onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
 from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
 from onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
 from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
-from onyx.configs.constants import MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
@@ -59,7 +58,6 @@ from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.setup import setup_onyx
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import TENANT_ID_PREFIX
@@ -71,7 +69,9 @@ logger = setup_logger()
 
 
 async def get_or_provision_tenant(
-    email: str, referral_source: str | None = None, request: Request | None = None
+    email: str,
+    referral_source: str | None = None,
+    request: Request | None = None,
 ) -> str:
     """
     Get existing tenant ID for an email or create a new tenant if none exists.
@@ -693,12 +693,6 @@ async def assign_tenant_to_user(
 
     try:
         add_users_to_tenant([email], tenant_id)
-
-        mt_cloud_telemetry(
-            tenant_id=tenant_id,
-            distinct_id=email,
-            event=MilestoneRecordType.TENANT_CREATED,
-        )
     except Exception:
         logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")
         raise Exception("Failed to assign tenant to user")
