@@ -14,20 +14,19 @@ import {
 import { Disabled } from "@opal/core";
 import Popover from "@/refresh-components/Popover";
 import Separator from "@/refresh-components/Separator";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
-import {
-  deactivateUser,
-  activateUser,
-  deleteUser,
-  cancelInvite,
-  approveRequest,
-  resetPassword,
-} from "./svc";
+import { approveRequest } from "./svc";
 import EditUserModal from "./EditUserModal";
+import {
+  CancelInviteModal,
+  DeactivateUserModal,
+  ActivateUserModal,
+  DeleteUserModal,
+  ResetPasswordModal,
+} from "./UserActionModals";
 import type { UserRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
@@ -58,29 +57,17 @@ export default function UserRowActions({
 }: UserRowActionsProps) {
   const [modal, setModal] = useState<Modal | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newPassword, setNewPassword] = useState<string | null>(null);
-
-  async function handleAction(
-    action: () => Promise<void>,
-    successMessage: string
-  ) {
-    setIsSubmitting(true);
-    try {
-      await action();
-      onMutate();
-      toast.success(successMessage);
-      setModal(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
 
   const openModal = (type: Modal) => {
     setPopoverOpen(false);
     setModal(type);
+  };
+
+  const closeModal = () => setModal(null);
+
+  const closeAndMutate = () => {
+    setModal(null);
+    onMutate();
   };
 
   // Status-aware action menus
@@ -132,10 +119,17 @@ export default function UserRowActions({
             icon={SvgUserCheck}
             onClick={() => {
               setPopoverOpen(false);
-              handleAction(
-                () => approveRequest(user.email),
-                "Request approved"
-              );
+              void (async () => {
+                try {
+                  await approveRequest(user.email);
+                  onMutate();
+                  toast.success("Request approved");
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : "An error occurred"
+                  );
+                }
+              })();
             }}
           >
             Approve
@@ -240,211 +234,45 @@ export default function UserRowActions({
       {modal === Modal.EDIT_GROUPS && user.id && (
         <EditUserModal
           user={user as UserRow & { id: string }}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           onMutate={onMutate}
         />
       )}
 
       {modal === Modal.CANCEL_INVITE && (
-        <ConfirmationModalLayout
-          icon={(props) => (
-            <SvgUserX {...props} className="text-action-danger-05" />
-          )}
-          title="Cancel Invite"
-          onClose={isSubmitting ? undefined : () => setModal(null)}
-          submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  handleAction(
-                    () => cancelInvite(user.email),
-                    "Invite cancelled"
-                  );
-                }}
-              >
-                Cancel Invite
-              </Button>
-            </Disabled>
-          }
-        >
-          <Text as="p" text03>
-            <Text as="span" text05>
-              {user.email}
-            </Text>{" "}
-            will no longer be able to join Onyx with this invite.
-          </Text>
-        </ConfirmationModalLayout>
+        <CancelInviteModal
+          email={user.email}
+          onClose={closeModal}
+          onMutate={onMutate}
+        />
       )}
 
       {modal === Modal.DEACTIVATE && (
-        <ConfirmationModalLayout
-          icon={(props) => (
-            <SvgUserX {...props} className="text-action-danger-05" />
-          )}
-          title="Deactivate User"
-          onClose={isSubmitting ? undefined : () => setModal(null)}
-          submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  await handleAction(
-                    () => deactivateUser(user.email),
-                    "User deactivated"
-                  );
-                }}
-              >
-                Deactivate
-              </Button>
-            </Disabled>
-          }
-        >
-          <Text as="p" text03>
-            <Text as="span" text05>
-              {user.email}
-            </Text>{" "}
-            will immediately lose access to Onyx. Their sessions and agents will
-            be preserved. Their license seat will be freed. You can reactivate
-            this account later.
-          </Text>
-        </ConfirmationModalLayout>
+        <DeactivateUserModal
+          email={user.email}
+          onClose={closeModal}
+          onMutate={onMutate}
+        />
       )}
 
       {modal === Modal.ACTIVATE && (
-        <ConfirmationModalLayout
-          icon={SvgUserPlus}
-          title="Activate User"
-          onClose={isSubmitting ? undefined : () => setModal(null)}
-          submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                onClick={async () => {
-                  await handleAction(
-                    () => activateUser(user.email),
-                    "User activated"
-                  );
-                }}
-              >
-                Activate
-              </Button>
-            </Disabled>
-          }
-        >
-          <Text as="p" text03>
-            <Text as="span" text05>
-              {user.email}
-            </Text>{" "}
-            will regain access to Onyx.
-          </Text>
-        </ConfirmationModalLayout>
+        <ActivateUserModal
+          email={user.email}
+          onClose={closeModal}
+          onMutate={onMutate}
+        />
       )}
 
       {modal === Modal.DELETE && (
-        <ConfirmationModalLayout
-          icon={(props) => (
-            <SvgUserX {...props} className="text-action-danger-05" />
-          )}
-          title="Delete User"
-          onClose={isSubmitting ? undefined : () => setModal(null)}
-          submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  await handleAction(
-                    () => deleteUser(user.email),
-                    "User deleted"
-                  );
-                }}
-              >
-                Delete
-              </Button>
-            </Disabled>
-          }
-        >
-          <Text as="p" text03>
-            <Text as="span" text05>
-              {user.email}
-            </Text>{" "}
-            will be permanently removed from Onyx. All of their session history
-            will be deleted. Deletion cannot be undone.
-          </Text>
-        </ConfirmationModalLayout>
+        <DeleteUserModal
+          email={user.email}
+          onClose={closeModal}
+          onMutate={onMutate}
+        />
       )}
 
       {modal === Modal.RESET_PASSWORD && (
-        <ConfirmationModalLayout
-          icon={SvgKey}
-          title={newPassword ? "Password Reset" : "Reset Password"}
-          onClose={
-            isSubmitting
-              ? undefined
-              : () => {
-                  setModal(null);
-                  setNewPassword(null);
-                }
-          }
-          submit={
-            newPassword ? (
-              <Button
-                onClick={() => {
-                  setModal(null);
-                  setNewPassword(null);
-                }}
-              >
-                Done
-              </Button>
-            ) : (
-              <Disabled disabled={isSubmitting}>
-                <Button
-                  variant="danger"
-                  onClick={async () => {
-                    setIsSubmitting(true);
-                    try {
-                      const result = await resetPassword(user.email);
-                      setNewPassword(result.new_password);
-                    } catch (err) {
-                      toast.error(
-                        err instanceof Error
-                          ? err.message
-                          : "Failed to reset password"
-                      );
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-                >
-                  Reset Password
-                </Button>
-              </Disabled>
-            )
-          }
-        >
-          {newPassword ? (
-            <div className="flex flex-col gap-2">
-              <Text as="p" text03>
-                The password for{" "}
-                <Text as="span" text05>
-                  {user.email}
-                </Text>{" "}
-                has been reset. Copy the new password below — it will not be
-                shown again.
-              </Text>
-              <code className="rounded-sm bg-background-neutral-02 px-3 py-2 text-sm select-all">
-                {newPassword}
-              </code>
-            </div>
-          ) : (
-            <Text as="p" text03>
-              This will generate a new random password for{" "}
-              <Text as="span" text05>
-                {user.email}
-              </Text>
-              . Their current password will stop working immediately.
-            </Text>
-          )}
-        </ConfirmationModalLayout>
+        <ResetPasswordModal email={user.email} onClose={closeModal} />
       )}
     </>
   );

@@ -273,9 +273,7 @@ test.describe("Users page — invite users", () => {
     await usersPage.openInviteModal();
 
     await expect(usersPage.dialog.getByText("Invite Users")).toBeVisible();
-    await expect(
-      usersPage.dialog.getByPlaceholder("Add emails to invite, comma separated")
-    ).toBeVisible();
+    await expect(usersPage.inviteEmailInput).toBeVisible();
 
     await usersPage.cancelModal();
     await expect(usersPage.dialog).not.toBeVisible();

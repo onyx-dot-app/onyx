@@ -34,9 +34,9 @@ export class UsersAdminPage {
     this.inviteButton = page.getByRole("button", { name: "Invite Users" });
     this.searchInput = page.getByPlaceholder("Search users...");
 
-    this.accountTypesFilter = page.getByTestId("filter-role");
-    this.groupsFilter = page.getByTestId("filter-group");
-    this.statusFilter = page.getByTestId("filter-status");
+    this.accountTypesFilter = page.getByLabel("Filter by role");
+    this.groupsFilter = page.getByLabel("Filter by group");
+    this.statusFilter = page.getByLabel("Filter by status");
 
     this.table = page.getByRole("table");
     this.tableRows = page.getByRole("table").locator("tbody tr");
@@ -227,17 +227,19 @@ export class UsersAdminPage {
   // Invite modal
   // ---------------------------------------------------------------------------
 
+  /** The email input inside the invite modal. */
+  get inviteEmailInput(): Locator {
+    return this.dialog.getByPlaceholder("Add an email and press enter");
+  }
+
   async openInviteModal() {
     await this.inviteButton.click();
     await expect(this.dialog.getByText("Invite Users")).toBeVisible();
   }
 
   async addInviteEmail(email: string) {
-    const input = this.dialog.getByPlaceholder(
-      "Add emails to invite, comma separated"
-    );
-    await input.pressSequentially(email, { delay: 20 });
-    await input.press("Enter");
+    await this.inviteEmailInput.pressSequentially(email, { delay: 20 });
+    await this.inviteEmailInput.press("Enter");
     // Wait for the chip to appear in the dialog
     await expect(this.dialog.getByText(email)).toBeVisible();
   }
@@ -276,8 +278,13 @@ export class UsersAdminPage {
     ).toBeVisible();
   }
 
+  /** The search input inside the edit groups modal. */
+  get groupSearchInput(): Locator {
+    return this.dialog.getByPlaceholder("Search groups to join...");
+  }
+
   async searchGroupsInModal(term: string) {
-    await this.dialog.getByPlaceholder("Search groups to join...").fill(term);
+    await this.groupSearchInput.fill(term);
     await expect(this.dialog.getByText(term).first()).toBeVisible();
   }
 
