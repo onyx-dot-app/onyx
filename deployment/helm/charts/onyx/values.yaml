@@ -1179,7 +1179,10 @@ auth:
     # cluster.
     # Password must meet OpenSearch complexity requirements:
     # min 8 chars, uppercase, lowercase, digit, and special character.
-    # If not set, helm install/upgrade will fail when auth.opensearch.enabled=true.
+    # If not set and no existing Kubernetes secret is found, helm install/upgrade will
+    # fail when auth.opensearch.enabled=true. Note: helm --dry-run always fails here
+    # because lookup returns empty during dry-run; supply credentials or use an
+    # existingSecret for dry-run validation on upgraded clusters.
     values:
       opensearch_admin_username: ""
       opensearch_admin_password: ""
