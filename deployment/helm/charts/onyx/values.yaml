@@ -1179,10 +1179,10 @@ auth:
     # cluster.
     # Password must meet OpenSearch complexity requirements:
     # min 8 chars, uppercase, lowercase, digit, and special character.
-    # CHANGE THIS FOR PRODUCTION.
+    # If not set, helm install/upgrade will fail when auth.opensearch.enabled=true.
     values:
-      opensearch_admin_username: "admin"
-      opensearch_admin_password: "OnyxDev1!"
+      opensearch_admin_username: ""
+      opensearch_admin_password: ""
   userauth:
     # -- Used for password reset / verification tokens and OAuth/OIDC state signing.
     # Disabled by default to preserve upgrade compatibility for existing Helm customers.
