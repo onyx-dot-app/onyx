@@ -353,7 +353,7 @@ function PaginationList({
   const fonts = PAGE_NUMBER_FONT[size];
 
   return (
-    <div {...props} className={cn("flex items-center gap-1")}>
+    <div {...props} className="flex items-center gap-1">
       <NavButtons
         currentPage={currentPage}
         totalPages={totalPages}

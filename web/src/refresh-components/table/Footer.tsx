@@ -66,8 +66,6 @@ interface FooterSummaryModeProps {
   onPageChange: (page: number) => void;
   /** Optional extra element rendered after the summary text (e.g. a download icon). */
   leftExtra?: React.ReactNode;
-  /** Controls overall footer sizing. `"regular"` (default) or `"small"`. */
-  size?: TableSize;
   className?: string;
 }
 
@@ -100,8 +98,7 @@ function getSelectionMessage(
  * `mode: "summary"` for read-only tables.
  */
 export default function Footer(props: FooterProps) {
-  const contextSize = useTableSize();
-  const resolvedSize = props.size ?? contextSize;
+  const resolvedSize = useTableSize();
   const isSmall = resolvedSize === "small";
   return (
     <div
