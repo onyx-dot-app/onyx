@@ -97,44 +97,64 @@ type PaginationProps =
 // ---------------------------------------------------------------------------
 
 /**
- * Computes the page numbers to display, inserting `"start-ellipsis"` and/or
- * `"end-ellipsis"` sentinels when the total exceeds 7 pages.
+ * Computes the page numbers to display.
+ *
+ * - <=7 pages: render all pages individually (no ellipsis).
+ * - >7 pages: always render exactly 7 slots (numbers or ellipsis).
+ *   First and last page are always shown. Ellipsis takes one slot.
+ *
+ * Examples for totalPages=20:
+ * - page 1:  `1  2  3  4  5  ...  20`
+ * - page 4:  `1  2  3  4  5  ...  20`
+ * - page 5:  `1  ...  4  5  6  ...  20`
+ * - page 16: `1  ...  15  16  17  ...  20`
+ * - page 17: `1  ...  16  17  18  19  20`
+ * - page 20: `1  ...  16  17  18  19  20`
  */
 function getPageNumbers(
   currentPage: number,
   totalPages: number
 ): (number | string)[] {
-  const pages: (number | string)[] = [];
-  const maxPagesToShow = 7;
-
-  if (totalPages <= maxPagesToShow) {
+  if (totalPages <= 7) {
+    const pages: number[] = [];
     for (let i = 1; i <= totalPages; i++) pages.push(i);
     return pages;
   }
 
-  pages.push(1);
+  // Always 7 slots. First and last are always page 1 and totalPages.
+  // That leaves 5 inner slots.
 
-  let startPage = Math.max(2, currentPage - 1);
-  let endPage = Math.min(totalPages - 1, currentPage + 1);
-
-  if (currentPage <= 3) {
-    endPage = 5;
-  } else if (currentPage >= totalPages - 2) {
-    startPage = totalPages - 4;
+  // Near the start: no start-ellipsis needed
+  // Slots: 1, 2, 3, 4, 5, ..., totalPages
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "end-ellipsis", totalPages];
   }
 
-  if (startPage > 2) {
-    pages.push(startPage === 3 ? 2 : "start-ellipsis");
+  // Near the end: no end-ellipsis needed
+  // Slots: 1, ..., tp-4, tp-3, tp-2, tp-1, tp
+  if (currentPage >= totalPages - 3) {
+    return [
+      1,
+      "start-ellipsis",
+      totalPages - 4,
+      totalPages - 3,
+      totalPages - 2,
+      totalPages - 1,
+      totalPages,
+    ];
   }
 
-  for (let i = startPage; i <= endPage; i++) pages.push(i);
-
-  if (endPage < totalPages - 1) {
-    pages.push(endPage === totalPages - 2 ? totalPages - 1 : "end-ellipsis");
-  }
-
-  pages.push(totalPages);
-  return pages;
+  // Middle: both ellipses
+  // Slots: 1, ..., cur-1, cur, cur+1, ..., totalPages
+  return [
+    1,
+    "start-ellipsis",
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    "end-ellipsis",
+    totalPages,
+  ];
 }
 
 function monoClass(size: PaginationSize): string {
@@ -145,6 +165,13 @@ function textClasses(size: PaginationSize, style: "mono" | "muted"): string {
   if (style === "mono") return monoClass(size);
   return size === "sm" ? "font-secondary-body" : "font-main-ui-muted";
 }
+
+/** Matches the icon-only Button dimensions for each size. */
+const ELLIPSIS_SIZE: Record<PaginationSize, string> = {
+  lg: "w-[2.25rem] h-[2.25rem]",
+  md: "w-[1.75rem] h-[1.75rem]",
+  sm: "w-[1.5rem] h-[1.5rem]",
+};
 
 const PAGE_NUMBER_FONT: Record<
   PaginationSize,
@@ -333,7 +360,14 @@ function PaginationList({
           {pageNumbers.map((page) => {
             if (typeof page === "string") {
               return (
-                <span key={page} className={cn("px-1", fonts.inactive)}>
+                <span
+                  key={page}
+                  className={cn(
+                    "flex items-center justify-center",
+                    ELLIPSIS_SIZE[size],
+                    fonts.inactive
+                  )}
+                >
                   ...
                 </span>
               );
