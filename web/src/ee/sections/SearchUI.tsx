@@ -394,7 +394,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         <Pagination
           currentPage={currentPage}
           totalPages={totalPages}
-          onPageClick={setCurrentPage}
+          onChange={setCurrentPage}
         />
       )}
     </div>

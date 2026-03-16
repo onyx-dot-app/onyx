@@ -137,7 +137,7 @@ export const List: Story = {
   args: {
     currentPage: 5,
     totalPages: 20,
-    onPageClick: () => {},
+    onChange: () => {},
   },
 };
 
@@ -145,7 +145,7 @@ export const ListFewPages: Story = {
   args: {
     currentPage: 2,
     totalPages: 4,
-    onPageClick: () => {},
+    onChange: () => {},
   },
 };
 
@@ -160,7 +160,7 @@ export const ListAllSizes: Story = {
           <Pagination
             currentPage={3}
             totalPages={10}
-            onPageClick={() => {}}
+            onChange={() => {}}
             size={size}
           />
         </div>
@@ -181,7 +181,7 @@ function InteractiveSimpleDemo() {
         variant="simple"
         currentPage={page}
         totalPages={15}
-        onArrowClick={setPage}
+        onChange={setPage}
         units="pages"
       />
       <span className="font-secondary-body text-text-03">
@@ -199,7 +199,7 @@ function InteractiveListDemo() {
   const [page, setPage] = useState(1);
   return (
     <div className="flex flex-col gap-4 items-start">
-      <Pagination currentPage={page} totalPages={15} onPageClick={setPage} />
+      <Pagination currentPage={page} totalPages={15} onChange={setPage} />
       <span className="font-secondary-body text-text-03">
         Current page: {page}
       </span>
@@ -224,7 +224,7 @@ function InteractiveCountDemo() {
         totalPages={totalPages}
         pageSize={pageSize}
         totalItems={totalItems}
-        onArrowClick={setPage}
+        onChange={setPage}
         units="items"
       />
       <span className="font-secondary-body text-text-03">

@@ -90,7 +90,7 @@ function MainContent({
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
-                onPageClick={onPageChange}
+                onChange={onPageChange}
               />
             )}
           </>

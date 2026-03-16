@@ -28,8 +28,8 @@ interface SimplePaginationProps
   currentPage: number;
   /** Total number of pages. */
   totalPages: number;
-  /** Called when a prev/next arrow is clicked. */
-  onArrowClick?: (page: number) => void;
+  /** Called when the page changes. */
+  onChange?: (page: number) => void;
   /** Controls button and text sizing. Default: `"lg"`. */
   size?: PaginationSize;
   /** Whether to show the `currentPage/totalPages` summary text. Default: `true`. */
@@ -53,8 +53,8 @@ interface CountPaginationProps
   pageSize: number;
   /** Total number of items across all pages. */
   totalItems: number;
-  /** Called when a prev/next arrow is clicked. */
-  onArrowClick?: (page: number) => void;
+  /** Called when the page changes. */
+  onChange?: (page: number) => void;
   /** Controls button and text sizing. Default: `"lg"`. */
   size?: PaginationSize;
   /** Whether to show the current page number between the arrows. Default: `true`. */
@@ -74,8 +74,8 @@ interface ListPaginationProps
   currentPage: number;
   /** Total number of pages. */
   totalPages: number;
-  /** Called when a page is selected (via page button or arrow). */
-  onPageClick: (page: number) => void;
+  /** Called when the page changes. */
+  onChange: (page: number) => void;
   /** Controls button and text sizing. Default: `"lg"`. */
   size?: PaginationSize;
 }
@@ -319,13 +319,13 @@ function NavButtons({
 function PaginationSimple({
   currentPage,
   totalPages,
-  onArrowClick,
+  onChange,
   size = "lg",
   showPages = true,
   units,
   ...props
 }: SimplePaginationProps) {
-  const handleChange = (page: number) => onArrowClick?.(page);
+  const handleChange = (page: number) => onChange?.(page);
 
   const label = `${currentPage}/${totalPages}${units ? ` ${units}` : ""}`;
 
@@ -358,13 +358,13 @@ function PaginationCount({
   totalItems,
   currentPage,
   totalPages,
-  onArrowClick,
+  onChange,
   size = "lg",
   showPages = true,
   units,
   ...props
 }: CountPaginationProps) {
-  const handleChange = (page: number) => onArrowClick?.(page);
+  const handleChange = (page: number) => onChange?.(page);
   const rangeStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const rangeEnd = Math.min(currentPage * pageSize, totalItems);
 
@@ -412,7 +412,7 @@ function PaginationCount({
 function PaginationList({
   currentPage,
   totalPages,
-  onPageClick,
+  onChange,
   size = "lg",
   ...props
 }: ListPaginationProps) {
@@ -424,7 +424,7 @@ function PaginationList({
       <NavButtons
         currentPage={currentPage}
         totalPages={totalPages}
-        onChange={onPageClick}
+        onChange={onChange}
         size={size}
       >
         <div className="flex items-center">
@@ -434,7 +434,7 @@ function PaginationList({
                 <GoToPagePopup
                   key={page}
                   totalPages={totalPages}
-                  onSubmit={onPageClick}
+                  onSubmit={onChange}
                 >
                   <Button
                     size={size}
@@ -460,7 +460,7 @@ function PaginationList({
             return (
               <Button
                 key={page}
-                onClick={() => onPageClick(page)}
+                onClick={() => onChange(page)}
                 size={size}
                 prominence="tertiary"
                 interaction={isActive ? "hover" : "rest"}
@@ -501,13 +501,13 @@ function PaginationList({
  * @example
  * ```tsx
  * // List (default)
- * <Pagination currentPage={3} totalPages={10} onPageClick={setPage} />
+ * <Pagination currentPage={3} totalPages={10} onChange={setPage} />
  *
  * // Simple
- * <Pagination variant="simple" currentPage={1} totalPages={5} onArrowClick={setPage} />
+ * <Pagination variant="simple" currentPage={1} totalPages={5} onChange={setPage} />
  *
  * // Count
- * <Pagination variant="count" pageSize={10} totalItems={95} currentPage={2} totalPages={10} onArrowClick={setPage} />
+ * <Pagination variant="count" pageSize={10} totalItems={95} currentPage={2} totalPages={10} onChange={setPage} />
  * ```
  */
 function Pagination(props: PaginationProps) {

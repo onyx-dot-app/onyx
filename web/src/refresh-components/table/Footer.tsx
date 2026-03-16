@@ -6,6 +6,7 @@ import Text from "@/refresh-components/texts/Text";
 import { useTableSize } from "@/refresh-components/table/TableSizeContext";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
+import type { ReactNode } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,7 +66,7 @@ interface FooterSummaryModeProps {
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
   /** Optional extra element rendered after the summary text (e.g. a download icon). */
-  leftExtra?: React.ReactNode;
+  leftExtra?: ReactNode;
   className?: string;
 }
 
@@ -142,7 +143,7 @@ export default function Footer(props: FooterProps) {
             totalItems={props.totalItems}
             currentPage={props.currentPage}
             totalPages={props.totalPages}
-            onArrowClick={props.onPageChange}
+            onChange={props.onPageChange}
             units="items"
             size={isSmall ? "sm" : "md"}
           />
@@ -150,7 +151,7 @@ export default function Footer(props: FooterProps) {
           <Pagination
             currentPage={props.currentPage}
             totalPages={props.totalPages}
-            onPageClick={props.onPageChange}
+            onChange={props.onPageChange}
             size={isSmall ? "md" : "lg"}
           />
         )}
