@@ -425,7 +425,10 @@ function Pagination(props: PaginationProps) {
   const normalized = {
     ...props,
     totalPages: Math.max(1, props.totalPages),
-    currentPage: Math.max(1, props.currentPage),
+    currentPage: Math.max(
+      1,
+      Math.min(props.currentPage, Math.max(1, props.totalPages))
+    ),
   };
   const variant = normalized.variant ?? "list";
   switch (variant) {
