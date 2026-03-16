@@ -8,6 +8,9 @@ def event_telemetry(
     distinct_id: str, event: str, properties: dict | None = None
 ) -> None:
     """Capture and send an event to PostHog, flushing immediately."""
+    if not posthog:
+        return
+
     logger.info(f"Capturing PostHog event: {distinct_id} {event} {properties}")
     try:
         posthog.capture(distinct_id, event, properties)
