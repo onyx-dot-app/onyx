@@ -195,16 +195,10 @@ const PAGE_NUMBER_FONT: Record<
 interface GoToPagePopupProps {
   totalPages: number;
   onSubmit: (page: number) => void;
-  size: PaginationSize;
   children: ReactNode;
 }
 
-function GoToPagePopup({
-  totalPages,
-  onSubmit,
-  size,
-  children,
-}: GoToPagePopupProps) {
+function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
 
@@ -244,7 +238,7 @@ function GoToPagePopup({
         <PopoverPrimitive.Content
           className={cn(
             "flex items-center gap-1 p-1",
-            "bg-background-neutral-00 rounded-08 border border-border-01 shadow-md z-popover",
+            "bg-background-neutral-00 rounded-12 border border-border-01 shadow-md z-popover",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
@@ -258,19 +252,19 @@ function GoToPagePopup({
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder={`1–${totalPages}`}
+            placeholder="Go to page"
             autoFocus
             className={cn(
-              "w-16 bg-transparent px-1.5 py-1 rounded-04",
+              "w-[7rem] h-[36px] bg-transparent px-1.5 py-1 rounded-08",
               "border border-border-02 focus:outline-none focus:border-border-04",
-              monoClass(size),
+              "font-main-ui-body",
               "text-text-04 placeholder:text-text-02"
             )}
           />
           <Disabled disabled={!isValid}>
             <Button
               icon={SvgArrowRight}
-              size={size}
+              size="lg"
               onClick={handleSubmit}
               tooltip="Go to page"
             />
@@ -351,11 +345,7 @@ function PaginationSimple({
         size={size}
       >
         {showPages && (
-          <GoToPagePopup
-            totalPages={totalPages}
-            onSubmit={handleChange}
-            size={size}
-          >
+          <GoToPagePopup totalPages={totalPages} onSubmit={handleChange}>
             <Button size={size} prominence="tertiary">
               {label}
             </Button>
@@ -410,11 +400,7 @@ function PaginationCount({
           size={size}
         >
           {showPages && (
-            <GoToPagePopup
-              totalPages={totalPages}
-              onSubmit={handleChange}
-              size={size}
-            >
+            <GoToPagePopup totalPages={totalPages} onSubmit={handleChange}>
               <Button size={size} prominence="tertiary">
                 {String(currentPage)}
               </Button>
@@ -456,7 +442,6 @@ function PaginationList({
                   key={page}
                   totalPages={totalPages}
                   onSubmit={onPageClick}
-                  size={size}
                 >
                   <Button
                     size={size}
