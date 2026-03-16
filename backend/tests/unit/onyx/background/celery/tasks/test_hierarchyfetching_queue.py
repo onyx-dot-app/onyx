@@ -57,6 +57,7 @@ def test_connector_supports_hierarchy_fetching_false_for_non_hierarchy_connector
     mock_identify_connector_class.return_value = _NonHierarchyConnector
 
     assert _connector_supports_hierarchy_fetching(_build_cc_pair_mock()) is False
+    mock_identify_connector_class.assert_called_once_with("mock-source")
 
 
 @patch(f"{TASKS_MODULE}.task_logger.warning")
@@ -78,6 +79,7 @@ def test_connector_supports_hierarchy_fetching_true_for_supported_connector(
     mock_identify_connector_class.return_value = _HierarchyCapableConnector
 
     assert _connector_supports_hierarchy_fetching(_build_cc_pair_mock()) is True
+    mock_identify_connector_class.assert_called_once_with("mock-source")
 
 
 @patch(f"{TASKS_MODULE}._try_creating_hierarchy_fetching_task")

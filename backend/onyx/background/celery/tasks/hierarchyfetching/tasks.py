@@ -64,7 +64,6 @@ def _connector_supports_hierarchy_fetching(
     try:
         connector_class = identify_connector_class(
             cc_pair.connector.source,
-            cc_pair.connector.input_type,
         )
     except ConnectorMissingException as e:
         task_logger.warning(
