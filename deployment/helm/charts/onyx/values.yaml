@@ -504,6 +504,10 @@ api:
   tolerations: []
   affinity: {}
 
+  # Run update-ca-certificates before starting the server.
+  # Useful when mounting custom CA certificates via volumes/volumeMounts.
+  runUpdateCaCertificates: false
+
 
 ######################################################################
 #
