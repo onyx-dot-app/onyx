@@ -163,13 +163,6 @@ function textClasses(size: PaginationSize, style: "mono" | "muted"): string {
   return size === "sm" ? "font-secondary-body" : "font-main-ui-muted";
 }
 
-/** Matches the icon-only Button dimensions for each size. */
-const ELLIPSIS_SIZE: Record<PaginationSize, string> = {
-  lg: "w-[2.25rem] h-[2.25rem]",
-  md: "w-[1.75rem] h-[1.75rem]",
-  sm: "w-[1.5rem] h-[1.5rem]",
-};
-
 const PAGE_NUMBER_FONT: Record<
   PaginationSize,
   { active: string; inactive: string }
