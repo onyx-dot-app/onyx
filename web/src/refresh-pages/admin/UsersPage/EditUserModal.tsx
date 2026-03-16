@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Button } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { Disabled } from "@opal/core";
@@ -19,6 +19,7 @@ import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
+import { cn } from "../../../lib/utils";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -52,6 +53,7 @@ export default function EditUserModal({
   const { data: allGroups, isLoading: groupsLoading } = useGroups();
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole | "">(
     user.role ?? ""
   );
@@ -150,7 +152,10 @@ export default function EditUserModal({
   };
 
   const displayName = user.personal_name ?? user.email;
-  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
+  const contentRef = useCallback((node: HTMLDivElement | null) => {
+    setContentEl(node);
+  }, []);
 
   return (
     <Modal
@@ -173,24 +178,29 @@ export default function EditUserModal({
             <Section
               gap={0.5}
               padding={0.25}
-              height={joinedGroups.length === 0 ? "auto" : 12.5}
+              height={joinedGroups.length === 0 && !popoverOpen ? "auto" : 14.5}
               alignItems="stretch"
               justifyContent="start"
               className="bg-background-tint-02 rounded-08"
             >
-              <Popover>
-                <Popover.Trigger>
-                  <InputTypeIn
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search groups to join..."
-                    leftSearchIcon
-                  />
+              <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                <Popover.Trigger asChild>
+                  {/* asChild merges trigger props onto this div instead of rendering a <button>.
+                     Without it, the trigger <button> would nest around InputTypeIn's
+                     internal IconButton <button>, causing a hydration error. */}
+                  <div>
+                    <InputTypeIn
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search groups to join..."
+                      leftSearchIcon
+                    />
+                  </div>
                 </Popover.Trigger>
                 <Popover.Content
                   width="trigger"
                   align="start"
-                  container={contentRef.current}
+                  container={contentEl}
                 >
                   {groupsLoading ? (
                     <LineItem skeleton description="Loading groups...">
@@ -204,7 +214,12 @@ export default function EditUserModal({
                       No groups found
                     </LineItem>
                   ) : (
-                    <ShadowDiv className="flex flex-col gap-1 max-h-[15rem]">
+                    <ShadowDiv
+                      shadowHeight="0.75rem"
+                      className={cn(
+                        "flex flex-col gap-1 max-h-[15rem] rounded-08"
+                      )}
+                    >
                       {dropdownGroups.map((group) => {
                         const isMember = memberGroupIds.has(group.id);
                         return (
@@ -228,7 +243,7 @@ export default function EditUserModal({
               </Popover>
 
               <ShadowDiv
-                className=" max-h-[9rem] flex flex-col gap-1 rounded-08"
+                className={cn(" max-h-[11rem] flex flex-col gap-1 rounded-08")}
                 shadowHeight="0.75rem"
               >
                 {joinedGroups.length === 0 ? (
