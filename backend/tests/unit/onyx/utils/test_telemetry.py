@@ -17,7 +17,7 @@ def test_mt_cloud_telemetry_noop_when_not_multi_tenant(monkeypatch: Any) -> None
 
     telemetry_utils.mt_cloud_telemetry(
         tenant_id="tenant-1",
-        distinct_id="user@example.com",
+        distinct_id="12345678-1234-1234-1234-123456789abc",
         event=MilestoneRecordType.USER_MESSAGE_SENT,
         properties={"origin": "web"},
     )
@@ -40,7 +40,7 @@ def test_mt_cloud_telemetry_calls_event_telemetry_when_multi_tenant(
 
     telemetry_utils.mt_cloud_telemetry(
         tenant_id="tenant-1",
-        distinct_id="user@example.com",
+        distinct_id="12345678-1234-1234-1234-123456789abc",
         event=MilestoneRecordType.USER_MESSAGE_SENT,
         properties={"origin": "web"},
     )
@@ -51,7 +51,7 @@ def test_mt_cloud_telemetry_calls_event_telemetry_when_multi_tenant(
         fallback=telemetry_utils.noop_fallback,
     )
     event_telemetry.assert_called_once_with(
-        "user@example.com",
+        "12345678-1234-1234-1234-123456789abc",
         MilestoneRecordType.USER_MESSAGE_SENT,
         {"origin": "web", "tenant_id": "tenant-1"},
     )
