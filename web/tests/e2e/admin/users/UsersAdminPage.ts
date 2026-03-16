@@ -270,17 +270,29 @@ export class UsersAdminPage {
   // Edit groups modal
   // ---------------------------------------------------------------------------
 
-  async openEditGroupsModal(email: string) {
-    await this.openRowActions(email);
-    await this.clickRowAction("Groups");
-    await expect(
-      this.dialog.getByText("Edit User's Groups & Roles")
-    ).toBeVisible();
+  /**
+   * Stable locator for the edit-groups modal.
+   *
+   * We can't use the generic `dialog` getter (`.last()`) here because the
+   * groups search opens a Radix Popover (also `role="dialog"`) inside the
+   * modal, which shifts what `.last()` resolves to.  Targeting by accessible
+   * name keeps the reference pinned to the modal itself.
+   */
+  get editGroupsDialog(): Locator {
+    return this.page.getByRole("dialog", { name: /Edit User/ });
   }
 
   /** The search input inside the edit groups modal. */
   get groupSearchInput(): Locator {
-    return this.dialog.getByPlaceholder("Search groups to join...");
+    return this.editGroupsDialog.getByPlaceholder("Search groups to join...");
+  }
+
+  async openEditGroupsModal(email: string) {
+    await this.openRowActions(email);
+    await this.clickRowAction("Groups");
+    await expect(
+      this.editGroupsDialog.getByText("Edit User's Groups & Roles")
+    ).toBeVisible();
   }
 
   async searchGroupsInModal(term: string) {
@@ -288,16 +300,25 @@ export class UsersAdminPage {
     // wraps the input — fill() alone bypasses the trigger's click handler).
     await this.groupSearchInput.click();
     await this.groupSearchInput.fill(term);
-    await expect(this.dialog.getByText(term).first()).toBeVisible();
+    // The group name appears in the popover dropdown (nested dialog).
+    // Use page-level search since the popover may be portaled.
+    await expect(this.page.getByText(term).first()).toBeVisible();
   }
 
   async toggleGroupInModal(groupName: string) {
-    // LineItem renders as a <div>, not <button> — use text match.
-    // The popover dropdown is portaled inside the modal dialog.
-    await this.dialog.getByText(groupName).first().click();
+    // LineItem renders as a <div>, not <button>.
+    // The popover dropdown is a nested dialog inside the modal.
+    await this.page
+      .getByRole("dialog")
+      .last()
+      .getByText(groupName)
+      .first()
+      .click();
   }
 
   async saveGroupsModal() {
-    await this.dialog.getByRole("button", { name: "Save Changes" }).click();
+    await this.editGroupsDialog
+      .getByRole("button", { name: "Save Changes" })
+      .click();
   }
 }
