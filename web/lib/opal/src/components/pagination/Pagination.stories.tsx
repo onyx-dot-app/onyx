@@ -84,6 +84,62 @@ export const Count: Story = {
   },
 };
 
+export const CountWithUnits: Story = {
+  args: {
+    variant: "count",
+    pageSize: 25,
+    totalItems: 203,
+    currentPage: 1,
+    totalPages: 9,
+    units: "items",
+  },
+};
+
+export const CountWithGoto: Story = {
+  args: {
+    variant: "count",
+    pageSize: 10,
+    totalItems: 95,
+    currentPage: 3,
+    totalPages: 10,
+    goto: () => alert("Go to clicked"),
+  },
+};
+
+export const CountArrowsOnly: Story = {
+  args: {
+    variant: "count",
+    pageSize: 10,
+    totalItems: 50,
+    currentPage: 2,
+    totalPages: 5,
+    showSummary: false,
+  },
+};
+
+export const CountAllSizes: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 items-start">
+      {(["lg", "md", "sm"] as const).map((size) => (
+        <div key={size} className="flex flex-col gap-1">
+          <span className="font-secondary-body text-text-03">
+            size=&quot;{size}&quot;
+          </span>
+          <Pagination
+            variant="count"
+            pageSize={10}
+            totalItems={95}
+            currentPage={3}
+            totalPages={10}
+            size={size}
+            units="items"
+          />
+        </div>
+      ))}
+    </div>
+  ),
+};
+
 // ===========================================================================
 // variant="list" (default)
 // ===========================================================================

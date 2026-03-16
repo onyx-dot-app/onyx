@@ -52,12 +52,30 @@ interface SimplePaginationProps
  * Item-count display (`X~Y of Z`) with prev/next arrows.
  * Designed for table footers.
  */
-interface CountPaginationProps extends PaginationBase {
+interface CountPaginationProps
+  extends Omit<
+    WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
+    "onChange"
+  > {
   variant: "count";
+  /** The 1-based current page number. */
+  currentPage: number;
+  /** Total number of pages. */
+  totalPages: number;
   /** Number of items displayed per page. Used to compute the visible range. */
   pageSize: number;
   /** Total number of items across all pages. */
   totalItems: number;
+  /** Called when a prev/next arrow is clicked. */
+  onArrowClick?: (page: number) => void;
+  /** Controls button and text sizing. Default: `"lg"`. */
+  size?: PaginationSize;
+  /** Whether to show the current page number between the arrows. Default: `true`. */
+  showSummary?: boolean;
+  /** Unit label shown after the total count (e.g. `"items"`). Always has 4px spacing. */
+  units?: string;
+  /** If provided, renders a "Go to" button that calls this callback when clicked. */
+  goto?: () => void;
 }
 
 /**
@@ -241,33 +259,55 @@ function PaginationCount({
   totalItems,
   currentPage,
   totalPages,
-  onChange,
-  size = "md",
+  onArrowClick,
+  size = "lg",
+  showSummary = true,
+  units,
+  goto: onGoto,
   ...props
 }: CountPaginationProps) {
+  const handleChange = (page: number) => onArrowClick?.(page);
   const rangeStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const rangeEnd = Math.min(currentPage * pageSize, totalItems);
 
   return (
-    <div {...props} className={cn("flex items-center gap-1")}>
-      <span className={cn(textClasses(size, "mono"), "text-text-03")}>
+    <div {...props} className="flex items-center gap-[4px]">
+      {/* Summary: range of total [units] */}
+      <span
+        className={cn(
+          "flex items-center gap-1",
+          monoClass(size),
+          "text-text-03"
+        )}
+      >
         {rangeStart}~{rangeEnd}
-      </span>
-      <span className={cn(textClasses(size, "muted"), "text-text-03")}>of</span>
-      <span className={cn(textClasses(size, "mono"), "text-text-03")}>
+        <span className={textClasses(size, "muted")}>of</span>
         {totalItems}
+        {units && <span style={{ marginLeft: 4 }}>{units}</span>}
       </span>
 
-      <NavButtons
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onChange={onChange}
-        size={size}
-      >
-        <span className={cn(textClasses(size, "mono"), "text-text-03")}>
-          {currentPage}
-        </span>
-      </NavButtons>
+      {/* Buttons: < [page] > */}
+      <div className="flex items-center">
+        <NavButtons
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onChange={handleChange}
+          size={size}
+        >
+          {showSummary && (
+            <span className={cn(monoClass(size), "text-text-03")}>
+              {currentPage}
+            </span>
+          )}
+        </NavButtons>
+      </div>
+
+      {/* Goto */}
+      {onGoto && (
+        <Button onClick={onGoto} size={size} prominence="tertiary">
+          Go to
+        </Button>
+      )}
     </div>
   );
 }
@@ -356,10 +396,10 @@ function PaginationList({
  * <Pagination currentPage={3} totalPages={10} onChange={setPage} />
  *
  * // Simple
- * <Pagination variant="simple" currentPage={1} totalPages={5} onChange={setPage} />
+ * <Pagination variant="simple" currentPage={1} totalPages={5} onArrowClick={setPage} />
  *
  * // Count
- * <Pagination variant="count" pageSize={10} currentPage={2} totalPages={10} onChange={setPage} />
+ * <Pagination variant="count" pageSize={10} totalItems={95} currentPage={2} totalPages={10} onArrowClick={setPage} />
  * ```
  */
 function Pagination(props: PaginationProps) {
