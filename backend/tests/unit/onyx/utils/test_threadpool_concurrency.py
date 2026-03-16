@@ -32,15 +32,17 @@ def test_run_with_timeout_raises_on_timeout(slow: float, timeout: float) -> None
     """Test that a function that exceeds timeout raises TimeoutError"""
 
     def slow_function() -> None:
-        time.sleep(slow)  # Sleep for 2 seconds
+        time.sleep(slow)
 
+    start = time.monotonic()
     with pytest.raises(TimeoutError) as exc_info:
-        start = time.time()
-        run_with_timeout(timeout, slow_function)  # Set timeout to 0.1 seconds
-        end = time.time()
-        assert end - start >= timeout
-        assert end - start < (slow + timeout) / 2
+        run_with_timeout(timeout, slow_function)
+    elapsed = time.monotonic() - start
+
     assert f"timed out after {timeout} seconds" in str(exc_info.value)
+    assert elapsed >= timeout
+    # Should return around the timeout duration, not the full sleep duration
+    assert elapsed == pytest.approx(timeout, abs=0.8)
 
 
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
