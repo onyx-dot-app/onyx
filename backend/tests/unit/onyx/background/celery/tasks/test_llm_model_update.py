@@ -1,5 +1,5 @@
-from datetime import UTC
 from datetime import datetime
+from datetime import UTC
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -36,12 +36,8 @@ def _build_llm_recommendations() -> LLMRecommendations:
 
 
 @patch("onyx.background.celery.tasks.llm_model_update.tasks.get_shared_cache_backend")
-@patch(
-    "onyx.background.celery.tasks.llm_model_update.tasks.set_cached_last_updated_at"
-)
-@patch(
-    "onyx.background.celery.tasks.llm_model_update.tasks.get_cached_last_updated_at"
-)
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.set_cached_last_updated_at")
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_cached_last_updated_at")
 @patch(
     "onyx.background.celery.tasks.llm_model_update.tasks.fetch_llm_recommendations_from_github"
 )
@@ -73,15 +69,14 @@ def test_cloud_check_for_auto_llm_updates_skips_fanout_when_config_unchanged(
     lock.release.assert_called_once()
 
 
-@patch("onyx.background.celery.tasks.llm_model_update.tasks.IGNORED_SYNCING_TENANT_LIST", [])
+@patch(
+    "onyx.background.celery.tasks.llm_model_update.tasks.IGNORED_SYNCING_TENANT_LIST",
+    [],
+)
 @patch("onyx.background.celery.tasks.llm_model_update.tasks.get_all_tenant_ids")
 @patch("onyx.background.celery.tasks.llm_model_update.tasks.get_shared_cache_backend")
-@patch(
-    "onyx.background.celery.tasks.llm_model_update.tasks.set_cached_last_updated_at"
-)
-@patch(
-    "onyx.background.celery.tasks.llm_model_update.tasks.get_cached_last_updated_at"
-)
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.set_cached_last_updated_at")
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_cached_last_updated_at")
 @patch(
     "onyx.background.celery.tasks.llm_model_update.tasks.fetch_llm_recommendations_from_github"
 )

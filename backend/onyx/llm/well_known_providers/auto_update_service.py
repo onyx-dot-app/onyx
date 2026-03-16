@@ -13,8 +13,8 @@ from datetime import datetime
 import httpx
 from sqlalchemy.orm import Session
 
-from onyx.cache.interface import CacheBackend
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.db.llm import fetch_auto_mode_providers
 from onyx.db.llm import sync_auto_mode_models

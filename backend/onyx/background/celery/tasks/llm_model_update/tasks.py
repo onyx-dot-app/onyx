@@ -4,9 +4,9 @@ from celery import shared_task
 from celery import Task
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
-from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
@@ -117,10 +117,7 @@ def cloud_check_for_auto_llm_updates(
 
         shared_cache = get_shared_cache_backend()
         last_updated_at = get_cached_last_updated_at(cache_backend=shared_cache)
-        if (
-            last_updated_at
-            and llm_recommendations.updated_at <= last_updated_at
-        ):
+        if last_updated_at and llm_recommendations.updated_at <= last_updated_at:
             set_cached_last_updated_at(
                 llm_recommendations.updated_at,
                 cache_backend=shared_cache,
