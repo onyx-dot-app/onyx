@@ -1,3 +1,5 @@
+import { buildBrowserWebSocketUrl } from "@/lib/backendUrl";
+
 /**
  * Real-time streaming TTS using HTTP streaming with MediaSource Extensions.
  * Plays audio chunks as they arrive for smooth, low-latency playback.
@@ -381,13 +383,11 @@ export class WebSocketStreamingTTSPlayer {
     }
     const { token } = await tokenResponse.json();
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const isDev = window.location.port === "3000";
-    const host = isDev ? "localhost:8080" : window.location.host;
-    const path = isDev
-      ? "/voice/synthesize/stream"
-      : "/api/voice/synthesize/stream";
-    return `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`;
+    return buildBrowserWebSocketUrl({
+      directPath: "/voice/synthesize/stream",
+      proxiedPath: "/api/voice/synthesize/stream",
+      token,
+    });
   }
 
   async connect(voice?: string, speed?: number): Promise<void> {
