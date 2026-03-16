@@ -2,6 +2,7 @@ import contextvars
 import threading
 import uuid
 from enum import Enum
+from typing import Any
 
 import requests
 
@@ -152,7 +153,7 @@ def mt_cloud_telemetry(
     tenant_id: str,
     distinct_id: str,
     event: MilestoneRecordType,
-    properties: dict | None = None,
+    properties: dict[str, Any] | None = None,
 ) -> None:
     if not MULTI_TENANT:
         return
@@ -177,7 +178,7 @@ def mt_cloud_telemetry(
 
 def mt_cloud_identify(
     distinct_id: str,
-    properties: dict | None = None,
+    properties: dict[str, Any] | None = None,
 ) -> None:
     """Create/update a PostHog person profile (Cloud only)."""
     if not MULTI_TENANT:
