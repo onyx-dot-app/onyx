@@ -16,14 +16,14 @@ Numbered page buttons with ellipsis truncation for large page counts.
 
 ### `"simple"`
 
-Compact `currentPage/totalPages` display with prev/next arrows. Can be reduced to just arrows via `showSummary={false}`.
+Compact `currentPage/totalPages` display with prev/next arrows. Can be reduced to just arrows via `showPages={false}`.
 
 ```tsx
 // With summary (default)
 <Pagination variant="simple" currentPage={1} totalPages={5} onArrowClick={setPage} />
 
 // Arrows only
-<Pagination variant="simple" currentPage={1} totalPages={5} onArrowClick={setPage} showSummary={false} />
+<Pagination variant="simple" currentPage={1} totalPages={5} onArrowClick={setPage} showPages={false} />
 
 // With units
 <Pagination variant="simple" currentPage={1} totalPages={5} onArrowClick={setPage} units="pages" />
@@ -74,7 +74,7 @@ Item-count display (`X~Y of Z`) with prev/next arrows. Designed for table footer
 |---|---|---|---|
 | `onArrowClick` | `(page: number) => void` | — | Called when a prev/next arrow is clicked |
 | `size` | `PaginationSize` | `"lg"` | Button and text sizing |
-| `showSummary` | `boolean` | `true` | Show `currentPage/totalPages` text between arrows |
+| `showPages` | `boolean` | `true` | Show `currentPage/totalPages` text between arrows |
 | `units` | `string` | — | Label after the summary (e.g. `"pages"`), always 4px spacing |
 
 ### `"count"`
@@ -85,7 +85,7 @@ Item-count display (`X~Y of Z`) with prev/next arrows. Designed for table footer
 | `pageSize` | `number` | **(required)** | Items per page (for range calculation) |
 | `totalItems` | `number` | **(required)** | Total item count |
 | `size` | `PaginationSize` | `"lg"` | Button and text sizing |
-| `showSummary` | `boolean` | `true` | Show current page number between arrows |
+| `showPages` | `boolean` | `true` | Show current page number between arrows |
 | `units` | `string` | — | Label after the total (e.g. `"items"`), always 4px spacing |
 | `goto` | `() => void` | — | Renders a "Go to" button with matching size |
 

@@ -28,7 +28,7 @@ interface SimplePaginationProps
   /** Controls button and text sizing. Default: `"lg"`. */
   size?: PaginationSize;
   /** Whether to show the `currentPage/totalPages` summary text. Default: `true`. */
-  showSummary?: boolean;
+  showPages?: boolean;
   /** Unit label shown after the summary (e.g. `"pages"`). Always has 4px spacing. */
   units?: string;
 }
@@ -56,7 +56,7 @@ interface CountPaginationProps
   /** Controls button and text sizing. Default: `"lg"`. */
   size?: PaginationSize;
   /** Whether to show the current page number between the arrows. Default: `true`. */
-  showSummary?: boolean;
+  showPages?: boolean;
   /** Unit label shown after the total count (e.g. `"items"`). Always has 4px spacing. */
   units?: string;
   /** If provided, renders a "Go to" button that calls this callback when clicked. */
@@ -244,7 +244,7 @@ function PaginationSimple({
   totalPages,
   onArrowClick,
   size = "lg",
-  showSummary = true,
+  showPages = true,
   units,
   ...props
 }: SimplePaginationProps) {
@@ -261,7 +261,7 @@ function PaginationSimple({
         onChange={handleChange}
         size={size}
       >
-        {showSummary && (
+        {showPages && (
           <span className={cn(monoClass(size), "text-text-03")}>
             {currentPage}/{totalPages}
             {units && <span style={{ marginLeft: 4 }}>{units}</span>}
@@ -283,7 +283,7 @@ function PaginationCount({
   totalPages,
   onArrowClick,
   size = "lg",
-  showSummary = true,
+  showPages = true,
   units,
   goto: onGoto,
   ...props
@@ -316,7 +316,7 @@ function PaginationCount({
           onChange={handleChange}
           size={size}
         >
-          {showSummary && (
+          {showPages && (
             <span
               className={cn(
                 "flex items-center justify-center",

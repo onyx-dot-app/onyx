@@ -46,7 +46,7 @@ export const SimpleArrowsOnly: Story = {
     variant: "simple",
     currentPage: 2,
     totalPages: 8,
-    showSummary: false,
+    showPages: false,
   },
 };
 
@@ -113,7 +113,7 @@ export const CountArrowsOnly: Story = {
     totalItems: 50,
     currentPage: 2,
     totalPages: 5,
-    showSummary: false,
+    showPages: false,
   },
 };
 
