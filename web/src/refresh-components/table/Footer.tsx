@@ -154,7 +154,7 @@ export default function Footer(props: FooterProps) {
           <Pagination
             currentPage={props.currentPage}
             totalPages={props.totalPages}
-            onChange={props.onPageChange}
+            onPageClick={props.onPageChange}
             size={isSmall ? "md" : "lg"}
           />
         )}

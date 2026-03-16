@@ -11,7 +11,7 @@ Page navigation with three display variants and prev/next arrow controls.
 Numbered page buttons with ellipsis truncation for large page counts.
 
 ```tsx
-<Pagination currentPage={3} totalPages={10} onChange={setPage} />
+<Pagination currentPage={3} totalPages={10} onPageClick={setPage} />
 ```
 
 ### `"simple"`
@@ -93,9 +93,8 @@ Item-count display (`X~Y of Z`) with prev/next arrows. Designed for table footer
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `onChange` | `(page: number) => void` | **(required)** | Page change callback |
-| `onPageClick` | `(page: number) => void` | — | Called when a numbered page button is clicked |
-| `size` | `PaginationSize` | `"md"` | Button and text sizing |
+| `onPageClick` | `(page: number) => void` | **(required)** | Called when a page is selected (via page button or arrow) |
+| `size` | `PaginationSize` | `"lg"` | Button and text sizing |
 
 ### `PaginationSize`
 

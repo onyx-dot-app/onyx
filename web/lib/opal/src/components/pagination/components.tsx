@@ -10,21 +10,6 @@ import type { WithoutStyles } from "@opal/types";
 
 type PaginationSize = "lg" | "md" | "sm";
 
-interface PaginationBase
-  extends Omit<
-    WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
-    "onChange"
-  > {
-  /** The 1-based current page number. */
-  currentPage: number;
-  /** Total number of pages. */
-  totalPages: number;
-  /** Called when the page changes (via prev/next arrows or page buttons). */
-  onChange: (page: number) => void;
-  /** Controls button and text sizing. Default: `"md"`. */
-  size?: PaginationSize;
-}
-
 /**
  * Compact `currentPage / totalPages` display with prev/next arrows.
  */
@@ -82,10 +67,20 @@ interface CountPaginationProps
  * Numbered page buttons with ellipsis truncation for large page counts.
  * This is the default variant.
  */
-interface ListPaginationProps extends PaginationBase {
+interface ListPaginationProps
+  extends Omit<
+    WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
+    "onChange"
+  > {
   variant?: "list";
-  /** Called when a specific numbered page button is clicked. */
-  onPageClick?: (page: number) => void;
+  /** The 1-based current page number. */
+  currentPage: number;
+  /** Total number of pages. */
+  totalPages: number;
+  /** Called when a page is selected (via page button or arrow). */
+  onPageClick: (page: number) => void;
+  /** Controls button and text sizing. Default: `"lg"`. */
+  size?: PaginationSize;
 }
 
 /**
@@ -319,25 +314,19 @@ function PaginationCount({
 function PaginationList({
   currentPage,
   totalPages,
-  onChange,
   onPageClick,
-  size = "md",
+  size = "lg",
   ...props
 }: ListPaginationProps) {
   const pageNumbers = getPageNumbers(currentPage, totalPages);
   const fonts = PAGE_NUMBER_FONT[size];
-
-  const handlePageClick = (page: number) => {
-    onPageClick?.(page);
-    onChange(page);
-  };
 
   return (
     <div {...props} className={cn("flex items-center gap-1")}>
       <NavButtons
         currentPage={currentPage}
         totalPages={totalPages}
-        onChange={onChange}
+        onChange={onPageClick}
         size={size}
       >
         <div className="flex items-center">
@@ -355,7 +344,7 @@ function PaginationList({
             return (
               <Button
                 key={page}
-                onClick={() => handlePageClick(page)}
+                onClick={() => onPageClick(page)}
                 size={size}
                 prominence="tertiary"
                 interaction={isActive ? "hover" : "rest"}
@@ -393,7 +382,7 @@ function PaginationList({
  * @example
  * ```tsx
  * // List (default)
- * <Pagination currentPage={3} totalPages={10} onChange={setPage} />
+ * <Pagination currentPage={3} totalPages={10} onPageClick={setPage} />
  *
  * // Simple
  * <Pagination variant="simple" currentPage={1} totalPages={5} onArrowClick={setPage} />

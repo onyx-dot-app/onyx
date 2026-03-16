@@ -169,7 +169,7 @@ export const ListAllSizes: Story = {
           <Pagination
             currentPage={3}
             totalPages={10}
-            onChange={() => {}}
+            onPageClick={() => {}}
             size={size}
           />
         </div>
@@ -208,7 +208,7 @@ function InteractiveListDemo() {
   const [page, setPage] = useState(1);
   return (
     <div className="flex flex-col gap-4 items-start">
-      <Pagination currentPage={page} totalPages={15} onChange={setPage} />
+      <Pagination currentPage={page} totalPages={15} onPageClick={setPage} />
       <span className="font-secondary-body text-text-03">
         Current page: {page}
       </span>
