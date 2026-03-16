@@ -19,6 +19,7 @@ from typing import Optional
 from typing import Protocol
 from typing import Tuple
 from typing import TypeVar
+from urllib.parse import urlparse
 
 import jwt
 from email_validator import EmailNotValidError
@@ -1659,6 +1660,33 @@ async def _get_user_from_token_data(token_data: dict) -> User | None:
         return user
 
 
+_LOOPBACK_HOSTNAMES = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _is_same_origin(actual: str, expected: str) -> bool:
+    """Compare two origins for the WebSocket CSWSH check.
+
+    Scheme and hostname must match exactly.  Port must also match, except
+    when the hostname is a loopback address (localhost / 127.0.0.1 / ::1),
+    where port is ignored.  On loopback, all ports belong to the same
+    operator, so port differences carry no security significance — the
+    CSWSH threat is remote origins, not local ones.
+    """
+    a = urlparse(actual.rstrip("/"))
+    e = urlparse(expected.rstrip("/"))
+
+    if a.scheme != e.scheme or a.hostname != e.hostname:
+        return False
+
+    if a.hostname in _LOOPBACK_HOSTNAMES:
+        return True
+
+    actual_port = a.port or (443 if a.scheme == "https" else 80)
+    expected_port = e.port or (443 if e.scheme == "https" else 80)
+
+    return actual_port == expected_port
+
+
 async def current_user_from_websocket(
     websocket: WebSocket,
     token: str = Query(..., description="WebSocket authentication token"),
@@ -1678,19 +1706,15 @@ async def current_user_from_websocket(
 
     This applies the same auth checks as current_user() for HTTP endpoints.
     """
-    # Check Origin header to prevent Cross-Site WebSocket Hijacking (CSWSH)
-    # Browsers always send Origin on WebSocket connections
+    # Check Origin header to prevent Cross-Site WebSocket Hijacking (CSWSH).
+    # Browsers always send Origin on WebSocket connections.
     origin = websocket.headers.get("origin")
-    expected_origin = WEB_DOMAIN.rstrip("/")
     if not origin:
         logger.warning("WS auth: missing Origin header")
         raise BasicAuthenticationError(detail="Access denied. Missing origin.")
 
-    actual_origin = origin.rstrip("/")
-    if actual_origin != expected_origin:
-        logger.warning(
-            f"WS auth: origin mismatch. Expected {expected_origin}, got {actual_origin}"
-        )
+    if not _is_same_origin(origin, WEB_DOMAIN):
+        logger.warning(f"WS auth: origin mismatch. Expected {WEB_DOMAIN}, got {origin}")
         raise BasicAuthenticationError(detail="Access denied. Invalid origin.")
 
     # Validate WS token in Redis (single-use, deleted after retrieval)
