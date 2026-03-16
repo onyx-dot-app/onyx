@@ -22,7 +22,7 @@ export default function SidebarBody({
 }: SidebarBodyProps) {
   return (
     <div className="flex flex-col min-h-0 h-full gap-3">
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5 px-2">
         {actionButtons &&
           (Array.isArray(actionButtons)
             ? actionButtons.map((button, index) => (
