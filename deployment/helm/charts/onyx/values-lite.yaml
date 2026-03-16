@@ -25,6 +25,10 @@ vespa:
 redis:
   enabled: false
 
+auth:
+  opensearch:
+    enabled: false
+
 configMap:
   CACHE_BACKEND: "postgres"
   AUTH_BACKEND: "postgres"
