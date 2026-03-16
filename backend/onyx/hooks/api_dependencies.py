@@ -16,11 +16,11 @@ def require_hook_enabled() -> None:
     """
     if MULTI_TENANT:
         raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
+            OnyxErrorCode.SINGLE_TENANT_ONLY,
             "Custom code hooks are not available in multi-tenant deployments",
         )
     if not HOOK_ENABLED:
         raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
+            OnyxErrorCode.ENV_VAR_GATED,
             "Custom code hooks are not enabled. Set HOOK_ENABLED=true to enable.",
         )

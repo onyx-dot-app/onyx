@@ -17,8 +17,8 @@ class TestRequireHookEnabled:
         ):
             with pytest.raises(OnyxError) as exc_info:
                 require_hook_enabled()
-        assert exc_info.value.error_code is OnyxErrorCode.NOT_FOUND
-        assert exc_info.value.status_code == 404
+        assert exc_info.value.error_code is OnyxErrorCode.SINGLE_TENANT_ONLY
+        assert exc_info.value.status_code == 400
         assert "multi-tenant" in exc_info.value.detail
 
     def test_raises_when_flag_disabled(self) -> None:
@@ -28,8 +28,8 @@ class TestRequireHookEnabled:
         ):
             with pytest.raises(OnyxError) as exc_info:
                 require_hook_enabled()
-        assert exc_info.value.error_code is OnyxErrorCode.NOT_FOUND
-        assert exc_info.value.status_code == 404
+        assert exc_info.value.error_code is OnyxErrorCode.ENV_VAR_GATED
+        assert exc_info.value.status_code == 400
         assert "HOOK_ENABLED" in exc_info.value.detail
 
     def test_passes_when_enabled_single_tenant(self) -> None:

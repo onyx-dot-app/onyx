@@ -42,6 +42,8 @@ class OnyxErrorCode(Enum):
     VALIDATION_ERROR = ("VALIDATION_ERROR", 400)
     INVALID_INPUT = ("INVALID_INPUT", 400)
     MISSING_REQUIRED_FIELD = ("MISSING_REQUIRED_FIELD", 400)
+    SINGLE_TENANT_ONLY = ("SINGLE_TENANT_ONLY", 400)
+    ENV_VAR_GATED = ("ENV_VAR_GATED", 400)
 
     # ------------------------------------------------------------------
     # Not Found (404)
