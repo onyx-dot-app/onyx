@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import { Button, Pagination } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { useTableSize } from "@/refresh-components/table/TableSizeContext";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 import type { ReactNode } from "react";
 
@@ -41,8 +40,6 @@ interface FooterSelectionModeProps {
   totalPages: number;
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
-  /** Controls overall footer sizing. `"regular"` (default) or `"small"`. */
-  size?: TableSize;
   className?: string;
 }
 
@@ -144,8 +141,8 @@ export default function Footer(props: FooterProps) {
             currentPage={props.currentPage}
             totalPages={props.totalPages}
             onChange={props.onPageChange}
-            units="items"
-            size={isSmall ? "sm" : "md"}
+            units={props.totalItems === 1 ? "item" : "items"}
+            size={isSmall ? "md" : "lg"}
           />
         ) : (
           <Pagination
