@@ -24,7 +24,6 @@ def identify_user(distinct_id: str, properties: dict | None = None) -> None:
     if not posthog:
         return
 
-    logger.info(f"Identifying PostHog user: {distinct_id} {properties}")
     try:
         posthog.identify(distinct_id, properties)
         posthog.flush()
