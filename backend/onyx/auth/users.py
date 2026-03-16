@@ -135,6 +135,7 @@ from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
+from onyx.utils.telemetry import mt_cloud_identify
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -793,6 +794,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         except Exception:
             logger.exception("Error deleting anonymous user cookie")
 
+        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+        mt_cloud_identify(
+            distinct_id=str(user.id),
+            properties={"email": user.email, "tenant_id": tenant_id},
+        )
+
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
@@ -810,6 +817,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         try:
             user_count = await get_user_count()
             logger.debug(f"Current tenant user count: {user_count}")
+
+            # Ensure a PostHog person profile exists for this user.
+            mt_cloud_identify(
+                distinct_id=str(user.id),
+                properties={"email": user.email, "tenant_id": tenant_id},
+            )
 
             mt_cloud_telemetry(
                 tenant_id=tenant_id,
