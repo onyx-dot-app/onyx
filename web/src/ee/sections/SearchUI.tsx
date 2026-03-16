@@ -391,11 +391,13 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
       {/* ── Bottom row: Pagination ── */}
       {!showEmpty && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onChange={setCurrentPage}
-        />
+        <Section height="fit">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onChange={setCurrentPage}
+          />
+        </Section>
       )}
     </div>
   );
