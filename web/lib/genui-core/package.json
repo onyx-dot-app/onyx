@@ -1,0 +1,12 @@
+{
+  "name": "@onyx/genui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Framework-agnostic structured UI rendering — parser, registry, prompt generation",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

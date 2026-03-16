@@ -61,6 +61,7 @@ import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
 import { OnboardingStep } from "@/interfaces/onboarding";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
+import { useGenUIViewStore } from "@/app/app/stores/useGenUIViewStore";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button } from "@opal/components";
 import Spacer from "@/refresh-components/Spacer";
@@ -506,8 +507,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     []
   );
 
+  const resetToStructuredView = useGenUIViewStore(
+    (s) => s.resetToStructuredView
+  );
+
   const handleAppInputBarSubmit = useCallback(
     async (message: string) => {
+      // Reset GenUI view to structured mode for the new response.
+      resetToStructuredView();
+
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
@@ -534,6 +542,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       submitQuery,
       onChat,
       resetInputBar,
+      resetToStructuredView,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,

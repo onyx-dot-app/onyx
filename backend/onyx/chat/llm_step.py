@@ -48,6 +48,8 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import GenUIDelta
+from onyx.server.query_and_chat.streaming_models import GenUIStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
@@ -931,6 +933,7 @@ def run_llm_step_pkt_generator(
     is_deep_research: bool = False,
     pre_answer_processing_time: float | None = None,
     timeout_override: int | None = None,
+    use_genui: bool = False,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -966,6 +969,8 @@ def run_llm_step_pkt_generator(
         pre_answer_processing_time: Optional time spent processing before the
             answer started, recorded in state_container for analytics.
         timeout_override: Optional timeout override for the LLM call.
+        use_genui: If True, emit GenUIStart/GenUIDelta packets instead of
+            AgentResponseStart/AgentResponseDelta.
 
     Yields:
         Packet: Streaming packets containing:
@@ -1112,6 +1117,7 @@ def run_llm_step_pkt_generator(
                         pre_answer_processing_time
                     )
 
+                # Always emit AgentResponseStart for text rendering
                 yield Packet(
                     placement=_current_placement(),
                     obj=AgentResponseStart(
@@ -1119,9 +1125,30 @@ def run_llm_step_pkt_generator(
                         pre_answer_processing_seconds=pre_answer_processing_time,
                     ),
                 )
+                # When GenUI is enabled, also emit GenUIStart so the
+                # frontend can offer both text and structured views.
+                if use_genui:
+                    yield Packet(
+                        placement=_current_placement(),
+                        obj=GenUIStart(),
+                    )
                 answer_start = True
 
-            if citation_processor:
+            if use_genui:
+                accumulated_answer += content_chunk
+                if state_container:
+                    state_container.set_answer_tokens(accumulated_answer)
+                # Emit both text and GenUI deltas so the frontend can
+                # toggle between plain text and structured rendering.
+                yield Packet(
+                    placement=_current_placement(),
+                    obj=AgentResponseDelta(content=content_chunk),
+                )
+                yield Packet(
+                    placement=_current_placement(),
+                    obj=GenUIDelta(content=content_chunk),
+                )
+            elif citation_processor:
                 yield from _emit_citation_results(
                     citation_processor.process_token(content_chunk)
                 )
@@ -1338,6 +1365,7 @@ def run_llm_step(
     is_deep_research: bool = False,
     pre_answer_processing_time: float | None = None,
     timeout_override: int | None = None,
+    use_genui: bool = False,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -1361,6 +1389,7 @@ def run_llm_step(
         is_deep_research=is_deep_research,
         pre_answer_processing_time=pre_answer_processing_time,
         timeout_override=timeout_override,
+        use_genui=use_genui,
     )
 
     while True:

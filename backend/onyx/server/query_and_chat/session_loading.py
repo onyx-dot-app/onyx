@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
+from onyx.configs.app_configs import GENUI_ENABLED
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
@@ -29,6 +30,8 @@ from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import FileReaderResult
 from onyx.server.query_and_chat.streaming_models import FileReaderStart
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.server.query_and_chat.streaming_models import GenUIDelta
+from onyx.server.query_and_chat.streaming_models import GenUIStart
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
@@ -89,6 +92,16 @@ def create_message_packets(
         )
     )
 
+    # When GenUI is enabled, also emit GenUIStart so the frontend
+    # can offer both text and structured views for old conversations.
+    if GENUI_ENABLED:
+        packets.append(
+            Packet(
+                placement=Placement(turn_index=turn_index),
+                obj=GenUIStart(),
+            )
+        )
+
     packets.append(
         Packet(
             placement=Placement(turn_index=turn_index),
@@ -97,6 +110,16 @@ def create_message_packets(
             ),
         ),
     )
+
+    if GENUI_ENABLED:
+        packets.append(
+            Packet(
+                placement=Placement(turn_index=turn_index),
+                obj=GenUIDelta(
+                    content=message_text,
+                ),
+            ),
+        )
 
     packets.append(
         Packet(

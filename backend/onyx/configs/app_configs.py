@@ -1049,6 +1049,12 @@ DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 INTEGRATION_TESTS_MODE = os.environ.get("INTEGRATION_TESTS_MODE", "").lower() == "true"
 
 #####
+# GenUI Configuration
+#####
+# Enable GenUI structured UI rendering in chat responses
+GENUI_ENABLED = os.environ.get("GENUI_ENABLED", "").lower() == "true"
+
+#####
 # Captcha Configuration (for cloud signup protection)
 #####
 # Enable captcha verification for new user registration

@@ -1,7 +1,9 @@
 import React, { JSX, memo } from "react";
+import { useGenUIViewStore } from "../../stores/useGenUIViewStore";
 import {
   ChatPacket,
   CODE_INTERPRETER_TOOL_TYPES,
+  GenUIPacket,
   ImageGenerationToolPacket,
   Packet,
   PacketType,
@@ -14,7 +16,6 @@ import {
   FullChatState,
   MessageRenderer,
   RenderType,
-  RendererResult,
   RendererOutput,
 } from "./interfaces";
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
@@ -160,11 +161,15 @@ export function findRenderer(
   if (groupedPackets.packets.some((packet) => isMemoryToolPacket(packet))) {
     return MemoryToolRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isReasoningPacket(packet))) {
-    return ReasoningRenderer;
-  }
+  // GenUI must be checked BEFORE reasoning because isReasoningPacket matches
+  // SECTION_END/ERROR (shared packet types injected into all groups on STOP).
+  // Without this ordering, GenUI groups get misrouted to ReasoningRenderer
+  // once the STOP packet injects SECTION_END.
   if (groupedPackets.packets.some((packet) => isGenUIPacket(packet))) {
     return GenUIRenderer;
+  }
+  if (groupedPackets.packets.some((packet) => isReasoningPacket(packet))) {
+    return ReasoningRenderer;
   }
   return null;
 }
@@ -222,6 +227,67 @@ function MixedContentHandler({
   );
 }
 
+// Handles display groups containing both chat text and GenUI packets.
+// Which view is active is controlled by the external showGenUI prop
+// (toggle lives in MessageToolbar).
+function GenUIToggleHandler({
+  chatPackets,
+  genuiPackets,
+  showGenUI,
+  chatState,
+  messageNodeId,
+  hasTimelineThinking,
+  onComplete,
+  animate,
+  stopPacketSeen,
+  stopReason,
+  children,
+}: {
+  chatPackets: Packet[];
+  genuiPackets: Packet[];
+  showGenUI: boolean;
+  chatState: FullChatState;
+  messageNodeId?: number;
+  hasTimelineThinking?: boolean;
+  onComplete: () => void;
+  animate: boolean;
+  stopPacketSeen: boolean;
+  stopReason?: StopReason;
+  children: (result: RendererOutput) => JSX.Element;
+}) {
+  if (showGenUI) {
+    return (
+      <GenUIRenderer
+        packets={genuiPackets as GenUIPacket[]}
+        state={chatState}
+        onComplete={onComplete}
+        animate={animate}
+        renderType={RenderType.FULL}
+        stopPacketSeen={stopPacketSeen}
+        stopReason={stopReason}
+      >
+        {children}
+      </GenUIRenderer>
+    );
+  }
+
+  return (
+    <MessageTextRenderer
+      packets={chatPackets as ChatPacket[]}
+      state={chatState}
+      messageNodeId={messageNodeId}
+      hasTimelineThinking={hasTimelineThinking}
+      onComplete={onComplete}
+      animate={animate}
+      renderType={RenderType.FULL}
+      stopPacketSeen={stopPacketSeen}
+      stopReason={stopReason}
+    >
+      {children}
+    </MessageTextRenderer>
+  );
+}
+
 // Props interface for RendererComponent
 interface RendererComponentProps {
   packets: Packet[];
@@ -263,10 +329,53 @@ export const RendererComponent = memo(function RendererComponent({
   stopReason,
   children,
 }: RendererComponentProps) {
-  // Detect mixed display groups (both chat text and image generation)
+  const structuredViewEnabled = useGenUIViewStore(
+    (s) => s.structuredViewEnabled
+  );
+  // Detect mixed display groups
   const hasChatPackets = packets.some((p) => isChatPacket(p));
   const hasImagePackets = packets.some((p) => isImageToolPacket(p));
+  const hasGenUIPackets = packets.some((p) => isGenUIPacket(p));
 
+  // Mixed chat + GenUI: show text by default with toggle to GenUI
+  if (hasChatPackets && hasGenUIPackets) {
+    const sharedTypes = new Set<string>([
+      PacketType.SECTION_END,
+      PacketType.ERROR,
+    ]);
+
+    const chatOnly = packets.filter(
+      (p) =>
+        isChatPacket(p) ||
+        p.obj.type === PacketType.CITATION_INFO ||
+        sharedTypes.has(p.obj.type as string)
+    );
+    const genuiOnly = packets.filter(
+      (p) =>
+        isGenUIPacket(p) ||
+        p.obj.type === PacketType.GENUI_DELTA ||
+        sharedTypes.has(p.obj.type as string)
+    );
+
+    return (
+      <GenUIToggleHandler
+        chatPackets={chatOnly}
+        genuiPackets={genuiOnly}
+        showGenUI={structuredViewEnabled}
+        chatState={chatState}
+        messageNodeId={messageNodeId}
+        hasTimelineThinking={hasTimelineThinking}
+        onComplete={onComplete}
+        animate={animate}
+        stopPacketSeen={stopPacketSeen}
+        stopReason={stopReason}
+      >
+        {children}
+      </GenUIToggleHandler>
+    );
+  }
+
+  // Mixed chat + image generation
   if (hasChatPackets && hasImagePackets) {
     const sharedTypes = new Set<string>([
       PacketType.SECTION_END,

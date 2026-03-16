@@ -1,0 +1,12 @@
+{
+  "name": "@onyx/genui-react",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React renderer for GenUI structured UI output",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

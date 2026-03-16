@@ -56,15 +56,34 @@ import {
   SvgSearchMenu,
   SvgShare,
   SvgSidebar,
+  SvgSparkle,
   SvgTrash,
 } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import { useGenUIViewStore } from "@/app/app/stores/useGenUIViewStore";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
+
+/** Chat-level toggle for structured GenUI view vs raw text. */
+function GenUIToggleButton() {
+  const { structuredViewEnabled, toggleStructuredView } = useGenUIViewStore();
+  return (
+    <Button
+      icon={SvgSparkle}
+      prominence="tertiary"
+      interaction={structuredViewEnabled ? "hover" : "rest"}
+      responsiveHideText
+      onClick={toggleStructuredView}
+      aria-label="genui-view-toggle"
+    >
+      {structuredViewEnabled ? "Structured" : "Text"}
+    </Button>
+  );
+}
 
 /**
  * App Header Component
@@ -391,6 +410,7 @@ function Header() {
         <div className="flex flex-1 justify-end items-center h-[3.3rem]">
           {appFocus.isChat() && currentChatSession && (
             <FrostedDiv className="flex shrink flex-row items-center">
+              <GenUIToggleButton />
               <Button
                 icon={SvgShare}
                 prominence="tertiary"

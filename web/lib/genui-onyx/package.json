@@ -1,0 +1,17 @@
+{
+  "name": "@onyx/genui-onyx",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Onyx component bindings for GenUI",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  }
+}

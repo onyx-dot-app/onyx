@@ -13,6 +13,7 @@ from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
+from onyx.chat.genui_prompt import GENUI_SYSTEM_PROMPT
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
@@ -26,6 +27,7 @@ from onyx.chat.prompt_utils import build_system_prompt
 from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
 )
+from onyx.configs.app_configs import GENUI_ENABLED
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -699,6 +701,7 @@ def run_llm_loop(
                         tools=tools,
                         should_cite_documents=should_cite_documents
                         or always_cite_documents,
+                        genui_prompt=GENUI_SYSTEM_PROMPT if GENUI_ENABLED else None,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
@@ -792,6 +795,7 @@ def run_llm_loop(
                 final_documents=gathered_documents,
                 user_identity=user_identity,
                 pre_answer_processing_time=pre_answer_processing_time,
+                use_genui=GENUI_ENABLED,
             )
             if has_reasoned:
                 reasoning_cycles += 1

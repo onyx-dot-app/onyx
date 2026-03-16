@@ -60,7 +60,8 @@ export function isActualToolCallPacket(packet: Packet): boolean {
 export function isDisplayPacket(packet: Packet) {
   return (
     packet.obj.type === PacketType.MESSAGE_START ||
-    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
+    packet.obj.type === PacketType.GENUI_START
   );
 }
 
@@ -80,7 +81,8 @@ export function isFinalAnswerComing(packets: Packet[]) {
   return packets.some(
     (packet) =>
       packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
+      packet.obj.type === PacketType.GENUI_START
   );
 }
 

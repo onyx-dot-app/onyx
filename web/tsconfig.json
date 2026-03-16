@@ -25,7 +25,9 @@
       "@tests/*": ["./tests/*"],
       "@public/*": ["./public/*"],
       "@opal/*": ["./lib/opal/src/*"],
-      "@opal/types/*": ["./lib/opal/src/types/*"]
+      "@opal/types/*": ["./lib/opal/src/types/*"],
+      "@onyx/genui": ["./lib/genui-core/src/index.ts"],
+      "@onyx/genui-react": ["./lib/genui-react/src/index.ts"]
     }
   },
   "include": [

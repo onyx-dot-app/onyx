@@ -149,6 +149,7 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
+  PacketType.GENUI_START,
 ]);
 
 function hasContentPackets(packets: Packet[]): boolean {
@@ -172,6 +173,8 @@ const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_DELTA,
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_DELTA,
+  PacketType.GENUI_START,
+  PacketType.GENUI_DELTA,
 ]);
 
 // ============================================================================
