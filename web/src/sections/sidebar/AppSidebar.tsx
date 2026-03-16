@@ -603,7 +603,7 @@ const MemoizedAppSidebarInner = memo(
         <div>
           {(isAdmin || isCurator) && (
             <SidebarTab
-              href="/admin/configuration/llm"
+              href={isCurator ? "/admin/agents" : "/admin/configuration/llm"}
               icon={SvgSettings}
               folded={folded}
             >
