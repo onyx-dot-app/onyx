@@ -21,7 +21,7 @@ export default function SidebarBody({
   scrollKey,
 }: SidebarBodyProps) {
   return (
-    <div className="flex flex-col min-h-0 h-full gap-3 px-2">
+    <div className="flex flex-col min-h-0 h-full gap-3">
       <div className="flex flex-col gap-1.5">
         {actionButtons &&
           (Array.isArray(actionButtons)
@@ -30,7 +30,7 @@ export default function SidebarBody({
               ))
             : actionButtons)}
       </div>
-      <OverflowDiv className="gap-3" scrollKey={scrollKey}>
+      <OverflowDiv className="gap-3 px-2" scrollKey={scrollKey}>
         {children}
       </OverflowDiv>
       {footer}
