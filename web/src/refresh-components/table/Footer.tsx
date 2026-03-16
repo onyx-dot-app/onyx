@@ -2,11 +2,15 @@
 
 import { cn } from "@/lib/utils";
 import { Button } from "@opal/components";
+import { Pagination } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import Pagination from "@/refresh-components/table/Pagination";
 import { useTableSize } from "@/refresh-components/table/TableSizeContext";
 import type { TableSize } from "@/refresh-components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 type SelectionState = "none" | "partial" | "all";
 
@@ -75,6 +79,10 @@ interface FooterSummaryModeProps {
  */
 export type FooterProps = FooterSelectionModeProps | FooterSummaryModeProps;
 
+// ---------------------------------------------------------------------------
+// Footer
+// ---------------------------------------------------------------------------
+
 function getSelectionMessage(
   state: SelectionState,
   multi: boolean,
@@ -133,21 +141,19 @@ export default function Footer(props: FooterProps) {
       <div className="flex items-center gap-2 px-1 py-2">
         {props.mode === "selection" ? (
           <Pagination
-            type="count"
+            variant="count"
             pageSize={props.pageSize}
             totalItems={props.totalItems}
             currentPage={props.currentPage}
             totalPages={props.totalPages}
-            onPageChange={props.onPageChange}
-            showUnits
+            onChange={props.onPageChange}
             size={isSmall ? "sm" : "md"}
           />
         ) : (
           <Pagination
-            type="list"
             currentPage={props.currentPage}
             totalPages={props.totalPages}
-            onPageChange={props.onPageChange}
+            onChange={props.onPageChange}
             size={isSmall ? "md" : "lg"}
           />
         )}
@@ -155,6 +161,10 @@ export default function Footer(props: FooterProps) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Footer — left-side content
+// ---------------------------------------------------------------------------
 
 interface SelectionLeftProps {
   selectionState: SelectionState;

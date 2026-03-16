@@ -7,7 +7,7 @@ import {
   SourceMetadata,
 } from "@/lib/search/interfaces";
 import SearchCard from "@/ee/sections/SearchCard";
-import Pagination from "@/refresh-components/Pagination";
+import { Pagination } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { IllustrationContent } from "@opal/layouts";
@@ -394,7 +394,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         <Pagination
           currentPage={currentPage}
           totalPages={totalPages}
-          onPageChange={setCurrentPage}
+          onChange={setCurrentPage}
         />
       )}
     </div>
