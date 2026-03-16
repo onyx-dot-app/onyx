@@ -66,12 +66,12 @@ def _connector_supports_hierarchy_fetching(
             cc_pair.connector.source,
             cc_pair.connector.input_type,
         )
-    except ConnectorMissingException:
-        task_logger.debug(
-            "Skipping hierarchy fetching enqueue for source=%s input_type=%s: "
-            "unable to identify connector class",
+    except ConnectorMissingException as e:
+        task_logger.warning(
+            "Skipping hierarchy fetching enqueue for source=%s input_type=%s: %s",
             cc_pair.connector.source,
             cc_pair.connector.input_type,
+            str(e),
         )
         return False
 

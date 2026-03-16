@@ -59,13 +59,16 @@ def test_connector_supports_hierarchy_fetching_false_for_non_hierarchy_connector
     assert _connector_supports_hierarchy_fetching(_build_cc_pair_mock()) is False
 
 
+@patch(f"{TASKS_MODULE}.task_logger.warning")
 @patch(f"{TASKS_MODULE}.identify_connector_class")
 def test_connector_supports_hierarchy_fetching_false_when_class_missing(
     mock_identify_connector_class: MagicMock,
+    mock_warning: MagicMock,
 ) -> None:
     mock_identify_connector_class.side_effect = ConnectorMissingException("missing")
 
     assert _connector_supports_hierarchy_fetching(_build_cc_pair_mock()) is False
+    mock_warning.assert_called_once()
 
 
 @patch(f"{TASKS_MODULE}.identify_connector_class")
@@ -129,8 +132,9 @@ def test_check_for_hierarchy_fetching_creates_task_for_supported_due_connector(
 ) -> None:
     redis_client, lock = _build_redis_mock_with_lock()
     cc_pair = _build_cc_pair_mock()
+    db_session = MagicMock()
     mock_get_redis_client.return_value = redis_client
-    mock_get_session.return_value.__enter__.return_value = MagicMock()
+    mock_get_session.return_value.__enter__.return_value = db_session
     mock_fetch_cc_pair_ids.return_value = [123]
     mock_get_cc_pair.return_value = cc_pair
     mock_supports_hierarchy_fetching.return_value = True
@@ -143,7 +147,13 @@ def test_check_for_hierarchy_fetching_creates_task_for_supported_due_connector(
 
     assert result == 1
     mock_is_due.assert_called_once_with(cc_pair)
-    mock_try_create_task.assert_called_once()
+    mock_try_create_task.assert_called_once_with(
+        celery_app=task_app,
+        cc_pair=cc_pair,
+        db_session=db_session,
+        r=redis_client,
+        tenant_id="test-tenant",
+    )
     lock.release.assert_called_once()
 
 
