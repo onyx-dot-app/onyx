@@ -62,6 +62,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
+from onyx.hooks.registry import validate_registry
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
@@ -308,6 +309,7 @@ def validate_no_vector_db_settings() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     validate_no_vector_db_settings()
     validate_cache_backend_settings()
+    validate_registry()
 
     # Set recursion limit
     if SYSTEM_RECURSION_LIMIT is not None:
