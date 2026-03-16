@@ -284,14 +284,17 @@ export class UsersAdminPage {
   }
 
   async searchGroupsInModal(term: string) {
+    // Click the input first to open the popover (Radix Popover.Trigger
+    // wraps the input — fill() alone bypasses the trigger's click handler).
+    await this.groupSearchInput.click();
     await this.groupSearchInput.fill(term);
     await expect(this.dialog.getByText(term).first()).toBeVisible();
   }
 
   async toggleGroupInModal(groupName: string) {
-    await this.dialog
-      .getByRole("button", { name: new RegExp(groupName) })
-      .click();
+    // LineItem renders as a <div>, not <button> — use text match.
+    // The popover dropdown is portaled inside the modal dialog.
+    await this.dialog.getByText(groupName).first().click();
   }
 
   async saveGroupsModal() {
