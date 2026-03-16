@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Button } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { Disabled } from "@opal/core";
@@ -150,14 +150,14 @@ export default function EditUserModal({
   };
 
   const displayName = user.personal_name ?? user.email;
+  const contentRef = useRef<HTMLDivElement>(null);
 
   return (
     <Modal
       open
       onOpenChange={(isOpen) => !isOpen && !isSubmitting && onClose()}
-      modal={false}
     >
-      <Modal.Content width="sm">
+      <Modal.Content width="sm" ref={contentRef}>
         <Modal.Header
           icon={SvgUsers}
           title="Edit User's Groups & Roles"
@@ -187,7 +187,11 @@ export default function EditUserModal({
                     leftSearchIcon
                   />
                 </Popover.Trigger>
-                <Popover.Content width="trigger" align="start">
+                <Popover.Content
+                  width="trigger"
+                  align="start"
+                  container={contentRef.current}
+                >
                   {groupsLoading ? (
                     <LineItem skeleton description="Loading groups...">
                       Loading...

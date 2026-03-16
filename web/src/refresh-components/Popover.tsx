@@ -121,17 +121,20 @@ interface PopoverContentProps
     React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
   > {
   width?: PopoverWidths;
+  /** Portal container. Set to a DOM element to render inside it (e.g. inside a modal). */
+  container?: HTMLElement | null;
   ref?: React.Ref<React.ComponentRef<typeof PopoverPrimitive.Content>>;
 }
 function PopoverContent({
   width = "fit",
+  container,
   align = "center",
   sideOffset = 4,
   ref,
   ...props
 }: PopoverContentProps) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={container}>
       <PopoverPrimitive.Content
         ref={ref}
         align={align}
