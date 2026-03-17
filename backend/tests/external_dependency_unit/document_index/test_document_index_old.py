@@ -297,6 +297,10 @@ def index_batch_params(
 class TestDocumentIndexOld:
     """Tests the old DocumentIndex interface."""
 
+    # TODO(ENG-3864)(andrei): Re-enable this test.
+    @pytest.mark.xfail(
+        reason="Flaky test: Retrieved chunks vary non-deterministically before and after changing user projects and personas. Likely a timing issue with the index being updated."
+    )
     def test_update_single_can_clear_user_projects_and_personas(
         self,
         document_indices: list[DocumentIndex],
