@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
-import { IS_DEV } from "@/lib/constants";
+import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
 
 // Target format for OpenAI Realtime API
 const TARGET_SAMPLE_RATE = 24000;
@@ -247,7 +247,7 @@ class VoiceRecorderSession {
     const { token } = await tokenResponse.json();
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = IS_DEV ? "localhost:8080" : window.location.host;
+    const host = IS_DEV ? new URL(INTERNAL_URL).host : window.location.host;
     const path = IS_DEV
       ? "/voice/transcribe/stream"
       : "/api/voice/transcribe/stream";
