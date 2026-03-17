@@ -11,8 +11,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 # Requests timeout in seconds.
-_CANVAS_CALL_TIMEOUT = 30
-_CANVAS_API_VERSION = "/api/v1"
+_CANVAS_CALL_TIMEOUT: int = 30
+_CANVAS_API_VERSION: str = "/api/v1"
 _NEXT_LINK_PATTERN = re.compile(r'<([^>]+)>;\s*rel="next"')
 
 
@@ -45,7 +45,7 @@ class CanvasApiClient:
             raise ValueError("canvas_base_url must use https")
 
         self.bearer_token = bearer_token
-        self.base_url = canvas_base_url.rstrip("/") + _CANVAS_API_VERSION
+        self.base_url = canvas_base_url.rstrip("/").removesuffix(_CANVAS_API_VERSION) + _CANVAS_API_VERSION
 
     def get(
         self,
