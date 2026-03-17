@@ -7,6 +7,7 @@ from typing import cast
 from typing import Literal
 from typing import TypeAlias
 
+from bs4 import BeautifulSoup
 from pydantic import BaseModel
 from retry import retry
 from typing_extensions import override
@@ -38,6 +39,13 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _html_to_text(html: str | None) -> str:
+    """Strip HTML tags and return plain text."""
+    if not html:
+        return ""
+    return BeautifulSoup(html, "html.parser").get_text(separator="\n", strip=True)
 
 
 class CanvasCourse(BaseModel):
@@ -128,9 +136,7 @@ class CanvasConnector(
     @property
     def canvas_client(self) -> CanvasApiClient:
         if self._canvas_client is None:
-            raise ConnectorMissingCredentialError(
-                "Canvas API client has not been initialized. Missing credentials?"
-            )
+            raise ConnectorMissingCredentialError("Canvas")
         return self._canvas_client
 
     def _get_course_permissions(self, course_id: int) -> ExternalAccess | None:
@@ -311,8 +317,9 @@ class CanvasConnector(
         link = f"{self.canvas_base_url}/courses/{page.course_id}/pages/{page.url}"
 
         text_parts = [page.title, link]
-        if page.body:
-            text_parts.append(page.body)
+        body_text = _html_to_text(page.body)
+        if body_text:
+            text_parts.append(body_text)
 
         sections = [TextSection(link=link, text="\n\n".join(text_parts))]
 
@@ -333,8 +340,9 @@ class CanvasConnector(
         """Convert a Canvas assignment to a Document."""
 
         text_parts = [assignment.name, assignment.html_url]
-        if assignment.description:
-            text_parts.append(assignment.description)
+        desc_text = _html_to_text(assignment.description)
+        if desc_text:
+            text_parts.append(desc_text)
         if assignment.due_at:
             text_parts.append(f"Due: {assignment.due_at}")
 
@@ -359,8 +367,9 @@ class CanvasConnector(
         """Convert a Canvas announcement to a Document."""
 
         text_parts = [announcement.title, announcement.html_url]
-        if announcement.message:
-            text_parts.append(announcement.message)
+        msg_text = _html_to_text(announcement.message)
+        if msg_text:
+            text_parts.append(msg_text)
 
         sections = [
             TextSection(
@@ -397,9 +406,7 @@ class CanvasConnector(
             self._canvas_client.get("courses", params={"per_page": "1"})
         except CanvasClientRequestFailedError as e:
             if e.status_code == 401:
-                raise ConnectorMissingCredentialError(
-                    "Invalid Canvas API token"
-                )
+                raise ConnectorMissingCredentialError("Canvas")
             raise
 
         return None
