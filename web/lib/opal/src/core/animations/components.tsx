@@ -84,7 +84,7 @@ interface HoverableItemProps
 function HoverableRoot({
   group,
   children,
-  widthVariant = "auto",
+  widthVariant = "full",
   ref,
   onMouseEnter: consumerMouseEnter,
   onMouseLeave: consumerMouseLeave,

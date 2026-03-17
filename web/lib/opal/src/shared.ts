@@ -19,9 +19,20 @@
 //   - Content (ContentXl / ContentLg / ContentMd)  (edit-button size)
 // ---------------------------------------------------------------------------
 
-type ExtremaSizeVariants = "fit" | "full" | "auto";
-type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
-type ContainerSizeVariants = "fit" | "lg" | "md" | "sm" | "xs" | "2xs";
+// Base size types:
+type SizeVariants = "fit" | "full" | "lg" | "md" | "sm" | "xs" | "2xs";
+type OverridableExtremaSizeVariants = SizeVariants | number;
+
+// Convenience types:
+//
+// NOTE (@raunakab + @nmgarza5)
+// There are many components throughout the library that need to "extract" very specific sizings from the full gamut that is available.
+// For those components, we've extracted these below "convenience" types.
+type ContainerSizeVariants = Exclude<SizeVariants, "full">;
+type ExtremaSizeVariants = Exclude<
+  SizeVariants,
+  "lg" | "md" | "sm" | "xs" | "2xs"
+>;
 
 /**
  * Size-variant scale.
@@ -80,7 +91,6 @@ const containerSizeVariants: Record<
  * | `full` | `w-full`       |
  */
 const widthVariants: Record<ExtremaSizeVariants, string> = {
-  auto: "w-auto",
   fit: "w-fit",
   full: "w-full",
 } as const;
@@ -95,7 +105,6 @@ const widthVariants: Record<ExtremaSizeVariants, string> = {
  * | `full` | `h-full`       |
  */
 const heightVariants: Record<ExtremaSizeVariants, string> = {
-  auto: "h-auto",
   fit: "h-fit",
   full: "h-full",
 } as const;

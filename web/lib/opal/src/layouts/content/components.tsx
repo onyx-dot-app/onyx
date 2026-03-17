@@ -128,7 +128,7 @@ function Content(props: ContentProps) {
   const {
     sizePreset = "headline",
     variant = "heading",
-    widthVariant = "auto",
+    widthVariant = "full",
     withInteractive,
     ref,
     ...rest
