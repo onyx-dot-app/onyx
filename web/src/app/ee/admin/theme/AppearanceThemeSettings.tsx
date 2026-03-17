@@ -22,6 +22,7 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 
 interface AppearanceThemeSettingsProps {
   selectedLogo: File | null;
@@ -237,7 +238,7 @@ export const AppearanceThemeSettings = forwardRef<
               />
             </FormField.Control>
             <FormField.Description>
-              This name will show across the app and replace "Onyx" in the UI.
+              {`This name will show across the app and replace "${DEFAULT_APPLICATION_NAME}" in the UI.`}
             </FormField.Description>
             <FormField.Message
               messages={{ error: errors.application_name as string }}

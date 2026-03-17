@@ -17,7 +17,7 @@ def test_mt_cloud_telemetry_noop_when_not_multi_tenant(monkeypatch: Any) -> None
 
     telemetry_utils.mt_cloud_telemetry(
         tenant_id="tenant-1",
-        distinct_id="user@example.com",
+        distinct_id="12345678-1234-1234-1234-123456789abc",
         event=MilestoneRecordType.USER_MESSAGE_SENT,
         properties={"origin": "web"},
     )
@@ -40,7 +40,7 @@ def test_mt_cloud_telemetry_calls_event_telemetry_when_multi_tenant(
 
     telemetry_utils.mt_cloud_telemetry(
         tenant_id="tenant-1",
-        distinct_id="user@example.com",
+        distinct_id="12345678-1234-1234-1234-123456789abc",
         event=MilestoneRecordType.USER_MESSAGE_SENT,
         properties={"origin": "web"},
     )
@@ -51,7 +51,52 @@ def test_mt_cloud_telemetry_calls_event_telemetry_when_multi_tenant(
         fallback=telemetry_utils.noop_fallback,
     )
     event_telemetry.assert_called_once_with(
-        "user@example.com",
+        "12345678-1234-1234-1234-123456789abc",
         MilestoneRecordType.USER_MESSAGE_SENT,
         {"origin": "web", "tenant_id": "tenant-1"},
+    )
+
+
+def test_mt_cloud_identify_noop_when_not_multi_tenant(monkeypatch: Any) -> None:
+    fetch_impl = Mock()
+    monkeypatch.setattr(
+        telemetry_utils,
+        "fetch_versioned_implementation_with_fallback",
+        fetch_impl,
+    )
+    monkeypatch.setattr("onyx.utils.telemetry.MULTI_TENANT", False)
+
+    telemetry_utils.mt_cloud_identify(
+        distinct_id="12345678-1234-1234-1234-123456789abc",
+        properties={"email": "user@example.com"},
+    )
+
+    fetch_impl.assert_not_called()
+
+
+def test_mt_cloud_identify_calls_identify_user_when_multi_tenant(
+    monkeypatch: Any,
+) -> None:
+    identify_user = Mock()
+    fetch_impl = Mock(return_value=identify_user)
+    monkeypatch.setattr(
+        telemetry_utils,
+        "fetch_versioned_implementation_with_fallback",
+        fetch_impl,
+    )
+    monkeypatch.setattr("onyx.utils.telemetry.MULTI_TENANT", True)
+
+    telemetry_utils.mt_cloud_identify(
+        distinct_id="12345678-1234-1234-1234-123456789abc",
+        properties={"email": "user@example.com"},
+    )
+
+    fetch_impl.assert_called_once_with(
+        module="onyx.utils.telemetry",
+        attribute="identify_user",
+        fallback=telemetry_utils.noop_fallback,
+    )
+    identify_user.assert_called_once_with(
+        "12345678-1234-1234-1234-123456789abc",
+        {"email": "user@example.com"},
     )

@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 import { useContext } from "react";
 import Logo from "@/refresh-components/Logo";
 import { SettingsContext } from "@/providers/SettingsProvider";
@@ -11,7 +12,9 @@ export default function OnyxInitializingLoader() {
     <div className="mx-auto my-auto animate-pulse">
       <Logo folded size={96} className="mx-auto mb-3" />
       <p className="text-lg text-text font-semibold">
-        Initializing {settings?.enterpriseSettings?.application_name ?? "Onyx"}
+        Initializing{" "}
+        {settings?.enterpriseSettings?.application_name ??
+          DEFAULT_APPLICATION_NAME}
       </p>
     </div>
   );

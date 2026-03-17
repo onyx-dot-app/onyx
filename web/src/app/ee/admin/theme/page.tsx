@@ -15,6 +15,7 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/interfaces/settings";
 import { useRouter } from "next/navigation";
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 
 const route = ADMIN_ROUTES.THEME;
 
@@ -130,7 +131,8 @@ export default function ThemePage() {
   return (
     <Formik
       initialValues={{
-        application_name: enterpriseSettings?.application_name || "",
+        application_name:
+          enterpriseSettings?.application_name || DEFAULT_APPLICATION_NAME,
         logo_display_style:
           enterpriseSettings?.logo_display_style || "logo_and_name",
         use_custom_logo: enterpriseSettings?.use_custom_logo || false,
