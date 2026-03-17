@@ -10,6 +10,7 @@ from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
+# Requests timeout in seconds.
 _CANVAS_CALL_TIMEOUT = 30
 _CANVAS_API_VERSION = "/api/v1"
 
