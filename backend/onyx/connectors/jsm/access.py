@@ -1,5 +1,5 @@
 """
-Permissioning / AccessControl logic for JIRA Projects + Issues.
+Permissioning / AccessControl logic for JSM Projects + Issues.
 """
 
 from collections.abc import Callable
@@ -13,8 +13,8 @@ from onyx.utils.variable_functionality import global_version
 
 
 def get_project_permissions(
-    jira_client: JIRA,
-    jira_project: str,
+    jsm_client: JIRA,
+    jsm_project: str,
     add_prefix: bool = False,
 ) -> ExternalAccess | None:
     """
@@ -22,8 +22,8 @@ def get_project_permissions(
     This functionality requires Enterprise Edition.
 
     Args:
-        jira_client: The JIRA client instance.
-        jira_project: The JIRA project string.
+        jsm_client: The JSM client instance.
+        jsm_project: The JSM project string.
         add_prefix: When True, prefix group IDs with source type (for indexing path).
                    When False (default), leave unprefixed (for permission sync path
                    where upsert_document_external_perms handles prefixing).
@@ -38,16 +38,16 @@ def get_project_permissions(
 
     ee_get_project_permissions = cast(
         Callable[
-            [JIRA, str, bool],
+            [JSM, str, bool],
             ExternalAccess | None,
         ],
         fetch_versioned_implementation(
-            "onyx.external_permissions.jira.page_access", "get_project_permissions"
+            "onyx.external_permissions.jsm.page_access", "get_project_permissions"
         ),
     )
 
     return ee_get_project_permissions(
-        jira_client,
-        jira_project,
+        jsm_client,
+        jsm_project,
         add_prefix,
     )

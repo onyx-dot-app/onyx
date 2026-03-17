@@ -18,8 +18,8 @@ logger = setup_logger()
 
 
 PROJECT_URL_PAT = "projects"
-JIRA_SERVER_API_VERSION = os.environ.get("JIRA_SERVER_API_VERSION") or "2"
-JIRA_CLOUD_API_VERSION = os.environ.get("JIRA_CLOUD_API_VERSION") or "3"
+JSM_SERVER_API_VERSION = os.environ.get("JSM_SERVER_API_VERSION") or "2"
+JSM_CLOUD_API_VERSION = "rest/servicedeskapi"
 
 
 def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
@@ -46,22 +46,22 @@ def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
     return BasicExpertInfo(display_name=display_name, email=email)
 
 
-def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
-    if hasattr(jira_issue, field):
-        return getattr(jira_issue, field)
+def best_effort_get_field_from_issue(jsm_issue: Issue, field: str) -> Any:
+    if hasattr(jsm_issue, field):
+        return getattr(jsm_issue, field)
 
-    if hasattr(jira_issue, "fields") and hasattr(jira_issue.fields, field):
-        return getattr(jira_issue.fields, field)
+    if hasattr(jsm_issue, "fields") and hasattr(jsm_issue.fields, field):
+        return getattr(jsm_issue.fields, field)
 
     try:
-        return jira_issue.raw["fields"][field]
+        return jsm_issue.raw["fields"][field]
     except Exception:
         return None
 
 
 def extract_text_from_adf(adf: dict | None) -> str:
     """Extracts plain text from Atlassian Document Format:
-    https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/
+    https://developer.atlassian.com/cloud/jsm/platform/apis/document/structure/
 
     WARNING: This function is incomplete and will e.g. skip lists!
     """
@@ -76,51 +76,51 @@ def extract_text_from_adf(adf: dict | None) -> str:
     return " ".join(texts)
 
 
-def build_jira_url(jira_base_url: str, issue_key: str) -> str:
+def build_jsm_url(jsm_base_url: str, issue_key: str) -> str:
     """
     Get the url used to access an issue in the UI.
     """
-    return f"{jira_base_url}/browse/{issue_key}"
+    return f"{jsm_base_url}/browse/{issue_key}"
 
 
-def build_jira_client(
-    credentials: dict[str, Any], jira_base: str, scoped_token: bool = False
-) -> JIRA:
+def build_jsm_client(
+    credentials: dict[str, Any], jsm_base: str, scoped_token: bool = False
+) -> JSM:
 
-    jira_base = scoped_url(jira_base, "jira") if scoped_token else jira_base
-    api_token = credentials["jira_api_token"]
+    jsm_base = scoped_url(jsm_base, "jsm") if scoped_token else jsm_base
+    api_token = credentials["jsm_api_token"]
     # if user provide an email we assume it's cloud
-    if "jira_user_email" in credentials:
-        email = credentials["jira_user_email"]
-        return JIRA(
+    if "jsm_user_email" in credentials:
+        email = credentials["jsm_user_email"]
+        return JSM(
             basic_auth=(email, api_token),
-            server=jira_base,
-            options={"rest_api_version": JIRA_CLOUD_API_VERSION},
+            server=jsm_base,
+            options={"rest_api_version": JSM_CLOUD_API_VERSION},
         )
     else:
-        return JIRA(
+        return JSM(
             token_auth=api_token,
-            server=jira_base,
-            options={"rest_api_version": JIRA_SERVER_API_VERSION},
+            server=jsm_base,
+            options={"rest_api_version": JSM_SERVER_API_VERSION},
         )
 
 
-def extract_jira_project(url: str) -> tuple[str, str]:
+def extract_jsm_project(url: str) -> tuple[str, str]:
     parsed_url = urlparse(url)
-    jira_base = parsed_url.scheme + "://" + parsed_url.netloc
+    jsm_base = parsed_url.scheme + "://" + parsed_url.netloc
 
     # Split the path by '/' and find the position of 'projects' to get the project name
     split_path = parsed_url.path.split("/")
     if PROJECT_URL_PAT in split_path:
         project_pos = split_path.index(PROJECT_URL_PAT)
         if len(split_path) > project_pos + 1:
-            jira_project = split_path[project_pos + 1]
+            jsm_project = split_path[project_pos + 1]
         else:
             raise ValueError("No project name found in the URL")
     else:
         raise ValueError("'projects' not found in the URL")
 
-    return jira_base, jira_project
+    return jsm_base, jsm_project
 
 
 def get_comment_strs(
@@ -149,7 +149,7 @@ def get_comment_strs(
     return comment_strs
 
 
-def get_jira_project_key_from_issue(issue: Issue) -> str | None:
+def get_jsm_project_key_from_issue(issue: Issue) -> str | None:
     if not hasattr(issue, "fields"):
         return None
     if not hasattr(issue.fields, "project"):
@@ -185,18 +185,18 @@ class CustomFieldExtractor:
 
     @staticmethod
     def get_issue_custom_fields(
-        jira: Issue, custom_fields: dict, max_value_length: int = 250
+        jsm: Issue, custom_fields: dict, max_value_length: int = 250
     ) -> dict:
         """
         Process all custom fields of an issue to a dictionary of strings
-        :param jira: jira_issue, bug or similar
+        :param jsm: jsm_issue, bug or similar
         :param custom_fields: custom fields dictionary
         :param max_value_length: maximum length of the value to be processed, if exceeded, it will be truncated
         """
 
         issue_custom_fields = {
             custom_fields[key]: value
-            for key, value in jira.fields.__dict__.items()
+            for key, value in jsm.fields.__dict__.items()
             if value and key in custom_fields.keys()
         }
 
@@ -213,9 +213,9 @@ class CustomFieldExtractor:
         return processed_fields
 
     @staticmethod
-    def get_all_custom_fields(jira_client: JIRA) -> dict:
-        """Get all custom fields from Jira"""
-        fields = jira_client.fields()
+    def get_all_custom_fields(jsm_client: JSM) -> dict:
+        """Get all custom fields from JSM"""
+        fields = jsm_client.fields()
         fields_dct = {
             field["id"]: field["name"] for field in fields if field["custom"] is True
         }
@@ -224,17 +224,17 @@ class CustomFieldExtractor:
 
 class CommonFieldExtractor:
     @staticmethod
-    def get_issue_common_fields(jira: Issue) -> dict:
+    def get_issue_common_fields(jsm: Issue) -> dict:
         return {
-            "Priority": jira.fields.priority.name if jira.fields.priority else None,
+            "Priority": jsm.fields.priority.name if jsm.fields.priority else None,
             "Reporter": (
-                jira.fields.reporter.displayName if jira.fields.reporter else None
+                jsm.fields.reporter.displayName if jsm.fields.reporter else None
             ),
             "Assignee": (
-                jira.fields.assignee.displayName if jira.fields.assignee else None
+                jsm.fields.assignee.displayName if jsm.fields.assignee else None
             ),
-            "Status": jira.fields.status.name if jira.fields.status else None,
+            "Status": jsm.fields.status.name if jsm.fields.status else None,
             "Resolution": (
-                jira.fields.resolution.name if jira.fields.resolution else None
+                jsm.fields.resolution.name if jsm.fields.resolution else None
             ),
         }
