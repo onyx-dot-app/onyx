@@ -35,6 +35,8 @@ class OnyxErrorCode(Enum):
     INSUFFICIENT_PERMISSIONS = ("INSUFFICIENT_PERMISSIONS", 403)
     ADMIN_ONLY = ("ADMIN_ONLY", 403)
     EE_REQUIRED = ("EE_REQUIRED", 403)
+    SINGLE_TENANT_ONLY = ("SINGLE_TENANT_ONLY", 403)
+    ENV_VAR_GATED = ("ENV_VAR_GATED", 403)
 
     # ------------------------------------------------------------------
     # Validation / Bad Request (400)
