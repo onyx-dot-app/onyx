@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useContext } from "react";
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import Text from "@/refresh-components/texts/Text";
 
@@ -10,7 +11,8 @@ export default function LoginText() {
     <div className="w-full flex flex-col ">
       <Text as="p" headingH2 text05>
         Welcome to{" "}
-        {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
+        {(settings && settings?.enterpriseSettings?.application_name) ||
+          DEFAULT_APPLICATION_NAME}
       </Text>
       <Text as="p" text03 mainUiMuted>
         Your open source AI platform for work

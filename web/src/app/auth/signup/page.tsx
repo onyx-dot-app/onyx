@@ -13,7 +13,7 @@ import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { AuthType } from "@/lib/constants";
+import { AuthType, DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -77,7 +77,7 @@ const Page = async (props: {
               {cloud ? "Complete your sign up" : "Create account"}
             </Text>
             <Text as="p" text03>
-              Get started with Onyx
+              {`Get started with ${DEFAULT_APPLICATION_NAME}`}
             </Text>
           </div>
           {cloud && authUrl && (

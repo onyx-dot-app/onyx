@@ -9,6 +9,7 @@ export enum AuthType {
 }
 
 export const HOST_URL = process.env.WEB_DOMAIN || "http://localhost:3000";
+export const DEFAULT_APPLICATION_NAME = "ACTIVA";
 
 export const INTERNAL_URL = process.env.INTERNAL_URL || "http://localhost:8080";
 

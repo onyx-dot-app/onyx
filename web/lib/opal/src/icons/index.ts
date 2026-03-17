@@ -119,7 +119,7 @@ export { default as SvgMusicSmall } from "@opal/icons/music-small";
 export { default as SvgNetworkGraph } from "@opal/icons/network-graph";
 export { default as SvgNotificationBubble } from "@opal/icons/notification-bubble";
 export { default as SvgOllama } from "@opal/icons/ollama";
-export { default as SvgOnyxLogo } from "@opal/icons/onyx-logo";
+export { default as SvgActivaLogo } from "@opal/icons/activa-logo";
 export { default as SvgOnyxOctagon } from "@opal/icons/onyx-octagon";
 export { default as SvgOpenai } from "@opal/icons/openai";
 export { default as SvgOpenrouter } from "@opal/icons/openrouter";

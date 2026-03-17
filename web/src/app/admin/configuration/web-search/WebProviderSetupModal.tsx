@@ -9,7 +9,7 @@ import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 
-import { SvgArrowExchange, SvgOnyxLogo } from "@opal/icons";
+import { SvgActivaLogo, SvgArrowExchange } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 
 export type WebProviderSetupModalProps = {
@@ -69,7 +69,7 @@ export const WebProviderSetupModal = memo(
             <SvgArrowExchange className="size-3 text-text-04" />
           </div>
           <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-            <SvgOnyxLogo size={24} className="text-text-04 shrink-0" />
+            <SvgActivaLogo size={24} className="text-text-04 shrink-0" />
           </div>
         </div>
       );
