@@ -121,6 +121,10 @@ export interface SlabCredentialJson {
   slab_bot_token: string;
 }
 
+export interface CanvasCredentialJson {
+  canvas_access_token: string;
+}
+
 export interface CodaCredentialJson {
   coda_bearer_token: string;
 }
@@ -311,6 +315,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   } as JiraCredentialJson,
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
+  canvas: { canvas_access_token: "" } as CanvasCredentialJson,
   coda: { coda_bearer_token: "" } as CodaCredentialJson,
   notion: { notion_integration_token: "" } as NotionCredentialJson,
   guru: { guru_user: "", guru_user_token: "" } as GuruCredentialJson,
@@ -532,6 +537,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Slab
   slab_bot_token: "Slab Bot Token",
+
+  // Canvas
+  canvas_access_token: "Canvas Access Token",
 
   // Coda
   coda_bearer_token: "Coda Bearer Token",
