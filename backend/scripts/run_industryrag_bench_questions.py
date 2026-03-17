@@ -4,10 +4,13 @@ import argparse
 import asyncio
 import json
 import logging
+import sys
 from dataclasses import asdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from typing import TypedDict
+from typing import TypeGuard
 
 import aiohttp
 
@@ -37,6 +40,11 @@ class AnswerRecord:
     question_id: str
     answer: str
     document_ids: list[str]
+
+
+class Citation(TypedDict, total=False):
+    citation_number: int
+    document_id: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -213,18 +221,8 @@ def extract_document_ids(citation_info: object) -> list[str]:
         return []
 
     sorted_citations = sorted(
-        (
-            citation
-            for citation in citation_info
-            if isinstance(citation, dict)
-            and isinstance(citation.get("document_id"), str)
-            and citation.get("document_id")
-        ),
-        key=lambda citation: (
-            citation.get("citation_number")
-            if isinstance(citation.get("citation_number"), int)
-            else float("inf")
-        ),
+        (citation for citation in citation_info if _is_valid_citation(citation)),
+        key=_citation_sort_key,
     )
 
     document_ids: list[str] = []
@@ -236,6 +234,21 @@ def extract_document_ids(citation_info: object) -> list[str]:
             document_ids.append(document_id)
 
     return document_ids
+
+
+def _is_valid_citation(citation: object) -> TypeGuard[Citation]:
+    return (
+        isinstance(citation, dict)
+        and isinstance(citation.get("document_id"), str)
+        and bool(citation["document_id"])
+    )
+
+
+def _citation_sort_key(citation: Citation) -> int:
+    citation_number = citation.get("citation_number")
+    if isinstance(citation_number, int):
+        return citation_number
+    return sys.maxsize
 
 
 async def fetch_internal_search_tool_id(
