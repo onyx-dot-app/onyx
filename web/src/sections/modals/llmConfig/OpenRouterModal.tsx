@@ -9,19 +9,21 @@ import {
   LLMProviderFormProps,
   LLMProviderView,
   ModelConfiguration,
-  OpenRouterModelResponse,
 } from "@/interfaces/llm";
+import { fetchOpenRouterModels } from "@/app/admin/configuration/llm/utils";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
-  submitLLMProvider,
-  submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-} from "@/sections/modals/llmConfig/formUtils";
+} from "@/sections/modals/llmConfig/utils";
+import {
+  submitLLMProvider,
+  submitOnboardingProvider,
+} from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
   ModelsField,
@@ -36,65 +38,9 @@ import { toast } from "@/hooks/useToast";
 
 const OPENROUTER_PROVIDER_NAME = "openrouter";
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
-const OPENROUTER_MODELS_API_URL = "/api/admin/llm/openrouter/available-models";
-
 interface OpenRouterModalValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
-}
-
-async function fetchOpenRouterModels(params: {
-  apiBase: string;
-  apiKey: string;
-  providerName?: string;
-}): Promise<{ models: ModelConfiguration[]; error?: string }> {
-  if (!params.apiBase || !params.apiKey) {
-    return {
-      models: [],
-      error: "API Base and API Key are required to fetch models",
-    };
-  }
-
-  try {
-    const response = await fetch(OPENROUTER_MODELS_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        api_base: params.apiBase,
-        api_key: params.apiKey,
-        provider_name: params.providerName,
-      }),
-    });
-
-    if (!response.ok) {
-      let errorMessage = "Failed to fetch models";
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.detail || errorMessage;
-      } catch {
-        // ignore JSON parsing errors
-      }
-      return { models: [], error: errorMessage };
-    }
-
-    const data: OpenRouterModelResponse[] = await response.json();
-    const models: ModelConfiguration[] = data.map((modelData) => ({
-      name: modelData.name,
-      display_name: modelData.display_name,
-      is_visible: true,
-      max_input_tokens: modelData.max_input_tokens,
-      supports_image_input: modelData.supports_image_input,
-      supports_reasoning: false,
-    }));
-
-    return { models };
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    return { models: [], error: errorMessage };
-  }
 }
 
 interface OpenRouterModalInternalsProps {
@@ -128,9 +74,9 @@ function OpenRouterModalInternals({
 
   const handleFetchModels = async () => {
     const { models, error } = await fetchOpenRouterModels({
-      apiBase: formikProps.values.api_base,
-      apiKey: formikProps.values.api_key,
-      providerName: existingLlmProvider?.name,
+      api_base: formikProps.values.api_base,
+      api_key: formikProps.values.api_key,
+      provider_name: existingLlmProvider?.name,
     });
     if (error) {
       throw new Error(error);

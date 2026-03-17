@@ -18,11 +18,13 @@ import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
-  submitLLMProvider,
-  submitOnboardingProvider,
   buildOnboardingInitialValues,
   BaseLLMFormValues,
-} from "@/sections/modals/llmConfig/formUtils";
+} from "@/sections/modals/llmConfig/utils";
+import {
+  submitLLMProvider,
+  submitOnboardingProvider,
+} from "@/sections/modals/llmConfig/svc";
 import {
   ModelsField,
   DisplayNameField,

@@ -10,10 +10,12 @@ import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
+  buildOnboardingInitialValues,
+} from "@/sections/modals/llmConfig/utils";
+import {
   submitLLMProvider,
   submitOnboardingProvider,
-  buildOnboardingInitialValues,
-} from "@/sections/modals/llmConfig/formUtils";
+} from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
   ModelsField,

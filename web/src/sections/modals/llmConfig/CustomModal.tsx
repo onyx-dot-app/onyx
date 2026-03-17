@@ -6,11 +6,13 @@ import { Formik, FormikProps } from "formik";
 import { LLMProviderFormProps, ModelConfiguration } from "@/interfaces/llm";
 import * as Yup from "yup";
 import {
-  submitLLMProvider,
-  submitOnboardingProvider,
   buildDefaultInitialValues,
   buildOnboardingInitialValues,
-} from "@/sections/modals/llmConfig/formUtils";
+} from "@/sections/modals/llmConfig/utils";
+import {
+  submitLLMProvider,
+  submitOnboardingProvider,
+} from "@/sections/modals/llmConfig/svc";
 import {
   DisplayNameField,
   FieldSeparator,

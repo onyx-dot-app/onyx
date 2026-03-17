@@ -15,7 +15,7 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import { Button, LineItemButton, Tag } from "@opal/components";
-import { BaseLLMFormValues } from "@/sections/modals/llmConfig/formUtils";
+import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";
 import { WithoutStyles } from "@opal/types";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
