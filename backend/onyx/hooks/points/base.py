@@ -19,11 +19,14 @@ _REQUIRED_ATTRS = (
 class HookPointSpec(ABC):
     """Static metadata and contract for a pipeline hook point.
 
+    This is NOT a regular class meant for direct instantiation by callers.
+    Each concrete subclass represents exactly one hook point and is instantiated
+    once at startup, registered in onyx.hooks.registry._REGISTRY. No caller
+    should ever create instances directly — use get_hook_point_spec() or
+    get_all_specs() from the registry instead.
+
     Each hook point is a concrete subclass of this class. Onyx engineers
     own these definitions — customers never touch this code.
-
-    Instances are registered in onyx.hooks.registry._REGISTRY and served
-    via GET /api/admin/hook-points.
 
     Subclasses must define all attributes as class-level constants.
     """
