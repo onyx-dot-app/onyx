@@ -248,7 +248,7 @@ class TestLoadCredentials:
     def test_load_credentials_invalid_token(self, mock_requests: MagicMock) -> None:
         mock_requests.get.return_value = _mock_response(401, {})
         connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
-        with pytest.raises(ConnectorMissingCredentialError, match="Invalid Canvas API token"):
+        with pytest.raises(CredentialExpiredError, match="invalid or expired"):
             connector.load_credentials({"canvas_access_token": "bad-token"})
 
 
