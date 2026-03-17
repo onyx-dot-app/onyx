@@ -5,7 +5,7 @@ Each file gets its own connector named after the file.
 Usage:
     python upload_files_as_connectors.py --data-dir /path/to/files --api-key YOUR_KEY
     python upload_files_as_connectors.py --data-dir /path/to/files --api-key YOUR_KEY --api-base http://onyxserver:3000
-    python upload_files_as_connectors.py --data-dir /path/to/files --api-key YOUR_KEY --file-regex '*.zip'
+    python upload_files_as_connectors.py --data-dir /path/to/files --api-key YOUR_KEY --file-glob '*.zip'
 
 Requires:
     pip install requests
@@ -242,7 +242,7 @@ def main() -> None:
         help="API key for authentication.",
     )
     parser.add_argument(
-        "--file-regex",
+        "--file-glob",
         default=None,
         help="Glob pattern to filter files (e.g. '*.json', '*.zip').",
     )
@@ -251,7 +251,7 @@ def main() -> None:
     data_dir = args.data_dir
     base_url = args.api_base.rstrip("/")
     api_key = args.api_key
-    file_regex = args.file_regex
+    file_glob = args.file_glob
 
     if not os.path.isdir(data_dir):
         print(f"Error: {data_dir} is not a directory")
@@ -263,7 +263,7 @@ def main() -> None:
         for f in os.listdir(data_dir)
         if os.path.isfile(os.path.join(data_dir, f))
         and os.path.realpath(os.path.join(data_dir, f)) != script_path
-        and (file_regex is None or fnmatch.fnmatch(f, file_regex))
+        and (file_glob is None or fnmatch.fnmatch(f, file_glob))
     )
 
     if not files:

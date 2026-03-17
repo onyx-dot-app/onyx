@@ -42,6 +42,12 @@ class AnswerRecord:
     document_ids: list[str]
 
 
+@dataclass(frozen=True)
+class FailedQuestionRecord:
+    question_id: str
+    error: str
+
+
 class Citation(TypedDict, total=False):
     citation_number: int
     document_id: str
@@ -360,7 +366,7 @@ async def generate_answers(
     connector = aiohttp.TCPConnector(limit=parallelism)
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    with output_file.open("w", encoding="utf-8") as file:
+    with output_file.open("a", encoding="utf-8") as file:
         async with aiohttp.ClientSession(
             timeout=timeout, connector=connector
         ) as session:
@@ -375,18 +381,39 @@ async def generate_answers(
             progress_lock = asyncio.Lock()
             write_lock = asyncio.Lock()
             completed = 0
+            successful = 0
+            failed_questions: list[FailedQuestionRecord] = []
             total = len(questions)
 
-            async def process_question(question_record: QuestionRecord) -> AnswerRecord:
+            async def process_question(question_record: QuestionRecord) -> None:
                 nonlocal completed
-                async with semaphore:
-                    result = await submit_question(
-                        session=session,
-                        api_base=api_base,
-                        headers=headers,
-                        internal_search_tool_id=internal_search_tool_id,
-                        question_record=question_record,
-                    )
+                nonlocal successful
+
+                try:
+                    async with semaphore:
+                        result = await submit_question(
+                            session=session,
+                            api_base=api_base,
+                            headers=headers,
+                            internal_search_tool_id=internal_search_tool_id,
+                            question_record=question_record,
+                        )
+                except Exception as exc:
+                    async with progress_lock:
+                        completed += 1
+                        failed_questions.append(
+                            FailedQuestionRecord(
+                                question_id=question_record.question_id,
+                                error=str(exc),
+                            )
+                        )
+                        logger.exception(
+                            "Failed question %s (%s/%s)",
+                            question_record.question_id,
+                            completed,
+                            total,
+                        )
+                    return
 
                 async with write_lock:
                     file.write(json.dumps(asdict(result), ensure_ascii=False))
@@ -395,13 +422,25 @@ async def generate_answers(
 
                 async with progress_lock:
                     completed += 1
+                    successful += 1
                     logger.info("Processed %s/%s questions", completed, total)
-
-                return result
 
             await asyncio.gather(
                 *(process_question(question_record) for question_record in questions)
             )
+
+            if failed_questions:
+                logger.warning(
+                    "Completed with %s failed questions and %s successful questions.",
+                    len(failed_questions),
+                    successful,
+                )
+                for failed_question in failed_questions:
+                    logger.warning(
+                        "Failed question %s: %s",
+                        failed_question.question_id,
+                        failed_question.error,
+                    )
 
 
 def main() -> None:
