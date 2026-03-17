@@ -207,7 +207,7 @@ class TestConnectorMappingIntegrity:
             DocumentSource.NOT_APPLICABLE,  # Special placeholder, no connector needed
             DocumentSource.USER_FILE,  # Special placeholder, no connector needed
             DocumentSource.CRAFT_FILE,  # Direct S3 upload via API, no connector needed
-            # Add other legitimately unmapped sources here if they exist
+            DocumentSource.CANVAS,  # Connector class added in follow-up PR
         }
 
         unmapped_sources = all_sources - mapped_sources - expected_unmapped
