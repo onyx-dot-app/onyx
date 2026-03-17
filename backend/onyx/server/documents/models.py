@@ -408,7 +408,7 @@ class FailedConnectorIndexingStatus(BaseModel):
     """Simplified version of ConnectorIndexingStatus for failed indexing attempts"""
 
     cc_pair_id: int
-    name: str | None
+    name: str
     error_msg: str | None
     is_deletable: bool
     connector_id: int
@@ -422,7 +422,7 @@ class ConnectorStatus(BaseModel):
     """
 
     cc_pair_id: int
-    name: str | None
+    name: str
     connector: ConnectorSnapshot
     credential: CredentialSnapshot
     access_type: AccessType
@@ -453,7 +453,7 @@ class DocsCountOperator(str, Enum):
 
 class ConnectorIndexingStatusLite(BaseModel):
     cc_pair_id: int
-    name: str | None
+    name: str
     source: DocumentSource
     access_type: AccessType
     cc_pair_status: ConnectorCredentialPairStatus
@@ -501,7 +501,7 @@ class CCStatusUpdateRequest(BaseModel):
 
 class ConnectorCredentialPairDescriptor(BaseModel):
     id: int
-    name: str | None = None
+    name: str
     connector: ConnectorSnapshot
     credential: CredentialSnapshot
     access_type: AccessType
@@ -511,7 +511,7 @@ class CCPairSummary(BaseModel):
     """Simplified connector-credential pair information with just essential data"""
 
     id: int
-    name: str | None
+    name: str
     source: DocumentSource
     access_type: AccessType
 

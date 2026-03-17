@@ -511,7 +511,7 @@ def add_credential_to_connector(
     user: User,
     connector_id: int,
     credential_id: int,
-    cc_pair_name: str | None,
+    cc_pair_name: str,
     access_type: AccessType,
     groups: list[int] | None,
     auto_sync_options: dict | None = None,
