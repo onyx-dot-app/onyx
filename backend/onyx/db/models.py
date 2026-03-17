@@ -64,6 +64,8 @@ from onyx.db.enums import (
     BuildSessionStatus,
     EmbeddingPrecision,
     HierarchyNodeType,
+    HookFailStrategy,
+    HookPoint,
     IndexingMode,
     OpenSearchDocumentMigrationStatus,
     OpenSearchTenantMigrationStatus,
@@ -5178,3 +5180,90 @@ class CacheStore(Base):
     expires_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class Hook(Base):
+    """Pairs a HookPoint with a customer-provided API endpoint.
+
+    At most one non-deleted Hook per HookPoint is allowed, enforced by a
+    partial unique index on (hook_point) where deleted=false.
+    """
+
+    __tablename__ = "hook"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    hook_point: Mapped[HookPoint] = mapped_column(
+        Enum(HookPoint, native_enum=False), nullable=False
+    )
+    endpoint_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    is_reachable: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )  # null = never validated, true = last check passed, false = last check failed
+    fail_strategy: Mapped[HookFailStrategy] = mapped_column(
+        Enum(HookFailStrategy, native_enum=False),
+        nullable=False,
+        default=HookFailStrategy.HARD,
+    )
+    timeout_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=30.0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    creator_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    creator: Mapped["User | None"] = relationship("User", foreign_keys=[creator_id])
+    execution_logs: Mapped[list["HookExecutionLog"]] = relationship(
+        "HookExecutionLog", back_populates="hook", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_hook_one_non_deleted_per_point",
+            "hook_point",
+            unique=True,
+            postgresql_where=(deleted == False),  # noqa: E712
+        ),
+    )
+
+
+class HookExecutionLog(Base):
+    """Records hook executions for health monitoring and debugging.
+
+    Currently only failures are logged; the is_success column exists so
+    success logging can be added later without a schema change.
+    Retention: rows older than 30 days are deleted by a nightly Celery task.
+    """
+
+    __tablename__ = "hook_execution_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hook_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("hook.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    is_success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    hook: Mapped["Hook"] = relationship("Hook", back_populates="execution_logs")

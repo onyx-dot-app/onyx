@@ -97,16 +97,8 @@ function InputChipField({
           <Chip
             key={chip.id}
             onRemove={disabled ? undefined : () => onRemoveChip(chip.id)}
-            rightIcon={
-              chip.error
-                ? (props) => (
-                    <SvgAlertTriangle
-                      {...props}
-                      className="text-status-warning-text"
-                    />
-                  )
-                : undefined
-            }
+            rightIcon={chip.error ? SvgAlertTriangle : undefined}
+            error={chip.error}
             smallLabel={layout === "stacked"}
           >
             {chip.label}
@@ -124,7 +116,7 @@ function InputChipField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={chips.length === 0 ? placeholder : undefined}
+        placeholder={placeholder}
         className={cn(
           "flex-1 min-w-[80px] h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
           innerClasses[variant],

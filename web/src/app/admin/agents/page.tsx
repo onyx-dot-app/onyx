@@ -13,7 +13,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useState, useEffect } from "react";
-import Pagination from "@/refresh-components/Pagination";
+import { Pagination } from "@opal/components";
 
 const route = ADMIN_ROUTES.AGENTS;
 const PAGE_SIZE = 20;
@@ -90,7 +90,7 @@ function MainContent({
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
-                onPageChange={onPageChange}
+                onChange={onPageChange}
               />
             )}
           </>

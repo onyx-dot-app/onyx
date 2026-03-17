@@ -207,7 +207,7 @@ jobs:
           CHERRY_PICK_PR_URL: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_pr_url }}
         run: |
           source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
-          details="*Cherry-pick PR opened successfully.*\\n• source PR: ${source_pr_url}"
+          details="*Cherry-pick PR opened successfully.*\\n• author: {mention}\\n• source PR: ${source_pr_url}"
           if [ -n "${CHERRY_PICK_PR_URL}" ]; then
             details="${details}\\n• cherry-pick PR: ${CHERRY_PICK_PR_URL}"
           fi
@@ -221,6 +221,7 @@ jobs:
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
+          mention: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
           details: ${{ steps.success-summary.outputs.details }}
           title: "✅ Automated Cherry-Pick PR Opened"
           ref-name: ${{ github.event.pull_request.base.ref }}
@@ -275,20 +276,21 @@ jobs:
           else
             failed_job_label="cherry-pick-to-latest-release"
           fi
-          failed_jobs="• ${failed_job_label}\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
+          details="• author: {mention}\\n• ${failed_job_label}\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
           if [ -n "${MERGE_COMMIT_SHA}" ]; then
-            failed_jobs="${failed_jobs}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
+            details="${details}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
           fi
           if [ -n "${details_excerpt}" ]; then
-            failed_jobs="${failed_jobs}\\n• excerpt: ${details_excerpt}"
+            details="${details}\\n• excerpt: ${details_excerpt}"
           fi
 
-          echo "jobs=${failed_jobs}" >> "$GITHUB_OUTPUT"
+          echo "details=${details}" >> "$GITHUB_OUTPUT"
 
       - name: Notify #cherry-pick-prs about cherry-pick failure
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
-          details: ${{ steps.failure-summary.outputs.jobs }}
+          mention: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
+          details: ${{ steps.failure-summary.outputs.details }}
           title: "🚨 Automated Cherry-Pick Failed"
           ref-name: ${{ github.event.pull_request.base.ref }}
