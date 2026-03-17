@@ -1013,6 +1013,10 @@ def run_llm_step_pkt_generator(
     accumulated_reasoning = ""
     accumulated_answer = ""
     accumulated_raw_answer = ""
+    stream_chunk_count = 0
+    actionable_chunk_count = 0
+    empty_chunk_count = 0
+    finish_reasons: set[str] = set()
     xml_tool_call_content_filter = _XmlToolCallContentFilter()
 
     processor_state: Any = None
@@ -1145,6 +1149,7 @@ def run_llm_step_pkt_generator(
             user_identity=user_identity,
             timeout_override=timeout_override,
         ):
+            stream_chunk_count += 1
             if packet.usage:
                 usage = packet.usage
                 span_generation.span_data.usage = {
@@ -1154,16 +1159,21 @@ def run_llm_step_pkt_generator(
                     "cache_creation_input_tokens": usage.cache_creation_input_tokens,
                 }
                 # Note: LLM cost tracking is now handled in multi_llm.py
+            finish_reason = packet.choice.finish_reason
+            if finish_reason:
+                finish_reasons.add(str(finish_reason))
             delta = packet.choice.delta
 
             # Weird behavior from some model providers, just log and ignore for now
             if (
-                delta.content is None
+                not delta.content
                 and delta.reasoning_content is None
-                and delta.tool_calls is None
+                and not delta.tool_calls
             ):
+                empty_chunk_count += 1
                 logger.warning(
-                    f"LLM packet is empty (no contents, reasoning or tool calls). Skipping: {packet}"
+                    "LLM packet is empty (no content, reasoning, or tool calls). "
+                    f"finish_reason={finish_reason}. Skipping: {packet}"
                 )
                 continue
 
@@ -1172,6 +1182,8 @@ def run_llm_step_pkt_generator(
                     time.monotonic() - stream_start_time
                 )
                 first_action_recorded = True
+            if _delta_has_action(delta):
+                actionable_chunk_count += 1
 
             if custom_token_processor:
                 # The custom token processor can modify the deltas for specific custom logic
@@ -1306,6 +1318,15 @@ def run_llm_step_pkt_generator(
             logger.debug(f"Tool calls:\n{tool_calls_str}")
         else:
             logger.debug("Tool calls: []")
+
+    if actionable_chunk_count == 0:
+        logger.warning(
+            "LLM stream completed with no actionable deltas. "
+            f"chunks={stream_chunk_count}, empty_chunks={empty_chunk_count}, "
+            f"finish_reasons={sorted(finish_reasons)}, "
+            f"provider={llm.config.model_provider}, model={llm.config.model_name}, "
+            f"tool_choice={tool_choice}, tools_sent={len(tool_definitions)}"
+        )
 
     return (
         LlmStepResult(

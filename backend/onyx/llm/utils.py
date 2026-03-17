@@ -219,13 +219,26 @@ def litellm_exception_to_error_msg(
             "ratelimiterror"
         ):
             upstream_detail = upstream_detail.split(":", 1)[1].strip()
-        error_msg = (
-            f"{provider_name} rate limit: {upstream_detail}"
-            if upstream_detail
-            else f"{provider_name} rate limit exceeded: Please slow down your requests and try again later."
-        )
-        error_code = "RATE_LIMIT"
-        is_retryable = True
+        upstream_detail_lower = upstream_detail.lower()
+        if (
+            "insufficient_quota" in upstream_detail_lower
+            or "exceeded your current quota" in upstream_detail_lower
+        ):
+            error_msg = (
+                f"{provider_name} quota exceeded: {upstream_detail}"
+                if upstream_detail
+                else f"{provider_name} quota exceeded: Verify billing and quota for this API key."
+            )
+            error_code = "BUDGET_EXCEEDED"
+            is_retryable = False
+        else:
+            error_msg = (
+                f"{provider_name} rate limit: {upstream_detail}"
+                if upstream_detail
+                else f"{provider_name} rate limit exceeded: Please slow down your requests and try again later."
+            )
+            error_code = "RATE_LIMIT"
+            is_retryable = True
     elif isinstance(core_exception, ServiceUnavailableError):
         provider_name = (
             llm.config.model_provider
