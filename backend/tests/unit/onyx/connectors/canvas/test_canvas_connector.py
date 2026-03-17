@@ -641,6 +641,51 @@ class TestLoadFromCheckpoint:
 
 
 # ---------------------------------------------------------------------------
+# load_from_checkpoint_with_perm_sync tests
+# ---------------------------------------------------------------------------
+
+
+class TestLoadFromCheckpointWithPermSync:
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_documents_have_external_access(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        """load_from_checkpoint_with_perm_sync attaches ExternalAccess to documents."""
+        expected_access = ExternalAccess(
+            external_user_emails={"student@school.edu"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        mock_perms.return_value = expected_access
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[_mock_page(10, "Syllabus", "2025-06-15T12:00:00Z")]
+        )
+
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        gen = connector.load_from_checkpoint_with_perm_sync(start, end, cp)
+        items: list[Any] = []
+        new_cp = cp
+        for item in gen:
+            if isinstance(item, CanvasConnectorCheckpoint):
+                new_cp = item
+            else:
+                items.append(item)
+
+        assert len(items) == 1
+        assert isinstance(items[0], Document)
+        assert items[0].external_access == expected_access
+        mock_perms.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # retrieve_all_slim_docs_perm_sync tests
 # ---------------------------------------------------------------------------
 
