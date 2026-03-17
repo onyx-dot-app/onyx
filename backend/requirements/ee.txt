@@ -195,7 +195,7 @@ propcache==0.4.1
     #   yarl
 py==1.11.0
     # via retry
-pyasn1==0.6.2
+pyasn1==0.6.3
     # via
     #   pyasn1-modules
     #   rsa
