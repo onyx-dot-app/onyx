@@ -43,7 +43,6 @@ const submitLlmTestRequest = async (
 
     return { ok: true };
   } catch {
-    toast.error(fallbackErrorMessage);
     return {
       ok: false,
       errorMessage: fallbackErrorMessage,

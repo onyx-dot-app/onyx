@@ -289,7 +289,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await setupModal.getByLabel("Display Name").fill(providerName);
     await setupModal.getByLabel("API Key").fill(apiKey);
 
-    const enableButton = setupModal.getByRole("button", { name: "Enable" });
+    const enableButton = setupModal.getByRole("button", { name: "Connect" });
     await expect(enableButton).toBeEnabled({ timeout: 10000 });
     await enableButton.click();
     await expect(setupModal).not.toBeVisible({ timeout: 30000 });
