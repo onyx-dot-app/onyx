@@ -10,14 +10,9 @@ import React, {
 } from "react";
 import { useUser } from "@/providers/UserProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
+import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
 
 // --- TTS Configuration Constants ---
-
-/** Dev server port - used to detect Next.js dev environment */
-const DEV_PORT = "3000";
-
-/** Backend port for direct WebSocket connection in development */
-const BACKEND_PORT = "8080";
 
 /** WebSocket path for TTS streaming (backend-direct, used in dev) */
 const TTS_WS_PATH = "/voice/synthesize/stream";
@@ -471,9 +466,8 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     // WebSocket connections, so we connect directly to the backend (port 8080).
     // In production, the reverse proxy handles the /api prefix routing.
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const isDev = window.location.port === DEV_PORT;
-    const host = isDev ? "localhost:" + BACKEND_PORT : window.location.host;
-    const path = isDev ? TTS_WS_PATH : TTS_WS_PATH_PROXIED;
+    const host = IS_DEV ? new URL(INTERNAL_URL).host : window.location.host;
+    const path = IS_DEV ? TTS_WS_PATH : TTS_WS_PATH_PROXIED;
     // Auth: the token query param is validated server-side by
     // current_user_from_websocket (single-use, 60s TTL, same checks as HTTP auth).
     return `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`;
