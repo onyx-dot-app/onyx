@@ -48,7 +48,7 @@ from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
     bind=True,
 )
 def check_for_auto_llm_updates(
-    self: Task,  # noqa: ARG001  # used implicitly by Celery autoretry_for
+    _task: Task,  # bind=True required; Celery uses Task.retry() for autoretry_for
     *,
     tenant_id: str,  # noqa: ARG001
     llm_recommendations: dict[str, Any] | None = None,
@@ -116,7 +116,8 @@ def cloud_check_for_auto_llm_updates(
     release_lock = True
     try:
         llm_recommendations = fetch_llm_recommendations_from_github(raise_on_error=True)
-        assert llm_recommendations is not None
+        if llm_recommendations is None:
+            return None
 
         shared_cache = get_shared_cache_backend()
         last_updated_at = get_cached_last_updated_at(cache_backend=shared_cache)
