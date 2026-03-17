@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@opal/components/buttons/button/components";
-import type { StandardDiscrimatedSizeVariants } from "@opal/shared";
+import type { StandardDiscriminatedSizeVariants } from "@opal/shared";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
@@ -31,7 +31,7 @@ interface ContentXlPresetConfig {
   /** Title line-height — also used as icon container min-height (CSS value). */
   lineHeight: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
-  editButtonSize: StandardDiscrimatedSizeVariants;
+  editButtonSize: StandardDiscriminatedSizeVariants;
   /** Tailwind padding class for the edit button container. */
   editButtonPadding: string;
 }

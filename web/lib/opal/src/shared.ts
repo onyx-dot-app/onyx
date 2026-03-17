@@ -19,7 +19,7 @@
 //   - Content (ContentXl / ContentLg / ContentMd)  (edit-button size)
 // ---------------------------------------------------------------------------
 
-type StandardDiscrimatedSizeVariants =
+type StandardDiscriminatedSizeVariants =
   | "fit"
   | "lg"
   | "md"
@@ -44,7 +44,7 @@ type ExtremaSizeVariants = "fit" | "full" | "auto";
  * | `fit` | h-fit         | `p-0`   |
  */
 const lineSizeVariants: Record<
-  StandardDiscrimatedSizeVariants,
+  StandardDiscriminatedSizeVariants,
   { height: string; minWidth: string; padding: string }
 > = {
   fit: { height: "h-fit", minWidth: "", padding: "p-0" },
@@ -102,7 +102,7 @@ const heightVariants: Record<ExtremaSizeVariants, string> = {
 
 export {
   lineSizeVariants,
-  type StandardDiscrimatedSizeVariants,
+  type StandardDiscriminatedSizeVariants,
   widthVariants,
   heightVariants,
   type ExtremaSizeVariants,

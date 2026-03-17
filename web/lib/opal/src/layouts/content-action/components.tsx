@@ -1,7 +1,7 @@
 import { Content, type ContentProps } from "@opal/layouts/content/components";
 import {
   lineSizeVariants,
-  type StandardDiscrimatedSizeVariants,
+  type StandardDiscriminatedSizeVariants,
 } from "@opal/shared";
 import { cn } from "@opal/utils";
 
@@ -18,9 +18,9 @@ type ContentActionProps = ContentProps & {
    * Uses the shared `SizeVariant` scale from `@opal/shared`.
    *
    * @default "lg"
-   * @see {@link StandardDiscrimatedSizeVariants} for the full list of presets.
+   * @see {@link StandardDiscriminatedSizeVariants} for the full list of presets.
    */
-  paddingVariant?: StandardDiscrimatedSizeVariants;
+  paddingVariant?: StandardDiscriminatedSizeVariants;
 };
 
 // ---------------------------------------------------------------------------

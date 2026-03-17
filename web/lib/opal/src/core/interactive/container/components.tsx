@@ -6,7 +6,7 @@ import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
 import {
   lineSizeVariants,
-  type StandardDiscrimatedSizeVariants,
+  type StandardDiscriminatedSizeVariants,
   widthVariants,
   type ExtremaSizeVariants,
 } from "@opal/shared";
@@ -73,7 +73,7 @@ interface InteractiveContainerProps
    *
    * @default "lg"
    */
-  heightVariant?: StandardDiscrimatedSizeVariants;
+  heightVariant?: StandardDiscriminatedSizeVariants;
 
   /**
    * Width preset controlling the container's horizontal size.

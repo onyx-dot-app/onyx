@@ -7,7 +7,7 @@ import {
   type InteractiveStatefulInteraction,
 } from "@opal/core";
 import type {
-  StandardDiscrimatedSizeVariants,
+  StandardDiscriminatedSizeVariants,
   ExtremaSizeVariants,
 } from "@opal/shared";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
@@ -67,7 +67,7 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
-    size?: StandardDiscrimatedSizeVariants;
+    size?: StandardDiscriminatedSizeVariants;
 
     /** Width preset. */
     width?: ExtremaSizeVariants;

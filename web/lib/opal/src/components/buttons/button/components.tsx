@@ -2,7 +2,7 @@ import "@opal/components/buttons/button/styles.css";
 import "@opal/components/tooltip.css";
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type {
-  StandardDiscrimatedSizeVariants,
+  StandardDiscriminatedSizeVariants,
   ExtremaSizeVariants,
 } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
@@ -34,7 +34,7 @@ type ButtonProps = InteractiveStatelessProps &
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
-    size?: StandardDiscrimatedSizeVariants;
+    size?: StandardDiscriminatedSizeVariants;
 
     /** HTML button type. When provided, Container renders a `<button>` element. */
     type?: "submit" | "button" | "reset";

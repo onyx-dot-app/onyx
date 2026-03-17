@@ -6,7 +6,7 @@ import {
   type InteractiveStatefulProps,
 } from "@opal/core";
 import type {
-  StandardDiscrimatedSizeVariants,
+  StandardDiscriminatedSizeVariants,
   ExtremaSizeVariants,
 } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
@@ -51,7 +51,7 @@ type SelectButtonProps = InteractiveStatefulProps &
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
-    size?: StandardDiscrimatedSizeVariants;
+    size?: StandardDiscriminatedSizeVariants;
 
     /** HTML button type. Container renders a `<button>` element. */
     type?: "submit" | "button" | "reset";

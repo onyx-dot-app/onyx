@@ -1,5 +1,5 @@
 import "@opal/components/cards/card/styles.css";
-import type { StandardDiscrimatedSizeVariants } from "@opal/shared";
+import type { StandardDiscriminatedSizeVariants } from "@opal/shared";
 import { lineSizeVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 
@@ -26,7 +26,7 @@ type CardProps = {
    *
    * @default "lg"
    */
-  sizeVariant?: StandardDiscrimatedSizeVariants;
+  sizeVariant?: StandardDiscriminatedSizeVariants;
 
   /**
    * Background fill intensity.
@@ -59,7 +59,7 @@ type CardProps = {
 // ---------------------------------------------------------------------------
 
 /** Maps a size variant to a rounding class, mirroring the Button pattern. */
-const roundingForSize: Record<StandardDiscrimatedSizeVariants, string> = {
+const roundingForSize: Record<StandardDiscriminatedSizeVariants, string> = {
   lg: "rounded-12",
   md: "rounded-08",
   sm: "rounded-08",
