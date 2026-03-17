@@ -116,8 +116,7 @@ def cloud_check_for_auto_llm_updates(
     release_lock = True
     try:
         llm_recommendations = fetch_llm_recommendations_from_github(raise_on_error=True)
-        if not llm_recommendations:
-            raise RuntimeError("Failed to fetch GitHub config")
+        assert llm_recommendations is not None
 
         shared_cache = get_shared_cache_backend()
         last_updated_at = get_cached_last_updated_at(cache_backend=shared_cache)

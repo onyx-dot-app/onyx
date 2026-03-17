@@ -119,9 +119,9 @@ def test_cloud_check_for_auto_llm_updates_fails_loudly_on_fetch_error(
 ) -> None:
     redis_client, lock = _build_redis_mock_with_lock()
     mock_get_redis_client.return_value = redis_client
-    mock_fetch_recommendations.return_value = None
+    mock_fetch_recommendations.side_effect = RuntimeError("fetch failed")
 
-    with pytest.raises(RuntimeError, match="Failed to fetch GitHub config"):
+    with pytest.raises(RuntimeError, match="fetch failed"):
         cloud_check_for_auto_llm_updates.run()
 
     mock_get_shared_cache_backend.assert_not_called()
