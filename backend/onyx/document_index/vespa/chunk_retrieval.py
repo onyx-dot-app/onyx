@@ -501,20 +501,31 @@ def query_vespa(
             response = http_client.post(SEARCH_ENDPOINT, json=params)
             response.raise_for_status()
     except httpx.HTTPError as e:
-        error_base = "Failed to query Vespa"
-        logger.error(
-            f"{error_base}:\n"
-            f"Request URL: {e.request.url}\n"
-            f"Request Headers: {e.request.headers}\n"
-            f"Request Payload: {params}\n"
-            f"Exception: {str(e)}"
-            + (
-                f"\nResponse: {e.response.text}"
-                if isinstance(e, httpx.HTTPStatusError)
-                else ""
-            )
+        response_text = (
+            e.response.text if isinstance(e, httpx.HTTPStatusError) else None
         )
-        raise httpx.HTTPError(error_base) from e
+        status_code = (
+            e.response.status_code if isinstance(e, httpx.HTTPStatusError) else None
+        )
+        yql_value = params.get("yql", "")
+        yql_length = len(str(yql_value))
+
+        # Log each detail on its own line so log collectors capture them
+        # as separate entries rather than truncating a single multiline msg
+        logger.error(
+            f"Failed to query Vespa | "
+            f"status={status_code} | "
+            f"yql_length={yql_length} | "
+            f"exception={str(e)}"
+        )
+        if response_text:
+            logger.error(f"Vespa error response: {response_text[:1000]}")
+        logger.error(f"Vespa request URL: {e.request.url}")
+
+        # Re-raise with diagnostics so callers see what actually went wrong
+        raise httpx.HTTPError(
+            f"Failed to query Vespa (status={status_code}, " f"yql_length={yql_length})"
+        ) from e
 
     response_json: dict[str, Any] = response.json()
 
