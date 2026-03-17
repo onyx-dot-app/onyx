@@ -3,7 +3,7 @@
  * Plays audio chunks as they arrive for smooth, low-latency playback.
  */
 
-import { IS_DEV } from "@/lib/constants";
+import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
 
 /**
  * HTTPStreamingTTSPlayer - Uses HTTP streaming with MediaSource Extensions
@@ -384,7 +384,7 @@ export class WebSocketStreamingTTSPlayer {
     const { token } = await tokenResponse.json();
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = IS_DEV ? "localhost:8080" : window.location.host;
+    const host = IS_DEV ? new URL(INTERNAL_URL).host : window.location.host;
     const path = IS_DEV
       ? "/voice/synthesize/stream"
       : "/api/voice/synthesize/stream";
