@@ -214,7 +214,6 @@ export default function UserRowActions({
           <Section
             gap={0.5}
             height="auto"
-            width="full"
             alignItems="stretch"
             justifyContent="start"
           >
