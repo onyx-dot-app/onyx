@@ -65,7 +65,7 @@ attrs==25.4.0
     #   jsonschema
     #   referencing
     #   zeep
-authlib==1.6.7
+authlib==1.6.9
     # via fastmcp
 azure-cognitiveservices-speech==1.38.0
     # via onyx

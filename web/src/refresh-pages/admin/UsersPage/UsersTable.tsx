@@ -237,6 +237,7 @@ export default function UsersTable({
               prominence="tertiary"
               size="sm"
               tooltip="Download CSV"
+              aria-label="Download CSV"
               onClick={() => {
                 downloadUsersCsv().catch((err) => {
                   toast.error(
