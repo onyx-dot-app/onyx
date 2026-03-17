@@ -69,6 +69,14 @@ class CanvasApiClient:
                     error = response_error
             elif isinstance(error_field, str):
                 error = error_field
+            # Canvas also returns {"errors": [{"message": "..."}]} for many endpoints
+            errors_list = response_json.get("errors")
+            if isinstance(errors_list, list) and errors_list:
+                first_error = errors_list[0]
+                if isinstance(first_error, dict):
+                    msg = first_error.get("message", "")
+                    if msg:
+                        error = msg
             raise CanvasClientRequestFailedError(error, response.status_code)
 
         next_url = self._parse_next_link(response.headers.get("Link", ""))
