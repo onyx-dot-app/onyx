@@ -7,7 +7,6 @@ from typing import cast
 from typing import Literal
 from typing import TypeAlias
 
-from bs4 import BeautifulSoup
 from pydantic import BaseModel
 from retry import retry
 from typing_extensions import override
@@ -16,6 +15,7 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.access import get_course_permissions
+from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.canvas.client import CanvasClientRequestFailedError
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -45,7 +45,7 @@ def _html_to_text(html: str | None) -> str:
     """Strip HTML tags and return plain text."""
     if not html:
         return ""
-    return BeautifulSoup(html, "html.parser").get_text(separator="\n", strip=True)
+    return parse_html_page_basic(html)
 
 
 class CanvasCourse(BaseModel):
@@ -402,7 +402,9 @@ class CanvasConnector(
             self._canvas_client.get("courses", params={"per_page": "1"})
         except CanvasClientRequestFailedError as e:
             if e.status_code == 401:
-                raise ConnectorMissingCredentialError("Canvas")
+                raise CredentialExpiredError(
+                    "Canvas API token is invalid or expired (HTTP 401)."
+                )
             raise
 
         return None
