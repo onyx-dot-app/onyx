@@ -37,8 +37,10 @@ M = 32  # Set relatively high for better accuracy.
 # we have a much higher chance of all 10 of the final desired docs showing up
 # and getting scored. In worse situations, the final 10 docs don't even show up
 # as the final 10 (worse than just a miss at the reranking step).
-DEFAULT_NUM_HYBRID_SUBSEARCH_CANDIDATES = int(
-    os.environ.get("DEFAULT_NUM_HYBRID_SUBSEARCH_CANDIDATES", 100)
+# Defaults to 100 for now. Initially this defaulted to 750 but we were seeing
+# poor search performance.
+DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES = int(
+    os.environ.get("DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES", 100)
 )
 
 # Number of vectors to examine to decide the top k neighbors for the HNSW
@@ -48,7 +50,7 @@ DEFAULT_NUM_HYBRID_SUBSEARCH_CANDIDATES = int(
 # larger than k, you can provide the size parameter to limit the final number of
 # results to k." from
 # https://docs.opensearch.org/latest/query-dsl/specialized/k-nn/index/#ef_search
-EF_SEARCH = DEFAULT_NUM_HYBRID_SUBSEARCH_CANDIDATES
+EF_SEARCH = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
 
 
 class HybridSearchSubqueryConfiguration(Enum):
