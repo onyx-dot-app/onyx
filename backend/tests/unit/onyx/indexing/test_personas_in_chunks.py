@@ -157,6 +157,7 @@ def _run_adapter_build(
     ):
         result = adapter.build_metadata_aware_chunks(
             chunks_with_embeddings=[chunk],
+            doc_id_to_new_chunk_cnt={file_id: 1},
             chunk_content_scores=[1.0],
             tenant_id="test_tenant",
             context=context,

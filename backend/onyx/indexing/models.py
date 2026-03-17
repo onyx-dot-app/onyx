@@ -1,5 +1,6 @@
 import contextlib
 from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Optional
 from typing import Protocol
 from typing import TYPE_CHECKING
@@ -256,7 +257,8 @@ class IndexingBatchAdapter(Protocol):
 
     def build_metadata_aware_chunks(
         self,
-        chunks_with_embeddings: list[IndexChunk],
+        chunks_with_embeddings: Iterator[IndexChunk],
+        doc_id_to_new_chunk_cnt: dict[str, int],
         chunk_content_scores: list[float],
         tenant_id: str,
         context: "DocumentBatchPrepareContext",

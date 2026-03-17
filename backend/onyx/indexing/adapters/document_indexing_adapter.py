@@ -1,5 +1,6 @@
 import contextlib
 from collections.abc import Generator
+from collections.abc import Iterator
 
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.orm import Session
@@ -87,7 +88,8 @@ class DocumentIndexingBatchAdapter:
 
     def build_metadata_aware_chunks(
         self,
-        chunks_with_embeddings: list[IndexChunk],
+        chunks_with_embeddings: Iterator[IndexChunk],
+        doc_id_to_new_chunk_cnt: dict[str, int],
         chunk_content_scores: list[float],
         tenant_id: str,
         context: DocumentBatchPrepareContext,
@@ -122,43 +124,39 @@ class DocumentIndexingBatchAdapter:
             )
         }
 
-        doc_id_to_new_chunk_cnt: dict[str, int] = {
-            doc_id: 0 for doc_id in updatable_ids
-        }
-        for chunk in chunks_with_embeddings:
-            if chunk.source_document.id in doc_id_to_new_chunk_cnt:
-                doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
-
         # Get ancestor hierarchy node IDs for each document
         doc_id_to_ancestor_ids = self._get_ancestor_ids_for_documents(
             context.updatable_docs, tenant_id
         )
 
-        access_aware_chunks = [
-            DocMetadataAwareIndexChunk.from_index_chunk(
-                index_chunk=chunk,
-                access=doc_id_to_access_info.get(chunk.source_document.id, no_access),
-                document_sets=set(
-                    doc_id_to_document_set.get(chunk.source_document.id, [])
-                ),
-                user_project=[],
-                personas=[],
-                boost=(
-                    context.id_to_boost_map[chunk.source_document.id]
-                    if chunk.source_document.id in context.id_to_boost_map
-                    else DEFAULT_BOOST
-                ),
-                tenant_id=tenant_id,
-                aggregated_chunk_boost_factor=chunk_content_scores[chunk_num],
-                ancestor_hierarchy_node_ids=doc_id_to_ancestor_ids[
-                    chunk.source_document.id
-                ],
-            )
-            for chunk_num, chunk in enumerate(chunks_with_embeddings)
-        ]
+        def _enrich(
+            embedded: Iterator[IndexChunk],
+        ) -> Generator[DocMetadataAwareIndexChunk, None, None]:
+            for chunk_num, chunk in enumerate(embedded):
+                yield DocMetadataAwareIndexChunk.from_index_chunk(
+                    index_chunk=chunk,
+                    access=doc_id_to_access_info.get(
+                        chunk.source_document.id, no_access
+                    ),
+                    document_sets=set(
+                        doc_id_to_document_set.get(chunk.source_document.id, [])
+                    ),
+                    user_project=[],
+                    personas=[],
+                    boost=(
+                        context.id_to_boost_map[chunk.source_document.id]
+                        if chunk.source_document.id in context.id_to_boost_map
+                        else DEFAULT_BOOST
+                    ),
+                    tenant_id=tenant_id,
+                    aggregated_chunk_boost_factor=chunk_content_scores[chunk_num],
+                    ancestor_hierarchy_node_ids=doc_id_to_ancestor_ids[
+                        chunk.source_document.id
+                    ],
+                )
 
         return BuildMetadataAwareChunksResult(
-            chunks=access_aware_chunks,
+            chunks=_enrich(chunks_with_embeddings),
             doc_id_to_previous_chunk_cnt=doc_id_to_previous_chunk_cnt,
             doc_id_to_new_chunk_cnt=doc_id_to_new_chunk_cnt,
             user_file_id_to_raw_text={},

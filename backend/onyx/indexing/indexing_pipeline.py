@@ -729,6 +729,11 @@ def index_doc_batch(
 
     chunk_content_scores = [1.0] * len(chunks_with_embeddings)
 
+    # Pre-compute new chunk counts before the generator consumes the iterator
+    doc_id_to_new_chunk_cnt: dict[str, int] = defaultdict(int)
+    for chunk in chunks:
+        doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
+
     updatable_ids = [doc.id for doc in context.updatable_docs]
     updatable_chunk_data = [
         UpdatableChunkData(
@@ -750,6 +755,7 @@ def index_doc_batch(
         # always triggers a final metadata sync via the celery queue
         result = adapter.build_metadata_aware_chunks(
             chunks_with_embeddings=chunks_with_embeddings,
+            doc_id_to_new_chunk_cnt=dict(doc_id_to_new_chunk_cnt),
             chunk_content_scores=chunk_content_scores,
             tenant_id=tenant_id,
             context=context,

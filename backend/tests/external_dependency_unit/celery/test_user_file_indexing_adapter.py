@@ -155,6 +155,7 @@ class TestAdapterWritesBothMetadataFields:
 
         result = adapter.build_metadata_aware_chunks(
             chunks_with_embeddings=[chunk],
+            doc_id_to_new_chunk_cnt={str(uf.id): 1},
             chunk_content_scores=[1.0],
             tenant_id=TEST_TENANT_ID,
             context=context,
@@ -192,6 +193,7 @@ class TestAdapterWritesBothMetadataFields:
 
         result = adapter.build_metadata_aware_chunks(
             chunks_with_embeddings=[chunk],
+            doc_id_to_new_chunk_cnt={str(uf.id): 1},
             chunk_content_scores=[1.0],
             tenant_id=TEST_TENANT_ID,
             context=context,
@@ -231,6 +233,7 @@ class TestAdapterWritesBothMetadataFields:
 
         result = adapter.build_metadata_aware_chunks(
             chunks_with_embeddings=[chunk],
+            doc_id_to_new_chunk_cnt={str(uf.id): 1},
             chunk_content_scores=[1.0],
             tenant_id=TEST_TENANT_ID,
             context=context,
@@ -263,6 +266,7 @@ class TestAdapterWritesBothMetadataFields:
 
         result = adapter.build_metadata_aware_chunks(
             chunks_with_embeddings=[chunk],
+            doc_id_to_new_chunk_cnt={str(uf.id): 1},
             chunk_content_scores=[1.0],
             tenant_id=TEST_TENANT_ID,
             context=context,
@@ -302,6 +306,7 @@ class TestAdapterWritesBothMetadataFields:
 
         result = adapter.build_metadata_aware_chunks(
             chunks_with_embeddings=[chunk],
+            doc_id_to_new_chunk_cnt={str(uf.id): 1},
             chunk_content_scores=[1.0],
             tenant_id=TEST_TENANT_ID,
             context=context,
