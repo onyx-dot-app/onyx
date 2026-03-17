@@ -15,6 +15,18 @@ _CANVAS_CALL_TIMEOUT = 30
 _CANVAS_API_VERSION = "/api/v1"
 
 
+def _error_code_for_status(status_code: int) -> OnyxErrorCode:
+    if status_code == 401:
+        return OnyxErrorCode.CREDENTIAL_EXPIRED
+    if status_code == 403:
+        return OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    if status_code == 429:
+        return OnyxErrorCode.RATE_LIMITED
+    if status_code >= 500:
+        return OnyxErrorCode.BAD_GATEWAY
+    return OnyxErrorCode.CONNECTOR_VALIDATION_FAILED
+
+
 class CanvasApiClient:
     def __init__(
         self,
@@ -66,7 +78,7 @@ class CanvasApiClient:
                 )
             response_json = {}
 
-        if response.status_code >= 300:
+        if response.status_code >= 400:
             error = response.reason
             error_field = response_json.get("error")
             if isinstance(error_field, dict):
@@ -84,7 +96,7 @@ class CanvasApiClient:
                     if msg:
                         error = msg
             raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY,
+                _error_code_for_status(response.status_code),
                 detail=error,
                 status_code_override=response.status_code,
             )
