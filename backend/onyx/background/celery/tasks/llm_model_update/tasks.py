@@ -5,6 +5,7 @@ from celery import Task
 from sqlalchemy.exc import OperationalError
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
@@ -141,6 +142,7 @@ def cloud_check_for_auto_llm_updates(
                     "force": True,
                 },
                 priority=OnyxCeleryPriority.LOW,
+                expires=BEAT_EXPIRES_DEFAULT,
                 ignore_result=True,
             )
             num_processed_tenants += 1
