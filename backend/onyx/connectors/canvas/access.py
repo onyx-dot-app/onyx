@@ -1,9 +1,7 @@
 """
 Permissioning / AccessControl logic for Canvas courses.
 
-CE stub — returns None (no permissions).
-The EE implementation is loaded at runtime via fetch_versioned_implementation
-when permission sync is wired up (PR4).
+CE stub — returns None (no permissions). Upgraded in a follow-up PR.
 """
 
 from onyx.access.models import ExternalAccess
