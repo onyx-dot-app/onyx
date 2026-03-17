@@ -19,14 +19,9 @@
 //   - Content (ContentXl / ContentLg / ContentMd)  (edit-button size)
 // ---------------------------------------------------------------------------
 
-type StandardDiscriminatedSizeVariants =
-  | "fit"
-  | "lg"
-  | "md"
-  | "sm"
-  | "xs"
-  | "2xs";
 type ExtremaSizeVariants = "fit" | "full" | "auto";
+type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
+type ContainerSizeVariants = "fit" | "lg" | "md" | "sm" | "xs" | "2xs";
 
 /**
  * Size-variant scale.
@@ -43,9 +38,14 @@ type ExtremaSizeVariants = "fit" | "full" | "auto";
  * | `2xs` | 1rem (16px)   | `p-0.5` |
  * | `fit` | h-fit         | `p-0`   |
  */
-const lineSizeVariants: Record<
-  StandardDiscriminatedSizeVariants,
-  { height: string; minWidth: string; padding: string }
+type ContainerProperties = {
+  height: string;
+  minWidth: string;
+  padding: string;
+};
+const containerSizeVariants: Record<
+  ContainerSizeVariants,
+  ContainerProperties
 > = {
   fit: { height: "h-fit", minWidth: "", padding: "p-0" },
   lg: { height: "h-[2.25rem]", minWidth: "min-w-[2.25rem]", padding: "p-2" },
@@ -101,9 +101,10 @@ const heightVariants: Record<ExtremaSizeVariants, string> = {
 } as const;
 
 export {
-  lineSizeVariants,
-  type StandardDiscriminatedSizeVariants,
+  type ExtremaSizeVariants,
+  type ContainerSizeVariants,
+  type OverridableExtremaSizeVariants,
+  containerSizeVariants,
   widthVariants,
   heightVariants,
-  type ExtremaSizeVariants,
 };

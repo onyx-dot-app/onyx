@@ -5,10 +5,7 @@ import {
   useDisabled,
   type InteractiveStatefulProps,
 } from "@opal/core";
-import type {
-  StandardDiscriminatedSizeVariants,
-  ExtremaSizeVariants,
-} from "@opal/shared";
+import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -51,7 +48,7 @@ type SelectButtonProps = InteractiveStatefulProps &
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
-    size?: StandardDiscriminatedSizeVariants;
+    size?: ContainerSizeVariants;
 
     /** HTML button type. Container renders a `<button>` element. */
     type?: "submit" | "button" | "reset";

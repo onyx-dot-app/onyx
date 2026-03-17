@@ -5,8 +5,8 @@ import React from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
 import {
-  lineSizeVariants,
-  type StandardDiscriminatedSizeVariants,
+  containerSizeVariants,
+  type ContainerSizeVariants,
   widthVariants,
   type ExtremaSizeVariants,
 } from "@opal/shared";
@@ -73,7 +73,7 @@ interface InteractiveContainerProps
    *
    * @default "lg"
    */
-  heightVariant?: StandardDiscriminatedSizeVariants;
+  heightVariant?: ContainerSizeVariants;
 
   /**
    * Width preset controlling the container's horizontal size.
@@ -119,7 +119,7 @@ function InteractiveContainer({
     target?: string;
     rel?: string;
   };
-  const { height, minWidth, padding } = lineSizeVariants[heightVariant];
+  const { height, minWidth, padding } = containerSizeVariants[heightVariant];
   const sharedProps = {
     ...rest,
     className: cn(
