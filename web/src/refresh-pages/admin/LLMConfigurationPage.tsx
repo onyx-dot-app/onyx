@@ -34,7 +34,7 @@ import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import { getModalForExistingProvider } from "@/sections/modals/llmConfig/utils";
+import { getModalForExistingProvider } from "@/sections/modals/llmConfig/getModal";
 import OpenAIModal from "@/sections/modals/llmConfig/OpenAIModal";
 import AnthropicModal from "@/sections/modals/llmConfig/AnthropicModal";
 import OllamaModal from "@/sections/modals/llmConfig/OllamaModal";
