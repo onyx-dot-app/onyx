@@ -1177,12 +1177,17 @@ auth:
     # Secrets values IF existingSecret is empty. Key here must match the value
     # in secretKeys to be used. Values will be base64 encoded in the k8s
     # cluster.
+    # For the bundled OpenSearch chart, the admin password is consumed during
+    # initial cluster setup. Changing this value later will update Onyx's
+    # client credentials, but will not rotate the OpenSearch admin password.
+    # Set this before first install or use existingSecret to preserve the
+    # current secret on upgrade.
     # Password must meet OpenSearch complexity requirements:
     # min 8 chars, uppercase, lowercase, digit, and special character.
-    # CHANGE THIS FOR PRODUCTION.
+    # Required when auth.opensearch.enabled=true and no existing secret exists.
     values:
       opensearch_admin_username: "admin"
-      opensearch_admin_password: "OnyxDev1!"
+      opensearch_admin_password: ""
   userauth:
     # -- Used for password reset / verification tokens and OAuth/OIDC state signing.
     # Disabled by default to preserve upgrade compatibility for existing Helm customers.
