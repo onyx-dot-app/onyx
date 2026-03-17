@@ -14,7 +14,7 @@ import Link from "next/link";
 interface ConnectorTitleProps {
   connector: Connector<any>;
   ccPairId: number;
-  ccPairName: string | null | undefined;
+  ccPairName: string;
   isPublic?: boolean;
   owner?: string;
   isLink?: boolean;

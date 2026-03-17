@@ -184,7 +184,7 @@ export interface DocumentBoostStatus {
 
 export interface FailedConnectorIndexingStatus {
   cc_pair_id: number;
-  name: string | null;
+  name: string;
   error_msg: string | null;
   is_deletable: boolean;
   connector_id: number;
@@ -207,7 +207,7 @@ export interface IndexAttemptSnapshot {
 
 export interface ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
   cc_pair_id: number;
-  name: string | null;
+  name: string;
   connector: Connector<ConnectorConfigType>;
   credential: Credential<ConnectorCredentialType>;
   access_type: AccessType;
@@ -230,7 +230,7 @@ export interface ConnectorIndexingStatus<
 
 export interface ConnectorIndexingStatusLite {
   cc_pair_id: number;
-  name: string | null;
+  name: string;
   source: ValidSources;
   access_type: AccessType;
   in_progress: boolean;
@@ -343,7 +343,7 @@ export interface DeletionAttemptSnapshot {
 // DOCUMENT SETS
 export interface CCPairDescriptor<ConnectorType, CredentialType> {
   id: number;
-  name: string | null;
+  name: string;
   connector: Connector<ConnectorType>;
   credential: Credential<CredentialType>;
   access_type: AccessType;
@@ -364,7 +364,7 @@ export interface FederatedConnectorDescriptor {
 // Simplified interfaces with minimal data
 export interface CCPairSummary {
   id: number;
-  name: string | null;
+  name: string;
   source: ValidSources;
   access_type: AccessType;
 }
