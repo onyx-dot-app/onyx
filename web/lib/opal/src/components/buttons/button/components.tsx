@@ -1,7 +1,10 @@
 import "@opal/components/buttons/button/styles.css";
 import "@opal/components/tooltip.css";
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
-import type { SizeVariant, WidthVariant } from "@opal/shared";
+import type {
+  StandardDiscrimatedSizeVariants,
+  ExtremaSizeVariants,
+} from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -31,7 +34,7 @@ type ButtonProps = InteractiveStatelessProps &
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
-    size?: SizeVariant;
+    size?: StandardDiscrimatedSizeVariants;
 
     /** HTML button type. When provided, Container renders a `<button>` element. */
     type?: "submit" | "button" | "reset";
@@ -40,7 +43,7 @@ type ButtonProps = InteractiveStatelessProps &
     tooltip?: string;
 
     /** Width preset. `"fit"` shrink-wraps, `"full"` stretches to parent width. */
-    width?: WidthVariant;
+    width?: ExtremaSizeVariants;
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;

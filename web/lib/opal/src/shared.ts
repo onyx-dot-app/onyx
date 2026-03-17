@@ -19,6 +19,15 @@
 //   - Content (ContentXl / ContentLg / ContentMd)  (edit-button size)
 // ---------------------------------------------------------------------------
 
+type StandardDiscrimatedSizeVariants =
+  | "fit"
+  | "lg"
+  | "md"
+  | "sm"
+  | "xs"
+  | "2xs";
+type ExtremaSizeVariants = "fit" | "full" | "auto";
+
 /**
  * Size-variant scale.
  *
@@ -34,7 +43,11 @@
  * | `2xs` | 1rem (16px)   | `p-0.5` |
  * | `fit` | h-fit         | `p-0`   |
  */
-const sizeVariants = {
+const lineSizeVariants: Record<
+  StandardDiscrimatedSizeVariants,
+  { height: string; minWidth: string; padding: string }
+> = {
+  fit: { height: "h-fit", minWidth: "", padding: "p-0" },
   lg: { height: "h-[2.25rem]", minWidth: "min-w-[2.25rem]", padding: "p-2" },
   md: { height: "h-[1.75rem]", minWidth: "min-w-[1.75rem]", padding: "p-1" },
   sm: { height: "h-[1.5rem]", minWidth: "min-w-[1.5rem]", padding: "p-1" },
@@ -44,18 +57,14 @@ const sizeVariants = {
     padding: "p-0.5",
   },
   "2xs": { height: "h-[1rem]", minWidth: "min-w-[1rem]", padding: "p-0.5" },
-  fit: { height: "h-fit", minWidth: "", padding: "p-0" },
 } as const;
 
-/** Named size preset key. */
-type SizeVariant = keyof typeof sizeVariants;
-
 // ---------------------------------------------------------------------------
-// Width Variants
+// Width/Height Variants
 //
-// A named scale of width presets that map to Tailwind width utility classes.
+// A named scale of width/height presets that map to Tailwind width/height utility classes.
 //
-// Consumers:
+// Consumers (for width):
 //   - Interactive.Container  (widthVariant)
 //   - Button                 (width)
 //   - Content                (widthVariant)
@@ -70,13 +79,31 @@ type SizeVariant = keyof typeof sizeVariants;
  * | `fit`  | `w-fit`        |
  * | `full` | `w-full`       |
  */
-const widthVariants = {
+const widthVariants: Record<ExtremaSizeVariants, string> = {
   auto: "w-auto",
   fit: "w-fit",
   full: "w-full",
 } as const;
 
-/** Named width preset key. */
-type WidthVariant = keyof typeof widthVariants;
+/**
+ * Height-variant scale.
+ *
+ * | Key    | Tailwind class |
+ * |--------|----------------|
+ * | `auto` | `h-auto`       |
+ * | `fit`  | `h-fit`        |
+ * | `full` | `h-full`       |
+ */
+const heightVariants: Record<ExtremaSizeVariants, string> = {
+  auto: "h-auto",
+  fit: "h-fit",
+  full: "h-full",
+} as const;
 
-export { sizeVariants, type SizeVariant, widthVariants, type WidthVariant };
+export {
+  lineSizeVariants,
+  type StandardDiscrimatedSizeVariants,
+  widthVariants,
+  heightVariants,
+  type ExtremaSizeVariants,
+};

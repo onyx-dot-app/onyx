@@ -1,4 +1,4 @@
-import type { SizeVariant } from "@opal/shared";
+import type { StandardDiscrimatedSizeVariants } from "@opal/shared";
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
 
@@ -13,7 +13,7 @@ const iconVariants = {
 
 function iconWrapper(
   Icon: IconFunctionComponent | undefined,
-  size: SizeVariant,
+  size: StandardDiscrimatedSizeVariants,
   includeSpacer: boolean
 ) {
   const { padding: p, size: s } = iconVariants[size];

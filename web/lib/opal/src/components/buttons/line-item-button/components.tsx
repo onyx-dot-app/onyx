@@ -6,7 +6,7 @@ import {
   type InteractiveStatefulProps,
   InteractiveContainerRoundingVariant,
 } from "@opal/core";
-import { type WidthVariant } from "@opal/shared";
+import { type ExtremaSizeVariants } from "@opal/shared";
 import type { TooltipSide } from "@opal/components";
 import type { DistributiveOmit } from "@opal/types";
 import type { ContentActionProps } from "@opal/layouts/content-action/components";
@@ -51,7 +51,7 @@ type LineItemButtonOwnProps = {
   roundingVariant?: InteractiveContainerRoundingVariant;
 
   /** Container width. @default "full" */
-  width?: WidthVariant;
+  width?: ExtremaSizeVariants;
 
   /** HTML button type. @default "button" */
   type?: "submit" | "button" | "reset";

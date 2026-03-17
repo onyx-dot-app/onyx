@@ -2,7 +2,7 @@
 
 import { Button } from "@opal/components/buttons/button/components";
 import { Tag, type TagProps } from "@opal/components/tag/components";
-import type { SizeVariant } from "@opal/shared";
+import type { StandardDiscrimatedSizeVariants } from "@opal/shared";
 import SvgAlertCircle from "@opal/icons/alert-circle";
 import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
@@ -27,7 +27,7 @@ interface ContentMdPresetConfig {
   lineHeight: string;
   gap: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
-  editButtonSize: SizeVariant;
+  editButtonSize: StandardDiscrimatedSizeVariants;
   editButtonPadding: string;
   optionalFont: string;
   /** Aux icon size = lineHeight − 2 × p-0.5. */

@@ -18,7 +18,7 @@ import {
 } from "@opal/layouts/content/ContentMd";
 import type { TagProps } from "@opal/components/tag/components";
 import type { IconFunctionComponent } from "@opal/types";
-import { widthVariants, type WidthVariant } from "@opal/shared";
+import { widthVariants, type ExtremaSizeVariants } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -59,7 +59,7 @@ interface ContentBaseProps {
    *
    * @default "fit"
    */
-  widthVariant?: WidthVariant;
+  widthVariant?: ExtremaSizeVariants;
 
   /** When `true`, the title color hooks into `Interactive.Stateful`/`Interactive.Stateless`'s `--interactive-foreground` variable. */
   withInteractive?: boolean;

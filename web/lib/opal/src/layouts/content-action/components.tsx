@@ -1,5 +1,8 @@
 import { Content, type ContentProps } from "@opal/layouts/content/components";
-import { sizeVariants, type SizeVariant } from "@opal/shared";
+import {
+  lineSizeVariants,
+  type StandardDiscrimatedSizeVariants,
+} from "@opal/shared";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -15,9 +18,9 @@ type ContentActionProps = ContentProps & {
    * Uses the shared `SizeVariant` scale from `@opal/shared`.
    *
    * @default "lg"
-   * @see {@link SizeVariant} for the full list of presets.
+   * @see {@link StandardDiscrimatedSizeVariants} for the full list of presets.
    */
-  paddingVariant?: SizeVariant;
+  paddingVariant?: StandardDiscrimatedSizeVariants;
 };
 
 // ---------------------------------------------------------------------------
@@ -54,7 +57,7 @@ function ContentAction({
   paddingVariant = "lg",
   ...contentProps
 }: ContentActionProps) {
-  const { padding } = sizeVariants[paddingVariant];
+  const { padding } = lineSizeVariants[paddingVariant];
 
   return (
     <div className="flex flex-row items-stretch w-full">
