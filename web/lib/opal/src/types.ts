@@ -23,14 +23,6 @@ import type { SVGProps } from "react";
  */
 export type SizeVariants = "fit" | "full" | "lg" | "md" | "sm" | "xs" | "2xs";
 
-/**
- * Size variants with numeric overrides.
- *
- * Allows size specification as a named preset or a custom numeric value.
- * Used in components that need programmatic sizing flexibility.
- */
-export type OverridableExtremaSizeVariants = SizeVariants | number;
-
 // Convenience Size Types:
 //
 // NOTE (@raunakab + @nmgarza5)
@@ -54,6 +46,14 @@ export type ExtremaSizeVariants = Exclude<
   SizeVariants,
   "lg" | "md" | "sm" | "xs" | "2xs"
 >;
+
+/**
+ * Size variants with numeric overrides.
+ *
+ * Allows size specification as a named preset or a custom numeric value.
+ * Used in components that need programmatic sizing flexibility.
+ */
+export type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
 
 // ---------------------------------------------------------------------------
 // Icon Props
