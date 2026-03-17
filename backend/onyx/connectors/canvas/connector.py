@@ -515,95 +515,124 @@ class CanvasConnector(
                 )
             return document
 
-        # Process current stage for current course.
-        # Only advance if the listing succeeds — on failure the stage
-        # stays the same so the framework retries it next call.
-        if stage == "pages":
-            try:
-                pages = self._list_pages(course_id)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to list pages for course {course_id}: {e}"
-                )
-                return new_checkpoint
+        # Fetch one page of API results for the current stage.
+        # If next_url is set, we're resuming mid-pagination.
+        stage_config: dict[str, dict[str, Any]] = {
+            "pages": {
+                "endpoint": f"courses/{course_id}/pages",
+                "params": {"per_page": "100", "include[]": "body"},
+            },
+            "assignments": {
+                "endpoint": f"courses/{course_id}/assignments",
+                "params": {"per_page": "100"},
+            },
+            "announcements": {
+                "endpoint": "announcements",
+                "params": {
+                    "per_page": "100",
+                    "context_codes[]": f"course_{course_id}",
+                },
+            },
+        }
+        config = stage_config[stage]
 
-            for page in pages:
-                try:
+        try:
+            if new_checkpoint.next_url:
+                response, result_next_url = self.canvas_client.get(
+                    full_url=new_checkpoint.next_url
+                )
+            else:
+                response, result_next_url = self.canvas_client.get(
+                    config["endpoint"], params=config["params"]
+                )
+        except Exception as e:
+            logger.warning(
+                f"Failed to fetch {stage} for course {course_id}: {e}"
+            )
+            return new_checkpoint
+
+        # Process fetched items
+        for item in response or []:
+            try:
+                if stage == "pages":
+                    page = CanvasPage(
+                        page_id=item["page_id"],
+                        url=item["url"],
+                        title=item["title"],
+                        body=item.get("body"),
+                        created_at=item["created_at"],
+                        updated_at=item["updated_at"],
+                        course_id=course_id,
+                    )
                     if not _in_time_window(page.updated_at):
                         continue
                     doc = self._convert_page_to_document(page)
                     yield _maybe_attach_permissions(doc)
-                except Exception as e:
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=f"canvas-page-{course_id}-{page.page_id}",
-                            document_link=f"{self.canvas_base_url}/courses/{course_id}/pages/{page.url}",
-                        ),
-                        failure_message=f"Failed to process page: {e}",
-                        exception=e,
+
+                elif stage == "assignments":
+                    assignment = CanvasAssignment(
+                        id=item["id"],
+                        name=item["name"],
+                        description=item.get("description"),
+                        html_url=item["html_url"],
+                        course_id=course_id,
+                        created_at=item["created_at"],
+                        updated_at=item["updated_at"],
+                        due_at=item.get("due_at"),
                     )
-
-            new_checkpoint.stage = "assignments"
-
-        elif stage == "assignments":
-            try:
-                assignments = self._list_assignments(course_id)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to list assignments for course {course_id}: {e}"
-                )
-                return new_checkpoint
-
-            for assignment in assignments:
-                try:
                     if not _in_time_window(assignment.updated_at):
                         continue
                     doc = self._convert_assignment_to_document(assignment)
                     yield _maybe_attach_permissions(doc)
-                except Exception as e:
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=f"canvas-assignment-{course_id}-{assignment.id}",
-                            document_link=assignment.html_url,
-                        ),
-                        failure_message=f"Failed to process assignment: {e}",
-                        exception=e,
+
+                elif stage == "announcements":
+                    announcement = CanvasAnnouncement(
+                        id=item["id"],
+                        title=item["title"],
+                        message=item.get("message"),
+                        html_url=item["html_url"],
+                        posted_at=item.get("posted_at"),
+                        course_id=course_id,
                     )
-
-            new_checkpoint.stage = "announcements"
-
-        elif stage == "announcements":
-            try:
-                announcements = self._list_announcements(course_id)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to list announcements for course {course_id}: {e}"
-                )
-                return new_checkpoint
-
-            for announcement in announcements:
-                try:
                     if not announcement.posted_at:
+                        logger.debug(
+                            f"Skipping announcement {announcement.id} in "
+                            f"course {course_id}: no posted_at"
+                        )
                         continue
                     if not _in_time_window(announcement.posted_at):
                         continue
-                    doc = self._convert_announcement_to_document(
-                        announcement
-                    )
+                    doc = self._convert_announcement_to_document(announcement)
                     yield _maybe_attach_permissions(doc)
-                except Exception as e:
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=f"canvas-announcement-{course_id}-{announcement.id}",
-                            document_link=announcement.html_url,
-                        ),
-                        failure_message=f"Failed to process announcement: {e}",
-                        exception=e,
-                    )
 
-            # Done with all 3 stages for this course, advance to next
-            new_checkpoint.current_course_index += 1
-            new_checkpoint.stage = "pages"
+            except Exception as e:
+                item_id = item.get("id") or item.get("page_id", "unknown")
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=f"canvas-{stage.rstrip('s')}-{course_id}-{item_id}",
+                        document_link=item.get("html_url", ""),
+                    ),
+                    failure_message=f"Failed to process {stage.rstrip('s')}: {e}",
+                    exception=e,
+                )
+
+        # If there are more pages, save the cursor and return
+        if result_next_url:
+            new_checkpoint.next_url = result_next_url
+        else:
+            # Stage complete — advance to next stage
+            new_checkpoint.next_url = None
+            next_stages: dict[str, CanvasStage | None] = {
+                "pages": "assignments",
+                "assignments": "announcements",
+                "announcements": None,
+            }
+            next_stage = next_stages[stage]
+            if next_stage:
+                new_checkpoint.stage = next_stage
+            else:
+                new_checkpoint.current_course_index += 1
+                new_checkpoint.stage = "pages"
 
         new_checkpoint.has_more = new_checkpoint.current_course_index < len(
             new_checkpoint.course_ids
