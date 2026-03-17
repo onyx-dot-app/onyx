@@ -223,7 +223,7 @@ async function openOpenAiSetupModal(page: Page): Promise<Locator> {
   await expect(openAiCard).toBeVisible({ timeout: 10000 });
   await openAiCard.getByRole("button", { name: "Connect" }).click();
 
-  const modal = page.getByRole("dialog", { name: /setup openai/i });
+  const modal = page.getByRole("dialog", { name: /set up gpt/i });
   await expect(modal).toBeVisible({ timeout: 10000 });
   return modal;
 }
