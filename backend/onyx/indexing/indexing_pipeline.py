@@ -1,3 +1,5 @@
+import pickle
+import tempfile
 from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Iterable
@@ -8,6 +10,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import CHUNKS_PER_BATCH
 from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_NAME
 from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
@@ -50,6 +53,7 @@ from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import IndexingBatchAdapter
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
@@ -66,6 +70,7 @@ from onyx.natural_language_processing.utils import tokenizer_trim_middle
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT1
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT2
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_PROMPT
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -149,6 +154,68 @@ def _upsert_documents_in_db(
             metadata=doc.metadata,
             db_session=db_session,
         )
+
+
+def embed_chunks_in_batches(
+    chunks: list[DocAwareChunk],
+    embedder: IndexingEmbedder,
+    tenant_id: str,
+    request_id: str | None,
+) -> tuple[Path, list[ConnectorFailure]]:
+    """Embeds chunks in batches of CHUNKS_PER_BATCH, spilling each batch to disk.
+
+    For each batch:
+      1. Embed the chunks via embed_chunks_with_failure_handling
+      2. Pickle the resulting IndexChunks to a temp file
+      3. Clear the batch from memory
+
+    Returns:
+      - Path to the temp directory containing one pickle file per batch
+      - Accumulated embedding failures across all batches
+    """
+    tmpdir = Path(tempfile.mkdtemp(prefix="onyx_embeddings_"))
+    all_embedding_failures: list[ConnectorFailure] = []
+
+    for batch_idx, chunk_batch in enumerate(batch_generator(chunks, CHUNKS_PER_BATCH)):
+        logger.debug(f"Embedding batch {batch_idx}: {len(chunk_batch)} chunks")
+
+        chunks_with_embeddings, embedding_failures = embed_chunks_with_failure_handling(
+            chunks=chunk_batch,
+            embedder=embedder,
+            tenant_id=tenant_id,
+            request_id=request_id,
+        )
+        all_embedding_failures.extend(embedding_failures)
+
+        # Spill embeddings to disk
+        batch_file = tmpdir / f"batch_{batch_idx}.pkl"
+        with open(batch_file, "wb") as f:
+            pickle.dump(chunks_with_embeddings, f)
+
+        # Free memory
+        del chunks_with_embeddings
+
+    return tmpdir, all_embedding_failures
+
+
+def load_embedded_chunks(
+    tmpdir: Path,
+) -> Generator[list[IndexChunk], None, None]:
+    """Reads back embedded chunk batches from disk, yielding one batch at a time.
+
+    After each batch is yielded and consumed, the caller can delete the reference
+    to free memory before the next batch is loaded. The batch file is deleted
+    after reading to free disk space incrementally.
+    """
+    batch_files = sorted(tmpdir.glob("batch_*.pkl"))
+    for batch_file in batch_files:
+        with open(batch_file, "rb") as f:
+            batch: list[IndexChunk] = pickle.load(f)
+        batch_file.unlink()
+        yield batch
+
+    # Clean up the temp directory once all batches have been consumed
+    tmpdir.rmdir()
 
 
 def get_doc_ids_to_update(
@@ -737,14 +804,6 @@ def index_doc_batch(
     chunk_content_scores = [1.0] * len(chunks_with_embeddings)
 
     updatable_ids = [doc.id for doc in context.updatable_docs]
-    updatable_chunk_data = [
-        UpdatableChunkData(
-            chunk_id=chunk.chunk_id,
-            document_id=chunk.source_document.id,
-            boost_score=score,
-        )
-        for chunk, score in zip(chunks_with_embeddings, chunk_content_scores)
-    ]
 
     # Acquires a lock on the documents so that no other process can modify them
     # NOTE: don't need to acquire till here, since this is when the actual race condition
@@ -779,9 +838,6 @@ def index_doc_batch(
             return metadata_aware_chunks
 
         for document_index in document_indices:
-            # A document will not be spread across different batches, so all the
-            # documents with chunks in this set, are fully represented by the chunks
-            # in this set
             (
                 insertion_records,
                 vector_db_write_failures,
@@ -842,7 +898,7 @@ def index_doc_batch(
             [r for r in primary_doc_idx_insertion_records if not r.already_existed]
         ),
         total_docs=len(filtered_documents),
-        total_chunks=len(chunks_with_embeddings),
+        total_chunks=total_chunks,
         failures=primary_doc_idx_vector_db_write_failures + embedding_failures,
     )
 

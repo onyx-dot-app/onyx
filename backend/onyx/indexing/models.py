@@ -5,6 +5,7 @@ from typing import Protocol
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 
 from onyx.access.models import DocumentAccess
