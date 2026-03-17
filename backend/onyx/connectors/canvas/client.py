@@ -23,6 +23,8 @@ def _error_code_for_status(status_code: int) -> OnyxErrorCode:
         return OnyxErrorCode.CREDENTIAL_EXPIRED
     if status_code == 403:
         return OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    if status_code == 404:
+        return OnyxErrorCode.BAD_GATEWAY
     if status_code == 429:
         return OnyxErrorCode.RATE_LIMITED
     if status_code >= 500:
@@ -46,7 +48,7 @@ class CanvasApiClient:
         if parsed_base.scheme != "https":
             raise ValueError("canvas_base_url must use https")
 
-        self.bearer_token = bearer_token
+        self._bearer_token = bearer_token
         self.base_url = (
             canvas_base_url.rstrip("/")
             .removesuffix(_CANVAS_API_VERSION)
@@ -142,7 +144,7 @@ class CanvasApiClient:
         return None
 
     def _build_headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.bearer_token}"}
+        return {"Authorization": f"Bearer {self._bearer_token}"}
 
     def _build_url(self, endpoint: str) -> str:
         return f"{self.base_url}/{endpoint.lstrip('/')}"
