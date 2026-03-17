@@ -8,7 +8,7 @@ import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import { Callout } from "@/components/ui/callout";
-import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
+import ActivaInitializingLoader from "@/components/ActivaInitializingLoader";
 import { Persona } from "@/app/admin/agents/interfaces";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import PreviewModal from "@/sections/modals/PreviewModal";
@@ -134,7 +134,7 @@ export default function SharedChatDisplay({
             </div>
           ) : (
             <div className="h-full w-full flex items-center justify-center">
-              <OnyxInitializingLoader />
+              <ActivaInitializingLoader />
             </div>
           )}
         </div>

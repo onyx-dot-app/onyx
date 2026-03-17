@@ -7,7 +7,7 @@ import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
+import ActivaInitializingLoader from "@/components/ActivaInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import {
   useSettingsContext,
@@ -619,7 +619,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           : "1fr auto 1fr",
   };
 
-  if (!isReady) return <OnyxInitializingLoader />;
+  if (!isReady) return <ActivaInitializingLoader />;
 
   return (
     <>

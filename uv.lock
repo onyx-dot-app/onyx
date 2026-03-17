@@ -16,7 +16,7 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "onyx",
+    "activa",
     "onyx-backend",
 ]
 
@@ -4209,7 +4209,7 @@ wheels = [
 ]
 
 [[package]]
-name = "onyx"
+name = "activa"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [
@@ -4555,11 +4555,11 @@ name = "onyx-backend"
 version = "0.0.0"
 source = { virtual = "backend" }
 dependencies = [
-    { name = "onyx", extra = ["backend", "dev", "ee"] },
+    { name = "activa", extra = ["backend", "dev", "ee"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "onyx", extras = ["backend", "dev", "ee"], editable = "." }]
+requires-dist = [{ name = "activa", extras = ["backend", "dev", "ee"], editable = "." }]
 
 [[package]]
 name = "onyx-devtools"
