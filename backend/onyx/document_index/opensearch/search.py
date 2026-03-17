@@ -387,6 +387,11 @@ class DocumentQuery:
             "size": num_hits,
             "highlight": match_highlights_configuration,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
         }
 
         # Explain is for scoring breakdowns.
@@ -446,6 +451,11 @@ class DocumentQuery:
             },
             "size": num_to_retrieve,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
         }
         if not OPENSEARCH_PROFILING_DISABLED:
             final_random_search_query["profile"] = True
