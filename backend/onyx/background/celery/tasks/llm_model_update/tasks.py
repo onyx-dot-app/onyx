@@ -48,7 +48,7 @@ from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
     bind=True,
 )
 def check_for_auto_llm_updates(
-    _task: Task,  # bind=True required; Celery uses Task.retry() for autoretry_for
+    task: Task,  # bind=True required; Celery uses Task.retry() for autoretry_for
     *,
     tenant_id: str,  # noqa: ARG001
     llm_recommendations: dict[str, Any] | None = None,
@@ -81,6 +81,13 @@ def check_for_auto_llm_updates(
             else:
                 task_logger.debug("No model updates applied")
 
+    except (OperationalError, OSError):
+        max_retries = task.max_retries if task.max_retries is not None else 0
+        if task.request.retries >= max_retries:
+            task_logger.exception("Auto LLM update task failed after retries")
+        else:
+            task_logger.warning("Transient error in auto LLM update task, will retry")
+        raise
     except Exception:
         task_logger.exception("Error in auto LLM update task")
         raise
@@ -117,7 +124,10 @@ def cloud_check_for_auto_llm_updates(
     try:
         llm_recommendations = fetch_llm_recommendations_from_github(raise_on_error=True)
         if llm_recommendations is None:
-            return None
+            raise RuntimeError(
+                "fetch_llm_recommendations_from_github returned None with "
+                "raise_on_error=True"
+            )
 
         shared_cache = get_shared_cache_backend()
         last_updated_at = get_cached_last_updated_at(cache_backend=shared_cache)
