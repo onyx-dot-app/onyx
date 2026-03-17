@@ -103,8 +103,9 @@ def sync_llm_models_from_github(
 
     Args:
         db_session: Database session
-        config: GitHub LLM configuration
         force: If True, skip the updated_at check and force sync
+        cache_backend: Optional cache backend override; defaults to the
+            per-tenant backend returned by get_cache_backend().
 
     Returns:
         Dict of provider_name -> number of changes made.
