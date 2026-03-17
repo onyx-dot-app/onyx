@@ -4,6 +4,9 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+const BRAND_NAME = "ACTIVA";
+const BRAND_PROMISE = "Menos busqueda. Mas ejecucion.";
+const BRAND_TAGLINE = "De la informacion a la accion.";
 const LOGIN_ROUTE: Route = "/login";
 const REGISTER_ROUTE: Route = "/register";
 
@@ -221,11 +224,18 @@ export default function Landing() {
     <div className="min-h-screen bg-[var(--grey-00)] text-[var(--grey-100)]">
       <header className="sticky top-0 z-40 border-b border-[var(--grey-10)] bg-[rgba(255,255,255,0.92)] backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
-          <Link
-            href="/"
-            className="text-2xl font-semibold tracking-[-0.05em] text-[var(--grey-100)]"
-          >
-            klugemax
+          <Link href="/" className="flex items-center gap-3 text-[var(--grey-100)]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--grey-100)] text-sm font-semibold tracking-[0.12em] text-[var(--grey-00)]">
+              A
+            </span>
+            <span className="flex flex-col">
+              <span className="text-2xl font-semibold tracking-[-0.08em]">
+                {BRAND_NAME}
+              </span>
+              <span className="hidden text-xs uppercase tracking-[0.18em] text-[var(--grey-50)] md:block">
+                IA operativa
+              </span>
+            </span>
           </Link>
 
           <nav
@@ -264,11 +274,19 @@ export default function Landing() {
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-0 top-0 h-[30rem] bg-[radial-gradient(circle_at_top,_rgba(0,0,0,0.08),_transparent_62%)]"
           />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-20 mx-auto h-[28rem] max-w-5xl rounded-full border border-[rgba(0,0,0,0.04)]"
+          />
 
           <div className="relative mx-auto flex min-h-[calc(100vh-81px)] w-full max-w-7xl flex-col items-center justify-center px-6 py-20 text-center lg:px-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-[var(--grey-10)] bg-[var(--grey-04)] px-4 py-2 text-sm font-medium text-[var(--grey-70)]">
               <LightningIcon className="h-4 w-4" />
-              <span>Enterprise AI Copilot</span>
+              <span>{BRAND_PROMISE}</span>
+            </div>
+
+            <div className="pt-8 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--grey-50)]">
+              {BRAND_NAME}
             </div>
 
             <h1 className="pt-8 text-[clamp(3.5rem,8vw,6rem)] font-semibold leading-[0.94] tracking-[-0.06em] text-[var(--grey-100)]">
@@ -280,6 +298,10 @@ export default function Landing() {
               Responde con evidencia interna. Ejecuta acciones con control y
               auditor\u00eda. Todo conectado a tus datos, con permisos y
               trazabilidad.
+            </p>
+
+            <p className="pt-4 text-base font-medium uppercase tracking-[0.18em] text-[var(--grey-50)]">
+              {BRAND_TAGLINE}
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-4 pt-10">
@@ -317,6 +339,9 @@ export default function Landing() {
           <FeatureAnchor id="pricing" />
 
           <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
+            <p className="pb-4 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--grey-50)]">
+              {BRAND_NAME}
+            </p>
             <h2 className="text-[clamp(2.5rem,4vw,3.5rem)] font-semibold tracking-[-0.05em] text-[var(--grey-100)]">
               Listo para empezar
             </h2>
@@ -332,26 +357,28 @@ export default function Landing() {
 
       <footer className="border-t border-[var(--grey-10)] px-6 py-8 lg:px-8">
         <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
-          <p className="text-base text-[var(--grey-50)]">&copy; 2025 klugemax</p>
+          <p className="text-base text-[var(--grey-50)]">
+            &copy; 2025 {BRAND_NAME}
+          </p>
 
           <div
             id="docs"
             className="flex flex-wrap items-center justify-center gap-6 text-base text-[var(--grey-50)] md:justify-end"
           >
             <a
-              href="mailto:legal@klugemax.com?subject=Privacy"
+              href="mailto:legal@activa.ai?subject=Privacy"
               className="transition-colors hover:text-[var(--grey-100)]"
             >
               Privacy
             </a>
             <a
-              href="mailto:legal@klugemax.com?subject=Terms"
+              href="mailto:legal@activa.ai?subject=Terms"
               className="transition-colors hover:text-[var(--grey-100)]"
             >
               Terms
             </a>
             <a
-              href="mailto:contact@klugemax.com"
+              href="mailto:contact@activa.ai"
               className="transition-colors hover:text-[var(--grey-100)]"
             >
               Contact
