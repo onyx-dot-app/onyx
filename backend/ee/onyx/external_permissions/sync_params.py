@@ -16,6 +16,7 @@ from ee.onyx.configs.app_configs import SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SLACK_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import TEAMS_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.external_permissions.canvas.doc_sync import canvas_doc_sync
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from ee.onyx.external_permissions.github.doc_sync import github_doc_sync
@@ -82,6 +83,14 @@ def mock_doc_sync(
 
 
 _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
+    # Canvas: no group sync needed — permissions are user-email-only (course enrollments).
+    DocumentSource.CANVAS: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=canvas_doc_sync,
+            initial_index_should_sync=True,
+        ),
+    ),
     DocumentSource.GOOGLE_DRIVE: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
