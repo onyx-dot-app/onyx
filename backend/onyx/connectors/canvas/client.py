@@ -52,6 +52,7 @@ class CanvasApiClient:
             .removesuffix(_CANVAS_API_VERSION)
             + _CANVAS_API_VERSION
         )
+        self._expected_host: str | None = urlparse(self.base_url).hostname
 
     def get(
         self,
@@ -117,7 +118,7 @@ class CanvasApiClient:
         Only returns URLs whose host matches the configured Canvas base URL
         to prevent leaking the bearer token to arbitrary hosts.
         """
-        expected_host = urlparse(self.base_url).hostname
+        expected_host = self._expected_host
         for match in _NEXT_LINK_PATTERN.finditer(link_header):
             url = match.group(1)
             parsed_url = urlparse(url)
