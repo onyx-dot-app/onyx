@@ -695,8 +695,7 @@ def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMess
 def _build_structured_tool_response_message(msg: ChatMessageSimple) -> ToolMessage:
     if not msg.tool_call_id:
         raise ValueError(
-            "Tool call response message encountered but tool_call_id is not available. "
-            f"Message: {msg}"
+            f"Tool call response message encountered but tool_call_id is not available. Message: {msg}"
         )
 
     return ToolMessage(
@@ -731,8 +730,7 @@ class _OllamaHistoryMessageFormatter(_HistoryMessageFormatter):
 
         tool_call_lines = [
             (
-                f"[Tool Call] name={tc.tool_name} "
-                f"id={tc.tool_call_id} args={json.dumps(tc.tool_arguments)}"
+                f"[Tool Call] name={tc.tool_name} id={tc.tool_call_id} args={json.dumps(tc.tool_arguments)}"
             )
             for tc in msg.tool_calls
         ]
@@ -750,8 +748,7 @@ class _OllamaHistoryMessageFormatter(_HistoryMessageFormatter):
     def format_tool_response_message(self, msg: ChatMessageSimple) -> UserMessage:
         if not msg.tool_call_id:
             raise ValueError(
-                "Tool call response message encountered but tool_call_id is not available. "
-                f"Message: {msg}"
+                f"Tool call response message encountered but tool_call_id is not available. Message: {msg}"
             )
 
         return UserMessage(
@@ -839,8 +836,7 @@ def translate_history_to_llm_format(
                             content_parts.append(image_part)
                         except Exception as e:
                             logger.warning(
-                                f"Failed to process image file {img_file.file_id}: {e}. "
-                                "Skipping image."
+                                f"Failed to process image file {img_file.file_id}: {e}. Skipping image."
                             )
                 user_msg = UserMessage(
                     role="user",

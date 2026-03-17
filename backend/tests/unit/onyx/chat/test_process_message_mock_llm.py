@@ -43,12 +43,15 @@ def test_mock_llm_response_requires_integration_mode() -> None:
 def test_gather_stream_returns_empty_answer_when_streaming_error_only() -> None:
     packets: AnswerStream = iter(
         [
-            StreamingError(
-                error="The selected model returned an empty response",
-                error_code="EMPTY_LLM_RESPONSE",
-                is_retryable=True,
+            MessageResponseIDInfo(
+                user_message_id=None,
+                reserved_assistant_message_id=42,
             ),
-            MessageResponseIDInfo(user_message_id=1, reserved_assistant_message_id=2),
+            StreamingError(
+                error="OpenAI quota exceeded",
+                error_code="BUDGET_EXCEEDED",
+                is_retryable=False,
+            ),
         ]
     )
 
@@ -56,5 +59,5 @@ def test_gather_stream_returns_empty_answer_when_streaming_error_only() -> None:
 
     assert result.answer == ""
     assert result.answer_citationless == ""
-    assert result.error_msg == "The selected model returned an empty response"
-    assert result.message_id == 2
+    assert result.error_msg == "OpenAI quota exceeded"
+    assert result.message_id == 42

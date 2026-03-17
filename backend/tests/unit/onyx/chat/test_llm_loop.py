@@ -1,18 +1,13 @@
-"""Tests for llm_loop.py, including history construction and error paths."""
+"""Tests for llm_loop.py, including history construction and empty-response paths."""
 
-from collections.abc import Iterator
-from contextlib import contextmanager
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.emitter import get_default_emitter
+from onyx.chat.llm_loop import _build_empty_llm_response_error
 from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_loop import EmptyLLMResponseError
-from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ContextFileMetadata
@@ -22,6 +17,7 @@ from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolCallKickoff
@@ -943,126 +939,6 @@ class TestForgottenFileMetadata:
             assert "moby_dick.txt" in forgotten.message
 
 
-class TestRunLlmLoopErrors:
-    def _setup_common_mocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        @contextmanager
-        def _dummy_db_session() -> Iterator[Mock]:
-            yield Mock()
-
-        monkeypatch.setattr(
-            "onyx.llm.litellm_singleton.config.initialize_litellm",
-            lambda: None,
-        )
-        monkeypatch.setattr(
-            "onyx.chat.llm_loop.get_session_with_current_tenant",
-            _dummy_db_session,
-        )
-        monkeypatch.setattr(
-            "onyx.chat.llm_loop.get_default_base_system_prompt",
-            lambda _db_session: "",
-        )
-
-    def test_raises_empty_llm_response_error_for_empty_stream_result(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        self._setup_common_mocks(monkeypatch)
-        monkeypatch.setattr(
-            "onyx.chat.llm_loop.run_llm_step",
-            Mock(
-                return_value=(
-                    LlmStepResult(
-                        reasoning=None,
-                        answer=None,
-                        tool_calls=None,
-                        raw_answer=None,
-                    ),
-                    False,
-                )
-            ),
-        )
-
-        llm = Mock()
-        llm.config = SimpleNamespace(
-            max_input_tokens=1024,
-            model_provider="openai",
-            model_name="gpt-5.2",
-        )
-
-        with pytest.raises(EmptyLLMResponseError) as exc_info:
-            run_llm_loop(
-                emitter=get_default_emitter(),
-                state_container=ChatStateContainer(),
-                simple_chat_history=[create_message("Hey", MessageType.USER, 1)],
-                tools=[],
-                custom_agent_prompt=None,
-                context_files=create_context_files(),
-                persona=None,
-                user_memory_context=None,
-                llm=llm,
-                token_counter=lambda text: max(1, len(text) // 4),
-                db_session=Mock(),
-                chat_session_id="test-chat-session",
-            )
-
-        assert exc_info.value.provider == "openai"
-        assert exc_info.value.model == "gpt-5.2"
-        assert exc_info.value.tool_choice == ToolChoiceOptions.AUTO.value
-        assert (
-            str(exc_info.value)
-            == "The model returned an empty response (no text, reasoning, or tool calls were returned)."
-        )
-
-    def test_raises_empty_llm_response_error_for_reasoning_only_result(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        self._setup_common_mocks(monkeypatch)
-        monkeypatch.setattr(
-            "onyx.chat.llm_loop.run_llm_step",
-            Mock(
-                return_value=(
-                    LlmStepResult(
-                        reasoning="thinking only",
-                        answer=None,
-                        tool_calls=None,
-                        raw_answer=None,
-                    ),
-                    False,
-                )
-            ),
-        )
-
-        llm = Mock()
-        llm.config = SimpleNamespace(
-            max_input_tokens=1024,
-            model_provider="openai",
-            model_name="gpt-5.2",
-        )
-
-        with pytest.raises(EmptyLLMResponseError) as exc_info:
-            run_llm_loop(
-                emitter=get_default_emitter(),
-                state_container=ChatStateContainer(),
-                simple_chat_history=[create_message("Hey", MessageType.USER, 1)],
-                tools=[],
-                custom_agent_prompt=None,
-                context_files=create_context_files(),
-                persona=None,
-                user_memory_context=None,
-                llm=llm,
-                token_counter=lambda text: max(1, len(text) // 4),
-                db_session=Mock(),
-                chat_session_id="test-chat-session",
-            )
-
-        assert exc_info.value.provider == "openai"
-        assert exc_info.value.model == "gpt-5.2"
-        assert exc_info.value.tool_choice == ToolChoiceOptions.AUTO.value
-        assert (
-            str(exc_info.value)
-            == "The model returned an empty response (reasoning tokens were produced but no answer text was returned)."
-        )
-
-
 class TestFallbackToolExtraction:
     def _tool_defs(self) -> list[dict]:
         return [
@@ -1296,3 +1172,57 @@ class TestFallbackToolExtraction:
 
         assert result is llm_step_result
         assert attempted is False
+
+
+class TestEmptyLlmResponseClassification:
+    def _make_llm(self, provider: str = "openai", model: str = "gpt-5.2") -> Mock:
+        llm = Mock()
+        llm.config = LLMConfig(
+            model_provider=provider,
+            model_name=model,
+            temperature=0.0,
+            max_input_tokens=4096,
+        )
+        return llm
+
+    def test_openai_empty_stream_is_classified_as_budget_exceeded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("onyx.chat.llm_loop.is_true_openai_model", lambda *_: True)
+
+        err = _build_empty_llm_response_error(
+            llm=self._make_llm(),
+            llm_step_result=LlmStepResult(
+                reasoning=None,
+                answer=None,
+                tool_calls=None,
+                raw_answer=None,
+            ),
+            tool_choice=ToolChoiceOptions.AUTO,
+        )
+
+        assert isinstance(err, EmptyLLMResponseError)
+        assert err.error_code == "BUDGET_EXCEEDED"
+        assert err.is_retryable is False
+        assert "quota" in err.client_error_msg.lower()
+
+    def test_reasoning_only_response_uses_generic_empty_response_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("onyx.chat.llm_loop.is_true_openai_model", lambda *_: True)
+
+        err = _build_empty_llm_response_error(
+            llm=self._make_llm(),
+            llm_step_result=LlmStepResult(
+                reasoning="scratchpad only",
+                answer=None,
+                tool_calls=None,
+                raw_answer=None,
+            ),
+            tool_choice=ToolChoiceOptions.AUTO,
+        )
+
+        assert isinstance(err, EmptyLLMResponseError)
+        assert err.error_code == "EMPTY_LLM_RESPONSE"
+        assert err.is_retryable is True
+        assert "quota" not in err.client_error_msg.lower()
