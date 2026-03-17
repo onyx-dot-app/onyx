@@ -19,12 +19,13 @@
 
 ## Output template to file and inspect
 * cd charts/onyx
-* helm template test-output . > test-output.yaml
+* helm template test-output . --set auth.opensearch.values.opensearch_admin_password='StrongPassword123!' > test-output.yaml
 
 ## Test the entire cluster manually
 * cd charts/onyx
-* helm install onyx . -n onyx --set postgresql.primary.persistence.enabled=false
+* helm install onyx . -n onyx --set postgresql.primary.persistence.enabled=false --set auth.opensearch.values.opensearch_admin_password='StrongPassword123!'
   * the postgres flag is to keep the storage ephemeral for testing. You probably don't want to set that in prod.
+  * the OpenSearch admin password must be set on first install unless you are supplying `auth.opensearch.existingSecret`.
   * no flag for ephemeral vespa storage yet, might be good for testing
 * kubectl -n onyx port-forward service/onyx-nginx 8080:80
   * this will forward the local port 8080 to the installed chart for you to run tests, etc.
