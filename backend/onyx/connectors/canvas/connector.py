@@ -17,7 +17,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.access import get_course_permissions
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.connectors.canvas.client import CanvasApiClient
-from onyx.connectors.canvas.client import CanvasClientRequestFailedError
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import UnexpectedValidationError
@@ -35,6 +34,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.error_handling.exceptions import OnyxError
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -400,7 +400,7 @@ class CanvasConnector(
 
         try:
             self._canvas_client.get("courses", params={"per_page": "1"})
-        except CanvasClientRequestFailedError as e:
+        except OnyxError as e:
             if e.status_code == 401:
                 raise CredentialExpiredError(
                     "Canvas API token is invalid or expired (HTTP 401)."
@@ -414,7 +414,7 @@ class CanvasConnector(
         try:
             self.canvas_client.get("courses", params={"per_page": "1"})
             logger.info("Canvas connector settings validated successfully")
-        except CanvasClientRequestFailedError as e:
+        except OnyxError as e:
             if e.status_code == 401:
                 raise CredentialExpiredError(
                     "Canvas credential appears to be invalid or expired (HTTP 401)."
