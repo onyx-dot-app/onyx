@@ -28,7 +28,9 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.html_utils import parse_html_page_basic
@@ -711,9 +713,74 @@ class CanvasConnector(
     @override
     def retrieve_all_slim_docs_perm_sync(
         self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        raise NotImplementedError("Implemented in follow-up PR")
+        """Return slim documents with permission info for all courses."""
+        batch: list[SlimDocument | HierarchyNode] = []
+        courses = self._list_courses()
+
+        for course in courses:
+            course_id = course.id
+            permissions = self._get_course_permissions(course_id)
+
+            # Pages — no try/except: if the API fails, the entire sync
+            # must abort so generic_doc_sync doesn't treat missing docs
+            # as deleted and mass-revoke permissions.
+            pages = self._list_pages(course_id)
+            for page in pages:
+                batch.append(
+                    SlimDocument(
+                        id=f"canvas-page-{course_id}-{page.page_id}",
+                        external_access=permissions,
+                    )
+                )
+                if len(batch) >= self.batch_size:
+                    yield batch
+                    batch = []
+                    if callback and callback.should_stop():
+                        raise RuntimeError(
+                            "canvas_perm_sync: Stop signal detected"
+                        )
+
+            # Assignments
+            assignments = self._list_assignments(course_id)
+            for assignment in assignments:
+                batch.append(
+                    SlimDocument(
+                        id=f"canvas-assignment-{course_id}-{assignment.id}",
+                        external_access=permissions,
+                    )
+                )
+                if len(batch) >= self.batch_size:
+                    yield batch
+                    batch = []
+                    if callback and callback.should_stop():
+                        raise RuntimeError(
+                            "canvas_perm_sync: Stop signal detected"
+                        )
+
+            # Announcements
+            announcements = self._list_announcements(course_id)
+            for announcement in announcements:
+                batch.append(
+                    SlimDocument(
+                        id=f"canvas-announcement-{course_id}-{announcement.id}",
+                        external_access=permissions,
+                    )
+                )
+                if len(batch) >= self.batch_size:
+                    yield batch
+                    batch = []
+                    if callback and callback.should_stop():
+                        raise RuntimeError(
+                            "canvas_perm_sync: Stop signal detected"
+                        )
+
+            if callback:
+                callback.progress("canvas_perm_sync", 1)
+
+        if batch:
+            yield batch
 
