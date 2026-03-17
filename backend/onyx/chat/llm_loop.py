@@ -73,16 +73,25 @@ logger = setup_logger()
 
 
 class EmptyLLMResponseError(RuntimeError):
-    """Raised when the upstream model stream completes without any usable output."""
+    """Raised when the upstream model stream completes without a usable final answer."""
 
-    def __init__(self, provider: str, model: str, tool_choice: ToolChoiceOptions):
+    def __init__(
+        self,
+        provider: str,
+        model: str,
+        tool_choice: ToolChoiceOptions,
+        has_reasoning: bool = False,
+    ):
         self.provider = provider
         self.model = model
         self.tool_choice = tool_choice.value
-        super().__init__(
-            "The model returned an empty response "
-            "(no text, reasoning, or tool calls)."
+        self.has_reasoning = has_reasoning
+        detail = (
+            "reasoning tokens were produced but no answer text was returned"
+            if has_reasoning
+            else "no text, reasoning, or tool calls were returned"
         )
+        super().__init__(f"The model returned an empty response ({detail}).")
 
 
 def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
@@ -1107,6 +1116,7 @@ def run_llm_loop(
                 should_cite_documents = True
 
         else:
+            # Reached when MAX_LLM_CYCLES was exhausted without hitting the break above.
             raise RuntimeError(
                 "The LLM did not return a final answer after tool execution. "
                 "Typically this indicates invalid tool-call output, a model/provider mismatch, "
@@ -1118,6 +1128,7 @@ def run_llm_loop(
                 provider=llm.config.model_provider,
                 model=llm.config.model_name,
                 tool_choice=tool_choice,
+                has_reasoning=bool(llm_step_result.reasoning),
             )
 
         emitter.emit(

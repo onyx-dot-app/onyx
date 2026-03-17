@@ -936,10 +936,16 @@ def handle_stream_message_objects(
                 f"(provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})"
             )
 
+            error_detail = (
+                "Reasoning tokens were produced, but no final answer text was returned."
+                if e.has_reasoning
+                else "No text, reasoning, or tool calls were returned."
+            )
+
             yield StreamingError(
                 error=(
                     "The selected model returned an empty response "
-                    "(no text, reasoning, or tool calls). "
+                    f"({error_detail}) "
                     "This is usually caused by upstream model/provider behavior "
                     "or output-token settings."
                 ),

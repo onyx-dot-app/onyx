@@ -1165,7 +1165,7 @@ def run_llm_step_pkt_generator(
                 # Note: LLM cost tracking is now handled in multi_llm.py
             finish_reason = packet.choice.finish_reason
             if finish_reason:
-                finish_reasons.add(finish_reason)
+                finish_reasons.add(str(finish_reason))
             delta = packet.choice.delta
 
             # Weird behavior from some model providers, just log and ignore for now

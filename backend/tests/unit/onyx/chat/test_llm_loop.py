@@ -1,4 +1,4 @@
-"""Tests for llm_loop.py, specifically the construct_message_history function."""
+"""Tests for llm_loop.py, including history construction and error paths."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -1007,6 +1007,10 @@ class TestRunLlmLoopErrors:
         assert exc_info.value.provider == "openai"
         assert exc_info.value.model == "gpt-5.2"
         assert exc_info.value.tool_choice == ToolChoiceOptions.AUTO.value
+        assert (
+            str(exc_info.value)
+            == "The model returned an empty response (no text, reasoning, or tool calls were returned)."
+        )
 
     def test_raises_empty_llm_response_error_for_reasoning_only_result(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1053,6 +1057,10 @@ class TestRunLlmLoopErrors:
         assert exc_info.value.provider == "openai"
         assert exc_info.value.model == "gpt-5.2"
         assert exc_info.value.tool_choice == ToolChoiceOptions.AUTO.value
+        assert (
+            str(exc_info.value)
+            == "The model returned an empty response (reasoning tokens were produced but no answer text was returned)."
+        )
 
 
 class TestFallbackToolExtraction:
