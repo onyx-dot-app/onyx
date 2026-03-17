@@ -115,7 +115,7 @@ def cloud_check_for_auto_llm_updates(
 
     release_lock = True
     try:
-        llm_recommendations = fetch_llm_recommendations_from_github()
+        llm_recommendations = fetch_llm_recommendations_from_github(raise_on_error=True)
         if not llm_recommendations:
             raise RuntimeError("Failed to fetch GitHub config")
 

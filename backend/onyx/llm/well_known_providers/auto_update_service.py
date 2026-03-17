@@ -63,8 +63,15 @@ def set_cached_last_updated_at(
 
 def fetch_llm_recommendations_from_github(
     timeout: float = 30.0,
+    *,
+    raise_on_error: bool = False,
 ) -> LLMRecommendations | None:
     """Fetch LLM configuration from GitHub.
+
+    Args:
+        timeout: HTTP timeout in seconds.
+        raise_on_error: If True, re-raise fetch/parse failures instead of
+            logging and returning None.
 
     Returns:
         GitHubLLMConfig if successful, None on error.
@@ -81,9 +88,13 @@ def fetch_llm_recommendations_from_github(
             data = response.json()
             return LLMRecommendations.model_validate(data)
     except httpx.HTTPError as e:
+        if raise_on_error:
+            raise
         logger.error(f"Failed to fetch LLM config from GitHub: {e}")
         return None
     except Exception as e:
+        if raise_on_error:
+            raise
         logger.error(f"Error parsing LLM config: {e}")
         return None
 
@@ -137,6 +148,19 @@ def sync_llm_models(
     cache_backend: CacheBackend | None = None,
     auto_providers: list[LLMProviderModel] | None = None,
 ) -> dict[str, int]:
+    """Sync a pre-fetched LLM config to Auto mode providers for one tenant.
+
+    Args:
+        db_session: Database session for the current tenant.
+        config: The already-fetched recommendations to apply.
+        force: If True, bypass the updated_at idempotency check.
+        cache_backend: Optional cache backend override for the updated_at key.
+        auto_providers: Pre-fetched Auto mode providers to avoid an extra DB
+            query. If None, they are fetched from the database.
+
+    Returns:
+        Dict of provider name to number of model changes applied.
+    """
     results: dict[str, int] = {}
 
     # Get all providers in Auto mode
