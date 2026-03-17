@@ -24,10 +24,8 @@ import {
 } from "@/app/craft/onboarding/constants";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
-import {
-  buildInitialValues,
-  testApiKeyHelper,
-} from "@/sections/onboarding/components/llmConnectionHelpers";
+import { buildOnboardingInitialValues as buildInitialValues } from "@/sections/modals/llmConfig/utils";
+import { testApiKeyHelper } from "@/sections/modals/llmConfig/svc";
 import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
 import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
 import OnboardingLlmSetup, {

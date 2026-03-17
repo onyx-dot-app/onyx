@@ -223,7 +223,7 @@ async function openOpenAiSetupModal(page: Page): Promise<Locator> {
   await expect(openAiCard).toBeVisible({ timeout: 10000 });
   await openAiCard.getByRole("button", { name: "Connect" }).click();
 
-  const modal = page.getByRole("dialog", { name: /setup openai/i });
+  const modal = page.getByRole("dialog", { name: /set up gpt/i });
   await expect(modal).toBeVisible({ timeout: 10000 });
   return modal;
 }
@@ -289,7 +289,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await setupModal.getByLabel("Display Name").fill(providerName);
     await setupModal.getByLabel("API Key").fill(apiKey);
 
-    const enableButton = setupModal.getByRole("button", { name: "Enable" });
+    const enableButton = setupModal.getByRole("button", { name: "Connect" });
     await expect(enableButton).toBeEnabled({ timeout: 10000 });
     await enableButton.click();
     await expect(setupModal).not.toBeVisible({ timeout: 30000 });
@@ -322,9 +322,12 @@ test.describe("LLM Provider Setup @exclusive", () => {
       })
       .toBe(!initialAutoModeState);
 
-    const deleteModal = await openProviderEditModal(page, providerName);
-    await deleteModal.getByRole("button", { name: "Delete" }).click();
-    await expect(deleteModal).not.toBeVisible({ timeout: 15000 });
+    const providerCard = await findProviderCard(page, providerName);
+    await providerCard.getByRole("button", { name: "Delete provider" }).click();
+    const confirmationModal = page.getByRole("dialog");
+    await expect(confirmationModal).toBeVisible({ timeout: 10000 });
+    await confirmationModal.getByRole("button", { name: "Delete" }).click();
+    await expect(confirmationModal).not.toBeVisible({ timeout: 15000 });
 
     await expect
       .poll(

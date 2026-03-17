@@ -1,23 +1,11 @@
 import {
-  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import {
-  LLM_ADMIN_URL,
-  LLM_PROVIDERS_ADMIN_URL,
-} from "@/lib/llmConfig/constants";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
-import { toast } from "@/hooks/useToast";
 import * as Yup from "yup";
-import isEqual from "lodash/isEqual";
 import { ScopedMutator } from "swr";
-import {
-  track,
-  AnalyticsEvent,
-  LLMProviderConfiguredSource,
-} from "@/lib/analytics";
+import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
 // Common class names for the Form component across all LLM provider forms
 export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
@@ -112,7 +100,6 @@ export interface SubmitLLMProviderParams<
   shouldMarkAsDefault?: boolean;
   hideSuccess?: boolean;
   setIsTesting: (testing: boolean) => void;
-  setTestError: (error: string) => void;
   mutate: ScopedMutator;
   onClose: () => void;
   setSubmitting: (submitting: boolean) => void;
@@ -159,158 +146,45 @@ export const getAutoModeModelConfigurations = (
   );
 };
 
-export const submitLLMProvider = async <T extends BaseLLMFormValues>({
-  providerName,
-  values,
-  initialValues,
-  modelConfigurations,
-  existingLlmProvider,
-  shouldMarkAsDefault,
-  hideSuccess,
-  setIsTesting,
-  setTestError,
-  mutate,
-  onClose,
-  setSubmitting,
-}: SubmitLLMProviderParams<T>): Promise<void> => {
-  setSubmitting(true);
+export type TestApiKeyResult =
+  | { ok: true }
+  | { ok: false; errorMessage: string };
 
-  const { selected_model_names: visibleModels, api_key, ...rest } = values;
-
-  // In auto mode, use recommended models from descriptor
-  // In manual mode, use user's selection
-  let filteredModelConfigurations: ModelConfiguration[];
-  let finalDefaultModelName = rest.default_model_name;
-
-  if (values.is_auto_mode) {
-    filteredModelConfigurations =
-      getAutoModeModelConfigurations(modelConfigurations);
-
-    // In auto mode, use the first recommended model as default if current default isn't in the list
-    const visibleModelNames = new Set(
-      filteredModelConfigurations.map((m) => m.name)
-    );
-    if (
-      finalDefaultModelName &&
-      !visibleModelNames.has(finalDefaultModelName)
-    ) {
-      finalDefaultModelName = filteredModelConfigurations[0]?.name ?? "";
-    }
-  } else {
-    filteredModelConfigurations = filterModelConfigurations(
-      modelConfigurations,
-      visibleModels,
-      rest.default_model_name as string | undefined
-    );
-  }
-
-  const customConfigChanged = !isEqual(
-    values.custom_config,
-    initialValues.custom_config
-  );
-
-  const normalizedApiBase =
-    typeof rest.api_base === "string" && rest.api_base.trim() === ""
-      ? undefined
-      : rest.api_base;
-
-  const finalValues = {
-    ...rest,
-    api_base: normalizedApiBase,
-    default_model_name: finalDefaultModelName,
-    api_key,
-    api_key_changed: api_key !== (initialValues.api_key as string | undefined),
-    custom_config_changed: customConfigChanged,
-    model_configurations: filteredModelConfigurations,
-  };
-
-  // Test the configuration
-  if (!isEqual(finalValues, initialValues)) {
-    setIsTesting(true);
-
-    const response = await fetch("/api/admin/llm/test", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        provider: providerName,
-        ...finalValues,
-        model: finalDefaultModelName,
-        id: existingLlmProvider?.id,
-      }),
-    });
-    setIsTesting(false);
-
-    if (!response.ok) {
-      const errorMsg = (await response.json()).detail;
-      setTestError(errorMsg);
-      setSubmitting(false);
-      return;
-    }
-  }
-
-  const response = await fetch(
-    `${LLM_PROVIDERS_ADMIN_URL}${
-      existingLlmProvider ? "" : "?is_creation=true"
-    }`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        provider: providerName,
-        ...finalValues,
-        id: existingLlmProvider?.id,
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const errorMsg = (await response.json()).detail;
-    const fullErrorMsg = existingLlmProvider
-      ? `Failed to update provider: ${errorMsg}`
-      : `Failed to enable provider: ${errorMsg}`;
-    toast.error(fullErrorMsg);
-    return;
-  }
-
-  if (shouldMarkAsDefault) {
-    const newLlmProvider = (await response.json()) as LLMProviderView;
-    const setDefaultResponse = await fetch(`${LLM_ADMIN_URL}/default`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        provider_id: newLlmProvider.id,
-        model_name: finalDefaultModelName,
-      }),
-    });
-    if (!setDefaultResponse.ok) {
-      const errorMsg = (await setDefaultResponse.json()).detail;
-      toast.error(`Failed to set provider as default: ${errorMsg}`);
-      return;
-    }
-  }
-
-  await refreshLlmProviderCaches(mutate);
-  onClose();
-
-  if (!hideSuccess) {
-    const successMsg = existingLlmProvider
-      ? "Provider updated successfully!"
-      : "Provider enabled successfully!";
-    toast.success(successMsg);
-  }
-
-  const knownProviders = new Set<string>(Object.values(LLMProviderName));
-  track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
-    provider: knownProviders.has(providerName) ? providerName : "custom",
-    is_creation: !existingLlmProvider,
-    source: LLMProviderConfiguredSource.ADMIN_PAGE,
-  });
-
-  setSubmitting(false);
+export const getModelOptions = (
+  fetchedModelConfigurations: Array<{ name: string }>
+) => {
+  return fetchedModelConfigurations.map((model) => ({
+    label: model.name,
+    value: model.name,
+  }));
 };
+
+/** Initial values used by onboarding forms (flat shape, always creating new). */
+export const buildOnboardingInitialValues = () => ({
+  name: "",
+  provider: "",
+  api_key: "",
+  api_base: "",
+  api_version: "",
+  default_model_name: "",
+  model_configurations: [] as ModelConfiguration[],
+  custom_config: {} as Record<string, string>,
+  api_key_changed: true,
+  groups: [] as number[],
+  is_public: true,
+  is_auto_mode: false,
+  personas: [] as number[],
+  selected_model_names: [] as string[],
+  deployment_name: "",
+  target_uri: "",
+});
+
+export interface SubmitOnboardingProviderParams {
+  providerName: string;
+  payload: Record<string, unknown>;
+  onboardingState: OnboardingState;
+  onboardingActions: OnboardingActions;
+  isCustomProvider: boolean;
+  onClose: () => void;
+  setIsSubmitting: (submitting: boolean) => void;
+}
