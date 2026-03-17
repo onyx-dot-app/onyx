@@ -10,6 +10,7 @@ import httpx
 from pydantic import BaseModel
 from retry import retry
 
+from onyx.configs.app_configs import CHUNKS_PER_BATCH
 from onyx.configs.app_configs import RECENCY_BIAS_MULTIPLIER
 from onyx.configs.app_configs import RERANK_COUNT
 from onyx.configs.chat_configs import DOC_TIME_DECAY
@@ -427,7 +428,9 @@ class VespaDocumentIndex(DocumentIndex):
                 new_document_id_to_original_document_id,
                 all_cleaned_doc_ids,
             )
-            for chunk_batch in batch_generator(cleaned_chunks, BATCH_SIZE):
+            for chunk_batch in batch_generator(
+                cleaned_chunks, min(BATCH_SIZE, CHUNKS_PER_BATCH)
+            ):
                 batch_index_vespa_chunks(
                     chunks=chunk_batch,
                     index_name=self._index_name,
