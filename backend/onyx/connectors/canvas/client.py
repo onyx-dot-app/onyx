@@ -44,7 +44,10 @@ class CanvasApiClient:
         headers = self._build_headers()
 
         response = rl_requests.get(
-            url, headers=headers, params=params, timeout=_CANVAS_CALL_TIMEOUT
+            url,
+            headers=headers,
+            params=params if not full_url else None,
+            timeout=_CANVAS_CALL_TIMEOUT,
         )
 
         try:
