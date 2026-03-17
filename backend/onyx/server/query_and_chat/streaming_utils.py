@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import re
-
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.placement import Placement
@@ -26,37 +24,10 @@ from onyx.server.query_and_chat.streaming_models import SectionEnd
 _CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
 
 
-def _adjust_message_text_for_agent_search_results(
-    adjusted_message_text: str,
-    final_documents: list[SavedSearchDoc],  # noqa: ARG001
-) -> str:
-    # Remove all [Q<integer>] patterns (sub-question citations)
-    return re.sub(r"\[Q\d+\]", "", adjusted_message_text)
-
-
-def _replace_d_citations_with_links(
-    message_text: str, final_documents: list[SavedSearchDoc]
-) -> str:
-    def replace_citation(match: re.Match[str]) -> str:
-        d_number = match.group(1)
-        try:
-            doc_index = int(d_number) - 1
-            if 0 <= doc_index < len(final_documents):
-                doc = final_documents[doc_index]
-                link = doc.link if doc.link else ""
-                return f"[[{d_number}]]({link})"
-            return match.group(0)
-        except (ValueError, IndexError):
-            return match.group(0)
-
-    return re.sub(r"\[D(\d+)\]", replace_citation, message_text)
-
-
 def create_message_packets(
     message_text: str,
     final_documents: list[SavedSearchDoc] | None,
     turn_index: int,
-    is_legacy_agentic: bool = False,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -70,16 +41,6 @@ def create_message_packets(
     )
 
     adjusted_message_text = message_text
-    if is_legacy_agentic:
-        if final_documents is not None:
-            adjusted_message_text = _adjust_message_text_for_agent_search_results(
-                message_text, final_documents
-            )
-            adjusted_message_text = _replace_d_citations_with_links(
-                adjusted_message_text, final_documents
-            )
-        else:
-            adjusted_message_text = re.sub(r"\[Q\d+\]", "", message_text)
 
     packets.append(
         Packet(

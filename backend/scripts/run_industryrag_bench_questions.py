@@ -1,0 +1,419 @@
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import logging
+from dataclasses import asdict
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import aiohttp
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+DEFAULT_API_BASE = "http://localhost:3000"
+INTERNAL_SEARCH_TOOL_NAME = "internal_search"
+INTERNAL_SEARCH_IN_CODE_TOOL_ID = "SearchTool"
+MAX_REQUEST_ATTEMPTS = 5
+RETRIABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+@dataclass(frozen=True)
+class QuestionRecord:
+    question_id: str
+    question: str
+
+
+@dataclass(frozen=True)
+class AnswerRecord:
+    question_id: str
+    answer: str
+    document_ids: list[str]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Submit questions to Onyx chat with internal search forced and write "
+            "answers to a JSONL file."
+        )
+    )
+    parser.add_argument(
+        "--questions-file",
+        type=Path,
+        required=True,
+        help="Path to the input questions JSONL file.",
+    )
+    parser.add_argument(
+        "--output-file",
+        type=Path,
+        required=True,
+        help="Path to the output answers JSONL file.",
+    )
+    parser.add_argument(
+        "--api-key",
+        type=str,
+        required=True,
+        help="API key used to authenticate against Onyx.",
+    )
+    parser.add_argument(
+        "--api-base",
+        type=str,
+        default=DEFAULT_API_BASE,
+        help=(
+            "Frontend base URL for Onyx. If `/api` is omitted, it will be added "
+            f"automatically. Default: {DEFAULT_API_BASE}"
+        ),
+    )
+    parser.add_argument(
+        "--parallelism",
+        type=int,
+        default=1,
+        help="Number of questions to process in parallel. Default: 1.",
+    )
+    parser.add_argument(
+        "--max-questions",
+        type=int,
+        default=None,
+        help="Optional cap on how many questions to process. Defaults to all.",
+    )
+    return parser.parse_args()
+
+
+def normalize_api_base(api_base: str) -> str:
+    normalized = api_base.rstrip("/")
+    if normalized.endswith("/api"):
+        return normalized
+    return f"{normalized}/api"
+
+
+def load_questions(questions_file: Path) -> list[QuestionRecord]:
+    if not questions_file.exists():
+        raise FileNotFoundError(f"Questions file not found: {questions_file}")
+
+    questions: list[QuestionRecord] = []
+    with questions_file.open("r", encoding="utf-8") as file:
+        for line_number, line in enumerate(file, start=1):
+            stripped_line = line.strip()
+            if not stripped_line:
+                continue
+
+            try:
+                payload = json.loads(stripped_line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Invalid JSON on line {line_number} of {questions_file}"
+                ) from exc
+
+            question_id = payload.get("question_id")
+            question = payload.get("question")
+
+            if not isinstance(question_id, str) or not question_id:
+                raise ValueError(
+                    f"Line {line_number} is missing a non-empty `question_id`."
+                )
+            if not isinstance(question, str) or not question:
+                raise ValueError(
+                    f"Line {line_number} is missing a non-empty `question`."
+                )
+
+            questions.append(QuestionRecord(question_id=question_id, question=question))
+
+    return questions
+
+
+async def read_json_response(
+    response: aiohttp.ClientResponse,
+) -> dict[str, Any] | list[dict[str, Any]]:
+    response_text = await response.text()
+    if response.status >= 400:
+        raise RuntimeError(
+            f"Request to {response.url} failed with {response.status}: {response_text}"
+        )
+
+    try:
+        payload = json.loads(response_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Request to {response.url} returned non-JSON content: {response_text}"
+        ) from exc
+
+    if not isinstance(payload, (dict, list)):
+        raise RuntimeError(
+            f"Unexpected response payload type from {response.url}: {type(payload)}"
+        )
+
+    return payload
+
+
+async def request_json_with_retries(
+    session: aiohttp.ClientSession,
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    json_payload: dict[str, Any] | None = None,
+) -> dict[str, Any] | list[dict[str, Any]]:
+    backoff_seconds = 1.0
+
+    for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
+        try:
+            async with session.request(
+                method=method,
+                url=url,
+                headers=headers,
+                json=json_payload,
+            ) as response:
+                if (
+                    response.status in RETRIABLE_STATUS_CODES
+                    and attempt < MAX_REQUEST_ATTEMPTS
+                ):
+                    response_text = await response.text()
+                    logger.warning(
+                        "Retryable response from %s on attempt %s/%s: %s %s",
+                        url,
+                        attempt,
+                        MAX_REQUEST_ATTEMPTS,
+                        response.status,
+                        response_text,
+                    )
+                    await asyncio.sleep(backoff_seconds)
+                    backoff_seconds *= 2
+                    continue
+
+                return await read_json_response(response)
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            if attempt == MAX_REQUEST_ATTEMPTS:
+                raise RuntimeError(
+                    f"Request to {url} failed after {MAX_REQUEST_ATTEMPTS} attempts."
+                ) from exc
+
+            logger.warning(
+                "Request to %s failed on attempt %s/%s: %s",
+                url,
+                attempt,
+                MAX_REQUEST_ATTEMPTS,
+                exc,
+            )
+            await asyncio.sleep(backoff_seconds)
+            backoff_seconds *= 2
+
+    raise RuntimeError(f"Request to {url} failed unexpectedly.")
+
+
+def extract_document_ids(citation_info: object) -> list[str]:
+    if not isinstance(citation_info, list):
+        return []
+
+    sorted_citations = sorted(
+        (
+            citation
+            for citation in citation_info
+            if isinstance(citation, dict)
+            and isinstance(citation.get("document_id"), str)
+            and citation.get("document_id")
+        ),
+        key=lambda citation: (
+            citation.get("citation_number")
+            if isinstance(citation.get("citation_number"), int)
+            else float("inf")
+        ),
+    )
+
+    document_ids: list[str] = []
+    seen_document_ids: set[str] = set()
+    for citation in sorted_citations:
+        document_id = citation["document_id"]
+        if document_id not in seen_document_ids:
+            seen_document_ids.add(document_id)
+            document_ids.append(document_id)
+
+    return document_ids
+
+
+async def fetch_internal_search_tool_id(
+    session: aiohttp.ClientSession,
+    api_base: str,
+    headers: dict[str, str],
+) -> int:
+    payload = await request_json_with_retries(
+        session=session,
+        method="GET",
+        url=f"{api_base}/tool",
+        headers=headers,
+    )
+
+    if not isinstance(payload, list):
+        raise RuntimeError("Expected `/tool` to return a list.")
+
+    for tool in payload:
+        if not isinstance(tool, dict):
+            continue
+
+        if tool.get("in_code_tool_id") == INTERNAL_SEARCH_IN_CODE_TOOL_ID:
+            tool_id = tool.get("id")
+            if isinstance(tool_id, int):
+                return tool_id
+
+    for tool in payload:
+        if not isinstance(tool, dict):
+            continue
+
+        if tool.get("name") == INTERNAL_SEARCH_TOOL_NAME:
+            tool_id = tool.get("id")
+            if isinstance(tool_id, int):
+                return tool_id
+
+    raise RuntimeError(
+        "Could not find the internal search tool in `/tool`. "
+        "Make sure SearchTool is available for this environment."
+    )
+
+
+async def submit_question(
+    session: aiohttp.ClientSession,
+    api_base: str,
+    headers: dict[str, str],
+    internal_search_tool_id: int,
+    question_record: QuestionRecord,
+) -> AnswerRecord:
+    payload = {
+        "message": question_record.question,
+        "chat_session_info": {"persona_id": 0},
+        "parent_message_id": None,
+        "file_descriptors": [],
+        "allowed_tool_ids": [internal_search_tool_id],
+        "forced_tool_id": internal_search_tool_id,
+        "stream": False,
+    }
+
+    response_payload = await request_json_with_retries(
+        session=session,
+        method="POST",
+        url=f"{api_base}/chat/send-chat-message",
+        headers=headers,
+        json_payload=payload,
+    )
+
+    if not isinstance(response_payload, dict):
+        raise RuntimeError(
+            "Expected `/chat/send-chat-message` to return an object when `stream=false`."
+        )
+
+    answer = response_payload.get("answer_citationless")
+    if not isinstance(answer, str):
+        answer = response_payload.get("answer")
+
+    if not isinstance(answer, str):
+        raise RuntimeError(
+            f"Response for question {question_record.question_id} is missing `answer`."
+        )
+
+    return AnswerRecord(
+        question_id=question_record.question_id,
+        answer=answer,
+        document_ids=extract_document_ids(response_payload.get("citation_info")),
+    )
+
+
+async def generate_answers(
+    questions: list[QuestionRecord],
+    output_file: Path,
+    api_base: str,
+    api_key: str,
+    parallelism: int,
+) -> None:
+    if parallelism < 1:
+        raise ValueError("`--parallelism` must be at least 1.")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    timeout = aiohttp.ClientTimeout(
+        total=None,
+        connect=30,
+        sock_connect=30,
+        sock_read=600,
+    )
+    connector = aiohttp.TCPConnector(limit=parallelism)
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with output_file.open("w", encoding="utf-8") as file:
+        async with aiohttp.ClientSession(
+            timeout=timeout, connector=connector
+        ) as session:
+            internal_search_tool_id = await fetch_internal_search_tool_id(
+                session=session,
+                api_base=api_base,
+                headers=headers,
+            )
+            logger.info("Using internal search tool id %s", internal_search_tool_id)
+
+            semaphore = asyncio.Semaphore(parallelism)
+            progress_lock = asyncio.Lock()
+            write_lock = asyncio.Lock()
+            completed = 0
+            total = len(questions)
+
+            async def process_question(question_record: QuestionRecord) -> AnswerRecord:
+                nonlocal completed
+                async with semaphore:
+                    result = await submit_question(
+                        session=session,
+                        api_base=api_base,
+                        headers=headers,
+                        internal_search_tool_id=internal_search_tool_id,
+                        question_record=question_record,
+                    )
+
+                async with write_lock:
+                    file.write(json.dumps(asdict(result), ensure_ascii=False))
+                    file.write("\n")
+                    file.flush()
+
+                async with progress_lock:
+                    completed += 1
+                    logger.info("Processed %s/%s questions", completed, total)
+
+                return result
+
+            await asyncio.gather(
+                *(process_question(question_record) for question_record in questions)
+            )
+
+
+def main() -> None:
+    args = parse_args()
+    questions = load_questions(args.questions_file)
+    api_base = normalize_api_base(args.api_base)
+
+    if args.max_questions is not None:
+        if args.max_questions < 1:
+            raise ValueError("`--max-questions` must be at least 1 when provided.")
+        questions = questions[: args.max_questions]
+
+    logger.info("Loaded %s questions from %s", len(questions), args.questions_file)
+    logger.info("Writing answers to %s", args.output_file)
+
+    asyncio.run(
+        generate_answers(
+            questions=questions,
+            output_file=args.output_file,
+            api_base=api_base,
+            api_key=args.api_key,
+            parallelism=args.parallelism,
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -1047,7 +1047,7 @@ def llm_loop_completion_handle(
 
 
 def remove_answer_citations(answer: str) -> str:
-    pattern = r"\s*\[\[\d+\]\]\(http[s]?://[^\s]+\)"
+    pattern = r"\s*\[\[\d+\]\]\([^)]*\)"
 
     return re.sub(pattern, "", answer)
 
