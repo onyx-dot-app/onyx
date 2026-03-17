@@ -502,7 +502,7 @@ class CanvasConnector(
 
         def _in_time_window(timestamp_str: str) -> bool:
             ts = (
-                datetime.fromisoformat(timestamp_str)
+                datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 .astimezone(timezone.utc)
                 .timestamp()
             )
