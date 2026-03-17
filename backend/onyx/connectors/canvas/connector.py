@@ -631,8 +631,7 @@ class CanvasConnector(
             if next_stage:
                 new_checkpoint.stage = next_stage
             else:
-                new_checkpoint.current_course_index += 1
-                new_checkpoint.stage = "pages"
+                new_checkpoint.advance_course()
 
         new_checkpoint.has_more = new_checkpoint.current_course_index < len(
             new_checkpoint.course_ids
