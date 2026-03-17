@@ -844,7 +844,13 @@ class TestOpenSearchClient:
             _patch_hybrid_search_subquery_configuration(monkeypatch, configuration)
             for pipeline in HybridSearchNormalizationPipeline:
                 _patch_hybrid_search_normalization_pipeline(monkeypatch, pipeline)
-                pipeline_name, _ = get_normalization_pipeline_name_and_config()
+                pipeline_name, pipeline_config = (
+                    get_normalization_pipeline_name_and_config()
+                )
+                test_client.create_search_pipeline(
+                    pipeline_id=pipeline_name,
+                    pipeline_body=pipeline_config,
+                )
 
                 # Search query.
                 query_text = "Python programming"
