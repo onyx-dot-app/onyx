@@ -38,6 +38,7 @@ def get_course_permissions(
                     params={
                         "per_page": "100",
                         "state[]": "active",
+                        "include[]": "email",
                     },
                 )
                 first_request = False
