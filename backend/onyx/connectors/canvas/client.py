@@ -7,17 +7,11 @@ from urllib.parse import urlparse
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 _CANVAS_CALL_TIMEOUT = 30
 _CANVAS_API_VERSION = "/api/v1"
-
-
-class CanvasClientRequestFailedError(ConnectionError):
-    def __init__(self, message: str, status_code: int):
-        super().__init__(
-            f"Canvas API request failed with status {status_code}: {message}"
-        )
-        self.status_code = status_code
 
 
 class CanvasApiClient:
@@ -55,8 +49,9 @@ class CanvasApiClient:
             response_json = response.json()
         except Exception as e:
             if response.status_code < 300:
-                raise CanvasClientRequestFailedError(
-                    f"Invalid JSON in response: {e}", response.status_code
+                raise OnyxError(
+                    OnyxErrorCode.BAD_GATEWAY,
+                    detail=f"Invalid JSON in Canvas response: {e}",
                 )
             response_json = {}
 
@@ -77,7 +72,11 @@ class CanvasApiClient:
                     msg = first_error.get("message", "")
                     if msg:
                         error = msg
-            raise CanvasClientRequestFailedError(error, response.status_code)
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                detail=error,
+                status_code_override=response.status_code,
+            )
 
         next_url = self._parse_next_link(response.headers.get("Link", ""))
         return response_json, next_url
