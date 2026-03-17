@@ -52,7 +52,7 @@ def get_course_permissions(
             for enrollment in response:
                 user = enrollment.get("user", {})
                 email = user.get("email") or user.get("login_id")
-                if email:
+                if email and "@" in email:
                     emails.add(email)
 
             if not next_url:
@@ -76,4 +76,3 @@ def get_course_permissions(
         external_user_group_ids=set(),
         is_public=False,
     )
-++ b/backend/ee/onyx/external_permissions/canvas/doc_sync.py

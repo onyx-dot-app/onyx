@@ -114,7 +114,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: CanvasIcon,
     displayName: "Canvas",
     category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/canvas",
+    docs: `${DOCS_ADMINS_PATH}/connectors/canvas`,
   },
   coda: {
     icon: CodaIcon,
