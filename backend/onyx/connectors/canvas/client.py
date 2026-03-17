@@ -13,6 +13,7 @@ from onyx.error_handling.exceptions import OnyxError
 # Requests timeout in seconds.
 _CANVAS_CALL_TIMEOUT = 30
 _CANVAS_API_VERSION = "/api/v1"
+_NEXT_LINK_PATTERN = re.compile(r'<([^>]+)>;\s*rel="next"')
 
 
 def _error_code_for_status(status_code: int) -> OnyxErrorCode:
@@ -111,7 +112,7 @@ class CanvasApiClient:
         to prevent leaking the bearer token to arbitrary hosts.
         """
         expected_host = urlparse(self.base_url).hostname
-        for match in re.finditer(r'<([^>]+)>;\s*rel="next"', link_header):
+        for match in _NEXT_LINK_PATTERN.finditer(link_header):
             url = match.group(1)
             if urlparse(url).hostname == expected_host:
                 return url
