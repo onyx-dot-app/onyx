@@ -42,10 +42,7 @@ export type ContainerSizeVariants = Exclude<SizeVariants, "full">;
  *
  * Used for width and height properties that only support extremal values.
  */
-export type ExtremaSizeVariants = Exclude<
-  SizeVariants,
-  "lg" | "md" | "sm" | "xs" | "2xs"
->;
+export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
 
 /**
  * Size variants with numeric overrides.
