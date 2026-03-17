@@ -698,7 +698,7 @@ py-key-value-aio==0.4.4
     # via fastmcp
 pyairtable==3.0.1
     # via onyx
-pyasn1==0.6.2
+pyasn1==0.6.3
     # via
     #   pyasn1-modules
     #   rsa
