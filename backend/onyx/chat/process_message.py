@@ -1066,10 +1066,46 @@ def llm_loop_completion_handle(
         )
 
 
-def remove_answer_citations(answer: str) -> str:
-    pattern = r"\s*\[\[\d+\]\]\(http[s]?://[^\s]+\)"
+_CITATION_LINK_START_PATTERN = re.compile(r"\s*\[\[\d+\]\]\(")
 
-    return re.sub(pattern, "", answer)
+
+def _find_markdown_link_end(text: str, destination_start: int) -> int | None:
+    depth = 0
+    i = destination_start
+
+    while i < len(text):
+        curr = text[i]
+        if curr == "\\":
+            i += 2
+            continue
+
+        if curr == "(":
+            depth += 1
+        elif curr == ")":
+            if depth == 0:
+                return i
+            depth -= 1
+
+        i += 1
+
+    return None
+
+
+def remove_answer_citations(answer: str) -> str:
+    stripped_parts: list[str] = []
+    cursor = 0
+
+    while match := _CITATION_LINK_START_PATTERN.search(answer, cursor):
+        stripped_parts.append(answer[cursor : match.start()])
+        link_end = _find_markdown_link_end(answer, match.end())
+        if link_end is None:
+            stripped_parts.append(answer[match.start() :])
+            return "".join(stripped_parts)
+
+        cursor = link_end + 1
+
+    stripped_parts.append(answer[cursor:])
+    return "".join(stripped_parts)
 
 
 @log_function_time()
