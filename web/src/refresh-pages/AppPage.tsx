@@ -21,7 +21,6 @@ import useTags from "@/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";
 import { AppPopup } from "@/app/app/components/AppPopup";
-import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { useUser } from "@/providers/UserProvider";
 import NoAgentModal from "@/components/modals/NoAgentModal";
 import PreviewModal from "@/sections/modals/PreviewModal";
@@ -420,10 +419,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [currentChatSessionId]);
 
-  const [stackTraceModalContent, setStackTraceModalContent] = useState<
-    string | null
-  >(null);
-
   const handleResubmitLastMessage = useCallback(() => {
     // Grab the last user-type message
     const lastUserMsg = messageHistory
@@ -657,13 +652,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         <PreviewModal
           presentingDocument={presentingDocument}
           onClose={() => setPresentingDocument(null)}
-        />
-      )}
-
-      {stackTraceModalContent && (
-        <ExceptionTraceModal
-          onOutsideClick={() => setStackTraceModalContent(null)}
-          exceptionTrace={stackTraceModalContent}
         />
       )}
 
