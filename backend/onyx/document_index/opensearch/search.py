@@ -13,12 +13,20 @@ from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.constants import ASSUMED_DOCUMENT_AGE_DAYS
 from onyx.document_index.opensearch.constants import (
     DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
 )
 from onyx.document_index.opensearch.constants import (
+    DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
+)
+from onyx.document_index.opensearch.constants import (
+    HYBRID_SEARCH_NORMALIZATION_PIPELINE,
+)
+from onyx.document_index.opensearch.constants import (
     HYBRID_SEARCH_SUBQUERY_CONFIGURATION,
 )
+from onyx.document_index.opensearch.constants import HybridSearchNormalizationPipeline
 from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
@@ -95,53 +103,64 @@ def _get_hybrid_search_normalization_weights() -> list[float]:
     return hybrid_search_normalization_weights
 
 
-MIN_MAX_NORMALIZATION_PIPELINE_NAME = "normalization_pipeline_min_max"
-MIN_MAX_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
-    "description": "Normalization for keyword and vector scores using min-max",
-    "phase_results_processors": [
-        {
-            # https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/
-            "normalization-processor": {
-                "normalization": {"technique": "min_max"},
-                "combination": {
-                    "technique": "arithmetic_mean",
-                    "parameters": {
-                        "weights": _get_hybrid_search_normalization_weights()
+def get_min_max_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
+    min_max_normalization_pipeline_name = "normalization_pipeline_min_max"
+    min_max_normalization_pipeline_config: dict[str, Any] = {
+        "description": "Normalization for keyword and vector scores using min-max",
+        "phase_results_processors": [
+            {
+                # https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/
+                "normalization-processor": {
+                    "normalization": {"technique": "min_max"},
+                    "combination": {
+                        "technique": "arithmetic_mean",
+                        "parameters": {
+                            "weights": _get_hybrid_search_normalization_weights()
+                        },
                     },
-                },
+                }
             }
-        }
-    ],
-}
+        ],
+    }
+    return min_max_normalization_pipeline_name, min_max_normalization_pipeline_config
 
-ZSCORE_NORMALIZATION_PIPELINE_NAME = "normalization_pipeline_zscore"
-ZSCORE_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
-    "description": "Normalization for keyword and vector scores using z-score",
-    "phase_results_processors": [
-        {
-            # https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/
-            "normalization-processor": {
-                "normalization": {"technique": "z_score"},
-                "combination": {
-                    "technique": "arithmetic_mean",
-                    "parameters": {
-                        "weights": _get_hybrid_search_normalization_weights()
+
+def get_zscore_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
+    zscore_normalization_pipeline_name = "normalization_pipeline_zscore"
+    zscore_normalization_pipeline_config: dict[str, Any] = {
+        "description": "Normalization for keyword and vector scores using z-score",
+        "phase_results_processors": [
+            {
+                # https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/
+                "normalization-processor": {
+                    "normalization": {"technique": "z_score"},
+                    "combination": {
+                        "technique": "arithmetic_mean",
+                        "parameters": {
+                            "weights": _get_hybrid_search_normalization_weights()
+                        },
                     },
-                },
+                }
             }
-        }
-    ],
-}
+        ],
+    }
+    return zscore_normalization_pipeline_name, zscore_normalization_pipeline_config
 
 
-# By default OpenSearch will only return a maximum of this many results in a
-# given search. This value is configurable in the index settings.
-DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW = 10_000
-
-# For documents which do not have a value for LAST_UPDATED_FIELD_NAME, we assume
-# that the document was last updated this many days ago for the purpose of time
-# cutoff filtering during retrieval.
-ASSUMED_DOCUMENT_AGE_DAYS = 90
+def get_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
+    if (
+        HYBRID_SEARCH_NORMALIZATION_PIPELINE
+        is HybridSearchNormalizationPipeline.MIN_MAX
+    ):
+        return get_min_max_normalization_pipeline_name_and_config()
+    elif (
+        HYBRID_SEARCH_NORMALIZATION_PIPELINE is HybridSearchNormalizationPipeline.ZSCORE
+    ):
+        return get_zscore_normalization_pipeline_name_and_config()
+    else:
+        raise ValueError(
+            f"Bug: Unhandled hybrid search normalization pipeline: {HYBRID_SEARCH_NORMALIZATION_PIPELINE}."
+        )
 
 
 class DocumentQuery:

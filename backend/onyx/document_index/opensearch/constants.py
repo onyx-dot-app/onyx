@@ -10,6 +10,18 @@ from onyx.configs.app_configs import (
 
 DEFAULT_MAX_CHUNK_SIZE = 512
 
+
+# By default OpenSearch will only return a maximum of this many results in a
+# given search. This value is configurable in the index settings.
+DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW = 10_000
+
+
+# For documents which do not have a value for LAST_UPDATED_FIELD_NAME, we assume
+# that the document was last updated this many days ago for the purpose of time
+# cutoff filtering during retrieval.
+ASSUMED_DOCUMENT_AGE_DAYS = 90
+
+
 # Size of the dynamic list used to consider elements during kNN graph creation.
 # Higher values improve search quality but increase indexing time. Values
 # typically range between 100 - 512.
@@ -60,4 +72,25 @@ HYBRID_SEARCH_SUBQUERY_CONFIGURATION: HybridSearchSubqueryConfiguration = (
     )
     if os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION", None) is not None
     else HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
+)
+
+
+class HybridSearchNormalizationPipeline(Enum):
+    # Current default.
+    MIN_MAX = 1
+    # NOTE: Using z-score normalization is better for hybrid search from a
+    # theoretical standpoint. Empirically on a small dataset of up to 10K docs,
+    # it's not very different. Likely more impactful at scale.
+    # https://opensearch.org/blog/introducing-the-z-score-normalization-technique-for-hybrid-search/
+    ZSCORE = 2
+
+
+# Will raise and block application start if HYBRID_SEARCH_NORMALIZATION_PIPELINE
+# is set but not a valid value. If not set, defaults to MIN_MAX.
+HYBRID_SEARCH_NORMALIZATION_PIPELINE: HybridSearchNormalizationPipeline = (
+    HybridSearchNormalizationPipeline(
+        int(os.environ.get("HYBRID_SEARCH_NORMALIZATION_PIPELINE"))
+    )
+    if os.environ.get("HYBRID_SEARCH_NORMALIZATION_PIPELINE", None) is not None
+    else HybridSearchNormalizationPipeline.MIN_MAX
 )

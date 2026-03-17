@@ -22,6 +22,7 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
+from onyx.document_index.opensearch.constants import HybridSearchNormalizationPipeline
 from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
 from onyx.document_index.opensearch.opensearch_document_index import (
     generate_opensearch_filtered_access_control_list,
@@ -32,9 +33,14 @@ from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DocumentQuery
 from onyx.document_index.opensearch.search import (
-    MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+    get_min_max_normalization_pipeline_name_and_config,
 )
-from onyx.document_index.opensearch.search import MIN_MAX_NORMALIZATION_PIPELINE_NAME
+from onyx.document_index.opensearch.search import (
+    get_normalization_pipeline_name_and_config,
+)
+from onyx.document_index.opensearch.search import (
+    get_zscore_normalization_pipeline_name_and_config,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 
@@ -70,6 +76,23 @@ def _patch_hybrid_search_subquery_configuration(
     monkeypatch.setattr(
         "onyx.document_index.opensearch.search.HYBRID_SEARCH_SUBQUERY_CONFIGURATION",
         configuration,
+    )
+
+
+def _patch_hybrid_search_normalization_pipeline(
+    monkeypatch: pytest.MonkeyPatch, pipeline: HybridSearchNormalizationPipeline
+) -> None:
+    """
+    Patches HYBRID_SEARCH_NORMALIZATION_PIPELINE wherever necessary for this
+    test file.
+    """
+    monkeypatch.setattr(
+        "onyx.document_index.opensearch.constants.HYBRID_SEARCH_NORMALIZATION_PIPELINE",
+        pipeline,
+    )
+    monkeypatch.setattr(
+        "onyx.document_index.opensearch.search.HYBRID_SEARCH_NORMALIZATION_PIPELINE",
+        pipeline,
     )
 
 
@@ -168,14 +191,27 @@ def test_client(
 @pytest.fixture(scope="function")
 def search_pipeline(test_client: OpenSearchIndexClient) -> Generator[None, None, None]:
     """Creates a search pipeline for testing with automatic cleanup."""
+    min_max_normalization_pipeline_name, min_max_normalization_pipeline_config = (
+        get_min_max_normalization_pipeline_name_and_config()
+    )
+    zscore_normalization_pipeline_name, zscore_normalization_pipeline_config = (
+        get_zscore_normalization_pipeline_name_and_config()
+    )
     test_client.create_search_pipeline(
-        pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-        pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+        pipeline_id=min_max_normalization_pipeline_name,
+        pipeline_body=min_max_normalization_pipeline_config,
+    )
+    test_client.create_search_pipeline(
+        pipeline_id=zscore_normalization_pipeline_name,
+        pipeline_body=zscore_normalization_pipeline_config,
     )
     yield  # Test runs here.
     try:
         test_client.delete_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+            pipeline_id=min_max_normalization_pipeline_name,
+        )
+        test_client.delete_search_pipeline(
+            pipeline_id=zscore_normalization_pipeline_name,
         )
     except Exception:
         pass
@@ -401,18 +437,19 @@ class TestOpenSearchClient:
         self, test_client: OpenSearchIndexClient
     ) -> None:
         """Tests creating and deleting a search pipeline."""
+        # Precondition.
+        pipeline_name, pipeline_config = get_normalization_pipeline_name_and_config()
+
         # Under test and postcondition.
         # Should not raise.
         test_client.create_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-            pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+            pipeline_id=pipeline_name,
+            pipeline_body=pipeline_config,
         )
 
         # Under test and postcondition.
         # Should not raise.
-        test_client.delete_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
+        test_client.delete_search_pipeline(pipeline_id=pipeline_name)
 
     def test_index_document(
         self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
@@ -758,15 +795,13 @@ class TestOpenSearchClient:
                 properties_to_update={"hidden": True},
             )
 
-    def test_hybrid_search_configurations_with_pipeline(
+    def test_hybrid_search_configurations_and_pipelines(
         self,
         test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """
-        Tests all hybrid search configurations with a normalization pipeline.
-        """
+        """Tests all hybrid search configurations and pipelines."""
         # Precondition.
         _patch_global_tenant_state(monkeypatch, False)
         tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
@@ -807,43 +842,50 @@ class TestOpenSearchClient:
 
         for configuration in HybridSearchSubqueryConfiguration:
             _patch_hybrid_search_subquery_configuration(monkeypatch, configuration)
+            for pipeline in HybridSearchNormalizationPipeline:
+                _patch_hybrid_search_normalization_pipeline(monkeypatch, pipeline)
+                pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
-            # Search query.
-            query_text = "Python programming"
-            query_vector = _generate_test_vector(0.12)
-            search_body = DocumentQuery.get_hybrid_search_query(
-                query_text=query_text,
-                query_vector=query_vector,
-                num_hits=5,
-                tenant_state=tenant_state,
-                # We're not worried about filtering here. tenant_id in this object
-                # is not relevant.
-                index_filters=IndexFilters(access_control_list=None, tenant_id=None),
-                include_hidden=False,
-            )
+                # Search query.
+                query_text = "Python programming"
+                query_vector = _generate_test_vector(0.12)
+                search_body = DocumentQuery.get_hybrid_search_query(
+                    query_text=query_text,
+                    query_vector=query_vector,
+                    num_hits=5,
+                    tenant_state=tenant_state,
+                    # We're not worried about filtering here. tenant_id in this object
+                    # is not relevant.
+                    index_filters=IndexFilters(
+                        access_control_list=None, tenant_id=None
+                    ),
+                    include_hidden=False,
+                )
 
-            # Under test.
-            results = test_client.search(
-                body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-            )
+                # Under test.
+                results = test_client.search(
+                    body=search_body, search_pipeline_id=pipeline_name
+                )
 
-            # Postcondition.
-            assert len(results) == len(docs)
-            # Assert that all the chunks above are present.
-            assert all(
-                chunk.document_chunk.document_id in docs.keys() for chunk in results
-            )
-            # Make sure the chunk contents are preserved.
-            for i, chunk in enumerate(results):
-                assert chunk.document_chunk == docs[chunk.document_chunk.document_id]
-                # Make sure score reporting seems reasonable (it should not be None
-                # or 0).
-                assert chunk.score
-                # Make sure there is some kind of match highlight only for the first
-                # result. The other results are so bad they're not expected to have
-                # match highlights.
-                if i == 0:
-                    assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
+                # Postcondition.
+                assert len(results) == len(docs)
+                # Assert that all the chunks above are present.
+                assert all(
+                    chunk.document_chunk.document_id in docs.keys() for chunk in results
+                )
+                # Make sure the chunk contents are preserved.
+                for i, chunk in enumerate(results):
+                    assert (
+                        chunk.document_chunk == docs[chunk.document_chunk.document_id]
+                    )
+                    # Make sure score reporting seems reasonable (it should not be None
+                    # or 0).
+                    assert chunk.score
+                    # Make sure there is some kind of match highlight only for the first
+                    # result. The other results are so bad they're not expected to have
+                    # match highlights.
+                    if i == 0:
+                        assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_empty_index(
         self,
@@ -875,11 +917,10 @@ class TestOpenSearchClient:
             index_filters=IndexFilters(access_control_list=None, tenant_id=None),
             include_hidden=False,
         )
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
         # Under test.
-        results = test_client.search(
-            body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
+        results = test_client.search(body=search_body, search_pipeline_id=pipeline_name)
 
         # Postcondition.
         assert len(results) == 0
@@ -978,11 +1019,10 @@ class TestOpenSearchClient:
             ),
             include_hidden=False,
         )
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
         # Under test.
-        results = test_client.search(
-            body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
+        results = test_client.search(body=search_body, search_pipeline_id=pipeline_name)
 
         # Postcondition.
         # Should only get the public, non-hidden document, and the private
@@ -1097,11 +1137,10 @@ class TestOpenSearchClient:
             index_filters=IndexFilters(access_control_list=[], tenant_id=None),
             include_hidden=False,
         )
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
         # Under test.
-        results = test_client.search(
-            body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
+        results = test_client.search(body=search_body, search_pipeline_id=pipeline_name)
 
         # Postcondition.
         # Should only get public, non-hidden documents (3 out of 5).
@@ -1471,15 +1510,16 @@ class TestOpenSearchClient:
             ),
             include_hidden=False,
         )
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
         # Under test.
         last_week_results = test_client.search(
             body=last_week_search_body,
-            search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+            search_pipeline_id=pipeline_name,
         )
         last_six_months_results = test_client.search(
             body=last_six_months_search_body,
-            search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+            search_pipeline_id=pipeline_name,
         )
 
         # Postcondition.

@@ -55,16 +55,13 @@ from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
 from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 from onyx.document_index.opensearch.search import DocumentQuery
 from onyx.document_index.opensearch.search import (
-    MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+    get_min_max_normalization_pipeline_name_and_config,
 )
 from onyx.document_index.opensearch.search import (
-    MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+    get_normalization_pipeline_name_and_config,
 )
 from onyx.document_index.opensearch.search import (
-    ZSCORE_NORMALIZATION_PIPELINE_CONFIG,
-)
-from onyx.document_index.opensearch.search import (
-    ZSCORE_NORMALIZATION_PIPELINE_NAME,
+    get_zscore_normalization_pipeline_name_and_config,
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
@@ -103,13 +100,19 @@ def set_cluster_state(client: OpenSearchClient) -> None:
             "is not the first time running Onyx against this instance of OpenSearch, these "
             "settings have likely already been set. Not taking any further action..."
         )
-    client.create_search_pipeline(
-        pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-        pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+    min_max_normalization_pipeline_name, min_max_normalization_pipeline_config = (
+        get_min_max_normalization_pipeline_name_and_config()
+    )
+    zscore_normalization_pipeline_name, zscore_normalization_pipeline_config = (
+        get_zscore_normalization_pipeline_name_and_config()
     )
     client.create_search_pipeline(
-        pipeline_id=ZSCORE_NORMALIZATION_PIPELINE_NAME,
-        pipeline_body=ZSCORE_NORMALIZATION_PIPELINE_CONFIG,
+        pipeline_id=min_max_normalization_pipeline_name,
+        pipeline_body=min_max_normalization_pipeline_config,
+    )
+    client.create_search_pipeline(
+        pipeline_id=zscore_normalization_pipeline_name,
+        pipeline_body=zscore_normalization_pipeline_config,
     )
 
 
@@ -940,14 +943,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             index_filters=filters,
             include_hidden=False,
         )
-        # NOTE: Using z-score normalization here because it's better for hybrid
-        # search from a theoretical standpoint. Empirically on a small dataset
-        # of up to 10K docs, it's not very different. Likely more impactful at
-        # scale.
-        # https://opensearch.org/blog/introducing-the-z-score-normalization-technique-for-hybrid-search/
+        normalization_pipeline_name, _ = get_normalization_pipeline_name_and_config()
         search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
             body=query_body,
-            search_pipeline_id=ZSCORE_NORMALIZATION_PIPELINE_NAME,
+            search_pipeline_id=normalization_pipeline_name,
         )
 
         # Good place for a breakpoint to inspect the search hits if you have "explain" enabled.
