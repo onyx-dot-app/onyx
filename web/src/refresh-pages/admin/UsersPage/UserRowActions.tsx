@@ -12,6 +12,7 @@ import {
   SvgKey,
 } from "@opal/icons";
 import { Disabled } from "@opal/core";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover from "@/refresh-components/Popover";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
@@ -78,18 +79,17 @@ export default function UserRowActions({
       return (
         <>
           {user.id && (
-            <Button
-              prominence="tertiary"
+            <LineItem
               icon={SvgUsers}
               onClick={() => openModal(Modal.EDIT_GROUPS)}
             >
               Groups &amp; Roles
-            </Button>
+            </LineItem>
           )}
           <Disabled disabled>
-            <Button prominence="tertiary" variant="danger" icon={SvgUserX}>
+            <LineItem danger icon={SvgUserX}>
               Deactivate User
-            </Button>
+            </LineItem>
           </Disabled>
           <Separator paddingXRem={0.5} />
           <Text as="p" secondaryBody text03 className="px-3 py-1">
@@ -102,20 +102,18 @@ export default function UserRowActions({
     switch (user.status) {
       case UserStatus.INVITED:
         return (
-          <Button
-            prominence="tertiary"
-            variant="danger"
+          <LineItem
+            danger
             icon={SvgXCircle}
             onClick={() => openModal(Modal.CANCEL_INVITE)}
           >
             Cancel Invite
-          </Button>
+          </LineItem>
         );
 
       case UserStatus.REQUESTED:
         return (
-          <Button
-            prominence="tertiary"
+          <LineItem
             icon={SvgUserCheck}
             onClick={() => {
               setPopoverOpen(false);
@@ -133,37 +131,34 @@ export default function UserRowActions({
             }}
           >
             Approve
-          </Button>
+          </LineItem>
         );
 
       case UserStatus.ACTIVE:
         return (
           <>
             {user.id && (
-              <Button
-                prominence="tertiary"
+              <LineItem
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
               >
                 Groups &amp; Roles
-              </Button>
+              </LineItem>
             )}
-            <Button
-              prominence="tertiary"
+            <LineItem
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
             >
               Reset Password
-            </Button>
+            </LineItem>
             <Separator paddingXRem={0.5} />
-            <Button
-              prominence="tertiary"
-              variant="danger"
+            <LineItem
+              danger
               icon={SvgUserX}
               onClick={() => openModal(Modal.DEACTIVATE)}
             >
               Deactivate User
-            </Button>
+            </LineItem>
           </>
         );
 
@@ -171,38 +166,34 @@ export default function UserRowActions({
         return (
           <>
             {user.id && (
-              <Button
-                prominence="tertiary"
+              <LineItem
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
               >
                 Groups &amp; Roles
-              </Button>
+              </LineItem>
             )}
-            <Button
-              prominence="tertiary"
+            <LineItem
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
             >
               Reset Password
-            </Button>
+            </LineItem>
             <Separator paddingXRem={0.5} />
-            <Button
-              prominence="tertiary"
+            <LineItem
               icon={SvgUserPlus}
               onClick={() => openModal(Modal.ACTIVATE)}
             >
               Activate User
-            </Button>
+            </LineItem>
             <Separator paddingXRem={0.5} />
-            <Button
-              prominence="tertiary"
-              variant="danger"
+            <LineItem
+              danger
               icon={SvgUserX}
               onClick={() => openModal(Modal.DELETE)}
             >
               Delete User
-            </Button>
+            </LineItem>
           </>
         );
 
@@ -223,6 +214,7 @@ export default function UserRowActions({
           <Section
             gap={0.5}
             height="auto"
+            width="full"
             alignItems="stretch"
             justifyContent="start"
           >
