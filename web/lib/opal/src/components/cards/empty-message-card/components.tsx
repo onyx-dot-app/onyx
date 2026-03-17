@@ -1,7 +1,7 @@
 import { Card } from "@opal/components/cards/card/components";
 import { Content } from "@opal/layouts";
 import { SvgEmpty } from "@opal/icons";
-import type { SizeVariant } from "@opal/shared";
+import type { ContainerSizeVariants } from "@opal/types";
 import type { IconFunctionComponent } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -16,7 +16,7 @@ type EmptyMessageCardProps = {
   title: string;
 
   /** Size preset controlling padding and rounding of the card. */
-  sizeVariant?: SizeVariant;
+  sizeVariant?: ContainerSizeVariants;
 
   /** Ref forwarded to the root Card div. */
   ref?: React.Ref<HTMLDivElement>;

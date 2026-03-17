@@ -6,7 +6,7 @@ import {
   type InteractiveStatefulProps,
   type InteractiveStatefulInteraction,
 } from "@opal/core";
-import type { SizeVariant, WidthVariant } from "@opal/shared";
+import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
@@ -64,10 +64,10 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
-    size?: SizeVariant;
+    size?: ContainerSizeVariants;
 
     /** Width preset. */
-    width?: WidthVariant;
+    width?: ExtremaSizeVariants;
 
     /**
      * Content justify mode. When `"between"`, icon+label group left and
