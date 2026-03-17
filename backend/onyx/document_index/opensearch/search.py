@@ -17,6 +17,10 @@ from onyx.document_index.opensearch.constants import (
     DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
 )
 from onyx.document_index.opensearch.constants import HYBRID_SEARCH_NORMALIZATION_WEIGHTS
+from onyx.document_index.opensearch.constants import (
+    HYBRID_SEARCH_SUBQUERY_CONFIGURATION,
+)
+from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
 from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
@@ -395,20 +399,18 @@ class DocumentQuery:
         The return of this function is not sufficient to be directly supplied to
         the OpenSearch client. See get_hybrid_search_query.
 
-        Matches:
-          - Title vector
-          - Content vector
-          - Keyword (title + content, match and phrase)
-
         Normalization is not performed here.
         The weights of each of these subqueries should be configured in a search
         pipeline.
+
+        The exact subqueries executed depend on the
+        HYBRID_SEARCH_SUBQUERY_CONFIGURATION setting.
 
         NOTE: For OpenSearch, 5 is the maximum number of query clauses allowed
         in a single hybrid query. Source:
         https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
 
-        NOTE: Each query is independent during the search phase, there is no
+        NOTE: Each query is independent during the search phase; there is no
         backfilling of scores for missing query components. What this means is
         that if a document was a good vector match but did not show up for
         keyword, it gets a score of 0 for the keyword component of the hybrid
@@ -437,74 +439,116 @@ class DocumentQuery:
                 similarity search.
         """
         # Build sub-queries for hybrid search. Order must match normalization
-        # pipeline weights: title vector, content vector, keyword (title + content).
-        hybrid_search_queries: list[dict[str, Any]] = [
-            # 1. Title vector search
-            {
-                "knn": {
-                    TITLE_VECTOR_FIELD_NAME: {
-                        "vector": query_vector,
-                        "k": vector_candidates,
-                    }
-                }
-            },
-            # 2. Content vector search
-            {
-                "knn": {
-                    CONTENT_VECTOR_FIELD_NAME: {
-                        "vector": query_vector,
-                        "k": vector_candidates,
-                    }
-                }
-            },
-            # 3. Keyword (title + content) match and phrase search.
-            {
-                "bool": {
-                    "should": [
-                        {
-                            "match": {
-                                TITLE_FIELD_NAME: {
-                                    "query": query_text,
-                                    "operator": "or",
-                                    # The title fields are strongly discounted as they are included in the content.
-                                    # It just acts as a minor boost
-                                    "boost": 0.1,
-                                }
-                            }
-                        },
-                        {
-                            "match_phrase": {
-                                TITLE_FIELD_NAME: {
-                                    "query": query_text,
-                                    "slop": 1,
-                                    "boost": 0.2,
-                                }
-                            }
-                        },
-                        {
-                            "match": {
-                                CONTENT_FIELD_NAME: {
-                                    "query": query_text,
-                                    "operator": "or",
-                                    "boost": 1.0,
-                                }
-                            }
-                        },
-                        {
-                            "match_phrase": {
-                                CONTENT_FIELD_NAME: {
-                                    "query": query_text,
-                                    "slop": 1,
-                                    "boost": 1.5,
-                                }
-                            }
-                        },
-                    ]
-                }
-            },
-        ]
+        # pipeline weights. See HYBRID_SEARCH_NORMALIZATION_WEIGHTS.
 
-        return hybrid_search_queries
+        if (
+            HYBRID_SEARCH_SUBQUERY_CONFIGURATION
+            is HybridSearchSubqueryConfiguration.TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
+        ):
+            return [
+                DocumentQuery._get_title_vector_similarity_search_query(
+                    query_vector, vector_candidates
+                ),
+                DocumentQuery._get_content_vector_similarity_search_query(
+                    query_vector, vector_candidates
+                ),
+                DocumentQuery._get_title_content_combined_keyword_search_query(
+                    query_text
+                ),
+            ]
+        elif (
+            HYBRID_SEARCH_SUBQUERY_CONFIGURATION
+            is HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
+        ):
+            return [
+                DocumentQuery._get_content_vector_similarity_search_query(
+                    query_vector, vector_candidates
+                ),
+                DocumentQuery._get_title_content_combined_keyword_search_query(
+                    query_text
+                ),
+            ]
+        else:
+            raise ValueError(
+                f"Bug: Unhandled hybrid search subquery configuration: {HYBRID_SEARCH_SUBQUERY_CONFIGURATION}"
+            )
+
+    @staticmethod
+    def _get_title_vector_similarity_search_query(
+        query_vector: list[float],
+        vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+    ) -> dict[str, Any]:
+        return {
+            "knn": {
+                TITLE_VECTOR_FIELD_NAME: {
+                    "vector": query_vector,
+                    "k": vector_candidates,
+                }
+            }
+        }
+
+    @staticmethod
+    def _get_content_vector_similarity_search_query(
+        query_vector: list[float],
+        vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+    ) -> dict[str, Any]:
+        return {
+            "knn": {
+                CONTENT_VECTOR_FIELD_NAME: {
+                    "vector": query_vector,
+                    "k": vector_candidates,
+                }
+            }
+        }
+
+    @staticmethod
+    def _get_title_content_combined_keyword_search_query(
+        query_text: str,
+    ) -> dict[str, Any]:
+        return {
+            "bool": {
+                "should": [
+                    {
+                        "match": {
+                            TITLE_FIELD_NAME: {
+                                "query": query_text,
+                                "operator": "or",
+                                # The title fields are strongly discounted as they are included in the content.
+                                # It just acts as a minor boost
+                                "boost": 0.1,
+                            }
+                        }
+                    },
+                    {
+                        "match_phrase": {
+                            TITLE_FIELD_NAME: {
+                                "query": query_text,
+                                "slop": 1,
+                                "boost": 0.2,
+                            }
+                        }
+                    },
+                    {
+                        "match": {
+                            CONTENT_FIELD_NAME: {
+                                "query": query_text,
+                                "operator": "or",
+                                "boost": 1.0,
+                            }
+                        }
+                    },
+                    {
+                        "match_phrase": {
+                            CONTENT_FIELD_NAME: {
+                                "query": query_text,
+                                "slop": 1,
+                                "boost": 1.5,
+                            }
+                        }
+                    },
+                ]
+            }
+        }
 
     @staticmethod
     def _get_search_filters(

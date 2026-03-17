@@ -1,5 +1,8 @@
 # Default value for the maximum number of tokens a chunk can hold, if none is
 # specified when creating an index.
+import os
+from enum import Enum
+
 from onyx.configs.app_configs import (
     OPENSEARCH_OVERRIDE_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
 )
@@ -41,21 +44,56 @@ DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES = (
 # https://docs.opensearch.org/latest/query-dsl/specialized/k-nn/index/#ef_search
 EF_SEARCH = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES
 
-# Since the titles are included in the contents, the embedding matches are
-# heavily downweighted as they act as a boost rather than an independent scoring
-# component.
-SEARCH_TITLE_VECTOR_WEIGHT = 0.1
-SEARCH_CONTENT_VECTOR_WEIGHT = 0.45
-# Single keyword weight for both title and content (merged from former title
-# keyword + content keyword).
-SEARCH_KEYWORD_WEIGHT = 0.45
 
-# NOTE: It is critical that the order of these weights matches the order of the
-# sub-queries in the hybrid search.
-HYBRID_SEARCH_NORMALIZATION_WEIGHTS = [
-    SEARCH_TITLE_VECTOR_WEIGHT,
-    SEARCH_CONTENT_VECTOR_WEIGHT,
-    SEARCH_KEYWORD_WEIGHT,
-]
+class HybridSearchSubqueryConfiguration(Enum):
+    TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD = 1
+    CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD = 2
+
+
+HYBRID_SEARCH_SUBQUERY_CONFIGURATION: HybridSearchSubqueryConfiguration = (
+    HybridSearchSubqueryConfiguration(
+        int(os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION"))
+    )
+    if int(os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION", -1))
+    in {c.value for c in HybridSearchSubqueryConfiguration}
+    else HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
+)
+
+if (
+    HYBRID_SEARCH_SUBQUERY_CONFIGURATION
+    is HybridSearchSubqueryConfiguration.TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
+):
+    # Since the titles are included in the contents, the embedding matches are
+    # heavily downweighted as they act as a boost rather than an independent
+    # scoring component.
+    SEARCH_TITLE_VECTOR_WEIGHT = 0.1
+    SEARCH_CONTENT_VECTOR_WEIGHT = 0.45
+    # Single keyword weight for both title and content (merged from former title
+    # keyword + content keyword).
+    SEARCH_KEYWORD_WEIGHT = 0.45
+
+    # NOTE: It is critical that the order of these weights matches the order of
+    # the sub-queries in the hybrid search.
+    HYBRID_SEARCH_NORMALIZATION_WEIGHTS = [
+        SEARCH_TITLE_VECTOR_WEIGHT,
+        SEARCH_CONTENT_VECTOR_WEIGHT,
+        SEARCH_KEYWORD_WEIGHT,
+    ]
+
+elif (
+    HYBRID_SEARCH_SUBQUERY_CONFIGURATION
+    is HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
+):
+    SEARCH_CONTENT_VECTOR_WEIGHT = 0.5
+    # Single keyword weight for both title and content (merged from former title
+    # keyword + content keyword).
+    SEARCH_KEYWORD_WEIGHT = 0.5
+
+    # NOTE: It is critical that the order of these weights matches the order of
+    # the sub-queries in the hybrid search.
+    HYBRID_SEARCH_NORMALIZATION_WEIGHTS = [
+        SEARCH_CONTENT_VECTOR_WEIGHT,
+        SEARCH_KEYWORD_WEIGHT,
+    ]
 
 assert sum(HYBRID_SEARCH_NORMALIZATION_WEIGHTS) == 1.0
