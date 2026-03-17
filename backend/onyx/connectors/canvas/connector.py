@@ -128,7 +128,7 @@ class CanvasConnector(
         canvas_base_url: str,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
-        self.canvas_base_url = canvas_base_url
+        self.canvas_base_url = canvas_base_url.rstrip("/")
         self.batch_size = batch_size
         self._canvas_client: CanvasApiClient | None = None
         self._course_permissions_cache: dict[int, ExternalAccess | None] = {}
