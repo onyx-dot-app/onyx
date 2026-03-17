@@ -11,7 +11,7 @@ import type {
   OverridableExtremaSizeVariants,
   ContainerSizeVariants,
   ExtremaSizeVariants,
-} from "./types";
+} from "@opal/types";
 
 /**
  * Size-variant scale.
