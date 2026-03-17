@@ -1,5 +1,3 @@
-
-import copy
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -15,7 +13,6 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.access import get_course_permissions
-from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -26,15 +23,12 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -413,6 +407,7 @@ class CanvasConnector(
             metadata={"course_id": str(announcement.course_id)},
         )
 
+    @override
     def load_credentials(
         self, credentials: dict[str, Any]
     ) -> dict[str, Any] | None:
@@ -433,6 +428,7 @@ class CanvasConnector(
 
         return None
 
+    @override
     def validate_connector_settings(self) -> None:
         """Validate Canvas connector settings by testing API access."""
         try:
@@ -456,3 +452,40 @@ class CanvasConnector(
             raise UnexpectedValidationError(
                 f"Unexpected error during Canvas settings validation: {exc}"
             )
+
+    @override
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CanvasConnectorCheckpoint,
+    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
+        raise NotImplementedError("Implemented in follow-up PR")
+
+    @override
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CanvasConnectorCheckpoint,
+    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
+        raise NotImplementedError("Implemented in follow-up PR")
+
+    @override
+    def build_dummy_checkpoint(self) -> CanvasConnectorCheckpoint:
+        raise NotImplementedError("Implemented in follow-up PR")
+
+    @override
+    def validate_checkpoint_json(
+        self, checkpoint_json: str
+    ) -> CanvasConnectorCheckpoint:
+        raise NotImplementedError("Implemented in follow-up PR")
+
+    @override
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        raise NotImplementedError("Implemented in follow-up PR")
