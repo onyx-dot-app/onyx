@@ -21,6 +21,16 @@ class CanvasApiClient:
         bearer_token: str,
         canvas_base_url: str,
     ) -> None:
+        parsed_base = urlparse(canvas_base_url)
+        if parsed_base.scheme not in ("http", "https"):
+            raise ValueError(
+                "canvas_base_url must start with http:// or https://"
+            )
+        if not parsed_base.hostname:
+            raise ValueError("canvas_base_url must include a valid host")
+        if parsed_base.scheme != "https":
+            raise ValueError("canvas_base_url must use https")
+
         self.bearer_token = bearer_token
         self.base_url = canvas_base_url.rstrip("/") + _CANVAS_API_VERSION
 
