@@ -34,12 +34,9 @@ export async function deleteCCPair(
     credentialId
   );
   if (deletionScheduleError) {
-    toast.error(
-      "Failed to schedule deletion of connector - " + deletionScheduleError
-    );
-  } else {
-    toast.success("Scheduled deletion of connector!");
+    throw new Error(deletionScheduleError);
   }
+  toast.success("Scheduled deletion of connector!");
   onCompletion();
 }
 
