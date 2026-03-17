@@ -6,6 +6,7 @@ import {
 } from "@/components/settings/lib";
 import {
   CUSTOM_ANALYTICS_ENABLED,
+  DEFAULT_APPLICATION_NAME,
   GTM_ENABLED,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   NEXT_PUBLIC_CLOUD_ENABLED,
@@ -45,21 +46,39 @@ const hankenGrotesk = Hanken_Grotesk({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  let logoLocation = "/onyx.ico";
+  const defaultDescription =
+    "ACTIVA, tu copiloto operativo para responder con evidencia interna y ejecutar acciones con control y auditoria.";
+  let logoLocation = "/activa.ico";
   let enterpriseSettings: EnterpriseSettings | null = null;
   if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
     enterpriseSettings = await (await fetchEnterpriseSettingsSS()).json();
     logoLocation =
       enterpriseSettings && enterpriseSettings.use_custom_logo
         ? "/api/enterprise-settings/logo"
-        : "/onyx.ico";
+        : "/activa.ico";
   }
 
+  const applicationName =
+    enterpriseSettings?.application_name || DEFAULT_APPLICATION_NAME;
+
   return {
-    title: enterpriseSettings?.application_name || "Onyx",
-    description: "Question answering for your documents",
+    title: applicationName,
+    applicationName,
+    description: defaultDescription,
     icons: {
       icon: logoLocation,
+      shortcut: logoLocation,
+      apple: logoLocation,
+    },
+    openGraph: {
+      title: applicationName,
+      description: defaultDescription,
+      siteName: applicationName,
+    },
+    twitter: {
+      card: "summary",
+      title: applicationName,
+      description: defaultDescription,
     },
   };
 }

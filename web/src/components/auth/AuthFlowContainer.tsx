@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 import { OnyxIcon } from "../icons/icons";
 
 export default function AuthFlowContainer({
@@ -20,7 +21,7 @@ export default function AuthFlowContainer({
         <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
           {footerContent ?? (
             <>
-              New to Onyx?{" "}
+              {`New to ${DEFAULT_APPLICATION_NAME}?`}{" "}
               <Link
                 href="/auth/signup"
                 className="text-text-05 mainUiAction underline transition-colors duration-200"

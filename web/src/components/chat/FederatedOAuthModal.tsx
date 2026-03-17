@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 import { useContext, useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
@@ -118,7 +119,7 @@ export default function FederatedOAuthModal() {
   }
 
   const applicationName =
-    settings?.enterpriseSettings?.application_name || "Onyx";
+    settings?.enterpriseSettings?.application_name || DEFAULT_APPLICATION_NAME;
 
   return (
     <Modal open>
