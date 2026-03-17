@@ -41,7 +41,7 @@ def test_upload_zip_with_unzip_true_extracts_files(
     zip_bytes = _create_test_zip()
     upload = _make_upload_file(zip_bytes, "test.zip", "application/zip")
 
-    result = upload_files([upload], FileOrigin.CONNECTOR, unzip=True)
+    result = upload_files([upload], FileOrigin.CONNECTOR)
 
     # Should have extracted the two individual files, not stored the zip itself
     assert len(result.file_paths) == 2
