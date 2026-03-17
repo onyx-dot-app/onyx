@@ -1,5 +1,6 @@
 import contextlib
 from collections.abc import Generator
+from collections.abc import Iterator
 
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.orm import Session
