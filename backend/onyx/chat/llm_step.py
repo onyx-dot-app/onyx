@@ -1166,7 +1166,7 @@ def run_llm_step_pkt_generator(
 
             # Weird behavior from some model providers, just log and ignore for now
             if (
-                delta.content is None
+                not delta.content
                 and delta.reasoning_content is None
                 and not delta.tool_calls
             ):

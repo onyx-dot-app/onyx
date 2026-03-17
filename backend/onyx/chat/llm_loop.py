@@ -36,6 +36,7 @@ from onyx.db.memory import add_memory
 from onyx.db.memory import update_memory_at_index
 from onyx.db.memory import UserMemoryContext
 from onyx.db.models import Persona
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
@@ -106,7 +107,11 @@ def _build_empty_llm_response_error(
     # OpenAI quota exhaustion has reached us as a streamed "stop" with zero content.
     # When the stream is completely empty and there is no reasoning/tool output, surface
     # the likely account-level cause instead of a generic tool-calling error.
-    if not llm_step_result.reasoning and is_true_openai_model(provider, model):
+    if (
+        not llm_step_result.reasoning
+        and provider == LlmProviderNames.OPENAI
+        and is_true_openai_model(provider, model)
+    ):
         return EmptyLLMResponseError(
             provider=provider,
             model=model,
