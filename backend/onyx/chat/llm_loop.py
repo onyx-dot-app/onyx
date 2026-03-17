@@ -1088,7 +1088,7 @@ def run_llm_loop(
                     )
                     simple_chat_history.append(tool_response_msg)
 
-            # If no tool calls, then it must have answered, wrap up
+            # Stop cycling once the model stops requesting tools.
             if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:
                 break
 
@@ -1106,18 +1106,18 @@ def run_llm_loop(
                 # As long as 1 tool with citeable documents is called at any point, we ask the LLM to try to cite
                 should_cite_documents = True
 
-        if not llm_step_result.answer and not llm_step_result.tool_calls:
-            raise EmptyLLMResponseError(
-                provider=llm.config.model_provider,
-                model=llm.config.model_name,
-                tool_choice=tool_choice,
-            )
-
-        if not llm_step_result.answer:
+        else:
             raise RuntimeError(
                 "The LLM did not return a final answer after tool execution. "
                 "Typically this indicates invalid tool-call output, a model/provider mismatch, "
                 "or serving API misconfiguration."
+            )
+
+        if not llm_step_result.answer:
+            raise EmptyLLMResponseError(
+                provider=llm.config.model_provider,
+                model=llm.config.model_name,
+                tool_choice=tool_choice,
             )
 
         emitter.emit(
