@@ -56,4 +56,3 @@ def get_course_permissions(
         external_user_group_ids=set(),
         is_public=False,
     )
-++ b/backend/ee/onyx/external_permissions/canvas/doc_sync.py
