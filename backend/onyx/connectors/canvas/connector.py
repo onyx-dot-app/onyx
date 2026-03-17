@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -24,8 +25,10 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.error_handling.exceptions import OnyxError
@@ -458,6 +461,188 @@ class CanvasConnector(
 
         return None
 
+    def _load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CanvasConnectorCheckpoint,
+        include_permissions: bool = False,
+    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
+        """Shared implementation for load_from_checkpoint and load_from_checkpoint_with_perm_sync."""
+        new_checkpoint = copy.deepcopy(checkpoint)
+
+        # First call: materialize the list of course IDs
+        if not new_checkpoint.course_ids:
+            courses = self._list_courses()
+            new_checkpoint.course_ids = [c.id for c in courses]
+            new_checkpoint.current_course_index = 0
+            new_checkpoint.stage = "pages"
+            logger.info(
+                f"Found {len(courses)} Canvas courses to process"
+            )
+            new_checkpoint.has_more = len(new_checkpoint.course_ids) > 0
+            return new_checkpoint
+
+        # All courses done
+        if new_checkpoint.current_course_index >= len(
+            new_checkpoint.course_ids
+        ):
+            new_checkpoint.has_more = False
+            return new_checkpoint
+
+        course_id = new_checkpoint.course_ids[
+            new_checkpoint.current_course_index
+        ]
+        stage = new_checkpoint.stage
+
+        if stage not in ("pages", "assignments", "announcements"):
+            raise ValueError(
+                f"Invalid checkpoint stage: {stage!r}"
+            )
+
+        def _in_time_window(timestamp_str: str) -> bool:
+            ts = (
+                datetime.fromisoformat(timestamp_str)
+                .astimezone(timezone.utc)
+                .timestamp()
+            )
+            return start < ts <= end
+
+        def _maybe_attach_permissions(document: Document) -> Document:
+            if include_permissions:
+                document.external_access = self._get_course_permissions(
+                    course_id
+                )
+            return document
+
+        # Process current stage for current course.
+        # Only advance if the listing succeeds — on failure the stage
+        # stays the same so the framework retries it next call.
+        if stage == "pages":
+            try:
+                pages = self._list_pages(course_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to list pages for course {course_id}: {e}"
+                )
+                return new_checkpoint
+
+            for page in pages:
+                try:
+                    if not _in_time_window(page.updated_at):
+                        continue
+                    doc = self._convert_page_to_document(page)
+                    yield _maybe_attach_permissions(doc)
+                except Exception as e:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=f"canvas-page-{course_id}-{page.page_id}",
+                            document_link=f"{self.canvas_base_url}/courses/{course_id}/pages/{page.url}",
+                        ),
+                        failure_message=f"Failed to process page: {e}",
+                        exception=e,
+                    )
+
+            new_checkpoint.stage = "assignments"
+
+        elif stage == "assignments":
+            try:
+                assignments = self._list_assignments(course_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to list assignments for course {course_id}: {e}"
+                )
+                return new_checkpoint
+
+            for assignment in assignments:
+                try:
+                    if not _in_time_window(assignment.updated_at):
+                        continue
+                    doc = self._convert_assignment_to_document(assignment)
+                    yield _maybe_attach_permissions(doc)
+                except Exception as e:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=f"canvas-assignment-{course_id}-{assignment.id}",
+                            document_link=assignment.html_url,
+                        ),
+                        failure_message=f"Failed to process assignment: {e}",
+                        exception=e,
+                    )
+
+            new_checkpoint.stage = "announcements"
+
+        elif stage == "announcements":
+            try:
+                announcements = self._list_announcements(course_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to list announcements for course {course_id}: {e}"
+                )
+                return new_checkpoint
+
+            for announcement in announcements:
+                try:
+                    if not announcement.posted_at:
+                        continue
+                    if not _in_time_window(announcement.posted_at):
+                        continue
+                    doc = self._convert_announcement_to_document(
+                        announcement
+                    )
+                    yield _maybe_attach_permissions(doc)
+                except Exception as e:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=f"canvas-announcement-{course_id}-{announcement.id}",
+                            document_link=announcement.html_url,
+                        ),
+                        failure_message=f"Failed to process announcement: {e}",
+                        exception=e,
+                    )
+
+            # Done with all 3 stages for this course, advance to next
+            new_checkpoint.current_course_index += 1
+            new_checkpoint.stage = "pages"
+
+        new_checkpoint.has_more = new_checkpoint.current_course_index < len(
+            new_checkpoint.course_ids
+        )
+        return new_checkpoint
+
+    @override
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CanvasConnectorCheckpoint,
+    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    @override
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CanvasConnectorCheckpoint,
+    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
+        """Load documents from checkpoint with permission information included."""
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
+        )
+
+    @override
+    def build_dummy_checkpoint(self) -> CanvasConnectorCheckpoint:
+        return CanvasConnectorCheckpoint(has_more=True)
+
+    @override
+    def validate_checkpoint_json(
+        self, checkpoint_json: str
+    ) -> CanvasConnectorCheckpoint:
+        return CanvasConnectorCheckpoint.model_validate_json(checkpoint_json)
+
     @override
     def validate_connector_settings(self) -> None:
         """Validate Canvas connector settings by testing API access."""
@@ -490,34 +675,6 @@ class CanvasConnector(
             )
 
     @override
-    def load_from_checkpoint(
-        self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-        checkpoint: CanvasConnectorCheckpoint,
-    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
-        raise NotImplementedError("Implemented in follow-up PR")
-
-    @override
-    def load_from_checkpoint_with_perm_sync(
-        self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-        checkpoint: CanvasConnectorCheckpoint,
-    ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
-        raise NotImplementedError("Implemented in follow-up PR")
-
-    @override
-    def build_dummy_checkpoint(self) -> CanvasConnectorCheckpoint:
-        raise NotImplementedError("Implemented in follow-up PR")
-
-    @override
-    def validate_checkpoint_json(
-        self, checkpoint_json: str
-    ) -> CanvasConnectorCheckpoint:
-        raise NotImplementedError("Implemented in follow-up PR")
-
-    @override
     def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
@@ -525,3 +682,4 @@ class CanvasConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         raise NotImplementedError("Implemented in follow-up PR")
+
