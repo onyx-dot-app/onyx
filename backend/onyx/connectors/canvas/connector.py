@@ -728,4 +728,3 @@ class CanvasConnector(
 
         if batch:
             yield batch
-
