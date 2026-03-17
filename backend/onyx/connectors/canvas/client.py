@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
@@ -73,11 +74,17 @@ class CanvasApiClient:
         next_url = self._parse_next_link(response.headers.get("Link", ""))
         return json, next_url
 
-    @staticmethod
-    def _parse_next_link(link_header: str) -> str | None:
-        """Extract the 'next' URL from a Canvas Link header."""
+    def _parse_next_link(self, link_header: str) -> str | None:
+        """Extract the 'next' URL from a Canvas Link header.
+
+        Only returns URLs whose host matches the configured Canvas base URL
+        to prevent leaking the bearer token to arbitrary hosts.
+        """
+        expected_host = urlparse(self.base_url).hostname
         for match in re.finditer(r'<([^>]+)>;\s*rel="next"', link_header):
-            return match.group(1)
+            url = match.group(1)
+            if urlparse(url).hostname == expected_host:
+                return url
         return None
 
     def _build_headers(self) -> dict[str, str]:
