@@ -56,8 +56,11 @@ class CanvasConnectorCheckpoint(ConnectorCheckpoint):
         course_ids: Materialized list of course IDs to process.
         current_course_index: Index into course_ids for current course.
         stage: Which item type we're processing for the current course.
+        next_url: Pagination cursor within the current stage. None means
+            start from the first page; a URL means resume from that page.
     """
 
     course_ids: list[int] = []
     current_course_index: int = 0
     stage: CanvasStage = "pages"
+    next_url: str | None = None
