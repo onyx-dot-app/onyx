@@ -745,6 +745,7 @@ print_success "All configuration files ready"
 # Set up deployment configuration
 print_step "Setting up deployment configs"
 ENV_FILE="${INSTALL_ROOT}/deployment/.env"
+ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 # Check if services are already running
 if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
     # Determine compose command
