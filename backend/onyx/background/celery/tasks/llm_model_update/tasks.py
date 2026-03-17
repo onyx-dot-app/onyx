@@ -2,6 +2,7 @@ from typing import Any
 
 from celery import shared_task
 from celery import Task
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy.exc import OperationalError
 
 from onyx.background.celery.apps.app_base import task_logger
@@ -47,7 +48,7 @@ from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
     bind=True,
 )
 def check_for_auto_llm_updates(
-    self: Task,  # noqa: ARG001
+    self: Task,  # noqa: ARG001  # used implicitly by Celery autoretry_for
     *,
     tenant_id: str,  # noqa: ARG001
     llm_recommendations: dict[str, Any] | None = None,
@@ -105,13 +106,14 @@ def cloud_check_for_auto_llm_updates(
     redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     lock = redis_client.lock(
         OnyxRedisLocks.CLOUD_CHECK_AUTO_LLM_UPDATE_LOCK,
-        timeout=max(15 * 60, AUTO_LLM_UPDATE_INTERVAL_SECONDS),
+        timeout=max(16 * 60, AUTO_LLM_UPDATE_INTERVAL_SECONDS),
     )
 
     if not lock.acquire(blocking=False):
         task_logger.debug("Auto LLM cloud update already running, skipping")
         return None
 
+    release_lock = True
     try:
         llm_recommendations = fetch_llm_recommendations_from_github()
         if not llm_recommendations:
@@ -156,11 +158,18 @@ def cloud_check_for_auto_llm_updates(
             f"updated_at={llm_recommendations.updated_at.isoformat()} "
             f"num_processed_tenants={num_processed_tenants}"
         )
+    except SoftTimeLimitExceeded:
+        release_lock = False
+        task_logger.info(
+            "Soft time limit exceeded in cloud auto LLM update task; "
+            "leaving lock in place until timeout."
+        )
+        raise
     except Exception:
         task_logger.exception("Error in cloud auto LLM update task")
         raise
     finally:
-        if lock.owned():
+        if release_lock and lock.owned():
             lock.release()
 
     return True

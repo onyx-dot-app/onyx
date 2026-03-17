@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+from celery.exceptions import SoftTimeLimitExceeded
 
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.llm_model_update.tasks import (
@@ -239,3 +240,25 @@ def test_cloud_check_for_auto_llm_updates_releases_lock_without_caching_on_fanou
 
     mock_set_cached_last_updated_at.assert_not_called()
     lock.release.assert_called_once()
+
+
+@patch(
+    "onyx.background.celery.tasks.llm_model_update.tasks.AUTO_LLM_CONFIG_URL",
+    "https://example.com/llm_config.json",
+)
+@patch(
+    "onyx.background.celery.tasks.llm_model_update.tasks.fetch_llm_recommendations_from_github"
+)
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_redis_client")
+def test_cloud_check_for_auto_llm_updates_keeps_lock_on_soft_time_limit(
+    mock_get_redis_client: MagicMock,
+    mock_fetch_recommendations: MagicMock,
+) -> None:
+    redis_client, lock = _build_redis_mock_with_lock()
+    mock_get_redis_client.return_value = redis_client
+    mock_fetch_recommendations.side_effect = SoftTimeLimitExceeded()
+
+    with pytest.raises(SoftTimeLimitExceeded):
+        cloud_check_for_auto_llm_updates.run()
+
+    lock.release.assert_not_called()
