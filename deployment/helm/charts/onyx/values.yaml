@@ -509,6 +509,11 @@ api:
   # NOTE: Requires the container to run as root (runAsUser: 0).
   # CA certificate files must be mounted under /usr/local/share/ca-certificates/
   # with a .crt extension (e.g. /usr/local/share/ca-certificates/my-ca.crt).
+  # NOTE: Python HTTP clients (requests, httpx) use certifi's bundle by default
+  # and will not pick up the system CA store automatically. Set the following
+  # environment variables via api.env to make them use the updated system bundle:
+  #   REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+  #   SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
   runUpdateCaCertificates: false
 
 
