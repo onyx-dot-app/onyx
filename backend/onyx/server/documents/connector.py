@@ -500,35 +500,50 @@ def upload_files(
                 logger.warning("File has no filename, skipping")
                 continue
 
-            if unzip and is_zip_file(file):
+            if is_zip_file(file):
                 if seen_zip:
                     raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
                 seen_zip = True
+
+                # Validate the zip by opening it (catches corrupt/non-zip files)
                 with zipfile.ZipFile(file.file, "r") as zf:
-                    zip_metadata_file_id = save_zip_metadata_to_file_store(
-                        zf, file_store
-                    )
-                    for file_info in zf.namelist():
-                        if zf.getinfo(file_info).is_dir():
-                            continue
-
-                        if not should_process_file(file_info):
-                            continue
-
-                        sub_file_bytes = zf.read(file_info)
-
-                        mime_type, __ = mimetypes.guess_type(file_info)
-                        if mime_type is None:
-                            mime_type = "application/octet-stream"
-
-                        file_id = file_store.save_file(
-                            content=BytesIO(sub_file_bytes),
-                            display_name=os.path.basename(file_info),
-                            file_origin=file_origin,
-                            file_type=mime_type,
+                    if unzip:
+                        zip_metadata_file_id = save_zip_metadata_to_file_store(
+                            zf, file_store
                         )
-                        deduped_file_paths.append(file_id)
-                        deduped_file_names.append(os.path.basename(file_info))
+                        for file_info in zf.namelist():
+                            if zf.getinfo(file_info).is_dir():
+                                continue
+
+                            if not should_process_file(file_info):
+                                continue
+
+                            sub_file_bytes = zf.read(file_info)
+
+                            mime_type, __ = mimetypes.guess_type(file_info)
+                            if mime_type is None:
+                                mime_type = "application/octet-stream"
+
+                            file_id = file_store.save_file(
+                                content=BytesIO(sub_file_bytes),
+                                display_name=os.path.basename(file_info),
+                                file_origin=file_origin,
+                                file_type=mime_type,
+                            )
+                            deduped_file_paths.append(file_id)
+                            deduped_file_names.append(os.path.basename(file_info))
+                        continue
+
+                # Store the zip as-is (unzip=False)
+                file.file.seek(0)
+                file_id = file_store.save_file(
+                    content=file.file,
+                    display_name=file.filename,
+                    file_origin=file_origin,
+                    file_type=file.content_type or "application/zip",
+                )
+                deduped_file_paths.append(file_id)
+                deduped_file_names.append(file.filename)
                 continue
 
             # Since we can't render docx files in the UI,

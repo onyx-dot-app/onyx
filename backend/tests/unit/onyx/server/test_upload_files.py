@@ -2,7 +2,9 @@ import io
 import zipfile
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from zipfile import BadZipFile
 
+import pytest
 from fastapi import UploadFile
 from starlette.datastructures import Headers
 
@@ -75,3 +77,33 @@ def test_upload_zip_with_unzip_false_stores_zip_as_is(
     saved_content.seek(0)
     with zipfile.ZipFile(saved_content, "r") as zf:
         assert set(zf.namelist()) == {"file1.txt", "file2.txt"}
+
+
+@patch("onyx.server.documents.connector.get_default_file_store")
+def test_upload_invalid_zip_with_unzip_false_raises(
+    mock_get_store: MagicMock,
+) -> None:
+    """An invalid zip is rejected even when unzip=False (validation still runs)."""
+    mock_get_store.return_value = MagicMock()
+
+    bad_zip = _make_upload_file(b"not a zip", "bad.zip", "application/zip")
+
+    with pytest.raises(BadZipFile):
+        upload_files([bad_zip], FileOrigin.CONNECTOR, unzip=False)
+
+
+@patch("onyx.server.documents.connector.get_default_file_store")
+def test_upload_multiple_zips_rejected_when_unzip_false(
+    mock_get_store: MagicMock,
+) -> None:
+    """The seen_zip guard rejects a second zip even when unzip=False."""
+    mock_store = MagicMock()
+    mock_store.save_file.return_value = "zip-id"
+    mock_get_store.return_value = mock_store
+
+    zip_bytes = _create_test_zip()
+    zip1 = _make_upload_file(zip_bytes, "a.zip", "application/zip")
+    zip2 = _make_upload_file(zip_bytes, "b.zip", "application/zip")
+
+    with pytest.raises(Exception, match="Only one zip file"):
+        upload_files([zip1, zip2], FileOrigin.CONNECTOR, unzip=False)
