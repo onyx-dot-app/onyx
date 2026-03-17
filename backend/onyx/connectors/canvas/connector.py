@@ -1,11 +1,9 @@
 from typing import Literal
+from typing import TypeAlias
 
 from pydantic import BaseModel
 
 from onyx.connectors.models import ConnectorCheckpoint
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 
 class CanvasCourse(BaseModel):
@@ -24,6 +22,10 @@ class CanvasPage(BaseModel):
     created_at: str
     updated_at: str
     course_id: int
+
+    @property
+    def id(self) -> int:
+        return self.page_id
 
 
 class CanvasAssignment(BaseModel):
@@ -46,7 +48,7 @@ class CanvasAnnouncement(BaseModel):
     course_id: int
 
 
-CanvasStage = Literal["pages", "assignments", "announcements"]
+CanvasStage: TypeAlias = Literal["pages", "assignments", "announcements"]
 
 
 class CanvasConnectorCheckpoint(ConnectorCheckpoint):
@@ -58,9 +60,19 @@ class CanvasConnectorCheckpoint(ConnectorCheckpoint):
         stage: Which item type we're processing for the current course.
         next_url: Pagination cursor within the current stage. None means
             start from the first page; a URL means resume from that page.
+
+    Invariant:
+        If current_course_index is incremented, stage must be reset to
+        "pages" and next_url must be reset to None.
     """
 
     course_ids: list[int] = []
     current_course_index: int = 0
     stage: CanvasStage = "pages"
     next_url: str | None = None
+
+    def advance_course(self) -> None:
+        """Move to the next course and reset within-course state."""
+        self.current_course_index += 1
+        self.stage = "pages"
+        self.next_url = None

@@ -80,7 +80,7 @@ class CanvasApiClient:
 
         try:
             response_json = response.json()
-        except Exception as e:
+        except ValueError as e:
             if response.status_code < 300:
                 raise OnyxError(
                     OnyxErrorCode.BAD_GATEWAY,
@@ -147,4 +147,7 @@ class CanvasApiClient:
         return {"Authorization": f"Bearer {self._bearer_token}"}
 
     def _build_url(self, endpoint: str) -> str:
-        return f"{self.base_url}/{endpoint.lstrip('/')}"
+        clean_endpoint = endpoint.lstrip("/")
+        if not clean_endpoint:
+            return self.base_url
+        return f"{self.base_url}/{clean_endpoint}"
