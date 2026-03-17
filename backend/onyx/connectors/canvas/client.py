@@ -31,7 +31,7 @@ class CanvasApiClient:
 
     def get(
         self,
-        endpoint: str,
+        endpoint: str = "",
         params: dict[str, Any] | None = None,
         full_url: str | None = None,
     ) -> tuple[Any, str | None]:
