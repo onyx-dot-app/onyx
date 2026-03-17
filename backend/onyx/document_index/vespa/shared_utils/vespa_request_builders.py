@@ -43,6 +43,22 @@ def build_vespa_filters(
             return ""
         return f"({' or '.join(eq_elems)})"
 
+    def _build_weighted_set_filter(key: str, vals: list[str] | None) -> str:
+        """Build a Vespa weightedSet filter for large value lists.
+
+        Uses Vespa's native weightedSet() operator instead of OR-chained
+        'contains' clauses.  This is critical for fields like
+        access_control_list where a single user may have tens of thousands
+        of ACL entries — OR clauses at that scale cause Vespa to reject
+        the query with HTTP 400."""
+        if not key or not vals:
+            return ""
+        filtered = [val for val in vals if val]
+        if not filtered:
+            return ""
+        items = ", ".join(f'"{val}":1' for val in filtered)
+        return f"weightedSet({key}, {{{items}}})"
+
     def _build_int_or_filters(key: str, vals: list[int] | None) -> str:
         """For an integer field filter.
         Returns a bare clause or ""."""
@@ -157,11 +173,16 @@ def build_vespa_filters(
     if filters.tenant_id and MULTI_TENANT:
         filter_parts.append(build_tenant_id_filter(filters.tenant_id))
 
-    # ACL filters
+    # ACL filters — use weightedSet for efficient matching against the
+    # access_control_list weightedset<string> field.  OR-chaining thousands
+    # of 'contains' clauses causes Vespa to reject the query (HTTP 400)
+    # for users with large numbers of external permission groups.
     if filters.access_control_list is not None:
         _append(
             filter_parts,
-            _build_or_filters(ACCESS_CONTROL_LIST, filters.access_control_list),
+            _build_weighted_set_filter(
+                ACCESS_CONTROL_LIST, filters.access_control_list
+            ),
         )
 
     # Source type filters
