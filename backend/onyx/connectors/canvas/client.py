@@ -52,17 +52,17 @@ class CanvasApiClient:
         )
 
         try:
-            json = response.json()
+            response_json = response.json()
         except Exception as e:
             if response.status_code < 300:
                 raise CanvasClientRequestFailedError(
                     f"Invalid JSON in response: {e}", response.status_code
                 )
-            json = {}
+            response_json = {}
 
         if response.status_code >= 300:
             error = response.reason
-            error_field = json.get("error")
+            error_field = response_json.get("error")
             if isinstance(error_field, dict):
                 response_error = error_field.get("message", "")
                 if response_error:
@@ -72,7 +72,7 @@ class CanvasApiClient:
             raise CanvasClientRequestFailedError(error, response.status_code)
 
         next_url = self._parse_next_link(response.headers.get("Link", ""))
-        return json, next_url
+        return response_json, next_url
 
     def _parse_next_link(self, link_header: str) -> str | None:
         """Extract the 'next' URL from a Canvas Link header.
