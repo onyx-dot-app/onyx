@@ -322,9 +322,12 @@ test.describe("LLM Provider Setup @exclusive", () => {
       })
       .toBe(!initialAutoModeState);
 
-    const deleteModal = await openProviderEditModal(page, providerName);
-    await deleteModal.getByRole("button", { name: "Delete" }).click();
-    await expect(deleteModal).not.toBeVisible({ timeout: 15000 });
+    const providerCard = await findProviderCard(page, providerName);
+    await providerCard.getByRole("button", { name: "Delete provider" }).click();
+    const confirmationModal = page.getByRole("dialog");
+    await expect(confirmationModal).toBeVisible({ timeout: 10000 });
+    await confirmationModal.getByRole("button", { name: "Delete" }).click();
+    await expect(confirmationModal).not.toBeVisible({ timeout: 15000 });
 
     await expect
       .poll(
