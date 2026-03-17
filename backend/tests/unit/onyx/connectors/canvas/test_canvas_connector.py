@@ -11,7 +11,6 @@ import pytest
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
-from onyx.connectors.canvas.client import CanvasClientRequestFailedError
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.canvas.connector import CanvasConnectorCheckpoint
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -21,6 +20,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
+from onyx.error_handling.exceptions import OnyxError
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ class TestCanvasApiClient:
             bearer_token=FAKE_TOKEN,
             canvas_base_url=FAKE_BASE_URL,
         )
-        with pytest.raises(CanvasClientRequestFailedError) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             client.get("courses")
         assert exc_info.value.status_code == 403
 
