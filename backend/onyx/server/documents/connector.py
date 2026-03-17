@@ -479,7 +479,9 @@ def is_zip_file(file: UploadFile) -> bool:
 
 
 def upload_files(
-    files: list[UploadFile], file_origin: FileOrigin = FileOrigin.CONNECTOR
+    files: list[UploadFile],
+    file_origin: FileOrigin = FileOrigin.CONNECTOR,
+    unzip: bool = True,
 ) -> FileUploadResponse:
 
     # Skip directories and known macOS metadata entries
@@ -498,7 +500,7 @@ def upload_files(
                 logger.warning("File has no filename, skipping")
                 continue
 
-            if is_zip_file(file):
+            if unzip and is_zip_file(file):
                 if seen_zip:
                     raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
                 seen_zip = True
@@ -613,9 +615,10 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
 @router.post("/admin/connector/file/upload", tags=PUBLIC_API_TAGS)
 def upload_files_api(
     files: list[UploadFile],
+    unzip: bool = True,
     _: User = Depends(current_curator_or_admin_user),
 ) -> FileUploadResponse:
-    return upload_files(files, FileOrigin.OTHER)
+    return upload_files(files, FileOrigin.OTHER, unzip=unzip)
 
 
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
