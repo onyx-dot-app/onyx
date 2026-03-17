@@ -197,23 +197,15 @@ export default function LogoCropModal({
               onPointerCancel={handlePointerUp}
               onWheel={handleWheel}
             >
-              {imageSrc && (
-                <img
                   src={imageSrc}
                   alt="Logo preview"
                   draggable={false}
                   onLoad={handleImageLoad}
-                  className="absolute pointer-events-none"
-                  style={{
-                    width: isLandscapeOrSquare ? baseDisplayed.w : "auto",
-                    height: isLandscapeOrSquare ? "auto" : baseDisplayed.h,
-                    maxWidth: "none",
-                    left: CANVAS_SIZE / 2 - baseDisplayed.w / 2,
-                    top: CANVAS_SIZE / 2 - baseDisplayed.h / 2,
-                    transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-                    transformOrigin: "center center",
+                  onError={() => {
+                    toast.error("Failed to load image. The file may be corrupted.");
+                    onCancel();
                   }}
-                />
+                  className="absolute pointer-events-none"
               )}
 
               <svg
