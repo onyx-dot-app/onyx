@@ -1,11 +1,26 @@
 # Default value for the maximum number of tokens a chunk can hold, if none is
 # specified when creating an index.
+import os
+from enum import Enum
+
 from onyx.configs.app_configs import (
     OPENSEARCH_OVERRIDE_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
 )
 
 
 DEFAULT_MAX_CHUNK_SIZE = 512
+
+
+# By default OpenSearch will only return a maximum of this many results in a
+# given search. This value is configurable in the index settings.
+DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW = 10_000
+
+
+# For documents which do not have a value for LAST_UPDATED_FIELD_NAME, we assume
+# that the document was last updated this many days ago for the purpose of time
+# cutoff filtering during retrieval.
+ASSUMED_DOCUMENT_AGE_DAYS = 90
+
 
 # Size of the dynamic list used to consider elements during kNN graph creation.
 # Higher values improve search quality but increase indexing time. Values
@@ -41,21 +56,41 @@ DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES = (
 # https://docs.opensearch.org/latest/query-dsl/specialized/k-nn/index/#ef_search
 EF_SEARCH = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES
 
-# Since the titles are included in the contents, the embedding matches are
-# heavily downweighted as they act as a boost rather than an independent scoring
-# component.
-SEARCH_TITLE_VECTOR_WEIGHT = 0.1
-SEARCH_CONTENT_VECTOR_WEIGHT = 0.45
-# Single keyword weight for both title and content (merged from former title
-# keyword + content keyword).
-SEARCH_KEYWORD_WEIGHT = 0.45
 
-# NOTE: It is critical that the order of these weights matches the order of the
-# sub-queries in the hybrid search.
-HYBRID_SEARCH_NORMALIZATION_WEIGHTS = [
-    SEARCH_TITLE_VECTOR_WEIGHT,
-    SEARCH_CONTENT_VECTOR_WEIGHT,
-    SEARCH_KEYWORD_WEIGHT,
-]
+class HybridSearchSubqueryConfiguration(Enum):
+    TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD = 1
+    # Current default.
+    CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD = 2
 
-assert sum(HYBRID_SEARCH_NORMALIZATION_WEIGHTS) == 1.0
+
+# Will raise and block application start if HYBRID_SEARCH_SUBQUERY_CONFIGURATION
+# is set but not a valid value. If not set, defaults to
+# CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD.
+HYBRID_SEARCH_SUBQUERY_CONFIGURATION: HybridSearchSubqueryConfiguration = (
+    HybridSearchSubqueryConfiguration(
+        int(os.environ["HYBRID_SEARCH_SUBQUERY_CONFIGURATION"])
+    )
+    if os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION", None) is not None
+    else HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
+)
+
+
+class HybridSearchNormalizationPipeline(Enum):
+    # Current default.
+    MIN_MAX = 1
+    # NOTE: Using z-score normalization is better for hybrid search from a
+    # theoretical standpoint. Empirically on a small dataset of up to 10K docs,
+    # it's not very different. Likely more impactful at scale.
+    # https://opensearch.org/blog/introducing-the-z-score-normalization-technique-for-hybrid-search/
+    ZSCORE = 2
+
+
+# Will raise and block application start if HYBRID_SEARCH_NORMALIZATION_PIPELINE
+# is set but not a valid value. If not set, defaults to MIN_MAX.
+HYBRID_SEARCH_NORMALIZATION_PIPELINE: HybridSearchNormalizationPipeline = (
+    HybridSearchNormalizationPipeline(
+        int(os.environ["HYBRID_SEARCH_NORMALIZATION_PIPELINE"])
+    )
+    if os.environ.get("HYBRID_SEARCH_NORMALIZATION_PIPELINE", None) is not None
+    else HybridSearchNormalizationPipeline.MIN_MAX
+)
