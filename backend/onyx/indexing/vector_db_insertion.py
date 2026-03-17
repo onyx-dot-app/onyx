@@ -1,5 +1,6 @@
 import time
 from collections import defaultdict
+from collections.abc import Iterable
 from http import HTTPStatus
 
 import httpx
@@ -28,7 +29,7 @@ def _log_insufficient_storage_error(e: Exception) -> None:
 
 def write_chunks_to_vector_db_with_backoff(
     document_index: DocumentIndex,
-    chunks: list[DocMetadataAwareIndexChunk],
+    chunks: Iterable[DocMetadataAwareIndexChunk],
     index_batch_params: IndexBatchParams,
 ) -> tuple[list[DocumentInsertionRecord], list[ConnectorFailure]]:
     """Tries to insert all chunks in one large batch. If that batch fails for any reason,
