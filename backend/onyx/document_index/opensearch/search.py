@@ -16,7 +16,6 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
 )
-from onyx.document_index.opensearch.constants import HYBRID_SEARCH_NORMALIZATION_WEIGHTS
 from onyx.document_index.opensearch.constants import (
     HYBRID_SEARCH_SUBQUERY_CONFIGURATION,
 )
@@ -47,6 +46,55 @@ from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 
 # TODO(andrei): Turn all magic dictionaries to pydantic models.
 
+
+def _get_hybrid_search_normalization_weights() -> list[float]:
+    if (
+        HYBRID_SEARCH_SUBQUERY_CONFIGURATION
+        is HybridSearchSubqueryConfiguration.TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
+    ):
+        # Since the titles are included in the contents, the embedding matches
+        # are heavily downweighted as they act as a boost rather than an
+        # independent scoring component.
+        search_title_vector_weight = 0.1
+        search_content_vector_weight = 0.45
+        # Single keyword weight for both title and content (merged from former
+        # title keyword + content keyword).
+        search_keyword_weight = 0.45
+
+        # NOTE: It is critical that the order of these weights matches the order
+        # of the sub-queries in the hybrid search.
+        hybrid_search_normalization_weights = [
+            search_title_vector_weight,
+            search_content_vector_weight,
+            search_keyword_weight,
+        ]
+    elif (
+        HYBRID_SEARCH_SUBQUERY_CONFIGURATION
+        is HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
+    ):
+        search_content_vector_weight = 0.5
+        # Single keyword weight for both title and content (merged from former
+        # title keyword + content keyword).
+        search_keyword_weight = 0.5
+
+        # NOTE: It is critical that the order of these weights matches the order
+        # of the sub-queries in the hybrid search.
+        hybrid_search_normalization_weights = [
+            search_content_vector_weight,
+            search_keyword_weight,
+        ]
+    else:
+        raise ValueError(
+            f"Bug: Unhandled hybrid search subquery configuration: {HYBRID_SEARCH_SUBQUERY_CONFIGURATION}."
+        )
+
+    assert (
+        sum(hybrid_search_normalization_weights) == 1.0
+    ), "Bug: Hybrid search normalization weights do not sum to 1.0."
+
+    return hybrid_search_normalization_weights
+
+
 MIN_MAX_NORMALIZATION_PIPELINE_NAME = "normalization_pipeline_min_max"
 MIN_MAX_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
     "description": "Normalization for keyword and vector scores using min-max",
@@ -57,7 +105,9 @@ MIN_MAX_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
                 "normalization": {"technique": "min_max"},
                 "combination": {
                     "technique": "arithmetic_mean",
-                    "parameters": {"weights": HYBRID_SEARCH_NORMALIZATION_WEIGHTS},
+                    "parameters": {
+                        "weights": _get_hybrid_search_normalization_weights()
+                    },
                 },
             }
         }
@@ -74,7 +124,9 @@ ZSCORE_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
                 "normalization": {"technique": "z_score"},
                 "combination": {
                     "technique": "arithmetic_mean",
-                    "parameters": {"weights": HYBRID_SEARCH_NORMALIZATION_WEIGHTS},
+                    "parameters": {
+                        "weights": _get_hybrid_search_normalization_weights()
+                    },
                 },
             }
         }
@@ -439,8 +491,7 @@ class DocumentQuery:
                 similarity search.
         """
         # Build sub-queries for hybrid search. Order must match normalization
-        # pipeline weights. See HYBRID_SEARCH_NORMALIZATION_WEIGHTS.
-
+        # pipeline weights.
         if (
             HYBRID_SEARCH_SUBQUERY_CONFIGURATION
             is HybridSearchSubqueryConfiguration.TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
