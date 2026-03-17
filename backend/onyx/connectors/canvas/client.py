@@ -52,7 +52,11 @@ class CanvasApiClient:
 
         try:
             json = response.json()
-        except Exception:
+        except Exception as e:
+            if response.status_code < 300:
+                raise CanvasClientRequestFailedError(
+                    f"Invalid JSON in response: {e}", response.status_code
+                )
             json = {}
 
         if response.status_code >= 300:
