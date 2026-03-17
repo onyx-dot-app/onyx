@@ -16,6 +16,7 @@ from onyx.connectors.canvas.access import get_course_permissions
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
@@ -61,6 +62,7 @@ class CanvasPage(BaseModel):
 
     @property
     def id(self) -> int:
+        # Used in checkpoint and test code
         return self.page_id
 
     @classmethod
@@ -164,7 +166,7 @@ class CanvasConnector(
         canvas_base_url: str,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
-        self.canvas_base_url = canvas_base_url.rstrip("/")
+        self.canvas_base_url = canvas_base_url.rstrip("/").removesuffix("/api/v1")
         self.batch_size = batch_size
         self._canvas_client: CanvasApiClient | None = None
         self._course_permissions_cache: dict[int, ExternalAccess | None] = {}
@@ -198,7 +200,6 @@ class CanvasConnector(
                     "courses",
                     params={
                         "per_page": "100",
-                        "enrollment_state": "active",
                     },
                 )
                 first_request = False
@@ -342,9 +343,9 @@ class CanvasConnector(
             sections=cast(list[TextSection | ImageSection], sections),
             source=DocumentSource.CANVAS,
             semantic_identifier=page.title or f"Page {page.page_id}",
-            doc_updated_at=datetime.fromisoformat(page.updated_at).astimezone(
-                timezone.utc
-            ),
+            doc_updated_at=datetime.fromisoformat(
+                page.updated_at.replace("Z", "+00:00")
+            ).astimezone(timezone.utc),
             metadata={"course_id": str(page.course_id)},
         )
 
@@ -370,7 +371,7 @@ class CanvasConnector(
             source=DocumentSource.CANVAS,
             semantic_identifier=assignment.name or f"Assignment {assignment.id}",
             doc_updated_at=datetime.fromisoformat(
-                assignment.updated_at
+                assignment.updated_at.replace("Z", "+00:00")
             ).astimezone(timezone.utc),
             metadata={"course_id": str(assignment.course_id)},
         )
@@ -394,7 +395,7 @@ class CanvasConnector(
         doc_updated_at = None
         if announcement.posted_at:
             doc_updated_at = datetime.fromisoformat(
-                announcement.posted_at
+                announcement.posted_at.replace("Z", "+00:00")
             ).astimezone(timezone.utc)
 
         return Document(
@@ -412,13 +413,20 @@ class CanvasConnector(
         self, credentials: dict[str, Any]
     ) -> dict[str, Any] | None:
         """Load and validate Canvas credentials."""
-        self._canvas_client = CanvasApiClient(
-            bearer_token=credentials["canvas_access_token"],
-            canvas_base_url=self.canvas_base_url,
-        )
+        access_token = credentials.get("canvas_access_token")
+        if not access_token:
+            raise ConnectorMissingCredentialError("Canvas")
 
         try:
+            self._canvas_client = CanvasApiClient(
+                bearer_token=access_token,
+                canvas_base_url=self.canvas_base_url,
+            )
             self._canvas_client.get("courses", params={"per_page": "1"})
+        except ValueError as e:
+            raise ConnectorValidationError(
+                f"Invalid Canvas base URL: {e}"
+            )
         except OnyxError as e:
             if e.status_code == 401:
                 raise CredentialExpiredError(
@@ -438,6 +446,10 @@ class CanvasConnector(
             if e.status_code == 401:
                 raise CredentialExpiredError(
                     "Canvas credential appears to be invalid or expired (HTTP 401)."
+                )
+            elif e.status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Canvas API token does not have sufficient permissions (HTTP 403)."
                 )
             elif e.status_code == 429:
                 raise ConnectorValidationError(
