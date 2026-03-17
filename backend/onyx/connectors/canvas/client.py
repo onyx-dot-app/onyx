@@ -13,7 +13,9 @@ from onyx.error_handling.exceptions import OnyxError
 # Requests timeout in seconds.
 _CANVAS_CALL_TIMEOUT: int = 30
 _CANVAS_API_VERSION: str = "/api/v1"
-_NEXT_LINK_PATTERN = re.compile(r'<([^>]+)>;\s*rel="next"')
+_NEXT_LINK_PATTERN: re.Pattern[str] = re.compile(
+    r'<([^>]+)>;\s*rel="next"'
+)
 
 
 def _error_code_for_status(status_code: int) -> OnyxErrorCode:
@@ -118,12 +120,21 @@ class CanvasApiClient:
         expected_host = urlparse(self.base_url).hostname
         for match in _NEXT_LINK_PATTERN.finditer(link_header):
             url = match.group(1)
-            if urlparse(url).hostname != expected_host:
+            parsed_url = urlparse(url)
+            if parsed_url.hostname != expected_host:
                 raise OnyxError(
                     OnyxErrorCode.BAD_GATEWAY,
                     detail=(
                         "Canvas pagination returned an unexpected host "
-                        f"({urlparse(url).hostname}); expected {expected_host}"
+                        f"({parsed_url.hostname}); expected {expected_host}"
+                    ),
+                )
+            if parsed_url.scheme != "https":
+                raise OnyxError(
+                    OnyxErrorCode.BAD_GATEWAY,
+                    detail=(
+                        "Canvas pagination link must use https, "
+                        f"got {parsed_url.scheme!r}"
                     ),
                 )
             return url
