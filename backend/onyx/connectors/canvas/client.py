@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -7,8 +8,11 @@ from urllib.parse import urlparse
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
+
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+
+logger = logging.getLogger(__name__)
 
 # Requests timeout in seconds.
 _CANVAS_CALL_TIMEOUT: int = 30
@@ -67,6 +71,10 @@ class CanvasApiClient:
         Returns a tuple of (json_body, next_url).
         next_url is parsed from the Link header and is None if there are no more pages.
         If full_url is provided, it is used directly (for following pagination links).
+
+        Security note: full_url must only be set to values returned by
+        ``_parse_next_link``, which validates the host against the configured
+        Canvas base URL.  Passing an arbitrary URL would leak the bearer token.
         """
         url = full_url if full_url else self._build_url(endpoint)
         headers = self._build_headers()
@@ -86,25 +94,32 @@ class CanvasApiClient:
                     OnyxErrorCode.BAD_GATEWAY,
                     detail=f"Invalid JSON in Canvas response: {e}",
                 )
+            logger.warning(
+                "Failed to parse JSON from Canvas error response "
+                "(status=%d): %s",
+                response.status_code,
+                e,
+            )
             response_json = {}
 
         if response.status_code >= 400:
             error: str = response.reason or f"HTTP {response.status_code}"
-            error_field = response_json.get("error")
-            if isinstance(error_field, dict):
-                response_error = error_field.get("message", "")
-                if response_error:
-                    error = response_error
-            elif isinstance(error_field, str):
-                error = error_field
-            # Canvas also returns {"errors": [{"message": "..."}]} for many endpoints
-            errors_list = response_json.get("errors")
-            if isinstance(errors_list, list) and errors_list:
-                first_error = errors_list[0]
-                if isinstance(first_error, dict):
-                    msg = first_error.get("message", "")
-                    if msg:
-                        error = msg
+            if isinstance(response_json, dict):
+                error_field = response_json.get("error")
+                if isinstance(error_field, dict):
+                    response_error = error_field.get("message", "")
+                    if response_error:
+                        error = response_error
+                elif isinstance(error_field, str):
+                    error = error_field
+                # Canvas also returns {"errors": [{"message": "..."}]} for many endpoints
+                errors_list = response_json.get("errors")
+                if isinstance(errors_list, list) and errors_list:
+                    first_error = errors_list[0]
+                    if isinstance(first_error, dict):
+                        msg = first_error.get("message", "")
+                        if msg:
+                            error = msg
             raise OnyxError(
                 _error_code_for_status(response.status_code),
                 detail=error,
