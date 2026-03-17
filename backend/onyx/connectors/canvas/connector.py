@@ -69,6 +69,20 @@ class CanvasPage(BaseModel):
     def id(self) -> int:
         return self.page_id
 
+    @classmethod
+    def from_api(
+        cls, payload: dict[str, Any], course_id: int
+    ) -> "CanvasPage":
+        return cls(
+            page_id=payload["page_id"],
+            url=payload["url"],
+            title=payload["title"],
+            body=payload.get("body"),
+            created_at=payload["created_at"],
+            updated_at=payload["updated_at"],
+            course_id=course_id,
+        )
+
 
 class CanvasAssignment(BaseModel):
     id: int
@@ -80,6 +94,21 @@ class CanvasAssignment(BaseModel):
     updated_at: str
     due_at: str | None = None
 
+    @classmethod
+    def from_api(
+        cls, payload: dict[str, Any], course_id: int
+    ) -> "CanvasAssignment":
+        return cls(
+            id=payload["id"],
+            name=payload["name"],
+            description=payload.get("description"),
+            html_url=payload["html_url"],
+            course_id=course_id,
+            created_at=payload["created_at"],
+            updated_at=payload["updated_at"],
+            due_at=payload.get("due_at"),
+        )
+
 
 class CanvasAnnouncement(BaseModel):
     id: int
@@ -88,6 +117,19 @@ class CanvasAnnouncement(BaseModel):
     html_url: str
     posted_at: str | None = None
     course_id: int
+
+    @classmethod
+    def from_api(
+        cls, payload: dict[str, Any], course_id: int
+    ) -> "CanvasAnnouncement":
+        return cls(
+            id=payload["id"],
+            title=payload["title"],
+            message=payload.get("message"),
+            html_url=payload["html_url"],
+            posted_at=payload.get("posted_at"),
+            course_id=course_id,
+        )
 
 
 CanvasStage: TypeAlias = Literal["pages", "assignments", "announcements"]
@@ -214,15 +256,7 @@ class CanvasConnector(
             if not response:
                 break
             pages.extend(
-                CanvasPage(
-                    page_id=p["page_id"],
-                    url=p["url"],
-                    title=p["title"],
-                    body=p.get("body"),
-                    created_at=p["created_at"],
-                    updated_at=p["updated_at"],
-                    course_id=course_id,
-                )
+                CanvasPage.from_api(p, course_id=course_id)
                 for p in response
             )
             if not next_url:
@@ -253,15 +287,8 @@ class CanvasConnector(
             if not response:
                 break
             assignments.extend(
-                CanvasAssignment(
-                    id=assignment["id"],
-                    name=assignment["name"],
-                    description=assignment.get("description"),
-                    html_url=assignment["html_url"],
-                    course_id=course_id,
-                    created_at=assignment["created_at"],
-                    updated_at=assignment["updated_at"],
-                    due_at=assignment.get("due_at"),
+                CanvasAssignment.from_api(
+                    assignment, course_id=course_id
                 )
                 for assignment in response
             )
@@ -296,14 +323,7 @@ class CanvasConnector(
             if not response:
                 break
             announcements.extend(
-                CanvasAnnouncement(
-                    id=a["id"],
-                    title=a["title"],
-                    message=a.get("message"),
-                    html_url=a["html_url"],
-                    posted_at=a.get("posted_at"),
-                    course_id=course_id,
-                )
+                CanvasAnnouncement.from_api(a, course_id=course_id)
                 for a in response
             )
             if not next_url:
