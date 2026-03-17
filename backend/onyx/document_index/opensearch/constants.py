@@ -68,7 +68,7 @@ class HybridSearchSubqueryConfiguration(Enum):
 # CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD.
 HYBRID_SEARCH_SUBQUERY_CONFIGURATION: HybridSearchSubqueryConfiguration = (
     HybridSearchSubqueryConfiguration(
-        int(os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION"))
+        int(os.environ["HYBRID_SEARCH_SUBQUERY_CONFIGURATION"])
     )
     if os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION", None) is not None
     else HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
@@ -89,7 +89,7 @@ class HybridSearchNormalizationPipeline(Enum):
 # is set but not a valid value. If not set, defaults to MIN_MAX.
 HYBRID_SEARCH_NORMALIZATION_PIPELINE: HybridSearchNormalizationPipeline = (
     HybridSearchNormalizationPipeline(
-        int(os.environ.get("HYBRID_SEARCH_NORMALIZATION_PIPELINE"))
+        int(os.environ["HYBRID_SEARCH_NORMALIZATION_PIPELINE"])
     )
     if os.environ.get("HYBRID_SEARCH_NORMALIZATION_PIPELINE", None) is not None
     else HybridSearchNormalizationPipeline.MIN_MAX
