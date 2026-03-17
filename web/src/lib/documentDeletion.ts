@@ -5,7 +5,6 @@ export async function scheduleDeletionJobForConnector(
   connectorId: number,
   credentialId: number
 ) {
-  await new Promise((resolve) => setTimeout(resolve, 5000));
   // Will schedule a background job which will:
   // 1. Remove all documents indexed by the connector / credential pair
   // 2. Remove the connector (if this is the only pair using the connector)
