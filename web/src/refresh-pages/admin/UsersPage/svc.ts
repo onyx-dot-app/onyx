@@ -127,6 +127,20 @@ export async function inviteUsers(emails: string[]): Promise<void> {
   }
 }
 
+export async function resetPassword(
+  email: string
+): Promise<{ user_id: string; new_password: string }> {
+  const res = await fetch("/api/password/reset_password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_email: email }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res, "Failed to reset password"));
+  }
+  return res.json();
+}
+
 export async function downloadUsersCsv(): Promise<void> {
   const res = await fetch("/api/manage/users/download");
   if (!res.ok) {
