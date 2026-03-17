@@ -321,6 +321,17 @@ OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
 OPENSEARCH_OVERRIDE_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES = int(
     os.environ.get("OPENSEARCH_DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES") or 0
 )
+# If set, will override the default number of shards and replicas for the index.
+OPENSEARCH_INDEX_NUM_SHARDS: int | None = (
+    int(os.environ["OPENSEARCH_INDEX_NUM_SHARDS"])
+    if os.environ.get("OPENSEARCH_INDEX_NUM_SHARDS", None) is not None
+    else None
+)
+OPENSEARCH_INDEX_NUM_REPLICAS: int | None = (
+    int(os.environ["OPENSEARCH_INDEX_NUM_REPLICAS"])
+    if os.environ.get("OPENSEARCH_INDEX_NUM_REPLICAS", None) is not None
+    else None
+)
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 # NOTE: this is used if and only if the vespa config server is accessible via a

@@ -11,6 +11,8 @@ from pydantic import model_serializer
 from pydantic import model_validator
 from pydantic import SerializerFunctionWrapHandler
 
+from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_REPLICAS
+from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_SHARDS
 from onyx.configs.app_configs import OPENSEARCH_TEXT_ANALYZER
 from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
 from onyx.document_index.interfaces_new import TenantState
@@ -517,77 +519,34 @@ class DocumentSchema:
         return schema
 
     @staticmethod
-    def get_index_settings() -> dict[str, Any]:
-        """
-        Standard settings for reasonable local index and search performance.
-        """
-        return {
-            "index": {
-                "number_of_shards": 1,
-                "number_of_replicas": 1,
-                # Required for vector search.
-                "knn": True,
-                "knn.algo_param.ef_search": EF_SEARCH,
-            }
-        }
-
-    @staticmethod
-    def get_index_settings_for_aws_managed_opensearch_st_dev() -> dict[str, Any]:
-        """
-        Settings for AWS-managed OpenSearch.
-
-        Our AWS-managed OpenSearch cluster has 3 data nodes in 3 availability
-        zones.
-          - We use 3 shards to distribute load across all data nodes.
-          - We use 2 replicas to ensure each shard has a copy in each
-            availability zone. This is a hard requirement from AWS. The number
-            of data copies, including the primary (not a replica) copy, must be
-            divisible by the number of AZs.
-        """
-        return {
-            "index": {
-                "number_of_shards": 3,
-                "number_of_replicas": 2,
-                # Required for vector search.
-                "knn": True,
-                "knn.algo_param.ef_search": EF_SEARCH,
-            }
-        }
-
-    @staticmethod
-    def get_index_settings_for_aws_managed_opensearch_mt_cloud() -> dict[str, Any]:
-        """
-        Settings for AWS-managed OpenSearch in multi-tenant cloud.
-
-        324 shards very roughly targets a storage load of ~30Gb per shard, which
-        according to AWS OpenSearch documentation is within a good target range.
-
-        As documented above we need 2 replicas for a total of 3 copies of the
-        data because the cluster is configured with 3-AZ awareness.
-        """
-        return {
-            "index": {
-                "number_of_shards": 324,
-                "number_of_replicas": 2,
-                # Required for vector search.
-                "knn": True,
-                "knn.algo_param.ef_search": EF_SEARCH,
-            }
-        }
-
-    @staticmethod
     def get_index_settings_based_on_environment() -> dict[str, Any]:
         """
         Returns the index settings based on the environment.
         """
         if USING_AWS_MANAGED_OPENSEARCH:
+            # NOTE: The number of data copies, including the primary (not a
+            # replica) copy, must be divisible by the number of AZs.
             if MULTI_TENANT:
-                return (
-                    DocumentSchema.get_index_settings_for_aws_managed_opensearch_mt_cloud()
-                )
+                number_of_shards = 324
+                number_of_replicas = 2
             else:
-                return (
-                    DocumentSchema.get_index_settings_for_aws_managed_opensearch_st_dev()
-                )
+                number_of_shards = 3
+                number_of_replicas = 2
         else:
-            return DocumentSchema.get_index_settings()
+            number_of_shards = 1
+            number_of_replicas = 1
+
+        if OPENSEARCH_INDEX_NUM_SHARDS is not None:
+            number_of_shards = OPENSEARCH_INDEX_NUM_SHARDS
+        if OPENSEARCH_INDEX_NUM_REPLICAS is not None:
+            number_of_replicas = OPENSEARCH_INDEX_NUM_REPLICAS
+
+        return {
+            "index": {
+                "number_of_shards": number_of_shards,
+                "number_of_replicas": number_of_replicas,
+                # Required for vector search.
+                "knn": True,
+                "knn.algo_param.ef_search": EF_SEARCH,
+            }
+        }
