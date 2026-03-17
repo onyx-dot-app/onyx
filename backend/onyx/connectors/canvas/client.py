@@ -45,7 +45,11 @@ class CanvasApiClient:
             raise ValueError("canvas_base_url must use https")
 
         self.bearer_token = bearer_token
-        self.base_url = canvas_base_url.rstrip("/").removesuffix(_CANVAS_API_VERSION) + _CANVAS_API_VERSION
+        self.base_url = (
+            canvas_base_url.rstrip("/")
+            .removesuffix(_CANVAS_API_VERSION)
+            + _CANVAS_API_VERSION
+        )
 
     def get(
         self,
@@ -80,7 +84,7 @@ class CanvasApiClient:
             response_json = {}
 
         if response.status_code >= 400:
-            error = response.reason
+            error: str = response.reason or f"HTTP {response.status_code}"
             error_field = response_json.get("error")
             if isinstance(error_field, dict):
                 response_error = error_field.get("message", "")
@@ -114,8 +118,15 @@ class CanvasApiClient:
         expected_host = urlparse(self.base_url).hostname
         for match in _NEXT_LINK_PATTERN.finditer(link_header):
             url = match.group(1)
-            if urlparse(url).hostname == expected_host:
-                return url
+            if urlparse(url).hostname != expected_host:
+                raise OnyxError(
+                    OnyxErrorCode.BAD_GATEWAY,
+                    detail=(
+                        "Canvas pagination returned an unexpected host "
+                        f"({urlparse(url).hostname}); expected {expected_host}"
+                    ),
+                )
+            return url
         return None
 
     def _build_headers(self) -> dict[str, str]:
