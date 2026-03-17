@@ -2,6 +2,7 @@ from typing import Any
 
 from celery import shared_task
 from celery import Task
+from sqlalchemy.exc import OperationalError
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.cache.factory import get_shared_cache_backend
@@ -37,7 +38,7 @@ from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
     name=OnyxCeleryTask.CHECK_FOR_AUTO_LLM_UPDATE,
     ignore_result=True,
     soft_time_limit=300,  # 5 minute timeout
-    autoretry_for=(Exception,),
+    autoretry_for=(OperationalError, OSError),
     retry_backoff=True,
     retry_jitter=True,
     retry_kwargs={"max_retries": 3},
@@ -89,6 +90,7 @@ def check_for_auto_llm_updates(
     name=OnyxCeleryTask.CLOUD_CHECK_FOR_AUTO_LLM_UPDATE,
     ignore_result=True,
     soft_time_limit=15 * 60,
+    time_limit=16 * 60,
     trail=False,
     bind=True,
 )
@@ -112,14 +114,13 @@ def cloud_check_for_auto_llm_updates(
     try:
         llm_recommendations = fetch_llm_recommendations_from_github()
         if not llm_recommendations:
-            task_logger.warning("Failed to fetch GitHub config")
-            return None
+            raise RuntimeError("Failed to fetch GitHub config")
 
         shared_cache = get_shared_cache_backend()
         last_updated_at = get_cached_last_updated_at(cache_backend=shared_cache)
         if last_updated_at and llm_recommendations.updated_at <= last_updated_at:
             set_cached_last_updated_at(
-                llm_recommendations.updated_at,
+                last_updated_at,
                 cache_backend=shared_cache,
             )
             task_logger.debug("GitHub config unchanged, skipping cloud fanout")

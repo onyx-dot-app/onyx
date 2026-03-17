@@ -18,6 +18,7 @@ from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.db.llm import fetch_auto_mode_providers
 from onyx.db.llm import sync_auto_mode_models
+from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.utils.logger import setup_logger
 
@@ -108,6 +109,11 @@ def sync_llm_models_from_github(
     Returns:
         Dict of provider_name -> number of changes made.
     """
+    auto_providers = fetch_auto_mode_providers(db_session)
+    if not auto_providers:
+        logger.debug("No providers in Auto mode found")
+        return {}
+
     # Fetch config from GitHub
     config = fetch_llm_recommendations_from_github()
     if not config:
@@ -119,6 +125,7 @@ def sync_llm_models_from_github(
         config=config,
         force=force,
         cache_backend=cache_backend,
+        auto_providers=auto_providers,
     )
 
 
@@ -127,11 +134,13 @@ def sync_llm_models(
     config: LLMRecommendations,
     force: bool = False,
     cache_backend: CacheBackend | None = None,
+    auto_providers: list[LLMProviderModel] | None = None,
 ) -> dict[str, int]:
     results: dict[str, int] = {}
 
     # Get all providers in Auto mode
-    auto_providers = fetch_auto_mode_providers(db_session)
+    if auto_providers is None:
+        auto_providers = fetch_auto_mode_providers(db_session)
     if not auto_providers:
         logger.debug("No providers in Auto mode found")
         return {}
@@ -140,7 +149,7 @@ def sync_llm_models(
     last_updated_at = get_cached_last_updated_at(cache_backend=cache_backend)
     if not force and last_updated_at and config.updated_at <= last_updated_at:
         logger.debug("GitHub config unchanged, skipping sync")
-        set_cached_last_updated_at(config.updated_at, cache_backend=cache_backend)
+        set_cached_last_updated_at(last_updated_at, cache_backend=cache_backend)
         return {}
 
     for provider in auto_providers:

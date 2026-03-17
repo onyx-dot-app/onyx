@@ -3,6 +3,8 @@ from datetime import UTC
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from onyx.background.celery.tasks.llm_model_update.tasks import (
     cloud_check_for_auto_llm_updates,
 )
@@ -52,9 +54,10 @@ def test_cloud_check_for_auto_llm_updates_skips_fanout_when_config_unchanged(
     redis_client, lock = _build_redis_mock_with_lock()
     mock_get_redis_client.return_value = redis_client
     llm_recommendations = _build_llm_recommendations()
+    cached_last_updated_at = datetime(2026, 3, 17, 1, 0, tzinfo=UTC)
     shared_cache = MagicMock()
     mock_fetch_recommendations.return_value = llm_recommendations
-    mock_get_cached_last_updated_at.return_value = llm_recommendations.updated_at
+    mock_get_cached_last_updated_at.return_value = cached_last_updated_at
     mock_get_shared_cache_backend.return_value = shared_cache
 
     task_app = MagicMock()
@@ -63,9 +66,52 @@ def test_cloud_check_for_auto_llm_updates_skips_fanout_when_config_unchanged(
 
     task_app.send_task.assert_not_called()
     mock_set_cached_last_updated_at.assert_called_once_with(
-        llm_recommendations.updated_at,
+        cached_last_updated_at,
         cache_backend=shared_cache,
     )
+    lock.release.assert_called_once()
+
+
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_redis_client")
+def test_cloud_check_for_auto_llm_updates_skips_when_lock_already_held(
+    mock_get_redis_client: MagicMock,
+) -> None:
+    redis_client = MagicMock()
+    lock = MagicMock()
+    lock.acquire.return_value = False
+    redis_client.lock.return_value = lock
+    mock_get_redis_client.return_value = redis_client
+
+    task_app = MagicMock()
+    with patch.object(cloud_check_for_auto_llm_updates, "app", task_app):
+        result = cloud_check_for_auto_llm_updates.run()
+
+    assert result is None
+    task_app.send_task.assert_not_called()
+    lock.release.assert_not_called()
+
+
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_shared_cache_backend")
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.set_cached_last_updated_at")
+@patch(
+    "onyx.background.celery.tasks.llm_model_update.tasks.fetch_llm_recommendations_from_github"
+)
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_redis_client")
+def test_cloud_check_for_auto_llm_updates_fails_loudly_on_fetch_error(
+    mock_get_redis_client: MagicMock,
+    mock_fetch_recommendations: MagicMock,
+    mock_set_cached_last_updated_at: MagicMock,
+    mock_get_shared_cache_backend: MagicMock,
+) -> None:
+    redis_client, lock = _build_redis_mock_with_lock()
+    mock_get_redis_client.return_value = redis_client
+    mock_fetch_recommendations.return_value = None
+
+    with pytest.raises(RuntimeError, match="Failed to fetch GitHub config"):
+        cloud_check_for_auto_llm_updates.run()
+
+    mock_get_shared_cache_backend.assert_not_called()
+    mock_set_cached_last_updated_at.assert_not_called()
     lock.release.assert_called_once()
 
 
@@ -128,4 +174,45 @@ def test_cloud_check_for_auto_llm_updates_enqueues_tenant_updates_on_change(
         llm_recommendations.updated_at,
         cache_backend=shared_cache,
     )
+    lock.release.assert_called_once()
+
+
+@patch(
+    "onyx.background.celery.tasks.llm_model_update.tasks.IGNORED_SYNCING_TENANT_LIST",
+    [],
+)
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_all_tenant_ids")
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_shared_cache_backend")
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.set_cached_last_updated_at")
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_cached_last_updated_at")
+@patch(
+    "onyx.background.celery.tasks.llm_model_update.tasks.fetch_llm_recommendations_from_github"
+)
+@patch("onyx.background.celery.tasks.llm_model_update.tasks.get_redis_client")
+def test_cloud_check_for_auto_llm_updates_releases_lock_without_caching_on_fanout_error(
+    mock_get_redis_client: MagicMock,
+    mock_fetch_recommendations: MagicMock,
+    mock_get_cached_last_updated_at: MagicMock,
+    mock_set_cached_last_updated_at: MagicMock,
+    mock_get_shared_cache_backend: MagicMock,
+    mock_get_all_tenant_ids: MagicMock,
+) -> None:
+    redis_client, lock = _build_redis_mock_with_lock()
+    mock_get_redis_client.return_value = redis_client
+    llm_recommendations = _build_llm_recommendations()
+    shared_cache = MagicMock()
+    mock_fetch_recommendations.return_value = llm_recommendations
+    mock_get_cached_last_updated_at.return_value = None
+    mock_get_shared_cache_backend.return_value = shared_cache
+    mock_get_all_tenant_ids.return_value = ["tenant_a"]
+
+    task_app = MagicMock()
+    task_app.send_task.side_effect = RuntimeError("publish failed")
+    with (
+        patch.object(cloud_check_for_auto_llm_updates, "app", task_app),
+        pytest.raises(RuntimeError, match="publish failed"),
+    ):
+        cloud_check_for_auto_llm_updates.run()
+
+    mock_set_cached_last_updated_at.assert_not_called()
     lock.release.assert_called_once()
