@@ -671,17 +671,17 @@ class TestLoadFromCheckpointWithPermSync:
         end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
 
         gen = connector.load_from_checkpoint_with_perm_sync(start, end, cp)
-        items: list[Any] = []
-        new_cp = cp
-        for item in gen:
-            if isinstance(item, CanvasConnectorCheckpoint):
-                new_cp = item
-            else:
-                items.append(item)
+        items: list[Document | ConnectorFailure] = []
+        try:
+            while True:
+                items.append(next(gen))
+        except StopIteration as e:
+            new_cp = e.value
 
         assert len(items) == 1
         assert isinstance(items[0], Document)
         assert items[0].external_access == expected_access
+        assert new_cp.stage == "assignments"
         mock_perms.assert_called_once()
 
 
