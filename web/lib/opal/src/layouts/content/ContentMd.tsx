@@ -2,7 +2,7 @@
 
 import { Button } from "@opal/components/buttons/button/components";
 import { Tag, type TagProps } from "@opal/components/tag/components";
-import type { ContainerSizeVariants } from "@opal/shared";
+import type { ContainerSizeVariants } from "@opal/types";
 import SvgAlertCircle from "@opal/icons/alert-circle";
 import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";

@@ -5,7 +5,7 @@ import {
   useDisabled,
   type InteractiveStatefulProps,
 } from "@opal/core";
-import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/shared";
+import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";

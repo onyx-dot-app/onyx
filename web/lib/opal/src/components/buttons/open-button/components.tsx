@@ -6,7 +6,7 @@ import {
   type InteractiveStatefulProps,
   type InteractiveStatefulInteraction,
 } from "@opal/core";
-import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/shared";
+import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, IconProps } from "@opal/types";

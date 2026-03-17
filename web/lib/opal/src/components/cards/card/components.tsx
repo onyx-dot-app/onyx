@@ -1,5 +1,5 @@
 import "@opal/components/cards/card/styles.css";
-import type { ContainerSizeVariants } from "@opal/shared";
+import type { ContainerSizeVariants } from "@opal/types";
 import { containerSizeVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 

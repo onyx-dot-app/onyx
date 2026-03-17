@@ -1,7 +1,7 @@
 import { Card } from "@opal/components/cards/card/components";
 import { Content } from "@opal/layouts";
 import { SvgEmpty } from "@opal/icons";
-import type { ContainerSizeVariants } from "@opal/shared";
+import type { ContainerSizeVariants } from "@opal/types";
 import type { IconFunctionComponent } from "@opal/types";
 
 // ---------------------------------------------------------------------------

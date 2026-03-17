@@ -6,33 +6,12 @@
  * circular imports and gives every consumer a single source of truth.
  */
 
-// ---------------------------------------------------------------------------
-// Size Variants
-//
-// A named scale of size presets (lg → 2xs, plus fit) that map to Tailwind
-// utility classes for height, min-width, and padding.
-//
-// Consumers:
-//   - Interactive.Container  (height + min-width + padding)
-//   - Button                 (icon sizing)
-//   - ContentAction          (padding only)
-//   - Content (ContentXl / ContentLg / ContentMd)  (edit-button size)
-// ---------------------------------------------------------------------------
-
-// Base size types:
-type SizeVariants = "fit" | "full" | "lg" | "md" | "sm" | "xs" | "2xs";
-type OverridableExtremaSizeVariants = SizeVariants | number;
-
-// Convenience types:
-//
-// NOTE (@raunakab + @nmgarza5)
-// There are many components throughout the library that need to "extract" very specific sizings from the full gamut that is available.
-// For those components, we've extracted these below "convenience" types.
-type ContainerSizeVariants = Exclude<SizeVariants, "full">;
-type ExtremaSizeVariants = Exclude<
+import type {
   SizeVariants,
-  "lg" | "md" | "sm" | "xs" | "2xs"
->;
+  OverridableExtremaSizeVariants,
+  ContainerSizeVariants,
+  ExtremaSizeVariants,
+} from "./types";
 
 /**
  * Size-variant scale.
@@ -113,6 +92,7 @@ export {
   type ExtremaSizeVariants,
   type ContainerSizeVariants,
   type OverridableExtremaSizeVariants,
+  type SizeVariants,
   containerSizeVariants,
   widthVariants,
   heightVariants,

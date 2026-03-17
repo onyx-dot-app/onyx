@@ -18,7 +18,8 @@ import {
 } from "@opal/layouts/content/ContentMd";
 import type { TagProps } from "@opal/components/tag/components";
 import type { IconFunctionComponent } from "@opal/types";
-import { widthVariants, type ExtremaSizeVariants } from "@opal/shared";
+import { widthVariants } from "@opal/shared";
+import type { ExtremaSizeVariants } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Shared types

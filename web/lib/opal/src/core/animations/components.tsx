@@ -1,8 +1,8 @@
 import "@opal/core/animations/styles.css";
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { cn } from "@opal/utils";
-import type { WithoutStyles } from "@opal/types";
-import { widthVariants, type ExtremaSizeVariants } from "@opal/shared";
+import type { WithoutStyles, ExtremaSizeVariants } from "@opal/types";
+import { widthVariants } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Context-per-group registry

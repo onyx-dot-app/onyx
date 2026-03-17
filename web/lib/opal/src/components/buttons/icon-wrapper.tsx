@@ -1,4 +1,4 @@
-import type { ContainerSizeVariants } from "@opal/shared";
+import type { ContainerSizeVariants } from "@opal/types";
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
 

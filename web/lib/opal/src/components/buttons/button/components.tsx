@@ -1,7 +1,7 @@
 import "@opal/components/buttons/button/styles.css";
 import "@opal/components/tooltip.css";
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
-import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/shared";
+import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
