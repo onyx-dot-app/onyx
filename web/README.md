@@ -30,6 +30,9 @@ create a `.env.local` file in the `web/` directory with the following configurat
 # Point local dev server to cloud backend
 INTERNAL_URL=https://st-dev.onyx.app/api
 
+# Public backend origin for browser-only WebSocket flows
+NEXT_PUBLIC_ONYX_BACKEND_URL=https://st-dev.onyx.app
+
 # Debug auth cookie for authenticating against remote backend
 # This cookie is automatically injected into API requests when in development mode
 # To get this value:
@@ -48,6 +51,7 @@ may need to delete the cookies for the `localhost` domain.
 
 - The `.env.local` file should be created in the `web/` directory (same level as `package.json`)
 - After creating or modifying `.env.local`, restart your development server for changes to take effect
+- Set `NEXT_PUBLIC_ONYX_BACKEND_URL` when browser-side WebSocket traffic should hit a remote HTTPS domain instead of `localhost`
 - The `DEBUG_AUTH_COOKIE` is only used in development mode (`NODE_ENV=development`)
 - If `INTERNAL_URL` is not set, the frontend will connect to the local backend at `http://127.0.0.1:8080`
 - Keep your `.env.local` file secure and never commit it to version control (it should already be in `.gitignore`)
