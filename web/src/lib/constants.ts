@@ -14,7 +14,7 @@ export const DEFAULT_APPLICATION_NAME = "ACTIVA";
 export const INTERNAL_URL = process.env.INTERNAL_URL || "http://localhost:8080";
 
 // Documentation URLs
-export const DOCS_BASE_URL = "https://docs.onyx.app";
+export const DOCS_BASE_URL = "https://docs.activa.ai";
 export const DOCS_ADMINS_PATH = `${DOCS_BASE_URL}/admins`;
 
 export const MCP_INTERNAL_URL =
@@ -25,11 +25,18 @@ export const MCP_INTERNAL_URL =
 export const SERVER_SIDE_ONLY__AUTH_TYPE = (process.env.AUTH_TYPE ||
   AuthType.BASIC) as AuthType;
 
-export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
-  process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===
-  "true";
+const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_POWERED =
+  (
+    process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_ACTIVA_POWERED ??
+    process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED
+  )?.toLowerCase() === "true";
 
-export const TENANT_ID_COOKIE_NAME = "onyx_tid";
+export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_ACTIVA_POWERED =
+  NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_POWERED;
+export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
+  NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_ACTIVA_POWERED;
+
+export const TENANT_ID_COOKIE_NAME = "activa_tid";
 
 export const SEARCH_TYPE_COOKIE_NAME = "search_type";
 export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
@@ -134,4 +141,4 @@ export const LOGO_UNFOLDED_SIZE_PX = 88;
 export const DEFAULT_CONTEXT_TOKENS = 120_000;
 export const MAX_CHUNKS_FED_TO_CHAT = 25;
 
-export const APP_SLOGAN = "Open Source AI Platform";
+export const APP_SLOGAN = "De la informacion a la accion.";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LOGOUT_DISABLED } from "@/lib/constants";
+import { DOCS_BASE_URL, LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/interfaces/settings";
 import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -109,7 +109,7 @@ function SettingsPopover({
           <LineItem
             key="help-faq"
             icon={SvgExternalLink}
-            href="https://docs.onyx.app"
+            href={DOCS_BASE_URL}
             target="_blank"
             rel="noopener noreferrer"
           >
