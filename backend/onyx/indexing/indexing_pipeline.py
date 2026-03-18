@@ -161,7 +161,7 @@ def embed_chunks_in_batches(
     embedder: IndexingEmbedder,
     tenant_id: str,
     request_id: str | None,
-) -> tuple[Path, list[ConnectorFailure]]:
+) -> ChunkEmbeddingResult:
     """Embeds chunks in batches of CHUNKS_PER_BATCH, spilling each batch to disk.
 
     For each batch:
@@ -174,6 +174,7 @@ def embed_chunks_in_batches(
       - Accumulated embedding failures across all batches
     """
     tmpdir = Path(tempfile.mkdtemp(prefix="onyx_embeddings_"))
+    successful_chunk_ids: list[tuple[int, str]] = []
     all_embedding_failures: list[ConnectorFailure] = []
 
     for batch_idx, chunk_batch in enumerate(batch_generator(chunks, CHUNKS_PER_BATCH)):
@@ -187,6 +188,18 @@ def embed_chunks_in_batches(
         )
         all_embedding_failures.extend(embedding_failures)
 
+        # Track which chunks succeeded by excluding failed doc IDs
+        failed_doc_ids = {
+            f.failed_document.document_id
+            for f in embedding_failures
+            if f.failed_document
+        }
+        successful_chunk_ids.extend(
+            (c.chunk_id, c.source_document.id)
+            for c in chunk_batch
+            if c.source_document.id not in failed_doc_ids
+        )
+
         # Spill embeddings to disk
         batch_file = tmpdir / f"batch_{batch_idx}.pkl"
         with open(batch_file, "wb") as f:
@@ -195,27 +208,46 @@ def embed_chunks_in_batches(
         # Free memory
         del chunks_with_embeddings
 
-    return tmpdir, all_embedding_failures
+    return ChunkEmbeddingResult(
+        embedding_path=tmpdir,
+        successful_chunk_ids=successful_chunk_ids,
+        connector_failures=all_embedding_failures,
+    )
 
 
-def load_embedded_chunks(
+class EmbedStream:
+    def __init__(self, tmpdir: Path) -> None:
+        self._tmpdir = tmpdir
+
+    def stream(self) -> Iterator[IndexChunk]:
+        for batch_file in sorted(self._tmpdir.glob("batch_*.pkl")):
+            with open(batch_file, "rb") as f:
+                batch: list[IndexChunk] = pickle.load(f)
+            yield from batch
+
+
+@contextmanager
+def use_embed_stream(
     tmpdir: Path,
-) -> Generator[list[IndexChunk], None, None]:
-    """Reads back embedded chunk batches from disk, yielding one batch at a time.
+) -> Generator[EmbedStream, None, None]:
+    """Context manager that provides a factory for creating chunk iterators.
 
-    After each batch is yielded and consumed, the caller can delete the reference
-    to free memory before the next batch is loaded. The batch file is deleted
-    after reading to free disk space incrementally.
+    Each call to stream() returns a fresh generator over the embedded chunks
+    on disk, so the data can be iterated multiple times (e.g. once per
+    document_index). Files are cleaned up when the context manager exits.
+
+    Usage:
+        with use_embed_stream(embedding_path) as embed_stream:
+            for document_index in document_indices:
+                for chunk in embed_stream.stream():
+                    ...
     """
-    batch_files = sorted(tmpdir.glob("batch_*.pkl"))
-    for batch_file in batch_files:
-        with open(batch_file, "rb") as f:
-            batch: list[IndexChunk] = pickle.load(f)
-        batch_file.unlink()
-        yield batch
-
-    # Clean up the temp directory once all batches have been consumed
-    tmpdir.rmdir()
+    try:
+        yield EmbedStream(tmpdir)
+    finally:
+        for batch_file in tmpdir.glob("batch_*.pkl"):
+            batch_file.unlink(missing_ok=True)
+        tmpdir.rmdir()
 
 
 def get_doc_ids_to_update(
@@ -716,6 +748,29 @@ def add_contextual_summaries(
     return chunks
 
 
+def _verify_indexing_completeness(
+    insertion_records: list[DocumentInsertionRecord],
+    write_failures: list[ConnectorFailure],
+    embedding_failed_doc_ids: set[str],
+    updatable_ids: list[str],
+    document_index_name: str,
+) -> None:
+    """Verify that every updatable document was either indexed or reported as failed."""
+    all_returned_doc_ids = (
+        {r.document_id for r in insertion_records}
+        | {f.failed_document.document_id for f in write_failures if f.failed_document}
+        | embedding_failed_doc_ids
+    )
+    if all_returned_doc_ids != set(updatable_ids):
+        raise RuntimeError(
+            f"Some documents were not successfully indexed. "
+            f"Updatable IDs: {updatable_ids}, "
+            f"Returned IDs: {all_returned_doc_ids}. "
+            f"This should never happen. "
+            f"This occured for document index {document_index_name}"
+        )
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
@@ -790,30 +845,30 @@ def index_doc_batch(
         )
 
     logger.debug("Starting embedding")
-    chunks_with_embeddings, embedding_failures = (
-        embed_chunks_with_failure_handling(
-            chunks=chunks,
-            embedder=embedder,
-            tenant_id=tenant_id,
-            request_id=request_id,
-        )
-        if chunks
-        else ([], [])
+    embedding_result = embed_chunks_in_batches(
+        chunks=chunks,
+        embedder=embedder,
+        tenant_id=tenant_id,
+        request_id=request_id,
     )
 
-    chunk_content_scores = [1.0] * len(chunks_with_embeddings)
-
     updatable_ids = [doc.id for doc in context.updatable_docs]
+    updatable_chunk_data = [
+        UpdatableChunkData(
+            chunk_id=chunk_id,
+            document_id=document_id,
+            boost_score=1.0,
+        )
+        for chunk_id, document_id in embedding_result.successful_chunk_ids
+    ]
 
     # Acquires a lock on the documents so that no other process can modify them
     # NOTE: don't need to acquire till here, since this is when the actual race condition
     # with Vespa can occur.
-    with adapter.lock_context(context.updatable_docs):
-        # we're concerned about race conditions where multiple simultaneous indexings might result
-        # in one set of metadata overwriting another one in vespa.
-        # we still write data here for the immediate and most likely correct sync, but
-        # to resolve this, an update of the last modified field at the end of this loop
-        # always triggers a final metadata sync via the celery queue
+    with (
+        adapter.lock_context(context.updatable_docs),
+        use_embed_stream(embedding_result.embedding_path) as embed_stream,
+    ):
         enricher = adapter.prepare_enrichment(
             context=context,
             tenant_id=tenant_id,
@@ -825,11 +880,11 @@ def index_doc_batch(
             for chunk, score in zip(chunks_with_embeddings, chunk_content_scores)
         ]
 
-        short_descriptor_list = [
-            chunk.to_short_descriptor() for chunk in metadata_aware_chunks
-        ]
-        short_descriptor_log = str(short_descriptor_list)[:1024]
-        logger.debug(f"Indexing the following chunks: {short_descriptor_log}")
+        embedding_failed_doc_ids = {
+            f.failed_document.document_id
+            for f in embedding_result.connector_failures
+            if f.failed_document
+        }
 
         primary_doc_idx_insertion_records: list[DocumentInsertionRecord] | None = None
         primary_doc_idx_vector_db_write_failures: list[ConnectorFailure] | None = None
@@ -838,51 +893,30 @@ def index_doc_batch(
             return metadata_aware_chunks
 
         for document_index in document_indices:
-            (
-                insertion_records,
-                vector_db_write_failures,
-            ) = write_chunks_to_vector_db_with_backoff(
+
+            def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
+                for chunk in embed_stream.stream():
+                    yield enricher.enrich_chunk(chunk, 1.0)
+
+            insertion_records, write_failures = write_chunks_to_vector_db_with_backoff(
                 document_index=document_index,
-                make_chunks=chunk_iterable_creator,
-                index_batch_params=IndexBatchParams(
-                    doc_id_to_previous_chunk_cnt=enricher.doc_id_to_previous_chunk_cnt,
-                    doc_id_to_new_chunk_cnt=enricher.doc_id_to_new_chunk_cnt,
-                    tenant_id=tenant_id,
-                    large_chunks_enabled=chunker.enable_large_chunks,
-                ),
+                chunks=_enriched_stream(),
+                index_batch_params=index_batch_params,
             )
 
-            all_returned_doc_ids: set[str] = (
-                {record.document_id for record in insertion_records}
-                .union(
-                    {
-                        record.failed_document.document_id
-                        for record in vector_db_write_failures
-                        if record.failed_document
-                    }
-                )
-                .union(
-                    {
-                        record.failed_document.document_id
-                        for record in embedding_failures
-                        if record.failed_document
-                    }
-                )
+            _verify_indexing_completeness(
+                insertion_records=insertion_records,
+                write_failures=write_failures,
+                embedding_failed_doc_ids=embedding_failed_doc_ids,
+                updatable_ids=updatable_ids,
+                document_index_name=document_index.__class__.__name__,
             )
-            if all_returned_doc_ids != set(updatable_ids):
-                raise RuntimeError(
-                    f"Some documents were not successfully indexed. "
-                    f"Updatable IDs: {updatable_ids}, "
-                    f"Returned IDs: {all_returned_doc_ids}. "
-                    "This should never happen."
-                    f"This occurred for document index {document_index.__class__.__name__}"
-                )
             # We treat the first document index we got as the primary one used
             # for reporting the state of indexing.
             if primary_doc_idx_insertion_records is None:
                 primary_doc_idx_insertion_records = insertion_records
             if primary_doc_idx_vector_db_write_failures is None:
-                primary_doc_idx_vector_db_write_failures = vector_db_write_failures
+                primary_doc_idx_vector_db_write_failures = write_failures
 
         adapter.post_index(
             context=context,
@@ -894,12 +928,13 @@ def index_doc_batch(
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None
     return IndexingPipelineResult(
-        new_docs=len(
-            [r for r in primary_doc_idx_insertion_records if not r.already_existed]
+        new_docs=sum(
+            1 for r in primary_doc_idx_insertion_records if not r.already_existed
         ),
         total_docs=len(filtered_documents),
-        total_chunks=total_chunks,
-        failures=primary_doc_idx_vector_db_write_failures + embedding_failures,
+        total_chunks=len(embedding_result.successful_chunk_ids),
+        failures=primary_doc_idx_vector_db_write_failures
+        + embedding_result.connector_failures,
     )
 
 

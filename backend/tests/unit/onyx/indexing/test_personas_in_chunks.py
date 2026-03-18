@@ -163,8 +163,8 @@ def _run_adapter_build(
         return [enricher.enrich_chunk(chunk, 1.0)]
 
 
-def test_build_metadata_aware_chunks_includes_persona_ids() -> None:
-    """UserFileIndexingAdapter.build_metadata_aware_chunks writes persona IDs
+def test_prepare_enrichment_includes_persona_ids() -> None:
+    """UserFileIndexingAdapter.prepare_enrichment writes persona IDs
     fetched from the DB into each chunk's metadata."""
     file_id = str(uuid4())
     persona_ids = [5, 12]
@@ -181,7 +181,7 @@ def test_build_metadata_aware_chunks_includes_persona_ids() -> None:
     assert chunks[0].user_project == project_ids
 
 
-def test_build_metadata_aware_chunks_missing_file_defaults_to_empty() -> None:
+def test_prepare_enrichment_missing_file_defaults_to_empty() -> None:
     """When a file has no persona or project associations in the DB, the
     adapter should default to empty lists (not KeyError or None)."""
     file_id = str(uuid4())
