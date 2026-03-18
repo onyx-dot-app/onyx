@@ -166,9 +166,7 @@ function ConnectorRow({
       onClick={handleRowClick}
     >
       <TableCell className="">
-        <Truncated className="max-w-[200px] xl:max-w-[400px] inline-block ellipsis truncate">
-          {ccPairsIndexingStatus.name}
-        </Truncated>
+        <Truncated>{ccPairsIndexingStatus.name}</Truncated>
       </TableCell>
       <TableCell>
         {timeAgo(ccPairsIndexingStatus?.last_success) || "-"}
@@ -247,9 +245,7 @@ function FederatedConnectorRow({
       onClick={handleRowClick}
     >
       <TableCell className="">
-        <Truncated className="max-w-[200px] xl:max-w-[400px] inline-block ellipsis truncate">
-          {federatedConnector.name}
-        </Truncated>
+        <Truncated>{federatedConnector.name}</Truncated>
       </TableCell>
       <TableCell>N/A</TableCell>
       <TableCell>
