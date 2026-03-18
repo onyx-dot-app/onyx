@@ -13,10 +13,10 @@ import type {
   OnyxDataColumn,
   OnyxDisplayColumn,
   OnyxActionsColumn,
-} from "@/refresh-components/table/types";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+} from "./types";
+import type { TableSize } from "./TableSizeContext";
 import type { IconFunctionComponent } from "@opal/types";
-import type { SortDirection } from "@/refresh-components/table/TableHead";
+import type { SortDirection } from "./TableHead";
 
 // ---------------------------------------------------------------------------
 // Qualifier column config
@@ -160,7 +160,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         id: "qualifier",
         def,
         width: (size: TableSize) =>
-          size === "small" ? { fixed: 40 } : { fixed: 56 },
+          size === "md" ? { fixed: 40 } : { fixed: 56 },
         content,
         headerContentType: config?.headerContentType,
         getInitials: config?.getInitials,
@@ -246,7 +246,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         id: "__actions",
         def,
         width: (size: TableSize) =>
-          size === "small" ? { fixed: 20 } : { fixed: 88 },
+          size === "md" ? { fixed: 20 } : { fixed: 88 },
         showColumnVisibility: config?.showColumnVisibility ?? true,
         showSorting: config?.showSorting ?? true,
         sortingFooterText: config?.sortingFooterText,

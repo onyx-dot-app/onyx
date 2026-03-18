@@ -20,13 +20,13 @@ import Divider from "@/refresh-components/Divider";
 interface ColumnVisibilityPopoverProps<TData extends RowData = RowData> {
   table: Table<TData>;
   columnVisibility: VisibilityState;
-  size?: "regular" | "small";
+  size?: "md" | "lg";
 }
 
 function ColumnVisibilityPopover<TData extends RowData>({
   table,
   columnVisibility,
-  size = "regular",
+  size = "lg",
 }: ColumnVisibilityPopoverProps<TData>) {
   const [open, setOpen] = useState(false);
   const hideableColumns = table
@@ -39,8 +39,8 @@ function ColumnVisibilityPopover<TData extends RowData>({
         <Button
           icon={SvgColumn}
           interaction={open ? "hover" : "rest"}
-          size={size === "small" ? "sm" : "md"}
-          prominence="internal"
+          size={size === "md" ? "sm" : "md"}
+          prominence="tertiary"
           tooltip="Columns"
         />
       </Popover.Trigger>
@@ -80,7 +80,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
 // ---------------------------------------------------------------------------
 
 interface CreateColumnVisibilityColumnOptions {
-  size?: "regular" | "small";
+  size?: "md" | "lg";
 }
 
 function createColumnVisibilityColumn<TData>(

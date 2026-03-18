@@ -1,12 +1,12 @@
 "use client";
 
 import React from "react";
-import { cn } from "@/lib/utils";
-import { useTableSize } from "@/refresh-components/table/TableSizeContext";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+import { cn } from "@opal/utils";
+import { useTableSize } from "./TableSizeContext";
+import type { TableSize } from "./TableSizeContext";
 import { SvgUser } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import type { QualifierContentType } from "@/refresh-components/table/types";
+import type { QualifierContentType } from "./types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
 
@@ -35,8 +35,8 @@ interface TableQualifierProps {
 }
 
 const iconSizes = {
-  regular: 16,
-  small: 14,
+  lg: 16,
+  md: 14,
 } as const;
 
 function getQualifierStyles(selected: boolean, disabled: boolean) {
@@ -115,7 +115,7 @@ function TableQualifier({
           <div
             className={cn(
               "flex items-center justify-center rounded-full bg-background-neutral-inverted-00",
-              resolvedSize === "regular" ? "h-7 w-7" : "h-6 w-6"
+              resolvedSize === "lg" ? "h-7 w-7" : "h-6 w-6"
             )}
           >
             <Text
@@ -138,7 +138,7 @@ function TableQualifier({
     <div
       className={cn(
         "group relative inline-flex shrink-0 items-center justify-center",
-        resolvedSize === "regular" ? "h-9 w-9" : "h-7 w-7",
+        resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
         disabled ? "cursor-not-allowed" : "cursor-default",
         className
       )}
@@ -147,7 +147,7 @@ function TableQualifier({
       <div
         className={cn(
           "flex items-center justify-center overflow-hidden transition-colors",
-          resolvedSize === "regular" ? "h-9 w-9" : "h-7 w-7",
+          resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
           isRound ? "rounded-full" : "rounded-08",
           styles.container,
           content === "image" && disabled && !selected && "opacity-50"

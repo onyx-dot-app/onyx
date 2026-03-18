@@ -4,9 +4,9 @@ import type {
   SortingState,
   VisibilityState,
 } from "@tanstack/react-table";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+import type { TableSize } from "./TableSizeContext";
 import type { IconFunctionComponent } from "@opal/types";
-import type { SortDirection } from "@/refresh-components/table/TableHead";
+import type { SortDirection } from "./TableHead";
 
 // ---------------------------------------------------------------------------
 // Column width (mirrors useColumnWidths types)
@@ -166,7 +166,7 @@ export interface DataTableProps<TData> {
   draggable?: DataTableDraggableConfig;
   /** Footer configuration. */
   footer?: DataTableFooterConfig;
-  /** Table size variant. @default "regular" */
+  /** Table size variant. @default "lg" */
   size?: TableSize;
   /** Called whenever the set of selected row IDs changes. Receives IDs produced by `getRowId`. */
   onSelectionChange?: (selectedIds: string[]) => void;

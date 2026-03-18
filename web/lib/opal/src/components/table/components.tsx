@@ -1,30 +1,30 @@
 "use client";
 "use no memo";
 
+import "@opal/components/table/styles.css";
+
 import { useEffect, useMemo } from "react";
 import { flexRender } from "@tanstack/react-table";
-import useDataTable, {
-  toOnyxSortDirection,
-} from "@/refresh-components/table/hooks/useDataTable";
-import useColumnWidths from "@/refresh-components/table/hooks/useColumnWidths";
-import useDraggableRows from "@/refresh-components/table/hooks/useDraggableRows";
-import Table from "@/refresh-components/table/Table";
-import TableHeader from "@/refresh-components/table/TableHeader";
-import TableBody from "@/refresh-components/table/TableBody";
-import TableRow from "@/refresh-components/table/TableRow";
-import TableHead from "@/refresh-components/table/TableHead";
-import TableCell from "@/refresh-components/table/TableCell";
-import TableQualifier from "@/refresh-components/table/TableQualifier";
-import QualifierContainer from "@/refresh-components/table/QualifierContainer";
-import ActionsContainer from "@/refresh-components/table/ActionsContainer";
-import DragOverlayRow from "@/refresh-components/table/DragOverlayRow";
-import Footer from "@/refresh-components/table/Footer";
-import { TableSizeProvider } from "@/refresh-components/table/TableSizeContext";
-import { ColumnVisibilityPopover } from "@/refresh-components/table/ColumnVisibilityPopover";
-import { SortingPopover } from "@/refresh-components/table/SortingPopover";
-import type { WidthConfig } from "@/refresh-components/table/hooks/useColumnWidths";
+import useDataTable, { toOnyxSortDirection } from "./hooks/useDataTable";
+import useColumnWidths from "./hooks/useColumnWidths";
+import useDraggableRows from "./hooks/useDraggableRows";
+import TableElement from "./TableElement";
+import TableHeader from "./TableHeader";
+import TableBody from "./TableBody";
+import TableRow from "./TableRow";
+import TableHead from "./TableHead";
+import TableCell from "./TableCell";
+import TableQualifier from "./TableQualifier";
+import QualifierContainer from "./QualifierContainer";
+import ActionsContainer from "./ActionsContainer";
+import DragOverlayRow from "./DragOverlayRow";
+import Footer from "./Footer";
+import { TableSizeProvider } from "./TableSizeContext";
+import { ColumnVisibilityPopover } from "./ColumnVisibilityPopover";
+import { SortingPopover } from "./SortingPopover";
+import type { WidthConfig } from "./hooks/useColumnWidths";
 import type { ColumnDef } from "@tanstack/react-table";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type {
   DataTableProps,
   DataTableFooterConfig,
@@ -32,8 +32,8 @@ import type {
   OnyxDataColumn,
   OnyxQualifierColumn,
   OnyxActionsColumn,
-} from "@/refresh-components/table/types";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+} from "./types";
+import type { TableSize } from "./TableSizeContext";
 
 // ---------------------------------------------------------------------------
 // Internal: resolve size-dependent widths and build TanStack columns
@@ -116,7 +116,7 @@ function processColumns<TData>(
  * <DataTable data={items} columns={columns} footer={{ mode: "selection" }} />
  * ```
  */
-export default function DataTable<TData>(props: DataTableProps<TData>) {
+export function Table<TData>(props: DataTableProps<TData>) {
   const {
     data,
     columns,
@@ -126,7 +126,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     initialColumnVisibility,
     draggable,
     footer,
-    size = "regular",
+    size = "lg",
     onSelectionChange,
     onRowClick,
     searchTerm,
@@ -303,7 +303,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
               : undefined),
           }}
         >
-          <Table
+          <TableElement
             width={
               Object.keys(columnWidths).length > 0
                 ? Object.values(columnWidths).reduce((sum, w) => sum + w, 0)
@@ -539,7 +539,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                 );
               })}
             </TableBody>
-          </Table>
+          </TableElement>
         </div>
 
         {footer && renderFooter(footer)}

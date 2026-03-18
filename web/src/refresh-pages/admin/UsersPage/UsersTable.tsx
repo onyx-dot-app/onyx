@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import DataTable from "@/refresh-components/table/DataTable";
-import { createTableColumns } from "@/refresh-components/table/columns";
+import { Table, createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { SvgDownload } from "@opal/icons";
@@ -216,7 +215,7 @@ export default function UsersTable({
         roleCounts={roleCounts}
         statusCounts={statusCounts}
       />
-      <DataTable
+      <Table
         data={filteredUsers}
         columns={columns}
         getRowId={(row) => row.id ?? row.email}

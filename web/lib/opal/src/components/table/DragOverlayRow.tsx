@@ -1,14 +1,11 @@
 import { memo } from "react";
 import { type Row, flexRender } from "@tanstack/react-table";
-import TableRow from "@/refresh-components/table/TableRow";
-import TableCell from "@/refresh-components/table/TableCell";
-import QualifierContainer from "@/refresh-components/table/QualifierContainer";
-import TableQualifier from "@/refresh-components/table/TableQualifier";
-import ActionsContainer from "@/refresh-components/table/ActionsContainer";
-import type {
-  OnyxColumnDef,
-  OnyxQualifierColumn,
-} from "@/refresh-components/table/types";
+import TableRow from "./TableRow";
+import TableCell from "./TableCell";
+import QualifierContainer from "./QualifierContainer";
+import TableQualifier from "./TableQualifier";
+import ActionsContainer from "./ActionsContainer";
+import type { OnyxColumnDef, OnyxQualifierColumn } from "./types";
 
 interface DragOverlayRowProps<TData> {
   row: Row<TData>;

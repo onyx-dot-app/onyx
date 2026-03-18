@@ -1,8 +1,8 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import { useTableSize } from "@/refresh-components/table/TableSizeContext";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+import { cn } from "@opal/utils";
+import { useTableSize } from "./TableSizeContext";
+import type { TableSize } from "./TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -95,7 +95,7 @@ function SortableTableRow({
             {...listeners}
           >
             <SvgHandle
-              size={resolvedSize === "small" ? 12 : 16}
+              size={resolvedSize === "md" ? 12 : 16}
               className="text-border-02"
             />
           </button>

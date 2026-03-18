@@ -21,7 +21,7 @@ import Text from "@/refresh-components/texts/Text";
 interface SortingPopoverProps<TData extends RowData = RowData> {
   table: Table<TData>;
   sorting: SortingState;
-  size?: "regular" | "small";
+  size?: "md" | "lg";
   footerText?: string;
   ascendingLabel?: string;
   descendingLabel?: string;
@@ -30,7 +30,7 @@ interface SortingPopoverProps<TData extends RowData = RowData> {
 function SortingPopover<TData extends RowData>({
   table,
   sorting,
-  size = "regular",
+  size = "lg",
   footerText,
   ascendingLabel = "Ascending",
   descendingLabel = "Descending",
@@ -48,8 +48,8 @@ function SortingPopover<TData extends RowData>({
         <Button
           icon={currentSort === null ? SvgArrowUpDown : SvgSortOrder}
           interaction={open ? "hover" : "rest"}
-          size={size === "small" ? "sm" : "md"}
-          prominence="internal"
+          size={size === "md" ? "sm" : "md"}
+          prominence="tertiary"
           tooltip="Sort"
         />
       </Popover.Trigger>
@@ -149,7 +149,7 @@ function SortingPopover<TData extends RowData>({
 // ---------------------------------------------------------------------------
 
 interface CreateSortingColumnOptions {
-  size?: "regular" | "small";
+  size?: "md" | "lg";
   footerText?: string;
   ascendingLabel?: string;
   descendingLabel?: string;

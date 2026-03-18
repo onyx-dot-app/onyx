@@ -1,20 +1,20 @@
-import { useTableSize } from "@/refresh-components/table/TableSizeContext";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+import { useTableSize } from "./TableSizeContext";
+import type { TableSize } from "./TableSizeContext";
 
-interface ActionsContainerProps {
+interface QualifierContainerProps {
   type: "head" | "cell";
-  children: React.ReactNode;
+  children?: React.ReactNode;
   size?: TableSize;
   /** Pass-through click handler (e.g. stopPropagation on body cells). */
   onClick?: (e: React.MouseEvent) => void;
 }
 
-export default function ActionsContainer({
+export default function QualifierContainer({
   type,
   children,
   size,
   onClick,
-}: ActionsContainerProps) {
+}: QualifierContainerProps) {
   const contextSize = useTableSize();
   const resolvedSize = size ?? contextSize;
 
@@ -22,7 +22,7 @@ export default function ActionsContainer({
 
   return (
     <Tag
-      className="tbl-actions"
+      className="tbl-qualifier"
       data-type={type}
       data-size={resolvedSize}
       onClick={onClick}

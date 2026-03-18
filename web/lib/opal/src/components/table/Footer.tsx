@@ -1,10 +1,10 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Button, Pagination } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { useTableSize } from "@/refresh-components/table/TableSizeContext";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+import { useTableSize } from "./TableSizeContext";
+import type { TableSize } from "./TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 import type { ReactNode } from "react";
 
@@ -41,7 +41,7 @@ interface FooterSelectionModeProps {
   totalPages: number;
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
-  /** Controls overall footer sizing. `"regular"` (default) or `"small"`. */
+  /** Controls overall footer sizing. `"lg"` (default) or `"md"`. */
   size?: TableSize;
   className?: string;
 }
@@ -100,7 +100,7 @@ function getSelectionMessage(
  */
 export default function Footer(props: FooterProps) {
   const resolvedSize = useTableSize();
-  const isSmall = resolvedSize === "small";
+  const isSmall = resolvedSize === "md";
   return (
     <div
       className={cn(
