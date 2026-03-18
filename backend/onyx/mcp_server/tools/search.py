@@ -103,7 +103,11 @@ async def search_indexed_documents(
     # Some MCP clients serialize list parameters as JSON strings
     if isinstance(source_types, str):
         try:
-            source_types = json.loads(source_types)
+            parsed = json.loads(source_types)
+            if isinstance(parsed, list):
+                source_types = parsed
+            else:
+                source_types = [source_types]
         except (json.JSONDecodeError, TypeError):
             source_types = [source_types]
 
