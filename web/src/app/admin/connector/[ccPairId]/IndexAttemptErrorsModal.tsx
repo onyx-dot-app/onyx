@@ -24,7 +24,7 @@ export interface IndexAttemptErrorsModalProps {
   isResolvingErrors?: boolean;
 }
 
-const ROW_HEIGHT = 60;
+const ROW_HEIGHT = 65; // 4rem + 1px for border
 
 export default function IndexAttemptErrorsModal({
   errors,
@@ -141,7 +141,7 @@ export default function IndexAttemptErrorsModal({
               <TableBody>
                 {paginationData.currentPageItems.length > 0 ? (
                   paginationData.currentPageItems.map((error) => (
-                    <TableRow key={error.id} className="h-[60px]">
+                    <TableRow key={error.id} className="h-[4rem]">
                       <TableCell>
                         {localizeAndPrettify(error.time_created)}
                       </TableCell>
@@ -160,8 +160,7 @@ export default function IndexAttemptErrorsModal({
                         )}
                       </TableCell>
                       <TableCell>
-                        {/* 28px minimum ensures 60px row height while handling overflow. */}
-                        <div className="flex items-center min-h-[28px] max-h-[2rem] overflow-y-auto whitespace-normal">
+                        <div className="flex items-center h-[2rem] overflow-y-auto whitespace-normal">
                           {error.failure_message}
                         </div>
                       </TableCell>
