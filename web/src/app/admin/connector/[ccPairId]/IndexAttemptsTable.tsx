@@ -171,6 +171,7 @@ export function IndexAttemptsTable({
                 {indexAttempt.full_exception_trace && (
                   <td className="w-0 p-0">
                     <button
+                      aria-label="View full trace"
                       onClick={() =>
                         setIndexAttemptTracePopupId(indexAttempt.id)
                       }
