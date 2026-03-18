@@ -47,6 +47,7 @@ from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
+from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
@@ -117,7 +118,7 @@ def set_cluster_state(client: OpenSearchClient) -> None:
 
 
 def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
-    chunk: DocumentChunk,
+    chunk: DocumentChunkWithoutVectors,
     score: float | None,
     highlights: dict[str, list[str]],
 ) -> InferenceChunkUncleaned:
@@ -944,7 +945,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             include_hidden=False,
         )
         normalization_pipeline_name, _ = get_normalization_pipeline_name_and_config()
-        search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
             search_pipeline_id=normalization_pipeline_name,
         )

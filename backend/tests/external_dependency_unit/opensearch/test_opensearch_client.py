@@ -29,6 +29,7 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 )
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
+from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DocumentQuery
@@ -881,8 +882,12 @@ class TestOpenSearchClient:
                 )
                 # Make sure the chunk contents are preserved.
                 for i, chunk in enumerate(results):
-                    assert (
-                        chunk.document_chunk == docs[chunk.document_chunk.document_id]
+                    expected = docs[chunk.document_chunk.document_id]
+                    assert chunk.document_chunk == DocumentChunkWithoutVectors(
+                        **{
+                            k: getattr(expected, k)
+                            for k in DocumentChunkWithoutVectors.model_fields
+                        }
                     )
                     # Make sure score reporting seems reasonable (it should not be None
                     # or 0).
@@ -1599,4 +1604,9 @@ class TestOpenSearchClient:
         for result in results:
             # Note each result must be from doc 1, which is not hidden.
             expected_result = doc1_chunks[result.document_chunk.chunk_index]
-            assert result.document_chunk == expected_result
+            assert result.document_chunk == DocumentChunkWithoutVectors(
+                **{
+                    k: getattr(expected_result, k)
+                    for k in DocumentChunkWithoutVectors.model_fields
+                }
+            )

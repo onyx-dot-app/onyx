@@ -100,9 +100,9 @@ def set_or_convert_timezone_to_utc(value: datetime) -> datetime:
     return value
 
 
-class DocumentChunk(BaseModel):
+class DocumentChunkWithoutVectors(BaseModel):
     """
-    Represents a chunk of a document in the OpenSearch index.
+    Represents a chunk of a document in the OpenSearch index without vectors.
 
     The names of these fields are based on the OpenSearch schema. Changes to the
     schema require changes here. See get_document_schema.
@@ -124,9 +124,7 @@ class DocumentChunk(BaseModel):
 
     # Either both should be None or both should be non-None.
     title: str | None = None
-    title_vector: list[float] | None = None
     content: str
-    content_vector: list[float]
 
     source_type: str
     # A list of key-value pairs separated by INDEX_SEPARATOR. See
@@ -176,18 +174,8 @@ class DocumentChunk(BaseModel):
     def __str__(self) -> str:
         return (
             f"DocumentChunk(document_id={self.document_id}, chunk_index={self.chunk_index}, "
-            f"content length={len(self.content)}, content vector length={len(self.content_vector)}, "
-            f"tenant_id={self.tenant_id.tenant_id})"
+            f"content length={len(self.content)}, tenant_id={self.tenant_id.tenant_id})."
         )
-
-    @model_validator(mode="after")
-    def check_title_and_title_vector_are_consistent(self) -> Self:
-        # title and title_vector should both either be None or not.
-        if self.title is not None and self.title_vector is None:
-            raise ValueError("Bug: Title vector must not be None if title is not None.")
-        if self.title_vector is not None and self.title is None:
-            raise ValueError("Bug: Title must not be None if title vector is not None.")
-        return self
 
     @model_serializer(mode="wrap")
     def serialize_model(
@@ -303,6 +291,35 @@ class DocumentChunk(BaseModel):
                     "mode we don't expect to see a tenant_id."
                 )
             return TenantState(tenant_id=value, multitenant=MULTI_TENANT)
+
+
+class DocumentChunk(DocumentChunkWithoutVectors):
+    """Represents a chunk of a document in the OpenSearch index.
+
+    The names of these fields are based on the OpenSearch schema. Changes to the
+    schema require changes here. See get_document_schema.
+    """
+
+    model_config = {"frozen": True}
+
+    title_vector: list[float] | None = None
+    content_vector: list[float]
+
+    def __str__(self) -> str:
+        return (
+            f"DocumentChunk(document_id={self.document_id}, chunk_index={self.chunk_index}, "
+            f"content length={len(self.content)}, content vector length={len(self.content_vector)}, "
+            f"tenant_id={self.tenant_id.tenant_id})"
+        )
+
+    @model_validator(mode="after")
+    def check_title_and_title_vector_are_consistent(self) -> Self:
+        # title and title_vector should both either be None or not.
+        if self.title is not None and self.title_vector is None:
+            raise ValueError("Bug: Title vector must not be None if title is not None.")
+        if self.title_vector is not None and self.title is None:
+            raise ValueError("Bug: Title must not be None if title vector is not None.")
+        return self
 
 
 class DocumentSchema:
