@@ -11,9 +11,10 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
 import { uploadLicense } from "@/lib/billing/svc";
 import { LicenseStatus } from "@/lib/billing/interfaces";
+import { DOCS_BASE_URL } from "@/lib/constants";
 import { formatDateShort } from "@/lib/dateUtils";
 
-const BILLING_HELP_URL = "https://docs.onyx.app/more/billing";
+const BILLING_HELP_URL = `${DOCS_BASE_URL}/more/billing`;
 
 interface LicenseActivationCardProps {
   isOpen: boolean;
