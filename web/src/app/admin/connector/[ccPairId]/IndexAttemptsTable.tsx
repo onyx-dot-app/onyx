@@ -98,7 +98,19 @@ export function IndexAttemptsTable({
               isReindexInProgress ? "are being" : "were"
             } synced into the system.`;
             return (
-              <TableRow key={indexAttempt.id}>
+              <TableRow
+                key={indexAttempt.id}
+                className={
+                  indexAttempt.full_exception_trace
+                    ? "hover:bg-accent-background cursor-pointer relative select-none"
+                    : undefined
+                }
+                onClick={
+                  indexAttempt.full_exception_trace
+                    ? () => setIndexAttemptTracePopupId(indexAttempt.id)
+                    : undefined
+                }
+              >
                 <TableCell>
                   {indexAttempt.time_started
                     ? localizeAndPrettify(indexAttempt.time_started)
@@ -146,7 +158,7 @@ export function IndexAttemptsTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div>
+                  <>
                     {indexAttempt.status === "success" && (
                       <Text className="flex flex-wrap whitespace-normal">
                         {"-"}
@@ -159,18 +171,7 @@ export function IndexAttemptsTable({
                           {indexAttempt.error_msg}
                         </Text>
                       )}
-
-                    {indexAttempt.full_exception_trace && (
-                      <div
-                        onClick={() => {
-                          setIndexAttemptTracePopupId(indexAttempt.id);
-                        }}
-                        className="mt-2 text-link cursor-pointer select-none"
-                      >
-                        View Full Trace
-                      </div>
-                    )}
-                  </div>
+                  </>
                 </TableCell>
               </TableRow>
             );
@@ -178,14 +179,12 @@ export function IndexAttemptsTable({
         </TableBody>
       </Table>
       {totalPages > 1 && (
-        <div className="mt-3 flex">
-          <div className="mx-auto">
-            <PageSelector
-              totalPages={totalPages}
-              currentPage={currentPage}
-              onPageChange={onPageChange}
-            />
-          </div>
+        <div className="flex flex-1 justify-center pt-3">
+          <PageSelector
+            totalPages={totalPages}
+            currentPage={currentPage}
+            onPageChange={onPageChange}
+          />
         </div>
       )}
     </>
