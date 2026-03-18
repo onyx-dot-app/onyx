@@ -62,10 +62,12 @@ export default function IndexAttemptErrorsModal({
   const prevPageSizeRef = useRef(pageSize);
   useEffect(() => {
     if (pageSize !== prevPageSizeRef.current) {
-      const firstVisibleIndex = (currentPage - 1) * prevPageSizeRef.current;
-      const newPage = Math.floor(firstVisibleIndex / pageSize) + 1;
-      const totalPages = Math.ceil(errors.items.length / pageSize);
-      setCurrentPage(Math.min(newPage, totalPages));
+      setCurrentPage((prev) => {
+        const firstVisibleIndex = (prev - 1) * prevPageSizeRef.current;
+        const newPage = Math.floor(firstVisibleIndex / pageSize) + 1;
+        const totalPages = Math.ceil(errors.items.length / pageSize);
+        return Math.min(newPage, totalPages);
+      });
       prevPageSizeRef.current = pageSize;
     } else {
       setCurrentPage(1);
