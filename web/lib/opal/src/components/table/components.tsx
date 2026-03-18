@@ -127,6 +127,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
     draggable,
     footer,
     size = "lg",
+    variant = "cards",
     onSelectionChange,
     onRowClick,
     searchTerm,
@@ -212,7 +213,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
   });
 
   const hasDraggable = !!effectiveDraggable;
-  const rowVariant = hasDraggable ? "table" : "list";
 
   const isSelectable =
     qualifierColumn != null && qualifierColumn.selectable !== false;
@@ -304,6 +304,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
           }}
         >
           <TableElement
+            variant={variant}
             width={
               Object.keys(columnWidths).length > 0
                 ? Object.values(columnWidths).reduce((sum, w) => sum + w, 0)
@@ -437,7 +438,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
                       return (
                         <DragOverlayRow
                           row={row}
-                          variant={rowVariant}
                           columnWidths={columnWidths}
                           columnKindMap={columnKindMap}
                           qualifierColumn={qualifierColumn}
@@ -461,7 +461,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
                 return (
                   <TableRow
                     key={row.id}
-                    variant={rowVariant}
                     sortableId={rowId}
                     selected={row.getIsSelected()}
                     onClick={() => {

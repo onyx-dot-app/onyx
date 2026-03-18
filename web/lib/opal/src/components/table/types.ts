@@ -5,6 +5,7 @@ import type {
   VisibilityState,
 } from "@tanstack/react-table";
 import type { TableSize } from "./TableSizeContext";
+import type { TableVariant } from "./TableElement";
 import type { IconFunctionComponent } from "@opal/types";
 import type { SortDirection } from "./TableHead";
 
@@ -168,6 +169,8 @@ export interface DataTableProps<TData> {
   footer?: DataTableFooterConfig;
   /** Table size variant. @default "lg" */
   size?: TableSize;
+  /** Visual row variant. @default "cards" */
+  variant?: TableVariant;
   /** Called whenever the set of selected row IDs changes. Receives IDs produced by `getRowId`. */
   onSelectionChange?: (selectedIds: string[]) => void;
   /** Called when a row is clicked (replaces the default selection toggle). */

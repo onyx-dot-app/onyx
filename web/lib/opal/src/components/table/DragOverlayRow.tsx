@@ -9,7 +9,6 @@ import type { OnyxColumnDef, OnyxQualifierColumn } from "./types";
 
 interface DragOverlayRowProps<TData> {
   row: Row<TData>;
-  variant?: "table" | "list";
   columnWidths?: Record<string, number>;
   columnKindMap?: Map<string, OnyxColumnDef<TData>>;
   qualifierColumn?: OnyxQualifierColumn<TData> | null;
@@ -18,7 +17,6 @@ interface DragOverlayRowProps<TData> {
 
 function DragOverlayRowInner<TData>({
   row,
-  variant,
   columnWidths,
   columnKindMap,
   qualifierColumn,
@@ -47,7 +45,7 @@ function DragOverlayRowInner<TData>({
         </colgroup>
       )}
       <tbody>
-        <TableRow variant={variant} selected={row.getIsSelected()}>
+        <TableRow selected={row.getIsSelected()}>
           {row.getVisibleCells().map((cell) => {
             const colDef = columnKindMap?.get(cell.column.id);
 

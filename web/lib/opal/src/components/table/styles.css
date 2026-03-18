@@ -1,3 +1,6 @@
+/* Imports shared timing tokens (--interactive-duration, --interactive-easing) */
+@import "@opal/core/interactive/shared.css";
+
 /* ---------------------------------------------------------------------------
  * Table primitives — data-attribute driven styling
  * Follows the same pattern as card.css / line-item.css.
@@ -48,62 +51,64 @@
   @apply py-1.5;
 }
 
-/* ---- TableRow ---- */
+/* ---- TableRow (base) ---- */
 
 .tbl-row > td {
   @apply bg-background-tint-00;
-}
-
-.tbl-row[data-variant="table"] > td {
-  @apply border-b border-border-01;
-}
-
-.tbl-row[data-variant="list"] > td {
-  @apply bg-clip-padding border-y-[4px] border-x-0 border-transparent;
-}
-.tbl-row[data-variant="list"] > td:first-child {
-  @apply rounded-l-12;
-}
-.tbl-row[data-variant="list"] > td:last-child {
-  @apply rounded-r-12;
-}
-
-/* When a drag handle is present the second-to-last td gets the rounding */
-.tbl-row[data-variant="list"][data-drag-handle] > td:nth-last-child(2) {
-  @apply rounded-r-12;
-}
-.tbl-row[data-variant="list"][data-drag-handle] > td:last-child {
-  border-radius: 0;
-}
-
-/* ---- Row states (list variant) ---- */
-
-.tbl-row[data-variant="list"]:hover > td {
-  @apply bg-background-tint-02;
-}
-.tbl-row[data-variant="list"]:focus-visible > td,
-.tbl-row[data-variant="list"]:has(:focus-visible) > td {
-  @apply bg-action-link-01;
+  transition: background-color var(--interactive-duration)
+    var(--interactive-easing);
 }
 
 .tbl-row[data-disabled] {
   @apply pointer-events-none;
 }
 
-/* ---- Row states (table variant) ---- */
-
-.tbl-row[data-variant="table"]:hover > td {
-  @apply bg-background-tint-02;
-}
-.tbl-row[data-variant="table"]:focus-visible > td,
-.tbl-row[data-variant="table"]:has(:focus-visible) > td {
-  @apply bg-action-link-01;
-}
-
 /* Suppress default focus ring on rows — the row bg is the indicator */
 .tbl-row:focus,
 .tbl-row:focus-visible {
   outline: none;
+}
+
+/* ---- variant="rows" — traditional borders, no gaps ---- */
+
+table[data-variant="rows"] .tbl-row > td {
+  @apply border-b border-border-01;
+}
+
+table[data-variant="rows"] .tbl-row:hover > td {
+  @apply bg-background-tint-02;
+}
+table[data-variant="rows"] .tbl-row:focus-visible > td,
+table[data-variant="rows"] .tbl-row:has(:focus-visible) > td {
+  @apply bg-action-link-01;
+}
+
+/* ---- variant="cards" — rounded cards with gap ---- */
+
+table[data-variant="cards"] .tbl-row > td {
+  @apply bg-clip-padding border-y-[2px] border-x-0 border-transparent;
+}
+table[data-variant="cards"] .tbl-row > td:first-child {
+  @apply rounded-l-12;
+}
+table[data-variant="cards"] .tbl-row > td:last-child {
+  @apply rounded-r-12;
+}
+
+/* When a drag handle is present the second-to-last td gets the rounding */
+table[data-variant="cards"] .tbl-row[data-drag-handle] > td:nth-last-child(2) {
+  @apply rounded-r-12;
+}
+table[data-variant="cards"] .tbl-row[data-drag-handle] > td:last-child {
+  border-radius: 0;
+}
+
+table[data-variant="cards"] .tbl-row:hover > td {
+  @apply bg-background-tint-02;
+}
+table[data-variant="cards"] .tbl-row:focus-visible > td,
+table[data-variant="cards"] .tbl-row:has(:focus-visible) > td {
+  @apply bg-action-link-01;
 }
 
 /* ---- QualifierContainer ---- */

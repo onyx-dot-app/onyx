@@ -7,7 +7,7 @@ import type { ExtremaSizeVariants, SizeVariants } from "@opal/types";
 // ---------------------------------------------------------------------------
 
 type TableSize = Extract<SizeVariants, "md" | "lg">;
-type TableVariant = "rows" | "card";
+type TableVariant = "rows" | "cards";
 type TableQualifier = null | "icon" | "checkbox";
 type SelectionBehavior = "no-select" | "single-select" | "multi-select";
 
@@ -16,7 +16,7 @@ interface TableProps
   ref?: React.Ref<HTMLTableElement>;
   /** Size preset for the table. @default "lg" */
   size?: TableSize;
-  /** Visual row variant. @default "card" */
+  /** Visual row variant. @default "cards" */
   variant?: TableVariant;
   /** Row selection behavior. @default "no-select" */
   selectionBehavior?: SelectionBehavior;
@@ -38,7 +38,7 @@ interface TableProps
 function Table({
   ref,
   size = "lg",
-  variant = "card",
+  variant = "cards",
   selectionBehavior = "no-select",
   qualifier = null,
   heightVariant,
