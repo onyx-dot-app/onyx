@@ -45,9 +45,9 @@ PYTHONPATH=../backend
 PYTHONUNBUFFERED=1
 
 
-# Enable the full set of ACTIVA Enterprise Edition features.
-# NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you
-# are using this for local testing/development).
+# Habilita el conjunto completo de funcionalidades Enterprise de ACTIVA.
+# NOTA: NO ACTIVES ESTO A MENOS QUE TENGAS UNA LICENCIA ENTERPRISE DE PAGO
+# o que lo estes usando solo para pruebas o desarrollo local.
 ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
 
 

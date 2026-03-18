@@ -1,11 +1,11 @@
 FROM node:20-alpine AS base
 
-LABEL com.onyx.maintainer="founders@onyx.app"
-LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
-contains code for both the Community and Enterprise editions of Onyx. If you do not \
-have a contract or agreement with [YOUR LEGAL ENTITY], you are not permitted to use the Enterprise \
-Edition features outside of personal development or testing purposes. Please reach out to \
-founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+LABEL com.activa.maintainer="contact@activa.ai"
+LABEL com.activa.description="Esta imagen contiene el frontend web de ACTIVA. \
+Incluye codigo de las ediciones Community y Enterprise. Si no tienes un contrato o acuerdo \
+con la entidad legal de ACTIVA, no estas autorizado a usar las funcionalidades Enterprise \
+fuera de desarrollo personal o pruebas. Para mas informacion escribe a contact@activa.ai. \
+Repositorio: https://github.com/HOP-RAG/HOP"
 
 # Step 1. Install dependencies + rebuild the source code only when needed
 FROM base AS builder
