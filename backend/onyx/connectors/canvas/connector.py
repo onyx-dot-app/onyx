@@ -309,6 +309,7 @@ class CanvasConnector(
                     params={
                         "per_page": "100",
                         "context_codes[]": f"course_{course_id}",
+                        "active_only": "true",
                     },
                 )
                 first_request = False
