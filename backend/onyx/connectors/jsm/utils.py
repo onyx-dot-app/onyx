@@ -1,25 +1,21 @@
 """Module with custom fields processing functions"""
 
-import os
 from typing import Any
+from request import REQUEST
 from typing import List
 from urllib.parse import urlparse
-
-from jira import JIRA
-from jira.resources import CustomFieldOption
-from jira.resources import Issue
-from jira.resources import User
-
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
 from onyx.connectors.models import BasicExpertInfo
 from onyx.utils.logger import setup_logger
+from request.resources import Issue
+from request.resources import User
+from request.resources import Request
 
 logger = setup_logger()
 
 
 PROJECT_URL_PAT = "projects"
-JSM_SERVER_API_VERSION = os.environ.get("JSM_SERVER_API_VERSION") or "2"
-JSM_CLOUD_API_VERSION = "rest/servicedeskapi"
+REQUEST_SERVER_API_VERSION = "2"
 
 
 def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
@@ -46,26 +42,26 @@ def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
     return BasicExpertInfo(display_name=display_name, email=email)
 
 
-def best_effort_get_field_from_issue(jsm_issue: Issue, field: str) -> Any:
-    if hasattr(jsm_issue, field):
-        return getattr(jsm_issue, field)
+def best_effort_get_field_from_request(request: request, field: str) -> Any:
+    if hasattr(request, field):
+        return getattr(request, field)
 
-    if hasattr(jsm_issue, "fields") and hasattr(jsm_issue.fields, field):
-        return getattr(jsm_issue.fields, field)
+    if hasattr(request, "fields") and hasattr(request.fields, field):
+        return getattr(request.fields, field)
 
     try:
-        return jsm_issue.raw["fields"][field]
+        return request.raw["fields"][field]
     except Exception:
         return None
 
 
 def extract_text_from_adf(adf: dict | None) -> str:
     """Extracts plain text from Atlassian Document Format:
-    https://developer.atlassian.com/cloud/jsm/platform/apis/document/structure/
+    https://developer.atlassian.com/cloud/request/platform/apis/document/structure/
 
     WARNING: This function is incomplete and will e.g. skip lists!
     """
-    # TODO: complete this function
+    # TODO (#2281): complete this function
     texts = []
     if adf is not None and "content" in adf:
         for block in adf["content"]:
@@ -76,54 +72,52 @@ def extract_text_from_adf(adf: dict | None) -> str:
     return " ".join(texts)
 
 
-def build_jsm_url(jsm_base_url: str, issue_key: str) -> str:
+def build_request_url(request_base_url: str, issue_key: str) -> str:
     """
     Get the url used to access an issue in the UI.
     """
-    return f"{jsm_base_url}/browse/{issue_key}"
+    return f"{request_base_url}/browse/{issue_key}"
 
 
-def build_jsm_client(
-    credentials: dict[str, Any], jsm_base: str, scoped_token: bool = False
-) -> JSM:
+def build_request_client(
+    credentials: dict[str, Any], request_base: str, scoped_token: bool = False
+) -> REQUEST:
 
-    jsm_base = scoped_url(jsm_base, "jsm") if scoped_token else jsm_base
-    api_token = credentials["jsm_api_token"]
+    request_base = scoped_url(request_base, "request") if scoped_token else request_base
+    api_token = credentials["request_api_token"]
     # if user provide an email we assume it's cloud
-    if "jsm_user_email" in credentials:
-        email = credentials["jsm_user_email"]
-        return JSM(
+    if "request_user_email" in credentials:
+        email = credentials["request_user_email"]
+        return REQUEST(
             basic_auth=(email, api_token),
-            server=jsm_base,
-            options={"rest_api_version": JSM_CLOUD_API_VERSION},
+            options={"rest_path": "rest/servicedeskapi", "rest_api_version": "latest"},
         )
     else:
-        return JSM(
+        return REQUEST(
             token_auth=api_token,
-            server=jsm_base,
-            options={"rest_api_version": JSM_SERVER_API_VERSION},
+            server=request_base,
+            options={"rest_path": "rest/servicedeskapi", "rest_api_version": "latest"},
         )
-
-
-def extract_jsm_project(url: str) -> tuple[str, str]:
+def extract_request_project(url: str) -> tuple[str, str]:
     parsed_url = urlparse(url)
-    jsm_base = parsed_url.scheme + "://" + parsed_url.netloc
+    request_base = parsed_url.scheme + "://" + parsed_url.netloc
 
     # Split the path by '/' and find the position of 'projects' to get the project name
     split_path = parsed_url.path.split("/")
     if PROJECT_URL_PAT in split_path:
         project_pos = split_path.index(PROJECT_URL_PAT)
         if len(split_path) > project_pos + 1:
-            jsm_project = split_path[project_pos + 1]
+            request_project = split_path[project_pos + 1]
         else:
             raise ValueError("No project name found in the URL")
     else:
         raise ValueError("'projects' not found in the URL")
 
-    return jsm_base, jsm_project
+    return request_base, request_project
 
 
-def get_comment_strs(
+def get_comment_strs(request: Request, comment_email_blacklist: list[str], 
+) -> list[str]:0
     issue: Issue, comment_email_blacklist: tuple[str, ...] = ()
 ) -> list[str]:
     comment_strs = []
@@ -149,7 +143,7 @@ def get_comment_strs(
     return comment_strs
 
 
-def get_jsm_project_key_from_issue(issue: Issue) -> str | None:
+def get_request_project_key_from_issue(issue: Issue) -> str | None:
     if not hasattr(issue, "fields"):
         return None
     if not hasattr(issue.fields, "project"):
@@ -185,18 +179,18 @@ class CustomFieldExtractor:
 
     @staticmethod
     def get_issue_custom_fields(
-        jsm: Issue, custom_fields: dict, max_value_length: int = 250
+        request: Issue, custom_fields: dict, max_value_length: int = 250
     ) -> dict:
         """
         Process all custom fields of an issue to a dictionary of strings
-        :param jsm: jsm_issue, bug or similar
+        :param request: request, bug or similar
         :param custom_fields: custom fields dictionary
         :param max_value_length: maximum length of the value to be processed, if exceeded, it will be truncated
         """
 
         issue_custom_fields = {
             custom_fields[key]: value
-            for key, value in jsm.fields.__dict__.items()
+            for key, value in request.fields.__dict__.items()
             if value and key in custom_fields.keys()
         }
 
@@ -213,9 +207,9 @@ class CustomFieldExtractor:
         return processed_fields
 
     @staticmethod
-    def get_all_custom_fields(jsm_client: JSM) -> dict:
-        """Get all custom fields from JSM"""
-        fields = jsm_client.fields()
+    def get_all_custom_fields(request_client: REQUEST) -> dict:
+        """Get all custom fields from REQUEST"""
+        fields = request_client.fields()
         fields_dct = {
             field["id"]: field["name"] for field in fields if field["custom"] is True
         }
@@ -224,17 +218,22 @@ class CustomFieldExtractor:
 
 class CommonFieldExtractor:
     @staticmethod
-    def get_issue_common_fields(jsm: Issue) -> dict:
+    def get_issue_common_fields(request: Issue) -> dict:
         return {
-            "Priority": jsm.fields.priority.name if jsm.fields.priority else None,
+            "Priority": request.fields.priority.name if request.fields.priority else None,
             "Reporter": (
-                jsm.fields.reporter.displayName if jsm.fields.reporter else None
+                request.fields.reporter.displayName if request.fields.reporter else None
             ),
             "Assignee": (
-                jsm.fields.assignee.displayName if jsm.fields.assignee else None
+                request.fields.assignee.displayName if request.fields.assignee else None
             ),
-            "Status": jsm.fields.status.name if jsm.fields.status else None,
+            "Status": request.fields.status.name if request.fields.status else None,
             "Resolution": (
-                jsm.fields.resolution.name if jsm.fields.resolution else None
+                request.fields.resolution.name if request.fields.resolution else None
             ),
         }
+def get_jsm_session(jsm_client: JIRA) -> Any:
+    return jsm_client._session
+
+def get_jsm_options(jsm_client: JIRA) -> Any:
+    return jsm_client._options

@@ -279,7 +279,7 @@ class BlobType(str, Enum):
     OCI_STORAGE = "oci_storage"
 
 
-class DocumentSourceIndexType(str, Enum):
+class DocumentIndexType(str, Enum):
     COMBINED = "combined"  # Vespa
     SPLIT = "split"  # Typesense + Qdrant
 

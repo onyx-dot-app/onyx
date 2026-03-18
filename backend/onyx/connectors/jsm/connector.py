@@ -10,9 +10,9 @@ from datetime import timedelta
 from datetime import timezone
 from typing import Any
 
-from jsm import JSM
-from jsm.exceptions import JSMError
-from jsm.resources import Request
+from jira import JIRA as JSM
+from jira.exceptions import JIRAError as JSMError
+from jira.resources import Issue as Request
 from more_itertools import chunked
 from typing_extensions import override
 
@@ -81,7 +81,7 @@ _FIELD_PROJECT_NAME = "project_name"
 _FIELD_UPDATED = "updated"
 _FIELD_RESOLUTION_DATE = "resolutiondate"
 _FIELD_RESOLUTION_DATE_KEY = "resolution_date"
-
+_FIELD_ISSUE_TYPE = "issuetype"
 
 def _is_cloud_client(jsm_client: JSM) -> bool:
     return jsm_client._options["rest_api_version"] == JSM_CLOUD_API_VERSION
@@ -122,6 +122,8 @@ def _perform_jql_search(
     # v2 doesnt have the bulk fetch api and v3 has fully deprecated the search
     # api that v2 uses
     if _is_cloud_client(jsm_client):
+        if all_request_ids:
+            return
         if all_request_ids is None:
             raise ValueError("all_request_ids is required for v3")
         return _perform_jql_search_v3(
@@ -239,10 +241,10 @@ def enhanced_search_ids(
     )
 
 
-def bulk_fetch_requests(
+def bulk_fetch_requests()
     jsm_client: JSM, request_ids: list[str], fields: str | None = None
 ) -> list[Request]:
-    # TODO: move away from this jsm library if they continue to not support
+    # TODO (#2281): move away from this jsm library if they continue to not support
     # the endpoints we need. Using private fields is not ideal, but
     # is likely fine for now since we pin the library version
     bulk_fetch_path = jsm_client._get_url("request/bulkfetch")
@@ -255,12 +257,14 @@ def bulk_fetch_requests(
     payload["fields"] = fields.split(",") if fields else ["*all"]
 
     try:
-        response = jsm_client._session.post(bulk_fetch_path, json=payload).json()
+        response_obj = get_jsm_session(jsm_client).post(bulk_fetch_path, json=payload)
+        response_obj.raise_for_status()
+        response = response_obj.json()
     except Exception as e:
         logger.error(f"Error fetching requests: {e}")
-        raise e
+        raise ConnectorValidationError(str(e)) from e
     return [
-        Request(jsm_client._options, jsm_client._session, raw=request)
+        Request(get_jsm_options(jsm_client), get_jsm_session(jsm_client), raw_request)
         for request in response["requests"]
     ]
 
@@ -423,7 +427,9 @@ def process_jsm_request(
         metadata_dict[_FIELD_PROJECT] = project.key
     else:
         logger.error(f"Project should exist but does not for {request.key}")
-
+is_epic = request.fields.issuetype.name == "Epic"
+if is_epic:
+    parent_hierarchy_raw_node_id = None
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
