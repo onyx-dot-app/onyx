@@ -176,7 +176,7 @@ export function IndexAttemptsTable({
                         setIndexAttemptTracePopupId(indexAttempt.id)
                       }
                       className="absolute w-full h-full left-0 top-0"
-                    /> 
+                    />
                   )}
                 </td>
               </TableRow>
