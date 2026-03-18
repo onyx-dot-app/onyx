@@ -20,7 +20,7 @@ from tests.daily.connectors.utils import load_all_from_connector
 @pytest.fixture
 def confluence_connector() -> ConfluenceConnector:
     connector = ConfluenceConnector(
-        wiki_base="https://danswerai.atlassian.net",
+        wiki_base="https://example.atlassian.net",
         is_cloud=True,
     )
 
@@ -114,7 +114,7 @@ def test_confluence_connector_restriction_handling(
     # Mock the nested connector attribute and its config
     mock_cc_pair.connector = MagicMock()
     mock_cc_pair.connector.connector_specific_config = {
-        "wiki_base": "https://danswerai.atlassian.net",
+        "wiki_base": "https://example.atlassian.net",
         "is_cloud": True,
         "space": test_space_key,
     }
@@ -143,21 +143,21 @@ def test_confluence_connector_restriction_handling(
     # for more emails outside of the owner
     non_restricted_emails = {"chris@onyx.app"}
     non_restricted_user_groups = {
-        "confluence-admins-danswerai",
+        "confluence-admins-example",
         "org-admins",
         "atlassian-addons-admin",
-        "confluence-users-danswerai",
+        "confluence-users-example",
     }
 
     # if restriction is applied, only should be visible to shared users / groups
-    restricted_emails = {"chris@onyx.app", "hagen@danswer.ai", "oauth@onyx.app"}
-    restricted_user_groups = {"confluence-admins-danswerai"}
+    restricted_emails = {"chris@onyx.app", "hagen@example.com", "oauth@onyx.app"}
+    restricted_user_groups = {"confluence-admins-example"}
 
     extra_restricted_emails = {"chris@onyx.app", "oauth@onyx.app"}
     extra_restricted_user_groups: set[str] = set()
 
     # note that this is only allowed since yuhong@onyx.app is a member of the
-    # confluence-admins-danswerai group
+    # confluence-admins-example group
     special_restricted_emails = {"chris@onyx.app", "yuhong@onyx.app", "oauth@onyx.app"}
     special_restricted_user_groups: set[str] = set()
 

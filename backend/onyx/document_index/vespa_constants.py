@@ -17,12 +17,12 @@ VESPA_APPLICATION_ENDPOINT = f"{VESPA_CONFIG_SERVER_URL}/application/v2"
 VESPA_APP_CONTAINER_URL = VESPA_CLOUD_URL or f"http://{VESPA_HOST}:{VESPA_PORT}"
 
 
-# danswer_chunk below is defined in vespa/app_configs/schemas/danswer_chunk.sd.jinja
+# onyx_chunk below is defined in vespa/app_configs/schemas/onyx_chunk.sd.jinja
 DOCUMENT_ID_ENDPOINT = (
     f"{VESPA_APP_CONTAINER_URL}/document/v1/default/{{index_name}}/docid"
 )
 
-# the default document id endpoint is http://localhost:8080/document/v1/default/danswer_chunk/docid
+# the default document id endpoint is http://localhost:8080/document/v1/default/onyx_chunk/docid
 
 SEARCH_ENDPOINT = f"{VESPA_APP_CONTAINER_URL}/search/"
 

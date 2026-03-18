@@ -475,9 +475,7 @@ def configure_default_api_keys(db_session: Session) -> None:
                     1024  # Cohere's embed-english-v3.0 dimension
                 )
                 current_search_settings.provider_type = EmbeddingProvider.COHERE
-                current_search_settings.index_name = (
-                    "danswer_chunk_cohere_embed_english_v3_0"
-                )
+                current_search_settings.index_name = "onyx_chunk_cohere_embed_english_v3_0"
                 current_search_settings.query_prefix = ""
                 current_search_settings.passage_prefix = ""
                 db_session.commit()

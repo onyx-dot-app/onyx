@@ -109,17 +109,17 @@ def test_jira_doc_sync(
             fetch_all_existing_docs_ids_fn=fetch_all_existing_docs_ids_fn,
         )
 
-        # Expected documents from the danswerai.atlassian.net Jira instance
+        # Expected documents from the example.atlassian.net Jira instance
         # The AS project has applicationRole permission, so all docs should be public
         _EXPECTED_JIRA_DOCS = [
             DocExternalAccessSet(
-                doc_id="https://danswerai.atlassian.net/browse/AS-3",
+                doc_id="https://example.atlassian.net/browse/AS-3",
                 external_user_emails=set(),
                 external_user_group_ids=set(),
                 is_public=True,
             ),
             DocExternalAccessSet(
-                doc_id="https://danswerai.atlassian.net/browse/AS-4",
+                doc_id="https://example.atlassian.net/browse/AS-4",
                 external_user_emails=set(),
                 external_user_group_ids=set(),
                 is_public=True,
@@ -212,12 +212,12 @@ def test_jira_doc_sync_with_specific_permissions(
         _EXPECTED_USER_EMAILS = set(
             ["yuhong@onyx.app", "chris@onyx.app", "founders@onyx.app"]
         )
-        _EXPECTED_USER_GROUP_IDS = set(["jira-users-danswerai"])
+        _EXPECTED_USER_GROUP_IDS = set(["jira-users-example"])
 
         for doc in docs:
             if not isinstance(doc, DocExternalAccess):
                 continue
-            assert doc.doc_id.startswith("https://danswerai.atlassian.net/browse/SUP-")
+            assert doc.doc_id.startswith("https://example.atlassian.net/browse/SUP-")
             # SUP project has specific users assigned, not applicationRole
             assert (
                 not doc.external_access.is_public
