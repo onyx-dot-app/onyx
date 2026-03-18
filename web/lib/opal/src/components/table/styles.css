@@ -79,7 +79,13 @@ table[data-variant="rows"] .tbl-row > td {
   @apply border-b border-border-01;
 }
 
-table[data-variant="rows"] .tbl-row:hover > td {
+/* Hover/focus only for selectable tables */
+table[data-variant="rows"][data-selection="single-select"] .tbl-row,
+table[data-variant="rows"][data-selection="multi-select"] .tbl-row {
+  @apply cursor-pointer;
+}
+table[data-variant="rows"][data-selection="single-select"] .tbl-row:hover > td,
+table[data-variant="rows"][data-selection="multi-select"] .tbl-row:hover > td {
   @apply bg-background-tint-02;
 }
 table[data-variant="rows"] .tbl-row:focus-visible > td,
@@ -107,7 +113,13 @@ table[data-variant="cards"] .tbl-row[data-drag-handle] > td:last-child {
   border-radius: 0;
 }
 
-table[data-variant="cards"] .tbl-row:hover > td {
+/* Hover/focus only for selectable tables */
+table[data-variant="cards"][data-selection="single-select"] .tbl-row,
+table[data-variant="cards"][data-selection="multi-select"] .tbl-row {
+  @apply cursor-pointer;
+}
+table[data-variant="cards"][data-selection="single-select"] .tbl-row:hover > td,
+table[data-variant="cards"][data-selection="multi-select"] .tbl-row:hover > td {
   @apply bg-background-tint-02;
 }
 table[data-variant="cards"] .tbl-row:focus-visible > td,

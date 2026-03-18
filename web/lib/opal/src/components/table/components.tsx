@@ -363,6 +363,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
         >
           <TableElement
             variant={variant}
+            selectionBehavior={selectionBehavior}
             width={
               Object.keys(columnWidths).length > 0
                 ? Object.values(columnWidths).reduce((sum, w) => sum + w, 0)
