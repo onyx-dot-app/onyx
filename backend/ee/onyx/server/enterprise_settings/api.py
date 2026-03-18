@@ -152,10 +152,11 @@ def _fetch_image_helper(request: Request, filename: str, label: str) -> Response
     try:
         file_store = get_default_file_store()
         onyx_file = file_store.get_file_with_mime_type(filename)
-        if not onyx_file:
-            raise ValueError(f"get_onyx_file returned None for {label}!")
     except Exception:
         logger.exception("Failed to fetch %s file", label)
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to fetch {label} file")
+
+    if not onyx_file:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, f"No {label} file found")
 
     etag_value = f'"{hashlib.md5(onyx_file.data, usedforsecurity=False).hexdigest()}"'
