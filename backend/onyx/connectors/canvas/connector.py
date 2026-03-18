@@ -485,7 +485,7 @@ class CanvasConnector(
             },
             "assignments": {
                 "endpoint": f"courses/{course_id}/assignments",
-                "params": {"per_page": "100"},
+                "params": {"per_page": "100", "published": "true"},
             },
             "announcements": {
                 "endpoint": "announcements",
