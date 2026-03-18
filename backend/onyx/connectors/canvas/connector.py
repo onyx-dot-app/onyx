@@ -79,8 +79,8 @@ class CanvasPage(BaseModel):
             url=payload["url"],
             title=payload["title"],
             body=payload.get("body"),
-            created_at=payload["created_at"],
-            updated_at=payload["updated_at"],
+            created_at=payload.get("created_at", ""),
+            updated_at=payload.get("updated_at", ""),
             course_id=course_id,
         )
 
@@ -105,8 +105,8 @@ class CanvasAssignment(BaseModel):
             description=payload.get("description"),
             html_url=payload["html_url"],
             course_id=course_id,
-            created_at=payload["created_at"],
-            updated_at=payload["updated_at"],
+            created_at=payload.get("created_at", ""),
+            updated_at=payload.get("updated_at", ""),
             due_at=payload.get("due_at"),
         )
 
@@ -273,7 +273,7 @@ class CanvasConnector(
             if first_request:
                 response, next_url = self.canvas_client.get(
                     f"courses/{course_id}/assignments",
-                    params={"per_page": "100"},
+                    params={"per_page": "100", "published": "true"},
                 )
                 first_request = False
             else:
@@ -347,7 +347,9 @@ class CanvasConnector(
             semantic_identifier=page.title or f"Page {page.page_id}",
             doc_updated_at=datetime.fromisoformat(
                 page.updated_at.replace("Z", "+00:00")
-            ).astimezone(timezone.utc),
+            ).astimezone(timezone.utc)
+            if page.updated_at
+            else None,
             metadata={"course_id": str(page.course_id), "type": "page"},
         )
 
@@ -363,7 +365,7 @@ class CanvasConnector(
         if assignment.due_at:
             due_dt = datetime.fromisoformat(
                 assignment.due_at.replace("Z", "+00:00")
-            )
+            ).astimezone(timezone.utc)
             text_parts.append(f"Due: {due_dt.strftime('%B %d, %Y %H:%M UTC')}")
 
         sections = [
@@ -377,7 +379,9 @@ class CanvasConnector(
             semantic_identifier=assignment.name or f"Assignment {assignment.id}",
             doc_updated_at=datetime.fromisoformat(
                 assignment.updated_at.replace("Z", "+00:00")
-            ).astimezone(timezone.utc),
+            ).astimezone(timezone.utc)
+            if assignment.updated_at
+            else None,
             metadata={"course_id": str(assignment.course_id), "type": "assignment"},
         )
 
