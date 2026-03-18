@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import contextlib
 import datetime
 import time
+from collections import defaultdict
 from collections.abc import Generator
-from collections.abc import Iterator
 from uuid import UUID
 
 from sqlalchemy import select
@@ -25,7 +27,7 @@ from onyx.db.user_file import fetch_persona_ids_for_user_files
 from onyx.db.user_file import fetch_user_project_ids_for_user_files
 from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
-from onyx.indexing.models import BuildMetadataAwareChunksResult
+from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
@@ -103,14 +105,20 @@ class UserFileIndexingAdapter:
                 f"Failed to acquire locks after {_NUM_LOCK_ATTEMPTS} attempts for user files: {[doc.id for doc in documents]}"
             )
 
-    def build_metadata_aware_chunks(
+    def prepare_enrichment(
         self,
-        chunks_with_embeddings: Iterator[IndexChunk],
-        doc_id_to_new_chunk_cnt: dict[str, int],
-        chunk_content_scores: list[float],
-        tenant_id: str,
         context: DocumentBatchPrepareContext,
-    ) -> BuildMetadataAwareChunksResult:
+        tenant_id: str,
+        chunks: list[DocAwareChunk],
+    ) -> UserFileChunkEnricher:
+        """Do all DB lookups and pre-compute file metadata from chunks."""
+        updatable_ids = [doc.id for doc in context.updatable_docs]
+
+        doc_id_to_new_chunk_cnt: dict[str, int] = defaultdict(int)
+        content_by_file: dict[str, list[str]] = defaultdict(list)
+        for chunk in chunks:
+            doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
+            content_by_file[chunk.source_document.id].append(chunk.content)
 
         no_access = DocumentAccess.build(
             user_emails=[],
@@ -120,7 +128,6 @@ class UserFileIndexingAdapter:
             is_public=False,
         )
 
-        updatable_ids = [doc.id for doc in context.updatable_docs]
         user_file_id_to_project_ids = fetch_user_project_ids_for_user_files(
             user_file_ids=updatable_ids,
             db_session=self.db_session,
@@ -152,21 +159,12 @@ class UserFileIndexingAdapter:
             logger.error(f"Error getting tokenizer: {e}")
             llm_tokenizer = None
 
-        # Materialize the iterator so we can iterate multiple times
-        all_chunks = list(chunks_with_embeddings)
-
         user_file_id_to_raw_text: dict[str, str] = {}
         user_file_id_to_token_count: dict[str, int | None] = {}
         for user_file_id in updatable_ids:
-            user_file_chunks = [
-                chunk
-                for chunk in all_chunks
-                if chunk.source_document.id == user_file_id
-            ]
-            if user_file_chunks:
-                combined_content = " ".join(
-                    [chunk.content for chunk in user_file_chunks]
-                )
+            contents = content_by_file.get(user_file_id)
+            if contents:
+                combined_content = " ".join(contents)
                 user_file_id_to_raw_text[str(user_file_id)] = combined_content
                 token_count: int = (
                     count_tokens(combined_content, llm_tokenizer)
@@ -178,28 +176,16 @@ class UserFileIndexingAdapter:
                 user_file_id_to_raw_text[str(user_file_id)] = ""
                 user_file_id_to_token_count[str(user_file_id)] = None
 
-        access_aware_chunks = [
-            DocMetadataAwareIndexChunk.from_index_chunk(
-                index_chunk=chunk,
-                access=user_file_id_to_access.get(chunk.source_document.id, no_access),
-                document_sets=set(),
-                user_project=user_file_id_to_project_ids.get(
-                    chunk.source_document.id, []
-                ),
-                personas=user_file_id_to_persona_ids.get(chunk.source_document.id, []),
-                boost=DEFAULT_BOOST,
-                tenant_id=tenant_id,
-                aggregated_chunk_boost_factor=chunk_content_scores[chunk_num],
-            )
-            for chunk_num, chunk in enumerate(all_chunks)
-        ]
-
-        return BuildMetadataAwareChunksResult(
-            chunks=access_aware_chunks,
+        return UserFileChunkEnricher(
+            user_file_id_to_access=user_file_id_to_access,
+            user_file_id_to_project_ids=user_file_id_to_project_ids,
+            user_file_id_to_persona_ids=user_file_id_to_persona_ids,
             doc_id_to_previous_chunk_cnt=user_file_id_to_previous_chunk_cnt,
-            doc_id_to_new_chunk_cnt=doc_id_to_new_chunk_cnt,
+            doc_id_to_new_chunk_cnt=dict(doc_id_to_new_chunk_cnt),
             user_file_id_to_raw_text=user_file_id_to_raw_text,
             user_file_id_to_token_count=user_file_id_to_token_count,
+            no_access=no_access,
+            tenant_id=tenant_id,
         )
 
     def _notify_assistant_owners_if_files_ready(
@@ -243,7 +229,7 @@ class UserFileIndexingAdapter:
         context: DocumentBatchPrepareContext,
         updatable_chunk_data: list[UpdatableChunkData],  # noqa: ARG002
         filtered_documents: list[Document],  # noqa: ARG002
-        result: BuildMetadataAwareChunksResult,
+        enrichment: UserFileChunkEnricher,
     ) -> None:
         user_file_ids = [doc.id for doc in context.updatable_docs]
 
@@ -260,8 +246,10 @@ class UserFileIndexingAdapter:
             user_file.last_project_sync_at = datetime.datetime.now(
                 datetime.timezone.utc
             )
-            user_file.chunk_count = result.doc_id_to_new_chunk_cnt[str(user_file.id)]
-            user_file.token_count = result.user_file_id_to_token_count[
+            user_file.chunk_count = enrichment.doc_id_to_new_chunk_cnt[
+                str(user_file.id)
+            ]
+            user_file.token_count = enrichment.user_file_id_to_token_count[
                 str(user_file.id)
             ]
 
@@ -273,8 +261,54 @@ class UserFileIndexingAdapter:
         # Store the plaintext in the file store for faster retrieval
         # NOTE: this creates its own session to avoid committing the overall
         # transaction.
-        for user_file_id, raw_text in result.user_file_id_to_raw_text.items():
+        for user_file_id, raw_text in enrichment.user_file_id_to_raw_text.items():
             store_user_file_plaintext(
                 user_file_id=UUID(user_file_id),
                 plaintext_content=raw_text,
             )
+
+
+class UserFileChunkEnricher:
+    """Pre-computed metadata for per-chunk enrichment of user-uploaded files."""
+
+    def __init__(
+        self,
+        user_file_id_to_access: dict[str, DocumentAccess],
+        user_file_id_to_project_ids: dict[str, list[int]],
+        user_file_id_to_persona_ids: dict[str, list[int]],
+        doc_id_to_previous_chunk_cnt: dict[str, int],
+        doc_id_to_new_chunk_cnt: dict[str, int],
+        user_file_id_to_raw_text: dict[str, str],
+        user_file_id_to_token_count: dict[str, int | None],
+        no_access: DocumentAccess,
+        tenant_id: str,
+    ) -> None:
+        self._user_file_id_to_access = user_file_id_to_access
+        self._user_file_id_to_project_ids = user_file_id_to_project_ids
+        self._user_file_id_to_persona_ids = user_file_id_to_persona_ids
+        self._no_access = no_access
+        self._tenant_id = tenant_id
+        self.doc_id_to_previous_chunk_cnt = doc_id_to_previous_chunk_cnt
+        self.doc_id_to_new_chunk_cnt = doc_id_to_new_chunk_cnt
+        self.user_file_id_to_raw_text = user_file_id_to_raw_text
+        self.user_file_id_to_token_count = user_file_id_to_token_count
+
+    def enrich_chunk(
+        self, chunk: IndexChunk, score: float
+    ) -> DocMetadataAwareIndexChunk:
+        return DocMetadataAwareIndexChunk.from_index_chunk(
+            index_chunk=chunk,
+            access=self._user_file_id_to_access.get(
+                chunk.source_document.id, self._no_access
+            ),
+            document_sets=set(),
+            user_project=self._user_file_id_to_project_ids.get(
+                chunk.source_document.id, []
+            ),
+            personas=self._user_file_id_to_persona_ids.get(
+                chunk.source_document.id, []
+            ),
+            boost=DEFAULT_BOOST,
+            tenant_id=self._tenant_id,
+            aggregated_chunk_boost_factor=score,
+        )

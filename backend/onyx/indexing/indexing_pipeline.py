@@ -91,6 +91,15 @@ class IndexingPipelineResult(BaseModel):
 
     failures: list[ConnectorFailure]
 
+    @classmethod
+    def empty(cls, total_docs: int) -> "IndexingPipelineResult":
+        return cls(
+            new_docs=0,
+            total_docs=total_docs,
+            total_chunks=0,
+            failures=[],
+        )
+
 
 class IndexingPipelineProtocol(Protocol):
     def __call__(
@@ -672,12 +681,7 @@ def index_doc_batch(
     filtered_documents = filter_fnc(document_batch)
     context = adapter.prepare(filtered_documents, ignore_time_skip)
     if not context:
-        return IndexingPipelineResult(
-            new_docs=0,
-            total_docs=len(filtered_documents),
-            total_chunks=0,
-            failures=[],
-        )
+        return IndexingPipelineResult.empty(len(filtered_documents))
 
     # Convert documents to IndexingDocument objects with processed section
     # logger.debug("Processing image sections")
@@ -729,11 +733,6 @@ def index_doc_batch(
 
     chunk_content_scores = [1.0] * len(chunks_with_embeddings)
 
-    # Pre-compute new chunk counts before the generator consumes the iterator
-    doc_id_to_new_chunk_cnt: dict[str, int] = defaultdict(int)
-    for chunk in chunks:
-        doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
-
     updatable_ids = [doc.id for doc in context.updatable_docs]
     updatable_chunk_data = [
         UpdatableChunkData(
@@ -753,15 +752,17 @@ def index_doc_batch(
         # we still write data here for the immediate and most likely correct sync, but
         # to resolve this, an update of the last modified field at the end of this loop
         # always triggers a final metadata sync via the celery queue
-        result = adapter.build_metadata_aware_chunks(
-            chunks_with_embeddings=chunks_with_embeddings,
-            doc_id_to_new_chunk_cnt=dict(doc_id_to_new_chunk_cnt),
-            chunk_content_scores=chunk_content_scores,
-            tenant_id=tenant_id,
-            context=context,
+        enricher = adapter.prepare_enrichment(
+            context=context, tenant_id=tenant_id, chunks=chunks
         )
 
-        short_descriptor_list = [chunk.to_short_descriptor() for chunk in result.chunks]
+        metadata_aware_chunks = [
+            enricher.enrich_chunk(chunk, 1.0) for chunk in chunks_with_embeddings
+        ]
+
+        short_descriptor_list = [
+            chunk.to_short_descriptor() for chunk in metadata_aware_chunks
+        ]
         short_descriptor_log = str(short_descriptor_list)[:1024]
         logger.debug(f"Indexing the following chunks: {short_descriptor_log}")
 
@@ -776,10 +777,10 @@ def index_doc_batch(
                 vector_db_write_failures,
             ) = write_chunks_to_vector_db_with_backoff(
                 document_index=document_index,
-                chunks=result.chunks,
+                chunks=metadata_aware_chunks,
                 index_batch_params=IndexBatchParams(
-                    doc_id_to_previous_chunk_cnt=result.doc_id_to_previous_chunk_cnt,
-                    doc_id_to_new_chunk_cnt=result.doc_id_to_new_chunk_cnt,
+                    doc_id_to_previous_chunk_cnt=enricher.doc_id_to_previous_chunk_cnt,
+                    doc_id_to_new_chunk_cnt=enricher.doc_id_to_new_chunk_cnt,
                     tenant_id=tenant_id,
                     large_chunks_enabled=chunker.enable_large_chunks,
                 ),
@@ -821,7 +822,7 @@ def index_doc_batch(
             context=context,
             updatable_chunk_data=updatable_chunk_data,
             filtered_documents=filtered_documents,
-            result=result,
+            enrichment=enricher,
         )
 
     assert primary_doc_idx_insertion_records is not None
