@@ -99,7 +99,8 @@ class CanvasApiClient:
             response_json = {}
 
         if response.status_code >= 400:
-            error: str = response.reason or f"HTTP {response.status_code}"
+            default_error: str = response.reason or f"HTTP {response.status_code}"
+            error = default_error
             if isinstance(response_json, dict):
                 error_field = response_json.get("error")
                 if isinstance(error_field, dict):
@@ -108,14 +109,16 @@ class CanvasApiClient:
                         error = response_error
                 elif isinstance(error_field, str):
                     error = error_field
-                # Canvas also returns {"errors": [{"message": "..."}]} for many endpoints
-                errors_list = response_json.get("errors")
-                if isinstance(errors_list, list) and errors_list:
-                    first_error = errors_list[0]
-                    if isinstance(first_error, dict):
-                        msg = first_error.get("message", "")
-                        if msg:
-                            error = msg
+                # Canvas also returns {"errors": [{"message": "..."}]} for many endpoints.
+                # Only use this if we haven't already found a more specific message.
+                if error == default_error:
+                    errors_list = response_json.get("errors")
+                    if isinstance(errors_list, list) and errors_list:
+                        first_error = errors_list[0]
+                        if isinstance(first_error, dict):
+                            msg = first_error.get("message", "")
+                            if msg:
+                                error = msg
             raise OnyxError(
                 _error_code_for_status(response.status_code),
                 detail=error,
