@@ -235,9 +235,17 @@ class DocumentQuery:
             # returning some number of results less than the index max allowed
             # return size.
             "size": DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
-            "_source": get_full_document,
+            # By default exclude retrieving the vector fields in order to save
+            # on retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
+        if not get_full_document:
+            # If we explicitly do not want the underlying document, we will only
+            # retrieve IDs.
+            final_get_ids_query["_source"] = False
         if not OPENSEARCH_PROFILING_DISABLED:
             final_get_ids_query["profile"] = True
 
@@ -387,6 +395,11 @@ class DocumentQuery:
             "size": num_hits,
             "highlight": match_highlights_configuration,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
         }
 
         # Explain is for scoring breakdowns.
@@ -446,6 +459,11 @@ class DocumentQuery:
             },
             "size": num_to_retrieve,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
         }
         if not OPENSEARCH_PROFILING_DISABLED:
             final_random_search_query["profile"] = True

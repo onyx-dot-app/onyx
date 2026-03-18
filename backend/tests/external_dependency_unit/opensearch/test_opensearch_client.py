@@ -29,6 +29,7 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 )
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
+from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DocumentQuery
@@ -881,8 +882,12 @@ class TestOpenSearchClient:
                 )
                 # Make sure the chunk contents are preserved.
                 for i, chunk in enumerate(results):
-                    assert (
-                        chunk.document_chunk == docs[chunk.document_chunk.document_id]
+                    expected = docs[chunk.document_chunk.document_id]
+                    assert chunk.document_chunk == DocumentChunkWithoutVectors(
+                        **{
+                            k: getattr(expected, k)
+                            for k in DocumentChunkWithoutVectors.model_fields
+                        }
                     )
                     # Make sure score reporting seems reasonable (it should not be None
                     # or 0).
@@ -1038,7 +1043,12 @@ class TestOpenSearchClient:
         # ordered; we're just assuming which doc will be the first result here.
         assert results[0].document_chunk.document_id == "public-doc"
         # Make sure the chunk contents are preserved.
-        assert results[0].document_chunk == docs["public-doc"]
+        assert results[0].document_chunk == DocumentChunkWithoutVectors(
+            **{
+                k: getattr(docs["public-doc"], k)
+                for k in DocumentChunkWithoutVectors.model_fields
+            }
+        )
         # Make sure score reporting seems reasonable (it should not be None
         # or 0).
         assert results[0].score
@@ -1046,7 +1056,12 @@ class TestOpenSearchClient:
         assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
         # Same for the second result.
         assert results[1].document_chunk.document_id == "private-doc-user-a"
-        assert results[1].document_chunk == docs["private-doc-user-a"]
+        assert results[1].document_chunk == DocumentChunkWithoutVectors(
+            **{
+                k: getattr(docs["private-doc-user-a"], k)
+                for k in DocumentChunkWithoutVectors.model_fields
+            }
+        )
         assert results[1].score
         assert results[1].match_highlights.get(CONTENT_FIELD_NAME, [])
 
@@ -1599,4 +1614,9 @@ class TestOpenSearchClient:
         for result in results:
             # Note each result must be from doc 1, which is not hidden.
             expected_result = doc1_chunks[result.document_chunk.chunk_index]
-            assert result.document_chunk == expected_result
+            assert result.document_chunk == DocumentChunkWithoutVectors(
+                **{
+                    k: getattr(expected_result, k)
+                    for k in DocumentChunkWithoutVectors.model_fields
+                }
+            )
