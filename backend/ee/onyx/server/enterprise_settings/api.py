@@ -160,12 +160,14 @@ def _fetch_image_helper(request: Request, filename: str, label: str) -> Response
 
     etag_value = f'"{hashlib.md5(onyx_file.data, usedforsecurity=False).hexdigest()}"'
     if_none_match = request.headers.get("if-none-match", "")
-    client_etags = [tag.strip() for tag in if_none_match.split(",")]
+    # Strip W/ prefix for weak comparison per RFC 9110 §13.1.2
+    client_etags = [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
+    normalized_etag = etag_value.removeprefix("W/")
     cache_headers = {
         "ETag": etag_value,
         "Cache-Control": "private, max-age=3600, must-revalidate",
     }
-    if "*" in client_etags or etag_value in client_etags:
+    if "*" in client_etags or normalized_etag in client_etags:
         return Response(status_code=304, headers=cache_headers)
 
     return Response(
