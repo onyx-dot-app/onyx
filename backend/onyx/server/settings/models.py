@@ -2,6 +2,7 @@ from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import QueryHistoryType
@@ -78,9 +79,9 @@ class Settings(BaseModel):
 
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True
-    user_file_max_upload_size_mb: int | None = 100
-    file_token_count_threshold_k: int | None = (
-        None  # thousands of tokens; None = context-aware default
+    user_file_max_upload_size_mb: int | None = Field(default=100, ge=0)
+    file_token_count_threshold_k: int | None = Field(
+        default=None, ge=0  # thousands of tokens; None = context-aware default
     )
 
     # Connector settings

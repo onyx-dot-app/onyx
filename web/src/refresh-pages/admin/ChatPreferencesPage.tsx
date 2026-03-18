@@ -303,8 +303,7 @@ function FileSizeLimitFields({
 function ChatPreferencesForm() {
   const router = useRouter();
   const settings = useSettingsContext();
-  const { values, setFieldValue } =
-    useFormikContext<ChatPreferencesFormValues>();
+  const { values } = useFormikContext<ChatPreferencesFormValues>();
 
   // Track initial text values to avoid unnecessary saves on blur
   const initialCompanyName = useRef(values.company_name);
