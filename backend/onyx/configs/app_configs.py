@@ -684,9 +684,9 @@ JIRA_SLIM_PAGE_SIZE = int(os.environ.get("JIRA_SLIM_PAGE_SIZE", 500))
 
 # Jira Service Management connector settings
 JSM_CONNECTOR_LABELS_TO_SKIP = [
-    ignored_tag
+    ignored_tag.strip()
     for ignored_tag in os.environ.get("JSM_CONNECTOR_LABELS_TO_SKIP", "").split(",")
-    if ignored_tag
+    if ignored_tag.strip()
 ]
 # Maximum size for JSM tickets in bytes (default: 100KB)
 JSM_CONNECTOR_MAX_TICKET_SIZE = int(
