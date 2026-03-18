@@ -74,6 +74,7 @@ def load_runtime_settings() -> EnterpriseSettings:
     """
     enterprise_settings = load_settings()
     if not enterprise_settings.application_name:
+        # Keep end-user branding aligned with the current default product name.
         enterprise_settings.application_name = ONYX_DEFAULT_APPLICATION_NAME
 
     return enterprise_settings
