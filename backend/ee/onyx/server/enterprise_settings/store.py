@@ -11,6 +11,7 @@ from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
 from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import KV_CUSTOM_ANALYTICS_SCRIPT_KEY
+from onyx.configs.constants import LEGACY_KV_ENTERPRISE_SETTINGS_KEY
 from onyx.configs.constants import KV_ENTERPRISE_SETTINGS_KEY
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.file_store.file_store import get_default_file_store
@@ -25,6 +26,23 @@ _LOGO_FILENAME = "__logo__"
 _LOGOTYPE_FILENAME = "__logotype__"
 
 
+def _load_enterprise_settings_payload() -> dict | None:
+    dynamic_config_store = get_kv_store()
+
+    for key in (KV_ENTERPRISE_SETTINGS_KEY, LEGACY_KV_ENTERPRISE_SETTINGS_KEY):
+        try:
+            stored_settings = cast(dict | None, dynamic_config_store.load(key))
+        except KvKeyNotFoundError:
+            continue
+
+        if key != KV_ENTERPRISE_SETTINGS_KEY:
+            dynamic_config_store.store(KV_ENTERPRISE_SETTINGS_KEY, stored_settings)
+
+        return stored_settings
+
+    raise KvKeyNotFoundError()
+
+
 def load_settings() -> EnterpriseSettings:
     """Loads settings data directly from DB. This should be used primarily
     for checking what is actually in the DB, aka for editing and saving back settings.
@@ -32,13 +50,10 @@ def load_settings() -> EnterpriseSettings:
     Runtime settings actually used by the application should be checked with
     load_runtime_settings as defaults may be applied at runtime.
     """
-
-    dynamic_config_store = get_kv_store()
     try:
-        settings = EnterpriseSettings(
-            **cast(dict, dynamic_config_store.load(KV_ENTERPRISE_SETTINGS_KEY))
-        )
+        settings = EnterpriseSettings(**cast(dict, _load_enterprise_settings_payload()))
     except KvKeyNotFoundError:
+        dynamic_config_store = get_kv_store()
         settings = EnterpriseSettings()
         dynamic_config_store.store(KV_ENTERPRISE_SETTINGS_KEY, settings.model_dump())
 

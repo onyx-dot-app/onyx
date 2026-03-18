@@ -14,6 +14,8 @@ import { toast } from "@/hooks/useToast";
 import { Spinner } from "@/components/Spinner";
 import { redirect, useSearchParams } from "next/navigation";
 import {
+  LEGACY_RESET_PASSWORD_TENANT_QUERY_PARAM,
+  LEGACY_TENANT_ID_COOKIE_NAME,
   NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED,
   TENANT_ID_COOKIE_NAME,
 } from "@/lib/constants";
@@ -23,8 +25,10 @@ const ResetPasswordPage: React.FC = () => {
   const [isWorking, setIsWorking] = useState(false);
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
-  const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
-  // Keep search param same name as cookie for simplicity
+  const tenantId =
+    searchParams?.get(TENANT_ID_COOKIE_NAME) ??
+    searchParams?.get(LEGACY_TENANT_ID_COOKIE_NAME) ??
+    searchParams?.get(LEGACY_RESET_PASSWORD_TENANT_QUERY_PARAM);
 
   useEffect(() => {
     if (tenantId) {
@@ -32,6 +36,7 @@ const ResetPasswordPage: React.FC = () => {
         path: "/",
         expires: 1 / 24,
       }); // Expires in 1 hour
+      Cookies.remove(LEGACY_TENANT_ID_COOKIE_NAME, { path: "/" });
     }
   }, [tenantId]);
 

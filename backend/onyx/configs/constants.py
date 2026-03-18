@@ -30,8 +30,10 @@ PUBLIC_API_TAGS: list[str | Enum] = ["public"]
 FASTAPI_USERS_AUTH_COOKIE_NAME = (
     "fastapiusersauth"  # Currently a constant, but logic allows for configuration
 )
-TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
-ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
+TENANT_ID_COOKIE_NAME = "activa_tid"  # tenant id - for workaround cases
+LEGACY_TENANT_ID_COOKIE_NAME = "onyx_tid"
+ANONYMOUS_USER_COOKIE_NAME = "activa_anonymous_user"
+LEGACY_ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 
 # ID used in UserInfo API responses for anonymous users (not a UUID, just a string identifier)
 ANONYMOUS_USER_INFO_ID = "__anonymous_user__"
@@ -112,10 +114,12 @@ KV_GMAIL_SERVICE_ACCOUNT_KEY = "gmail_service_account_key"
 KV_GOOGLE_DRIVE_CRED_KEY = "google_drive_app_credential"
 KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY = "google_drive_service_account_key"
 KV_GEN_AI_KEY_CHECK_TIME = "genai_api_key_last_check_time"
-KV_SETTINGS_KEY = "onyx_settings"
+KV_SETTINGS_KEY = "activa_settings"
+LEGACY_KV_SETTINGS_KEY = "onyx_settings"
 KV_CUSTOMER_UUID_KEY = "customer_uuid"
 KV_INSTANCE_DOMAIN_KEY = "instance_domain"
-KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
+KV_ENTERPRISE_SETTINGS_KEY = "activa_enterprise_settings"
+LEGACY_KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
 

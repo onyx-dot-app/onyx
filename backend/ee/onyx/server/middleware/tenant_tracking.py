@@ -10,12 +10,29 @@ from fastapi import Response
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
 from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
+from onyx.configs.constants import LEGACY_ANONYMOUS_USER_COOKIE_NAME
+from onyx.configs.constants import LEGACY_TENANT_ID_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+
+def _get_cookie_value(
+    request: Request, primary_cookie_name: str, *legacy_cookie_names: str
+) -> str | None:
+    cookie_value = request.cookies.get(primary_cookie_name)
+    if cookie_value is not None:
+        return cookie_value
+
+    for cookie_name in legacy_cookie_names:
+        cookie_value = request.cookies.get(cookie_name)
+        if cookie_value is not None:
+            return cookie_value
+
+    return None
 
 
 def add_api_server_tenant_id_middleware(
@@ -79,7 +96,11 @@ async def _get_tenant_id_from_request(
                 raise HTTPException(status_code=400, detail="Invalid tenant ID format")
 
         # Check for anonymous user cookie
-        anonymous_user_cookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME)
+        anonymous_user_cookie = _get_cookie_value(
+            request,
+            ANONYMOUS_USER_COOKIE_NAME,
+            LEGACY_ANONYMOUS_USER_COOKIE_NAME,
+        )
         if anonymous_user_cookie:
             try:
                 anonymous_user_data = decode_anonymous_user_jwt_token(
@@ -118,7 +139,11 @@ async def _get_tenant_id_from_request(
             return tenant_id
 
         # As a final step, check for explicit tenant_id cookie
-        tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
+        tenant_id_cookie = _get_cookie_value(
+            request,
+            TENANT_ID_COOKIE_NAME,
+            LEGACY_TENANT_ID_COOKIE_NAME,
+        )
         if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
             return tenant_id_cookie
 

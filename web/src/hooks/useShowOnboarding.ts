@@ -16,8 +16,40 @@ import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 
+const ONBOARDING_COMPLETED_KEY_PREFIX = "activa:onboardingCompleted:";
+const LEGACY_ONBOARDING_COMPLETED_KEY_PREFIX = "onyx:onboardingCompleted:";
+
 function getOnboardingCompletedKey(userId: string): string {
-  return `onyx:onboardingCompleted:${userId}`;
+  return `${ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`;
+}
+
+function getLegacyOnboardingCompletedKey(userId: string): string {
+  return `${LEGACY_ONBOARDING_COMPLETED_KEY_PREFIX}${userId}`;
+}
+
+function getOnboardingDismissed(userId: string): boolean {
+  const onboardingCompletedKey = getOnboardingCompletedKey(userId);
+  const dismissed = localStorage.getItem(onboardingCompletedKey);
+
+  if (dismissed !== null) {
+    return dismissed === "true";
+  }
+
+  const legacyKey = getLegacyOnboardingCompletedKey(userId);
+  const legacyDismissed = localStorage.getItem(legacyKey);
+
+  if (legacyDismissed !== null) {
+    localStorage.setItem(onboardingCompletedKey, legacyDismissed);
+    localStorage.removeItem(legacyKey);
+    return legacyDismissed === "true";
+  }
+
+  return false;
+}
+
+function markOnboardingDismissed(userId: string): void {
+  localStorage.setItem(getOnboardingCompletedKey(userId), "true");
+  localStorage.removeItem(getLegacyOnboardingCompletedKey(userId));
 }
 
 function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
@@ -271,9 +303,7 @@ export function useShowOnboarding({
   // Read localStorage once userId is available to check if onboarding was dismissed
   useEffect(() => {
     if (userId === undefined) return;
-    const dismissed =
-      localStorage.getItem(getOnboardingCompletedKey(userId)) === "true";
-    setOnboardingDismissed(dismissed);
+    setOnboardingDismissed(getOnboardingDismissed(userId));
   }, [userId]);
 
   // Initialize onboarding state — single source of truth for provider data
@@ -339,7 +369,7 @@ export function useShowOnboarding({
     if (userId === undefined) return;
     setShowOnboarding(false);
     setOnboardingDismissed(true);
-    localStorage.setItem(getOnboardingCompletedKey(userId), "true");
+    markOnboardingDismissed(userId);
   }, [userId]);
 
   const hideOnboarding = dismissOnboarding;

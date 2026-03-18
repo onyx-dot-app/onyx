@@ -12,6 +12,10 @@ import { FiMoreHorizontal } from "react-icons/fi";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
+import {
+  persistHideMoveCustomAgentModal,
+  shouldHideMoveCustomAgentModal,
+} from "@/sections/sidebar/sidebarUtils";
 // PopoverMenu already imported above
 import { cn, noProp } from "@/lib/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -21,7 +25,6 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgFolder, SvgFolderIn, SvgShare, SvgTrash } from "@opal/icons";
 // Constants
 const DEFAULT_PERSONA_ID = 0;
-const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
 
 interface ChatSessionMorePopupProps {
   chatSession: ChatSession;
@@ -108,10 +111,7 @@ export function ChatSessionMorePopup({
   const handleMoveChatSession = useCallback(
     async (item: { id: number; label: string }) => {
       const targetProjectId = item.id;
-      const hideModal =
-        typeof window !== "undefined" &&
-        window.localStorage.getItem(LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY) ===
-          "true";
+      const hideModal = shouldHideMoveCustomAgentModal();
 
       if (!isChatUsingDefaultAgent && !hideModal) {
         setPendingMoveProjectId(targetProjectId);
@@ -269,11 +269,8 @@ export function ChatSessionMorePopup({
             setPendingMoveProjectId(null);
           }}
           onConfirm={async (doNotShowAgain: boolean) => {
-            if (doNotShowAgain && typeof window !== "undefined") {
-              window.localStorage.setItem(
-                LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY,
-                "true"
-              );
+            if (doNotShowAgain) {
+              persistHideMoveCustomAgentModal();
             }
             const target = pendingMoveProjectId;
             setShowMoveCustomAgentModal(false);
