@@ -206,6 +206,7 @@ class CanvasConnector(
                     "courses",
                     params={
                         "per_page": "100",
+                        "state[]": "available",
                     },
                 )
                 first_request = False
@@ -240,6 +241,7 @@ class CanvasConnector(
                     params={
                         "per_page": "100",
                         "include[]": "body",
+                        "published": "true",
                     },
                 )
                 first_request = False
@@ -346,7 +348,7 @@ class CanvasConnector(
             doc_updated_at=datetime.fromisoformat(
                 page.updated_at.replace("Z", "+00:00")
             ).astimezone(timezone.utc),
-            metadata={"course_id": str(page.course_id)},
+            metadata={"course_id": str(page.course_id), "type": "page"},
         )
 
     def _convert_assignment_to_document(
@@ -373,7 +375,7 @@ class CanvasConnector(
             doc_updated_at=datetime.fromisoformat(
                 assignment.updated_at.replace("Z", "+00:00")
             ).astimezone(timezone.utc),
-            metadata={"course_id": str(assignment.course_id)},
+            metadata={"course_id": str(assignment.course_id), "type": "assignment"},
         )
 
     def _convert_announcement_to_document(
@@ -405,7 +407,7 @@ class CanvasConnector(
             semantic_identifier=announcement.title
             or f"Announcement {announcement.id}",
             doc_updated_at=doc_updated_at,
-            metadata={"course_id": str(announcement.course_id)},
+            metadata={"course_id": str(announcement.course_id), "type": "announcement"},
         )
 
     @override
