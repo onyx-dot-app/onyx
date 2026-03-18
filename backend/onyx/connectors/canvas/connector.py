@@ -1,4 +1,3 @@
-import copy
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -469,11 +468,16 @@ class CanvasConnector(
         include_permissions: bool = False,
     ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
         """Shared implementation for load_from_checkpoint and load_from_checkpoint_with_perm_sync."""
-        new_checkpoint = copy.deepcopy(checkpoint)
+        new_checkpoint = checkpoint.model_copy(deep=True)
 
         # First call: materialize the list of course IDs
         if not new_checkpoint.course_ids:
-            courses = self._list_courses()
+            try:
+                courses = self._list_courses()
+            except Exception as e:
+                logger.warning(f"Failed to list Canvas courses: {e}")
+                new_checkpoint.has_more = True
+                return new_checkpoint
             new_checkpoint.course_ids = [c.id for c in courses]
             new_checkpoint.current_course_index = 0
             new_checkpoint.stage = "pages"
@@ -520,7 +524,7 @@ class CanvasConnector(
         stage_config: dict[str, dict[str, Any]] = {
             "pages": {
                 "endpoint": f"courses/{course_id}/pages",
-                "params": {"per_page": "100", "include[]": "body"},
+                "params": {"per_page": "100", "include[]": "body", "published": "true"},
             },
             "assignments": {
                 "endpoint": f"courses/{course_id}/assignments",
@@ -546,10 +550,13 @@ class CanvasConnector(
                 response, result_next_url = self.canvas_client.get(
                     config["endpoint"], params=config["params"]
                 )
+        except OnyxError:
+            raise
         except Exception as e:
             logger.warning(
                 f"Failed to fetch {stage} for course {course_id}: {e}"
             )
+            new_checkpoint.has_more = True
             return new_checkpoint
 
         # Process fetched items
