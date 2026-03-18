@@ -21,6 +21,7 @@ import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { SvgClock } from "@opal/icons";
+import { Button } from "@opal/components";
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
   indexAttempts: IndexAttemptSnapshot[];
@@ -161,14 +162,15 @@ export function IndexAttemptsTable({
                       )}
 
                     {indexAttempt.full_exception_trace && (
-                      <div
+                      <Button
+                        size="md"
+                        prominence="tertiary"
                         onClick={() => {
                           setIndexAttemptTracePopupId(indexAttempt.id);
                         }}
-                        className="mt-2 text-link cursor-pointer select-none"
                       >
                         View Full Trace
-                      </div>
+                      </Button>
                     )}
                   </div>
                 </TableCell>
