@@ -11,11 +11,11 @@ export const CONTENT_PROVIDER_DETAILS: Record<
   { label: string; subtitle: string; description: string; logoSrc?: string }
 > = {
   onyx_web_crawler: {
-    label: "Onyx Web Crawler",
+    label: "Crawler integrado",
     subtitle:
       "Built-in web crawler. Works for most pages but less performant in edge cases.",
     description:
-      "Onyx's built-in crawler processes URLs returned by your search engine.",
+      "El crawler integrado procesa las URLs devueltas por tu motor de búsqueda.",
   },
   firecrawl: {
     label: "Firecrawl",

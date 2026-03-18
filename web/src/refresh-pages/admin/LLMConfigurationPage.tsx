@@ -370,7 +370,7 @@ export default function LLMConfigurationPage() {
           <Card>
             <HorizontalInput
               title="Default Model"
-              description="This model will be used by Onyx by default in your chats."
+              description="Este modelo se usará por defecto en tus chats."
               nonInteractive
               center
             >
@@ -450,7 +450,7 @@ export default function LLMConfigurationPage() {
         >
           <Content
             title="Add Provider"
-            description="Onyx supports both popular providers and self-hosted models."
+            description="La aplicación admite proveedores populares y modelos autohospedados."
             sizePreset="main-content"
             variant="section"
           />

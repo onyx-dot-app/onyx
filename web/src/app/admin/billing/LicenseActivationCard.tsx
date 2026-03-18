@@ -155,7 +155,7 @@ export default function LicenseActivationCard({
           </Disabled>
         </Section>
         <Text secondaryBody text03>
-          Manually add and activate a license for this Onyx instance.
+          Agrega y activa manualmente una licencia para esta instancia.
         </Text>
       </Section>
 
@@ -180,7 +180,7 @@ export default function LicenseActivationCard({
             subDescription={
               error
                 ? undefined
-                : "Paste or attach your license key file you received from Onyx."
+                : "Pega o adjunta el archivo de licencia que recibiste."
             }
           >
             <InputFile

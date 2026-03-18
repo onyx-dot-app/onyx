@@ -76,7 +76,7 @@ function Main() {
   const introSection = (
     <div className="flex flex-col items-start gap-4">
       <Text as="p">
-        API Keys allow you to access Onyx APIs programmatically.
+        Las API keys te permiten acceder de forma programática a las APIs de la aplicación.
         {canCreateKeys
           ? " Click the button below to generate a new API Key."
           : ""}

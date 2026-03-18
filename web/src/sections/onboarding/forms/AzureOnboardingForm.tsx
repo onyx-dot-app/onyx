@@ -168,7 +168,7 @@ function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
             </FormField.Control>
             <FormField.Message
               messages={{
-                idle: "This model will be used by Onyx by default.",
+                idle: "Este modelo se usará por defecto.",
                 error: meta.error,
               }}
             />

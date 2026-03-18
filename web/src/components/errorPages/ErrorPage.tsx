@@ -1,6 +1,6 @@
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import Text from "@/refresh-components/texts/Text";
-import { DOCS_BASE_URL } from "@/lib/constants";
+import { DEFAULT_APPLICATION_NAME, DOCS_BASE_URL } from "@/lib/constants";
 import { SvgAlertCircle } from "@opal/icons";
 
 export default function Error() {
@@ -14,8 +14,9 @@ export default function Error() {
       </div>
 
       <Text as="p" text03>
-        It seems there was a problem loading your Onyx settings. This could be
-        due to a configuration issue or incomplete setup.
+        Parece que hubo un problema al cargar la configuración de{" "}
+        {DEFAULT_APPLICATION_NAME}. Esto puede deberse a una configuración
+        incompleta o incorrecta.
       </Text>
 
       <Text as="p" text03>

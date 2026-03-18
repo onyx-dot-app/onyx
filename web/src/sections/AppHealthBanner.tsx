@@ -220,7 +220,7 @@ export default function AppHealthBanner() {
         <Content
           icon={SvgAlertTriangle}
           title="The backend is currently unavailable"
-          description="If this is your initial setup or you just updated your Onyx deployment, this is likely because the backend is still starting up. Give it a minute or two, and then refresh the page. If that does not work, make sure the backend is setup and/or contact an administrator."
+          description="Si es tu configuración inicial o acabas de actualizar el despliegue, es probable que el backend todavía se esté iniciando. Espera uno o dos minutos y luego recarga la página. Si no funciona, verifica la configuración del backend o contacta a un administrador."
           sizePreset="main-content"
           variant="section"
         />

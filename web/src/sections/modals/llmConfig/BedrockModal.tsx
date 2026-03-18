@@ -152,7 +152,7 @@ function BedrockModalInternals({
           Authentication Method
         </Text>
         <Text as="p" secondaryBody text03>
-          Choose how Onyx should authenticate with Bedrock.
+          Elige cómo debe autenticarse la aplicación con Bedrock.
         </Text>
         <Tabs
           value={authMethod || AUTH_METHOD_ACCESS_KEY}
@@ -237,7 +237,7 @@ function BedrockModalInternals({
         formikProps={formikProps}
         noModelConfigurationsMessage={
           "Fetch available models first, then you'll be able to select " +
-          "the models you want to make available in Onyx."
+          "los modelos que quieres dejar disponibles en la aplicación."
         }
         recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}

@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 import Switch from "@/refresh-components/inputs/Switch";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import Text from "@/refresh-components/texts/Text";
@@ -59,7 +60,7 @@ const BackgroundThumbnail = ({
     {isNone ? (
       <div className="absolute inset-0 bg-background flex items-center justify-center">
         <Text secondaryBody text03>
-          None
+          Ninguno
         </Text>
       </div>
     ) : (
@@ -141,7 +142,7 @@ export const SettingsPanel = ({
                 <SvgSettings className="w-5 h-5 stroke-text-03" />
               </div>
               <Text headingH3 text04>
-                Settings
+                Configuración
               </Text>
             </div>
             <div className="flex items-center gap-3">
@@ -150,13 +151,13 @@ export const SettingsPanel = ({
                 icon={isDark ? SvgMoon : SvgSun}
                 onClick={toggleTheme}
                 prominence="tertiary"
-                tooltip={`Switch to ${isDark ? "light" : "dark"} theme`}
+                tooltip={`Cambiar a tema ${isDark ? "claro" : "oscuro"}`}
               />
               <Button
                 icon={SvgX}
                 onClick={toggleSettings}
                 prominence="tertiary"
-                tooltip="Close settings"
+                tooltip="Cerrar configuración"
               />
             </div>
           </div>
@@ -169,7 +170,9 @@ export const SettingsPanel = ({
               General
             </Text>
             <div className="flex flex-col gap-1 bg-background-tint-01 rounded-2xl px-4">
-              <SettingRow label="Use Onyx as new tab page">
+              <SettingRow
+                label={`Usar ${DEFAULT_APPLICATION_NAME} como página de nueva pestaña`}
+              >
                 <Switch
                   checked={useOnyxAsNewTab}
                   onCheckedChange={handleUseOnyxToggle}
@@ -181,7 +184,7 @@ export const SettingsPanel = ({
           {/* Background Section */}
           <section className="flex flex-col gap-3">
             <Text secondaryAction text03 className="uppercase tracking-wider">
-              Background
+              Fondo
             </Text>
             <div className="grid grid-cols-3 gap-2">
               {CHAT_BACKGROUND_OPTIONS.map((bg) => (

@@ -317,7 +317,7 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
             </FormField.Control>
             <FormField.Message
               messages={{
-                idle: "This model will be used by Onyx by default for this provider. This must be one of the models listed above.",
+                idle: "Este modelo se usará por defecto para este proveedor. Debe ser uno de los modelos listados arriba.",
                 error: meta.error,
               }}
             />

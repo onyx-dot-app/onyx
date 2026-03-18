@@ -183,7 +183,7 @@ export default function NewTeamModal() {
                   width="full"
                   rightIcon={SvgArrowRight}
                 >
-                  Try Onyx while waiting
+                  Prueba ACTIVA mientras esperas
                 </Button>
               </div>
             </div>

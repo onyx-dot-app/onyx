@@ -28,7 +28,7 @@ import { IconFunctionComponent } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { getUserDisplayName } from "@/lib/user";
-import { APP_SLOGAN } from "@/lib/constants";
+import { APP_SLOGAN, DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 
 const SECTIONS = {
   UNLABELED: "",
@@ -202,6 +202,9 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
           (billingData && hasActiveSubscription(billingData)) ||
             licenseData?.has_license
         );
+  const applicationName =
+    settings.enterpriseSettings?.application_name?.trim() ||
+    DEFAULT_APPLICATION_NAME;
 
   const allItems = buildItems(
     isCurator,
@@ -257,10 +260,10 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
               <Text text03 secondaryAction>
                 <a
                   className="underline"
-                  href="https://onyx.app"
+                  href="https://activa.ai"
                   target="_blank"
                 >
-                  Onyx
+                  {applicationName}
                 </a>
               </Text>
               <Text text03 secondaryBody>
