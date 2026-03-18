@@ -56,9 +56,20 @@ export default function IndexAttemptErrorsModal({
     observerRef.current = observer;
   }, []);
 
-  // Reset to page 1 when data or page size changes
+  // When data changes, reset to page 1.
+  // When page size changes (resize), preserve the user's position by
+  // finding which new page contains the first item they were looking at.
+  const prevPageSizeRef = useRef(pageSize);
   useEffect(() => {
-    setCurrentPage(1);
+    if (pageSize !== prevPageSizeRef.current) {
+      const firstVisibleIndex = (currentPage - 1) * prevPageSizeRef.current;
+      const newPage = Math.floor(firstVisibleIndex / pageSize) + 1;
+      const totalPages = Math.ceil(errors.items.length / pageSize);
+      setCurrentPage(Math.min(newPage, totalPages));
+      prevPageSizeRef.current = pageSize;
+    } else {
+      setCurrentPage(1);
+    }
   }, [errors.items.length, errors.total_items, pageSize]);
 
   const paginationData = useMemo(() => {
