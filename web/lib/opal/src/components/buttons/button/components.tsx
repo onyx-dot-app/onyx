@@ -1,4 +1,3 @@
-import "@opal/components/buttons/button/styles.css";
 import "@opal/components/tooltip.css";
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
@@ -67,7 +66,7 @@ function Button({
   const labelEl = children ? (
     <span
       className={cn(
-        "opal-button-label",
+        "whitespace-nowrap",
         isLarge ? "font-main-ui-body " : "font-secondary-body",
         responsiveHideText && "hidden md:inline"
       )}
@@ -87,7 +86,11 @@ function Button({
           isLarge ? "default" : size === "2xs" ? "mini" : "compact"
         }
       >
-        <div className={cn("opal-button interactive-foreground")}>
+        <div
+          className={cn(
+            "flex flex-row items-center gap-1 interactive-foreground"
+          )}
+        >
           {iconWrapper(Icon, size, !!children)}
 
           {labelEl}
