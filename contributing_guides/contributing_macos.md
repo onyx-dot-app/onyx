@@ -1,35 +1,34 @@
-## Some additional notes for Mac Users
+## Notas adicionales para usuarios de Mac
 
-The base instructions to set up the development environment are located in [CONTRIBUTING.md](https://github.com/onyx-dot-app/onyx/blob/main/CONTRIBUTING.md).
+Las instrucciones base para preparar el entorno de desarrollo estan en [CONTRIBUTING.md](https://github.com/HOP-RAG/HOP/blob/main/CONTRIBUTING.md).
 
-### Setting up Python
+### Configurar Python
 
-Ensure [Homebrew](https://brew.sh/) is already set up.
+Asegurate primero de tener [Homebrew](https://brew.sh/) instalado.
 
-Then install python 3.11.
+Despues instala Python 3.11:
 
 ```bash
 brew install python@3.11
 ```
 
-Add python 3.11 to your path: add the following line to ~/.zshrc
+Agrega Python 3.11 a tu path incluyendo esta linea en `~/.zshrc`:
 
-```
+```bash
 export PATH="$(brew --prefix)/opt/python@3.11/libexec/bin:$PATH"
 ```
 
-> **Note:**
-> You will need to open a new terminal for the path change above to take effect.
+> **Nota:**
+> Necesitaras abrir una terminal nueva para que el cambio en el path tenga efecto.
 
-### Setting up Docker
+### Configurar Docker
 
-On macOS, you will need to install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and
-ensure it is running before continuing with the docker commands.
+En macOS necesitas instalar [Docker Desktop](https://www.docker.com/products/docker-desktop/) y asegurarte de que este corriendo antes de continuar con los comandos de Docker.
 
-### Formatting and Linting
+### Formato y lint
 
-MacOS will likely require you to remove some quarantine attributes on some of the hooks for them to execute properly.
-After installing pre-commit, run the following command:
+En macOS es posible que tengas que quitar algunos atributos de cuarentena para que ciertos hooks se ejecuten correctamente.
+Despues de instalar `pre-commit`, corre este comando:
 
 ```bash
 sudo xattr -r -d com.apple.quarantine ~/.cache/pre-commit

@@ -1,32 +1,32 @@
-# Contributing to Onyx
-Hey there! We are so excited that you're interested in Onyx.
+# Contribuir a HOP
 
+Nos alegra que quieras contribuir a HOP y ACTIVA.
 
-## Contribution Opportunities
-The [GitHub Issues](https://github.com/onyx-dot-app/onyx/issues) page is a great place to look for and share contribution ideas.
+## Oportunidades de contribucion
 
-If you have your own feature that you would like to build please create an issue and community members can provide feedback and
-thumb it up if they feel a common need. 
+La pagina de [GitHub Issues](https://github.com/HOP-RAG/HOP/issues) es el mejor lugar para encontrar ideas, proponer mejoras y coordinar trabajo.
 
+Si tienes una funcionalidad propia que quieras construir, abre un issue para que la comunidad y el equipo mantenedor puedan dar feedback y priorizarla.
 
-## Contributing Code
-Please reference the documents in contributing_guides folder to ensure that the code base is kept to a high standard.
-1. dev_setup.md (start here): gives you a guide to setting up a local development environment.
-2. contribution_process.md: how to ensure you are building valuable features that will get reviewed and merged.
-3. best_practices.md: before asking for reviews, ensure your changes meet the repo code quality standards.
+## Contribuir codigo
 
-To contribute, please follow the
-["fork and pull request"](https://docs.github.com/en/get-started/quickstart/contributing-to-projects) workflow.
+Revisa primero los documentos dentro de `contributing_guides/` para mantener un buen nivel de calidad:
 
+1. `dev_setup.md`: como levantar el entorno local
+2. `contribution_process.md`: como proponer cambios y llevarlos a merge
+3. `best_practices.md`: criterios de calidad de codigo
 
-## Getting Help 🙋
-We have support channels and generally interesting discussions on our [Discord](https://discord.gg/4NA5SbzrWb).
+Para contribuir, sigue el flujo estandar de ["fork and pull request"](https://docs.github.com/en/get-started/quickstart/contributing-to-projects).
 
-See you there!
+## Ayuda
 
+Tenemos canales de soporte y conversacion en [Discord](https://discord.gg/4NA5SbzrWb).
 
-## Release Process
-Onyx loosely follows the SemVer versioning standard.
-Major changes are released with a "minor" version bump. Currently we use patch release versions to indicate small feature changes.
-A set of Docker containers will be pushed automatically to DockerHub with every tag.
-You can see the containers [here](https://hub.docker.com/search?q=onyx%2F).
+## Proceso de releases
+
+HOP sigue una variante de SemVer.
+
+- los cambios grandes suelen salir con incremento menor
+- los cambios pequenos suelen reflejarse en patch releases
+
+Si publicas imagenes de contenedor para tu despliegue, asegurate de que la documentacion apunte al registry correcto para HOP / ACTIVA.

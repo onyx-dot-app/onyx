@@ -1,109 +1,112 @@
-<!-- ONYX_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/web/README.md"} -->
+<!-- ONYX_METADATA={"link": "https://github.com/HOP-RAG/HOP/blob/main/web/README.md"} -->
 
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+Este es el frontend de ACTIVA dentro del repositorio HOP. Esta construido con [Next.js](https://nextjs.org/) y fue inicializado con [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
-## Getting Started
+## Primeros pasos
 
-Install node / npm: https://docs.npmjs.com/downloading-and-installing-node-js-and-npm
-Install all dependencies: `npm i`.
+Instala Node / npm: https://docs.npmjs.com/downloading-and-installing-node-js-and-npm
 
-Then, run the development server:
+Instala todas las dependencias:
+
+```bash
+npm i
+```
+
+Luego levanta el servidor de desarrollo:
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre [http://localhost:3000](http://localhost:3000) en tu navegador para ver el resultado.
 
-_Note:_ if you are having problems accessing the ^, try setting the `WEB_DOMAIN` env variable to
-`http://127.0.0.1:3000` and accessing it there.
+_Nota:_ si tienes problemas para acceder a esa URL, prueba configurando la variable de entorno `WEB_DOMAIN` con `http://127.0.0.1:3000` y entra por esa direccion.
 
 > [!TIP]
-> Packages are installed automatically when switching branches after `package.json` changes with [pre-commit](https://github.com/onyx-dot-app/onyx/blob/main/CONTRIBUTING.md#formatting-and-linting) configured.
+> Si tienes [pre-commit](https://github.com/HOP-RAG/HOP/blob/main/CONTRIBUTING.md#contribuir-con-codigo) configurado, los paquetes se instalan automaticamente al cambiar de rama cuando `package.json` se modifica.
 
-### Connecting to a Cloud Backend
+### Conectarse a un backend hospedado de ACTIVA
 
-To test your local frontend development server against a cloud backend (e.g., staging or production),
-create a `.env.local` file in the `web/` directory with the following configuration:
+Si quieres probar tu servidor frontend local contra un backend hospedado (por ejemplo, staging o produccion), crea un archivo `.env.local` dentro de `web/` con esta configuracion:
 
 ```text
-# Point local dev server to cloud backend
-INTERNAL_URL=https://st-dev.onyx.app/api
+# Apunta el servidor local al backend hospedado
+INTERNAL_URL=https://staging.activa.example/api
 
-# Public backend origin for browser-only WebSocket flows
-NEXT_PUBLIC_ONYX_BACKEND_URL=https://st-dev.onyx.app
+# Origen publico del backend para flujos de WebSocket que corren en el navegador.
+# El nombre de esta variable sigue siendo `NEXT_PUBLIC_ONYX_BACKEND_URL`
+# por compatibilidad con el codigo actual.
+NEXT_PUBLIC_ONYX_BACKEND_URL=https://staging.activa.example
 
-# Debug auth cookie for authenticating against remote backend
-# This cookie is automatically injected into API requests when in development mode
-# To get this value:
-#   1. Go to https://st-dev.onyx.app (or your target backend URL) and log in
-#   2. Open DevTools (F12) → Application → Cookies → [your backend domain]
-#   3. Find the "fastapiusersauth" cookie and copy its value
-#   4. Paste the value below (without quotes)
-# Note: This cookie may expire, so you may need to refresh it periodically
+# Cookie de depuracion para autenticar contra un backend remoto
+# Esta cookie se inyecta automaticamente en requests API cuando estas en modo desarrollo
+# Para obtenerla:
+#   1. Entra al backend objetivo de ACTIVA e inicia sesion
+#   2. Abre DevTools (F12) -> Application -> Cookies -> [tu dominio]
+#   3. Busca la cookie "fastapiusersauth" y copia su valor
+#   4. Pegalo abajo (sin comillas)
+# Nota: esta cookie puede expirar, asi que tal vez tengas que renovarla periodicamente
 DEBUG_AUTH_COOKIE=your_cookie_value_here
 ```
 
-By default, this does _NOT_ override existing cookies, so if you've logged in previously, you
-may need to delete the cookies for the `localhost` domain.
+Por defecto esto _NO_ sobreescribe las cookies existentes. Si ya iniciaste sesion antes, tal vez tengas que borrar las cookies del dominio `localhost`.
 
-**Important notes:**
+**Notas importantes:**
 
-- The `.env.local` file should be created in the `web/` directory (same level as `package.json`)
-- After creating or modifying `.env.local`, restart your development server for changes to take effect
-- Set `NEXT_PUBLIC_ONYX_BACKEND_URL` when browser-side WebSocket traffic should hit a remote HTTPS domain instead of `localhost`
-- The `DEBUG_AUTH_COOKIE` is only used in development mode (`NODE_ENV=development`)
-- If `INTERNAL_URL` is not set, the frontend will connect to the local backend at `http://127.0.0.1:8080`
-- Keep your `.env.local` file secure and never commit it to version control (it should already be in `.gitignore`)
+- El archivo `.env.local` debe crearse dentro de `web/` al mismo nivel que `package.json`.
+- Despues de crear o modificar `.env.local`, reinicia el servidor de desarrollo para que los cambios tengan efecto.
+- Configura `NEXT_PUBLIC_ONYX_BACKEND_URL` cuando el trafico WebSocket del navegador deba ir a un dominio remoto HTTPS en lugar de `localhost`.
+- `DEBUG_AUTH_COOKIE` solo se usa en modo desarrollo (`NODE_ENV=development`).
+- Si `INTERNAL_URL` no esta definida, el frontend se conectara al backend local en `http://127.0.0.1:8080`.
+- Mantén tu archivo `.env.local` seguro y nunca lo subas al control de versiones.
 
 ## Testing
 
-This testing process will reset your application into a clean state.
-Don't run these tests if you don't want to do this!
+Este proceso de testing puede resetear la aplicacion a un estado limpio.
+No lo ejecutes si no quieres hacerlo.
 
-Bring up the entire application.
+Levanta toda la aplicacion y luego:
 
-0. Install playwright dependencies
+1. Instala las dependencias de Playwright
 
 ```bash
 npx playwright install
 ```
 
-1. Run playwright
+2. Ejecuta Playwright
 
 ```bash
 npx playwright test
 ```
 
-To run a single test:
+Para correr un solo test:
 
 ```bash
 npx playwright test landing-page.spec.ts
 ```
 
-If running locally, interactive options can help you see exactly what is happening in
-the test.
+Si estas corriendo localmente, las opciones interactivas pueden ayudarte a ver exactamente lo que esta pasando:
 
 ```bash
 npx playwright test --ui
 npx playwright test --headed
 ```
 
-2. Inspect results
+3. Inspecciona los resultados
 
-By default, playwright.config.ts is configured to output the results to:
+Por defecto, `playwright.config.ts` deja la salida en:
 
 ```bash
 web/output/playwright/
 ```
 
-3. Visual regression screenshots
+4. Screenshots para regresion visual
 
-Screenshots are captured automatically during test runs and saved to `web/output/screenshots/`.
-To compare screenshots across CI runs, use:
+Las screenshots se capturan automaticamente durante los tests y se guardan en `web/output/screenshots/`.
+Para comparar screenshots entre corridas de CI usa:
 
 ```bash
 ods screenshot-diff compare --project admin
 ```
 
-For more information, see [tools/ods/README.md](https://github.com/onyx-dot-app/onyx/blob/main/tools/ods/README.md#screenshot-diff---visual-regression-testing).
+Para mas informacion, revisa [tools/ods/README.md](https://github.com/HOP-RAG/HOP/blob/main/tools/ods/README.md#screenshot-diff---visual-regression-testing).

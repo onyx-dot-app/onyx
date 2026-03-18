@@ -1,63 +1,71 @@
-<!-- ONYX_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/connectors/README.md"} -->
+<!-- ONYX_METADATA={"link": "https://github.com/HOP-RAG/HOP/blob/main/backend/onyx/connectors/README.md"} -->
 
-# Writing a new Onyx Connector
+# Como crear un conector nuevo para ACTIVA
 
-This README covers how to contribute a new Connector for Onyx. It includes an overview of the design, interfaces,
-and required changes.
+Este README explica como contribuir un conector nuevo para ACTIVA dentro del repositorio HOP. Incluye una vista general del diseno, las interfaces y los cambios obligatorios.
 
-Thank you for your contribution!
+Gracias por contribuir.
 
-### Connector Overview
+## Resumen de conectores
 
-Connectors come in 3 different flows:
+Los conectores siguen 3 flujos principales:
 
-- Load Connector:
-  - Bulk indexes documents to reflect a point in time. This type of connector generally works by either pulling all
-    documents via a connector's API or loads the documents from some sort of a dump file.
-- Poll Connector:
-  - Incrementally updates documents based on a provided time range. It is used by the background job to pull the latest
-    changes and additions since the last round of polling. This connector helps keep the document index up to date
-    without needing to fetch/embed/index every document which would be too slow to do frequently on large sets of
-    documents.
-- Slim Connector:
-  - This connector should be a lighter weight method of checking all documents in the source to see if they still exist.
-  - This connector should be identical to the Poll or Load Connector except that it only fetches the IDs of the documents, not the documents themselves.
-  - This is used by our pruning job which removes old documents from the index.
-  - The optional start and end datetimes can be ignored.
-- Event Based connectors:
-  - Connectors that listen to events and update documents accordingly.
-  - Currently not used by the background job, this exists for future design purposes.
+- **Load Connector**
+  - Indexa documentos en bloque para reflejar un punto en el tiempo.
+  - Normalmente obtiene todos los documentos por API o los carga desde algun dump.
 
-### Connector Implementation
+- **Poll Connector**
+  - Actualiza documentos incrementalmente segun un rango de tiempo.
+  - El job en background lo usa para traer cambios nuevos desde la ultima ejecucion.
+  - Sirve para mantener el indice actualizado sin volver a fetch / embed / index de todo el conjunto.
 
-Refer to [interfaces.py](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/connectors/interfaces.py)
-and this first contributor created Pull Request for a new connector (Shoutout to Dan Brown):
-[Reference Pull Request](https://github.com/onyx-dot-app/onyx/pull/139)
+- **Slim Connector**
+  - Es una version mas liviana para verificar si los documentos siguen existiendo.
+  - Debe comportarse igual que un Poll o Load Connector, pero trayendo solo IDs y no el contenido completo.
+  - Se usa durante el pruning para eliminar documentos viejos del indice.
+  - Las fechas opcionales de inicio y fin pueden ignorarse.
 
-For implementing a Slim Connector, refer to the comments in this PR:
-[Slim Connector PR](https://github.com/onyx-dot-app/onyx/pull/3303/files)
+- **Event Based Connectors**
+  - Escuchan eventos y actualizan documentos a partir de esos eventos.
+  - Hoy no los usa el job en background; existen para futuras extensiones de diseno.
 
-All new connectors should have tests added to the `backend/tests/daily/connectors` directory. Refer to the above PR for an example of adding tests for a new connector.
+## Implementacion del conector
 
-#### Implementing the new Connector
+Revisa [interfaces.py](https://github.com/HOP-RAG/HOP/blob/main/backend/onyx/connectors/interfaces.py) y toma como referencia conectores ya existentes en este repositorio.
 
-The connector must subclass one or more of LoadConnector, PollConnector, CheckpointedConnector, or CheckpointedConnectorWithPermSync
+Todo conector nuevo debe agregar tests en `backend/tests/daily/connectors`.
 
-The `__init__` should take arguments for configuring what documents the connector will and where it finds those
-documents. For example, if you have a wiki site, it may include the configuration for the team, topic, folder, etc. of
-the documents to fetch. It may also include the base domain of the wiki. Alternatively, if all the access information
-of the connector is stored in the credential/token, then there may be no required arguments.
+### Implementar el conector
 
-`load_credentials` should take a dictionary which provides all the access information that the connector might need.
-For example this could be the user's username and access token.
+El conector debe heredar de una o mas de estas clases:
 
-Refer to the existing connectors for `load_from_state` and `poll_source` examples. There is not yet a process to listen
-for EventConnector events, this will come down the line.
+- `LoadConnector`
+- `PollConnector`
+- `CheckpointedConnector`
+- `CheckpointedConnectorWithPermSync`
 
-#### Development Tip
+El `__init__` debe recibir la configuracion necesaria para decidir que documentos leer y de donde leerlos. Por ejemplo:
 
-It may be handy to test your new connector separate from the rest of the stack while developing.
-Follow the below template:
+- equipo
+- topic
+- carpeta
+- dominio base
+
+Si toda la informacion de acceso vive en la credencial o token, tal vez no haga falta pedir argumentos extra.
+
+`load_credentials` debe recibir un diccionario con toda la informacion de acceso que el conector necesite.
+
+Por ejemplo:
+
+- usuario
+- token de acceso
+
+Revisa conectores existentes para ejemplos de `load_from_state` y `poll_source`.
+
+### Tip de desarrollo
+
+Puede ser util probar tu conector por separado mientras lo construyes.
+Puedes usar una plantilla como esta:
 
 ```commandline
 if __name__ == "__main__":
@@ -74,31 +82,30 @@ if __name__ == "__main__":
     latest_docs = test_connector.poll_source(one_day_ago, current)
 ```
 
-> Note: Be sure to set PYTHONPATH to onyx/backend before running the above main.
+> Nota: asegúrate de configurar `PYTHONPATH` apuntando a `onyx/backend` antes de correr este ejemplo.
 
-### Additional Required Changes:
+## Cambios adicionales obligatorios
 
-#### Backend Changes
+### Cambios de backend
 
-- Add a new type to
-  [DocumentSource](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/configs/constants.py)
-- Add a mapping from DocumentSource (and optionally connector type) to the right connector class
-  [here](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/connectors/factory.py#L33)
+- Agrega un tipo nuevo en [DocumentSource](https://github.com/HOP-RAG/HOP/blob/main/backend/onyx/configs/constants.py).
+- Agrega el mapeo de `DocumentSource` al conector correcto [aqui](https://github.com/HOP-RAG/HOP/blob/main/backend/onyx/connectors/factory.py#L33).
 
-#### Frontend Changes
+### Cambios de frontend
 
-- Add the new Connector definition to the `SOURCE_METADATA_MAP` [here](https://github.com/onyx-dot-app/onyx/blob/main/web/src/lib/sources.ts#L59).
-- Add the definition for the new Form to the `connectorConfigs` object [here](https://github.com/onyx-dot-app/onyx/blob/main/web/src/lib/connectors/connectors.ts#L79).
+- Agrega la definicion del conector en `SOURCE_METADATA_MAP` [aqui](https://github.com/HOP-RAG/HOP/blob/main/web/src/lib/sources.ts#L59).
+- Agrega la definicion del formulario en `connectorConfigs` [aqui](https://github.com/HOP-RAG/HOP/blob/main/web/src/lib/connectors/connectors.tsx#L79).
 
-#### Docs Changes
+### Cambios de documentacion
 
-Create the new connector page (with guiding images!) with how to get the connector credentials and how to set up the
-connector in Onyx. Then create a Pull Request in [https://github.com/onyx-dot-app/documentation](https://github.com/onyx-dot-app/documentation).
+Crea la pagina de documentacion del conector, incluyendo imagenes guia y pasos para obtener credenciales y configurarlo en ACTIVA.
 
-### Before opening PR
+Despues actualiza la fuente de documentacion que alimenta `docs.activa.ai`.
 
-1. Be sure to fully test changes end to end with setting up the connector and updating the index with new docs from the
-   new connector. To make it easier to review, please attach a video showing the successful creation of the connector via the UI (starting from the `Add Connector` page).
-2. Add a folder + tests under `backend/tests/daily/connectors` director. For an example, checkout the [test for Confluence](https://github.com/onyx-dot-app/onyx/blob/main/backend/tests/daily/connectors/confluence/test_confluence_basic.py). In the PR description, include a guide on how to setup the new source to pass the test. Before merging, we will re-create the environment and make sure the test(s) pass.
-3. Be sure to run the linting/formatting, refer to the formatting and linting section in
-   [CONTRIBUTING.md](https://github.com/onyx-dot-app/onyx/blob/main/CONTRIBUTING.md#formatting-and-linting)
+## Antes de abrir el PR
+
+1. Prueba el flujo completo de punta a punta, incluyendo la creacion del conector y la indexacion de documentos nuevos.
+2. Adjunta un video mostrando la creacion exitosa desde la UI, empezando en `Add Connector`.
+3. Agrega una carpeta con tests en `backend/tests/daily/connectors`. Como referencia puedes revisar el [test de Confluence](https://github.com/HOP-RAG/HOP/blob/main/backend/tests/daily/connectors/confluence/test_confluence_basic.py).
+4. En la descripcion del PR, incluye una guia para levantar el origen necesario y hacer pasar esos tests.
+5. Corre formato y lint antes de pedir review. Puedes apoyarte en [CONTRIBUTING.md](https://github.com/HOP-RAG/HOP/blob/main/CONTRIBUTING.md#contribuir-con-codigo).

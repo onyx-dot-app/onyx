@@ -1,156 +1,139 @@
-# Onyx MCP Server
+# Servidor MCP de ACTIVA
 
-## Overview
+## Resumen
 
-The Onyx MCP server allows LLMs to connect to your Onyx instance and access its knowledge base and search capabilities through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+El servidor MCP de ACTIVA permite que LLMs se conecten a tu instancia de ACTIVA y accedan a su base de conocimiento y capacidades de busqueda mediante [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
-With the Onyx MCP Server, you can search your knowledgebase,
-give your LLMs web search, and upload and manage documents in Onyx.
+Con este servidor puedes:
 
-All access controls are managed within the main Onyx application.
+- buscar en la base de conocimiento indexada
+- habilitar web search para tus LLMs
+- subir y administrar documentos en ACTIVA
 
-### Authentication
+Todos los controles de acceso se administran desde la aplicacion principal de ACTIVA.
 
-Provide an Onyx Personal Access Token or API Key in the `Authorization` header as a Bearer token.
-The MCP server quickly validates and passes through the token on every request.
+## Autenticacion
 
-Depending on usage, the MCP Server may support OAuth and stdio in the future.
+Debes enviar un Personal Access Token o API Key de ACTIVA en el header `Authorization` como Bearer token.
 
-### Default Configuration
-- **Transport**: HTTP POST (MCP over HTTP)
-- **Port**: 8090 (shares domain with API server)
-- **Framework**: FastMCP with FastAPI wrapper
-- **Database**: None (all work delegates to the API server)
+El servidor valida y reenvia ese token en cada request.
 
-### Architecture
+Dependiendo del uso, en el futuro puede soportar OAuth y `stdio`.
 
-The MCP server is built on [FastMCP](https://github.com/jlowin/fastmcp) and runs alongside the main Onyx API server:
+## Configuracion por defecto
 
-```
-┌─────────────────┐
-│  LLM Client     │
-│  (Claude, etc)  │
-└────────┬────────┘
-         │ MCP over HTTP
-         │ (POST with bearer)
-         ▼
-┌─────────────────┐
-│  MCP Server     │
-│  Port 8090      │
-│  ├─ Auth        │
-│  ├─ Tools       │
-│  └─ Resources   │
-└────────┬────────┘
-         │ Internal HTTP
-         │ (authenticated)
-         ▼
-┌─────────────────┐
-│  API Server     │
-│  Port 8080      │
-│  ├─ /me (auth)  │
-│  ├─ Search APIs │
-│  └─ ACL checks  │
-└─────────────────┘
+- **Transporte:** HTTP POST (MCP sobre HTTP)
+- **Puerto:** 8090
+- **Framework:** FastMCP con wrapper FastAPI
+- **Base de datos:** ninguna; todo delega al API server
+
+## Arquitectura
+
+El servidor MCP esta construido sobre [FastMCP](https://github.com/jlowin/fastmcp) y corre junto al API server principal:
+
+```text
+LLM Client
+  -> MCP Server (8090)
+      -> API Server (8080)
 ```
 
-## Configuring MCP Clients
+## Configurar clientes MCP
 
 ### Claude Desktop
 
-Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Agrega esto a tu configuracion de Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json` en macOS):
 
 ```json
 {
   "mcpServers": {
-    "onyx": {
-      "url": "https://[YOUR_ONYX_DOMAIN]:8090/",
+    "activa": {
+      "url": "https://[YOUR_ACTIVA_DOMAIN]:8090/",
       "transport": "http",
       "headers": {
-        "Authorization": "Bearer YOUR_ONYX_TOKEN_HERE"
+        "Authorization": "Bearer YOUR_ACTIVA_TOKEN_HERE"
       }
     }
   }
 }
 ```
 
-### Other MCP Clients
+### Otros clientes MCP
 
-Most MCP clients support HTTP transport with custom headers. Refer to your client's documentation for configuration details.
+La mayoria de clientes MCP soportan transporte HTTP con headers personalizados. Revisa la documentacion de tu cliente.
 
-## Capabilities
+## Capacidades
 
 ### Tools
 
-The server provides three tools for searching and retrieving information:
-
 1. `search_indexed_documents`
-Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content snippets, scores, and metadata.
+   Busca dentro de la base de conocimiento privada indexada en ACTIVA y devuelve documentos rankeados con snippets, score y metadata.
 
 2. `search_web`
-Search the public internet for current events and general knowledge. Returns web search results with titles, URLs, and snippets.
+   Busca en Internet informacion publica y resultados recientes.
 
 3. `open_urls`
-Retrieve the complete text content from specific web URLs. Useful for fetching full page content after finding relevant URLs via `search_web`.
+   Recupera el contenido completo de URLs especificas, util para profundizar despues de `search_web`.
 
 ### Resources
 
 1. `indexed_sources`
-Lists all document sources currently indexed in the tenant (e.g., `"confluence"`, `"github"`). Use these values to filter results when calling `search_indexed_documents`.
+   Lista las fuentes documentales indexadas en el tenant, por ejemplo `"confluence"` o `"github"`.
 
-## Local Development
+## Desarrollo local
 
-### Running the MCP Server
+### Levantar el servidor MCP
 
-The MCP Server automatically launches with the `Run All Onyx Services` task from the default launch.json.
+El servidor MCP se levanta automaticamente con la tarea `Run All Onyx Services` definida en `launch.json`. Ese sigue siendo el nombre tecnico actual del perfil.
 
-You can also independently launch the Server via the vscode debugger.
+Tambien puedes ejecutarlo de manera independiente desde el depurador de VS Code.
 
-### Testing with MCP Inspector
+### Probar con MCP Inspector
 
-The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a debugging tool for MCP servers:
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector) sirve para depurar servidores MCP:
 
 ```bash
 npx @modelcontextprotocol/inspector http://localhost:8090/
 ```
 
-**Setup in Inspector:**
+**Configuracion en Inspector:**
 
-1. Ignore the OAuth configuration menus
-2. Open the **Authentication** tab
-3. Select **Bearer Token** authentication
-4. Paste your Onyx bearer token
-5. Click **Connect**
+1. Ignora las opciones de OAuth
+2. Abre la pestana **Authentication**
+3. Selecciona **Bearer Token**
+4. Pega tu token Bearer de ACTIVA
+5. Haz clic en **Connect**
 
-Once connected, you can:
-- Browse available tools
-- Test tool calls with different parameters
-- View request/response payloads
-- Debug authentication issues
+Una vez conectado puedes:
 
-### Health Check
+- explorar tools disponibles
+- probar llamadas con distintos parametros
+- inspeccionar payloads request / response
+- depurar problemas de autenticacion
 
-Verify the server is running:
+### Health check
+
+Verifica que el servidor este corriendo:
 
 ```bash
 curl http://localhost:8090/health
 ```
 
-Expected response:
+Deberias recibir:
+
 ```json
 {
-  "status": "healthy",
-  "service": "mcp_server"
+  "status": "healthy"
 }
 ```
 
-### Environment Variables
+## Variables de entorno
 
-**MCP Server Configuration:**
-- `MCP_SERVER_ENABLED`: Enable MCP server (set to "true" to enable, default: disabled)
-- `MCP_SERVER_PORT`: Port for MCP server (default: 8090)
-- `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
+### Configuracion del servidor MCP
 
-**API Server Connection:**
-- `API_SERVER_PROTOCOL`: Protocol for API server connection (default: "http")
-- `API_SERVER_HOST`: Hostname for API server connection (default: "127.0.0.1")
-- `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS`: Optional override URL. If set, takes precedence over the protocol/host variables. Used for self-hosting the MCP server with Onyx Cloud as the backend.
+- `MCP_SERVER_PORT`: puerto HTTP del servidor MCP. Por defecto `8090`.
+- `MCP_SERVER_HOST`: host donde escucha el servidor MCP. Por defecto `0.0.0.0`.
+
+### Conexion con el API server
+
+- `MCP_API_KEY_HEADER`: header usado para reenviar el token Bearer.
+- `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS`: URL override opcional. Si esta presente, tiene prioridad sobre protocolo y host. Es util para self-hosting del servidor MCP contra un backend hospedado de ACTIVA.

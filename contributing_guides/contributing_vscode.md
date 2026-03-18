@@ -1,30 +1,30 @@
-# VSCode Debugging Setup
+# Configuracion de depuracion en VS Code
 
-This guide explains how to set up and use VSCode's debugging capabilities with this project.
+Esta guia explica como configurar y usar las capacidades de depuracion de VS Code con este proyecto.
 
-## Initial Setup
+## Configuracion inicial
 
-1. **Environment Setup**:
-   - Copy `.vscode/env_template.txt` to `.vscode/.env`
-   - Fill in the necessary environment variables in `.vscode/.env`
+1. **Preparar el entorno:**
+   - Copia `.vscode/env_template.txt` a `.vscode/.env`
+   - Completa las variables de entorno necesarias en `.vscode/.env`
 
-## Using the Debugger
+## Usar el depurador
 
-Before starting, make sure the Docker Daemon is running.
+Antes de empezar, asegurate de que Docker Daemon este corriendo.
 
-1. Open the Debug view in VSCode (Cmd+Shift+D on macOS)
-2. From the dropdown at the top, select "Clear and Restart External Volumes and Containers" and press the green play button
-3. From the dropdown at the top, select "Run All Onyx Services" and press the green play button
-4. Now, you can navigate to onyx in your browser (default is http://localhost:3000) and start using the app
-5. You can set breakpoints by clicking to the left of line numbers to help debug while the app is running
-6. Use the debug toolbar to step through code, inspect variables, etc.
+1. Abre la vista de Debug en VS Code (`Cmd+Shift+D` en macOS)
+2. En el selector superior, elige `Clear and Restart External Volumes and Containers` y pulsa el boton verde de play
+3. En el selector superior, elige `Run All Onyx Services` y pulsa el boton verde de play. Ese sigue siendo el nombre tecnico actual del perfil aunque la marca del producto ahora sea ACTIVA.
+4. Luego abre ACTIVA en tu navegador (por defecto `http://localhost:3000`) y empieza a usar la aplicacion
+5. Puedes poner breakpoints haciendo clic a la izquierda de los numeros de linea para depurar mientras la app corre
+6. Usa la barra de depuracion para avanzar paso a paso, inspeccionar variables, etc.
 
-Note: Clear and Restart External Volumes and Containers will reset your postgres and Vespa (relational-db and index).
-Only run this if you are okay with wiping your data.
+Nota: `Clear and Restart External Volumes and Containers` reinicia Postgres y Vespa (`relational-db` e `index`).
+Solo ejecutalo si estas de acuerdo con borrar esos datos.
 
-## Features
+## Funcionalidades
 
-- Hot reload is enabled for the web server and API servers
-- Python debugging is configured with debugpy
-- Environment variables are loaded from `.vscode/.env`
-- Console output is organized in the integrated terminal with labeled tabs
+- Hot reload habilitado para el web server y los API servers
+- Depuracion de Python configurada con `debugpy`
+- Variables de entorno cargadas desde `.vscode/.env`
+- Salida de consola organizada en la terminal integrada con pestanas etiquetadas
