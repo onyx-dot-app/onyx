@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import contextlib
+from collections import defaultdict
 from collections.abc import Generator
-from collections.abc import Iterator
 
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.orm import Session

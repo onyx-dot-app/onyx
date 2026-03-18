@@ -5,7 +5,6 @@ import datetime
 import time
 from collections import defaultdict
 from collections.abc import Generator
-from collections.abc import Iterator
 from uuid import UUID
 
 from sqlalchemy import select
@@ -160,9 +159,6 @@ class UserFileIndexingAdapter:
         except Exception as e:
             logger.error(f"Error getting tokenizer: {e}")
             llm_tokenizer = None
-
-        # Materialize the iterator so we can iterate multiple times
-        all_chunks = list(chunks_with_embeddings)
 
         user_file_id_to_raw_text: dict[str, str] = {}
         user_file_id_to_token_count: dict[str, int | None] = {}
