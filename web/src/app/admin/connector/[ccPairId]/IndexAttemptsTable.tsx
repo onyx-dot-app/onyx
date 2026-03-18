@@ -18,7 +18,7 @@ import { PageSelector } from "@/components/PageSelector";
 import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { InfoIcon } from "@/components/icons/icons";
-import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
+import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { SvgClock } from "@opal/icons";
 export interface IndexingAttemptsTableProps {
