@@ -105,11 +105,6 @@ export function IndexAttemptsTable({
                     ? "hover:bg-accent-background cursor-pointer relative select-none"
                     : undefined
                 }
-                onClick={
-                  indexAttempt.full_exception_trace
-                    ? () => setIndexAttemptTracePopupId(indexAttempt.id)
-                    : undefined
-                }
               >
                 <TableCell>
                   {indexAttempt.time_started
@@ -173,6 +168,16 @@ export function IndexAttemptsTable({
                       )}
                   </>
                 </TableCell>
+                {indexAttempt.full_exception_trace && (
+                  <td className="w-0 p-0">
+                    <button
+                      onClick={() =>
+                        setIndexAttemptTracePopupId(indexAttempt.id)
+                      }
+                      className="absolute w-full h-full left-0 top-0"
+                    />
+                  </td>
+                )}
               </TableRow>
             );
           })}
