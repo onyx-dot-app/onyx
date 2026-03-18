@@ -109,6 +109,12 @@ class IndexingPipelineResult(BaseModel):
         )
 
 
+class ChunkEmbeddingResult(BaseModel):
+    embedding_path: Path
+    successful_chunk_ids: list[tuple[int, str]]  # (chunk_id, document_id)
+    connector_failures: list[ConnectorFailure]
+
+
 class IndexingPipelineProtocol(Protocol):
     def __call__(
         self,
