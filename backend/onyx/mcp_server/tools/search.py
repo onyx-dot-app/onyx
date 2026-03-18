@@ -1,5 +1,6 @@
 """Search tools for MCP server - document and web search."""
 
+import json
 from datetime import datetime
 from typing import Any
 
@@ -18,7 +19,7 @@ logger = setup_logger()
 @mcp_server.tool()
 async def search_indexed_documents(
     query: str,
-    source_types: list[str] | None = None,
+    source_types: list[str] | str | None = None,
     time_cutoff: str | None = None,
     limit: int = 10,
 ) -> dict[str, Any]:
@@ -97,6 +98,14 @@ async def search_indexed_documents(
                 "through Onyx before calling onyx_search_documents."
             ),
         }
+
+    # Handle source_types passed as JSON string (e.g. '["jira"]' instead of ["jira"])
+    # Some MCP clients serialize list parameters as JSON strings
+    if isinstance(source_types, str):
+        try:
+            source_types = json.loads(source_types)
+        except (json.JSONDecodeError, TypeError):
+            source_types = [source_types]
 
     # Convert source_types strings to DocumentSource enums if provided
     # Invalid values will be handled by the API server
