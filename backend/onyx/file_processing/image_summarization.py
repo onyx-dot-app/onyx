@@ -5,6 +5,7 @@ from PIL import Image
 
 from onyx.configs.app_configs import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.configs.app_configs import IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.configs.llm_configs import get_image_analysis_max_size_mb
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import ContentPart
@@ -28,8 +29,10 @@ class UnsupportedImageFormatError(ValueError):
 
 def prepare_image_bytes(image_data: bytes) -> str:
     """Prepare image bytes for summarization.
-    Resizes image if it's larger than 20MB. Encodes image as a base64 string."""
-    image_data = _resize_image_if_needed(image_data)
+    Downsizes large-dimension images for vision API efficiency and enforces the
+    workspace-configurable file-size limit.  Encodes the result as a base64 data URL."""
+    max_size_mb = get_image_analysis_max_size_mb()
+    image_data = _resize_image_if_needed(image_data, max_size_mb=max_size_mb)
 
     # encode image (base64)
     encoded_image = _encode_image_for_llm_prompt(image_data)
@@ -153,20 +156,53 @@ def _encode_image_for_llm_prompt(image_data: bytes) -> str:
     return f"data:{mime_type};base64,{base64_encoded_data}"
 
 
-def _resize_image_if_needed(image_data: bytes, max_size_mb: int = 20) -> bytes:
-    """Resize image if it's larger than the specified max size in MB."""
+_MAX_DIMENSION_PX = 2048
+"""Cap the longest side of any image sent to the vision API.
+
+Full-page PDF renders are commonly ~1700×2400 px — well under typical
+file-size limits but expensive in vision-API tokens.  Capping at 2048 px
+keeps quality high while significantly reducing token cost and latency.
+"""
+
+
+def _resize_image_if_needed(
+    image_data: bytes,
+    max_size_mb: int = 20,
+    max_dimension_px: int = _MAX_DIMENSION_PX,
+) -> bytes:
+    """Resize an image when it exceeds either a dimension or file-size limit.
+
+    The dimension check runs first so that a large-pixel image is down-scaled
+    even when its file size is within limits (common for lossless PNGs from
+    PDF renders).  The file-size check is a safety net for already-compressed
+    images that are still very large.
+    """
     max_size_bytes = max_size_mb * 1024 * 1024
+    needs_resize = False
 
-    if len(image_data) > max_size_bytes:
-        with Image.open(BytesIO(image_data)) as img:
-            # Reduce dimensions for better size reduction
-            img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
-            output = BytesIO()
+    with Image.open(BytesIO(image_data)) as img:
+        width, height = img.size
 
-            # Save with lower quality for compression
-            img.save(output, format="JPEG", quality=85)
-            resized_data = output.getvalue()
+        if width > max_dimension_px or height > max_dimension_px:
+            needs_resize = True
+        elif len(image_data) > max_size_bytes:
+            needs_resize = True
 
-            return resized_data
+        if not needs_resize:
+            return image_data
 
-    return image_data
+        original_size = (width, height)
+        img.thumbnail((max_dimension_px, max_dimension_px), Image.Resampling.LANCZOS)
+        output = BytesIO()
+        img.save(output, format="JPEG", quality=85)
+        resized_data = output.getvalue()
+
+        logger.info(
+            "Resized image from %s (%d bytes) to %s (%d bytes)",
+            original_size,
+            len(image_data),
+            img.size,
+            len(resized_data),
+        )
+
+        return resized_data
