@@ -218,6 +218,7 @@ function ContentMd({
                 "text-text-04",
                 editable && "cursor-pointer"
               )}
+              title={title}
               onClick={editable ? startEditing : undefined}
               style={{ height: config.lineHeight }}
             >

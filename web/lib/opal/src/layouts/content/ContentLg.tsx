@@ -174,6 +174,7 @@ function ContentLg({
               )}
               onClick={editable ? startEditing : undefined}
               style={{ height: config.lineHeight }}
+              title={title}
             >
               {title}
             </span>
