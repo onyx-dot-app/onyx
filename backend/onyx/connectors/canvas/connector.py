@@ -70,11 +70,6 @@ class CanvasPage(BaseModel):
     updated_at: str
     course_id: int
 
-    @property
-    def id(self) -> int:
-        # Used in checkpoint and test code
-        return self.page_id
-
     @classmethod
     def from_api(
         cls, payload: dict[str, Any], course_id: int
