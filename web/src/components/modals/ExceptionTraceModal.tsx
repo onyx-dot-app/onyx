@@ -1,18 +1,27 @@
-import { useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
+import { SvgAlertTriangle } from "@opal/icons";
+import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
+import { CopyButton } from "@/sections/modals/PreviewModal/variants/shared";
+import { Section } from "@/layouts/general-layouts";
+import { cn } from "@/lib/utils";
+import { useMemo } from "react";
 
 interface ExceptionTraceModalProps {
   onOutsideClick: () => void;
   exceptionTrace: string;
+  language?: string;
 }
 
 export default function ExceptionTraceModal({
   onOutsideClick,
   exceptionTrace,
+  language = "python",
 }: ExceptionTraceModalProps) {
-  const [copyClicked, setCopyClicked] = useState(false);
+  const lineCount = useMemo(
+    () => exceptionTrace.split("\n").length,
+    [exceptionTrace]
+  );
 
   return (
     <Modal open onOpenChange={onOutsideClick}>
@@ -23,30 +32,35 @@ export default function ExceptionTraceModal({
           onClose={onOutsideClick}
           height="fit"
         />
-        <Modal.Body>
-          <div className="mb-6">
-            {!copyClicked ? (
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(exceptionTrace!);
-                  setCopyClicked(true);
-                  setTimeout(() => setCopyClicked(false), 2000);
-                }}
-                className="flex w-fit items-center hover:bg-accent-background p-2 border-border border rounded"
-              >
-                <Text>Copy full trace</Text>
-                <SvgCopy className="stroke-text-04 ml-2 h-4 w-4 flex flex-shrink-0" />
-              </button>
-            ) : (
-              <div className="flex w-fit items-center hover:bg-accent-background p-2 border-border border rounded cursor-default">
-                <Text>Copied to clipboard</Text>
-                <SvgCheck className="stroke-text-04 my-auto ml-2 h-4 w-4 flex flex-shrink-0" />
-              </div>
-            )}
+
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full bg-background-tint-01">
+          <CodePreview content={exceptionTrace} language={language} normalize />
+        </div>
+
+        {/* Floating footer */}
+        <div
+          className={cn(
+            "absolute bottom-0 left-0 right-0",
+            "flex items-center justify-between",
+            "p-4 pointer-events-none w-full"
+          )}
+          style={{
+            background:
+              "linear-gradient(to top, var(--background-code-01) 40%, transparent)",
+          }}
+        >
+          <div className="pointer-events-auto">
+            <Text text03 mainUiBody className="select-none">
+              {lineCount} {lineCount === 1 ? "line" : "lines"}
+            </Text>
           </div>
-          <div className="whitespace-pre-wrap">{exceptionTrace}</div>
-        </Modal.Body>
+
+          <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
+            <Section flexDirection="row" width="fit">
+              <CopyButton getText={() => exceptionTrace} />
+            </Section>
+          </div>
+        </div>
       </Modal.Content>
     </Modal>
   );
