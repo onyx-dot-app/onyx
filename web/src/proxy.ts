@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
+  ANONYMOUS_USER_COOKIE_NAME,
   AuthType,
+  LEGACY_ANONYMOUS_USER_COOKIE_NAME,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
 } from "./lib/constants";
 
 // Authentication cookie names (matches backend constants)
 const FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth";
-const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
 
 // Protected route prefixes (require authentication)
 const PROTECTED_ROUTES = ["/app", "/admin", "/agents", "/connector"];
@@ -66,7 +67,9 @@ export async function proxy(request: NextRequest) {
 
   if (isProtectedRoute && !isPublicRoute) {
     const authCookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME);
-    const anonymousCookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME);
+    const anonymousCookie =
+      request.cookies.get(ANONYMOUS_USER_COOKIE_NAME) ??
+      request.cookies.get(LEGACY_ANONYMOUS_USER_COOKIE_NAME);
 
     // Allow access if user has either a regular auth cookie or anonymous user cookie
     if (!authCookie && !anonymousCookie) {

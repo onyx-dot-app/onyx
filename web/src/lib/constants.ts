@@ -37,6 +37,10 @@ export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_ACTIVA_POWERED;
 
 export const TENANT_ID_COOKIE_NAME = "activa_tid";
+export const LEGACY_TENANT_ID_COOKIE_NAME = "onyx_tid";
+export const LEGACY_RESET_PASSWORD_TENANT_QUERY_PARAM = "tenant";
+export const ANONYMOUS_USER_COOKIE_NAME = "activa_anonymous_user";
+export const LEGACY_ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
 
 export const SEARCH_TYPE_COOKIE_NAME = "search_type";
 export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";

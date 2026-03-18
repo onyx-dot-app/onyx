@@ -1,17 +1,58 @@
 import { ChatSession } from "@/app/app/interfaces";
-import { LOCAL_STORAGE_KEYS, DEFAULT_PERSONA_ID } from "./constants";
+import {
+  DEFAULT_PERSONA_ID,
+  LEGACY_LOCAL_STORAGE_KEYS,
+  LOCAL_STORAGE_KEYS,
+} from "./constants";
 import { moveChatSession } from "@/app/app/projects/projectsService";
 import { toast } from "@/hooks/useToast";
 
-export const shouldShowMoveModal = (chatSession: ChatSession): boolean => {
-  const hideModal =
-    typeof window !== "undefined" &&
-    window.localStorage.getItem(
-      LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
-    ) === "true";
+export function shouldHideMoveCustomAgentModal(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
 
-  return !hideModal && chatSession.persona_id !== DEFAULT_PERSONA_ID;
-};
+  const hideModal = window.localStorage.getItem(
+    LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
+  );
+  if (hideModal !== null) {
+    return hideModal === "true";
+  }
+
+  const legacyHideModal = window.localStorage.getItem(
+    LEGACY_LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
+  );
+  if (legacyHideModal !== null) {
+    window.localStorage.setItem(
+      LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
+      legacyHideModal
+    );
+    window.localStorage.removeItem(
+      LEGACY_LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
+    );
+    return legacyHideModal === "true";
+  }
+
+  return false;
+}
+
+export function persistHideMoveCustomAgentModal(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
+    "true"
+  );
+  window.localStorage.removeItem(
+    LEGACY_LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
+  );
+}
+
+export const shouldShowMoveModal = (chatSession: ChatSession): boolean =>
+  !shouldHideMoveCustomAgentModal() &&
+  chatSession.persona_id !== DEFAULT_PERSONA_ID;
 
 export const showErrorNotification = (message: string) => {
   toast.error(message);

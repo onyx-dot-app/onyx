@@ -30,6 +30,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import ONYX_DISCORD_URL
+from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
@@ -434,7 +435,9 @@ def send_forgot_password_email(
 
     subject = f"Reset Your {application_name} Password"
     heading = "Reset Your Password"
-    tenant_param = f"&tenant={tenant_id}" if tenant_id and MULTI_TENANT else ""
+    tenant_param = (
+        f"&{TENANT_ID_COOKIE_NAME}={tenant_id}" if tenant_id and MULTI_TENANT else ""
+    )
     message = "<p>Please click the button below to reset your password. This link will expire in 24 hours.</p>"
     cta_text = "Reset Password"
     cta_link = f"{WEB_DOMAIN}/auth/reset-password?token={token}{tenant_param}"

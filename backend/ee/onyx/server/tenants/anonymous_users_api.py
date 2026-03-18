@@ -17,6 +17,7 @@ from onyx.auth.users import current_admin_user
 from onyx.auth.users import User
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import LEGACY_ANONYMOUS_USER_COOKIE_NAME
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -86,6 +87,7 @@ async def login_as_anonymous_user(
 
     response = Response()
     response.delete_cookie(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    response.delete_cookie(LEGACY_ANONYMOUS_USER_COOKIE_NAME)
     response.set_cookie(
         key=ANONYMOUS_USER_COOKIE_NAME,
         value=token,

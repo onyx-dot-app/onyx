@@ -106,6 +106,7 @@ from onyx.configs.constants import AuthType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import LEGACY_ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import PASSWORD_SPECIAL_CHARS
@@ -782,14 +783,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         response: Optional[Response] = None,
     ) -> None:
         try:
-            if response and request and ANONYMOUS_USER_COOKIE_NAME in request.cookies:
-                response.delete_cookie(
+            if response and request:
+                for cookie_name in (
                     ANONYMOUS_USER_COOKIE_NAME,
-                    # Ensure cookie deletion doesn't override other cookies by setting the same path/domain
-                    path="/",
-                    domain=None,
-                    secure=WEB_DOMAIN.startswith("https"),
-                )
+                    LEGACY_ANONYMOUS_USER_COOKIE_NAME,
+                ):
+                    if cookie_name not in request.cookies:
+                        continue
+
+                    response.delete_cookie(
+                        cookie_name,
+                        # Ensure cookie deletion doesn't override other cookies by setting the same path/domain
+                        path="/",
+                        domain=None,
+                        secure=WEB_DOMAIN.startswith("https"),
+                    )
                 logger.debug(f"Deleted anonymous user cookie for user {user.email}")
         except Exception:
             logger.exception("Error deleting anonymous user cookie")
