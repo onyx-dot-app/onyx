@@ -15,7 +15,7 @@ from onyx.context.search.models import Tag
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import ASSUMED_DOCUMENT_AGE_DAYS
 from onyx.document_index.opensearch.constants import (
-    DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+    DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
 )
 from onyx.document_index.opensearch.constants import (
     DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
@@ -332,7 +332,7 @@ class DocumentQuery:
 
         # TODO(andrei, yuhong): We can tune this more dynamically based on
         # num_hits.
-        max_results_per_subquery = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES
+        max_results_per_subquery = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
 
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
             query_text, query_vector, vector_candidates=max_results_per_subquery
@@ -460,7 +460,7 @@ class DocumentQuery:
         # search. This is higher than the number of results because the scoring
         # is hybrid. For a detailed breakdown, see where the default value is
         # set.
-        vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+        vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
     ) -> list[dict[str, Any]]:
         """Returns subqueries for hybrid search.
 
@@ -546,7 +546,7 @@ class DocumentQuery:
     @staticmethod
     def _get_title_vector_similarity_search_query(
         query_vector: list[float],
-        vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+        vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
     ) -> dict[str, Any]:
         return {
             "knn": {
@@ -560,7 +560,7 @@ class DocumentQuery:
     @staticmethod
     def _get_content_vector_similarity_search_query(
         query_vector: list[float],
-        vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+        vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
     ) -> dict[str, Any]:
         return {
             "knn": {
