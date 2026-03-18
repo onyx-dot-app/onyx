@@ -361,7 +361,10 @@ class CanvasConnector(
         if desc_text:
             text_parts.append(desc_text)
         if assignment.due_at:
-            text_parts.append(f"Due: {assignment.due_at}")
+            due_dt = datetime.fromisoformat(
+                assignment.due_at.replace("Z", "+00:00")
+            )
+            text_parts.append(f"Due: {due_dt.strftime('%B %d, %Y %H:%M UTC')}")
 
         sections = [
             TextSection(link=assignment.html_url, text="\n\n".join(text_parts))
