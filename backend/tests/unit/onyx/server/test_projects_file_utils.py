@@ -199,7 +199,7 @@ def test_categorize_no_size_limit_when_upload_size_mb_is_zero(
     _patch_common_dependencies(monkeypatch, upload_size_mb=0)
     monkeypatch.setattr(utils, "estimate_image_tokens_for_upload", lambda _upload: 10)
 
-    upload = _make_upload("huge.png", size=999_999_999)
+    upload = _make_upload("huge.png", size=999_999_999, content=b"x")
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
     assert len(result.acceptable) == 1

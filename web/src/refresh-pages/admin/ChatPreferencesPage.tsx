@@ -219,14 +219,14 @@ function NumericLimitField({
 
   const handleBlur = () => {
     const parsed = parseInt(value, 10);
-    if (isNaN(parsed) || parsed === 0) {
+    if (isNaN(parsed) || parsed <= 0) {
       void setFieldValue(name, "");
     }
     if (value !== initialValue.current) {
       void saveSettings({
-        [name]: value === "" || isNaN(parsed) || parsed === 0 ? 0 : parsed,
+        [name]: value === "" || isNaN(parsed) || parsed <= 0 ? 0 : parsed,
       });
-      initialValue.current = isNaN(parsed) || parsed === 0 ? "" : value;
+      initialValue.current = isNaN(parsed) || parsed <= 0 ? "" : value;
     }
   };
 
