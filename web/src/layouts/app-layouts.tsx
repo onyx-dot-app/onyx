@@ -457,9 +457,9 @@ function Footer() {
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    `[Onyx ${
+    `[ACTIVA ${
       settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - ${APP_SLOGAN}`;
+    }](https://activa.ai/) - ${APP_SLOGAN}`;
 
   return (
     <footer

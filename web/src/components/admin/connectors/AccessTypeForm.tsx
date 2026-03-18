@@ -78,7 +78,7 @@ export function AccessTypeForm({
       name: "Public",
       value: "public",
       description:
-        "Everyone with an account on Onyx can access the documents pulled in by this connector",
+        "Cualquier persona con una cuenta en la aplicación puede acceder a los documentos traídos por este conector",
       disabled: false,
       disabledReason: "",
     },
@@ -89,7 +89,7 @@ export function AccessTypeForm({
       name: "Auto Sync Permissions",
       value: "sync",
       description:
-        "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
+        "Sincronizaremos automáticamente los permisos desde la fuente. Un documento solo será visible en la búsqueda si la persona que lo consulta también tiene permiso para verlo en la fuente original.",
       disabled: isSyncDisabledByAuth,
       disabledReason:
         "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",

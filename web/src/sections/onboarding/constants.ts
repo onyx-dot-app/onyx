@@ -56,7 +56,7 @@ export const STEP_NAVIGATION: Record<
 export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
   {
     title: "Select web search provider",
-    description: "Enable Onyx to search the internet for information.",
+    description: "Permite que la aplicación busque información en internet.",
     icon: SvgGlobe,
     buttonText: "Web Search",
     buttonHref: "/admin/configuration/web-search",

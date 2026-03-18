@@ -501,9 +501,9 @@ function RecentFilesTableContent({
       {hasProcessingFiles && (
         <GeneralLayouts.Section height="auto" alignItems="start">
           <Text as="p" text03 secondaryBody>
-            Onyx is still processing your uploaded files. You can create the
-            agent now, but it will not have access to all files until processing
-            completes.
+            La aplicación todavía está procesando los archivos que subiste.
+            Puedes crear el agente ahora, pero no tendrá acceso a todos los
+            archivos hasta que termine el procesamiento.
           </Text>
         </GeneralLayouts.Section>
       )}

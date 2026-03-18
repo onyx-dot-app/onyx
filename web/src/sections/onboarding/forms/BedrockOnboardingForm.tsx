@@ -204,8 +204,8 @@ function BedrockFormFields(props: OnboardingFormChildProps<BedrockFormValues>) {
             <SvgAlertCircle className="h-4 w-4 stroke-text-03" />
           </div>
           <Text as="p" text04 mainUiBody>
-            Onyx will use the IAM role attached to the environment it&apos;s
-            running in to authenticate.
+            La aplicación usará el rol de IAM adjunto al entorno donde se está
+            ejecutando para autenticarse.
           </Text>
         </div>
       )}

@@ -32,7 +32,7 @@ const SCOPE_OPTIONS: {
   {
     value: "public_org",
     label: "Organization",
-    description: "Anyone logged into your Onyx can view this app.",
+    description: "Cualquier persona que haya iniciado sesión en la aplicación puede ver esta app.",
   },
 ];
 

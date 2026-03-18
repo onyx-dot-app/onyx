@@ -40,6 +40,7 @@ import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import { getDisplayName } from "@/lib/llmConfig/utils";
 import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { Interactive } from "@opal/core";
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -260,7 +261,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
             )}
             <Content
               icon={SvgUser}
-              title={agent.owner?.email ?? "Onyx"}
+              title={agent.owner?.email ?? DEFAULT_APPLICATION_NAME}
               sizePreset="main-ui"
               variant="body"
               prominence="muted"
@@ -349,7 +350,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 {defaultModel && (
                   <Horizontal
                     title="Default Model"
-                    description="This model will be used by Onyx by default in your chats."
+                    description="Este modelo se usará por defecto en tus chats."
                     nonInteractive
                     sizePreset="main-ui"
                   >

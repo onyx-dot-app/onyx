@@ -19,7 +19,7 @@ export default function SharedAppInputBar() {
         {/* Textarea area */}
         <div className="flex flex-row items-center w-full">
           <Text text03 className="w-full px-3 pt-3 pb-2 select-none">
-            How can Onyx help you today
+            ¿Cómo puedo ayudarte hoy?
           </Text>
         </div>
 

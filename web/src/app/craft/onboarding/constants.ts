@@ -216,61 +216,61 @@ export const PERSONA_MAPPING: Record<WorkArea, Record<Level, PersonaInfo>> = {
   [WorkArea.ENGINEERING]: {
     [Level.IC]: {
       name: "Jiwon Kang",
-      email: "jiwon_kang@netherite-extraction.onyx.app",
+      email: "jiwon_kang@netherite-extraction.activa.ai",
     },
     [Level.MANAGER]: {
       name: "Javier Morales",
-      email: "javier_morales@netherite-extraction.onyx.app",
+      email: "javier_morales@netherite-extraction.activa.ai",
     },
   },
   [WorkArea.SALES]: {
     [Level.IC]: {
       name: "Megan Foster",
-      email: "megan_foster@netherite-extraction.onyx.app",
+      email: "megan_foster@netherite-extraction.activa.ai",
     },
     [Level.MANAGER]: {
       name: "Valeria Cruz",
-      email: "valeria_cruz@netherite-extraction.onyx.app",
+      email: "valeria_cruz@netherite-extraction.activa.ai",
     },
   },
   [WorkArea.PRODUCT]: {
     [Level.IC]: {
       name: "Michael Anderson",
-      email: "michael_anderson@netherite-extraction.onyx.app",
+      email: "michael_anderson@netherite-extraction.activa.ai",
     },
     [Level.MANAGER]: {
       name: "David Liu",
-      email: "david_liu@netherite-extraction.onyx.app",
+      email: "david_liu@netherite-extraction.activa.ai",
     },
   },
   [WorkArea.MARKETING]: {
     [Level.IC]: {
       name: "Rahul Patel",
-      email: "rahul_patel@netherite-extraction.onyx.app",
+      email: "rahul_patel@netherite-extraction.activa.ai",
     },
     [Level.MANAGER]: {
       name: "Olivia Reed",
-      email: "olivia_reed@netherite-extraction.onyx.app",
+      email: "olivia_reed@netherite-extraction.activa.ai",
     },
   },
   [WorkArea.EXECUTIVE]: {
     [Level.IC]: {
       name: "Sarah Mitchell",
-      email: "sarah_mitchell@netherite-extraction.onyx.app",
+      email: "sarah_mitchell@netherite-extraction.activa.ai",
     },
     [Level.MANAGER]: {
       name: "Sarah Mitchell",
-      email: "sarah_mitchell@netherite-extraction.onyx.app",
+      email: "sarah_mitchell@netherite-extraction.activa.ai",
     },
   },
   [WorkArea.OTHER]: {
     [Level.MANAGER]: {
       name: "Ralf Schroeder",
-      email: "ralf_schroeder@netherite-extraction.onyx.app",
+      email: "ralf_schroeder@netherite-extraction.activa.ai",
     },
     [Level.IC]: {
       name: "John Carpenter",
-      email: "john_carpenter@netherite-extraction.onyx.app",
+      email: "john_carpenter@netherite-extraction.activa.ai",
     },
   },
 };

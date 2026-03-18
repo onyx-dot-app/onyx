@@ -3,6 +3,7 @@
 import Modal from "@/refresh-components/Modal";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { Button } from "@opal/components";
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
@@ -57,6 +58,8 @@ export function AppPopup() {
   );
   const hasCustomLogo = Boolean(enterpriseSettings?.use_custom_logo);
   const logoDisplayStyle = enterpriseSettings?.logo_display_style;
+  const applicationName =
+    enterpriseSettings?.application_name?.trim() || DEFAULT_APPLICATION_NAME;
 
   // Header icon rules:
   // - If neither app name nor custom logo exists -> show Onyx icon
@@ -76,7 +79,7 @@ export function AppPopup() {
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={headerIcon}
-          title={popupTitle || "Welcome to Onyx!"}
+          title={popupTitle || `Bienvenido a ${applicationName}`}
         />
         <Modal.Body>
           <div className="overflow-y-auto text-left">
@@ -171,7 +174,7 @@ export function AppPopup() {
                 <FormField.Message
                   messages={{
                     error:
-                      "You need to agree to the terms to access the application.",
+                      "Debes aceptar los términos para acceder a la aplicación.",
                   }}
                 />
               </FormField>
@@ -192,7 +195,7 @@ export function AppPopup() {
               setCompletedFlow(true);
             }}
           >
-            Start
+            Comenzar
           </Button>
         </Modal.Footer>
       </Modal.Content>

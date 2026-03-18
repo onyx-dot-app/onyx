@@ -35,7 +35,10 @@ import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@/lib/utils";
 import Spacer from "@/refresh-components/Spacer";
-import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
+import {
+  DEFAULT_APPLICATION_NAME,
+  DEFAULT_CONTEXT_TOKENS,
+} from "@/lib/constants";
 import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -557,8 +560,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             <Modal.Content width="sm">
               <Modal.Header
                 icon={SvgAlertTriangle}
-                title="Turn off Onyx new tab page?"
-                description="You'll see your browser's default new tab page instead. You can turn it back on anytime in your Onyx settings."
+                title={`¿Desactivar la página de nueva pestaña de ${DEFAULT_APPLICATION_NAME}?`}
+                description={`Verás la página predeterminada de tu navegador. Puedes volver a activarla cuando quieras desde la configuración de ${DEFAULT_APPLICATION_NAME}.`}
                 onClose={() => setShowTurnOffModal(false)}
               />
               <Modal.Footer>
@@ -580,7 +583,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {!user && (
         <Modal open onOpenChange={() => {}}>
           <Modal.Content width="sm" height="sm">
-            <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
+            <Modal.Header
+              icon={SvgUser}
+              title={`Bienvenido a ${DEFAULT_APPLICATION_NAME}`}
+            />
             <Modal.Body>
               {authTypeMetadata.authType === AuthType.BASIC ? (
                 <LoginPage
@@ -601,7 +607,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       }
                     }}
                   >
-                    Log in
+                    Iniciar sesión
                   </Button>
                 </div>
               )}
@@ -618,7 +624,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             window.location.href = "/admin/configuration/llm";
           }}
         >
-          Set up an LLM.
+          Configurar un proveedor de IA
         </Button>
       )}
     </div>

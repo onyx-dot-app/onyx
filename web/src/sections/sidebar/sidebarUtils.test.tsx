@@ -1,4 +1,7 @@
-import { ChatSession } from "@/app/app/interfaces";
+import {
+  ChatSession,
+  ChatSessionSharedStatus,
+} from "@/app/app/interfaces";
 import {
   persistHideMoveCustomAgentModal,
   shouldHideMoveCustomAgentModal,
@@ -12,7 +15,7 @@ function createChatSession(personaId: number): ChatSession {
     persona_id: personaId,
     time_created: "2026-01-01T00:00:00Z",
     time_updated: "2026-01-01T00:00:00Z",
-    shared_status: "private",
+    shared_status: ChatSessionSharedStatus.Private,
     project_id: null,
     current_alternate_model: "",
     current_temperature_override: null,

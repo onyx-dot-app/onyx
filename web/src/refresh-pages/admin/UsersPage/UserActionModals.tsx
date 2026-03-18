@@ -86,7 +86,7 @@ export function CancelInviteModal({
         <Text as="span" text05>
           {email}
         </Text>{" "}
-        will no longer be able to join Onyx with this invite.
+        ya no podrá unirse a la aplicación con esta invitación.
       </Text>
     </ConfirmationModalLayout>
   );
@@ -141,9 +141,9 @@ export function DeactivateUserModal({
         <Text as="span" text05>
           {email}
         </Text>{" "}
-        will immediately lose access to Onyx. Their sessions and agents will be
-        preserved. Their license seat will be freed. You can reactivate this
-        account later.
+        perderá acceso a la aplicación de inmediato. Sus sesiones y agentes se
+        conservarán. Su licencia quedará liberada. Podrás reactivar esta cuenta
+        más adelante.
       </Text>
     </ConfirmationModalLayout>
   );
@@ -195,7 +195,7 @@ export function ActivateUserModal({
         <Text as="span" text05>
           {email}
         </Text>{" "}
-        will regain access to Onyx.
+        recuperará acceso a la aplicación.
       </Text>
     </ConfirmationModalLayout>
   );
@@ -250,8 +250,8 @@ export function DeleteUserModal({
         <Text as="span" text05>
           {email}
         </Text>{" "}
-        will be permanently removed from Onyx. All of their session history will
-        be deleted. Deletion cannot be undone.
+        será eliminado permanentemente de la aplicación. Todo su historial de
+        sesiones se borrará. Esta acción no se puede deshacer.
       </Text>
     </ConfirmationModalLayout>
   );

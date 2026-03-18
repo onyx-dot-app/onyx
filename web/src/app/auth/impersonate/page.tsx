@@ -14,8 +14,10 @@ import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 
 const ImpersonateSchema = Yup.object().shape({
-  email: Yup.string().email("Invalid email").required("Required"),
-  apiKey: Yup.string().required("Required"),
+  email: Yup.string()
+    .email("Correo electrónico inválido")
+    .required("Campo obligatorio"),
+  apiKey: Yup.string().required("Campo obligatorio"),
 });
 
 export default function ImpersonatePage() {
@@ -46,7 +48,7 @@ export default function ImpersonatePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        toast.error(errorData.detail || "Failed to impersonate user");
+        toast.error(errorData.detail || "No se pudo suplantar al usuario");
         helpers.setSubmitting(false);
       } else {
         helpers.setSubmitting(false);
@@ -54,7 +56,9 @@ export default function ImpersonatePage() {
       }
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to impersonate user"
+        error instanceof Error
+          ? error.message
+          : "No se pudo suplantar al usuario"
       );
       helpers.setSubmitting(false);
     }
@@ -65,7 +69,7 @@ export default function ImpersonatePage() {
       <div className="flex flex-col w-full justify-center">
         <div className="w-full flex flex-col items-center justify-center">
           <Text as="p" headingH3 className="mb-6 text-center">
-            Impersonate User
+            Suplantar usuario
           </Text>
         </div>
 
@@ -79,20 +83,20 @@ export default function ImpersonatePage() {
               <TextFormField
                 name="email"
                 type="email"
-                label="Email"
-                placeholder="email@yourcompany.com"
+                label="Correo electrónico"
+                placeholder="correo@tuempresa.com"
               />
 
               <TextFormField
                 name="apiKey"
                 type="password"
-                label="API Key"
-                placeholder="Enter API Key"
+                label="Clave de API"
+                placeholder="Ingresa la clave de API"
               />
 
               <Disabled disabled={isSubmitting}>
                 <Button type="submit" width="full">
-                  Impersonate User
+                  Suplantar usuario
                 </Button>
               </Disabled>
             </Form>
@@ -104,7 +108,9 @@ export default function ImpersonatePage() {
           mainUiMuted
           text03
           className="mt-4 text-center px-4"
-        >{`Note: This feature is only available for @onyx.app administrators`}</Text>
+        >
+          Esta función solo está disponible para administradores internos.
+        </Text>
       </div>
     </AuthFlowContainer>
   );

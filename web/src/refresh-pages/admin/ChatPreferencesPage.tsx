@@ -361,7 +361,7 @@ function ChatPreferencesForm() {
             >
               <InputTextAreaField
                 name="company_description"
-                placeholder="Describe your team and how Onyx should behave."
+                placeholder="Describe a tu equipo y cómo debe comportarse la aplicación."
                 rows={4}
                 maxRows={10}
                 autoResize
@@ -693,7 +693,7 @@ function ChatPreferencesForm() {
                 <Card>
                   <InputLayouts.Horizontal
                     title="Keep Chat History"
-                    description="Specify how long Onyx should retain chats in your organization."
+                    description="Define cuánto tiempo debe conservarse el historial de chats en tu organización."
                   >
                     <InputSelectField
                       name="maximum_chat_retention_days"

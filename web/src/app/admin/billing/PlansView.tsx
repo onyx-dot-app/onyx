@@ -25,7 +25,7 @@ import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 
-const SALES_URL = "https://www.onyx.app/contact-sales";
+const SALES_URL = "https://activa.ai/contact-sales";
 
 // ----------------------------------------------------------------------------
 // Types

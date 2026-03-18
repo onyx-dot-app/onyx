@@ -401,7 +401,7 @@ export default function MCPAuthenticationModal({
                             {isOAuthEnabled && (
                               <InputSelect.Item
                                 value={MCPAuthenticationType.PT_OAUTH}
-                                description="Forward the user's OAuth access token used to authenticate Onyx."
+                                description="Reenvía el token OAuth del usuario con el que inició sesión en la aplicación."
                               >
                                 OAuth Pass-through
                               </InputSelect.Item>
@@ -499,9 +499,10 @@ export default function MCPAuthenticationModal({
                         </Text>
                         <Text as="p" text03 secondaryBody>
                           If your server does not support DCR, you need register
-                          your Onyx instance with the server provider to obtain
-                          these credentials first. Make sure to grant Onyx
-                          necessary scopes/permissions for your actions.
+                          tu instancia de la aplicación con el proveedor del
+                          servidor para obtener primero estas credenciales.
+                          Asegúrate de conceder los permisos necesarios para tus
+                          acciones.
                         </Text>
 
                         {/* Redirect URI */}
@@ -622,7 +623,7 @@ export default function MCPAuthenticationModal({
                   {values.auth_type === MCPAuthenticationType.PT_OAUTH && (
                     <Message
                       text="Use pass-through for services with shared identity provider."
-                      description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
+                      description="La aplicación reenviará el token OAuth del usuario directamente al servidor como encabezado de autorización. Verifica que el servidor admita autenticación con el mismo proveedor."
                       default
                       medium
                       static
