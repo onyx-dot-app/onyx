@@ -72,7 +72,7 @@ export default function IndexAttemptErrorsModal({
     } else {
       setCurrentPage(1);
     }
-  }, [errors.items.length, errors.total_items, pageSize]);
+  }, [errors.items.length, pageSize]);
 
   const paginationData = useMemo(() => {
     const totalPages = Math.ceil(errors.items.length / pageSize);
