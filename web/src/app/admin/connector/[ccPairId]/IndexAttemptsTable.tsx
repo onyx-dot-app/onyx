@@ -153,20 +153,18 @@ export function IndexAttemptsTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <>
-                    {indexAttempt.status === "success" && (
+                  {indexAttempt.status === "success" && (
+                    <Text className="flex flex-wrap whitespace-normal">
+                      {"-"}
+                    </Text>
+                  )}
+
+                  {indexAttempt.status === "failed" &&
+                    indexAttempt.error_msg && (
                       <Text className="flex flex-wrap whitespace-normal">
-                        {"-"}
+                        {indexAttempt.error_msg}
                       </Text>
                     )}
-
-                    {indexAttempt.status === "failed" &&
-                      indexAttempt.error_msg && (
-                        <Text className="flex flex-wrap whitespace-normal">
-                          {indexAttempt.error_msg}
-                        </Text>
-                      )}
-                  </>
                 </TableCell>
                 <td className="w-0 p-0">
                   {indexAttempt.full_exception_trace && (
