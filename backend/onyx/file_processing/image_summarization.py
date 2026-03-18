@@ -138,7 +138,23 @@ def _summarize_image(
         return summary
 
     except Exception as e:
-        raise ValueError(f"Summarization failed: {type(e).__name__}: {e}") from e
+        # Extract structured details from LiteLLM exceptions when available,
+        # rather than dumping the full messages payload (which contains base64
+        # image data and produces enormous, unreadable error logs).
+        str_e = str(e)
+        if len(str_e) > 512:
+            str_e = str_e[:512] + "... (truncated)"
+        parts = [f"Summarization failed: {type(e).__name__}: {str_e}"]
+        status_code = getattr(e, "status_code", None)
+        llm_provider = getattr(e, "llm_provider", None)
+        model = getattr(e, "model", None)
+        if status_code is not None:
+            parts.append(f"status_code={status_code}")
+        if llm_provider is not None:
+            parts.append(f"llm_provider={llm_provider}")
+        if model is not None:
+            parts.append(f"model={model}")
+        raise ValueError(" | ".join(parts)) from e
 
 
 def _encode_image_for_llm_prompt(image_data: bytes) -> str:
