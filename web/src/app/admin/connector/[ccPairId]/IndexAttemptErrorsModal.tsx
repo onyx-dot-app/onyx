@@ -158,7 +158,8 @@ export default function IndexAttemptErrorsModal({
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="overflow-y-auto whitespace-normal">
+                        {/* 28px minimum ensures 60px row height while handling overflow. */}
+                        <div className="flex items-center min-h-[28px] max-h-[2rem] overflow-y-auto whitespace-normal">
                           {error.failure_message}
                         </div>
                       </TableCell>
