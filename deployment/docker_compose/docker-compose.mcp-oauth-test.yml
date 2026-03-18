@@ -2,7 +2,7 @@ name: onyx
 
 services:
   mcp_oauth_server:
-    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    image: hop-rag/activa-backend:${IMAGE_TAG:-latest}
     restart: on-failure
     working_dir: /workspace
     environment:

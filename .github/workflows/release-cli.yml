@@ -51,7 +51,7 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: onyxdotapp/onyx-cli
+      REGISTRY_IMAGE: hop-rag/activa-cli
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -107,7 +107,7 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: onyxdotapp/onyx-cli
+      REGISTRY_IMAGE: hop-rag/activa-cli
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -163,7 +163,7 @@ jobs:
       id-token: write
     timeout-minutes: 10
     env:
-      REGISTRY_IMAGE: onyxdotapp/onyx-cli
+      REGISTRY_IMAGE: hop-rag/activa-cli
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 

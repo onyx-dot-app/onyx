@@ -65,7 +65,7 @@ runs:
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:backend-cache-${{ inputs.github-sha }}
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:backend-cache
-          type=registry,ref=onyxdotapp/onyx-backend:latest
+          type=registry,ref=hop-rag/activa-backend:latest
         cache-to: |
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:backend-cache-${{ inputs.github-sha }},mode=max
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max

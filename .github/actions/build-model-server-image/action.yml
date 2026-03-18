@@ -61,7 +61,7 @@ runs:
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ inputs.github-sha }}
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache
-          type=registry,ref=onyxdotapp/onyx-model-server:latest
+          type=registry,ref=hop-rag/activa-model-server:latest
         cache-to: |
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ inputs.github-sha }},mode=max
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
