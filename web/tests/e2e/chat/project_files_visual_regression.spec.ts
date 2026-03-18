@@ -169,7 +169,9 @@ test.describe("Project Files visual regression", () => {
       .first();
     await expect(iconWrapper).toBeVisible();
 
-    await expectElementScreenshot(filesSection, {
+    const container = page.locator("[data-main-container]");
+    await expect(container).toBeVisible();
+    await expectElementScreenshot(container, {
       name: "project-files-long-underscore-filename",
     });
 
