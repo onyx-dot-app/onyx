@@ -21,6 +21,7 @@ from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
+from onyx.configs.app_configs import POSTGRES_SSLMODE
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
@@ -72,6 +73,12 @@ def build_connection_string(
         base_conn_str = f"postgresql+{db_api}://{user}@{host}:{port}/{db}"
     else:
         base_conn_str = f"postgresql+{db_api}://{user}:{password}@{host}:{port}/{db}"
+
+    if POSTGRES_SSLMODE:
+        if db_api == ASYNC_DB_API:
+            base_conn_str += f"?ssl={POSTGRES_SSLMODE}"
+        else:
+            base_conn_str += f"?sslmode={POSTGRES_SSLMODE}"
 
     # For asyncpg, do not include application_name in the connection string
     if app_name and db_api != "asyncpg":

@@ -371,6 +371,10 @@ POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() ==
 # defaults to False
 POSTGRES_POOL_PRE_PING = os.environ.get("POSTGRES_POOL_PRE_PING", "").lower() == "true"
 
+# SSL mode for PostgreSQL connections (e.g. "disable", "require", "verify-full")
+# asyncpg uses "ssl" param, psycopg2 uses "sslmode" param
+POSTGRES_SSLMODE = os.environ.get("POSTGRES_SSLMODE", None)
+
 # recycle timeout in seconds
 POSTGRES_POOL_RECYCLE_DEFAULT = 60 * 20  # 20 minutes
 try:
