@@ -4,6 +4,7 @@ import {
   fetchEnterpriseSettingsSS,
   fetchSettingsSS,
 } from "@/components/settings/lib";
+import { fetchSS } from "@/lib/utilsSS";
 import {
   CUSTOM_ANALYTICS_ENABLED,
   GTM_ENABLED,
@@ -55,11 +56,28 @@ export async function generateMetadata(): Promise<Metadata> {
         : "/onyx.ico";
   }
 
+  const useCustomLogo =
+    enterpriseSettings && enterpriseSettings.use_custom_logo;
+
+  let logoMimeType: string = "image/png";
+  if (useCustomLogo) {
+    try {
+      const logoRes = await fetchSS("/enterprise-settings/logo", {
+        method: "HEAD",
+      });
+      logoMimeType = logoRes.headers.get("content-type") || "image/png";
+    } catch {
+      // Fall back to image/png if the HEAD request fails
+    }
+  }
+
   return {
     title: enterpriseSettings?.application_name || "Onyx",
     description: "Question answering for your documents",
     icons: {
-      icon: logoLocation,
+      icon: useCustomLogo
+        ? { url: logoLocation, type: logoMimeType }
+        : { url: logoLocation, type: "image/x-icon" },
     },
   };
 }
