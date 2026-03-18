@@ -167,12 +167,11 @@ def _fetch_image_helper(request: Request, filename: str, label: str) -> Response
         for tag in if_none_match.split(",")
         if tag.strip()
     ]
-    normalized_etag = etag_value.removeprefix("W/")
     cache_headers = {
         "ETag": etag_value,
         "Cache-Control": "private, max-age=3600, must-revalidate",
     }
-    if "*" in client_etags or normalized_etag in client_etags:
+    if "*" in client_etags or etag_value in client_etags:
         return Response(status_code=304, headers=cache_headers)
 
     return Response(
