@@ -1,7 +1,7 @@
 # Docker service resource limits. Most are commented out by default.
 # 'background' service has preset (override-able) limits due to variable resource needs.
 # Uncomment and set env vars for specific service limits.
-# See: https://docs.danswer.dev/deployment/resource-sizing for details.
+# See: https://docs.activa.ai/deployment/resource-sizing for details.
 
 services:
   background:

@@ -163,8 +163,8 @@ class SiteDescriptor(BaseModel):
     """Data class for storing SharePoint site information.
 
     Args:
-        url: The base site URL (e.g. https://danswerai.sharepoint.com/sites/sharepoint-tests
-             or https://danswerai.sharepoint.com/teams/team-name)
+        url: The base site URL (e.g. https://example.sharepoint.com/sites/sharepoint-tests
+             or https://example.sharepoint.com/teams/team-name)
         drive_name: The name of the drive to access (e.g. "Shared Documents", "Other Library")
                    If None, all drives will be accessed.
         folder_path: The folder path within the drive to access (e.g. "test/nested with spaces")
@@ -214,7 +214,7 @@ def sleep_and_retry(
         except ClientRequestException as e:
             status = e.response.status_code if e.response is not None else None
 
-            # 429 / 503 — rate limit or transient error.  Back off and retry.
+            # 429 / 503 â€” rate limit or transient error.  Back off and retry.
             if status in (429, 503) and attempt < max_retries:
                 logger.warning(
                     f"Rate limit exceeded on {method_name}, attempt {attempt + 1}/{max_retries + 1}, sleeping and retrying"
@@ -230,7 +230,7 @@ def sleep_and_retry(
                 time.sleep(sleep_time)
                 continue
 
-            # Non-retryable error or retries exhausted — log details and raise.
+            # Non-retryable error or retries exhausted â€” log details and raise.
             if e.response is not None:
                 logger.error(
                     f"SharePoint request failed for {method_name}: status={status}, "
@@ -246,7 +246,7 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     current_drive_name: str | None = None
     # Drive's web_url from the API - used as raw_node_id for DRIVE hierarchy nodes
     current_drive_web_url: str | None = None
-    # Resolved drive ID — avoids re-resolving on checkpoint resume
+    # Resolved drive ID â€” avoids re-resolving on checkpoint resume
     current_drive_id: str | None = None
     # Next delta API page URL for per-page checkpointing within a drive.
     # When set, Phase 3b fetches one page at a time so progress is persisted
@@ -289,7 +289,7 @@ def _is_graph_invalid_request(response: requests.Response) -> bool:
     ``{"error": {"code": "invalidRequest", "message": "Invalid request"}}``
     shape. This particular error has no actionable inner error code and is
     returned by the site-pages endpoint when a page has a corrupt canvas layout
-    (e.g. duplicate web-part IDs — see SharePoint/sp-dev-docs#8822)."""
+    (e.g. duplicate web-part IDs â€” see SharePoint/sp-dev-docs#8822)."""
     try:
         body = response.json()
     except Exception:
@@ -677,7 +677,7 @@ def _convert_sitepage_to_document(
                             # Basic HTML to text conversion
                             # Remove HTML tags but preserve some structure
                             text_content = re.sub(r"<br\s*/?>", "\n", inner_html)
-                            text_content = re.sub(r"<li>", "• ", text_content)
+                            text_content = re.sub(r"<li>", "â€¢ ", text_content)
                             text_content = re.sub(r"</li>", "\n", text_content)
                             text_content = re.sub(
                                 r"<h[1-6][^>]*>", "\n## ", text_content
@@ -1325,7 +1325,7 @@ class SharepointConnector(
 
         The Graph API's LIST endpoint can return 400 when $expand=canvasLayout
         is used and *any* page in the site has a corrupt canvas layout (e.g.
-        duplicate web part IDs — see SharePoint/sp-dev-docs#8822). Since the
+        duplicate web part IDs â€” see SharePoint/sp-dev-docs#8822). Since the
         LIST expansion is all-or-nothing, a single bad page poisons the entire
         response. This method works around it by fetching metadata first, then
         expanding each page individually so only the broken page loses its
@@ -1498,7 +1498,7 @@ class SharepointConnector(
                         continue
 
                     # Skip non-file items (e.g. OneNote notebooks without a "file" facet)
-                    # but still yield them — the downstream conversion handles filtering
+                    # but still yield them â€” the downstream conversion handles filtering
                     # by extension / mime type.
 
                     # NOTE: We are now including items without a lastModifiedDateTime,
@@ -2204,7 +2204,7 @@ class SharepointConnector(
                 checkpoint.current_drive_delta_next_link = self._build_delta_start_url(
                     drive_id, start_dt
                 )
-            # else: BFS path — delta_next_link stays None;
+            # else: BFS path â€” delta_next_link stays None;
             # Phase 3b will use _iter_drive_items_paged.
 
         # Phase 3b: Process items from the current drive

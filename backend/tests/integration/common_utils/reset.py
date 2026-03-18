@@ -8,6 +8,7 @@ import requests
 
 from alembic import command
 from alembic.config import Config
+from onyx.configs.app_configs import DOCUMENT_INDEX_NAME
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_PORT
@@ -322,7 +323,7 @@ def reset_vespa() -> None:
             continuation = None
             should_continue = True
             while should_continue:
-                params = {"selection": "true", "cluster": "danswer_index"}
+                params = {"selection": "true", "cluster": DOCUMENT_INDEX_NAME}
                 if continuation:
                     params = {**params, "continuation": continuation}
                 response = requests.delete(
@@ -383,7 +384,7 @@ def reset_vespa_multitenant() -> None:
                 continuation = None
                 should_continue = True
                 while should_continue:
-                    params = {"selection": "true", "cluster": "danswer_index"}
+                    params = {"selection": "true", "cluster": DOCUMENT_INDEX_NAME}
                     if continuation:
                         params = {**params, "continuation": continuation}
                     response = requests.delete(

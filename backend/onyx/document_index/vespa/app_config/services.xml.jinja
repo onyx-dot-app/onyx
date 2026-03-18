@@ -7,17 +7,17 @@
             <server id="default" port="8081"/>
         </http>
         <nodes>
-            <node hostalias="danswer-node" />
+            <node hostalias="onyx-node" />
         </nodes>
     </container>
-    <content id="danswer_index" version="1.0">
+    <content id="onyx_index" version="1.0">
         <redundancy>1</redundancy>
         <documents>
-            <!-- <document type="danswer_chunk" mode="index" /> -->
+            <!-- <document type="onyx_chunk" mode="index" /> -->
             {{ document_elements }}
         </documents>
         <nodes>
-            <node hostalias="danswer-node" distribution-key="0" />
+            <node hostalias="onyx-node" distribution-key="0" />
         </nodes>
         <tuning>
             <resource-limits>

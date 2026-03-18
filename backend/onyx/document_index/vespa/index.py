@@ -220,7 +220,7 @@ def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk
 
 
 class VespaIndex(DocumentIndex):
-    VESPA_SCHEMA_JINJA_FILENAME = "danswer_chunk.sd.jinja"
+    VESPA_SCHEMA_JINJA_FILENAME = "onyx_chunk.sd.jinja"
 
     def __init__(
         self,

@@ -130,10 +130,10 @@ def _test_confluence_connector_basic(
     assert page_within_a_page_doc is not None
     assert page_within_a_page_doc.semantic_identifier == "Page Within A Page"
     assert page_within_a_page_doc.primary_owners
-    assert page_within_a_page_doc.primary_owners[0].email == "hagen@danswer.ai"
+    assert page_within_a_page_doc.primary_owners[0].email == "hagen@example.com"
     assert (
         page_within_a_page_doc.id
-        == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/pages/200769540/Page+Within+A+Page"
+        == "https://example.atlassian.net/wiki/spaces/DailyConne/pages/200769540/Page+Within+A+Page"
     )
     assert len(page_within_a_page_doc.sections) == 1
 
@@ -142,17 +142,17 @@ def _test_confluence_connector_basic(
     assert page_within_a_page_section.text == page_within_a_page_text
     assert (
         page_within_a_page_section.link
-        == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/pages/200769540/Page+Within+A+Page"
+        == "https://example.atlassian.net/wiki/spaces/DailyConne/pages/200769540/Page+Within+A+Page"
     )
 
     assert page_doc is not None
     assert page_doc.semantic_identifier == "DailyConnectorTestSpace Home"
     assert (
-        page_doc.id == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
+        page_doc.id == "https://example.atlassian.net/wiki/spaces/DailyConne/overview"
     )
     assert page_doc.metadata["labels"] == ["testlabel"]
     assert page_doc.primary_owners
-    assert page_doc.primary_owners[0].email == "hagen@danswer.ai"
+    assert page_doc.primary_owners[0].email == "hagen@example.com"
     assert (
         len(page_doc.sections) == 1
     )  # just page text, attachment text is separate doc
@@ -166,7 +166,7 @@ def _test_confluence_connector_basic(
     )
     assert (
         page_section.link
-        == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
+        == "https://example.atlassian.net/wiki/spaces/DailyConne/overview"
     )
 
     if expect_attachments:

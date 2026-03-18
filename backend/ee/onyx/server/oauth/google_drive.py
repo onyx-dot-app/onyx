@@ -55,7 +55,7 @@ class GoogleDriveOAuth:
 
     TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-    # SCOPE is per https://docs.danswer.dev/connectors/google-drive
+    # SCOPE is per https://docs.activa.ai/admins/connectors/official/google_drive/overview
     # TODO: Merge with or use google_utils.GOOGLE_SCOPES
     SCOPE = (
         "https://www.googleapis.com/auth/drive.readonly%20"

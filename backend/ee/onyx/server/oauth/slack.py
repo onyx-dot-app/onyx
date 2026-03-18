@@ -39,7 +39,7 @@ class SlackOAuth:
 
     TOKEN_URL = "https://slack.com/api/oauth.v2.access"
 
-    # SCOPE is per https://docs.danswer.dev/connectors/slack
+    # SCOPE is per https://docs.activa.ai/admins/getting_started/slack_bot_setup
     BOT_SCOPE = (
         "channels:history,"
         "channels:read,"

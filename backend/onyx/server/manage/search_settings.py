@@ -85,7 +85,7 @@ def set_new_search_settings(
 
     if search_settings_new.index_name is None:
         # We define index name here.
-        index_name = f"danswer_chunk_{clean_model_name(search_settings_new.model_name)}"
+        index_name = f"onyx_chunk_{clean_model_name(search_settings_new.model_name)}"
         if (
             search_settings_new.model_name == search_settings.model_name
             and not search_settings.index_name.endswith(ALT_INDEX_SUFFIX)

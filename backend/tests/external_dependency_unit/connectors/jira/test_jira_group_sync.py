@@ -21,7 +21,7 @@ from tests.daily.connectors.confluence.models import ExternalUserGroupSet
 
 pytestmark = pytest.mark.usefixtures("enable_ee")
 
-# Expected groups from the danswerai.atlassian.net Jira instance
+# Expected groups from the example.atlassian.net Jira instance
 # Note: These groups are shared with Confluence since they're both Atlassian products
 # App accounts (bots, integrations) are filtered out
 _EXPECTED_JIRA_GROUPS = [
@@ -31,42 +31,42 @@ _EXPECTED_JIRA_GROUPS = [
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
-        id="confluence-admins-danswerai",
+        id="confluence-admins-example",
         user_emails={"chris@onyx.app", "yuhong@onyx.app"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
-        id="confluence-user-access-admins-danswerai",
-        user_emails={"hagen@danswer.ai"},
+        id="confluence-user-access-admins-example",
+        user_emails={"hagen@example.com"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
-        id="confluence-users-danswerai",
+        id="confluence-users-example",
         user_emails={
             "chris@onyx.app",
             "founders@onyx.app",
-            "hagen@danswer.ai",
+            "hagen@example.com",
             "pablo@onyx.app",
             "yuhong@onyx.app",
         },
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
-        id="jira-admins-danswerai",
-        user_emails={"founders@onyx.app", "hagen@danswer.ai", "pablo@onyx.app"},
+        id="jira-admins-example",
+        user_emails={"founders@onyx.app", "hagen@example.com", "pablo@onyx.app"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
-        id="jira-user-access-admins-danswerai",
-        user_emails={"hagen@danswer.ai"},
+        id="jira-user-access-admins-example",
+        user_emails={"hagen@example.com"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
-        id="jira-users-danswerai",
+        id="jira-users-example",
         user_emails={
             "chris@onyx.app",
             "founders@onyx.app",
-            "hagen@danswer.ai",
+            "hagen@example.com",
             "pablo@onyx.app",
         },
         gives_anyone_access=False,

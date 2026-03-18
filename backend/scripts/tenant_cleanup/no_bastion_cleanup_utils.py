@@ -141,7 +141,7 @@ if os.environ.get("POSTGRES_CONTROL_HOST"):
 if not control_db_url and os.environ.get("POSTGRES_HOST"):
     host = os.environ.get("POSTGRES_HOST")
     port = os.environ.get("POSTGRES_PORT", "5432")
-    db = os.environ.get("POSTGRES_DB", "danswer")
+    db = os.environ.get("POSTGRES_DB", "onyx")
     user = os.environ.get("POSTGRES_USER", "postgres")
     password = os.environ.get("POSTGRES_PASSWORD", "")
     if password:
@@ -240,7 +240,7 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
     if not result["success"]:
         error_msg = result.get("error", "Unknown error")
         print(
-            f"✗ Failed to get tenant status for {tenant_id}: {error_msg}",
+            f"âœ— Failed to get tenant status for {tenant_id}: {error_msg}",
             file=sys.stderr,
         )
         return None
@@ -252,11 +252,11 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
         if rows and len(rows) > 0:
             status = rows[0].get("application_status")
             if status:
-                print(f"✓ Tenant status: {status}")
+                print(f"âœ“ Tenant status: {status}")
                 return status
 
         # Tenant record not found in control plane table
-        print("⚠ Tenant not found in control plane")
+        print("âš  Tenant not found in control plane")
         raise TenantNotFoundInControlPlaneError(
             f"Tenant {tenant_id} not found in control plane database"
         )
@@ -265,7 +265,7 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
         # Re-raise without wrapping
         raise
     except (json.JSONDecodeError, KeyError, IndexError) as e:
-        print(f"✗ Failed to parse tenant status: {e}", file=sys.stderr)
+        print(f"âœ— Failed to parse tenant status: {e}", file=sys.stderr)
         return None
 
 

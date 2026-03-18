@@ -106,7 +106,7 @@ if os.environ.get("POSTGRES_CONTROL_HOST"):
 if not control_db_url and os.environ.get("POSTGRES_HOST"):
     host = os.environ.get("POSTGRES_HOST")
     port = os.environ.get("POSTGRES_PORT", "5432")
-    db = os.environ.get("POSTGRES_DB", "danswer")
+    db = os.environ.get("POSTGRES_DB", "onyx")
     user = os.environ.get("POSTGRES_USER", "postgres")
     password = os.environ.get("POSTGRES_PASSWORD", "")
     if password:
@@ -154,7 +154,7 @@ with engine.connect() as conn:
     try:
         control_plane_data = json.loads(result.stdout)
         print(
-            f"✓ Successfully collected {len(control_plane_data)} tenant records from control plane"
+            f"âœ“ Successfully collected {len(control_plane_data)} tenant records from control plane"
         )
         return control_plane_data
     except json.JSONDecodeError as e:
@@ -377,7 +377,7 @@ def find_recent_tenant_data() -> tuple[list[dict[str, Any]] | None, str | None]:
     if file_age < seven_days_in_seconds:
         file_age_days = file_age / (24 * 60 * 60)
         print(
-            f"\n✓ Found recent tenant data: {most_recent.name} (age: {file_age_days:.1f} days)"
+            f"\nâœ“ Found recent tenant data: {most_recent.name} (age: {file_age_days:.1f} days)"
         )
 
         with open(most_recent, "r") as f:
@@ -423,7 +423,7 @@ def main() -> None:
             print(f"Total tenants in cache: {len(tenant_data)}")
         else:
             if args.skip_cache:
-                print("\n⚠ Skipping cache (--skip-cache flag set)")
+                print("\nâš  Skipping cache (--skip-cache flag set)")
 
             # Find data plane worker pod
             print("\n" + "=" * 80)
@@ -439,7 +439,7 @@ def main() -> None:
             output_file = f"tenant_data_{timestamp}.json"
             with open(output_file, "w") as f:
                 json.dump(tenant_data, f, indent=2, default=str)
-            print(f"\n✓ Raw data saved to: {output_file}")
+            print(f"\nâœ“ Raw data saved to: {output_file}")
 
         # Step 2: Collect control plane data from control plane cluster
         print("\n" + "=" * 80)
@@ -500,7 +500,7 @@ def main() -> None:
                     }
                 )
 
-        print(f"\n✓ CSV exported to: {csv_file}")
+        print(f"\nâœ“ CSV exported to: {csv_file}")
         print(
             f"  Total gated tenants with no query in last 3 months: {len(gated_no_query_3_months)}"
         )
