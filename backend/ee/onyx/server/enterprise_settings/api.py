@@ -35,6 +35,8 @@ from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -146,28 +148,24 @@ def put_logo(
     upload_logo(file=file, is_logotype=is_logotype)
 
 
-def fetch_logo_helper(request: Request) -> Response:
+def _fetch_image_helper(request: Request, filename: str, label: str) -> Response:
     try:
         file_store = get_default_file_store()
-        onyx_file = file_store.get_file_with_mime_type(get_logo_filename())
+        onyx_file = file_store.get_file_with_mime_type(filename)
         if not onyx_file:
-            raise ValueError("get_onyx_file returned None!")
+            raise ValueError(f"get_onyx_file returned None for {label}!")
     except Exception:
-        logger.exception("Failed to fetch logo file")
-        raise HTTPException(
-            status_code=404,
-            detail="No logo file found",
-        )
+        logger.exception("Failed to fetch %s file", label)
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, f"No {label} file found")
 
     etag_value = f'"{hashlib.md5(onyx_file.data, usedforsecurity=False).hexdigest()}"'
-    client_etags = [
-        tag.strip() for tag in request.headers.get("if-none-match", "").split(",")
-    ]
+    if_none_match = request.headers.get("if-none-match", "")
+    client_etags = [tag.strip() for tag in if_none_match.split(",")]
     cache_headers = {
         "ETag": etag_value,
         "Cache-Control": "private, max-age=3600, must-revalidate",
     }
-    if etag_value in client_etags:
+    if "*" in client_etags or etag_value in client_etags:
         return Response(status_code=304, headers=cache_headers)
 
     return Response(
@@ -175,37 +173,14 @@ def fetch_logo_helper(request: Request) -> Response:
         media_type=onyx_file.mime_type,
         headers=cache_headers,
     )
+
+
+def fetch_logo_helper(request: Request) -> Response:
+    return _fetch_image_helper(request, get_logo_filename(), "logo")
 
 
 def fetch_logotype_helper(request: Request) -> Response:
-    try:
-        file_store = get_default_file_store()
-        onyx_file = file_store.get_file_with_mime_type(get_logotype_filename())
-        if not onyx_file:
-            raise ValueError("get_onyx_file returned None!")
-    except Exception:
-        logger.exception("Failed to fetch logotype file")
-        raise HTTPException(
-            status_code=404,
-            detail="No logotype file found",
-        )
-
-    etag_value = f'"{hashlib.md5(onyx_file.data, usedforsecurity=False).hexdigest()}"'
-    client_etags = [
-        tag.strip() for tag in request.headers.get("if-none-match", "").split(",")
-    ]
-    cache_headers = {
-        "ETag": etag_value,
-        "Cache-Control": "private, max-age=3600, must-revalidate",
-    }
-    if etag_value in client_etags:
-        return Response(status_code=304, headers=cache_headers)
-
-    return Response(
-        content=onyx_file.data,
-        media_type=onyx_file.mime_type,
-        headers=cache_headers,
-    )
+    return _fetch_image_helper(request, get_logotype_filename(), "logotype")
 
 
 @basic_router.get("/logotype")
