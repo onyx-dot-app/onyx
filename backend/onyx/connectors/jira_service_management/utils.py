@@ -27,9 +27,10 @@ def get_request_details(
         response = requests.get(url, auth=auth, headers=_JSM_HEADERS, timeout=15)
         response.raise_for_status()
         return response.json()
-    except Exception as exc:
-        logger.debug(
-            f"Could not fetch JSM request details for {issue_id_or_key}: {exc}"
+    except Exception:
+        logger.warning(
+            f"Could not fetch JSM request details for {issue_id_or_key}",
+            exc_info=True,
         )
         return {}
 
@@ -45,8 +46,11 @@ def get_sla_information(
         response = requests.get(url, auth=auth, headers=_JSM_HEADERS, timeout=15)
         response.raise_for_status()
         return response.json().get("values", [])
-    except Exception as exc:
-        logger.debug(f"Could not fetch SLA info for {issue_id_or_key}: {exc}")
+    except Exception:
+        logger.warning(
+            f"Could not fetch SLA info for {issue_id_or_key}",
+            exc_info=True,
+        )
         return []
 
 
@@ -76,29 +80,3 @@ def format_sla_as_text(sla_list: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def get_service_desks(
-    base_url: str,
-    auth: HTTPBasicAuth,
-) -> list[dict[str, Any]]:
-    """Return all service desks accessible to the authenticated user."""
-    url = f"{base_url}{_JSM_API_PATH}/servicedesk"
-    results: list[dict[str, Any]] = []
-    start = 0
-    limit = 50
-
-    while True:
-        response = requests.get(
-            url,
-            auth=auth,
-            headers=_JSM_HEADERS,
-            params={"start": start, "limit": limit},
-            timeout=15,
-        )
-        response.raise_for_status()
-        data = response.json()
-        results.extend(data.get("values", []))
-        if data.get("isLastPage", True):
-            break
-        start += limit
-
-    return results
