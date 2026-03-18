@@ -162,7 +162,11 @@ def _fetch_image_helper(request: Request, filename: str, label: str) -> Response
     etag_value = f'"{hashlib.md5(onyx_file.data, usedforsecurity=False).hexdigest()}"'
     if_none_match = request.headers.get("if-none-match", "")
     # Strip W/ prefix for weak comparison per RFC 9110 §13.1.2
-    client_etags = [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
+    client_etags = [
+        tag.strip().removeprefix("W/")
+        for tag in if_none_match.split(",")
+        if tag.strip()
+    ]
     normalized_etag = etag_value.removeprefix("W/")
     cache_headers = {
         "ETag": etag_value,
