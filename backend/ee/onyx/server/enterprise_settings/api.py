@@ -160,19 +160,20 @@ def fetch_logo_helper(request: Request) -> Response:
         )
 
     etag_value = f'"{hashlib.md5(onyx_file.data, usedforsecurity=False).hexdigest()}"'
-    if request.headers.get("if-none-match") == etag_value:
-        return Response(
-            status_code=304,
-            headers={"ETag": etag_value},
-        )
+    client_etags = [
+        tag.strip() for tag in request.headers.get("if-none-match", "").split(",")
+    ]
+    cache_headers = {
+        "ETag": etag_value,
+        "Cache-Control": "private, max-age=3600, must-revalidate",
+    }
+    if etag_value in client_etags:
+        return Response(status_code=304, headers=cache_headers)
 
     return Response(
         content=onyx_file.data,
         media_type=onyx_file.mime_type,
-        headers={
-            "ETag": etag_value,
-            "Cache-Control": "private, max-age=3600, must-revalidate",
-        },
+        headers=cache_headers,
     )
 
 
@@ -190,19 +191,20 @@ def fetch_logotype_helper(request: Request) -> Response:
         )
 
     etag_value = f'"{hashlib.md5(onyx_file.data, usedforsecurity=False).hexdigest()}"'
-    if request.headers.get("if-none-match") == etag_value:
-        return Response(
-            status_code=304,
-            headers={"ETag": etag_value},
-        )
+    client_etags = [
+        tag.strip() for tag in request.headers.get("if-none-match", "").split(",")
+    ]
+    cache_headers = {
+        "ETag": etag_value,
+        "Cache-Control": "private, max-age=3600, must-revalidate",
+    }
+    if etag_value in client_etags:
+        return Response(status_code=304, headers=cache_headers)
 
     return Response(
         content=onyx_file.data,
         media_type=onyx_file.mime_type,
-        headers={
-            "ETag": etag_value,
-            "Cache-Control": "private, max-age=3600, must-revalidate",
-        },
+        headers=cache_headers,
     )
 
 
