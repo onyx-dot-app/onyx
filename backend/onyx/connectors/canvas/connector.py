@@ -50,6 +50,16 @@ class CanvasCourse(BaseModel):
     created_at: str
     workflow_state: str
 
+    @classmethod
+    def from_api(cls, payload: dict[str, Any]) -> "CanvasCourse":
+        return cls(
+            id=payload["id"],
+            name=payload.get("name", ""),
+            course_code=payload.get("course_code", ""),
+            created_at=payload.get("created_at", ""),
+            workflow_state=payload.get("workflow_state", ""),
+        )
+
 
 class CanvasPage(BaseModel):
     page_id: int
@@ -157,6 +167,7 @@ class CanvasConnectorCheckpoint(ConnectorCheckpoint):
         self.stage = "pages"
         self.next_url = None
 
+
 class CanvasConnector(
     CheckpointedConnectorWithPermSync[CanvasConnectorCheckpoint],
     SlimConnectorWithPermSync,
@@ -211,13 +222,7 @@ class CanvasConnector(
             if not response:
                 break
             courses.extend(
-                CanvasCourse(
-                    id=course["id"],
-                    name=course["name"],
-                    course_code=course["course_code"],
-                    created_at=course["created_at"],
-                    workflow_state=course["workflow_state"],
-                )
+                CanvasCourse.from_api(course)
                 for course in response
             )
             if not next_url:
@@ -432,7 +437,19 @@ class CanvasConnector(
                 raise CredentialExpiredError(
                     "Canvas API token is invalid or expired (HTTP 401)."
                 )
-            raise
+            elif e.status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Canvas API token does not have sufficient permissions (HTTP 403)."
+                )
+            elif e.status_code == 429:
+                raise ConnectorValidationError(
+                    "Canvas rate-limit exceeded during credential validation (HTTP 429). "
+                    "Please try again later."
+                )
+            else:
+                raise ConnectorValidationError(
+                    f"Canvas API error during credential load (status={e.status_code}): {e}"
+                )
 
         return None
 
