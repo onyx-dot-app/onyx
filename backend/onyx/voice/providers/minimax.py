@@ -16,7 +16,10 @@ from collections.abc import AsyncIterator
 
 import aiohttp
 
+from onyx.utils.logger import setup_logger
 from onyx.voice.interface import VoiceProviderInterface
+
+logger = setup_logger()
 
 # Default MiniMax API base URL
 DEFAULT_MINIMAX_API_BASE = "https://api.minimax.io"
@@ -135,9 +138,19 @@ class MiniMaxVoiceProvider(VoiceProviderInterface):
                         except json.JSONDecodeError:
                             continue
 
-                        hex_audio = (event_data.get("data") or {}).get("audio")
-                        if hex_audio:
-                            yield bytes.fromhex(hex_audio)
+                        data_obj = event_data.get("data") or {}
+                        hex_audio = data_obj.get("audio")
+                        status = data_obj.get("status")
+                        if hex_audio and status != 2:
+                            # status 1 = in progress (stream chunks)
+                            # status 2 = complete (contains full audio, skip to
+                            #             avoid duplicate data in streaming mode)
+                            try:
+                                yield bytes.fromhex(hex_audio)
+                            except ValueError:
+                                logger.warning(
+                                    "MiniMax TTS: invalid hex audio data, skipping chunk"
+                                )
 
     async def validate_credentials(self) -> None:
         """Validate MiniMax API key by making a lightweight TTS request."""
@@ -326,13 +339,22 @@ class MiniMaxStreamingSynthesizer:
                         except json.JSONDecodeError:
                             continue
 
-                        hex_audio = (event_data.get("data") or {}).get("audio")
-                        status = (event_data.get("data") or {}).get("status")
+                        data_obj = event_data.get("data") or {}
+                        hex_audio = data_obj.get("audio")
+                        status = data_obj.get("status")
                         if hex_audio and status != 2:
                             # status 1 = in progress (stream chunks)
                             # status 2 = complete (contains full audio, skip to
                             #             avoid duplicate data in streaming mode)
-                            await self._audio_queue.put(bytes.fromhex(hex_audio))
+                            try:
+                                await self._audio_queue.put(
+                                    bytes.fromhex(hex_audio)
+                                )
+                            except ValueError:
+                                self._logger.warning(
+                                    "MiniMax TTS: invalid hex audio data, "
+                                    "skipping chunk"
+                                )
         except Exception as e:
             self._logger.error(f"MiniMaxStreamingSynthesizer synthesis error: {e}")
 
@@ -343,11 +365,15 @@ class MiniMaxStreamingSynthesizer:
         await self._text_queue.put(text)
 
     async def receive_audio(self) -> bytes | None:
-        """Receive next audio chunk (MP3 format)."""
+        """Receive next audio chunk (MP3 format).
+
+        Returns:
+            Audio bytes, or None when stream ends or on timeout.
+        """
         try:
             return await asyncio.wait_for(self._audio_queue.get(), timeout=0.1)
         except asyncio.TimeoutError:
-            return b""
+            return None
 
     async def flush(self) -> None:
         """Signal end of text input - wait for synthesis to complete."""

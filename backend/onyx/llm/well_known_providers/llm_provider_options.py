@@ -252,10 +252,12 @@ def get_minimax_model_names() -> list[str]:
     """
     import litellm
 
+    minimax_models: list[str] = getattr(litellm, "minimax_models", [])
+
     return sorted(
         [
             model.removeprefix("minimax/")
-            for model in litellm.minimax_models
+            for model in minimax_models
             if "speech" not in model.lower()
         ],
         reverse=True,
