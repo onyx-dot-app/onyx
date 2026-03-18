@@ -500,18 +500,13 @@ async def test_is_reachable_failure_does_not_prevent_log(
     db_session: MagicMock,
 ) -> None:
     """is_reachable update failing (e.g. concurrent hook deletion) must not
-    prevent the execution log from being written. Uses a ConnectError so the
-    log session (first call) runs before the reachable session (second call)."""
+    prevent the execution log from being written.
+
+    Simulates the production failure path: update_hook__no_commit raises
+    OnyxError(NOT_FOUND) as it would if the hook was concurrently deleted
+    between the initial lookup and the reachable update.
+    """
     hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
-
-    call_count = 0
-
-    def _fail_second_call() -> MagicMock:
-        nonlocal call_count
-        call_count += 1
-        if call_count == 2:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "hook deleted")
-        return MagicMock()
 
     with (
         patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
@@ -519,9 +514,10 @@ async def test_is_reachable_failure_does_not_prevent_log(
             "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
+        patch("onyx.hooks.executor.get_session_with_current_tenant"),
         patch(
-            "onyx.hooks.executor.get_session_with_current_tenant",
-            side_effect=_fail_second_call,
+            "onyx.hooks.executor.update_hook__no_commit",
+            side_effect=OnyxError(OnyxErrorCode.NOT_FOUND, "hook deleted"),
         ),
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
         patch("httpx.AsyncClient") as mock_client_cls,

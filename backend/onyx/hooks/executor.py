@@ -270,11 +270,11 @@ async def execute_hook(
             response = await client.post(endpoint_url, json=payload, headers=headers)
     except Exception as e:
         exc = e
+    duration_ms = int((time.monotonic() - start) * 1000)
 
     is_success, is_reachable, status_code, error_message, response_payload = (
         _process_response(response=response, exc=exc, timeout=timeout)
     )
-    duration_ms = int((time.monotonic() - start) * 1000)
     _persist_result(
         hook_id=hook_id,
         is_success=is_success,
@@ -321,11 +321,11 @@ def execute_hook_sync(
             response = client.post(endpoint_url, json=payload, headers=headers)
     except Exception as e:
         exc = e
+    duration_ms = int((time.monotonic() - start) * 1000)
 
     is_success, is_reachable, status_code, error_message, response_payload = (
         _process_response(response=response, exc=exc, timeout=timeout)
     )
-    duration_ms = int((time.monotonic() - start) * 1000)
     _persist_result(
         hook_id=hook_id,
         is_success=is_success,
