@@ -511,8 +511,17 @@ class CanvasConnector(
                 response, result_next_url = self.canvas_client.get(
                     config["endpoint"], params=config["params"]
                 )
-        except OnyxError:
-            raise
+        except OnyxError as oe:
+            # Re-raise security errors from _parse_next_link (host/scheme
+            # mismatch) — these indicate a compromised pagination URL.
+            # All other API errors (404, 429, 5xx) are recoverable.
+            if "pagination" in (oe.detail or ""):
+                raise
+            logger.warning(
+                f"Failed to fetch {stage} for course {course_id}: {oe}"
+            )
+            new_checkpoint.has_more = True
+            return new_checkpoint
         except Exception as e:
             logger.warning(
                 f"Failed to fetch {stage} for course {course_id}: {e}"
