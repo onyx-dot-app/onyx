@@ -1,6 +1,5 @@
 import contextlib
 from collections.abc import Generator
-from collections.abc import Iterator
 from typing import Optional
 from typing import Protocol
 from typing import TYPE_CHECKING
