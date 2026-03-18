@@ -88,9 +88,13 @@ def summarize_image_with_error_handling(
     try:
         return summarize_image_pipeline(llm, image_data, user_prompt, system_prompt)
     except UnsupportedImageFormatError:
+        magic_hex = image_data[:8].hex() if image_data else "empty"
         logger.info(
-            "Skipping image summarization due to unsupported MIME type for %s",
+            "Skipping image summarization due to unsupported MIME type "
+            "for %s (magic_bytes=%s, size=%d bytes)",
             context_name,
+            magic_hex,
+            len(image_data),
         )
         return None
 
@@ -134,9 +138,7 @@ def _summarize_image(
         return summary
 
     except Exception as e:
-        error_msg = f"Summarization failed. Messages: {messages}"
-        error_msg = error_msg[:1024]
-        raise ValueError(error_msg) from e
+        raise ValueError(f"Summarization failed: {type(e).__name__}: {e}") from e
 
 
 def _encode_image_for_llm_prompt(image_data: bytes) -> str:
