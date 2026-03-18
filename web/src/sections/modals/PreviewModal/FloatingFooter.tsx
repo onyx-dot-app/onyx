@@ -29,9 +29,11 @@ export default function FloatingFooter({
       <div className="pointer-events-auto">{left}</div>
 
       {/* Right slot */}
-      <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
-        {right}
-      </div>
+      {right ? (
+        <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
+          {right}
+        </div>
+      ) : null}
     </div>
   );
 }
