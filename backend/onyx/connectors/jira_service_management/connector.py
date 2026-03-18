@@ -13,7 +13,6 @@ from typing import Any
 from typing_extensions import override
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorMissingCredentialError
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
@@ -23,7 +22,6 @@ from onyx.connectors.jira_service_management.models import (
     JSMComment,
     JSMCustomer,
     JSMTicket,
-    JSMServiceDesk,
 )
 from onyx.connectors.jira_service_management.utils import (
     JSMAPIError,
@@ -31,6 +29,7 @@ from onyx.connectors.jira_service_management.utils import (
     JSMPaginatedClient,
     JSM_DEFAULT_PAGE_SIZE,
 )
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -79,7 +78,7 @@ def _parse_comment(raw: dict[str, Any]) -> JSMComment:
         body=body,
         created=_parse_datetime(raw.get("created")),
         updated=_parse_datetime(raw.get("updated")),
-        is_public=raw.get("visibility", {}).get("type", "role") != "role",
+        is_public=(raw.get("visibility") is None or raw.get("visibility", {}).get("type") != "role"),
     )
 
 
@@ -228,7 +227,6 @@ def _ticket_to_document(
     # Determine primary owners
     primary_owners: list[str] = []
     if ticket.assignee_name:
-        from onyx.connectors.models import BasicExpertInfo
 
         primary_owners.append(
             BasicExpertInfo(
@@ -236,7 +234,6 @@ def _ticket_to_document(
                 email=ticket.assignee_email,
             ).get_semantic_name()
         )
-    elif ticket.reporter:
         from onyx.connectors.models import BasicExpertInfo
 
         reporter_name = ticket.reporter.display_name or ticket.reporter.name
@@ -331,6 +328,9 @@ class JiraServiceManagementConnector(
         if self.project_key:
             clauses.insert(0, f'project = "{self.project_key}"')
 
+        if self.service_desk_id:
+            clauses.insert(0, f'"Service Desk" = "{self.service_desk_id}"')
+
         return " AND ".join(clauses)
 
     def _enrich_ticket(self, ticket: JSMTicket) -> JSMTicket:
@@ -360,43 +360,49 @@ class JiraServiceManagementConnector(
         checkpoint: JSMConnectorCheckpoint,
     ) -> CheckpointOutput[JSMConnectorCheckpoint]:
         jql = self._build_jql(start, end)
-
-        try:
-            raw_issues = self.client.search_tickets(
-                jql=jql,
-                fields="*all",
-                page_size=self.page_size,
-            )
-        except (JSMAuthError, JSMAPIError) as e:
-            raise ConnectorMissingCredentialError(
-                f"Failed to fetch JSM tickets: {e}"
-            ) from e
-
         current_offset = checkpoint.offset
         new_checkpoint = JSMConnectorCheckpoint(offset=current_offset)
 
-        for i, raw_issue in enumerate(raw_issues):
-            if i < current_offset:
-                continue
-
+        while True:
             try:
-                ticket = _raw_to_ticket(raw_issue)
-                ticket = self._enrich_ticket(ticket)
-
-                document = _ticket_to_document(self.jira_base_url, ticket)
-                if document is not None:
-                    yield document
-            except Exception as e:
-                yield ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=raw_issue.get("key", "unknown"),
-                        document_link=f"{self.jira_base_url}/browse/{raw_issue.get('key', '')}",
-                    ),
-                    failure_message=f"Failed to process JSM ticket: {e}",
-                    exception=e,
+                raw_issues, has_more = self.client.search_tickets_paged(
+                    jql=jql,
+                    fields="*all",
+                    page_size=self.page_size,
+                    start_at=current_offset,
                 )
+            except (JSMAuthError, JSMAPIError) as e:
+                raise ConnectorMissingCredentialError(
+                    f"Failed to fetch JSM tickets: {e}"
+                ) from e
 
-            new_checkpoint.offset = i + 1
+            if not raw_issues:
+                break
+
+            for i, raw_issue in enumerate(raw_issues):
+                try:
+                    ticket = _raw_to_ticket(raw_issue)
+                    ticket = self._enrich_ticket(ticket)
+
+                    document = _ticket_to_document(self.jira_base_url, ticket)
+                    if document is not None:
+                        yield document
+                except Exception as e:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=raw_issue.get("key", "unknown"),
+                            document_link=f"{self.jira_base_url}/browse/{raw_issue.get('key', '')}",
+                        ),
+                        failure_message=f"Failed to process JSM ticket: {e}",
+                        exception=e,
+                    )
+
+                new_checkpoint.offset = current_offset + i + 1
+
+            current_offset = new_checkpoint.offset
+
+            if not has_more:
+                break
 
         new_checkpoint.has_more = False
         return new_checkpoint

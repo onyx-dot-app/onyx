@@ -6,7 +6,6 @@ import time
 from typing import Any
 
 import httpx
-from typing_extensions import override
 
 from onyx.utils.logger import setup_logger
 
@@ -203,6 +202,9 @@ class JSMPaginatedClient:
                 data = response.json()
                 all_items.extend(data.get("values", []))
 
+                if not data.get("values"):
+                    break
+
                 next_page = data.get("_links", {}).get("next")
                 if not next_page:
                     break
@@ -222,6 +224,8 @@ class JSMPaginatedClient:
                 response = request_fn("GET", path, params=params)
                 data = response.json()
                 issues = data.get("issues", data.get("values", []))
+                if not issues:
+                    break
                 all_items.extend(issues)
 
                 total = data.get("total", 0)
@@ -265,6 +269,8 @@ class JSMPaginatedClient:
             response = self._request_with_retry("GET", "/search", params=params)
             data = response.json()
             issues = data.get("issues", [])
+            if not issues:
+                break
             all_issues.extend(issues)
 
             total = data.get("total", 0)
@@ -273,6 +279,29 @@ class JSMPaginatedClient:
             start_at += len(issues)
 
         return all_issues
+
+    def search_tickets_paged(
+        self,
+        jql: str,
+        fields: str | None = None,
+        page_size: int = JSM_DEFAULT_PAGE_SIZE,
+        start_at: int = 0,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Search JSM tickets with pagination. Returns (issues, has_more)."""
+        params: dict[str, Any] = {
+            "jql": jql,
+            "maxResults": min(page_size, JSM_MAX_PAGE_SIZE),
+            "startAt": start_at,
+        }
+        if fields:
+            params["fields"] = fields
+
+        response = self._request_with_retry("GET", "/search", params=params)
+        data = response.json()
+        issues = data.get("issues", [])
+        total = data.get("total", 0)
+        has_more = (start_at + len(issues)) < total
+        return issues, has_more
 
     def get_ticket_comments(self, issue_key: str) -> list[dict[str, Any]]:
         """Get comments for a specific ticket."""
