@@ -711,6 +711,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     onyx_document.id, onyx_document.chunk_count
                 )
                 deleted_doc_ids.add(onyx_document.id)
+                # If we see that chunks were deleted we assume the doc already
+                # existed. We record the result before bulk_index_documents
+                # runs. If indexing raises, this entire result list is discarded
+                # by the caller's retry logic, so early recording is safe.
                 document_indexing_results.append(
                     DocumentInsertionRecord(
                         document_id=onyx_document.id,

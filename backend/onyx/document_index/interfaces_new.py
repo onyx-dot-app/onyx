@@ -213,7 +213,7 @@ class Indexable(abc.ABC):
         chunks: Iterable[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> list[DocumentInsertionRecord]:
-        """Indexes a list of document chunks into the document index.
+        """Indexes an iterable of document chunks into the document index.
 
         This is often a batch operation including chunks from multiple
         documents.
