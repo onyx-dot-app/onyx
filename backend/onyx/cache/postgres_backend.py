@@ -297,7 +297,9 @@ class PostgresCacheBackend(CacheBackend):
 
     def _lock_id_for(self, name: str) -> int:
         """Map *name* to a 64-bit signed int for ``pg_advisory_lock``."""
-        h = hashlib.md5(f"{self._tenant_id}:{name}".encode()).digest()
+        h = hashlib.md5(
+            f"{self._tenant_id}:{name}".encode(), usedforsecurity=False
+        ).digest()
         return struct.unpack("q", h[:8])[0]
 
 
