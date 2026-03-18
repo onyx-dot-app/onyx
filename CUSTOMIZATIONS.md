@@ -217,25 +217,25 @@ Archivos representativos:
 
 ### 5.4 Docker registries y charts
 
-**Importante**: el fork **no ha completado** una migracion total de registries/artefactos a una identidad propia.
+**Importante**: el fork sigue teniendo deuda de compatibilidad upstream, pero el chart de Helm y las imagenes principales de despliegue ya apuntan a la identidad propia.
 
 Estado actual observado:
 
-- Docker Compose y Helm todavia referencian imagenes upstream tipo:
-  - `onyxdotapp/onyx-backend`
-  - `onyxdotapp/onyx-web-server`
-  - `onyxdotapp/onyx-model-server`
-- Helm todavia usa:
-  - chart `name: onyx`
-  - `home: https://www.onyx.app/`
-  - `sources: https://github.com/onyx-dot-app/onyx`
+- Docker Compose y Helm ya referencian imagenes propias tipo:
+  - `hop-rag/activa-backend`
+  - `hop-rag/activa-web-server`
+  - `hop-rag/activa-model-server`
+- Helm usa:
+  - chart `name: activa`
+  - `home: https://activa.ai/`
+  - `sources: https://github.com/HOP-RAG/HOP`
 
 Archivos representativos:
 
 - `deployment/docker_compose/docker-compose.yml`
 - `deployment/docker_compose/docker-compose.prod*.yml`
-- `deployment/helm/charts/onyx/Chart.yaml`
-- `deployment/helm/charts/onyx/values.yaml`
+- `deployment/helm/charts/activa/Chart.yaml`
+- `deployment/helm/charts/activa/values.yaml`
 
 Interpretacion:
 
@@ -276,8 +276,6 @@ Para merges futuros, asumir que estas piezas siguen atadas al naming upstream:
 
 - paquetes Python y rutas de modulo bajo `backend/onyx/` y `backend/ee/onyx/`
 - gran parte de variables de entorno y constantes internas con prefijo `ONYX_*`
-- nombre del chart Helm `onyx`
-- imagenes `onyxdotapp/*`
 - muchas rutas de despliegue y artefactos AWS/ECS/Helm
 - iconografia y documentacion del subproyecto `widget/`
 - algunas URLs legacy o nombres tecnicos como `NEXT_PUBLIC_ONYX_BACKEND_URL`

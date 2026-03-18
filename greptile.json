@@ -106,7 +106,7 @@
         },
         {
           "scope": [],
-          "path": "deployment/helm/charts/onyx/values-lite.yaml",
+          "path": "deployment/helm/charts/activa/values-lite.yaml",
           "description": "Lite deployment Helm values and service assumptions"
         },
         {

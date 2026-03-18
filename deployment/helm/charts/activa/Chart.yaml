@@ -1,9 +1,9 @@
 apiVersion: v2
-name: onyx
+name: activa
 description: A Helm chart for Kubernetes
-home: https://www.onyx.app/
+home: https://activa.ai/
 sources:
-  - "https://github.com/onyx-dot-app/onyx"
+  - "https://github.com/HOP-RAG/HOP"
 type: application
 version: 0.4.35
 appVersion: latest
@@ -12,9 +12,9 @@ annotations:
   licenses: MIT
   images: |
     - name: webserver
-      image: docker.io/onyxdotapp/onyx-web-server:latest
+      image: docker.io/hop-rag/activa-web-server:latest
     - name: background
-      image: docker.io/onyxdotapp/onyx-backend:latest
+      image: docker.io/hop-rag/activa-backend:latest
     - name: vespa
       image: vespaengine/vespa:8.609.39
 dependencies:
