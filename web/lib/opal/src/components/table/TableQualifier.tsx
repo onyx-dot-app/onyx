@@ -62,9 +62,9 @@ function getQualifierStyles(selected: boolean, disabled: boolean) {
     container: "bg-background-tint-01",
     icon: "stroke-text-03",
     overlay:
-      "flex opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 bg-background-tint-01",
+      "flex opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 bg-background-tint-01",
     overlayImage:
-      "flex opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 bg-mask-01 group-hover:backdrop-blur-02 group-focus-within:backdrop-blur-02",
+      "flex opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 bg-mask-01 group-hover/row:backdrop-blur-02 group-focus-within/row:backdrop-blur-02",
   };
 }
 

@@ -130,25 +130,15 @@ export interface DataTableDraggableConfig {
   ) => void | Promise<void>;
 }
 
-export interface DataTableFooterSelection {
-  mode: "selection";
-  /** Whether the table supports selecting multiple rows. @default true */
-  multiSelect?: boolean;
-  /** When true, shows a "View" button that filters the table to only selected rows. @default false */
-  showView?: boolean;
-  /** Handler for the "Clear" button. When omitted, the default clearSelection is used. */
+/** Footer configuration. Mode is derived from `selectionBehavior` automatically. */
+export interface DataTableFooterConfig {
+  /** Handler for the "Clear" button (multi-select only). When omitted, the default clearSelection is used. */
   onClear?: () => void;
-}
-
-export interface DataTableFooterSummary {
-  mode: "summary";
-  /** Optional extra element rendered after the summary text (e.g. a download icon). */
+  /** Unit label for count pagination, e.g. "users", "documents" (multi-select only). */
+  units?: string;
+  /** Optional extra element rendered after the summary text, e.g. a download icon (summary mode only). */
   leftExtra?: ReactNode;
 }
-
-export type DataTableFooterConfig =
-  | DataTableFooterSelection
-  | DataTableFooterSummary;
 
 export interface DataTableProps<TData> {
   /** Row data array. */

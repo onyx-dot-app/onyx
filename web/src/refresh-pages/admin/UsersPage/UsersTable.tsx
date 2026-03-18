@@ -229,7 +229,6 @@ export default function UsersTable({
           />
         }
         footer={{
-          mode: "summary",
           leftExtra: (
             <Button
               icon={SvgDownload}

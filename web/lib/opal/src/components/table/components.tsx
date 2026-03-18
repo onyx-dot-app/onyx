@@ -250,16 +250,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
       );
     }
   }, [!!serverSide, !!draggable]); // eslint-disable-line react-hooks/exhaustive-deps
-  const footerShowView =
-    footer?.mode === "selection" ? footer.showView : undefined;
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "production" && serverSide && footerShowView) {
-      console.warn(
-        "DataTable: `showView` is ignored when `serverSide` is enabled. " +
-          "View mode requires client-side filtering."
-      );
-    }
-  }, [!!serverSide, !!footerShowView]); // eslint-disable-line react-hooks/exhaustive-deps
   const effectiveDraggable = serverSide ? undefined : draggable;
   const draggableReturn = useDraggableRows({
     data,
@@ -282,11 +272,13 @@ export function Table<TData>(props: DataTableProps<TData>) {
   const isServerLoading = !!serverSide?.isLoading;
 
   function renderFooter(footerConfig: DataTableFooterConfig) {
-    if (footerConfig.mode === "selection") {
+    // Mode derived from selectionBehavior — single/multi-select use selection
+    // footer, no-select uses summary footer.
+    if (isSelectable) {
       return (
         <Footer
           mode="selection"
-          multiSelect={footerConfig.multiSelect !== false}
+          multiSelect={isMultiSelect}
           selectionState={selectionState}
           selectedCount={selectedCount}
           onClear={
@@ -296,23 +288,19 @@ export function Table<TData>(props: DataTableProps<TData>) {
               clearSelection();
             })
           }
-          onView={
-            footerConfig.showView
-              ? isViewingSelected
-                ? exitViewMode
-                : enterViewMode
-              : undefined
-          }
+          onView={isViewingSelected ? exitViewMode : enterViewMode}
+          isViewingSelected={isViewingSelected}
           pageSize={resolvedPageSize}
           totalItems={totalItems}
           currentPage={currentPage}
           totalPages={totalPages}
           onPageChange={setPage}
+          units={footerConfig.units}
         />
       );
     }
 
-    // Summary mode
+    // Summary mode (no-select only)
     const rangeStart =
       totalItems === 0
         ? 0
@@ -333,6 +321,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
         totalPages={totalPages}
         onPageChange={setPage}
         leftExtra={footerConfig.leftExtra}
+        units={footerConfig.units}
       />
     );
   }
