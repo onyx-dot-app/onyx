@@ -226,7 +226,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
 
         # Under test.
         # Should not raise.
@@ -242,7 +242,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test.
@@ -271,7 +271,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
 
         test_client.create_index(mappings=mappings, settings=settings)
 
@@ -285,7 +285,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
 
         # Under test and postcondition.
         # Should return False before creation.
@@ -305,7 +305,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test.
@@ -340,7 +340,7 @@ class TestOpenSearchClient:
                 },
             },
         }
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=initial_mappings, settings=settings)
 
         # Under test.
@@ -383,7 +383,7 @@ class TestOpenSearchClient:
                 "test_field": {"type": "keyword"},
             },
         }
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=initial_mappings, settings=settings)
 
         # Under test and postcondition.
@@ -418,7 +418,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         # Create once - should succeed.
         test_client.create_index(mappings=mappings, settings=settings)
 
@@ -461,7 +461,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         doc = _create_test_document_chunk(
@@ -489,7 +489,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         docs = [
@@ -520,7 +520,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         doc = _create_test_document_chunk(
@@ -548,7 +548,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         original_doc = _create_test_document_chunk(
@@ -583,7 +583,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=False
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test and postcondition.
@@ -602,7 +602,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         doc = _create_test_document_chunk(
@@ -638,7 +638,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test.
@@ -659,7 +659,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index multiple documents.
@@ -735,7 +735,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Create a document to update.
@@ -784,7 +784,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test and postcondition.
@@ -808,7 +808,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
         # Index documents.
         docs = {
@@ -906,7 +906,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
         # Note no documents were indexed.
 
@@ -947,7 +947,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_x.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index documents with different public/hidden and tenant states.
@@ -1066,7 +1066,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_x.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index documents with varying relevance to the query.
@@ -1193,7 +1193,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_x.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Although very unlikely in practice, let's use the same doc ID just to
@@ -1286,7 +1286,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Don't index any documents.
@@ -1313,7 +1313,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index chunks for two different documents.
@@ -1381,7 +1381,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index documents with different public/hidden and tenant states.
@@ -1458,7 +1458,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index docs with various ages.
@@ -1550,7 +1550,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index chunks for two different documents, one hidden one not.
