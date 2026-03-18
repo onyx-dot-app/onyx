@@ -1,13 +1,13 @@
-# Default values for onyx.
+# Default values for activa.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
 global:
-  # Global version for all Onyx components (overrides .Chart.AppVersion)
+  # Global version for all Activa components (overrides .Chart.AppVersion)
   version: "latest"
-  # Global pull policy for all Onyx component images
+  # Global pull policy for all Activa component images
   pullPolicy: "IfNotPresent"
-  # Host for all Onyx components
+  # Host for all Activa components
   host: "0.0.0.0"
 
 postgresql:
@@ -149,7 +149,7 @@ inferenceCapability:
     - key: app
       value: inference-model-server
   image:
-    repository: onyxdotapp/onyx-model-server
+    repository: docker.io/hop-rag/activa-model-server
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   containerPorts:
@@ -208,7 +208,7 @@ indexCapability:
   containerPorts:
     server: 9000
   image:
-    repository: onyxdotapp/onyx-model-server
+    repository: docker.io/hop-rag/activa-model-server
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   limitConcurrency: 10
@@ -278,11 +278,11 @@ nginx:
     containerPort:
       http: 1024
 
-    # NOTE: When onyx-nginx-conf changes, nginx pods need to restart.
+    # NOTE: When activa-nginx-conf changes, nginx pods need to restart.
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "1"
+      activa.ai/nginx-config-version: "1"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -301,7 +301,7 @@ nginx:
     extraVolumes:
       - name: nginx-config
         configMap:
-          name: onyx-nginx-conf
+          name: activa-nginx-conf
     extraVolumeMounts:
       - name: nginx-config
         mountPath: /etc/nginx/custom-snippets
@@ -317,7 +317,7 @@ nginx:
 webserver:
   replicaCount: 1
   image:
-    repository: onyxdotapp/onyx-web-server
+    repository: docker.io/hop-rag/activa-web-server
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   deploymentLabels:
@@ -404,7 +404,7 @@ webserver:
 api:
   replicaCount: 1
   image:
-    repository: onyxdotapp/onyx-backend
+    repository: docker.io/hop-rag/activa-backend
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   deploymentLabels:
@@ -499,7 +499,7 @@ api:
 
 celery_shared:
   image:
-    repository: onyxdotapp/onyx-backend
+    repository: docker.io/hop-rag/activa-backend
     tag: ""  # Overrides the image tag whose default is the chart appVersion.
   startupProbe:
     # startupProbe fails after 2m
@@ -764,7 +764,7 @@ discordbot:
   # Command prefix for bot commands (default: "!")
   invokeChar: "!"
   image:
-    repository: onyxdotapp/onyx-backend
+    repository: docker.io/hop-rag/activa-backend
     tag: ""  # Overrides the image tag whose default is the chart appVersion.
   podAnnotations: {}
   podLabels:
@@ -792,7 +792,7 @@ slackbot:
   enabled: true
   replicaCount: 1
   image:
-    repository: onyxdotapp/onyx-backend
+    repository: docker.io/hop-rag/activa-backend
     tag: ""  # Overrides the image tag whose default is the chart appVersion.
   podAnnotations: {}
   podLabels:
@@ -820,7 +820,7 @@ mcpServer:
   enabled: false  # Disabled by default
   replicaCount: 1
   image:
-    repository: onyxdotapp/onyx-backend
+    repository: docker.io/hop-rag/activa-backend
     tag: ""  # Overrides the image tag whose default is the chart appVersion.
   # CORS origins for MCP clients (comma-separated)
   # Example: "https://claude.ai,https://app.cursor.sh"
@@ -967,7 +967,7 @@ codeInterpreter:
   replicaCount: 1
 
   image:
-    repository: onyxdotapp/code-interpreter
+    repository: docker.io/hop-rag/code-interpreter
     pullPolicy: Always
     tag: ""  # Empty uses chart appVersion
 
@@ -1059,9 +1059,9 @@ ingress:
   enabled: false
   className: ""
   api:
-    host: onyx.local
+    host: activa.local
   webserver:
-    host: onyx.local
+    host: activa.local
 
 letsencrypt:
   enabled: false
@@ -1209,7 +1209,7 @@ configMap:
   OIDC_PKCE_ENABLED: ""
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
-  # Can be something like onyx.app, as an extra double-check
+  # Can be something like activa.ai, as an extra double-check
   VALID_EMAIL_DOMAINS: ""
   # For sending verification emails, true or false
   REQUIRE_EMAIL_VERIFICATION: ""
