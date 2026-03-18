@@ -33,8 +33,11 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _JSM_ID_PREFIX = "JSM_"
-_JIRA_REST_API = "/rest/api/2"
+_JIRA_REST_API = "/rest/api/3"
 _JSM_PAGE_SIZE = 50
+
+# Characters that must not appear in project keys passed to JQL
+_JQL_UNSAFE = frozenset('"\'\\;')
 
 
 def _build_issue_url(base_url: str, issue_key: str) -> str:
@@ -127,9 +130,12 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
         conditions: list[str] = []
 
         if self.project_key:
-            conditions.append(f'project = "{self.project_key}"')
+            sanitized = "".join(
+                c for c in self.project_key if c not in _JQL_UNSAFE
+            )
+            conditions.append(f'project = "{sanitized}"')
         else:
-            conditions.append('project.projectTypeKey = "service_desk"')
+            conditions.append("projectType = service_desk")
 
         if updated_after:
             conditions.append(
@@ -160,6 +166,7 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
                     "issuetype,project,resolutiondate,duedate"
                 ),
             },
+            timeout=15,
         )
         _handle_http_error(response, f"JQL search: {jql}")
         return response.json()
@@ -210,14 +217,20 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
                 names = [p.get("displayName", "") for p in participants]
                 jsm_lines.append(f"Participants: {', '.join(names)}")
         except Exception:
-            pass
+            logger.warning(
+                f"Failed to fetch JSM request details for {issue_key}",
+                exc_info=True,
+            )
 
         sla_text = ""
         try:
             sla_data = get_sla_information(self.jsm_base_url, self._auth, issue_key)
             sla_text = format_sla_as_text(sla_data)
         except Exception:
-            pass
+            logger.warning(
+                f"Failed to fetch SLA information for {issue_key}",
+                exc_info=True,
+            )
 
         # Assemble full document text
         content_parts: list[str] = []
@@ -355,31 +368,3 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
             ) from exc
 
 
-if __name__ == "__main__":
-    import os
-
-    connector = JiraServiceManagementConnector(
-        jsm_base_url=os.environ["JSM_BASE_URL"],
-        project_key=os.environ.get("JSM_PROJECT_KEY"),
-    )
-    connector.load_credentials(
-        {
-            "jsm_user_email": os.environ["JSM_USER_EMAIL"],
-            "jsm_api_token": os.environ["JSM_API_TOKEN"],
-        }
-    )
-
-    import time
-
-    current = time.time()
-    one_day_ago = current - 86400
-
-    print("=== Full load ===")
-    for batch in connector.load_from_state():
-        for doc in batch:
-            print(f"  {doc.semantic_identifier} | {doc.metadata.get('status')}")
-
-    print("=== Poll (last 24h) ===")
-    for batch in connector.poll_source(one_day_ago, current):
-        for doc in batch:
-            print(f"  {doc.semantic_identifier} | {doc.metadata.get('status')}")
