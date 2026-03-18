@@ -597,6 +597,9 @@ class OnyxCeleryTask:
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
 
+    # Hook execution log retention
+    HOOK_EXECUTION_LOG_CLEANUP_TASK = "hook_execution_log_cleanup_task"
+
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
     CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
