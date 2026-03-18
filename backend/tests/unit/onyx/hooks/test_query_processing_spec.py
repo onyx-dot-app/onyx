@@ -22,6 +22,12 @@ def test_input_schema_required_fields() -> None:
     required = schema["required"]
     assert "query" in required
     assert "user_email" in required
+    assert "chat_session_id" in required
+
+
+def test_input_schema_chat_session_id_is_string() -> None:
+    props = QueryProcessingSpec().input_schema["properties"]
+    assert props["chat_session_id"]["type"] == "string"
 
 
 def test_input_schema_query_is_string() -> None:

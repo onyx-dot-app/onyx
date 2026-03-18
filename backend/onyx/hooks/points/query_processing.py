@@ -50,8 +50,12 @@ class QueryProcessingSpec(HookPointSpec):
                     "type": ["string", "null"],
                     "description": "Email of the user submitting the query, or null if unauthenticated.",
                 },
+                "chat_session_id": {
+                    "type": "string",
+                    "description": "UUID of the chat session. Always present — the session is guaranteed to exist by the time this hook fires.",
+                },
             },
-            "required": ["query", "user_email"],
+            "required": ["query", "user_email", "chat_session_id"],
             "additionalProperties": False,
         }
 
