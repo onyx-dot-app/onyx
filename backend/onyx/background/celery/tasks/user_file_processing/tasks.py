@@ -589,6 +589,8 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
     skipped_guard = 0
     try:
         # --- Protection 1: queue depth backpressure ---
+        # NOTE: must use the broker's Redis client (not redis_client) because
+        # Celery queues live on a separate Redis DB with CELERY_SEPARATOR keys.
         r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
         queue_len = celery_get_queue_length(OnyxCeleryQueues.USER_FILE_DELETE, r_celery)
         if queue_len > USER_FILE_DELETE_MAX_QUEUE_DEPTH:
@@ -643,7 +645,7 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
             lock.release()
 
     task_logger.info(
-        f"check_for_user_file_delete - Enqueued {enqueued} skipped_guard={skipped_guard} tasks for tenant={tenant_id}"
+        f"check_for_user_file_delete - Enqueued {enqueued} tasks, skipped_guard={skipped_guard} for tenant={tenant_id}"
     )
     return None
 
