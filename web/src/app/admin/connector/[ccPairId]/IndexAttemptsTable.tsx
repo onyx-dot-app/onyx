@@ -168,17 +168,17 @@ export function IndexAttemptsTable({
                       )}
                   </>
                 </TableCell>
-                {indexAttempt.full_exception_trace && (
-                  <td className="w-0 p-0">
+                <td className="w-0 p-0">
+                  {indexAttempt.full_exception_trace && (
                     <button
                       aria-label="View full trace"
                       onClick={() =>
                         setIndexAttemptTracePopupId(indexAttempt.id)
                       }
                       className="absolute w-full h-full left-0 top-0"
-                    />
-                  </td>
-                )}
+                    /> 
+                  )}
+                </td>
               </TableRow>
             );
           })}
