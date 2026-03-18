@@ -11,6 +11,7 @@ from slack_sdk.webhook import WebhookClient
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.process_message import remove_answer_citations
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_FOLLOWUP_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
@@ -55,6 +56,7 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 
 def _convert_document_ids_to_citation_info(
@@ -111,10 +113,10 @@ def handle_doc_feedback_button(
         external_id=external_id,
         # We use the private metadata to keep track of the channel id and thread ts
         private_metadata=f"{channel_id}_{thread_ts}",
-        title="Give Feedback",
+        title="Dar feedback",
         blocks=[get_document_feedback_blocks()],
-        submit="send",
-        close="cancel",
+        submit="Enviar",
+        close="Cancelar",
     )
 
     client.web_client.views_open(
@@ -158,7 +160,7 @@ def handle_generate_answer_button(
         client=client.web_client,
         channel=channel_id,
         receiver_ids=[user_id],
-        text="I'm working on generating a full answer for you. This may take a moment...",
+        text="Estoy generando una respuesta completa para ti. Esto puede tardar un momento...",
         thread_ts=thread_ts,
     )
 
@@ -297,7 +299,7 @@ def handle_publish_ephemeral_message_button(
                 client=client.web_client,
                 channel=channel_id,
                 receiver_ids=None,  # If respond_member_group_list is set, send to them. TODO: check!
-                text="Hello! Onyx has some results for you!",
+                text=f"Hola. {BOT_BRAND} tiene resultados para ti.",
                 blocks=all_blocks,
                 thread_ts=original_question_ts,
                 # don't unfurl, since otherwise we will have 5+ previews which makes the message very long
@@ -339,7 +341,7 @@ def handle_publish_ephemeral_message_button(
                     client=client.web_client,
                     channel=channel_id,
                     receiver_ids=[slack_sender_id],
-                    text="Your personal response, sent as an ephemeral message.",
+                    text="Tu respuesta personal, enviada como mensaje efimero.",
                     blocks=changed_blocks,
                     thread_ts=original_question_ts,
                     # don't unfurl, since otherwise we will have 5+ previews which makes the message very long
@@ -350,7 +352,7 @@ def handle_publish_ephemeral_message_button(
                 # This works fine if the ephemeral message is in the channel
                 webhook.send(
                     response_type="ephemeral",
-                    text="Your personal response, sent as an ephemeral message.",
+                    text="Tu respuesta personal, enviada como mensaje efimero.",
                     blocks=changed_blocks,
                     replace_original=True,
                     delete_original=False,
@@ -425,17 +427,22 @@ def handle_slack_feedback(
             channel=channel_id_to_post_confirmation,
             user=user_id_to_post_confirmation,
             thread_ts=thread_ts_to_post_confirmation,
-            text="Thanks for your feedback!",
+            text="Gracias por tu feedback.",
         )
     else:
         feedback_response_txt = (
-            "liked" if feedback_type == LIKE_BLOCK_ACTION_ID else "disliked"
+            "considero util"
+            if feedback_type == LIKE_BLOCK_ACTION_ID
+            else "considero poco util"
         )
 
         if get_feedback_visibility() == FeedbackVisibility.ANONYMOUS:
-            msg = f"A user has {feedback_response_txt} the AI Answer"
+            msg = f"Una persona {feedback_response_txt} la respuesta de IA"
         else:
-            msg = f"<@{user_id_to_post_confirmation}> has {feedback_response_txt} the AI Answer"
+            msg = (
+                f"<@{user_id_to_post_confirmation}> {feedback_response_txt} "
+                "la respuesta de IA"
+            )
 
         respond_in_thread_or_channel(
             client=client,
@@ -492,7 +499,7 @@ def handle_followup_button(
     respond_in_thread_or_channel(
         client=client.web_client,
         channel=channel_id,
-        text="Received your request for more help",
+        text="Recibimos tu solicitud de mas ayuda.",
         blocks=blocks,
         thread_ts=thread_ts,
         unfurl=False,
@@ -562,12 +569,12 @@ def handle_followup_resolved_button(
             logger.error("Unable to delete message for resolved")
 
     if immediate:
-        msg_text = f"{clicker_name} has marked this question as resolved!"
+        msg_text = f"{clicker_name} marco esta pregunta como resuelta."
     else:
         msg_text = (
-            f"{clicker_name} has marked this question as resolved! "
-            f'\n\n You can always click the "I need more help button" to let the team '
-            f"know that your problem still needs attention."
+            f"{clicker_name} marco esta pregunta como resuelta."
+            '\n\nSiempre puedes hacer clic en "Necesito mas ayuda de una persona" '
+            "para avisarle al equipo que el problema aun necesita atencion."
         )
 
     resolved_block = SectionBlock(text=msg_text)
@@ -575,7 +582,7 @@ def handle_followup_resolved_button(
     respond_in_thread_or_channel(
         client=client.web_client,
         channel=channel_id,
-        text="Your request for help as been addressed!",
+        text="Tu solicitud de ayuda ya fue atendida.",
         blocks=[resolved_block],
         thread_ts=thread_ts,
         unfurl=False,

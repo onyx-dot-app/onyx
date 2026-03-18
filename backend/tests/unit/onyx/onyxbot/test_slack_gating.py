@@ -126,7 +126,7 @@ class TestCheckTenantGated:
 
         assert result is True
         mock_respond.assert_called_once()
-        assert "subscription has expired" in mock_respond.call_args[1]["text"]
+        assert "suscripcion" in mock_respond.call_args[1]["text"].lower()
 
     @patch(f"{_LISTENER}.respond_in_thread_or_channel")
     @patch(f"{_LISTENER}.fetch_ee_implementation_or_noop")
@@ -293,8 +293,8 @@ class TestHandleMessageSeatCheck:
         result = self._call_handle_message()
 
         assert result is False
-        assert "seat limit" in mock_respond.call_args[1]["text"]
-        assert "Onyx administrator" in mock_respond.call_args[1]["text"]
+        assert "limite" in mock_respond.call_args[1]["text"].lower()
+        assert "ACTIVA" in mock_respond.call_args[1]["text"]
 
     @pytest.mark.usefixtures("db_session")
     @patch(f"{_HANDLE_MSG}.handle_regular_answer", return_value=False)

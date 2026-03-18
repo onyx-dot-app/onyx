@@ -21,6 +21,7 @@ from slack_sdk.socket_mode import SocketModeClient
 from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.constants import ID_SEPARATOR
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_VISIBILITY
 from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_QPM
 from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_WAIT_TIME
@@ -44,6 +45,7 @@ from onyx.utils.text_processing import replace_whitespaces_w_space
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 slack_token_user_ids: dict[str, str | None] = {}
 slack_token_bot_ids: dict[str, str | None] = {}
@@ -128,7 +130,7 @@ def check_message_limit() -> bool:
         _ONYX_BOT_COUNT_START_TIME = time.time()
     if (_ONYX_BOT_MESSAGE_COUNT + 1) > ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD:
         logger.error(
-            f"OnyxBot has reached the message limit {ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD}"
+            f"{BOT_BRAND} bot has reached the message limit {ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD}"
             f" for the time period {ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS} seconds."
             " These limits are configurable in backend/onyx/configs/onyxbot_configs.py"
         )
@@ -206,8 +208,8 @@ def _build_error_block(error_message: str) -> Block:
     the error without completely breaking
     """
     display_text = (
-        "There was an error displaying all of the Onyx answers."
-        f" Please let an admin or an onyx developer know. Error: {error_message}"
+        f"Hubo un error al mostrar todas las respuestas de {BOT_BRAND}."
+        f" Avisele a un administrador o al equipo de {BOT_BRAND}. Error: {error_message}"
     )
     return SectionBlock(text=display_text)
 

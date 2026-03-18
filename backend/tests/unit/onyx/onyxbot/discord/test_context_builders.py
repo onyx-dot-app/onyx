@@ -154,7 +154,7 @@ class TestThreadContextBuilder:
                 content="Bot response",
                 author_bot=True,
                 author_id=mock_bot_user.id,
-                author_display_name="OnyxBot",
+                author_display_name="ACTIVA",
             ),
         ]
 
@@ -631,7 +631,7 @@ class TestContextFormatting:
         assert "@TestUser:" in result
 
     def test_context_format_bot_marker(self, mock_bot_user: MagicMock) -> None:
-        """Bot messages in context are marked as OnyxBot:."""
+        """Bot messages in context are marked as ACTIVA:."""
         msg = mock_message(
             content="Bot response",
             author_bot=True,
@@ -642,4 +642,4 @@ class TestContextFormatting:
         result = _format_messages_as_context([msg], mock_bot_user)
 
         assert result is not None
-        assert "OnyxBot:" in result
+        assert "ACTIVA:" in result

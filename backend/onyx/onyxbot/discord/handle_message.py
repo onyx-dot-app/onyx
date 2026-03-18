@@ -6,6 +6,7 @@ import discord
 from pydantic import BaseModel
 
 from onyx.chat.models import ChatFullResponse
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.db.discord_bot import get_channel_config_by_discord_ids
 from onyx.db.discord_bot import get_guild_config_by_discord_id
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -19,6 +20,7 @@ from onyx.onyxbot.discord.exceptions import APIError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 # Message types with actual content (excludes system notifications like "user joined")
 CONTENT_MESSAGE_TYPES = (
@@ -192,7 +194,7 @@ async def process_chat_message(
         )
 
         # Format response with citations
-        answer = response.answer or "I couldn't generate a response."
+        answer = response.answer or "No pude generar una respuesta."
         answer = _append_citations(answer, response)
 
         await send_response(message, answer, thread_only_mode)
@@ -250,7 +252,7 @@ def _append_citations(answer: str, response: ChatFullResponse) -> str:
         return answer
 
     cited_docs.sort(key=lambda x: x[0])
-    citations = "\n\n**Sources:**\n"
+    citations = "\n\n**Fuentes:**\n"
     for num, name, link in cited_docs[:5]:
         if link:
             citations += f"{num}. [{name}](<{link}>)\n"
@@ -379,7 +381,7 @@ def _format_messages_as_context(
             continue
 
         sender = (
-            "OnyxBot" if msg.author.id == bot_user.id else f"@{msg.author.display_name}"
+            BOT_BRAND if msg.author.id == bot_user.id else f"@{msg.author.display_name}"
         )
         formatted.append(f"{sender}: {format_message_content(msg)}")
 
@@ -387,8 +389,8 @@ def _format_messages_as_context(
         return None
 
     return (
-        "You are a Discord bot named OnyxBot.\n"
-        'Always assume that [user] is the same as the "Current message" author.'
+        f"You are a Discord bot named {BOT_BRAND}.\n"
+        'Always assume that [user] is the same as the "Current message" author.\n'
         "Conversation history:\n"
         "---\n" + "\n".join(formatted) + "\n---"
     )
@@ -433,7 +435,7 @@ async def send_response(
         for chunk in chunks:
             await message.channel.send(chunk)
     elif thread_only_mode:
-        thread_name = f"OnyxBot <> {message.author.display_name}"[:100]
+        thread_name = f"{BOT_BRAND} <> {message.author.display_name}"[:100]
         thread = await message.create_thread(name=thread_name)
         for chunk in chunks:
             await thread.send(chunk)
@@ -477,14 +479,17 @@ async def send_error_response(
     except discord.DiscordException:
         pass
 
-    error_msg = "Sorry, I encountered an error processing your message. You may want to contact Onyx for support :sweat_smile:"
+    error_msg = (
+        f"Lo siento, tuve un error al procesar tu mensaje. "
+        f"Si el problema continua, contacta al equipo de {BOT_BRAND} :sweat_smile:"
+    )
 
     try:
         if isinstance(message.channel, discord.Thread):
             await message.channel.send(error_msg)
         else:
             thread = await message.create_thread(
-                name=f"Response to {message.author.display_name}"[:100]
+                name=f"Respuesta de {BOT_BRAND} a {message.author.display_name}"[:100]
             )
             await thread.send(error_msg)
     except discord.DiscordException:
