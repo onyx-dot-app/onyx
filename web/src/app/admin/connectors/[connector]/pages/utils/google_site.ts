@@ -21,10 +21,13 @@ export const submitGoogleSite = async (
       formData.append("files", file);
     });
 
-    const response = await fetch("/api/manage/admin/connector/file/upload", {
-      method: "POST",
-      body: formData,
-    });
+    const response = await fetch(
+      "/api/manage/admin/connector/file/upload?unzip=false",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
     const responseJson = await response.json();
     if (!response.ok) {
       toast.error(`Unable to upload files - ${responseJson.detail}`);
