@@ -24,7 +24,7 @@ def get_course_permissions(
     ee_get_course_permissions = cast(
         Callable[[CanvasApiClient, int], ExternalAccess | None],
         fetch_versioned_implementation(
-            "onyx.external_permissions.canvas.course_access",
+            "onyx.external_permissions.canvas.access",
             "get_course_permissions",
         ),
     )
