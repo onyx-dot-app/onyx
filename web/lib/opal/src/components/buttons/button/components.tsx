@@ -86,11 +86,7 @@ function Button({
           isLarge ? "default" : size === "2xs" ? "mini" : "compact"
         }
       >
-        <div
-          className={cn(
-            "flex flex-row items-center gap-1 interactive-foreground"
-          )}
-        >
+        <div className="flex flex-row items-center gap-1 interactive-foreground">
           {iconWrapper(Icon, size, !!children)}
 
           {labelEl}
