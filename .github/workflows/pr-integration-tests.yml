@@ -137,7 +137,7 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
-            type=registry,ref=onyxdotapp/onyx-backend:latest
+            type=registry,ref=hop-rag/activa-backend:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
@@ -197,7 +197,7 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
-            type=registry,ref=onyxdotapp/onyx-model-server:latest
+            type=registry,ref=hop-rag/activa-model-server:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
@@ -256,7 +256,7 @@ jobs:
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
-            --set backend.cache-from=type=registry,ref=onyxdotapp/onyx-backend:latest \
+            --set backend.cache-from=type=registry,ref=hop-rag/activa-backend:latest \
             --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA},mode=max \
             --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX},mode=max \
             --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
@@ -472,13 +472,13 @@ jobs:
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
-  onyx-lite-tests:
+  activa-lite-tests:
     needs: [build-backend-image, build-integration-image]
     runs-on:
       [
         runs-on,
         runner=4cpu-linux-arm64,
-        "run-id=${{ github.run_id }}-onyx-lite-tests",
+        "run-id=${{ github.run_id }}-activa-lite-tests",
         "extras=ecr-cache",
       ]
     timeout-minutes: 45
@@ -496,7 +496,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Create .env file for Onyx Lite Docker Compose
+      - name: Create .env file for ACTIVA Lite Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
@@ -513,19 +513,19 @@ jobs:
           INTEGRATION_TESTS_MODE=true
           EOF
 
-      # Start only the services needed for Onyx Lite (Postgres + API server)
-      - name: Start Docker containers (onyx-lite)
+      # Start only the services needed for ACTIVA Lite (Postgres + API server)
+      - name: Start Docker containers (ACTIVA Lite)
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up \
             relational_db \
             api_server \
             -d
-        id: start_docker_onyx_lite
+        id: start_docker_activa_lite
 
       - name: Wait for services to be ready
         run: |
-          echo "Starting wait-for-service script (onyx-lite)..."
+          echo "Starting wait-for-service script (ACTIVA Lite)..."
           start_time=$(date +%s)
           timeout=300
           while true; do
@@ -547,14 +547,14 @@ jobs:
             sleep 5
           done
 
-      - name: Run Onyx Lite Integration Tests
+      - name: Run ACTIVA Lite Integration Tests
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
           timeout_minutes: 20
           max_attempts: 3
           retry_wait_seconds: 10
           command: |
-            echo "Running onyx-lite integration tests..."
+            echo "Running ACTIVA Lite integration tests..."
             docker run --rm --network onyx_default \
               --name test-runner \
               -e POSTGRES_HOST=relational_db \
@@ -571,28 +571,28 @@ jobs:
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/tests/no_vectordb
 
-      - name: Dump API server logs (onyx-lite)
+      - name: Dump API server logs (ACTIVA Lite)
         if: always()
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml \
-            logs --no-color api_server > $GITHUB_WORKSPACE/api_server_onyx_lite.log || true
+            logs --no-color api_server > $GITHUB_WORKSPACE/api_server_activa_lite.log || true
 
-      - name: Dump all-container logs (onyx-lite)
+      - name: Dump all-container logs (ACTIVA Lite)
         if: always()
         run: |
           cd deployment/docker_compose
           docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml \
-            logs --no-color > $GITHUB_WORKSPACE/docker-compose-onyx-lite.log || true
+            logs --no-color > $GITHUB_WORKSPACE/docker-compose-activa-lite.log || true
 
-      - name: Upload logs (onyx-lite)
+      - name: Upload logs (ACTIVA Lite)
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
-          name: docker-all-logs-onyx-lite
-          path: ${{ github.workspace }}/docker-compose-onyx-lite.log
+          name: docker-all-logs-activa-lite
+          path: ${{ github.workspace }}/docker-compose-activa-lite.log
 
-      - name: Stop Docker containers (onyx-lite)
+      - name: Stop Docker containers (ACTIVA Lite)
         if: always()
         run: |
           cd deployment/docker_compose
@@ -740,7 +740,7 @@ jobs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 45
-    needs: [integration-tests, onyx-lite-tests, multitenant-tests]
+    needs: [integration-tests, activa-lite-tests, multitenant-tests]
     if: ${{ always() }}
     steps:
       - name: Check job status

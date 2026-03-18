@@ -25,8 +25,8 @@ jobs:
 
       - name: Set up Git user
         run: |
-          git config user.name "Onyx Bot [bot]"
-          git config user.email "onyx-bot[bot]@onyx.app"
+          git config user.name "Activa Bot [bot]"
+          git config user.email "activa-bot[bot]@activa.ai"
 
       - name: Check for existing nightly tag
         id: check_tag
@@ -60,6 +60,6 @@ jobs:
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
-          title: "🚨 Nightly Tag Push Failed"
+          title: "Nightly Tag Push Failed"
           ref-name: ${{ github.ref_name }}
           failed-jobs: "create-and-push-tag"

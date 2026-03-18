@@ -2,7 +2,7 @@ name: onyx
 
 services:
   mcp_api_key_server:
-    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:latest}
+    image: ${ONYX_BACKEND_IMAGE:-hop-rag/activa-backend:latest}
     restart: on-failure
     working_dir: /workspace
     environment:

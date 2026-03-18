@@ -63,7 +63,7 @@ runs:
           --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
           --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
           --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
-          --set backend.cache-from=type=registry,ref=onyxdotapp/onyx-backend:latest \
+          --set backend.cache-from=type=registry,ref=hop-rag/activa-backend:latest \
           --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA},mode=max \
           --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX},mode=max \
           --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
