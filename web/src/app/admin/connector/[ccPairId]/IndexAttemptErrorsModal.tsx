@@ -178,7 +178,7 @@ export default function IndexAttemptErrorsModal({
                     </TableRow>
                   ))
                 ) : (
-                  <TableRow className="h-[60px]">
+                  <TableRow className="h-[4rem]">
                     <TableCell
                       colSpan={4}
                       className="text-center py-8 text-gray-500"
