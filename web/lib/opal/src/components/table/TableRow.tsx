@@ -1,8 +1,8 @@
 "use client";
 
 import { cn } from "@opal/utils";
-import { useTableSize } from "./TableSizeContext";
-import type { TableSize } from "./TableSizeContext";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";

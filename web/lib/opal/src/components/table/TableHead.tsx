@@ -1,7 +1,7 @@
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
-import { useTableSize } from "./TableSizeContext";
-import type { TableSize } from "./TableSizeContext";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import { Button } from "@opal/components";
 import { SvgChevronDown, SvgChevronUp, SvgHandle, SvgSort } from "@opal/icons";

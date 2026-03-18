@@ -2,11 +2,11 @@
 
 import React from "react";
 import { cn } from "@opal/utils";
-import { useTableSize } from "./TableSizeContext";
-import type { TableSize } from "./TableSizeContext";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
 import { SvgUser } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import type { QualifierContentType } from "./types";
+import type { QualifierContentType } from "@opal/components/table/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
 
@@ -143,25 +143,31 @@ function TableQualifier({
         className
       )}
     >
-      {/* Inner qualifier container */}
-      <div
-        className={cn(
-          "flex items-center justify-center overflow-hidden transition-colors",
-          resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
-          isRound ? "rounded-full" : "rounded-08",
-          styles.container,
-          content === "image" && disabled && !selected && "opacity-50"
-        )}
-      >
-        {renderContent()}
-      </div>
+      {/* Inner qualifier container — no background for "simple" */}
+      {content !== "simple" && (
+        <div
+          className={cn(
+            "flex items-center justify-center overflow-hidden transition-colors",
+            resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
+            isRound ? "rounded-full" : "rounded-08",
+            styles.container,
+            content === "image" && disabled && !selected && "opacity-50"
+          )}
+        >
+          {renderContent()}
+        </div>
+      )}
 
       {/* Selection overlay */}
       {selectable && (
         <div
           className={cn(
             "absolute inset-0 items-center justify-center",
-            isRound ? "rounded-full" : "rounded-08",
+            content === "simple"
+              ? "flex"
+              : isRound
+                ? "rounded-full"
+                : "rounded-08",
             content === "simple"
               ? "flex"
               : content === "image"

@@ -3,8 +3,8 @@
 import { cn } from "@opal/utils";
 import { Button, Pagination } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { useTableSize } from "./TableSizeContext";
-import type { TableSize } from "./TableSizeContext";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 import type { ReactNode } from "react";
 

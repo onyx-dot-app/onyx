@@ -13,10 +13,10 @@ import type {
   OnyxDataColumn,
   OnyxDisplayColumn,
   OnyxActionsColumn,
-} from "./types";
-import type { TableSize } from "./TableSizeContext";
+} from "@opal/components/table/types";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
 import type { IconFunctionComponent } from "@opal/types";
-import type { SortDirection } from "./TableHead";
+import type { SortDirection } from "@opal/components/table/TableHead";
 
 // ---------------------------------------------------------------------------
 // Qualifier column config
@@ -160,7 +160,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         id: "qualifier",
         def,
         width: (size: TableSize) =>
-          size === "md" ? { fixed: 40 } : { fixed: 56 },
+          size === "md" ? { fixed: 36 } : { fixed: 44 },
         content,
         headerContentType: config?.headerContentType,
         getInitials: config?.getInitials,
@@ -241,14 +241,29 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
           : () => null,
       };
 
+      const showVisibility = config?.showColumnVisibility ?? true;
+      const showSorting = config?.showSorting ?? true;
+      const buttonCount = (showVisibility ? 1 : 0) + (showSorting ? 1 : 0);
+
+      // Icon button sizes: "md" button = 28px, "sm" button = 24px
+      // px-1 on .tbl-actions = 4px each side = 8px total
+      const BUTTON_MD = 28;
+      const BUTTON_SM = 24;
+      const PADDING = 8;
+
       return {
         kind: "actions",
         id: "__actions",
         def,
-        width: (size: TableSize) =>
-          size === "md" ? { fixed: 20 } : { fixed: 88 },
-        showColumnVisibility: config?.showColumnVisibility ?? true,
-        showSorting: config?.showSorting ?? true,
+        width: (size: TableSize) => ({
+          fixed:
+            Math.max(
+              buttonCount * (size === "md" ? BUTTON_SM : BUTTON_MD),
+              size === "md" ? BUTTON_SM : BUTTON_MD
+            ) + PADDING,
+        }),
+        showColumnVisibility: showVisibility,
+        showSorting: showSorting,
         sortingFooterText: config?.sortingFooterText,
       };
     },

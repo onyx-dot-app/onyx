@@ -4,10 +4,10 @@ import type {
   SortingState,
   VisibilityState,
 } from "@tanstack/react-table";
-import type { TableSize } from "./TableSizeContext";
-import type { TableVariant } from "./TableElement";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
+import type { TableVariant } from "@opal/components/table/TableElement";
 import type { IconFunctionComponent } from "@opal/types";
-import type { SortDirection } from "./TableHead";
+import type { SortDirection } from "@opal/components/table/TableHead";
 
 // ---------------------------------------------------------------------------
 // Column width (mirrors useColumnWidths types)

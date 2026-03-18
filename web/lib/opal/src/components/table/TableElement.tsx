@@ -8,7 +8,7 @@ import type { ExtremaSizeVariants, SizeVariants } from "@opal/types";
 
 type TableSize = Extract<SizeVariants, "md" | "lg">;
 type TableVariant = "rows" | "cards";
-type TableQualifier = null | "icon" | "checkbox";
+type TableQualifier = "simple" | "avatar" | "icon";
 type SelectionBehavior = "no-select" | "single-select" | "multi-select";
 
 interface TableProps
@@ -40,7 +40,7 @@ function Table({
   size = "lg",
   variant = "cards",
   selectionBehavior = "no-select",
-  qualifier = null,
+  qualifier = "simple",
   heightVariant,
   width,
   ...props
@@ -53,7 +53,7 @@ function Table({
       data-size={size}
       data-variant={variant}
       data-selection={selectionBehavior}
-      data-qualifier={qualifier ?? undefined}
+      data-qualifier={qualifier}
       data-height={heightVariant}
       {...props}
     />

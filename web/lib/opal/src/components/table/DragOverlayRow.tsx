@@ -1,11 +1,14 @@
 import { memo } from "react";
 import { type Row, flexRender } from "@tanstack/react-table";
-import TableRow from "./TableRow";
-import TableCell from "./TableCell";
-import QualifierContainer from "./QualifierContainer";
-import TableQualifier from "./TableQualifier";
-import ActionsContainer from "./ActionsContainer";
-import type { OnyxColumnDef, OnyxQualifierColumn } from "./types";
+import TableRow from "@opal/components/table/TableRow";
+import TableCell from "@opal/components/table/TableCell";
+import QualifierContainer from "@opal/components/table/QualifierContainer";
+import TableQualifier from "@opal/components/table/TableQualifier";
+import ActionsContainer from "@opal/components/table/ActionsContainer";
+import type {
+  OnyxColumnDef,
+  OnyxQualifierColumn,
+} from "@opal/components/table/types";
 
 interface DragOverlayRowProps<TData> {
   row: Row<TData>;

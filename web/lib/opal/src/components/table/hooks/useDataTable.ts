@@ -153,6 +153,10 @@ interface UseDataTableReturn<TData extends RowData> {
   clearSelection: () => void;
   /** Select or deselect all rows on the current page. */
   toggleAllPageRowsSelected: (selected: boolean) => void;
+  /** Select or deselect all rows across all pages. */
+  toggleAllRowsSelected: (selected: boolean) => void;
+  /** Whether every row across all pages is selected. */
+  isAllRowsSelected: boolean;
 
   // View-mode (filter to selected rows)
   /** Whether the table is currently filtered to show only selected rows. */
@@ -407,6 +411,12 @@ export default function useDataTable<TData extends RowData>(
     table.toggleAllPageRowsSelected(selected);
   };
 
+  const toggleAllRowsSelected = (selected: boolean) => {
+    table.toggleAllRowsSelected(selected);
+  };
+
+  const isAllRowsSelected = table.getIsAllRowsSelected();
+
   // ---- view mode (filter to selected rows) --------------------------------
   const isViewingSelected = globalFilter.selectedIds != null;
 
@@ -439,8 +449,10 @@ export default function useDataTable<TData extends RowData>(
     selectedCount,
     selectedRowIds,
     isAllPageRowsSelected,
+    isAllRowsSelected,
     clearSelection,
     toggleAllPageRowsSelected,
+    toggleAllRowsSelected,
     isViewingSelected,
     enterViewMode,
     exitViewMode,

@@ -1,5 +1,5 @@
-import { useTableSize } from "./TableSizeContext";
-import type { TableSize } from "./TableSizeContext";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
 
 interface ActionsContainerProps {
   type: "head" | "cell";

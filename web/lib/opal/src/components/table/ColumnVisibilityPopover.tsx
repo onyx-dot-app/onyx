@@ -7,10 +7,9 @@ import {
   type RowData,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { Button } from "@opal/components";
+import { Button, LineItemButton, Tag } from "@opal/components";
 import { SvgColumn, SvgCheck } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import Divider from "@/refresh-components/Divider";
 
 // ---------------------------------------------------------------------------
@@ -29,9 +28,11 @@ function ColumnVisibilityPopover<TData extends RowData>({
   size = "lg",
 }: ColumnVisibilityPopoverProps<TData>) {
   const [open, setOpen] = useState(false);
-  const hideableColumns = table
+
+  // User-defined columns only (exclude internal qualifier/actions)
+  const dataColumns = table
     .getAllLeafColumns()
-    .filter((col) => col.getCanHide());
+    .filter((col) => !col.id.startsWith("__") && col.id !== "qualifier");
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -48,7 +49,8 @@ function ColumnVisibilityPopover<TData extends RowData>({
       <Popover.Content width="lg" align="end" side="bottom">
         <Divider showTitle text="Shown Columns" />
         <Popover.Menu>
-          {hideableColumns.map((column) => {
+          {dataColumns.map((column) => {
+            const canHide = column.getCanHide();
             const isVisible = columnVisibility[column.id] !== false;
             const label =
               typeof column.columnDef.header === "string"
@@ -56,17 +58,23 @@ function ColumnVisibilityPopover<TData extends RowData>({
                 : column.id;
 
             return (
-              <LineItem
+              <LineItemButton
                 key={column.id}
-                selected={isVisible}
-                emphasized
-                rightChildren={isVisible ? <SvgCheck size={16} /> : undefined}
-                onClick={() => {
-                  column.toggleVisibility();
-                }}
-              >
-                {label}
-              </LineItem>
+                selectVariant="select-heavy"
+                state={isVisible ? "selected" : "empty"}
+                title={label}
+                sizePreset="main-ui"
+                rightChildren={
+                  !canHide ? (
+                    <div className="flex items-center">
+                      <Tag title="Always Shown" color="blue" />
+                    </div>
+                  ) : isVisible ? (
+                    <SvgCheck size={16} className="text-action-link-05" />
+                  ) : undefined
+                }
+                onClick={canHide ? () => column.toggleVisibility() : undefined}
+              />
             );
           })}
         </Popover.Menu>
