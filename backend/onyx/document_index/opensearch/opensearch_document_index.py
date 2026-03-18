@@ -881,7 +881,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
-            search_hits: list[SearchHit[DocumentChunk]] = []
+            search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
             query_body = DocumentQuery.get_from_document_id_query(
                 document_id=chunk_request.document_id,
                 tenant_state=self._tenant_state,
@@ -977,7 +977,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             index_filters=filters,
             num_to_retrieve=num_to_retrieve,
         )
-        search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
             search_pipeline_id=None,
         )
