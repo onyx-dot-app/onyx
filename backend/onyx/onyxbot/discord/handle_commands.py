@@ -7,7 +7,7 @@ from datetime import timezone
 import discord
 
 from onyx.configs.app_configs import DISCORD_BOT_INVOKE_CHAR
-from onyx.configs.constants import ONYX_DISCORD_URL
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.db.discord_bot import bulk_create_channel_configs
 from onyx.db.discord_bot import get_guild_config_by_discord_id
 from onyx.db.discord_bot import get_guild_config_by_internal_id
@@ -25,14 +25,14 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 
 async def handle_dm(message: discord.Message) -> None:
     """Handle direct messages."""
     dm_response = (
-        "**I can't respond to DMs** :sweat:\n\n"
-        f"Please chat with me in a server channel, or join the official "
-        f"[Onyx Discord]({ONYX_DISCORD_URL}) for help!"
+        f"**No puedo responder mensajes directos** :sweat:\n\n"
+        f"Escribeme en un canal del servidor o pide ayuda a tu administrador de {BOT_BRAND}."
     )
     await message.channel.send(dm_response)
 
@@ -102,7 +102,7 @@ async def handle_registration_command(
     # Must be in a server
     if not message.guild:
         await _try_dm_author(
-            message, "This command can only be used in a server channel."
+            message, "Este comando solo puede usarse en un canal del servidor."
         )
         return True
 
@@ -114,39 +114,39 @@ async def handle_registration_command(
         parts = content.split(maxsplit=1)
         if len(parts) < 2:
             raise RegistrationError(
-                "Invalid registration key format. Please check the key and try again."
+                "Formato de clave de registro invalido. Revisa la clave e intentalo de nuevo."
             )
 
         registration_key = parts[1].strip()
 
         if not message.author or not isinstance(message.author, discord.Member):
             raise RegistrationError(
-                "You need to be a server administrator to register the bot."
+                "Necesitas ser administrador del servidor para registrar el bot."
             )
 
         # Check permissions - require admin or manage_guild
         if not message.author.guild_permissions.administrator:
             if not message.author.guild_permissions.manage_guild:
                 raise RegistrationError(
-                    "You need **Administrator** or **Manage Server** permissions to register this bot."
+                    "Necesitas permisos de **Administrator** o **Manage Server** para registrar este bot."
                 )
 
         await _register_guild(message, registration_key, cache)
         logger.info(f"Registration successful: {guild_name}")
         await message.reply(
-            ":white_check_mark: **Successfully registered!**\n\n"
-            "This server is now connected to Onyx. "
-            "I'll respond to messages based on your server and channel settings set in Onyx."
+            ":white_check_mark: **Registro completado.**\n\n"
+            f"Este servidor ahora esta conectado a {BOT_BRAND}. "
+            f"Respondere segun la configuracion del servidor y de los canales en {BOT_BRAND}."
         )
     except RegistrationError as e:
         logger.debug(f"Registration failed: {guild_name}, error={e}")
-        await _try_dm_author(message, f":x: **Registration failed.**\n\n{e}")
+        await _try_dm_author(message, f":x: **No se pudo completar el registro.**\n\n{e}")
         await _try_delete_message(message)
     except Exception:
         logger.exception(f"Registration failed unexpectedly: {guild_name}")
         await _try_dm_author(
             message,
-            ":x: **Registration failed.**\n\nAn unexpected error occurred. Please try again later.",
+            ":x: **No se pudo completar el registro.**\n\nOcurrio un error inesperado. Intentalo de nuevo mas tarde.",
         )
         await _try_delete_message(message)
 
@@ -161,7 +161,7 @@ async def _register_guild(
     """Register a guild with a registration key."""
     if not message.guild:
         # mypy, even though we already know that message.guild is not None
-        raise RegistrationError("This command can only be used in a server.")
+        raise RegistrationError("Este comando solo puede usarse en un servidor.")
 
     logger.info(f"Guild '{message.guild.name}' attempting to register Discord bot")
     registration_key = registration_key.strip()
@@ -170,7 +170,7 @@ async def _register_guild(
     parsed = parse_discord_registration_key(registration_key)
     if parsed is None:
         raise RegistrationError(
-            "Invalid registration key format. Please check the key and try again."
+            "Formato de clave de registro invalido. Revisa la clave e intentalo de nuevo."
         )
 
     tenant_id = parsed
@@ -185,7 +185,8 @@ async def _register_guild(
             f"Guild {guild_id} is already registered to tenant {existing_tenant}"
         )
         raise RegistrationError(
-            "This server is already registered.\n\nOnyxBot can only connect one Discord server to one Onyx workspace."
+            "Este servidor ya esta registrado.\n\n"
+            f"El bot de {BOT_BRAND} solo puede conectar un servidor de Discord a un workspace de {BOT_BRAND}."
         )
 
     context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -204,17 +205,17 @@ async def _register_guild(
                 config = get_guild_config_by_registration_key(db, registration_key)
                 if not config:
                     raise RegistrationError(
-                        "Registration key not found.\n\n"
-                        "The key may have expired or been deleted. "
-                        "Please generate a new one from the Onyx admin panel."
+                        "No se encontro la clave de registro.\n\n"
+                        "Es posible que haya expirado o sido eliminada. "
+                        f"Genera una nueva desde el panel de administracion de {BOT_BRAND}."
                     )
 
                 # Check if already used
                 if config.guild_id is not None:
                     raise RegistrationError(
-                        "This registration key has already been used.\n\n"
-                        "Each key can only be used once. "
-                        "Please generate a new key from the Onyx admin panel."
+                        "Esta clave de registro ya fue usada.\n\n"
+                        "Cada clave solo puede usarse una vez. "
+                        f"Genera una nueva clave desde el panel de administracion de {BOT_BRAND}."
                     )
 
                 # Update the guild config
@@ -287,7 +288,7 @@ async def handle_sync_channels_command(
     # Must be in a server
     if not message.guild:
         await _try_dm_author(
-            message, "This command can only be used in a server channel."
+            message, "Este comando solo puede usarse en un canal del servidor."
         )
         return True
 
@@ -298,19 +299,19 @@ async def handle_sync_channels_command(
         # Must be registered
         if not tenant_id:
             raise SyncChannelsError(
-                "This server is not registered. Please register it first."
+                "Este servidor no esta registrado. Registralo primero."
             )
 
         # Check permissions - require admin or manage_guild
         if not message.author or not isinstance(message.author, discord.Member):
             raise SyncChannelsError(
-                "You need to be a server administrator to sync channels."
+                "Necesitas ser administrador del servidor para sincronizar canales."
             )
 
         if not message.author.guild_permissions.administrator:
             if not message.author.guild_permissions.manage_guild:
                 raise SyncChannelsError(
-                    "You need **Administrator** or **Manage Server** permissions to sync channels."
+                    "Necesitas permisos de **Administrator** o **Manage Server** para sincronizar canales."
                 )
 
         # Get guild config ID
@@ -318,7 +319,7 @@ async def handle_sync_channels_command(
             with get_session_with_tenant(tenant_id=tenant_id) as db:
                 if not message.guild:
                     raise SyncChannelsError(
-                        "Server not found. This shouldn't happen. Please contact Onyx support."
+                        f"Servidor no encontrado. Esto no deberia pasar. Contacta a tu administrador de {BOT_BRAND}."
                     )
                 config = get_guild_config_by_discord_id(db, message.guild.id)
                 return config.id if config else None
@@ -327,7 +328,7 @@ async def handle_sync_channels_command(
 
         if not guild_config_id:
             raise SyncChannelsError(
-                "Server config not found. This shouldn't happen. Please contact Onyx support."
+                f"La configuracion del servidor no existe. Esto no deberia pasar. Contacta a tu administrador de {BOT_BRAND}."
             )
 
         # Perform the sync
@@ -338,21 +339,23 @@ async def handle_sync_channels_command(
             f"Sync-channels successful: {guild_name}, added={added}, removed={removed}, updated={updated}"
         )
         await message.reply(
-            f":white_check_mark: **Channel sync complete!**\n\n"
-            f"* **{added}** new channel(s) added\n"
-            f"* **{removed}** deleted channel(s) removed\n"
-            f"* **{updated}** channel name(s) updated\n\n"
-            "New channels are disabled by default. Enable them in the Onyx admin panel."
+            f":white_check_mark: **Sincronizacion de canales completada.**\n\n"
+            f"* **{added}** canal(es) nuevo(s) agregados\n"
+            f"* **{removed}** canal(es) eliminados del registro\n"
+            f"* **{updated}** nombre(s) de canal actualizados\n\n"
+            f"Los canales nuevos quedan deshabilitados por defecto. Activalos en el panel de administracion de {BOT_BRAND}."
         )
     except SyncChannelsError as e:
         logger.debug(f"Sync-channels failed: {guild_name}, error={e}")
-        await _try_dm_author(message, f":x: **Channel sync failed.**\n\n{e}")
+        await _try_dm_author(
+            message, f":x: **La sincronizacion de canales fallo.**\n\n{e}"
+        )
         await _try_react_x(message)
     except Exception:
         logger.exception(f"Sync-channels failed unexpectedly: {guild_name}")
         await _try_dm_author(
             message,
-            ":x: **Channel sync failed.**\n\nAn unexpected error occurred. Please try again later.",
+            ":x: **La sincronizacion de canales fallo.**\n\nOcurrio un error inesperado. Intentalo de nuevo mas tarde.",
         )
         await _try_react_x(message)
 

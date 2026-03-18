@@ -63,7 +63,8 @@ class TestGuildRegistrationCommand:
         mock_discord_message.reply.assert_called()
         # Check that success message was sent
         call_args = mock_discord_message.reply.call_args
-        assert "Successfully registered" in str(call_args)
+        assert "Registro completado" in str(call_args)
+        assert "ACTIVA" in str(call_args)
 
     @pytest.mark.asyncio
     async def test_register_invalid_key_format(
@@ -86,7 +87,7 @@ class TestGuildRegistrationCommand:
         # On failure: DM the author and delete the message
         mock_discord_message.author.send.assert_called()
         call_args = mock_discord_message.author.send.call_args
-        assert "Invalid" in str(call_args)
+        assert "invalido" in str(call_args).lower()
         mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
@@ -125,7 +126,7 @@ class TestGuildRegistrationCommand:
         # On failure: DM the author and delete the message
         mock_discord_message.author.send.assert_called()
         call_args = mock_discord_message.author.send.call_args
-        assert "not found" in str(call_args).lower()
+        assert "no se encontro" in str(call_args).lower()
         mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
@@ -168,7 +169,7 @@ class TestGuildRegistrationCommand:
         # On failure: DM the author and delete the message
         mock_discord_message.author.send.assert_called()
         call_args = mock_discord_message.author.send.call_args
-        assert "already" in str(call_args).lower()
+        assert "ya fue usada" in str(call_args).lower()
         mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
@@ -195,7 +196,7 @@ class TestGuildRegistrationCommand:
         # On failure: DM the author and delete the message
         mock_discord_message.author.send.assert_called()
         call_args = mock_discord_message.author.send.call_args
-        assert "already registered" in str(call_args).lower()
+        assert "ya esta registrado" in str(call_args).lower()
         mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
@@ -217,7 +218,7 @@ class TestGuildRegistrationCommand:
         # On failure: DM the author and delete the message
         mock_discord_message.author.send.assert_called()
         call_args = mock_discord_message.author.send.call_args
-        assert "permission" in str(call_args).lower()
+        assert "permisos" in str(call_args).lower()
         mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
@@ -237,7 +238,7 @@ class TestGuildRegistrationCommand:
         assert result is True
         msg.author.send.assert_called()
         call_args = msg.author.send.call_args
-        assert "server" in str(call_args).lower()
+        assert "servidor" in str(call_args).lower()
 
     @pytest.mark.asyncio
     async def test_register_syncs_forum_channels(
@@ -330,7 +331,7 @@ class TestSyncChannelsCommand:
         # On failure: DM the author and react with ❌
         mock_discord_message.author.send.assert_called()
         call_args = mock_discord_message.author.send.call_args
-        assert "permission" in str(call_args).lower()
+        assert "permisos" in str(call_args).lower()
         mock_discord_message.add_reaction.assert_called_with("❌")
 
     @pytest.mark.asyncio
@@ -351,7 +352,7 @@ class TestSyncChannelsCommand:
         # On failure: DM the author and react with ❌
         mock_discord_message.author.send.assert_called()
         call_args = mock_discord_message.author.send.call_args
-        assert "not registered" in str(call_args).lower()
+        assert "no esta registrado" in str(call_args).lower()
         mock_discord_message.add_reaction.assert_called_with("❌")
 
 
@@ -432,7 +433,8 @@ class TestMessageHandling:
 
         msg.channel.send.assert_called_once()
         call_args = msg.channel.send.call_args
-        assert "DM" in str(call_args) or "server" in str(call_args).lower()
+        assert "mensajes directos" in str(call_args).lower()
+        assert "ACTIVA" in str(call_args)
 
 
 class TestThreadCreationAndResponseRouting:

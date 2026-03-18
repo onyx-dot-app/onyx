@@ -13,6 +13,7 @@ from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.onyxbot_configs import ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER
 from onyx.configs.onyxbot_configs import ONYX_BOT_DISPLAY_ERROR_MSGS
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
@@ -40,6 +41,7 @@ from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.utils.logger import OnyxLoggingAdapter
 
 srl = SlackRateLimiter()
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 RT = TypeVar("RT")  # return type
 
@@ -299,9 +301,9 @@ def handle_regular_answer(
         if channel_tags and not answer.citation_info and not answer.top_documents:
             channel_names = ", ".join(f"#{tag.tag_value}" for tag in channel_tags)
             answer.answer = (
-                f"No indexed data found for {channel_names}. "
-                "This channel may not be indexed, or there may be no messages "
-                "matching your query within it."
+                f"No se encontraron datos indexados para {channel_names}. "
+                "Es posible que este canal no este indexado o que no existan mensajes "
+                "que coincidan con tu consulta."
             )
 
     except Exception as e:
@@ -315,7 +317,7 @@ def handle_regular_answer(
                 client=client,
                 channel=channel,
                 receiver_ids=target_receiver_ids,
-                text=f"Encountered exception when trying to answer: \n\n```{e}```",
+                text=f"Se produjo una excepcion al intentar responder:\n\n```{e}```",
                 thread_ts=target_thread_ts,
                 send_as_ephemeral=send_as_ephemeral,
             )
@@ -368,7 +370,7 @@ def handle_regular_answer(
                 client=client,
                 channel=channel,
                 receiver_ids=target_receiver_ids,
-                text="Found no citations or quotes when trying to answer.",
+                text="No se encontraron citas ni fragmentos al intentar responder.",
                 thread_ts=target_thread_ts,
                 send_as_ephemeral=send_as_ephemeral,
             )
@@ -404,7 +406,7 @@ def handle_regular_answer(
             client=client,
             channel=channel,
             receiver_ids=target_receiver_ids,
-            text="Hello! Onyx has some results for you!",
+            text=f"Hola. {BOT_BRAND} tiene resultados para ti.",
             blocks=all_blocks,
             thread_ts=target_thread_ts,
             # don't unfurl, since otherwise we will have 5+ previews which makes the message very long

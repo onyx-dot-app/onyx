@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.standard_answer import fetch_standard_answer_categories_by_names
 from ee.onyx.db.standard_answer import find_matching_standard_answers
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
@@ -27,6 +28,7 @@ from onyx.utils.logger import OnyxLoggingAdapter
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 
 def build_standard_answer_blocks(
@@ -34,7 +36,7 @@ def build_standard_answer_blocks(
 ) -> list[Block]:
     generate_button_block = ButtonElement(
         action_id=GENERATE_ANSWER_BUTTON_ACTION_ID,
-        text="Generate Full Answer",
+        text="Generar respuesta completa",
     )
     answer_block = SectionBlock(text=answer_message)
     return [
@@ -169,10 +171,13 @@ def _handle_standard_answers(
         formatted_answers = []
         for standard_answer, match_str in matching_standard_answers:
             since_you_mentioned_pretext = (
-                f'Since your question contains "_{match_str}_"'
+                f'Como tu pregunta incluye "_{match_str}_"'
             )
             block_quotified_answer = ">" + standard_answer.answer.replace("\n", "\n> ")
-            formatted_answer = f"{since_you_mentioned_pretext}, I thought this might be useful: \n\n{block_quotified_answer}"
+            formatted_answer = (
+                f"{since_you_mentioned_pretext}, pense que esto podria ser util:\n\n"
+                f"{block_quotified_answer}"
+            )
             formatted_answers.append(formatted_answer)
         answer_message = "\n\n".join(formatted_answers)
 
@@ -216,7 +221,7 @@ def _handle_standard_answers(
                 client=client,
                 channel=message_info.channel_to_respond,
                 receiver_ids=receiver_ids,
-                text="Hello! Onyx has some results for you!",
+                text=f"Hola. {BOT_BRAND} tiene resultados para ti.",
                 blocks=all_blocks,
                 thread_ts=message_info.msg_to_respond,
                 unfurl=False,
