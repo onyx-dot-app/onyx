@@ -460,6 +460,8 @@ class CanvasConnector(
                 raise UnexpectedValidationError(
                     f"Unexpected Canvas HTTP error (status={e.status_code}): {e}"
                 )
+        except ConnectorMissingCredentialError:
+            raise
         except Exception as exc:
             raise UnexpectedValidationError(
                 f"Unexpected error during Canvas settings validation: {exc}"
