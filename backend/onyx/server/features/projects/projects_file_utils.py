@@ -241,7 +241,7 @@ def categorize_uploaded_files(
                     results.rejected.append(
                         RejectedFile(
                             filename=filename,
-                            reason=f"Exceeds {token_threshold} token limit",
+                            reason=f"Exceeds {token_threshold_k}K token limit",
                         )
                     )
                 else:
@@ -289,7 +289,7 @@ def categorize_uploaded_files(
                     results.rejected.append(
                         RejectedFile(
                             filename=filename,
-                            reason=f"Exceeds {token_threshold} token limit",
+                            reason=f"Exceeds {token_threshold_k}K token limit",
                         )
                     )
                 else:

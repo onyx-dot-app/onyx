@@ -212,21 +212,23 @@ function NumericLimitField({
   const value = values[name];
 
   const handleRestore = () => {
+    initialValue.current = defaultValue;
     void setFieldValue(name, defaultValue);
     void saveSettings({ [name]: parseInt(defaultValue, 10) });
-    initialValue.current = defaultValue;
   };
 
   const handleBlur = () => {
     const parsed = parseInt(value, 10);
     if (isNaN(parsed) || parsed <= 0) {
       void setFieldValue(name, "");
+    } else if (value !== String(parsed)) {
+      void setFieldValue(name, String(parsed));
     }
     if (value !== initialValue.current) {
       void saveSettings({
         [name]: value === "" || isNaN(parsed) || parsed <= 0 ? 0 : parsed,
       });
-      initialValue.current = isNaN(parsed) || parsed <= 0 ? "" : value;
+      initialValue.current = isNaN(parsed) || parsed <= 0 ? "" : String(parsed);
     }
   };
 
