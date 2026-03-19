@@ -1,4 +1,4 @@
-﻿"""Jira Service Management (JSM) connector for Onyx.
+"""Jira Service Management (JSM) connector for Onyx.
 
 Indexes service desk tickets/requests from JSM projects, including
 SLA status, request types, and customer information.

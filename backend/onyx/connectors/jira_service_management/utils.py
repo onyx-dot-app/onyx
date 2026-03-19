@@ -10,6 +10,9 @@ logger = setup_logger()
 
 _JSM_API_PATH = "/rest/servicedeskapi"
 
+# Headers for JSM API requests
+_JSM_HEADERS = {"Accept": "application/json"}
+
 
 def get_request_details(
     jsm_base_url: str, auth: HTTPBasicAuth, issue_key: str
@@ -17,13 +20,16 @@ def get_request_details(
     """Fetch JSM request details for an issue (request type, participants)."""
     url = f"{jsm_base_url}{_JSM_API_PATH}/request/{issue_key}"
     try:
-        response = requests.get(url, auth=auth, timeout=15)
+        response = requests.get(url, auth=auth, headers=_JSM_HEADERS, timeout=15)
         if response.status_code == 404:
             # Not a service desk request - return empty
             return {}
+        if response.status_code == 429:
+            logger.warning(f"Rate limited fetching request details for {issue_key}")
+            return {}
         response.raise_for_status()
         return response.json()
-    except Exception:
+    except requests.exceptions.RequestException:
         logger.warning(
             f"Failed to fetch request details for {issue_key}",
             exc_info=True,
@@ -37,12 +43,15 @@ def get_sla_information(
     """Fetch SLA information for a JSM request."""
     url = f"{jsm_base_url}{_JSM_API_PATH}/request/{issue_key}/sla"
     try:
-        response = requests.get(url, auth=auth, timeout=15)
+        response = requests.get(url, auth=auth, headers=_JSM_HEADERS, timeout=15)
         if response.status_code == 404:
+            return {}
+        if response.status_code == 429:
+            logger.warning(f"Rate limited fetching SLA for {issue_key}")
             return {}
         response.raise_for_status()
         return response.json()
-    except Exception:
+    except requests.exceptions.RequestException:
         logger.warning(
             f"Failed to fetch SLA information for {issue_key}",
             exc_info=True,
@@ -55,8 +64,13 @@ def format_sla_as_text(sla_data: dict[str, Any]) -> str:
     if not sla_data:
         return ""
 
+    # Check if there are actual SLA values
+    values = sla_data.get("values", [])
+    if not values:
+        return ""
+
     lines = ["SLA Status:"]
-    for sla in sla_data.get("values", []):
+    for sla in values:
         goal = sla.get("goal", {})
         name = goal.get("name", "Unknown SLA")
         completed = sla.get("completed", False)

@@ -1,4 +1,4 @@
-﻿"""Basic integration tests for the Jira Service Management connector.
+"""Basic integration tests for the Jira Service Management connector.
 
 Setup
 -----
