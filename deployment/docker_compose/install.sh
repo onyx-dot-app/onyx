@@ -207,6 +207,16 @@ prompt_yn_or_default() {
     fi
 }
 
+confirm_action() {
+    local description="$1"
+    prompt_yn_or_default "Install ${description}? (Y/n) [default: Y] " "Y"
+    if [[ "$REPLY" =~ ^[Nn] ]]; then
+        print_warning "Skipping: ${description}"
+        return 1
+    fi
+    return 0
+}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -395,6 +405,11 @@ fi
 
 if ! command -v docker &> /dev/null; then
     if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+        print_info "Docker is required but not installed."
+        if ! confirm_action "Docker Engine"; then
+            print_error "Docker is required to run Onyx."
+            exit 1
+        fi
         install_docker_linux
         if ! command -v docker &> /dev/null; then
             print_error "Docker installation failed."
@@ -411,7 +426,11 @@ if command -v docker &> /dev/null \
     && ! command -v docker-compose &> /dev/null \
     && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; }; then
 
-    print_info "Docker Compose not found — installing plugin..."
+    print_info "Docker Compose is required but not installed."
+    if ! confirm_action "Docker Compose plugin"; then
+        print_error "Docker Compose is required to run Onyx."
+        exit 1
+    fi
     COMPOSE_ARCH="$(uname -m)"
     COMPOSE_URL="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${COMPOSE_ARCH}"
     COMPOSE_DIR="/usr/local/lib/docker/cli-plugins"
@@ -562,10 +581,31 @@ version_compare() {
 
 # Check Docker daemon
 if ! docker info &> /dev/null; then
-    print_error "Docker daemon is not running. Please start Docker."
-    exit 1
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        print_info "Docker daemon is not running. Starting Docker Desktop..."
+        open -a Docker
+        # Wait up to 120 seconds for Docker to be ready
+        DOCKER_WAIT=0
+        DOCKER_MAX_WAIT=120
+        while ! docker info &> /dev/null; do
+            if [ $DOCKER_WAIT -ge $DOCKER_MAX_WAIT ]; then
+                print_error "Docker Desktop did not start within ${DOCKER_MAX_WAIT} seconds."
+                print_info "Please start Docker Desktop manually and re-run this script."
+                exit 1
+            fi
+            printf "\r\033[KWaiting for Docker Desktop to start... (%ds)" "$DOCKER_WAIT"
+            sleep 2
+            DOCKER_WAIT=$((DOCKER_WAIT + 2))
+        done
+        echo ""
+        print_success "Docker Desktop is now running"
+    else
+        print_error "Docker daemon is not running. Please start Docker."
+        exit 1
+    fi
+else
+    print_success "Docker daemon is running"
 fi
-print_success "Docker daemon is running"
 
 # Check Docker resources
 print_step "Verifying Docker resources"

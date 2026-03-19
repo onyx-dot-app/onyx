@@ -71,6 +71,16 @@ function Prompt-OrDefault {
     return $reply
 }
 
+function Confirm-Action {
+    param([string]$Description)
+    $reply = Prompt-OrDefault "Install $Description? (Y/n) [default: Y]" "Y"
+    if ($reply -match '^[Nn]') {
+        Print-Warning "Skipping: $Description"
+        return $false
+    }
+    return $true
+}
+
 function Prompt-VersionTag {
     Print-Info "Which tag would you like to deploy?"
     if ($script:IncludeCraftMode) {
@@ -540,7 +550,8 @@ function Start-DockerDaemon {
 # ── Docker Install ───────────────────────────────────────────────────────────
 
 function Install-DockerEngine {
-    Print-Info "Windows Server detected - installing Docker Engine..."
+    Print-Info "Windows Server detected - Docker Engine is required."
+    if (-not (Confirm-Action "Docker Engine (Windows Server)")) { exit 1 }
     if (-not (Test-IsAdmin)) { Invoke-ElevatedRelaunch }
 
     try {
@@ -612,6 +623,7 @@ function Install-DockerEngine {
 function Install-ComposePlugin {
     Invoke-NativeQuiet { docker compose version }
     if ($LASTEXITCODE -eq 0) { return }
+    if (-not (Confirm-Action "Docker Compose plugin")) { return }
     Print-Info "Installing Docker Compose plugin..."
     $dest = Join-Path $env:ProgramFiles "docker\cli-plugins"
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
@@ -626,7 +638,8 @@ function Install-ComposePlugin {
 function Install-Wsl {
     Invoke-NativeQuiet { wsl --status }
     if ($LASTEXITCODE -eq 0) { Print-Success "WSL2 is available"; return $true }
-    Print-Info "Installing WSL2 (Docker Desktop prerequisite)..."
+    if (-not (Confirm-Action "WSL2 (required for Docker)")) { return $false }
+    Print-Info "Installing WSL2..."
     try {
         $proc = Start-Process wsl -ArgumentList "--install", "--no-distribution" -Wait -PassThru -NoNewWindow
         if ($proc.ExitCode -eq 0) { Print-Success "WSL2 installed"; return $true }
@@ -636,7 +649,8 @@ function Install-Wsl {
 }
 
 function Install-DockerDesktop {
-    Print-Info "Docker is not installed. Attempting automatic installation..."
+    Print-Info "Docker Desktop is required but not installed."
+    if (-not (Confirm-Action "Docker Desktop")) { exit 1 }
     if (-not (Test-IsAdmin)) { Invoke-ElevatedRelaunch }
     $wslReady = Install-Wsl
     $installed = $false
@@ -692,6 +706,9 @@ function Install-DockerDesktop {
 }
 
 function Invoke-WslInstall {
+    Print-Info "Native Docker on Windows Server only supports Windows containers."
+    Print-Info "Onyx will be installed via WSL2 (Windows Subsystem for Linux)."
+    if (-not (Confirm-Action "Onyx via WSL2 (installs WSL2 + Ubuntu + Docker inside Linux)")) { exit 1 }
     if (-not (Test-IsAdmin)) { Invoke-ElevatedRelaunch }
 
     # Free memory by stopping the Windows Docker service (not needed once we use WSL2)
