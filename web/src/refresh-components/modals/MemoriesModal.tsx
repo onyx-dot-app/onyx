@@ -112,9 +112,11 @@ function MemoryItem({
             />
           </Disabled>
         </Section>
-        {isFocused && (
+        <div
+          className={isFocused ? "visible" : "invisible h-0 overflow-hidden"}
+        >
           <CharacterCount value={memory.content} limit={MAX_MEMORY_LENGTH} />
-        )}
+        </div>
       </Section>
     </div>
   );
