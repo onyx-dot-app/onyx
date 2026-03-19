@@ -108,6 +108,10 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
   },
 ];
 
+const FallbackMicrophoneIcon = ({ size, className }: IconProps) => (
+  <SvgMicrophone size={size} className={className} />
+);
+
 function getProviderIcon(
   providerType: string
 ): React.FunctionComponent<IconProps> {
@@ -119,9 +123,7 @@ function getProviderIcon(
     case "elevenlabs":
       return ElevenLabsIcon;
     default:
-      return ({ size, className }: IconProps) => (
-        <SvgMicrophone size={size} className={className} />
-      );
+      return FallbackMicrophoneIcon;
   }
 }
 
