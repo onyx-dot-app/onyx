@@ -177,7 +177,4 @@ class CanvasApiClient:
         return {"Authorization": f"Bearer {self._bearer_token}"}
 
     def _build_url(self, endpoint: str) -> str:
-        clean_endpoint = endpoint.lstrip("/")
-        if not clean_endpoint:
-            return self.base_url
-        return f"{self.base_url}/{clean_endpoint}"
+        return self.base_url + "/" + endpoint.lstrip("/")
