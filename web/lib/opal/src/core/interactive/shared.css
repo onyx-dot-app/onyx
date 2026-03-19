@@ -51,7 +51,11 @@
    `data-reveal-group` is hovered. */
 .interactive[data-revealed] {
   opacity: 0;
-  transition: opacity 150ms ease-in-out;
+  transition:
+    opacity 150ms ease-in-out,
+    background-color 150ms ease-in-out,
+    --interactive-foreground 150ms ease-in-out,
+    --interactive-foreground-icon 150ms ease-in-out;
 }
 [data-reveal-group]:hover .interactive[data-revealed],
 .interactive[data-revealed]:focus-visible {
