@@ -350,7 +350,9 @@ def load_chat_file(
         try:
             content_text = _get_or_extract_plaintext(cache_key, _extract)
         except Exception as e:
-            logger.warning(f"Failed to retrieve content for file {file_id}: {str(e)}")
+            logger.warning(
+                f"Failed to retrieve content for file {file_descriptor['id']}: {str(e)}"
+            )
 
     # Get token count from UserFile if available
     token_count = 0
