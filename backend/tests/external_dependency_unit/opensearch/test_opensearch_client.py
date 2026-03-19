@@ -97,6 +97,23 @@ def _patch_hybrid_search_normalization_pipeline(
     )
 
 
+def _patch_opensearch_match_highlights_disabled(
+    monkeypatch: pytest.MonkeyPatch, disabled: bool
+) -> None:
+    """
+    Patches OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED wherever necessary for this
+    test file.
+    """
+    monkeypatch.setattr(
+        "onyx.configs.app_configs.OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED",
+        disabled,
+    )
+    monkeypatch.setattr(
+        "onyx.document_index.opensearch.search.OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED",
+        disabled,
+    )
+
+
 def _create_test_document_chunk(
     document_id: str,
     content: str,
@@ -805,6 +822,7 @@ class TestOpenSearchClient:
         """Tests all hybrid search configurations and pipelines."""
         # Precondition.
         _patch_global_tenant_state(monkeypatch, False)
+        _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
@@ -947,6 +965,7 @@ class TestOpenSearchClient:
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
+        _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         tenant_y = TenantState(tenant_id="tenant-y", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
@@ -1077,6 +1096,7 @@ class TestOpenSearchClient:
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
+        _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_x.multitenant

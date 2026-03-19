@@ -7,6 +7,7 @@ from uuid import UUID
 
 from onyx.configs.app_configs import DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S
 from onyx.configs.app_configs import OPENSEARCH_EXPLAIN_ENABLED
+from onyx.configs.app_configs import OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED
 from onyx.configs.app_configs import OPENSEARCH_PROFILING_DISABLED
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
@@ -364,9 +365,6 @@ class DocumentQuery:
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
         )
-        match_highlights_configuration = (
-            DocumentQuery._get_match_highlights_configuration()
-        )
 
         # See https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
         hybrid_search_query: dict[str, Any] = {
@@ -393,7 +391,6 @@ class DocumentQuery:
         final_hybrid_search_body: dict[str, Any] = {
             "query": hybrid_search_query,
             "size": num_hits,
-            "highlight": match_highlights_configuration,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
             # Exclude retrieving the vector fields in order to save on
             # retrieval cost as we don't need them upstream.
@@ -401,6 +398,11 @@ class DocumentQuery:
                 "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
             },
         }
+
+        if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
+            final_hybrid_search_body["highlight"] = (
+                DocumentQuery._get_match_highlights_configuration()
+            )
 
         # Explain is for scoring breakdowns.
         if OPENSEARCH_EXPLAIN_ENABLED:
