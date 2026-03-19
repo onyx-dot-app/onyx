@@ -23,8 +23,14 @@ def jira_service_management_doc_sync(
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[ElementExternalAccess, None, None]:
+    config = cc_pair.connector.connector_specific_config
     jsm_connector = JiraServiceManagementConnector(
-        **cc_pair.connector.connector_specific_config,
+        jira_service_management_base_url=config.get("jira_service_management_base_url", ""),
+        project_key=config.get("project_key"),
+        comment_email_blacklist=config.get("comment_email_blacklist"),
+        labels_to_skip=config.get("labels_to_skip", []),
+        jql_query=config.get("jql_query"),
+        scoped_token=config.get("scoped_token", False),
     )
     credential_json = (
         cc_pair.credential.credential_json.get_value(apply_mask=False)

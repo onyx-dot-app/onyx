@@ -33,7 +33,7 @@ class JiraServiceManagementConnector(JiraConnector):
         project_key: str | None = None,
         comment_email_blacklist: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
-        labels_to_skip: list[str] | None = None,
+        labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
         jql_query: str | None = None,
         scoped_token: bool = False,
     ) -> None:
@@ -42,7 +42,7 @@ class JiraServiceManagementConnector(JiraConnector):
             project_key=project_key,
             comment_email_blacklist=comment_email_blacklist,
             batch_size=batch_size,
-            labels_to_skip=labels_to_skip if labels_to_skip is not None else JIRA_CONNECTOR_LABELS_TO_SKIP,
+            labels_to_skip=labels_to_skip,
             jql_query=jql_query,
             scoped_token=scoped_token,
         )
