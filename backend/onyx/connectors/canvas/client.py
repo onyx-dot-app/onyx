@@ -107,23 +107,32 @@ class CanvasApiClient:
             response_json = {}
 
         if response.status_code >= 400:
-            error: str = response.reason or f"HTTP {response.status_code}"
+            # Try to extract the most specific error message from the
+            # Canvas response body.  Canvas uses three different shapes
+            # depending on the endpoint and error type:
+            default_error: str = response.reason or f"HTTP {response.status_code}"
+            error = default_error
             if isinstance(response_json, dict):
+                # Shape 1: {"error": {"message": "Not authorized"}}
                 error_field = response_json.get("error")
                 if isinstance(error_field, dict):
                     response_error = error_field.get("message", "")
                     if response_error:
                         error = response_error
+                # Shape 2: {"error": "Invalid access token"}
                 elif isinstance(error_field, str):
                     error = error_field
-                # Canvas also returns {"errors": [{"message": "..."}]} for many endpoints
-                errors_list = response_json.get("errors")
-                if isinstance(errors_list, list) and errors_list:
-                    first_error = errors_list[0]
-                    if isinstance(first_error, dict):
-                        msg = first_error.get("message", "")
-                        if msg:
-                            error = msg
+                # Shape 3: {"errors": [{"message": "..."}]}
+                # Used for validation errors.  Only use as fallback if
+                # we didn't already find a more specific message above.
+                if error == default_error:
+                    errors_list = response_json.get("errors")
+                    if isinstance(errors_list, list) and errors_list:
+                        first_error = errors_list[0]
+                        if isinstance(first_error, dict):
+                            msg = first_error.get("message", "")
+                            if msg:
+                                error = msg
             raise OnyxError(
                 _error_code_for_status(response.status_code),
                 detail=error,
