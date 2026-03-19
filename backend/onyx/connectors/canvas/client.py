@@ -34,6 +34,12 @@ _STATUS_TO_ERROR_CODE: dict[int, OnyxErrorCode] = {
 
 
 def _error_code_for_status(status_code: int) -> OnyxErrorCode:
+    """Map an HTTP status code to the appropriate OnyxErrorCode.
+
+    Expects a >= 400 status code. Known codes (401, 403, 404, 429) are
+    mapped to specific error codes; 5xx maps to BAD_GATEWAY; anything
+    else falls back to CONNECTOR_VALIDATION_FAILED.
+    """
     if status_code in _STATUS_TO_ERROR_CODE:
         return _STATUS_TO_ERROR_CODE[status_code]
     if status_code >= 500:
@@ -174,7 +180,14 @@ class CanvasApiClient:
         return None
 
     def _build_headers(self) -> dict[str, str]:
+        """Return the Authorization header with the bearer token."""
         return {"Authorization": f"Bearer {self._bearer_token}"}
 
     def _build_url(self, endpoint: str) -> str:
+        """Build a full Canvas API URL from an endpoint path.
+
+        Assumes endpoint is non-empty (e.g. ``"courses"``, ``"announcements"``).
+        Leading slashes are stripped to avoid double-slash in the result.
+        self.base_url is already normalized with no trailing slash.
+        """
         return self.base_url + "/" + endpoint.lstrip("/")
