@@ -209,26 +209,37 @@ function NumericLimitField({
   const { values, setFieldValue } =
     useFormikContext<ChatPreferencesFormValues>();
   const initialValue = useRef(values[name]);
+  const restoringRef = useRef(false);
   const value = values[name];
 
   const handleRestore = () => {
+    restoringRef.current = true;
     initialValue.current = defaultValue;
     void setFieldValue(name, defaultValue);
     void saveSettings({ [name]: parseInt(defaultValue, 10) });
   };
 
   const handleBlur = () => {
+    if (restoringRef.current) {
+      restoringRef.current = false;
+      return;
+    }
     const parsed = parseInt(value, 10);
-    if (isNaN(parsed) || parsed <= 0) {
+    if (!isNaN(parsed) && parsed < 0) {
+      void setFieldValue(name, initialValue.current);
+      return;
+    }
+    if (isNaN(parsed) || parsed === 0) {
       void setFieldValue(name, "");
     } else if (value !== String(parsed)) {
       void setFieldValue(name, String(parsed));
     }
     if (value !== initialValue.current) {
       void saveSettings({
-        [name]: value === "" || isNaN(parsed) || parsed <= 0 ? 0 : parsed,
+        [name]: value === "" || isNaN(parsed) || parsed === 0 ? 0 : parsed,
       });
-      initialValue.current = isNaN(parsed) || parsed <= 0 ? "" : String(parsed);
+      initialValue.current =
+        isNaN(parsed) || parsed === 0 ? "" : String(parsed);
     }
   };
 
