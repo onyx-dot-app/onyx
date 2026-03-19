@@ -8,11 +8,20 @@ projects (including, but not limited to, `/web`, `/desktop`).
 All UI components live in the **Opal** design system at `web/lib/opal/src/`. Always prefer Opal
 components over raw HTML elements or one-off implementations.
 
-## Content Layout (`layouts/content/`)
+## Opal Layouts (`lib/opal/src/layouts/`)
+
+All layout primitives are imported from `@opal/layouts`. They handle sizing, font selection, icon
+alignment, and optional inline editing.
+
+```typescript
+import { Content, ContentAction, IllustrationContent } from "@opal/layouts";
+```
+
+### Content
 
 **Use this for any combination of icon + title + description.**
 
-`Content` is a two-axis layout component that automatically routes to the correct internal layout
+A two-axis layout component that automatically routes to the correct internal layout
 (`ContentXl`, `ContentLg`, `ContentMd`, `ContentSm`) based on `sizePreset` and `variant`:
 
 | sizePreset | variant | Routes to | Layout |
@@ -23,18 +32,16 @@ components over raw HTML elements or one-off implementations.
 | `main-content` / `main-ui` / `secondary` | `body` | `ContentSm` | Body text layout |
 
 ```typescript
-import { Content } from "@opal/layouts/content/components";
-
 <Content
   sizePreset="main-ui"
   variant="section"
-  icon={<SvgSettings />}
+  icon={SvgSettings}
   title="Settings"
   description="Manage your preferences"
 />
 ```
 
-## Content Action Layout (`layouts/content-action/`)
+### ContentAction
 
 **Use this when a Content block needs right-side actions** (buttons, badges, icons, etc.).
 
@@ -43,17 +50,73 @@ Wraps `Content` and adds a `rightChildren` slot. Accepts all `Content` props plu
 - `paddingVariant`: `SizeVariant` — controls outer padding
 
 ```typescript
-import { ContentAction } from "@opal/layouts/content-action/components";
-
 <ContentAction
   sizePreset="main-ui"
   variant="section"
-  icon={<SvgUser />}
+  icon={SvgUser}
   title="John Doe"
   description="Admin"
   rightChildren={<Button icon={SvgEdit}>Edit</Button>}
 />
 ```
+
+### IllustrationContent
+
+**Use this for empty states, error pages, and informational placeholders.**
+
+A vertically-stacked, center-aligned layout that pairs a large illustration (7.5rem x 7.5rem)
+with a title and optional description.
+
+```typescript
+import SvgNoResult from "@opal/illustrations/no-result";
+
+<IllustrationContent
+  illustration={SvgNoResult}
+  title="No results found"
+  description="Try adjusting your search or filters."
+/>
+```
+
+Props:
+- `illustration`: `IconFunctionComponent` — optional, from `@opal/illustrations`
+- `title`: `string` — required
+- `description`: `string` — optional
+
+## Settings Page Layout (`src/layouts/settings-layouts.tsx`)
+
+**Use this for all admin/settings pages.** Provides a standardized layout with scroll-aware
+sticky headers, centered content containers, and responsive behavior.
+
+```typescript
+import SettingsLayouts from "@/layouts/settings-layouts";
+
+function MySettingsPage() {
+  return (
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgSettings}
+        title="Account Settings"
+        description="Manage your account preferences"
+        rightChildren={<Button>Save</Button>}
+      >
+        <InputTypeIn placeholder="Search settings..." />
+      </SettingsLayouts.Header>
+
+      <SettingsLayouts.Body>
+        <Card>Settings content here</Card>
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
+  );
+}
+```
+
+Sub-components:
+- **`SettingsLayouts.Root`** — Wrapper with centered, scrollable container. Width options:
+  `"sm"` (672px), `"sm-md"` (752px), `"md"` (872px, default), `"lg"` (992px), `"full"` (100%).
+- **`SettingsLayouts.Header`** — Sticky header with icon, title, description, optional
+  `rightChildren` actions, optional `children` below (e.g., search/filter), optional `backButton`,
+  and optional `separator`. Automatically shows a scroll shadow when scrolled.
+- **`SettingsLayouts.Body`** — Content container with consistent padding and vertical spacing.
 
 ## Button (`components/buttons/button/`)
 
