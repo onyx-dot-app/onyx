@@ -54,6 +54,14 @@ interface InteractiveStatelessProps
   group?: string;
 
   /**
+   * When `true`, the element starts at opacity 0 and fades to opacity 1 when
+   * a parent with `data-reveal-group` is hovered.
+   *
+   * @default false
+   */
+  revealOnHover?: boolean;
+
+  /**
    * URL to navigate to when clicked. Passed through Slot to the child.
    */
   href?: string;
@@ -85,6 +93,7 @@ function InteractiveStateless({
   prominence = "primary",
   interaction = "rest",
   group,
+  revealOnHover = false,
   href,
   target,
   ...props
@@ -103,6 +112,7 @@ function InteractiveStateless({
     "data-interactive-variant": variant !== "none" ? variant : undefined,
     "data-interactive-prominence": variant !== "none" ? prominence : undefined,
     "data-interaction": interaction !== "rest" ? interaction : undefined,
+    "data-revealed": revealOnHover ? "true" : undefined,
     "data-disabled": isDisabled ? "true" : undefined,
     "aria-disabled": isDisabled || undefined,
   };

@@ -9,7 +9,7 @@ import {
 } from "react";
 import { SvgEdit } from "@opal/icons";
 import { Tag } from "@opal/components";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import EditUserModal from "./EditUserModal";
@@ -137,7 +137,8 @@ export default function GroupsCell({
   return (
     <>
       <div
-        className={`group/groups relative flex items-center w-full min-w-0 ${
+        data-reveal-group
+        className={`relative flex justify-between items-center w-full min-w-0 ${
           user.id ? "cursor-pointer" : ""
         }`}
         onClick={user.id ? () => setShowModal(true) : undefined}
@@ -169,13 +170,12 @@ export default function GroupsCell({
           </SimpleTooltip>
         )}
         {user.id && (
-          <IconButton
-            tertiary
+          <Button
+            revealOnHover
             icon={SvgEdit}
+            prominence="tertiary"
             tooltip="Edit"
-            toolTipPosition="left"
-            tooltipSize="sm"
-            className="absolute right-0 opacity-0 group-hover/groups:opacity-100 transition-opacity"
+            tooltipSide="left"
             onClick={(e) => {
               e.stopPropagation();
               setShowModal(true);
