@@ -83,3 +83,16 @@ def test_load_settings_preserves_zero_token_threshold(
     settings = settings_store.load_settings()
 
     assert settings.file_token_count_threshold_k == 0
+
+
+def test_load_settings_preserves_zero_upload_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A value of 0 means 'no limit' — it should not be replaced by a default."""
+    stored = Settings(user_file_max_upload_size_mb=0).model_dump()
+    monkeypatch.setattr(settings_store, "get_kv_store", lambda: _FakeKvStore(stored))
+    monkeypatch.setattr(settings_store, "get_cache_backend", lambda: _FakeCache())
+
+    settings = settings_store.load_settings()
+
+    assert settings.user_file_max_upload_size_mb == 0

@@ -174,7 +174,7 @@ class UserFileIndexingAdapter:
                     [chunk.content for chunk in user_file_chunks]
                 )
                 user_file_id_to_raw_text[str(user_file_id)] = combined_content
-                token_count = (
+                token_count: int = (
                     count_tokens(combined_content, llm_tokenizer)
                     if llm_tokenizer
                     else 0
