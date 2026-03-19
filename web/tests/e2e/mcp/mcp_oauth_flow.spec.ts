@@ -1860,6 +1860,9 @@ test.describe("MCP OAuth flows", () => {
       toolName: TOOL_NAMES.admin,
       logStep,
     });
+    const createdAgent = await adminApiClient.getAssistant(agentId);
+    expect(createdAgent.is_public).toBe(false);
+    logStep("Verified newly created agent is private by default");
     const adminToolId = await fetchMcpToolIdByName(
       page,
       serverId,
@@ -1898,6 +1901,13 @@ test.describe("MCP OAuth flows", () => {
       page.getByText(serverName, { exact: false }).first()
     ).toBeVisible({ timeout: 15000 });
     logStep("Verified MCP server card is still visible on actions page");
+
+    await adminApiClient.updateAgentSharing(agentId, {
+      isPublic: true,
+      userIds: createdAgent.users.map((user) => user.id),
+      groupIds: createdAgent.groups,
+    });
+    logStep("Published agent explicitly for end-user MCP flow");
 
     adminArtifacts = {
       serverId,
