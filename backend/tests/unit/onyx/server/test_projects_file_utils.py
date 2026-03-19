@@ -4,14 +4,21 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import UploadFile
 
+from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.server.features.projects import projects_file_utils as utils
 from onyx.server.features.projects.projects_file_utils import count_tokens
 from onyx.server.settings.models import Settings
 
 
-class _Tokenizer:
+class _Tokenizer(BaseTokenizer):
     def encode(self, text: str) -> list[int]:
         return [1] * len(text)
+
+    def tokenize(self, text: str) -> list[str]:
+        return list(text)
+
+    def decode(self, _tokens: list[int]) -> str:
+        return ""
 
 
 class _NonSeekableFile(BytesIO):
@@ -294,11 +301,17 @@ def test_count_tokens_with_token_limit_exits_early(
     encode_call_count = 0
     original_tokenizer = _Tokenizer()
 
-    class _CountingTokenizer:
+    class _CountingTokenizer(BaseTokenizer):
         def encode(self, text: str) -> list[int]:
             nonlocal encode_call_count
             encode_call_count += 1
             return original_tokenizer.encode(text)
+
+        def tokenize(self, text: str) -> list[str]:
+            return list(text)
+
+        def decode(self, _tokens: list[int]) -> str:
+            return ""
 
     tokenizer = _CountingTokenizer()
     # 500 chars → 5 chunks of 100; limit=150 → should stop after 2 chunks
@@ -351,11 +364,17 @@ def test_categorize_early_exits_tokenization_for_large_text(
     encode_call_count = 0
     original_tokenizer = _Tokenizer()
 
-    class _CountingTokenizer:
+    class _CountingTokenizer(BaseTokenizer):
         def encode(self, text: str) -> list[int]:
             nonlocal encode_call_count
             encode_call_count += 1
             return original_tokenizer.encode(text)
+
+        def tokenize(self, text: str) -> list[str]:
+            return list(text)
+
+        def decode(self, _tokens: list[int]) -> str:
+            return ""
 
     monkeypatch.setattr(utils, "get_tokenizer", lambda **_kwargs: _CountingTokenizer())
 
