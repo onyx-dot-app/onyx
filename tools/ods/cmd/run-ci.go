@@ -117,13 +117,17 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	// Check if a CI PR already exists for this branch
 	existingPRURL, err := findExistingCIPR(ciBranch)
 	if err != nil {
-		log.Debugf("Failed to check for existing CI PR: %v", err)
+		log.Fatalf("Failed to check for existing CI PR: %v", err)
 	}
 
 	if existingPRURL != "" && !opts.Rerun {
 		log.Infof("A CI PR already exists for #%s: %s", prNumber, existingPRURL)
 		log.Info("Run with --rerun to update it with the latest fork changes and re-trigger CI.")
 		return
+	}
+
+	if opts.Rerun && existingPRURL == "" {
+		log.Warn("--rerun was specified but no existing open CI PR was found. A new PR will be created.")
 	}
 
 	if existingPRURL != "" && opts.Rerun {
