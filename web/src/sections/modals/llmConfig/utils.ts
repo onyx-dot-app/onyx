@@ -12,9 +12,11 @@ export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
 
 export const buildDefaultInitialValues = (
   existingLlmProvider?: LLMProviderView,
-  modelConfigurations?: ModelConfiguration[]
+  modelConfigurations?: ModelConfiguration[],
+  currentDefaultModelName?: string
 ) => {
   const defaultModelName =
+    currentDefaultModelName ??
     existingLlmProvider?.model_configurations?.[0]?.name ??
     modelConfigurations?.[0]?.name ??
     "";

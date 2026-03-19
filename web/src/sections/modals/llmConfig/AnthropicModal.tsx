@@ -35,6 +35,7 @@ export default function AnthropicModal({
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -64,10 +65,15 @@ export default function AnthropicModal({
         default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
       }
     : {
-        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        ...buildDefaultInitialValues(
+          existingLlmProvider,
+          modelConfigurations,
+          defaultModelName
+        ),
         api_key: existingLlmProvider?.api_key ?? "",
         api_base: existingLlmProvider?.api_base ?? undefined,
         default_model_name:
+          defaultModelName ??
           wellKnownLLMProvider?.recommended_default_model?.name ??
           DEFAULT_DEFAULT_MODEL_NAME,
         is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,

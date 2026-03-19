@@ -48,6 +48,7 @@ export default function VertexAIModal({
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -80,8 +81,13 @@ export default function VertexAIModal({
         },
       } as VertexAIModalValues)
     : {
-        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        ...buildDefaultInitialValues(
+          existingLlmProvider,
+          modelConfigurations,
+          defaultModelName
+        ),
         default_model_name:
+          defaultModelName ??
           wellKnownLLMProvider?.recommended_default_model?.name ??
           VERTEXAI_DEFAULT_MODEL,
         is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
