@@ -9,6 +9,8 @@ export interface SeparatorProps
   noPadding?: boolean;
   /** Custom horizontal padding in rem. Overrides the default padding. */
   paddingXRem?: number;
+  /** Custom vertical padding in rem. Overrides the default padding. */
+  paddingYRem?: number;
 }
 
 /**
@@ -37,7 +39,7 @@ const Separator = React.forwardRef(
     {
       noPadding,
       paddingXRem,
-
+      paddingYRem,
       className,
       orientation = "horizontal",
       decorative = true,
@@ -54,6 +56,12 @@ const Separator = React.forwardRef(
             ? {
                 paddingLeft: `${paddingXRem}rem`,
                 paddingRight: `${paddingXRem}rem`,
+              }
+            : {}),
+          ...(paddingYRem != null
+            ? {
+                paddingTop: `${paddingYRem}rem`,
+                paddingBottom: `${paddingYRem}rem`,
               }
             : {}),
         }}
