@@ -29,8 +29,8 @@ from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
 from onyx.llm.factory import get_default_llm
+from onyx.natural_language_processing.utils import count_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.server.features.projects.projects_file_utils import count_tokens
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
