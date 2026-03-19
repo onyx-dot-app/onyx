@@ -73,7 +73,7 @@ function UsersTable({ users }: { users: User[] }) {
 
 - `tc.qualifier(opts)` — leading avatar/icon/checkbox column
 - `tc.column(accessor, opts)` — data column with sorting/resizing
-- `tc.display(opts)` — non-accessor custom column
+- `tc.displayColumn(opts)` — non-accessor custom column
 - `tc.actions(opts)` — trailing actions column with visibility/sorting popovers
 
 ## Footer Modes

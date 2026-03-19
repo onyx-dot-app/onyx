@@ -49,8 +49,8 @@ function Table({
   return (
     <table
       ref={ref}
-      className={cn("border-separate border-spacing-0", "min-w-full")}
-      style={{ tableLayout: "fixed", width: width ?? undefined }}
+      className={cn("border-separate border-spacing-0", !width && "min-w-full")}
+      style={{ tableLayout: "fixed", width }}
       data-size={size}
       data-variant={variant}
       data-selection={selectionBehavior}

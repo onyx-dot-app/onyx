@@ -137,7 +137,7 @@ function processColumns<TData>(
  *   tc.actions(),
  * ];
  *
- * <DataTable data={items} columns={columns} footer={{ mode: "selection" }} />
+ * <Table data={items} columns={columns} footer={{}} />
  * ```
  */
 export function Table<TData>(props: DataTableProps<TData>) {
@@ -288,7 +288,13 @@ export function Table<TData>(props: DataTableProps<TData>) {
               clearSelection();
             })
           }
-          onView={isViewingSelected ? exitViewMode : enterViewMode}
+          onView={
+            !serverSide
+              ? isViewingSelected
+                ? exitViewMode
+                : enterViewMode
+              : undefined
+          }
           isViewingSelected={isViewingSelected}
           pageSize={resolvedPageSize}
           totalItems={totalItems}
@@ -351,6 +357,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
           }}
         >
           <TableElement
+            size={size}
             variant={variant}
             selectionBehavior={selectionBehavior}
             width={
