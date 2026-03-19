@@ -61,9 +61,11 @@ class MCPTool(Tool[None]):
         self._additional_headers = additional_headers or {}
 
         self._name = tool_name
-        self._tool_definition = normalize_mcp_input_schema(tool_definition)
+        self._tool_definition = normalize_mcp_input_schema(
+            tool_definition, tool_name=tool_name
+        )
         self._description = tool_description
-        self._display_name = tool_definition.get("displayName", tool_name)
+        self._display_name = self._tool_definition.get("displayName", tool_name)
         self._llm_name = f"mcp:{mcp_server.name}:{tool_name}"
 
     @property

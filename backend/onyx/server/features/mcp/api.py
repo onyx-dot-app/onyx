@@ -1164,7 +1164,7 @@ def _upsert_db_tools(
         description = tool.description or ""
         annotations_title = tool.annotations.title if tool.annotations else None
         display_name = tool.title or annotations_title or tool_name
-        input_schema = normalize_mcp_input_schema(tool.inputSchema)
+        input_schema = normalize_mcp_input_schema(tool.inputSchema, tool_name=tool_name)
 
         if existing_tool := existing_by_name.get(tool_name):
             if existing_tool.description != description:
