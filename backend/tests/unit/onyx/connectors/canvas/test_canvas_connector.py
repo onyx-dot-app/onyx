@@ -38,8 +38,8 @@ def _mock_response(
 
 
 class TestCanvasApiClient:
-    def test_init_rejects_non_http_scheme(self) -> None:
-        with pytest.raises(ValueError, match="must start with http"):
+    def test_init_rejects_non_https_scheme(self) -> None:
+        with pytest.raises(ValueError, match="must use https"):
             CanvasApiClient(
                 bearer_token=FAKE_TOKEN,
                 canvas_base_url="ftp://myschool.instructure.com",

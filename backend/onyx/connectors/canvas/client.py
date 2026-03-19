@@ -48,10 +48,6 @@ class CanvasApiClient:
         canvas_base_url: str,
     ) -> None:
         parsed_base = urlparse(canvas_base_url)
-        if parsed_base.scheme not in ("http", "https"):
-            raise ValueError(
-                "canvas_base_url must start with http:// or https://"
-            )
         if not parsed_base.hostname:
             raise ValueError("canvas_base_url must include a valid host")
         if parsed_base.scheme != "https":
