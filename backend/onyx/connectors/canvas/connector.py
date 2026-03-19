@@ -535,30 +535,15 @@ class CanvasConnector(
         for item in response or []:
             try:
                 if stage == "pages":
-                    page = CanvasPage(
-                        page_id=item["page_id"],
-                        url=item["url"],
-                        title=item["title"],
-                        body=item.get("body"),
-                        created_at=item["created_at"],
-                        updated_at=item["updated_at"],
-                        course_id=course_id,
-                    )
+                    page = CanvasPage.from_api(item, course_id=course_id)
                     if not _in_time_window(page.updated_at):
                         continue
                     doc = self._convert_page_to_document(page)
                     yield _maybe_attach_permissions(doc)
 
                 elif stage == "assignments":
-                    assignment = CanvasAssignment(
-                        id=item["id"],
-                        name=item["name"],
-                        description=item.get("description"),
-                        html_url=item["html_url"],
-                        course_id=course_id,
-                        created_at=item["created_at"],
-                        updated_at=item["updated_at"],
-                        due_at=item.get("due_at"),
+                    assignment = CanvasAssignment.from_api(
+                        item, course_id=course_id
                     )
                     if not _in_time_window(assignment.updated_at):
                         continue
@@ -566,13 +551,8 @@ class CanvasConnector(
                     yield _maybe_attach_permissions(doc)
 
                 elif stage == "announcements":
-                    announcement = CanvasAnnouncement(
-                        id=item["id"],
-                        title=item["title"],
-                        message=item.get("message"),
-                        html_url=item["html_url"],
-                        posted_at=item.get("posted_at"),
-                        course_id=course_id,
+                    announcement = CanvasAnnouncement.from_api(
+                        item, course_id=course_id
                     )
                     if not announcement.posted_at:
                         logger.debug(
