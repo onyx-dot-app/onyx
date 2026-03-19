@@ -41,6 +41,19 @@ class TestRenameUserGroup:
 
         mock_session.commit.assert_not_called()
 
+    @pytest.mark.parametrize("name", ["Admin", "Basic"])
+    def test_rename_built_in_group_raises(self, name: str) -> None:
+        mock_session = MagicMock()
+        mock_group = MagicMock(spec=UserGroup)
+        mock_group.name = name
+        mock_group.is_up_to_date = True
+        mock_session.scalar.return_value = mock_group
+
+        with pytest.raises(ValueError, match="Built-in group"):
+            rename_user_group(mock_session, user_group_id=1, new_name="New Name")
+
+        mock_session.commit.assert_not_called()
+
     def test_rename_group_syncing_raises(self) -> None:
         mock_session = MagicMock()
         mock_group = MagicMock(spec=UserGroup)
