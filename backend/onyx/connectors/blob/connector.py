@@ -60,6 +60,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         prefix: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
         european_residency: bool = False,
+        endpoint_url: str | None = None,
+        s3_skip_ssl_verification: bool = False,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
         self.bucket_name = bucket_name.strip()
@@ -67,6 +69,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
         self._allow_images: bool | None = None
+        self.endpoint_url = endpoint_url
+        self.s3_skip_ssl_verification = s3_skip_ssl_verification
+        self.s3_ca_cert_path: str | None = None
         self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
         self.bucket_region: Optional[str] = None
         self.european_residency: bool = european_residency
@@ -82,6 +87,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             logger.warning(
                 "S3 client not initialized. Skipping bucket region detection."
             )
+            return
+
+        # Skip region detection for custom S3-compatible endpoints
+        if self.endpoint_url:
+            logger.debug("Custom endpoint URL set, skipping region detection.")
             return
 
         try:
@@ -111,6 +121,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         - GOOGLE_CLOUD_STORAGE: Uses Google Cloud Storage endpoint
         - OCI_STORAGE: Uses Oracle Cloud Infrastructure Object Storage endpoint
 
+        Supports S3-compatible storage (MinIO, Ceph, etc.) via:
+        - endpoint_url: Custom S3-compatible endpoint
+        - s3_skip_ssl_verification: Skip SSL verification
+        - s3_ca_cert_path: Path to custom CA certificate bundle
+
         Raises ConnectorMissingCredentialError if required credentials are missing.
         Raises ValueError for unsupported bucket types.
         """
@@ -118,6 +133,15 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         logger.debug(
             f"Loading credentials for {self.bucket_name} or type {self.bucket_type}"
         )
+
+        # Load S3-compatible options from credentials
+        if self.bucket_type == BlobType.S3:
+            if credentials.get("endpoint_url"):
+                self.endpoint_url = credentials["endpoint_url"]
+            if credentials.get("s3_skip_ssl_verification"):
+                self.s3_skip_ssl_verification = credentials["s3_skip_ssl_verification"]
+            if credentials.get("s3_ca_cert_path"):
+                self.s3_ca_cert_path = credentials["s3_ca_cert_path"]
 
         if self.bucket_type == BlobType.R2:
             if not all(
@@ -155,11 +179,28 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 ):
                     raise ConnectorMissingCredentialError("Amazon S3")
 
+                # Build client kwargs
+                client_kwargs: dict[str, Any] = {
+                    "service_name": "s3",
+                }
+                
+                # Add custom endpoint URL for S3-compatible storage (MinIO, Ceph, etc.)
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+                    client_kwargs["region_name"] = "us-east-1"
+                    client_kwargs["config"] = Config(signature_version="s3v4")
+                
+                # Add SSL verification setting
+                if self.s3_skip_ssl_verification:
+                    client_kwargs["verify"] = False
+                elif self.s3_ca_cert_path:
+                    client_kwargs["verify"] = self.s3_ca_cert_path
+                
                 session = boto3.Session(
                     aws_access_key_id=credentials["aws_access_key_id"],
                     aws_secret_access_key=credentials["aws_secret_access_key"],
                 )
-                self.s3_client = session.client("s3")
+                self.s3_client = session.client(**client_kwargs)
             elif authentication_method == "iam_role":
                 # If using IAM roles, we assume the role and let boto3 handle the credentials.
                 role_arn = credentials.get("aws_role_arn")
@@ -192,11 +233,35 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 botocore_session = get_session()
                 botocore_session._credentials = refreshable  # type: ignore[attr-defined]
                 session = boto3.Session(botocore_session=botocore_session)
-                self.s3_client = session.client("s3")
+                
+                # Build client kwargs for custom endpoint
+                client_kwargs: dict[str, Any] = {"service_name": "s3"}
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+                    client_kwargs["region_name"] = "us-east-1"
+                    client_kwargs["config"] = Config(signature_version="s3v4")
+                if self.s3_skip_ssl_verification:
+                    client_kwargs["verify"] = False
+                elif self.s3_ca_cert_path:
+                    client_kwargs["verify"] = self.s3_ca_cert_path
+                    
+                self.s3_client = session.client(**client_kwargs)
             elif authentication_method == "assume_role":
                 # We will assume the instance role to access S3.
                 logger.debug("Using instance role authentication for S3 bucket.")
-                self.s3_client = boto3.client("s3")
+                
+                # Build client kwargs for custom endpoint
+                client_kwargs: dict[str, Any] = {"service_name": "s3"}
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+                    client_kwargs["region_name"] = "us-east-1"
+                    client_kwargs["config"] = Config(signature_version="s3v4")
+                if self.s3_skip_ssl_verification:
+                    client_kwargs["verify"] = False
+                elif self.s3_ca_cert_path:
+                    client_kwargs["verify"] = self.s3_ca_cert_path
+                    
+                self.s3_client = boto3.client(**client_kwargs)
             else:
                 raise ConnectorValidationError("Invalid authentication method for S3. ")
 
@@ -307,6 +372,10 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             return f"https://dash.cloudflare.com/{account_id}/r2/{subdomain}buckets/{self.bucket_name}/objects/{encoded_key}/details"
 
         elif self.bucket_type == BlobType.S3:
+            # Use custom endpoint URL for S3-compatible storage (MinIO, Ceph, etc.)
+            if self.endpoint_url:
+                # Path-style URL for custom S3-compatible endpoints
+                return f"{self.endpoint_url.rstrip('/')}/{self.bucket_name}/{encoded_key}"
             region = self.bucket_region or self.s3_client.meta.region_name
             return f"https://s3.console.aws.amazon.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
 
