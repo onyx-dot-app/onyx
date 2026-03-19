@@ -24,22 +24,25 @@ logger = setup_logger()
 
 
 def plaintext_file_name_for_id(file_id: str) -> str:
-    """Generate a consistent file store key for cached plaintext of any file."""
+    """Generate a consistent file name for storing plaintext content of a file."""
     return f"plaintext_{file_id}"
 
 
 def store_plaintext(file_id: str, plaintext_content: str) -> bool:
-    """Store plaintext content in the file store, keyed by *file_id*.
+    """
+    Store plaintext content for a file in the file store.
 
-    Works for any file (user-uploaded, code-interpreter-generated, etc.).
+    Args:
+        file_id: The ID of the file (user_file or artifact_file)
+        plaintext_content: The plaintext content to store
 
     Returns:
-        True if storage succeeded, False otherwise.
+        bool: True if storage was successful, False otherwise
     """
     if not plaintext_content:
         return False
 
-    plaintext_key = plaintext_file_name_for_id(file_id)
+    plaintext_file_name = plaintext_file_name_for_id(file_id)
     try:
         file_store = get_default_file_store()
         file_content = BytesIO(plaintext_content.encode("utf-8"))
@@ -48,7 +51,7 @@ def store_plaintext(file_id: str, plaintext_content: str) -> bool:
             display_name=f"Plaintext for {file_id}",
             file_origin=FileOrigin.PLAINTEXT_CACHE,
             file_type="text/plain",
-            file_id=plaintext_key,
+            file_id=plaintext_file_name,
         )
         return True
     except Exception as e:
