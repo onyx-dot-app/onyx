@@ -18,6 +18,7 @@ export interface SidebarTabProps {
   // Button properties:
   onClick?: React.MouseEventHandler<HTMLElement>;
   href?: string;
+  type?: "submit" | "button" | "reset";
   icon?: React.FunctionComponent<IconProps>;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;
@@ -31,6 +32,7 @@ export default function SidebarTab({
 
   onClick,
   href,
+  type,
   icon,
   rightChildren,
   children,
@@ -58,12 +60,14 @@ export default function SidebarTab({
         variant="sidebar"
         state={selected ? "selected" : "empty"}
         onClick={onClick}
+        type="button"
         group="group/SidebarTab"
       >
         <Interactive.Container
           roundingVariant="compact"
           heightVariant="lg"
           widthVariant="full"
+          type={type}
         >
           {href && (
             <Link

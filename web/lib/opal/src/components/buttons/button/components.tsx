@@ -77,7 +77,7 @@ function Button({
   ) : null;
 
   const button = (
-    <Interactive.Stateless {...interactiveProps}>
+    <Interactive.Stateless type={type} {...interactiveProps}>
       <Interactive.Container
         type={type}
         border={interactiveProps.prominence === "secondary"}
