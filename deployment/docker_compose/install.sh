@@ -1125,6 +1125,25 @@ else
     USE_LATEST=false
 fi
 
+# For pinned version tags, re-download config files from that tag so the
+# compose file matches the images being pulled (the initial download used main).
+if [[ "$USE_LATEST" = false ]] && [[ "$USE_LOCAL_FILES" = false ]]; then
+    PINNED_BASE="https://raw.githubusercontent.com/onyx-dot-app/onyx/${CURRENT_IMAGE_TAG}/deployment"
+    print_info "Fetching config files matching tag ${CURRENT_IMAGE_TAG}..."
+    if download_file "${PINNED_BASE}/docker_compose/docker-compose.yml" "${INSTALL_ROOT}/deployment/docker-compose.yml" 2>/dev/null; then
+        download_file "${PINNED_BASE}/data/nginx/app.conf.template" "${INSTALL_ROOT}/data/nginx/app.conf.template" 2>/dev/null || true
+        download_file "${PINNED_BASE}/data/nginx/run-nginx.sh" "${INSTALL_ROOT}/data/nginx/run-nginx.sh" 2>/dev/null || true
+        chmod +x "${INSTALL_ROOT}/data/nginx/run-nginx.sh"
+        if [[ "$LITE_MODE" = true ]]; then
+            download_file "${PINNED_BASE}/docker_compose/${LITE_COMPOSE_FILE}" \
+                "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" 2>/dev/null || true
+        fi
+        print_success "Config files updated to match ${CURRENT_IMAGE_TAG}"
+    else
+        print_warning "Tag ${CURRENT_IMAGE_TAG} not found on GitHub — using main branch configs"
+    fi
+fi
+
 # Pull Docker images with reduced output
 print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."

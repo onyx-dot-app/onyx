@@ -1,8 +1,9 @@
 # Onyx Installer for Windows
-# Usage: irm https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.ps1 | iex
-# Or:    .\install.ps1 [OPTIONS]
-# With params via pipe:
+# Usage: .\install.ps1 [OPTIONS]
+# Remote (with params):
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.ps1))) -Lite -NoPrompt
+# Remote (defaults only):
+#   irm https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.ps1 | iex
 
 param(
     [switch]$Shutdown,
@@ -184,7 +185,7 @@ function Set-EnvFileValue {
         } else { $result += $line }
     }
     if (-not $found) { $result += "${Key}=${Value}" }
-    $result | Set-Content $Path
+    Write-Utf8NoBom -Path $Path -Content (($result -join "`n") + "`n")
 }
 
 function Get-EnvFileValue {
@@ -1052,6 +1053,24 @@ function Main {
     $currentImageTag = Get-EnvFileValue -Path $envFile -Key "IMAGE_TAG"
     $useLatest = ($currentImageTag -eq "latest" -or $currentImageTag -match '^craft-')
     if ($useLatest) { Print-Info "Using '$currentImageTag' tag - will force pull and recreate containers" }
+
+    # For pinned version tags, re-download config files from that tag so the
+    # compose file matches the images being pulled (the initial download used main).
+    if (-not $useLatest -and -not $Local) {
+        $pinnedBase = "https://raw.githubusercontent.com/onyx-dot-app/onyx/$currentImageTag/deployment"
+        Print-Info "Fetching config files matching tag $currentImageTag..."
+        try {
+            Download-OnyxFile "$pinnedBase/docker_compose/docker-compose.yml" $composeDest
+            try { Download-OnyxFile "$pinnedBase/data/nginx/app.conf.template" (Join-Path $script:InstallRoot "data\nginx\app.conf.template") } catch {}
+            try { Download-OnyxFile "$pinnedBase/data/nginx/run-nginx.sh" (Join-Path $script:InstallRoot "data\nginx\run-nginx.sh") } catch {}
+            if ($script:LiteMode) {
+                try { Download-OnyxFile "$pinnedBase/docker_compose/$($script:LiteComposeFile)" $liteOverlayPath } catch {}
+            }
+            Print-Success "Config files updated to match $currentImageTag"
+        } catch {
+            Print-Warning "Tag $currentImageTag not found on GitHub - using main branch configs"
+        }
+    }
 
     # ── Step 7: Pull Images ───────────────────────────────────────────────
     Print-Step "Pulling Docker images"
