@@ -1218,15 +1218,16 @@ def test_code_interpreter_receives_chat_files(
         finally:
             ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults
 
-    # Verify: file uploaded, code executed via streaming, staged file cleaned up
+    # Verify: file uploaded and code executed via streaming.
     assert len(mock_ci_server.get_requests(method="POST", path="/v1/files")) == 1
     assert (
         len(mock_ci_server.get_requests(method="POST", path="/v1/execute/stream")) == 1
     )
 
-    delete_requests = mock_ci_server.get_requests(method="DELETE")
-    assert len(delete_requests) == 1
-    assert delete_requests[0].path.startswith("/v1/files/")
+    # Staged input files are intentionally NOT deleted — PythonTool caches their
+    # file IDs across agent-loop iterations to avoid re-uploading on every call.
+    # The code interpreter cleans them up via its own TTL.
+    assert len(mock_ci_server.get_requests(method="DELETE")) == 0
 
     execute_body = mock_ci_server.get_requests(
         method="POST", path="/v1/execute/stream"

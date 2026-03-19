@@ -1,3 +1,4 @@
+import hashlib
 import mimetypes
 from io import BytesIO
 from typing import Any
@@ -85,6 +86,14 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
     def __init__(self, tool_id: int, emitter: Emitter) -> None:
         super().__init__(emitter=emitter)
         self._id = tool_id
+        # Cache of (filename, content_hash) -> ci_file_id to avoid re-uploading
+        # the same file on every tool call iteration within the same agent session.
+        # Filename is included in the key so two files with identical bytes but
+        # different names each get their own upload slot.
+        # TTL assumption: code-interpreter file TTLs (typically hours) greatly
+        # exceed the lifetime of a single agent session (at most MAX_LLM_CYCLES
+        # iterations, typically a few minutes), so stale-ID eviction is not needed.
+        self._uploaded_file_cache: dict[tuple[str, str], str] = {}
 
     @property
     def id(self) -> int:
@@ -184,8 +193,13 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             for ind, chat_file in enumerate(chat_files):
                 file_name = chat_file.filename or f"file_{ind}"
                 try:
-                    # Upload to Code Interpreter
-                    ci_file_id = client.upload_file(chat_file.content, file_name)
+                    content_hash = hashlib.sha256(chat_file.content).hexdigest()
+                    cache_key = (file_name, content_hash)
+                    ci_file_id = self._uploaded_file_cache.get(cache_key)
+                    if ci_file_id is None:
+                        # Upload to Code Interpreter
+                        ci_file_id = client.upload_file(chat_file.content, file_name)
+                        self._uploaded_file_cache[cache_key] = ci_file_id
 
                     # Stage for execution
                     files_to_stage.append({"path": file_name, "file_id": ci_file_id})
@@ -303,15 +317,10 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                             f"file {ci_file_id}: {e}"
                         )
 
-                # Cleanup staged input files
-                for file_mapping in files_to_stage:
-                    try:
-                        client.delete_file(file_mapping["file_id"])
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to delete Code Interpreter staged "
-                            f"file {file_mapping['file_id']}: {e}"
-                        )
+                # Note: staged input files are intentionally not deleted here because
+                # _uploaded_file_cache reuses their file_ids across iterations. They are
+                # orphaned when the session ends, but the code interpreter cleans up
+                # stale files on its own TTL.
 
                 # Emit file_ids once files are processed
                 if generated_file_ids:
