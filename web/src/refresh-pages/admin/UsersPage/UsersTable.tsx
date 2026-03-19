@@ -219,6 +219,7 @@ export default function UsersTable({
         data={filteredUsers}
         columns={columns}
         getRowId={(row) => row.id ?? row.email}
+        qualifier="avatar"
         pageSize={PAGE_SIZE}
         searchTerm={searchTerm}
         emptyState={
