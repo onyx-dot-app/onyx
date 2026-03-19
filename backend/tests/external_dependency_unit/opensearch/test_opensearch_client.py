@@ -965,6 +965,7 @@ class TestOpenSearchClient:
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
+        _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         tenant_y = TenantState(tenant_id="tenant-y", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
@@ -1095,6 +1096,7 @@ class TestOpenSearchClient:
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
+        _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_x.multitenant
