@@ -187,8 +187,13 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 # Add custom endpoint URL for S3-compatible storage (MinIO, Ceph, etc.)
                 if self.endpoint_url:
                     client_kwargs["endpoint_url"] = self.endpoint_url
-                    client_kwargs["region_name"] = "us-east-1"
-                    client_kwargs["config"] = Config(signature_version="s3v4")
+                    # Use provided region or default to us-east-1 for S3-compatible
+                    client_kwargs["region_name"] = credentials.get("region", "us-east-1")
+                    # Use path-style addressing for S3-compatible
+                    client_kwargs["config"] = Config(
+                        signature_version="s3v4",
+                        addressing_style="path"
+                    )
                 
                 # Add SSL verification setting
                 if self.s3_skip_ssl_verification:
@@ -238,8 +243,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 client_kwargs: dict[str, Any] = {"service_name": "s3"}
                 if self.endpoint_url:
                     client_kwargs["endpoint_url"] = self.endpoint_url
-                    client_kwargs["region_name"] = "us-east-1"
-                    client_kwargs["config"] = Config(signature_version="s3v4")
+                    client_kwargs["region_name"] = credentials.get("region", "us-east-1")
+                    client_kwargs["config"] = Config(
+                        signature_version="s3v4",
+                        addressing_style="path"
+                    )
                 if self.s3_skip_ssl_verification:
                     client_kwargs["verify"] = False
                 elif self.s3_ca_cert_path:
@@ -254,8 +262,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 client_kwargs: dict[str, Any] = {"service_name": "s3"}
                 if self.endpoint_url:
                     client_kwargs["endpoint_url"] = self.endpoint_url
-                    client_kwargs["region_name"] = "us-east-1"
-                    client_kwargs["config"] = Config(signature_version="s3v4")
+                    client_kwargs["region_name"] = credentials.get("region", "us-east-1")
+                    client_kwargs["config"] = Config(
+                        signature_version="s3v4",
+                        addressing_style="path"
+                    )
                 if self.s3_skip_ssl_verification:
                     client_kwargs["verify"] = False
                 elif self.s3_ca_cert_path:
