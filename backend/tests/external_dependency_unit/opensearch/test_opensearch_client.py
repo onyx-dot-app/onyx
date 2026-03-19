@@ -1854,9 +1854,8 @@ class TestOpenSearchClient:
         # Refresh index to make documents searchable.
         test_client.refresh_index()
 
-        query_vector = _generate_test_vector(0.6)
         search_body = DocumentQuery.get_semantic_search_query(
-            query_vector=query_vector,
+            query_embedding=query_vector,
             num_hits=5,
             tenant_state=tenant_x,
             # The user should only be able to see their private docs. tenant_id

@@ -427,7 +427,7 @@ class DocumentQuery:
             query_text: The text to query for.
             num_hits: The final number of hits to return.
             tenant_state: Tenant state containing the tenant ID.
-            index_filters: Filters for the hybrid search query.
+            index_filters: Filters for the keyword search query.
             include_hidden: Whether to include hidden documents.
 
         Returns:
@@ -461,7 +461,7 @@ class DocumentQuery:
 
         keyword_search_query = (
             DocumentQuery._get_title_content_combined_keyword_search_query(
-                query_text, query_filter=keyword_search_filters
+                query_text, search_filters=keyword_search_filters
             )
         )
 
