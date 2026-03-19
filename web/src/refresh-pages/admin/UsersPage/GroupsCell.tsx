@@ -146,7 +146,7 @@ export default function GroupsCell({
         {groups.length === 0 ? (
           <div
             ref={containerRef}
-            className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 pr-7"
+            className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0"
           >
             <Text as="span" secondaryBody text03>
               —
@@ -163,7 +163,7 @@ export default function GroupsCell({
           >
             <div
               ref={containerRef}
-              className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 pr-7"
+              className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0"
             >
               {tagsContent}
             </div>
