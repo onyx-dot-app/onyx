@@ -2,7 +2,7 @@ from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.jira.group_sync import (
-    _jira_group_sync_impl,
+    jira_group_sync_impl,
 )
 from onyx.db.models import ConnectorCredentialPair
 
@@ -24,4 +24,4 @@ def jira_service_management_group_sync(
             "No jira_service_management_base_url found in connector config"
         )
 
-    yield from _jira_group_sync_impl(cc_pair, jira_base_url)
+    yield from jira_group_sync_impl(cc_pair, jira_base_url)

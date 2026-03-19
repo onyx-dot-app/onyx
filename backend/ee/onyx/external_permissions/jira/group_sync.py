@@ -99,7 +99,7 @@ def _get_group_member_emails(
     return emails
 
 
-def _jira_group_sync_impl(
+def jira_group_sync_impl(
     cc_pair: ConnectorCredentialPair,
     jira_base_url: str,
 ) -> Generator[ExternalUserGroup, None, None]:
@@ -160,4 +160,4 @@ def jira_group_sync(
     if not jira_base_url:
         raise ValueError("No jira_base_url found in connector config")
 
-    yield from _jira_group_sync_impl(cc_pair, jira_base_url)
+    yield from jira_group_sync_impl(cc_pair, jira_base_url)
