@@ -681,12 +681,46 @@ export class OnyxApiClient {
 
   async getAssistant(agentId: number): Promise<{
     id: number;
+    is_public: boolean;
+    users: Array<{ id: string }>;
+    groups: number[];
     tools: Array<{ id: number; mcp_server_id?: number | null }>;
   }> {
     const response = await this.get(`/persona/${agentId}`);
     return await this.handleResponse(
       response,
       `Failed to fetch assistant ${agentId}`
+    );
+  }
+
+  async updateAgentSharing(
+    agentId: number,
+    options: {
+      userIds?: string[];
+      groupIds?: number[];
+      isPublic?: boolean;
+      labelIds?: number[];
+    }
+  ): Promise<void> {
+    const response = await this.request.patch(
+      `${this.baseUrl}/persona/${agentId}/share`,
+      {
+        data: {
+          user_ids: options.userIds,
+          group_ids: options.groupIds,
+          is_public: options.isPublic,
+          label_ids: options.labelIds,
+        },
+      }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to update sharing for assistant ${agentId}`
+    );
+    this.log(
+      `Updated assistant sharing: ${agentId} (is_public=${String(
+        options.isPublic
+      )})`
     );
   }
 
