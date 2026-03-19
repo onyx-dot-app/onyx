@@ -12,6 +12,7 @@ import { cn, noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "./constants";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import Truncated from "@/refresh-components/texts/Truncated";
 import { Button } from "@opal/components";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import type { IconProps } from "@opal/types";
@@ -181,7 +182,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
                 onClose={() => setIsEditing(false)}
               />
             ) : (
-              project.name
+              <Truncated>{project.name}</Truncated>
             )}
           </SidebarTab>
         </Popover.Anchor>

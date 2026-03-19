@@ -395,6 +395,12 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         llm = get_default_llm_with_vision()
 
     if not llm:
+        if get_image_extraction_and_analysis_enabled():
+            logger.warning(
+                "Image analysis is enabled but no vision-capable LLM is "
+                "available — images will not be summarized. Configure a "
+                "vision model in the admin LLM settings."
+            )
         # Even without LLM, we still convert to IndexingDocument with base Sections
         return [
             IndexingDocument(
