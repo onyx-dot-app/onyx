@@ -30,6 +30,7 @@ from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
 from onyx.llm.factory import get_default_llm
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.server.features.projects.projects_file_utils import count_tokens
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -174,7 +175,9 @@ class UserFileIndexingAdapter:
                 )
                 user_file_id_to_raw_text[str(user_file_id)] = combined_content
                 token_count = (
-                    len(llm_tokenizer.encode(combined_content)) if llm_tokenizer else 0
+                    count_tokens(combined_content, llm_tokenizer)
+                    if llm_tokenizer
+                    else 0
                 )
                 user_file_id_to_token_count[str(user_file_id)] = token_count
             else:

@@ -14,6 +14,7 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.password_validation import is_file_password_protected
+from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -21,6 +22,29 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 UNKNOWN_FILENAME = "[unknown_file]"  # More descriptive than empty string
+
+# Max characters per encode() call.
+_ENCODE_CHUNK_SIZE = 500_000
+
+
+def count_tokens(
+    text: str,
+    tokenizer: BaseTokenizer,
+    token_limit: int | None = None,
+) -> int:
+    """Count tokens, chunking the input to avoid tiktoken stack overflow.
+
+    If token_limit is provided, stops early once the count exceeds it.
+    The returned value will be >= actual count but signals "over limit".
+    """
+    if len(text) <= _ENCODE_CHUNK_SIZE:
+        return len(tokenizer.encode(text))
+    total = 0
+    for start in range(0, len(text), _ENCODE_CHUNK_SIZE):
+        total += len(tokenizer.encode(text[start : start + _ENCODE_CHUNK_SIZE]))
+        if token_limit is not None and total > token_limit:
+            return total  # Already over — skip remaining chunks
+    return total
 
 
 def get_safe_filename(upload: UploadFile) -> str:
@@ -258,7 +282,9 @@ def categorize_uploaded_files(
                     )
                     continue
 
-                token_count = len(tokenizer.encode(text_content))
+                token_count = count_tokens(
+                    text_content, tokenizer, token_limit=token_threshold
+                )
                 if token_threshold is not None and token_count > token_threshold:
                     results.rejected.append(
                         RejectedFile(

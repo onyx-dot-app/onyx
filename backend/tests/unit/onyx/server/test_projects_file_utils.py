@@ -5,6 +5,7 @@ import pytest
 from fastapi import UploadFile
 
 from onyx.server.features.projects import projects_file_utils as utils
+from onyx.server.features.projects.projects_file_utils import count_tokens
 from onyx.server.settings.models import Settings
 
 
@@ -256,3 +257,129 @@ def test_categorize_rejection_reason_contains_dynamic_values(
     result2 = utils.categorize_uploaded_files([oversized], MagicMock())
 
     assert result2.rejected[0].reason == "Exceeds 42 MB file size limit"
+
+
+# --- count_tokens tests ---
+
+
+def test_count_tokens_small_text() -> None:
+    """Small text should be encoded in a single call and return correct count."""
+    tokenizer = _Tokenizer()
+    text = "hello world"
+    assert count_tokens(text, tokenizer) == len(tokenizer.encode(text))
+
+
+def test_count_tokens_chunked_matches_single_call() -> None:
+    """Chunked encoding should produce the same result as single-call for small text."""
+    tokenizer = _Tokenizer()
+    text = "a" * 1000
+    assert count_tokens(text, tokenizer) == len(tokenizer.encode(text))
+
+
+def test_count_tokens_large_text_is_chunked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Text exceeding _ENCODE_CHUNK_SIZE should be split into multiple encode calls."""
+    monkeypatch.setattr(utils, "_ENCODE_CHUNK_SIZE", 100)
+    tokenizer = _Tokenizer()
+    text = "a" * 250
+    # _Tokenizer returns 1 token per char, so total should be 250
+    assert count_tokens(text, tokenizer) == 250
+
+
+def test_count_tokens_with_token_limit_exits_early(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When token_limit is set and exceeded, count_tokens should stop early."""
+    monkeypatch.setattr(utils, "_ENCODE_CHUNK_SIZE", 100)
+
+    encode_call_count = 0
+    original_tokenizer = _Tokenizer()
+
+    class _CountingTokenizer:
+        def encode(self, text: str) -> list[int]:
+            nonlocal encode_call_count
+            encode_call_count += 1
+            return original_tokenizer.encode(text)
+
+    tokenizer = _CountingTokenizer()
+    # 500 chars → 5 chunks of 100; limit=150 → should stop after 2 chunks
+    text = "a" * 500
+    result = count_tokens(text, tokenizer, token_limit=150)
+
+    assert result == 200  # 2 chunks × 100 tokens each
+    assert encode_call_count == 2, "Should have stopped after 2 chunks"
+
+
+def test_count_tokens_with_token_limit_not_exceeded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When token_limit is set but not exceeded, all chunks are encoded."""
+    monkeypatch.setattr(utils, "_ENCODE_CHUNK_SIZE", 100)
+    tokenizer = _Tokenizer()
+    text = "a" * 250
+    result = count_tokens(text, tokenizer, token_limit=1000)
+    assert result == 250
+
+
+def test_count_tokens_no_limit_encodes_all_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without token_limit, all chunks are encoded regardless of count."""
+    monkeypatch.setattr(utils, "_ENCODE_CHUNK_SIZE", 100)
+    tokenizer = _Tokenizer()
+    text = "a" * 500
+    result = count_tokens(text, tokenizer)
+    assert result == 500
+
+
+# --- early exit via token_limit in categorize tests ---
+
+
+def test_categorize_early_exits_tokenization_for_large_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Large text files should be rejected via early-exit tokenization
+    without encoding all chunks."""
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=1)
+    # token_threshold = 1000; _ENCODE_CHUNK_SIZE = 100 → text of 500 chars = 5 chunks
+    # Should stop after 2nd chunk (200 tokens > 1000? No... need 1 token per char)
+    # With _Tokenizer: 1 token per char. threshold=1000, chunk=100 → need 11 chunks
+    # Let's use a bigger text
+    monkeypatch.setattr(utils, "_ENCODE_CHUNK_SIZE", 100)
+    large_text = "x" * 5000  # 5000 tokens, threshold 1000
+    monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: large_text)
+
+    encode_call_count = 0
+    original_tokenizer = _Tokenizer()
+
+    class _CountingTokenizer:
+        def encode(self, text: str) -> list[int]:
+            nonlocal encode_call_count
+            encode_call_count += 1
+            return original_tokenizer.encode(text)
+
+    monkeypatch.setattr(utils, "get_tokenizer", lambda **_kwargs: _CountingTokenizer())
+
+    upload = _make_upload("big.txt", size=5000, content=large_text.encode())
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.rejected) == 1
+    assert "token limit" in result.rejected[0].reason
+    # 5000 chars / 100 chunk_size = 50 chunks total; should stop well before all 50
+    assert (
+        encode_call_count < 50
+    ), f"Expected early exit but encoded {encode_call_count} chunks out of 50"
+
+
+def test_categorize_text_under_token_limit_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Text files under the token threshold should be accepted with exact count."""
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=1)
+    small_text = "x" * 500  # 500 tokens < 1000 threshold
+    monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: small_text)
+
+    upload = _make_upload("ok.txt", size=500, content=small_text.encode())
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.acceptable) == 1
+    assert result.acceptable_file_to_token_count["ok.txt"] == 500
