@@ -489,12 +489,14 @@ services:
     # The specified script waits for the api_server to start up.
     # Without this we've seen issues where nginx shows no error logs but
     # does not receive any traffic
-    # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
-    # in order to make this work on both Unix-like systems and windows
+    # NOTE: we strip \r so the script works on both Unix and Windows hosts.
+    # We write to /tmp because dos2unix cannot create temp files on Windows
+    # Docker bind mounts (permission denied on mkstemp).
     # PRODUCTION: Change to app.conf.template.prod for production nginx config
     command: >
-      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh
-      && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
+      /bin/sh -c "sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
+      && chmod +x /tmp/run-nginx.sh
+      && /tmp/run-nginx.sh app.conf.template"
 
   cache:
     image: redis:7.4-alpine
