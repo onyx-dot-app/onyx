@@ -118,7 +118,7 @@ function OpenButton({
   const labelEl = children ? (
     <span
       className={cn(
-        "opal-button-label whitespace-nowrap",
+        "whitespace-nowrap",
         isLarge ? "font-main-ui-body" : "font-secondary-body"
       )}
     >
@@ -143,7 +143,7 @@ function OpenButton({
       >
         <div
           className={cn(
-            "opal-button interactive-foreground flex flex-row items-center",
+            "interactive-foreground flex flex-row items-center",
             justifyContent === "between" ? "w-full justify-between" : "gap-1",
             foldable &&
               justifyContent !== "between" &&

@@ -58,7 +58,7 @@ async function mockCodeInterpreterApi(
  */
 function getDisconnectIconButton(page: Page) {
   return page
-    .locator("button:has(.opal-button):not(:has(.opal-button-label))")
+    .locator("button:has(.interactive-foreground-icon):not(:has(span))")
     .first();
 }
 
