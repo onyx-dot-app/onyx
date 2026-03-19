@@ -552,9 +552,11 @@ class CanvasConnector(
                 )
         except OnyxError as oe:
             # Re-raise security errors from _parse_next_link (host/scheme
-            # mismatch) — these indicate a compromised pagination URL.
-            # All other API errors (404, 429, 5xx) are recoverable.
-            if "pagination" in (oe.detail or ""):
+            # mismatch on pagination URLs) — these must not be silenced.
+            # Security errors have no HTTP status code override (they are
+            # raised locally, not from an API response).
+            is_api_error = oe._status_code_override is not None
+            if not is_api_error:
                 raise
             logger.warning(
                 f"Failed to fetch {stage} for course {course_id}: {oe}"
@@ -624,12 +626,19 @@ class CanvasConnector(
 
             except Exception as e:
                 item_id = item.get("id") or item.get("page_id", "unknown")
+                if stage == "pages":
+                    doc_link = (
+                        f"{self.canvas_base_url}/courses/{course_id}"
+                        f"/pages/{item.get('url', '')}"
+                    )
+                else:
+                    doc_link = item.get("html_url", "")
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
-                        document_id=f"canvas-{stage.rstrip('s')}-{course_id}-{item_id}",
-                        document_link=item.get("html_url", ""),
+                        document_id=f"canvas-{stage.removesuffix('s')}-{course_id}-{item_id}",
+                        document_link=doc_link,
                     ),
-                    failure_message=f"Failed to process {stage.rstrip('s')}: {e}",
+                    failure_message=f"Failed to process {stage.removesuffix('s')}: {e}",
                     exception=e,
                 )
 
