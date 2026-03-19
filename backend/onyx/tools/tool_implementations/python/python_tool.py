@@ -84,9 +84,14 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
     def __init__(self, tool_id: int, emitter: Emitter) -> None:
         super().__init__(emitter=emitter)
         self._id = tool_id
-        # Cache of content_hash -> ci_file_id to avoid re-uploading the same
-        # file on every tool call iteration within the same agent session.
-        self._uploaded_file_cache: dict[str, str] = {}
+        # Cache of (filename, content_hash) -> ci_file_id to avoid re-uploading
+        # the same file on every tool call iteration within the same agent session.
+        # Filename is included in the key so two files with identical bytes but
+        # different names each get their own upload slot.
+        # TTL assumption: code-interpreter file TTLs (typically hours) greatly
+        # exceed the lifetime of a single agent session (at most MAX_LLM_CYCLES
+        # iterations, typically a few minutes), so stale-ID eviction is not needed.
+        self._uploaded_file_cache: dict[tuple[str, str], str] = {}
 
     @property
     def id(self) -> int:
@@ -187,11 +192,12 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 file_name = chat_file.filename or f"file_{ind}"
                 try:
                     content_hash = hashlib.sha256(chat_file.content).hexdigest()
-                    ci_file_id = self._uploaded_file_cache.get(content_hash)
+                    cache_key = (file_name, content_hash)
+                    ci_file_id = self._uploaded_file_cache.get(cache_key)
                     if ci_file_id is None:
                         # Upload to Code Interpreter
                         ci_file_id = client.upload_file(chat_file.content, file_name)
-                        self._uploaded_file_cache[content_hash] = ci_file_id
+                        self._uploaded_file_cache[cache_key] = ci_file_id
 
                     # Stage for execution
                     files_to_stage.append({"path": file_name, "file_id": ci_file_id})

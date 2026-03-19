@@ -144,6 +144,25 @@ def test_multiple_distinct_files_each_uploaded_once() -> None:
     assert client.upload_file.call_count == 2
 
 
+@patch(f"{TOOL_MODULE}.CODE_INTERPRETER_BASE_URL", "http://fake:8000")
+def test_same_content_different_filename_uploaded_separately() -> None:
+    # Identical bytes but different names must each get their own upload slot
+    # so both files appear under their respective paths in the workspace.
+    tool = _make_tool()
+    client = MagicMock()
+    client.upload_file.side_effect = ["id-v1", "id-v2"]
+
+    same_bytes = b"shared content"
+    files = [
+        ChatFile(filename="report_v1.csv", content=same_bytes),
+        ChatFile(filename="report_v2.csv", content=same_bytes),
+    ]
+
+    _run_tool(tool, client, files)
+
+    assert client.upload_file.call_count == 2
+
+
 # ---------------------------------------------------------------------------
 # No cross-instance sharing: a fresh PythonTool re-uploads everything
 # ---------------------------------------------------------------------------
