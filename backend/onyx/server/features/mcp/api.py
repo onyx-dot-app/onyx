@@ -80,6 +80,7 @@ from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
+from onyx.tools.tool_implementations.mcp.schema_utils import normalize_mcp_input_schema
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 
@@ -1163,7 +1164,7 @@ def _upsert_db_tools(
         description = tool.description or ""
         annotations_title = tool.annotations.title if tool.annotations else None
         display_name = tool.title or annotations_title or tool_name
-        input_schema = tool.inputSchema
+        input_schema = normalize_mcp_input_schema(tool.inputSchema)
 
         if existing_tool := existing_by_name.get(tool_name):
             if existing_tool.description != description:

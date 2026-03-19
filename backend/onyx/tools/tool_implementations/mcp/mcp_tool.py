@@ -14,6 +14,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
+from onyx.tools.tool_implementations.mcp.schema_utils import normalize_mcp_input_schema
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -60,7 +61,7 @@ class MCPTool(Tool[None]):
         self._additional_headers = additional_headers or {}
 
         self._name = tool_name
-        self._tool_definition = tool_definition
+        self._tool_definition = normalize_mcp_input_schema(tool_definition)
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
         self._llm_name = f"mcp:{mcp_server.name}:{tool_name}"
