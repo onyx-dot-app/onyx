@@ -1696,7 +1696,7 @@ class TestOpenSearchClient:
             "private-but-not-relevant-doc-user-a": _create_test_document_chunk(
                 document_id="private-but-not-relevant-doc-user-a",
                 chunk_index=0,
-                content="This content should not match the query at all",
+                content="This text should not match the query at all",
                 hidden=False,
                 tenant_state=tenant_x,
                 document_access=DocumentAccess.build(
@@ -1737,6 +1737,7 @@ class TestOpenSearchClient:
         # Refresh index to make documents searchable.
         test_client.refresh_index()
 
+        # Should not match private-but-not-relevant-doc-user-a.
         query_text = "document content"
         search_body = DocumentQuery.get_keyword_search_query(
             query_text=query_text,
