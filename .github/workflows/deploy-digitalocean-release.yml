@@ -66,7 +66,7 @@ jobs:
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' '  ServerAliveInterval 30' '  ServerAliveCountMax 10' >> ~/.ssh/config
 
           echo "[INFO] Deploying version $VERSION to DigitalOcean ($DEPLOY_HOST)"
           echo "[INFO] Preferred deployment directory: $PREFERRED_DEPLOY_DIR"
@@ -207,7 +207,7 @@ jobs:
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' '  ServerAliveInterval 30' '  ServerAliveCountMax 10' >> ~/.ssh/config
 
           echo "[INFO] Running deployment health checks..."
 
@@ -361,7 +361,7 @@ jobs:
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' '  ServerAliveInterval 30' '  ServerAliveCountMax 10' >> ~/.ssh/config
 
           ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- \
             "$PREFERRED_DEPLOY_DIR" \
