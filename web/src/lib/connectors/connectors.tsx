@@ -936,6 +936,20 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  phabricator: {
+    description: "Configure Phabricator connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the base URL:",
+        label: "Base URL",
+        name: "api_base",
+        optional: false,
+        description: `Specify the base URL for your Phorge/Phab install. This will look something like: https://phabricator.company.com/api/`,
+      },
+    ],
+    advanced_values: [],
+  },
   drupal_wiki: {
     description: "Configure Drupal Wiki connector",
     values: [
