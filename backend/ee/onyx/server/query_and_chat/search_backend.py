@@ -20,6 +20,7 @@ from ee.onyx.server.query_and_chat.models import SearchQueryResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
 from onyx.auth.users import current_user
+from onyx.configs.app_configs import ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
@@ -67,8 +68,10 @@ def search_flow_classification(
     return SearchFlowClassificationResponse(is_search_flow=is_search_flow)
 
 
-# NOTE: This endpoint is used for the core flow of the Onyx application, any changes to it should be reviewed and approved by an
-# experienced team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
+# NOTE: This endpoint is used for the core flow of the Onyx application, any
+# changes to it should be reviewed and approved by an experienced team member.
+# It is very important to 1. avoid bloat and 2. that this remains backwards
+# compatible across versions.
 @router.post(
     "/send-search-message",
     response_model=None,
@@ -80,12 +83,18 @@ def handle_send_search_message(
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse | SearchFullResponse:
     """
-    Execute a search query with optional streaming.
+    Executes a search query with optional streaming.
 
-    When stream=True: Returns StreamingResponse with SSE
-    When stream=False: Returns SearchFullResponse
+    If hybrid_alpha is unset and ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH
+    is True, executes pure keyword search.
+
+    Returns:
+        StreamingResponse with SSE if stream=True, otherwise SearchFullResponse.
     """
     logger.debug(f"Received search query: {request.search_query}")
+
+    if request.hybrid_alpha is None and ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH:
+        request.hybrid_alpha = 0.0
 
     # Non-streaming path
     if not request.stream:

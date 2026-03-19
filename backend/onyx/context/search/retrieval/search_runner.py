@@ -14,6 +14,10 @@ from onyx.context.search.utils import get_query_embedding
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.interfaces_new import DocumentIndex as NewDocumentIndex
+from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchOldDocumentIndex,
+)
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.federated_connectors.federated_retrieval import (
     get_federated_retrieval_functions,
@@ -49,7 +53,7 @@ def combine_retrieval_results(
     return sorted_chunks
 
 
-def _embed_and_search(
+def _embed_and_hybrid_search(
     query_request: ChunkIndexRequest,
     document_index: DocumentIndex,
     db_session: Session | None = None,
@@ -79,6 +83,17 @@ def _embed_and_search(
     )
 
     return top_chunks
+
+
+def _keyword_search(
+    query_request: ChunkIndexRequest,
+    document_index: NewDocumentIndex,
+) -> list[InferenceChunk]:
+    return document_index.keyword_retrieval(
+        query=query_request.query,
+        filters=query_request.filters,
+        num_to_retrieve=query_request.limit or NUM_RETURNED_HITS,
+    )
 
 
 def search_chunks(
@@ -129,21 +144,38 @@ def search_chunks(
     )
 
     if normal_search_enabled:
-        run_queries.append(
-            (
-                _embed_and_search,
-                (query_request, document_index, db_session, embedding_model),
+        if (
+            query_request.hybrid_alpha is not None
+            and query_request.hybrid_alpha == 0.0
+            and isinstance(document_index, OpenSearchOldDocumentIndex)
+        ):
+            # If hybrid alpha is explicitly set to keyword only, do pure keyword
+            # search without generating an embedding. This is currently only
+            # supported with OpenSearchDocumentIndex.
+            opensearch_new_document_index: NewDocumentIndex = document_index._real_index
+            run_queries.append(
+                (
+                    lambda: _keyword_search(
+                        query_request, opensearch_new_document_index
+                    ),
+                    (),
+                )
             )
-        )
+        else:
+            run_queries.append(
+                (
+                    _embed_and_hybrid_search,
+                    (query_request, document_index, db_session, embedding_model),
+                )
+            )
 
     parallel_search_results = run_functions_tuples_in_parallel(run_queries)
     top_chunks = combine_retrieval_results(parallel_search_results)
 
     if not top_chunks:
         logger.debug(
-            f"Hybrid search returned no results for query: {query_request.query}with filters: {query_request.filters}"
+            f"Search returned no results for query: {query_request.query} with filters: {query_request.filters}."
         )
-        return []
 
     return top_chunks
 
