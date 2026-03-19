@@ -17,6 +17,7 @@ import (
 type RunCIOptions struct {
 	DryRun bool
 	Yes    bool
+	Rerun  bool
 }
 
 // NewRunCICommand creates a new run-ci command
@@ -49,6 +50,7 @@ Example usage:
 
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform all local operations but skip pushing to remote and creating PRs")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompts and automatically proceed")
+	cmd.Flags().BoolVar(&opts.Rerun, "rerun", false, "Update an existing CI PR with the latest fork changes to re-trigger CI")
 
 	return cmd
 }
@@ -107,18 +109,43 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		log.Fatalf("PR #%s is not from a fork - CI should already run automatically", prNumber)
 	}
 
-	// Confirm before proceeding
-	if !opts.Yes {
-		if !prompt.Confirm(fmt.Sprintf("Create CI branch for PR #%s? (yes/no): ", prNumber)) {
-			log.Info("Exiting...")
-			return
-		}
-	}
-
 	// Create the CI branch
 	ciBranch := fmt.Sprintf("run-ci/%s", prNumber)
 	prTitle := fmt.Sprintf("chore: [Running GitHub actions for #%s]", prNumber)
 	prBody := fmt.Sprintf("This PR runs GitHub Actions CI for #%s.\n\n- [x] Override Linear Check\n\n**This PR should be closed (not merged) after CI completes.**", prNumber)
+
+	// Check if a CI PR already exists for this branch
+	existingPRURL, err := findExistingCIPR(ciBranch)
+	if err != nil {
+		log.Fatalf("Failed to check for existing CI PR: %v", err)
+	}
+
+	if existingPRURL != "" && !opts.Rerun {
+		log.Infof("A CI PR already exists for #%s: %s", prNumber, existingPRURL)
+		log.Info("Run with --rerun to update it with the latest fork changes and re-trigger CI.")
+		return
+	}
+
+	if opts.Rerun && existingPRURL == "" {
+		log.Warn("--rerun was specified but no existing open CI PR was found. A new PR will be created.")
+	}
+
+	if existingPRURL != "" && opts.Rerun {
+		log.Infof("Existing CI PR found: %s", existingPRURL)
+		log.Info("Will update the CI branch with the latest fork changes to re-trigger CI.")
+	}
+
+	// Confirm before proceeding
+	if !opts.Yes {
+		action := "Create CI branch"
+		if existingPRURL != "" {
+			action = "Update existing CI branch"
+		}
+		if !prompt.Confirm(fmt.Sprintf("%s for PR #%s? (yes/no): ", action, prNumber)) {
+			log.Info("Exiting...")
+			return
+		}
+	}
 
 	// Fetch the fork's branch
 	if forkRepo == "" {
@@ -158,7 +185,11 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 
 	if opts.DryRun {
 		log.Warnf("[DRY RUN] Would push CI branch: %s", ciBranch)
-		log.Warnf("[DRY RUN] Would create PR: %s", prTitle)
+		if existingPRURL == "" {
+			log.Warnf("[DRY RUN] Would create PR: %s", prTitle)
+		} else {
+			log.Warnf("[DRY RUN] Would update existing PR: %s", existingPRURL)
+		}
 		// Switch back to original branch
 		if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
 			log.Warnf("Failed to switch back to original branch: %v", err)
@@ -174,6 +205,17 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)
 		}
 		log.Fatalf("Failed to push CI branch: %v", err)
+	}
+
+	if existingPRURL != "" {
+		// PR already exists - force push is enough to re-trigger CI
+		log.Infof("Switching back to original branch: %s", originalBranch)
+		if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
+			log.Warnf("Failed to switch back to original branch: %v", err)
+		}
+		log.Infof("CI PR updated successfully: %s", existingPRURL)
+		log.Info("The force push will re-trigger CI. Remember to close (not merge) this PR after CI completes!")
+		return
 	}
 
 	// Create PR using GitHub CLI
@@ -215,6 +257,39 @@ func getPRInfo(prNumber string) (*PRInfo, error) {
 	}
 
 	return &prInfo, nil
+}
+
+// findExistingCIPR checks if an open PR already exists for the given CI branch.
+// Returns the PR URL if found, or empty string if not.
+func findExistingCIPR(headBranch string) (string, error) {
+	cmd := exec.Command("gh", "pr", "list",
+		"--head", headBranch,
+		"--state", "open",
+		"--json", "url",
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("%w: %s", err, string(exitErr.Stderr))
+		}
+		return "", err
+	}
+
+	var prs []struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(output, &prs); err != nil {
+		log.Debugf("Failed to parse PR list JSON: %v (raw: %s)", err, string(output))
+		return "", fmt.Errorf("failed to parse PR list: %w", err)
+	}
+
+	if len(prs) == 0 {
+		log.Debugf("No existing open PRs found for branch %s", headBranch)
+		return "", nil
+	}
+
+	log.Debugf("Found existing PR for branch %s: %s", headBranch, prs[0].URL)
+	return prs[0].URL, nil
 }
 
 // createCIPR creates a pull request for CI using the GitHub CLI
