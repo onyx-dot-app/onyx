@@ -1,3 +1,4 @@
+import React from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@/types";
 import type { ExtremaSizeVariants, SizeVariants } from "@opal/types";
