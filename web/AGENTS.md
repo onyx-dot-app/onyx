@@ -118,6 +118,26 @@ Sub-components:
   and optional `separator`. Automatically shows a scroll shadow when scrolled.
 - **`SettingsLayouts.Body`** — Content container with consistent padding and vertical spacing.
 
+## Cards (`src/sections/cards/`)
+
+**When building a card that displays information about a specific entity (agent, document set,
+file, connector, etc.), add it to `web/src/sections/cards/`.**
+
+Each card is a self-contained component focused on a single entity type. Cards typically include
+entity identification (name, avatar, icon), summary information, and quick actions.
+
+```typescript
+import AgentCard from "@/sections/cards/AgentCard";
+import DocumentSetCard from "@/sections/cards/DocumentSetCard";
+import FileCard from "@/sections/cards/FileCard";
+```
+
+Guidelines:
+- One card per entity type — keep card-specific logic within the card component.
+- Cards should be reusable across different pages and contexts.
+- Use shared components from `@opal/components`, `@opal/layouts`, and `@/refresh-components`
+  inside cards — do not duplicate layout or styling logic.
+
 ## Button (`components/buttons/button/`)
 
 **Always use the Opal `Button`.** Do not use raw `<button>` elements.
