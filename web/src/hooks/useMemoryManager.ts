@@ -26,8 +26,15 @@ export function useMemoryManager({
   const initialMemoriesRef = useRef<MemoryItem[]>([]);
   const isSavingRef = useRef(false);
 
-  // Initialize local memories from props
+  // Initialize local memories from props — skip when props match what we
+  // last saved so that a post-save re-render doesn't steal focus.
   useEffect(() => {
+    if (
+      JSON.stringify(memories) === JSON.stringify(initialMemoriesRef.current)
+    ) {
+      return;
+    }
+
     const existingMemories: LocalMemory[] = memories.map((mem, index) => ({
       id: mem.id ?? -(index + 1),
       content: mem.content,

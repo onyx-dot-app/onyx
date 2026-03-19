@@ -20,7 +20,6 @@ import {
   MAX_MEMORY_COUNT,
   LocalMemory,
 } from "@/hooks/useMemoryManager";
-import { cn } from "@/lib/utils";
 import { useUser } from "@/providers/UserProvider";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import type { MemoryItem } from "@/lib/types";
@@ -31,10 +30,7 @@ interface MemoryItemProps {
   onUpdate: (index: number, value: string) => void;
   onBlur: (index: number) => void;
   onRemove: (index: number) => void;
-  shouldFocus?: boolean;
-  onFocused?: () => void;
-  shouldHighlight?: boolean;
-  onHighlighted?: () => void;
+  initialFocus?: boolean;
 }
 
 function MemoryItem({
@@ -43,66 +39,39 @@ function MemoryItem({
   onUpdate,
   onBlur,
   onRemove,
-  shouldFocus,
-  onFocused,
-  shouldHighlight,
-  onHighlighted,
+  initialFocus,
 }: MemoryItemProps) {
-  const [isFocused, setIsFocused] = useState(false);
-  const [isHighlighting, setIsHighlighting] = useState(false);
+  const [isFocused, setIsFocused] = useState(!!initialFocus);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (shouldFocus) {
-      textareaRef.current?.focus();
-      onFocused?.();
-    }
-  }, [shouldFocus, onFocused]);
-
-  useEffect(() => {
-    if (!shouldHighlight) return;
-
-    wrapperRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (!initialFocus) return;
+    textareaRef.current?.scrollIntoView({
+      block: "center",
+      behavior: "smooth",
+    });
     textareaRef.current?.focus();
-    setIsHighlighting(true);
-
-    const timer = setTimeout(() => {
-      setIsHighlighting(false);
-      onHighlighted?.();
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [shouldHighlight, onHighlighted]);
+  }, []);
 
   return (
     <Section gap={0.25} alignItems="start">
       <Section flexDirection="row" alignItems="start" gap={0.5}>
-        <div
-          ref={wrapperRef}
-          className={cn(
-            "rounded-08 hover:bg-background-tint-00 w-full p-0.5",
-            "transition-colors ",
-            isHighlighting &&
-              "bg-action-link-01 border border-action-link-05 duration-700"
-          )}
-        >
-          <InputTextArea
-            ref={textareaRef}
-            placeholder="Type or paste in a personal note or memory"
-            value={memory.content}
-            onChange={(e) => onUpdate(originalIndex, e.target.value)}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => {
-              setIsFocused(false);
-              void onBlur(originalIndex);
-            }}
-            rows={3}
-            maxLength={MAX_MEMORY_LENGTH}
-            resizable={false}
-            className={cn(!isFocused && "bg-transparent")}
-          />
-        </div>
+        <InputTextArea
+          className="rounded-08 w-full p-0.5 bg-background-tint-01 hover:bg-background-tint-00 focus-within:bg-background-tint-00 border"
+          ref={textareaRef}
+          autoFocus={memory.isNew}
+          placeholder="Type or paste in a personal note or memory"
+          value={memory.content}
+          onChange={(e) => onUpdate(originalIndex, e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => {
+            setIsFocused(false);
+            void onBlur(originalIndex);
+          }}
+          rows={3}
+          maxLength={MAX_MEMORY_LENGTH}
+          resizable={false}
+        />
         <Disabled disabled={!memory.content.trim() && memory.isNew}>
           <Button
             prominence="tertiary"
@@ -113,9 +82,9 @@ function MemoryItem({
           />
         </Disabled>
       </Section>
-      {isFocused && (
+      <div className={isFocused ? "visible" : "invisible h-0 overflow-hidden"}>
         <CharacterCount value={memory.content} limit={MAX_MEMORY_LENGTH} />
-      )}
+      </div>
     </Section>
   );
 }
@@ -126,7 +95,6 @@ interface MemoriesModalProps {
   onClose?: () => void;
   initialTargetMemoryId?: number | null;
   initialTargetIndex?: number | null;
-  highlightFirstOnOpen?: boolean;
 }
 
 export default function MemoriesModal({
@@ -135,10 +103,8 @@ export default function MemoriesModal({
   onClose,
   initialTargetMemoryId,
   initialTargetIndex,
-  highlightFirstOnOpen = false,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
-  const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
 
   // Self-fetching: when no props provided, fetch from UserProvider
   const { user, refreshUser, updateUserPersonalization } = useUser();
@@ -174,32 +140,18 @@ export default function MemoriesModal({
     memoriesProp ?? user?.personalization?.memories ?? [];
   const effectiveSave = onSaveMemoriesProp ?? internalSaveMemories;
 
-  // Drives scroll-into-view + highlight when opening from a FileTile click
-  const [highlightMemoryId, setHighlightMemoryId] = useState<number | null>(
-    null
-  );
-
-  useEffect(() => {
-    if (initialTargetMemoryId != null) {
-      // Direct DB id available — use it
-      setHighlightMemoryId(initialTargetMemoryId);
-    } else if (initialTargetIndex != null && effectiveMemories.length > 0) {
-      // Backend index is ASC (oldest-first), but the frontend displays DESC
-      // (newest-first). Convert: descIdx = totalCount - 1 - ascIdx
-      const descIdx = effectiveMemories.length - 1 - initialTargetIndex;
-      const target = effectiveMemories[descIdx];
-      if (target) {
-        setHighlightMemoryId(target.id);
-      }
-    } else if (
-      highlightFirstOnOpen &&
-      effectiveMemories.length > 0 &&
-      effectiveMemories[0]
-    ) {
-      // Fallback: highlight the first displayed item (newest)
-      setHighlightMemoryId(effectiveMemories[0].id);
+  // Compute which memory to scroll-to + focus on open
+  let initialFocusId: number | null = null;
+  if (initialTargetMemoryId != null) {
+    initialFocusId = initialTargetMemoryId;
+  } else if (initialTargetIndex != null && effectiveMemories.length > 0) {
+    // Backend index is ASC (oldest-first), frontend displays DESC (newest-first)
+    const descIdx = effectiveMemories.length - 1 - initialTargetIndex;
+    const target = effectiveMemories[descIdx];
+    if (target) {
+      initialFocusId = target.id;
     }
-  }, [initialTargetMemoryId, initialTargetIndex]);
+  }
 
   const {
     searchQuery,
@@ -218,10 +170,7 @@ export default function MemoriesModal({
   });
 
   const onAddLine = () => {
-    const id = handleAddMemory();
-    if (id !== null) {
-      setFocusMemoryId(id);
-    }
+    handleAddMemory();
   };
 
   return (
@@ -278,12 +227,7 @@ export default function MemoriesModal({
                     onUpdate={handleUpdateMemory}
                     onBlur={handleBlurMemory}
                     onRemove={handleRemoveMemory}
-                    shouldFocus={memory.id === focusMemoryId}
-                    onFocused={() => setFocusMemoryId(null)}
-                    shouldHighlight={memory.id === highlightMemoryId}
-                    onHighlighted={() => {
-                      setHighlightMemoryId(null);
-                    }}
+                    initialFocus={memory.id === initialFocusId}
                   />
                   {memory.isNew && <Separator noPadding />}
                 </Fragment>
