@@ -92,7 +92,6 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs_for
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user_parallel,
 )
-from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
@@ -574,43 +573,6 @@ def _normalize_file_names_for_backwards_compatibility(
     return file_names + file_locations[len(file_names) :]
 
 
-def _fetch_and_check_file_connector_cc_pair_permissions(
-    connector_id: int,
-    user: User,
-    db_session: Session,
-    require_editable: bool,
-) -> ConnectorCredentialPair:
-    cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
-    if cc_pair is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No Connector-Credential Pair found for this connector",
-        )
-
-    has_requested_access = verify_user_has_access_to_cc_pair(
-        cc_pair_id=cc_pair.id,
-        db_session=db_session,
-        user=user,
-        get_editable=require_editable,
-    )
-    if has_requested_access:
-        return cc_pair
-
-    # Special case: global curators should be able to manage files
-    # for public file connectors even when they are not the creator.
-    if (
-        require_editable
-        and user.role == UserRole.GLOBAL_CURATOR
-        and cc_pair.access_type == AccessType.PUBLIC
-    ):
-        return cc_pair
-
-    raise HTTPException(
-        status_code=403,
-        detail="Access denied. User cannot manage files for this connector.",
-    )
-
-
 @router.post("/admin/connector/file/upload", tags=PUBLIC_API_TAGS)
 def upload_files_api(
     files: list[UploadFile],
@@ -623,7 +585,7 @@ def upload_files_api(
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
     """List all files in a file connector."""
@@ -635,13 +597,6 @@ def list_connector_files(
         raise HTTPException(
             status_code=400, detail="This endpoint only works with file connectors"
         )
-
-    _ = _fetch_and_check_file_connector_cc_pair_permissions(
-        connector_id=connector_id,
-        user=user,
-        db_session=db_session,
-        require_editable=False,
-    )
 
     file_locations = connector.connector_specific_config.get("file_locations", [])
     file_names = connector.connector_specific_config.get("file_names", [])
@@ -692,7 +647,7 @@ def update_connector_files(
     connector_id: int,
     files: list[UploadFile] | None = File(None),
     file_ids_to_remove: str = Form("[]"),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     """
@@ -710,13 +665,12 @@ def update_connector_files(
         )
 
     # Get the connector-credential pair for indexing/pruning triggers
-    # and validate user permissions for file management.
-    cc_pair = _fetch_and_check_file_connector_cc_pair_permissions(
-        connector_id=connector_id,
-        user=user,
-        db_session=db_session,
-        require_editable=True,
-    )
+    cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
+    if cc_pair is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No Connector-Credential Pair found for this connector",
+        )
 
     # Parse file IDs to remove
     try:
