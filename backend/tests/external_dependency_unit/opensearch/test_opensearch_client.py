@@ -1691,6 +1691,22 @@ class TestOpenSearchClient:
                     is_public=False,
                 ),
             ),
+            # Tests that we don't return documents that don't match keywords at
+            # all, even if they match filters.
+            "private-but-not-relevant-doc-user-a": _create_test_document_chunk(
+                document_id="private-but-not-relevant-doc-user-a",
+                chunk_index=0,
+                content="This content should not match the query at all",
+                hidden=False,
+                tenant_state=tenant_x,
+                document_access=DocumentAccess.build(
+                    user_emails=["user-a@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+            ),
             "private-doc-user-b": _create_test_document_chunk(
                 document_id="private-doc-user-b",
                 chunk_index=0,

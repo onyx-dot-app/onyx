@@ -803,7 +803,11 @@ class DocumentQuery:
                             }
                         }
                     },
-                ]
+                ],
+                # Ensure at least one term from the query is present in the
+                # document. This defaults to 1, unless a filter of must clause
+                # is supplied, in which case it defaults to 0.
+                "minimum_should_match": 1,
             }
         }
 
