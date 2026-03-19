@@ -1460,4 +1460,3 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         assert (
             "tool_choice" not in kwargs
         ), "tool_choice must not be sent to providers when no tools are provided"
-               
