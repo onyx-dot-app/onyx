@@ -489,20 +489,16 @@ services:
       - "${HOST_PORT_80:-80}:80"
       - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
-      - ../data/nginx:/etc/nginx/conf.d
+      - ../data/nginx:/nginx-templates:ro
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "6"
-    # The specified script waits for the api_server to start up.
-    # Without this we've seen issues where nginx shows no error logs but
-    # does not recieve any traffic
-    # NOTE: we strip \r so the script works on both Unix and Windows hosts.
-    # We write to /tmp because dos2unix cannot create temp files on Windows
-    # Docker bind mounts (permission denied on mkstemp).
     command: >
-      /bin/sh -c "sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
+      /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf
+      && cp -a /nginx-templates/. /etc/nginx/conf.d/
+      && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
       && chmod +x /tmp/run-nginx.sh
       && /tmp/run-nginx.sh app.conf.template"
 
