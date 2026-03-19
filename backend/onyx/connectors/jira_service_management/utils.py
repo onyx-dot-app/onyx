@@ -71,20 +71,21 @@ def format_sla_as_text(sla_data: dict[str, Any]) -> str:
 
     lines = ["SLA Status:"]
     for sla in values:
-        goal = sla.get("goal", {})
-        name = goal.get("name", "Unknown SLA")
-        completed = sla.get("completed", False)
-        breached = sla.get("breached", False)
-        time_remaining = sla.get("timeRemaining", {})
+        # SLA name is at top level, not in goal object
+        name = sla.get("name", "Unknown SLA")
+        completed_cycles = sla.get("completedCycles", [])
+        breached = any(c.get("breached", False) for c in completed_cycles)
+        ongoing = sla.get("ongoingCycle", {})
+        time_remaining = ongoing.get("remainingTime", {})
 
-        if completed:
+        if ongoing.get("completed", False):
             status = "Completed"
         elif breached:
             status = "BREACHED"
         else:
             remaining = time_remaining.get("formattedValue", "unknown")
             unit = time_remaining.get("unit", "")
-            status = f"{remaining} {unit} remaining"
+            status = f"{remaining} {unit} remaining" if remaining else "In progress"
 
         lines.append(f"  - {name}: {status}")
 

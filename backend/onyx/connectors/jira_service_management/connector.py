@@ -133,6 +133,10 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
             sanitized = "".join(
                 c for c in self.project_key if c not in _JQL_UNSAFE
             )
+            if not sanitized:
+                raise ConnectorValidationError(
+                    f"Project key '{self.project_key}' contains only invalid characters."
+                )
             conditions.append(f'project = "{sanitized}"')
             conditions.append("projectType = service_desk")
         else:
