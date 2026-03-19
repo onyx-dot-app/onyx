@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 # Requests timeout in seconds.
 _CANVAS_CALL_TIMEOUT: int = 30
 _CANVAS_API_VERSION: str = "/api/v1"
+# Matches the "next" URL in a Canvas Link header, e.g.:
+#   <https://canvas.example.com/api/v1/courses?page=2>; rel="next"
+# Captures the URL inside the angle brackets.
 _NEXT_LINK_PATTERN: re.Pattern[str] = re.compile(
     r'<([^>]+)>;\s*rel="next"'
 )
