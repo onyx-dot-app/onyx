@@ -65,7 +65,7 @@
         },
         {
           "scope": ["web/**"],
-          "rule": "For frontend changes (changes that touch the /web directory), make sure to enforce all standards described in the web/STANDARDS.md file."
+          "rule": "For frontend changes (changes that touch the /web directory), make sure to enforce all standards described in the web/AGENTS.md file."
         },
         {
           "scope": [],
