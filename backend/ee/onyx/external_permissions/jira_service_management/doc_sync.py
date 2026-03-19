@@ -5,6 +5,7 @@ from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFun
 from ee.onyx.external_permissions.utils import generic_doc_sync
 from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
@@ -28,7 +29,7 @@ def jira_service_management_doc_sync(
         jira_service_management_base_url=config.get("jira_service_management_base_url", ""),
         project_key=config.get("project_key"),
         comment_email_blacklist=config.get("comment_email_blacklist"),
-        labels_to_skip=config.get("labels_to_skip", []),
+        labels_to_skip=config.get("labels_to_skip") or JIRA_CONNECTOR_LABELS_TO_SKIP,
         jql_query=config.get("jql_query"),
         scoped_token=config.get("scoped_token", False),
     )
