@@ -25,15 +25,17 @@ _NEXT_LINK_PATTERN: re.Pattern[str] = re.compile(
 )
 
 
+_STATUS_TO_ERROR_CODE: dict[int, OnyxErrorCode] = {
+    401: OnyxErrorCode.CREDENTIAL_EXPIRED,
+    403: OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+    404: OnyxErrorCode.BAD_GATEWAY,
+    429: OnyxErrorCode.RATE_LIMITED,
+}
+
+
 def _error_code_for_status(status_code: int) -> OnyxErrorCode:
-    if status_code == 401:
-        return OnyxErrorCode.CREDENTIAL_EXPIRED
-    if status_code == 403:
-        return OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-    if status_code == 404:
-        return OnyxErrorCode.BAD_GATEWAY
-    if status_code == 429:
-        return OnyxErrorCode.RATE_LIMITED
+    if status_code in _STATUS_TO_ERROR_CODE:
+        return _STATUS_TO_ERROR_CODE[status_code]
     if status_code >= 500:
         return OnyxErrorCode.BAD_GATEWAY
     return OnyxErrorCode.CONNECTOR_VALIDATION_FAILED
