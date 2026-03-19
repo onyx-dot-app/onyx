@@ -451,41 +451,48 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
     );
 
     return (
-      <Section ref={ref} padding={1} alignItems="start" height="fit" {...props}>
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="start"
-          gap={0}
-          padding={0}
-        >
-          <div className="relative w-full">
-            {/* Close button is absolutely positioned because:
+      <Section
+        ref={ref}
+        padding={0.5}
+        alignItems="start"
+        height="fit"
+        {...props}
+      >
+        <Section padding={0.5} alignItems="start">
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="start"
+            gap={0}
+            padding={0}
+          >
+            <div className="relative w-full">
+              {/* Close button is absolutely positioned because:
                1. Figma mocks place it overlapping the top-right of the content area
                2. Using ContentAction with rightChildren causes the description
                   to wrap to the second line early due to the button reserving space */}
-            <div className="absolute top-0 right-0">{closeButton}</div>
-            <DialogPrimitive.Title asChild>
-              <div>
-                <Content
-                  icon={icon}
-                  moreIcon1={moreIcon1}
-                  moreIcon2={moreIcon2}
-                  title={title}
-                  description={description}
-                  sizePreset="section"
-                  variant="heading"
-                />
-                {description && (
-                  <DialogPrimitive.Description className="hidden">
-                    {description}
-                  </DialogPrimitive.Description>
-                )}
-              </div>
-            </DialogPrimitive.Title>
-          </div>
+              <div className="absolute top-0 right-0">{closeButton}</div>
+              <DialogPrimitive.Title asChild>
+                <div>
+                  <Content
+                    icon={icon}
+                    moreIcon1={moreIcon1}
+                    moreIcon2={moreIcon2}
+                    title={title}
+                    description={description}
+                    sizePreset="section"
+                    variant="heading"
+                  />
+                  {description && (
+                    <DialogPrimitive.Description className="hidden">
+                      {description}
+                    </DialogPrimitive.Description>
+                  )}
+                </div>
+              </DialogPrimitive.Title>
+            </div>
+          </Section>
         </Section>
-
         {children}
       </Section>
     );
