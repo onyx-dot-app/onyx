@@ -59,8 +59,9 @@ class CanvasApiClient:
             .removesuffix(_CANVAS_API_VERSION)
             + _CANVAS_API_VERSION
         )
-        # Always a str — __init__ raises ValueError if hostname is missing.
-        self._expected_host: str = urlparse(self.base_url).hostname  # type: ignore[assignment]
+        # Hostname is already validated above; reuse parsed_base instead
+        # of re-parsing.  Used by _parse_next_link to validate pagination URLs.
+        self._expected_host: str = parsed_base.hostname  # type: ignore[assignment]
 
     def get(
         self,
