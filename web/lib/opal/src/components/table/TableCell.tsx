@@ -1,6 +1,6 @@
-import { cn } from "@/lib/utils";
-import { useTableSize } from "@/refresh-components/table/TableSizeContext";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+import { cn } from "@opal/utils";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 
 interface TableCellProps

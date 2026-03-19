@@ -1,10 +1,10 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import { Button, Pagination } from "@opal/components";
+import { cn } from "@opal/utils";
+import { Button, Pagination, SelectButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { useTableSize } from "@/refresh-components/table/TableSizeContext";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 import type { ReactNode } from "react";
 
@@ -27,9 +27,11 @@ interface FooterSelectionModeProps {
   selectionState: SelectionState;
   /** Number of currently selected items. */
   selectedCount: number;
-  /** If provided, renders a "View" icon button when items are selected. */
+  /** Toggle view-filter on/off. */
   onView?: () => void;
-  /** If provided, renders a "Clear" icon button when items are selected. */
+  /** Whether the view-filter is currently active. */
+  isViewingSelected?: boolean;
+  /** Clears all selections. */
   onClear?: () => void;
   /** Number of items displayed per page. */
   pageSize: number;
@@ -41,7 +43,9 @@ interface FooterSelectionModeProps {
   totalPages: number;
   /** Called when the user navigates to a different page. */
   onPageChange: (page: number) => void;
-  /** Controls overall footer sizing. `"regular"` (default) or `"small"`. */
+  /** Unit label for count pagination. @default "items" */
+  units?: string;
+  /** Controls overall footer sizing. `"lg"` (default) or `"md"`. */
   size?: TableSize;
   className?: string;
 }
@@ -67,6 +71,8 @@ interface FooterSummaryModeProps {
   onPageChange: (page: number) => void;
   /** Optional extra element rendered after the summary text (e.g. a download icon). */
   leftExtra?: ReactNode;
+  /** Unit label for the summary text, e.g. "users". */
+  units?: string;
   className?: string;
 }
 
@@ -84,9 +90,10 @@ export type FooterProps = FooterSelectionModeProps | FooterSummaryModeProps;
 function getSelectionMessage(
   state: SelectionState,
   multi: boolean,
-  count: number
+  count: number,
+  isViewingSelected: boolean
 ): string {
-  if (state === "none") {
+  if (state === "none" && !isViewingSelected) {
     return multi ? "Select items to continue" : "Select an item to continue";
   }
   if (!multi) return "Item selected";
@@ -100,7 +107,7 @@ function getSelectionMessage(
  */
 export default function Footer(props: FooterProps) {
   const resolvedSize = useTableSize();
-  const isSmall = resolvedSize === "small";
+  const isSmall = resolvedSize === "md";
   return (
     <div
       className={cn(
@@ -118,6 +125,7 @@ export default function Footer(props: FooterProps) {
             multiSelect={props.multiSelect}
             selectedCount={props.selectedCount}
             onView={props.onView}
+            isViewingSelected={props.isViewingSelected}
             onClear={props.onClear}
             isSmall={isSmall}
           />
@@ -127,6 +135,7 @@ export default function Footer(props: FooterProps) {
               rangeStart={props.rangeStart}
               rangeEnd={props.rangeEnd}
               totalItems={props.totalItems}
+              units={props.units}
               isSmall={isSmall}
             />
             {props.leftExtra}
@@ -144,7 +153,7 @@ export default function Footer(props: FooterProps) {
             currentPage={props.currentPage}
             totalPages={props.totalPages}
             onChange={props.onPageChange}
-            units="items"
+            units={props.units}
             size={isSmall ? "sm" : "md"}
           />
         ) : (
@@ -169,6 +178,7 @@ interface SelectionLeftProps {
   multiSelect: boolean;
   selectedCount: number;
   onView?: () => void;
+  isViewingSelected?: boolean;
   onClear?: () => void;
   isSmall: boolean;
 }
@@ -178,15 +188,19 @@ function SelectionLeft({
   multiSelect,
   selectedCount,
   onView,
+  isViewingSelected = false,
   onClear,
   isSmall,
 }: SelectionLeftProps) {
   const message = getSelectionMessage(
     selectionState,
     multiSelect,
-    selectedCount
+    selectedCount,
+    isViewingSelected
   );
   const hasSelection = selectionState !== "none";
+  // Show buttons when items are selected OR when the view filter is active
+  const showActions = hasSelection || isViewingSelected;
 
   return (
     <div className="flex flex-row gap-1 items-center justify-center w-fit flex-shrink-0 h-fit px-1">
@@ -204,22 +218,22 @@ function SelectionLeft({
         </Text>
       )}
 
-      {hasSelection && (
+      {showActions && (
         <div className="flex flex-row items-center w-fit flex-shrink-0 h-fit">
           {onView && (
-            <Button
+            <SelectButton
               icon={SvgEye}
+              state={isViewingSelected ? "selected" : "empty"}
               onClick={onView}
-              tooltip="View"
+              tooltip="View selected"
               size={isSmall ? "sm" : "md"}
-              prominence="tertiary"
             />
           )}
           {onClear && (
             <Button
               icon={SvgXCircle}
               onClick={onClear}
-              tooltip="Clear selection"
+              tooltip="Deselect all"
               size={isSmall ? "sm" : "md"}
               prominence="tertiary"
             />
@@ -234,6 +248,7 @@ interface SummaryLeftProps {
   rangeStart: number;
   rangeEnd: number;
   totalItems: number;
+  units?: string;
   isSmall: boolean;
 }
 
@@ -241,8 +256,10 @@ function SummaryLeft({
   rangeStart,
   rangeEnd,
   totalItems,
+  units,
   isSmall,
 }: SummaryLeftProps) {
+  const suffix = units ? ` ${units}` : "";
   return (
     <div className="flex flex-row gap-1 items-center w-fit h-fit px-1">
       {isSmall ? (
@@ -255,6 +272,7 @@ function SummaryLeft({
           <Text as="span" secondaryMono text03>
             {totalItems}
           </Text>
+          {suffix}
         </Text>
       ) : (
         <Text mainUiMuted text03>
@@ -266,6 +284,7 @@ function SummaryLeft({
           <Text as="span" mainUiMono text03>
             {totalItems}
           </Text>
+          {suffix}
         </Text>
       )}
     </div>

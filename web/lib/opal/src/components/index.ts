@@ -52,3 +52,8 @@ export {
   type PaginationProps,
   type PaginationSize,
 } from "@opal/components/pagination/components";
+
+/* Table */
+export { Table } from "@opal/components/table/components";
+export { createTableColumns } from "@opal/components/table/columns";
+export type { DataTableProps } from "@opal/components/table/components";

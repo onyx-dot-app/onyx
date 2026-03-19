@@ -1,39 +1,56 @@
 "use client";
 "use no memo";
 
+import "@opal/components/table/styles.css";
+
 import { useEffect, useMemo } from "react";
 import { flexRender } from "@tanstack/react-table";
 import useDataTable, {
   toOnyxSortDirection,
-} from "@/refresh-components/table/hooks/useDataTable";
-import useColumnWidths from "@/refresh-components/table/hooks/useColumnWidths";
-import useDraggableRows from "@/refresh-components/table/hooks/useDraggableRows";
-import Table from "@/refresh-components/table/Table";
-import TableHeader from "@/refresh-components/table/TableHeader";
-import TableBody from "@/refresh-components/table/TableBody";
-import TableRow from "@/refresh-components/table/TableRow";
-import TableHead from "@/refresh-components/table/TableHead";
-import TableCell from "@/refresh-components/table/TableCell";
-import TableQualifier from "@/refresh-components/table/TableQualifier";
-import QualifierContainer from "@/refresh-components/table/QualifierContainer";
-import ActionsContainer from "@/refresh-components/table/ActionsContainer";
-import DragOverlayRow from "@/refresh-components/table/DragOverlayRow";
-import Footer from "@/refresh-components/table/Footer";
-import { TableSizeProvider } from "@/refresh-components/table/TableSizeContext";
-import { ColumnVisibilityPopover } from "@/refresh-components/table/ColumnVisibilityPopover";
-import { SortingPopover } from "@/refresh-components/table/SortingPopover";
-import type { WidthConfig } from "@/refresh-components/table/hooks/useColumnWidths";
+} from "@opal/components/table/hooks/useDataTable";
+import useColumnWidths from "@opal/components/table/hooks/useColumnWidths";
+import useDraggableRows from "@opal/components/table/hooks/useDraggableRows";
+import TableElement from "@opal/components/table/TableElement";
+import TableHeader from "@opal/components/table/TableHeader";
+import TableBody from "@opal/components/table/TableBody";
+import TableRow from "@opal/components/table/TableRow";
+import TableHead from "@opal/components/table/TableHead";
+import TableCell from "@opal/components/table/TableCell";
+import TableQualifier from "@opal/components/table/TableQualifier";
+import QualifierContainer from "@opal/components/table/QualifierContainer";
+import ActionsContainer from "@opal/components/table/ActionsContainer";
+import DragOverlayRow from "@opal/components/table/DragOverlayRow";
+import Footer from "@opal/components/table/Footer";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { TableSizeProvider } from "@opal/components/table/TableSizeContext";
+import { ColumnVisibilityPopover } from "@opal/components/table/ColumnVisibilityPopover";
+import { SortingPopover } from "@opal/components/table/ColumnSortabilityPopover";
+import type { WidthConfig } from "@opal/components/table/hooks/useColumnWidths";
 import type { ColumnDef } from "@tanstack/react-table";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type {
-  DataTableProps,
+  DataTableProps as BaseDataTableProps,
   DataTableFooterConfig,
   OnyxColumnDef,
   OnyxDataColumn,
   OnyxQualifierColumn,
   OnyxActionsColumn,
-} from "@/refresh-components/table/types";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+} from "@opal/components/table/types";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
+
+// ---------------------------------------------------------------------------
+// Qualifier × SelectionBehavior
+// ---------------------------------------------------------------------------
+
+type Qualifier = "simple" | "avatar" | "icon";
+type SelectionBehavior = "no-select" | "single-select" | "multi-select";
+
+export type DataTableProps<TData> = BaseDataTableProps<TData> & {
+  /** Leading qualifier column type. @default "simple" */
+  qualifier?: Qualifier;
+  /** Row selection behavior. @default "no-select" */
+  selectionBehavior?: SelectionBehavior;
+};
 
 // ---------------------------------------------------------------------------
 // Internal: resolve size-dependent widths and build TanStack columns
@@ -57,6 +74,7 @@ function processColumns<TData>(
   const columnMinWidths: Record<string, number> = {};
   const columnKindMap = new Map<string, OnyxColumnDef<TData>>();
   let qualifierColumn: OnyxQualifierColumn<TData> | null = null;
+  let firstDataColumnSeen = false;
 
   for (const col of columns) {
     const resolvedWidth =
@@ -69,6 +87,12 @@ function processColumns<TData>(
       size:
         "fixed" in resolvedWidth ? resolvedWidth.fixed : resolvedWidth.weight,
     };
+
+    // First data column is never hideable
+    if (col.kind === "data" && !firstDataColumnSeen) {
+      firstDataColumnSeen = true;
+      clonedDef.enableHiding = false;
+    }
 
     tanstackColumns.push(clonedDef);
 
@@ -113,10 +137,10 @@ function processColumns<TData>(
  *   tc.actions(),
  * ];
  *
- * <DataTable data={items} columns={columns} footer={{ mode: "selection" }} />
+ * <Table data={items} columns={columns} footer={{}} />
  * ```
  */
-export default function DataTable<TData>(props: DataTableProps<TData>) {
+export function Table<TData>(props: DataTableProps<TData>) {
   const {
     data,
     columns,
@@ -126,7 +150,10 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     initialColumnVisibility,
     draggable,
     footer,
-    size = "regular",
+    size = "lg",
+    variant = "cards",
+    qualifier = "simple",
+    selectionBehavior = "no-select",
     onSelectionChange,
     onRowClick,
     searchTerm,
@@ -138,9 +165,37 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
 
   const effectivePageSize = pageSize ?? (footer ? 10 : data.length);
 
+  // Whether the qualifier column should exist in the DOM.
+  // "simple" only gets a qualifier column for multi-select (checkboxes).
+  // "simple" + no-select/single-select = no qualifier column — single-select
+  // uses row-level background coloring instead.
+  const hasQualifierColumn =
+    qualifier !== "simple" || selectionBehavior === "multi-select";
+
   // 1. Process columns (memoized on columns + size)
   const { tanstackColumns, widthConfig, qualifierColumn, columnKindMap } =
-    useMemo(() => processColumns(columns, size), [columns, size]);
+    useMemo(() => {
+      const processed = processColumns(columns, size);
+      if (!hasQualifierColumn) {
+        // Remove qualifier from TanStack columns and width config entirely
+        return {
+          ...processed,
+          tanstackColumns: processed.tanstackColumns.filter(
+            (c) => c.id !== "qualifier"
+          ),
+          widthConfig: {
+            ...processed.widthConfig,
+            fixedColumnIds: new Set(
+              Array.from(processed.widthConfig.fixedColumnIds).filter(
+                (id) => id !== "qualifier"
+              )
+            ),
+          },
+          qualifierColumn: null,
+        };
+      }
+      return processed;
+    }, [columns, size, hasQualifierColumn]);
 
   // 2. Call useDataTable
   const {
@@ -155,7 +210,9 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
     selectedRowIds,
     clearSelection,
     toggleAllPageRowsSelected,
+    toggleAllRowsSelected,
     isAllPageRowsSelected,
+    isAllRowsSelected,
     isViewingSelected,
     enterViewMode,
     exitViewMode,
@@ -193,16 +250,6 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
       );
     }
   }, [!!serverSide, !!draggable]); // eslint-disable-line react-hooks/exhaustive-deps
-  const footerShowView =
-    footer?.mode === "selection" ? footer.showView : undefined;
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "production" && serverSide && footerShowView) {
-      console.warn(
-        "DataTable: `showView` is ignored when `serverSide` is enabled. " +
-          "View mode requires client-side filtering."
-      );
-    }
-  }, [!!serverSide, !!footerShowView]); // eslint-disable-line react-hooks/exhaustive-deps
   const effectiveDraggable = serverSide ? undefined : draggable;
   const draggableReturn = useDraggableRows({
     data,
@@ -212,10 +259,11 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   });
 
   const hasDraggable = !!effectiveDraggable;
-  const rowVariant = hasDraggable ? "table" : "list";
 
-  const isSelectable =
-    qualifierColumn != null && qualifierColumn.selectable !== false;
+  const isSelectable = selectionBehavior !== "no-select";
+  const isMultiSelect = selectionBehavior === "multi-select";
+  // Checkboxes appear for any selectable table
+  const showQualifierCheckbox = isSelectable;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -224,11 +272,13 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
   const isServerLoading = !!serverSide?.isLoading;
 
   function renderFooter(footerConfig: DataTableFooterConfig) {
-    if (footerConfig.mode === "selection") {
+    // Mode derived from selectionBehavior — single/multi-select use selection
+    // footer, no-select uses summary footer.
+    if (isSelectable) {
       return (
         <Footer
           mode="selection"
-          multiSelect={footerConfig.multiSelect !== false}
+          multiSelect={isMultiSelect}
           selectionState={selectionState}
           selectedCount={selectedCount}
           onClear={
@@ -239,22 +289,24 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
             })
           }
           onView={
-            footerConfig.showView
+            !serverSide
               ? isViewingSelected
                 ? exitViewMode
                 : enterViewMode
               : undefined
           }
+          isViewingSelected={isViewingSelected}
           pageSize={resolvedPageSize}
           totalItems={totalItems}
           currentPage={currentPage}
           totalPages={totalPages}
           onPageChange={setPage}
+          units={footerConfig.units}
         />
       );
     }
 
-    // Summary mode
+    // Summary mode (no-select only)
     const rangeStart =
       totalItems === 0
         ? 0
@@ -275,6 +327,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
         totalPages={totalPages}
         onPageChange={setPage}
         leftExtra={footerConfig.leftExtra}
+        units={footerConfig.units}
       />
     );
   }
@@ -303,7 +356,10 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
               : undefined),
           }}
         >
-          <Table
+          <TableElement
+            size={size}
+            variant={variant}
+            selectionBehavior={selectionBehavior}
             width={
               Object.keys(columnWidths).length > 0
                 ? Object.values(columnWidths).reduce((sum, w) => sum + w, 0)
@@ -311,7 +367,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
             }
           >
             <colgroup>
-              {table.getAllLeafColumns().map((col) => (
+              {table.getVisibleLeafColumns().map((col) => (
                 <col
                   key={col.id}
                   style={
@@ -328,28 +384,26 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                   {headerGroup.headers.map((header, headerIndex) => {
                     const colDef = columnKindMap.get(header.id);
 
-                    // Qualifier header
+                    // Qualifier header — select-all checkbox only for multi-select
                     if (colDef?.kind === "qualifier") {
-                      if (qualifierColumn?.header === false) {
-                        return (
-                          <QualifierContainer key={header.id} type="head" />
-                        );
-                      }
                       return (
                         <QualifierContainer key={header.id} type="head">
-                          <TableQualifier
-                            content={
-                              qualifierColumn?.headerContentType ?? "simple"
-                            }
-                            selectable={isSelectable}
-                            selected={isSelectable && isAllPageRowsSelected}
-                            onSelectChange={
-                              isSelectable
-                                ? (checked) =>
-                                    toggleAllPageRowsSelected(checked)
-                                : undefined
-                            }
-                          />
+                          {isMultiSelect && (
+                            <Checkbox
+                              checked={isAllRowsSelected}
+                              indeterminate={
+                                !isAllRowsSelected && selectedCount > 0
+                              }
+                              onCheckedChange={(checked) => {
+                                // Indeterminate → clear all; otherwise toggle normally
+                                if (!isAllRowsSelected && selectedCount > 0) {
+                                  toggleAllRowsSelected(false);
+                                } else {
+                                  toggleAllRowsSelected(checked);
+                                }
+                              }}
+                            />
+                          )}
                         </QualifierContainer>
                       );
                     }
@@ -437,7 +491,6 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                       return (
                         <DragOverlayRow
                           row={row}
-                          variant={rowVariant}
                           columnWidths={columnWidths}
                           columnKindMap={columnKindMap}
                           qualifierColumn={qualifierColumn}
@@ -461,7 +514,6 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                 return (
                   <TableRow
                     key={row.id}
-                    variant={rowVariant}
                     sortableId={rowId}
                     selected={row.getIsSelected()}
                     onClick={() => {
@@ -474,6 +526,10 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                       if (onRowClick) {
                         onRowClick(row.original);
                       } else if (isSelectable) {
+                        if (!isMultiSelect) {
+                          // single-select: clear all, then select this row
+                          table.toggleAllRowsSelected(false);
+                        }
                         row.toggleSelected();
                       }
                     }}
@@ -484,6 +540,13 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                       // Qualifier cell
                       if (cellColDef?.kind === "qualifier") {
                         const qDef = cellColDef as OnyxQualifierColumn<TData>;
+
+                        // Resolve content based on the qualifier prop:
+                        // - "simple" renders nothing (checkbox only when selectable)
+                        // - "avatar"/"icon" render from column config
+                        const qualifierContent =
+                          qualifier === "simple" ? "simple" : qDef.content;
+
                         return (
                           <QualifierContainer
                             key={cell.id}
@@ -491,15 +554,20 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                             onClick={(e) => e.stopPropagation()}
                           >
                             <TableQualifier
-                              content={qDef.content}
+                              content={qualifierContent}
                               initials={qDef.getInitials?.(row.original)}
                               icon={qDef.getIcon?.(row.original)}
                               imageSrc={qDef.getImageSrc?.(row.original)}
-                              selectable={isSelectable}
-                              selected={isSelectable && row.getIsSelected()}
+                              selectable={showQualifierCheckbox}
+                              selected={
+                                showQualifierCheckbox && row.getIsSelected()
+                              }
                               onSelectChange={
-                                isSelectable
+                                showQualifierCheckbox
                                   ? (checked) => {
+                                      if (!isMultiSelect) {
+                                        table.toggleAllRowsSelected(false);
+                                      }
                                       row.toggleSelected(checked);
                                     }
                                   : undefined
@@ -539,7 +607,7 @@ export default function DataTable<TData>(props: DataTableProps<TData>) {
                 );
               })}
             </TableBody>
-          </Table>
+          </TableElement>
         </div>
 
         {footer && renderFooter(footer)}

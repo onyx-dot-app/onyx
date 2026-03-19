@@ -7,11 +7,10 @@ import {
   type RowData,
   type SortingState,
 } from "@tanstack/react-table";
-import { Button } from "@opal/components";
+import { Button, LineItemButton } from "@opal/components";
 import { SvgArrowUpDown, SvgSortOrder, SvgCheck } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
 import Divider from "@/refresh-components/Divider";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 
 // ---------------------------------------------------------------------------
@@ -21,7 +20,7 @@ import Text from "@/refresh-components/texts/Text";
 interface SortingPopoverProps<TData extends RowData = RowData> {
   table: Table<TData>;
   sorting: SortingState;
-  size?: "regular" | "small";
+  size?: "md" | "lg";
   footerText?: string;
   ascendingLabel?: string;
   descendingLabel?: string;
@@ -30,7 +29,7 @@ interface SortingPopoverProps<TData extends RowData = RowData> {
 function SortingPopover<TData extends RowData>({
   table,
   sorting,
-  size = "regular",
+  size = "lg",
   footerText,
   ascendingLabel = "Ascending",
   descendingLabel = "Descending",
@@ -48,8 +47,8 @@ function SortingPopover<TData extends RowData>({
         <Button
           icon={currentSort === null ? SvgArrowUpDown : SvgSortOrder}
           interaction={open ? "hover" : "rest"}
-          size={size === "small" ? "sm" : "md"}
-          prominence="internal"
+          size={size === "md" ? "sm" : "md"}
+          prominence="tertiary"
           tooltip="Sort"
         />
       </Popover.Trigger>
@@ -68,18 +67,20 @@ function SortingPopover<TData extends RowData>({
         >
           <Divider showTitle text="Sort by" />
 
-          <LineItem
-            selected={currentSort === null}
-            emphasized
+          <LineItemButton
+            selectVariant="select-heavy"
+            state={currentSort === null ? "selected" : "empty"}
+            title="Manual Ordering"
+            sizePreset="main-ui"
             rightChildren={
-              currentSort === null ? <SvgCheck size={16} /> : undefined
+              currentSort === null ? (
+                <SvgCheck size={16} className="text-action-link-05" />
+              ) : undefined
             }
             onClick={() => {
               table.resetSorting();
             }}
-          >
-            Manual Ordering
-          </LineItem>
+          />
 
           {sortableColumns.map((column) => {
             const isSorted = currentSort?.id === column.id;
@@ -89,11 +90,17 @@ function SortingPopover<TData extends RowData>({
                 : column.id;
 
             return (
-              <LineItem
+              <LineItemButton
                 key={column.id}
-                selected={isSorted}
-                emphasized
-                rightChildren={isSorted ? <SvgCheck size={16} /> : undefined}
+                selectVariant="select-heavy"
+                state={isSorted ? "selected" : "empty"}
+                title={label}
+                sizePreset="main-ui"
+                rightChildren={
+                  isSorted ? (
+                    <SvgCheck size={16} className="text-action-link-05" />
+                  ) : undefined
+                }
                 onClick={() => {
                   if (isSorted) {
                     table.resetSorting();
@@ -101,9 +108,7 @@ function SortingPopover<TData extends RowData>({
                   }
                   column.toggleSorting(false);
                 }}
-              >
-                {label}
-              </LineItem>
+              />
             );
           })}
 
@@ -111,31 +116,35 @@ function SortingPopover<TData extends RowData>({
             <>
               <Divider showTitle text="Sorting Order" />
 
-              <LineItem
-                selected={!currentSort.desc}
-                emphasized
+              <LineItemButton
+                selectVariant="select-heavy"
+                state={!currentSort.desc ? "selected" : "empty"}
+                title={ascendingLabel}
+                sizePreset="main-ui"
                 rightChildren={
-                  !currentSort.desc ? <SvgCheck size={16} /> : undefined
+                  !currentSort.desc ? (
+                    <SvgCheck size={16} className="text-action-link-05" />
+                  ) : undefined
                 }
                 onClick={() => {
                   table.setSorting([{ id: currentSort.id, desc: false }]);
                 }}
-              >
-                {ascendingLabel}
-              </LineItem>
+              />
 
-              <LineItem
-                selected={currentSort.desc}
-                emphasized
+              <LineItemButton
+                selectVariant="select-heavy"
+                state={currentSort.desc ? "selected" : "empty"}
+                title={descendingLabel}
+                sizePreset="main-ui"
                 rightChildren={
-                  currentSort.desc ? <SvgCheck size={16} /> : undefined
+                  currentSort.desc ? (
+                    <SvgCheck size={16} className="text-action-link-05" />
+                  ) : undefined
                 }
                 onClick={() => {
                   table.setSorting([{ id: currentSort.id, desc: true }]);
                 }}
-              >
-                {descendingLabel}
-              </LineItem>
+              />
             </>
           )}
         </Popover.Menu>
@@ -149,7 +158,7 @@ function SortingPopover<TData extends RowData>({
 // ---------------------------------------------------------------------------
 
 interface CreateSortingColumnOptions {
-  size?: "regular" | "small";
+  size?: "md" | "lg";
   footerText?: string;
   ascendingLabel?: string;
   descendingLabel?: string;
