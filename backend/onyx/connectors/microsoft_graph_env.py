@@ -81,8 +81,7 @@ def resolve_microsoft_environment(
     if env is None:
         known = ", ".join(sorted(_GRAPH_HOST_INDEX))
         raise ConnectorValidationError(
-            f"Unsupported Microsoft Graph API host '{graph_api_host}'. "
-            f"Recognised hosts: {known}"
+            f"Unsupported Microsoft Graph API host '{graph_api_host}'. Recognised hosts: {known}"
         )
 
     if env.authority_host != authority_host:

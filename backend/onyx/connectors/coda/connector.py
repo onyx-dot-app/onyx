@@ -698,8 +698,7 @@ class CodaConnector(LoadConnector, PollConnector):
                 )
             elif e.status_code == 429:
                 raise ConnectorValidationError(
-                    "Validation failed due to Coda rate-limits being exceeded (HTTP 429). "
-                    "Please try again later."
+                    "Validation failed due to Coda rate-limits being exceeded (HTTP 429). Please try again later."
                 )
             else:
                 raise UnexpectedValidationError(

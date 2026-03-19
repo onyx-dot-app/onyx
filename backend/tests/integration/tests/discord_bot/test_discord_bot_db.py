@@ -151,7 +151,8 @@ class TestRegistrationKeyAPI:
         db_session.commit()
 
     def test_registration_key_is_unique(
-        self, db_session: Session  # noqa: ARG002
+        self,
+        db_session: Session,  # noqa: ARG002
     ) -> None:
         """Each generated key is unique."""
         keys = [generate_discord_registration_key("tenant") for _ in range(5)]

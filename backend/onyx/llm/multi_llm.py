@@ -533,6 +533,11 @@ class LitellmLLM(LLM):
                 ):
                     messages = _strip_tool_content_from_messages(messages)
 
+                # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
+                # reject requests where tool_choice is explicitly null.
+                if tools and tool_choice is not None:
+                    optional_kwargs["tool_choice"] = tool_choice
+
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
@@ -541,7 +546,6 @@ class LitellmLLM(LLM):
                     custom_llm_provider=self._custom_llm_provider or None,
                     messages=messages,
                     tools=tools,
-                    tool_choice=tool_choice,
                     stream=stream,
                     temperature=temperature,
                     timeout=timeout_override or self._timeout,

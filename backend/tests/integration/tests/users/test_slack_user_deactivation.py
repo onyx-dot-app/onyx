@@ -62,7 +62,9 @@ def _get_user_is_active(email: str, admin_user: DATestUser) -> bool:
     return matching[0].is_active
 
 
-def test_slack_user_deactivate_and_reactivate(reset: None) -> None:  # noqa: ARG001
+def test_slack_user_deactivate_and_reactivate(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """Admin can deactivate and then reactivate a Slack user."""
     admin_user = UserManager.create(name="admin_user")
 

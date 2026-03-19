@@ -62,8 +62,7 @@ def is_upload_too_large(upload: UploadFile, max_bytes: int) -> bool:
     size_bytes = get_upload_size_bytes(upload)
     if size_bytes is None:
         logger.warning(
-            "Could not determine upload size; skipping size-limit check for "
-            f"'{get_safe_filename(upload)}'"
+            f"Could not determine upload size; skipping size-limit check for '{get_safe_filename(upload)}'"
         )
         return False
     return size_bytes > max_bytes

@@ -75,7 +75,9 @@ def test_pat_lifecycle_happy_path(reset: None) -> None:  # noqa: ARG001
     assert len(tokens_after_revoke) == 0
 
 
-def test_pat_user_isolation_and_authentication(reset: None) -> None:  # noqa: ARG001
+def test_pat_user_isolation_and_authentication(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """
     PATs authenticate as real users, and users can only see/manage their own tokens.
     """
@@ -86,7 +88,7 @@ def test_pat_user_isolation_and_authentication(reset: None) -> None:  # noqa: AR
     user_a_pats = []
     for i in range(2):
         pat = PATManager.create(
-            name=f"User A Token {i+1}",
+            name=f"User A Token {i + 1}",
             expiration_days=30,
             user_performing_action=user_a,
         )
@@ -95,7 +97,7 @@ def test_pat_user_isolation_and_authentication(reset: None) -> None:  # noqa: AR
     user_b_pats = []
     for i in range(2):
         pat = PATManager.create(
-            name=f"User B Token {i+1}",
+            name=f"User B Token {i + 1}",
             expiration_days=30,
             user_performing_action=user_b,
         )
@@ -440,8 +442,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     )
     assert basic_manage_response.status_code in [403, 401]
     print(
-        f"[✓] Basic PAT correctly denied access ({basic_manage_response.status_code}) "
-        "to /manage/admin/connector"
+        f"[✓] Basic PAT correctly denied access ({basic_manage_response.status_code}) to /manage/admin/connector"
     )
 
     # Verify PATs authenticate with correct identity and role
@@ -492,12 +493,10 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
         "  - Admin PAT: Full access to admin-only endpoints (/admin/*, /manage/admin/*)"
     )
     print(
-        "  - Curator PAT: Access to management endpoints (/manage/admin/*), "
-        "denied on admin-only (/admin/*)"
+        "  - Curator PAT: Access to management endpoints (/manage/admin/*), denied on admin-only (/admin/*)"
     )
     print(
-        "  - Global Curator PAT: Access to management endpoints (/manage/admin/*), "
-        "denied on admin-only (/admin/*)"
+        "  - Global Curator PAT: Access to management endpoints (/manage/admin/*), denied on admin-only (/admin/*)"
     )
     print("  - Basic PAT: Denied access to admin and management endpoints")
     print("  - All PATs: Can access basic endpoints (/persona, /me, etc.)")

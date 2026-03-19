@@ -116,10 +116,7 @@ def test_extracts_from_multiple_tool_calls() -> None:
             )
         ]
     )
-    message = (
-        f"[plot.png](http://localhost/api/chat/file/{id_1}) "
-        f"and [report.csv](http://localhost/api/chat/file/{id_2})"
-    )
+    message = f"[plot.png](http://localhost/api/chat/file/{id_1}) and [report.csv](http://localhost/api/chat/file/{id_2})"
 
     result = _extract_referenced_file_descriptors([tc1, tc2], message)
 

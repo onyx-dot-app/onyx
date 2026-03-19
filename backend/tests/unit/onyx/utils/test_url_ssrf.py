@@ -14,6 +14,7 @@ from onyx.utils.url import _is_ip_private_or_reserved
 from onyx.utils.url import _validate_and_resolve_url
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.url import SSRFException
+from onyx.utils.url import validate_outbound_http_url
 
 
 class TestIsIpPrivateOrReserved:
@@ -305,3 +306,22 @@ class TestSsrfSafeGet:
 
                 call_args = mock_get.call_args
                 assert call_args[1]["timeout"] == (5, 15)
+
+
+class TestValidateOutboundHttpUrl:
+    def test_rejects_private_ip_by_default(self) -> None:
+        with pytest.raises(SSRFException, match="internal/private IP"):
+            validate_outbound_http_url("http://127.0.0.1:8000")
+
+    def test_allows_private_ip_when_explicitly_enabled(self) -> None:
+        validated_url = validate_outbound_http_url(
+            "http://127.0.0.1:8000", allow_private_network=True
+        )
+        assert validated_url == "http://127.0.0.1:8000"
+
+    def test_blocks_metadata_hostname_when_private_is_enabled(self) -> None:
+        with pytest.raises(SSRFException, match="not allowed"):
+            validate_outbound_http_url(
+                "http://metadata.google.internal/latest",
+                allow_private_network=True,
+            )

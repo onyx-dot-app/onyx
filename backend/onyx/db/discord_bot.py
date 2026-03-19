@@ -100,8 +100,7 @@ def get_or_create_discord_service_api_key(
         # Database only stores the hash, so we must regenerate to get the raw key.
         # This is safe since the Discord bot is the only consumer of this key.
         logger.debug(
-            f"Found existing Discord service API key for tenant {tenant_id} that isn't in cache, "
-            "regenerating to update cache"
+            f"Found existing Discord service API key for tenant {tenant_id} that isn't in cache, regenerating to update cache"
         )
         new_api_key = generate_api_key(tenant_id)
         existing.hashed_api_key = hash_api_key(new_api_key)

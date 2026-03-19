@@ -1,8 +1,8 @@
 import "@opal/core/animations/styles.css";
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { cn } from "@opal/utils";
-import type { WithoutStyles } from "@opal/types";
-import { widthVariants, type WidthVariant } from "@opal/shared";
+import type { WithoutStyles, ExtremaSizeVariants } from "@opal/types";
+import { widthVariants } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Context-per-group registry
@@ -40,7 +40,7 @@ interface HoverableRootProps
   children: React.ReactNode;
   group: string;
   /** Width preset. @default "auto" */
-  widthVariant?: WidthVariant;
+  widthVariant?: ExtremaSizeVariants;
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -84,7 +84,7 @@ interface HoverableItemProps
 function HoverableRoot({
   group,
   children,
-  widthVariant = "auto",
+  widthVariant = "full",
   ref,
   onMouseEnter: consumerMouseEnter,
   onMouseLeave: consumerMouseLeave,

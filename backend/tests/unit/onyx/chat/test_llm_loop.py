@@ -1,9 +1,13 @@
-"""Tests for llm_loop.py, specifically the construct_message_history function."""
+"""Tests for llm_loop.py, including history construction and empty-response paths."""
+
+from unittest.mock import Mock
 
 import pytest
 
+from onyx.chat.llm_loop import _build_empty_llm_response_error
 from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
+from onyx.chat.llm_loop import EmptyLLMResponseError
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ContextFileMetadata
@@ -13,6 +17,7 @@ from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolCallKickoff
@@ -1167,3 +1172,57 @@ class TestFallbackToolExtraction:
 
         assert result is llm_step_result
         assert attempted is False
+
+
+class TestEmptyLlmResponseClassification:
+    def _make_llm(self, provider: str = "openai", model: str = "gpt-5.2") -> Mock:
+        llm = Mock()
+        llm.config = LLMConfig(
+            model_provider=provider,
+            model_name=model,
+            temperature=0.0,
+            max_input_tokens=4096,
+        )
+        return llm
+
+    def test_openai_empty_stream_is_classified_as_budget_exceeded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("onyx.chat.llm_loop.is_true_openai_model", lambda *_: True)
+
+        err = _build_empty_llm_response_error(
+            llm=self._make_llm(),
+            llm_step_result=LlmStepResult(
+                reasoning=None,
+                answer=None,
+                tool_calls=None,
+                raw_answer=None,
+            ),
+            tool_choice=ToolChoiceOptions.AUTO,
+        )
+
+        assert isinstance(err, EmptyLLMResponseError)
+        assert err.error_code == "BUDGET_EXCEEDED"
+        assert err.is_retryable is False
+        assert "quota" in err.client_error_msg.lower()
+
+    def test_reasoning_only_response_uses_generic_empty_response_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("onyx.chat.llm_loop.is_true_openai_model", lambda *_: True)
+
+        err = _build_empty_llm_response_error(
+            llm=self._make_llm(),
+            llm_step_result=LlmStepResult(
+                reasoning="scratchpad only",
+                answer=None,
+                tool_calls=None,
+                raw_answer=None,
+            ),
+            tool_choice=ToolChoiceOptions.AUTO,
+        )
+
+        assert isinstance(err, EmptyLLMResponseError)
+        assert err.error_code == "EMPTY_LLM_RESPONSE"
+        assert err.is_retryable is True
+        assert "quota" not in err.client_error_msg.lower()

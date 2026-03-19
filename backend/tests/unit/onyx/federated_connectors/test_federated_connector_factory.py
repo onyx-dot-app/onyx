@@ -193,6 +193,5 @@ class TestFederatedConnectorMappingIntegrity:
 
         if unmapped_sources:
             pytest.fail(
-                f"FederatedConnectorSource values without connector mappings: "
-                f"{[s.value for s in unmapped_sources]}"
+                f"FederatedConnectorSource values without connector mappings: {[s.value for s in unmapped_sources]}"
             )

@@ -196,10 +196,9 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         mock_celery_app.send_task.assert_called_once()
         call_kwargs = mock_celery_app.send_task.call_args
         actual_priority = call_kwargs.kwargs["priority"]
-        assert actual_priority == expected_priority, (
-            f"Expected priority {expected_priority} for has_successful_index={has_successful_index}, "
-            f"but got {actual_priority}"
-        )
+        assert (
+            actual_priority == expected_priority
+        ), f"Expected priority {expected_priority} for has_successful_index={has_successful_index}, but got {actual_priority}"
 
     @patch(
         "onyx.background.celery.tasks.docfetching.task_creation_utils.IndexingCoordination.try_create_index_attempt"

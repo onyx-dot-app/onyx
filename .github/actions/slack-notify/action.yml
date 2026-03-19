@@ -1,11 +1,17 @@
-name: "Slack Notify on Failure"
-description: "Sends a Slack notification when a workflow fails"
+name: "Slack Notify"
+description: "Sends a Slack notification for workflow events"
 inputs:
   webhook-url:
     description: "Slack webhook URL (can also use SLACK_WEBHOOK_URL env var)"
     required: false
+  details:
+    description: "Additional message body content"
+    required: false
   failed-jobs:
-    description: "List of failed job names (newline-separated)"
+    description: "Deprecated alias for details"
+    required: false
+  mention:
+    description: "GitHub username to resolve to a Slack @-mention. Replaces {mention} in details."
     required: false
   title:
     description: "Title for the notification"
@@ -21,7 +27,9 @@ runs:
       shell: bash
       env:
         SLACK_WEBHOOK_URL: ${{ inputs.webhook-url }}
+        DETAILS: ${{ inputs.details }}
         FAILED_JOBS: ${{ inputs.failed-jobs }}
+        MENTION_USER: ${{ inputs.mention }}
         TITLE: ${{ inputs.title }}
         REF_NAME: ${{ inputs.ref-name }}
         REPO: ${{ github.repository }}
@@ -44,6 +52,39 @@ runs:
           REF_NAME="$GITHUB_REF_NAME"
         fi
 
+        if [ -z "$DETAILS" ]; then
+          DETAILS="$FAILED_JOBS"
+        fi
+
+        # Resolve {mention} placeholder if a GitHub username was provided.
+        # Looks up the username in user-mappings.json (co-located with this action)
+        # and replaces {mention} with <@SLACK_ID> for a Slack @-mention.
+        # Falls back to the plain GitHub username if not found in the mapping.
+        if [ -n "$MENTION_USER" ]; then
+          MAPPINGS_FILE="${GITHUB_ACTION_PATH}/user-mappings.json"
+          slack_id="$(jq -r --arg gh "$MENTION_USER" 'to_entries[] | select(.value | ascii_downcase == ($gh | ascii_downcase)) | .key' "$MAPPINGS_FILE" 2>/dev/null | head -1)"
+
+          if [ -n "$slack_id" ]; then
+            mention_text="<@${slack_id}>"
+          else
+            mention_text="${MENTION_USER}"
+          fi
+
+          DETAILS="${DETAILS//\{mention\}/$mention_text}"
+          TITLE="${TITLE//\{mention\}/}"
+        else
+          DETAILS="${DETAILS//\{mention\}/}"
+          TITLE="${TITLE//\{mention\}/}"
+        fi
+
+        normalize_multiline() {
+          printf '%s' "$1" | awk 'BEGIN { ORS=""; first=1 } { if (!first) printf "\\n"; printf "%s", $0; first=0 }'
+        }
+
+        DETAILS="$(normalize_multiline "$DETAILS")"
+        REF_NAME="$(normalize_multiline "$REF_NAME")"
+        TITLE="$(normalize_multiline "$TITLE")"
+
         # Escape JSON special characters
         escape_json() {
           local input="$1"
@@ -59,12 +100,12 @@ runs:
         }
 
         REF_NAME_ESC=$(escape_json "$REF_NAME")
-        FAILED_JOBS_ESC=$(escape_json "$FAILED_JOBS")
+        DETAILS_ESC=$(escape_json "$DETAILS")
         WORKFLOW_URL_ESC=$(escape_json "$WORKFLOW_URL")
         TITLE_ESC=$(escape_json "$TITLE")
 
         # Build JSON payload piece by piece
-        # Note: FAILED_JOBS_ESC already contains \n sequences that should remain as \n in JSON
+        # Note: DETAILS_ESC already contains \n sequences that should remain as \n in JSON
         PAYLOAD="{"
         PAYLOAD="${PAYLOAD}\"text\":\"${TITLE_ESC}\","
         PAYLOAD="${PAYLOAD}\"blocks\":[{"
@@ -79,10 +120,10 @@ runs:
         PAYLOAD="${PAYLOAD}{\"type\":\"mrkdwn\",\"text\":\"*Run ID:*\\n#${RUN_NUMBER}\"}"
         PAYLOAD="${PAYLOAD}]"
         PAYLOAD="${PAYLOAD}}"
-        if [ -n "$FAILED_JOBS" ]; then
+        if [ -n "$DETAILS" ]; then
           PAYLOAD="${PAYLOAD},{"
           PAYLOAD="${PAYLOAD}\"type\":\"section\","
-          PAYLOAD="${PAYLOAD}\"text\":{\"type\":\"mrkdwn\",\"text\":\"*Failed Jobs:*\\n${FAILED_JOBS_ESC}\"}"
+          PAYLOAD="${PAYLOAD}\"text\":{\"type\":\"mrkdwn\",\"text\":\"${DETAILS_ESC}\"}"
           PAYLOAD="${PAYLOAD}}"
         fi
         PAYLOAD="${PAYLOAD},{"
@@ -99,4 +140,3 @@ runs:
         curl -X POST -H 'Content-type: application/json' \
           --data "$PAYLOAD" \
           "$SLACK_WEBHOOK_URL"
-

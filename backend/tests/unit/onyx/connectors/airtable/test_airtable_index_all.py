@@ -182,7 +182,8 @@ def _collect_docs(connector: AirtableConnector) -> list[Document]:
 class TestIndexAll:
     @patch("time.sleep")
     def test_index_all_discovers_all_bases_and_tables(
-        self, mock_sleep: MagicMock  # noqa: ARG002
+        self,
+        mock_sleep: MagicMock,  # noqa: ARG002
     ) -> None:
         connector = AirtableConnector()
         mock_api = _setup_mock_api(SAMPLE_BASES)
@@ -202,7 +203,8 @@ class TestIndexAll:
 
     @patch("time.sleep")
     def test_index_all_semantic_id_includes_base_name(
-        self, mock_sleep: MagicMock  # noqa: ARG002
+        self,
+        mock_sleep: MagicMock,  # noqa: ARG002
     ) -> None:
         connector = AirtableConnector()
         mock_api = _setup_mock_api(SAMPLE_BASES)
@@ -226,7 +228,8 @@ class TestIndexAll:
 
     @patch("time.sleep")
     def test_index_all_hierarchy_source_path(
-        self, mock_sleep: MagicMock  # noqa: ARG002
+        self,
+        mock_sleep: MagicMock,  # noqa: ARG002
     ) -> None:
         """Verify doc_metadata hierarchy source_path is [base_name, table_name]."""
         connector = AirtableConnector()
@@ -254,7 +257,8 @@ class TestIndexAll:
 
     @patch("time.sleep")
     def test_index_all_empty_account(
-        self, mock_sleep: MagicMock  # noqa: ARG002
+        self,
+        mock_sleep: MagicMock,  # noqa: ARG002
     ) -> None:
         connector = AirtableConnector()
         mock_api = MagicMock()
@@ -266,7 +270,8 @@ class TestIndexAll:
 
     @patch("time.sleep")
     def test_index_all_skips_failing_table(
-        self, mock_sleep: MagicMock  # noqa: ARG002
+        self,
+        mock_sleep: MagicMock,  # noqa: ARG002
     ) -> None:
         """If one table fails, other tables should still be indexed."""
         bases = [
@@ -320,7 +325,8 @@ class TestIndexAll:
 
     @patch("time.sleep")
     def test_index_all_skips_failing_base(
-        self, mock_sleep: MagicMock  # noqa: ARG002
+        self,
+        mock_sleep: MagicMock,  # noqa: ARG002
     ) -> None:
         """If listing tables for a base fails, other bases should still be indexed."""
         bases_data = [

@@ -50,7 +50,9 @@ def test_non_registered_user_gets_basic_role(
     assert UserManager.is_role(invited_basic_user, UserRole.BASIC)
 
 
-def test_user_can_accept_invitation(reset_multitenant: None) -> None:  # noqa: ARG001
+def test_user_can_accept_invitation(
+    reset_multitenant: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """Test that a user can accept an invitation and join the organization with BASIC role."""
     # Create admin user
     unique = uuid4().hex

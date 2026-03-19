@@ -230,8 +230,7 @@ def upsert_llm_provider(
         )
         if existing_llm_provider:
             raise ValueError(
-                f"LLM provider with name '{llm_provider_upsert_request.name}'"
-                " already exists"
+                f"LLM provider with name '{llm_provider_upsert_request.name}' already exists"
             )
         existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
         db_session.add(existing_llm_provider)
@@ -290,13 +289,11 @@ def upsert_llm_provider(
             if mc.id == default_model.id:
                 if default_model.id in removed_ids:
                     raise ValueError(
-                        f"Cannot remove the default model '{name}'. "
-                        "Please change the default model before removing."
+                        f"Cannot remove the default model '{name}'. Please change the default model before removing."
                     )
                 if not requested_visibility.get(name, True):
                     raise ValueError(
-                        f"Cannot hide the default model '{name}'. "
-                        "Please change the default model before hiding."
+                        f"Cannot hide the default model '{name}'. Please change the default model before hiding."
                     )
                 break
 
@@ -892,8 +889,7 @@ def create_new_flow_mapping__no_commit(
         )
     if not flow:
         raise ValueError(
-            f"Failed to create or find flow mapping for "
-            f"model_configuration_id={model_configuration_id} and flow_type={flow_type}"
+            f"Failed to create or find flow mapping for model_configuration_id={model_configuration_id} and flow_type={flow_type}"
         )
 
     return flow

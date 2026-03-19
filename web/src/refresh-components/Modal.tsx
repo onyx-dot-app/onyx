@@ -451,13 +451,19 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
     );
 
     return (
-      <Section ref={ref} padding={1} alignItems="start" height="fit" {...props}>
+      <Section
+        ref={ref}
+        padding={0.5}
+        alignItems="start"
+        height="fit"
+        {...props}
+      >
         <Section
           flexDirection="row"
           justifyContent="between"
           alignItems="start"
           gap={0}
-          padding={0}
+          padding={0.5}
         >
           <div className="relative w-full">
             {/* Close button is absolutely positioned because:
@@ -485,7 +491,6 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             </DialogPrimitive.Title>
           </div>
         </Section>
-
         {children}
       </Section>
     );

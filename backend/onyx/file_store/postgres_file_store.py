@@ -167,8 +167,7 @@ class PostgresBackedFileStore(FileStore):
                         _delete_large_object(raw_conn, old_oid)
                     except Exception:
                         logger.warning(
-                            f"Failed to unlink old large object {old_oid} "
-                            f"for file {file_id}"
+                            f"Failed to unlink old large object {old_oid} for file {file_id}"
                         )
 
                 session.commit()
@@ -235,8 +234,7 @@ class PostgresBackedFileStore(FileStore):
                     _delete_large_object(raw_conn, file_content.lobj_oid)
                 except Exception:
                     logger.warning(
-                        f"Large object {file_content.lobj_oid} for file {file_id} "
-                        "not found, cleaning up records only."
+                        f"Large object {file_content.lobj_oid} for file {file_id} not found, cleaning up records only."
                     )
 
                 delete_file_content_by_file_id(file_id=file_id, db_session=session)

@@ -89,8 +89,7 @@ def _get_group_member_emails(
                 emails.add(email)
             else:
                 logger.warning(
-                    f"Atlassian user {member.get('accountId', 'unknown')} "
-                    f"in group {group_name} has no visible email address"
+                    f"Atlassian user {member.get('accountId', 'unknown')} in group {group_name} has no visible email address"
                 )
 
         if page.get("isLast", True) or not members:

@@ -56,8 +56,7 @@ def test_with_opencode_acp(message: str, working_dir: str | None = None) -> None
         # Use context manager - handles start/stop automatically
         with ACPAgentClient(cwd=str(work_dir)) as client:
             print(
-                f"Agent: {client.agent_info.get('name', 'unknown')} "
-                f"v{client.agent_info.get('version', '?')}"
+                f"Agent: {client.agent_info.get('name', 'unknown')} v{client.agent_info.get('version', '?')}"
             )
             print(f"Session ID: {client.session_id}")
 
@@ -83,16 +82,14 @@ def test_with_opencode_acp(message: str, working_dir: str | None = None) -> None
 
                 elif isinstance(event, ToolCallStart):
                     print(
-                        f"\n[Tool Call: {event.title} ({event.kind}) "
-                        f"- {event.tool_call_id}]",
+                        f"\n[Tool Call: {event.title} ({event.kind}) - {event.tool_call_id}]",
                         flush=True,
                     )
 
                 elif isinstance(event, ToolCallProgress):
                     title_str = f"{event.title} " if event.title else ""
                     print(
-                        f"\n[Tool Result: {title_str}{event.status} "
-                        f"- {event.tool_call_id}]",
+                        f"\n[Tool Result: {title_str}{event.status} - {event.tool_call_id}]",
                         flush=True,
                     )
 

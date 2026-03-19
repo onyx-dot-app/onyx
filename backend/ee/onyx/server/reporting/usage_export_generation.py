@@ -152,10 +152,7 @@ def create_new_usage_report(
         zip_buffer.seek(0)
 
         # store zip blob to file_store
-        report_name = (
-            f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}"
-            f"_{report_id}_usage_report.zip"
-        )
+        report_name = f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}_{report_id}_usage_report.zip"
         file_store.save_file(
             content=zip_buffer,
             display_name=report_name,

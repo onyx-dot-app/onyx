@@ -661,7 +661,7 @@ export default function AgentEditorPage({
     // Sharing
     shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
     shared_group_ids: existingAgent?.groups ?? [],
-    is_public: existingAgent?.is_public ?? true,
+    is_public: existingAgent?.is_public ?? false,
     label_ids: existingAgent?.labels?.map((l) => l.id) ?? [],
     featured: existingAgent?.featured ?? false,
   };

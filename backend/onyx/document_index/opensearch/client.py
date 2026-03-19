@@ -18,6 +18,7 @@ from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.schema import DocumentChunk
+from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.utils.logger import setup_logger
@@ -56,8 +57,8 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     # Maps schema property name to a list of highlighted snippets with match
     # terms wrapped in tags (e.g. "something <hi>keyword</hi> other thing").
     match_highlights: dict[str, list[str]] = {}
-    # Score explanation from OpenSearch when "explain": true is set in the query.
-    # Contains detailed breakdown of how the score was calculated.
+    # Score explanation from OpenSearch when "explain": true is set in the
+    # query. Contains detailed breakdown of how the score was calculated.
     explanation: dict[str, Any] | None = None
 
 
@@ -833,8 +834,12 @@ class OpenSearchIndexClient(OpenSearchClient):
     @log_function_time(print_only=True, debug_only=True)
     def search(
         self, body: dict[str, Any], search_pipeline_id: str | None
-    ) -> list[SearchHit[DocumentChunk]]:
+    ) -> list[SearchHit[DocumentChunkWithoutVectors]]:
         """Searches the index.
+
+        NOTE: Does not return vector fields. In order to take advantage of
+        performance benefits, the search body should exclude the schema's vector
+        fields.
 
         TODO(andrei): Ideally we could check that every field in the body is
         present in the index, to avoid a class of runtime bugs that could easily
@@ -883,18 +888,20 @@ class OpenSearchIndexClient(OpenSearchClient):
             raise_on_timeout=True,
         )
 
-        search_hits: list[SearchHit[DocumentChunk]] = []
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
         for hit in hits:
             document_chunk_source: dict[str, Any] | None = hit.get("_source")
             if not document_chunk_source:
                 raise RuntimeError(
-                    f"Document chunk with ID \"{hit.get('_id', '')}\" has no data."
+                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
                 )
             document_chunk_score = hit.get("_score", None)
             match_highlights: dict[str, list[str]] = hit.get("highlight", {})
             explanation: dict[str, Any] | None = hit.get("_explanation", None)
-            search_hit = SearchHit[DocumentChunk](
-                document_chunk=DocumentChunk.model_validate(document_chunk_source),
+            search_hit = SearchHit[DocumentChunkWithoutVectors](
+                document_chunk=DocumentChunkWithoutVectors.model_validate(
+                    document_chunk_source
+                ),
                 score=document_chunk_score,
                 match_highlights=match_highlights,
                 explanation=explanation,
@@ -1095,8 +1102,7 @@ def wait_for_opensearch_with_timeout(
             time_elapsed = time.monotonic() - time_start
             if time_elapsed > wait_limit_s:
                 logger.info(
-                    f"[OpenSearch] Readiness probe did not succeed within the timeout "
-                    f"({wait_limit_s} seconds)."
+                    f"[OpenSearch] Readiness probe did not succeed within the timeout ({wait_limit_s} seconds)."
                 )
                 return False
             logger.info(

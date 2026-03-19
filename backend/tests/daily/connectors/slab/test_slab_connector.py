@@ -32,8 +32,7 @@ def slab_connector() -> SlabConnector:
 
 @pytest.mark.xfail(
     reason=(
-        "Need a test account with a slab subscription to run this test."
-        "Trial only lasts 14 days."
+        "Need a test account with a slab subscription to run this test.Trial only lasts 14 days."
     )
 )
 def test_slab_connector_basic(slab_connector: SlabConnector) -> None:
@@ -73,8 +72,7 @@ def test_slab_connector_basic(slab_connector: SlabConnector) -> None:
 
 @pytest.mark.xfail(
     reason=(
-        "Need a test account with a slab subscription to run this test."
-        "Trial only lasts 14 days."
+        "Need a test account with a slab subscription to run this test.Trial only lasts 14 days."
     )
 )
 def test_slab_connector_slim(slab_connector: SlabConnector) -> None:

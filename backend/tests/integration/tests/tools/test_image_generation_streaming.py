@@ -38,10 +38,7 @@ def test_image_generation_streaming(
 
     # Send a message that should trigger image generation
     # Use explicit instructions to ensure the image generation tool is used
-    message = (
-        "Please generate an image of a beautiful sunset over the ocean. "
-        "Use the image generation tool to create this image."
-    )
+    message = "Please generate an image of a beautiful sunset over the ocean. Use the image generation tool to create this image."
 
     start_time = time.monotonic()
     analyzed_response = ChatSessionManager.send_message(
@@ -74,10 +71,7 @@ def test_image_generation_streaming(
         assert "obj" in packet, "Heartbeat packet should have 'obj' field"
         assert (
             packet["obj"].get("type") == StreamingType.IMAGE_GENERATION_HEARTBEAT.value
-        ), (
-            f"Expected heartbeat type to be {StreamingType.IMAGE_GENERATION_HEARTBEAT.value}, "
-            f"got {packet['obj'].get('type')}"
-        )
+        ), f"Expected heartbeat type to be {StreamingType.IMAGE_GENERATION_HEARTBEAT.value}, got {packet['obj'].get('type')}"
     # 4. Verify image generation tool delta packets with actual image data
     image_tool_results = [
         tool

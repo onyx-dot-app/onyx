@@ -148,8 +148,7 @@ class NotionConnector(LoadConnector, PollConnector):
 
         if len(cleaned) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", cleaned):
             normalized_uuid = (
-                f"{cleaned[0:8]}-{cleaned[8:12]}-{cleaned[12:16]}-"
-                f"{cleaned[16:20]}-{cleaned[20:]}"
+                f"{cleaned[0:8]}-{cleaned[8:12]}-{cleaned[12:16]}-{cleaned[16:20]}-{cleaned[20:]}"
             ).lower()
             return NormalizationResult(
                 normalized_url=normalized_uuid, use_default=False
@@ -162,8 +161,7 @@ class NotionConnector(LoadConnector, PollConnector):
                 candidate = params[key][0].replace("-", "")
                 if len(candidate) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", candidate):
                     normalized_uuid = (
-                        f"{candidate[0:8]}-{candidate[8:12]}-{candidate[12:16]}-"
-                        f"{candidate[16:20]}-{candidate[20:]}"
+                        f"{candidate[0:8]}-{candidate[8:12]}-{candidate[12:16]}-{candidate[16:20]}-{candidate[20:]}"
                     ).lower()
                     return NormalizationResult(
                         normalized_url=normalized_uuid, use_default=False
@@ -883,8 +881,7 @@ class NotionConnector(LoadConnector, PollConnector):
     def _recursive_load(self) -> GenerateDocumentsOutput:
         if self.root_page_id is None or not self.recursive_index_enabled:
             raise RuntimeError(
-                "Recursive page lookup is not enabled, but we are trying to "
-                "recursively load pages. This should never happen."
+                "Recursive page lookup is not enabled, but we are trying to recursively load pages. This should never happen."
             )
 
         # Yield workspace hierarchy node FIRST before any pages
@@ -893,8 +890,7 @@ class NotionConnector(LoadConnector, PollConnector):
             yield [workspace_node]
 
         logger.info(
-            "Recursively loading pages from Notion based on root page with "
-            f"ID: {self.root_page_id}"
+            f"Recursively loading pages from Notion based on root page with ID: {self.root_page_id}"
         )
         pages = [self._fetch_page(page_id=self.root_page_id)]
         yield from batch_generator(self._read_pages(pages), self.batch_size)
@@ -902,7 +898,7 @@ class NotionConnector(LoadConnector, PollConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Applies integration token to headers"""
         self.headers["Authorization"] = (
-            f'Bearer {credentials["notion_integration_token"]}'
+            f"Bearer {credentials['notion_integration_token']}"
         )
         return None
 
@@ -1030,8 +1026,7 @@ class NotionConnector(LoadConnector, PollConnector):
                 )
             elif status_code == 429:
                 raise ConnectorValidationError(
-                    "Validation failed due to Notion rate-limits being exceeded (HTTP 429). "
-                    "Please try again later."
+                    "Validation failed due to Notion rate-limits being exceeded (HTTP 429). Please try again later."
                 )
             else:
                 raise UnexpectedValidationError(

@@ -38,8 +38,7 @@ def get_cache_backend(*, tenant_id: str | None = None) -> CacheBackend:
     builder = _BACKEND_BUILDERS.get(CACHE_BACKEND)
     if builder is None:
         raise ValueError(
-            f"Unsupported CACHE_BACKEND={CACHE_BACKEND!r}. "
-            f"Supported values: {[t.value for t in CacheBackendType]}"
+            f"Unsupported CACHE_BACKEND={CACHE_BACKEND!r}. Supported values: {[t.value for t in CacheBackendType]}"
         )
     return builder(tenant_id)
 

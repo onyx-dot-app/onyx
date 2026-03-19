@@ -98,10 +98,9 @@ class TestForceAddSearchToolGuard:
         from onyx.tools.tool_constructor import construct_tools
 
         source = inspect.getsource(construct_tools)
-        assert "DISABLE_VECTOR_DB" in source, (
-            "construct_tools should reference DISABLE_VECTOR_DB "
-            "to suppress force-adding SearchTool"
-        )
+        assert (
+            "DISABLE_VECTOR_DB" in source
+        ), "construct_tools should reference DISABLE_VECTOR_DB to suppress force-adding SearchTool"
 
 
 # ------------------------------------------------------------------

@@ -57,7 +57,9 @@ def test_zendesk_client_per_minute_rate_limiting(
     calls: list[str] = []
 
     def _fake_get(
-        url: str, auth: Any, params: Dict[str, Any]  # noqa: ARG001
+        url: str,
+        auth: Any,  # noqa: ARG001
+        params: Dict[str, Any],  # noqa: ARG001
     ) -> _FakeResponse:
         calls.append(url)
         # minimal Zendesk list response (articles path)

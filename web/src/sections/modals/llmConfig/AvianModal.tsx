@@ -23,7 +23,7 @@ const AVIAN_DISPLAY_NAME = "Avian";
 const DEFAULT_API_BASE = "https://api.avian.io/v1";
 const DEFAULT_MODEL_NAME = "deepseek/deepseek-v3.2";
 
-export function AvianModal({
+export default function AvianModal({
   existingLlmProvider,
   shouldMarkAsDefault,
   open,

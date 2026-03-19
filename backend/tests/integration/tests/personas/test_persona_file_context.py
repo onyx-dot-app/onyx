@@ -55,8 +55,7 @@ def _poll_file_statuses(
             return
         time.sleep(FILE_PROCESSING_POLL_INTERVAL)
     raise TimeoutError(
-        f"Files {user_file_ids} did not reach {target_status.value} "
-        f"within {timeout}s"
+        f"Files {user_file_ids} did not reach {target_status.value} within {timeout}s"
     )
 
 
@@ -74,8 +73,7 @@ def test_persona_with_files_chat_no_error(
 
     # Upload files (creates UserFile records)
     text_file = create_test_text_file(
-        "The secret project codename is NIGHTINGALE. "
-        "It was started in 2024 by the Advanced Research division."
+        "The secret project codename is NIGHTINGALE. It was started in 2024 by the Advanced Research division."
     )
     file_descriptors, error = FileManager.upload_files(
         files=[("nightingale_brief.txt", text_file)],
@@ -211,10 +209,9 @@ def test_persona_files_override_project_files(
     assert response.error is None, f"Chat should succeed, got error: {response.error}"
     # The persona's file should be what the model sees, not the project's
     message_lower = response.full_message.lower()
-    assert "albatross" in message_lower, (
-        "Response should reference the persona file's secret word (ALBATROSS), "
-        f"but got: {response.full_message}"
-    )
+    assert (
+        "albatross" in message_lower
+    ), f"Response should reference the persona file's secret word (ALBATROSS), but got: {response.full_message}"
 
 
 def test_default_persona_in_project_uses_project_files(
@@ -255,10 +252,9 @@ def test_default_persona_in_project_uses_project_files(
     )
 
     assert response.error is None
-    assert "pangolin" in response.full_message.lower(), (
-        "Response should reference the project file content (PANGOLIN), "
-        f"but got: {response.full_message}"
-    )
+    assert (
+        "pangolin" in response.full_message.lower()
+    ), f"Response should reference the project file content (PANGOLIN), but got: {response.full_message}"
 
 
 def test_custom_persona_no_files_in_project_ignores_project(

@@ -196,8 +196,7 @@ def mark_tenant_connectors_for_deletion(
 def main() -> None:
     if len(sys.argv) < 2:
         print(
-            "Usage: python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py <tenant_id> [--force] "
-            "[--concurrency N]"
+            "Usage: python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py <tenant_id> [--force] [--concurrency N]"
         )
         print(
             "       python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv <csv_file_path> [--force]"

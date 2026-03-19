@@ -148,7 +148,8 @@ def file_store(
         if "Contents" in response:
             objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
             s3_client.delete_objects(
-                Bucket=actual_bucket_name, Delete={"Objects": objects_to_delete}  # type: ignore[typeddict-item]
+                Bucket=actual_bucket_name,
+                Delete={"Objects": objects_to_delete},  # type: ignore[typeddict-item]
             )
             logger.info(
                 f"Cleaned up {len(objects_to_delete)} test objects from {backend_config['backend_name']}"
@@ -942,17 +943,15 @@ class TestS3BackedFileStore:
 
         # Verify all prefixed files are returned
         for expected_file_id in prefixed_files:
-            assert expected_file_id in returned_file_ids, (
-                f"File '{expected_file_id}' should be in results but was not found. "
-                f"Returned files: {returned_file_ids}"
-            )
+            assert (
+                expected_file_id in returned_file_ids
+            ), f"File '{expected_file_id}' should be in results but was not found. Returned files: {returned_file_ids}"
 
         # Verify no non-prefixed files are returned
         for unexpected_file_id in non_prefixed_files:
-            assert unexpected_file_id not in returned_file_ids, (
-                f"File '{unexpected_file_id}' should NOT be in results but was found. "
-                f"Returned files: {returned_file_ids}"
-            )
+            assert (
+                unexpected_file_id not in returned_file_ids
+            ), f"File '{unexpected_file_id}' should NOT be in results but was found. Returned files: {returned_file_ids}"
 
         # Verify the returned records have correct properties
         for record in prefix_results:

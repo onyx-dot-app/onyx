@@ -1,0 +1,164 @@
+/* Imports shared timing tokens (--interactive-duration, --interactive-easing) */
+@import "@opal/core/interactive/shared.css";
+
+/* ---------------------------------------------------------------------------
+ * Table primitives — data-attribute driven styling
+ * Follows the same pattern as card.css / line-item.css.
+ * ------------------------------------------------------------------------- */
+
+/* ---- TableCell ---- */
+
+.tbl-cell[data-size="lg"] {
+  @apply px-1 py-0.5;
+}
+.tbl-cell[data-size="md"] {
+  @apply pl-0.5 pr-1.5 py-1.5;
+}
+
+.tbl-cell-inner[data-size="lg"] {
+  @apply h-10 px-1;
+}
+.tbl-cell-inner[data-size="md"] {
+  @apply h-6 px-0.5;
+}
+
+/* ---- TableHead ---- */
+
+.table-head {
+  @apply relative sticky top-0 z-20;
+  background: var(--table-header-bg, transparent);
+}
+.table-head[data-size="lg"] {
+  @apply px-2 py-1;
+}
+.table-head[data-size="md"] {
+  @apply px-2 py-1;
+}
+.table-head[data-bottom-border] {
+  @apply border-b border-transparent hover:border-border-03;
+}
+
+/* Inner text wrapper */
+.table-head[data-size="lg"] .table-head-label {
+  @apply py-2 px-0.5;
+}
+.table-head[data-size="md"] .table-head-label {
+  @apply py-1;
+}
+
+/* Sort button wrapper */
+.table-head[data-size="lg"] .table-head-sort {
+  @apply py-1.5;
+}
+
+/* ---- TableRow (base) ---- */
+
+.tbl-row > td {
+  @apply bg-background-tint-00;
+  transition: background-color var(--interactive-duration)
+    var(--interactive-easing);
+}
+
+.tbl-row[data-selected] > td {
+  @apply bg-[var(--action-link-01)];
+}
+
+.tbl-row[data-disabled] {
+  @apply pointer-events-none;
+}
+
+/* Suppress default focus ring on rows — the row bg is the indicator */
+.tbl-row:focus,
+.tbl-row:focus-visible {
+  outline: none;
+}
+
+/* ---- variant="rows" — traditional borders, no gaps ---- */
+
+table[data-variant="rows"] .tbl-row > td {
+  @apply border-b border-border-01;
+}
+
+/* Hover/focus only for selectable tables */
+table[data-variant="rows"][data-selection="single-select"] .tbl-row,
+table[data-variant="rows"][data-selection="multi-select"] .tbl-row {
+  @apply cursor-pointer;
+}
+table[data-variant="rows"][data-selection="single-select"] .tbl-row:hover > td,
+table[data-variant="rows"][data-selection="multi-select"] .tbl-row:hover > td {
+  @apply bg-background-tint-02;
+}
+table[data-variant="rows"] .tbl-row:focus-visible > td,
+table[data-variant="rows"] .tbl-row:has(:focus-visible) > td {
+  @apply bg-action-link-01;
+}
+
+/* ---- variant="cards" — rounded cards with gap ---- */
+
+table[data-variant="cards"] .tbl-row > td {
+  @apply bg-clip-padding border-y-[2px] border-x-0 border-transparent;
+}
+table[data-variant="cards"] .tbl-row > td:first-child {
+  @apply rounded-l-12;
+}
+table[data-variant="cards"] .tbl-row > td:last-child {
+  @apply rounded-r-12;
+}
+
+/* When a drag handle is present the second-to-last td gets the rounding */
+table[data-variant="cards"] .tbl-row[data-drag-handle] > td:nth-last-child(2) {
+  @apply rounded-r-12;
+}
+table[data-variant="cards"] .tbl-row[data-drag-handle] > td:last-child {
+  border-radius: 0;
+}
+
+/* Hover/focus only for selectable tables */
+table[data-variant="cards"][data-selection="single-select"] .tbl-row,
+table[data-variant="cards"][data-selection="multi-select"] .tbl-row {
+  @apply cursor-pointer;
+}
+table[data-variant="cards"][data-selection="single-select"] .tbl-row:hover > td,
+table[data-variant="cards"][data-selection="multi-select"] .tbl-row:hover > td {
+  @apply bg-background-tint-02;
+}
+table[data-variant="cards"] .tbl-row:focus-visible > td,
+table[data-variant="cards"] .tbl-row:has(:focus-visible) > td {
+  @apply bg-action-link-01;
+}
+
+/* ---- QualifierContainer ---- */
+
+.tbl-qualifier[data-type="head"] {
+  @apply w-px whitespace-nowrap py-1 sticky top-0 z-20;
+  background: var(--table-header-bg, transparent);
+}
+.tbl-qualifier[data-type="head"][data-size="md"] {
+  @apply py-0.5;
+}
+
+.tbl-qualifier[data-type="cell"] {
+  @apply w-px whitespace-nowrap py-1;
+}
+.tbl-qualifier[data-type="cell"][data-size="md"] {
+  @apply py-0.5;
+}
+
+/* ---- ActionsContainer ---- */
+
+.tbl-actions {
+  @apply sticky right-0 w-px whitespace-nowrap px-1;
+}
+.tbl-actions[data-type="head"] {
+  @apply z-30 sticky top-0 px-2 py-1;
+  background: var(--table-header-bg, transparent);
+}
+
+/* ---- Footer ---- */
+
+.table-footer[data-size="lg"] {
+  @apply min-h-[2.75rem];
+}
+.table-footer[data-size="md"] {
+  @apply min-h-[2.25rem];
+}

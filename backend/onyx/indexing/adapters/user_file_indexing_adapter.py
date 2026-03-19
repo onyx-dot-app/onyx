@@ -64,10 +64,13 @@ class UserFileIndexingAdapter:
         self.db_session = db_session
 
     def prepare(
-        self, documents: list[Document], ignore_time_skip: bool  # noqa: ARG002
+        self,
+        documents: list[Document],
+        ignore_time_skip: bool,  # noqa: ARG002
     ) -> DocumentBatchPrepareContext:
         return DocumentBatchPrepareContext(
-            updatable_docs=documents, id_to_boost_map={}  # TODO(subash): add boost map
+            updatable_docs=documents,
+            id_to_boost_map={},  # TODO(subash): add boost map
         )
 
     @contextlib.contextmanager
@@ -95,8 +98,7 @@ class UserFileIndexingAdapter:
 
         if not lock_acquired:
             raise RuntimeError(
-                f"Failed to acquire locks after {_NUM_LOCK_ATTEMPTS} attempts "
-                f"for user files: {[doc.id for doc in documents]}"
+                f"Failed to acquire locks after {_NUM_LOCK_ATTEMPTS} attempts for user files: {[doc.id for doc in documents]}"
             )
 
     def build_metadata_aware_chunks(

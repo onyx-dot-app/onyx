@@ -29,6 +29,7 @@ from onyx.chat.compression import compress_chat_history
 from onyx.chat.compression import find_summary_for_branch
 from onyx.chat.compression import get_compression_params
 from onyx.chat.emitter import get_default_emitter
+from onyx.chat.llm_loop import EmptyLLMResponseError
 from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
@@ -490,13 +491,13 @@ def handle_stream_message_objects(
         # Milestone tracking, most devs using the API don't need to understand this
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if not user.is_anonymous else tenant_id,
+            distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
         )
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if not user.is_anonymous else tenant_id,
+            distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
             event=MilestoneRecordType.USER_MESSAGE_SENT,
             properties={
                 "origin": new_msg_req.origin.value,
@@ -796,8 +797,7 @@ def handle_stream_message_objects(
 
         if all_injected_file_metadata:
             logger.debug(
-                "FileReader: file metadata for LLM: "
-                f"{[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
+                f"FileReader: file metadata for LLM: {[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
             )
 
         # Prepend summary message if compression exists
@@ -926,9 +926,28 @@ def handle_stream_message_objects(
         db_session.rollback()
         return
 
+    except EmptyLLMResponseError as e:
+        stack_trace = traceback.format_exc()
+
+        logger.warning(
+            "LLM returned an empty response "
+            f"(provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})"
+        )
+
+        yield StreamingError(
+            error=e.client_error_msg,
+            stack_trace=stack_trace,
+            error_code=e.error_code,
+            is_retryable=e.is_retryable,
+            details={
+                "model": e.model,
+                "provider": e.provider,
+                "tool_choice": e.tool_choice.value,
+            },
+        )
+        db_session.rollback()
     except Exception as e:
         logger.exception(f"Failed to process chat message due to {e}")
-        error_msg = str(e)
         stack_trace = traceback.format_exc()
 
         if llm:
@@ -1047,10 +1066,46 @@ def llm_loop_completion_handle(
         )
 
 
-def remove_answer_citations(answer: str) -> str:
-    pattern = r"\s*\[\[\d+\]\]\(http[s]?://[^\s]+\)"
+_CITATION_LINK_START_PATTERN = re.compile(r"\s*\[\[\d+\]\]\(")
 
-    return re.sub(pattern, "", answer)
+
+def _find_markdown_link_end(text: str, destination_start: int) -> int | None:
+    depth = 0
+    i = destination_start
+
+    while i < len(text):
+        curr = text[i]
+        if curr == "\\":
+            i += 2
+            continue
+
+        if curr == "(":
+            depth += 1
+        elif curr == ")":
+            if depth == 0:
+                return i
+            depth -= 1
+
+        i += 1
+
+    return None
+
+
+def remove_answer_citations(answer: str) -> str:
+    stripped_parts: list[str] = []
+    cursor = 0
+
+    while match := _CITATION_LINK_START_PATTERN.search(answer, cursor):
+        stripped_parts.append(answer[cursor : match.start()])
+        link_end = _find_markdown_link_end(answer, match.end())
+        if link_end is None:
+            stripped_parts.append(answer[match.start() :])
+            return "".join(stripped_parts)
+
+        cursor = link_end + 1
+
+    stripped_parts.append(answer[cursor:])
+    return "".join(stripped_parts)
 
 
 @log_function_time()
@@ -1088,8 +1143,11 @@ def gather_stream(
         raise ValueError("Message ID is required")
 
     if answer is None:
-        # This should never be the case as these non-streamed flows do not have a stop-generation signal
-        raise RuntimeError("Answer was not generated")
+        if error_msg is not None:
+            answer = ""
+        else:
+            # This should never be the case as these non-streamed flows do not have a stop-generation signal
+            raise RuntimeError("Answer was not generated")
 
     return ChatBasicResponse(
         answer=answer,

@@ -61,8 +61,7 @@ def tenant_schema_at_head(
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(
             text(
-                f'CREATE TABLE "{schema}".alembic_version '
-                f"(version_num VARCHAR(32) NOT NULL)"
+                f'CREATE TABLE "{schema}".alembic_version (version_num VARCHAR(32) NOT NULL)'
             )
         )
         conn.execute(
@@ -101,14 +100,12 @@ def tenant_schema_stale_rev(engine: Engine) -> Generator[str, None, None]:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(
             text(
-                f'CREATE TABLE "{schema}".alembic_version '
-                f"(version_num VARCHAR(32) NOT NULL)"
+                f'CREATE TABLE "{schema}".alembic_version (version_num VARCHAR(32) NOT NULL)'
             )
         )
         conn.execute(
             text(
-                f'INSERT INTO "{schema}".alembic_version (version_num) '
-                f"VALUES ('stalerev000000000000')"
+                f"INSERT INTO \"{schema}\".alembic_version (version_num) VALUES ('stalerev000000000000')"
             )
         )
         conn.commit()

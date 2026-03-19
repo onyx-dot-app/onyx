@@ -39,8 +39,7 @@ BUILT_IN_TOOLS = [
         "name": "WebSearchTool",
         "display_name": "Web Search",
         "description": (
-            "The Web Search Action allows the assistant "
-            "to perform internet searches for up-to-date information."
+            "The Web Search Action allows the assistant to perform internet searches for up-to-date information."
         ),
         "in_code_tool_id": "WebSearchTool",
     },

@@ -149,8 +149,7 @@ def _mock_convert(monkeypatch: pytest.MonkeyPatch) -> None:
         return _make_document(driveitem)
 
     monkeypatch.setattr(
-        "onyx.connectors.sharepoint.connector"
-        "._convert_driveitem_to_document_with_permissions",
+        "onyx.connectors.sharepoint.connector._convert_driveitem_to_document_with_permissions",
         fake_convert,
     )
 
@@ -389,10 +388,7 @@ class TestDelta410GoneResync:
             call_count += 1
             if call_count == 1:
                 # Simulate the 410 handler returning a full-resync URL
-                full_url = (
-                    f"https://graph.microsoft.com/v1.0/drives/{drive_id}"
-                    f"/root/delta?$top={page_size}"
-                )
+                full_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/delta?$top={page_size}"
                 return [], full_url
             return [_make_item("recovered")], None
 

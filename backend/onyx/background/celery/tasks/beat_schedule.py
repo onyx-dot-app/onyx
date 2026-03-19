@@ -9,6 +9,7 @@ from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import HOOK_ENABLED
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
@@ -360,6 +361,19 @@ if not MULTI_TENANT:
     )
 
     tasks_to_schedule.extend(beat_task_templates)
+
+if not MULTI_TENANT and HOOK_ENABLED:
+    tasks_to_schedule.append(
+        {
+            "name": "hook-execution-log-cleanup",
+            "task": OnyxCeleryTask.HOOK_EXECUTION_LOG_CLEANUP_TASK,
+            "schedule": timedelta(days=1),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        }
+    )
 
 
 def generate_cloud_tasks(

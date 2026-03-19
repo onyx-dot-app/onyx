@@ -181,9 +181,7 @@ class DynamicTenantScheduler(PersistentScheduler):
         if not do_update:
             # exit early if nothing changed
             task_logger.info(
-                f"_try_updating_schedule - Schedule unchanged: "
-                f"tasks={len(new_schedule)} "
-                f"beat_multiplier={beat_multiplier}"
+                f"_try_updating_schedule - Schedule unchanged: tasks={len(new_schedule)} beat_multiplier={beat_multiplier}"
             )
             return
 

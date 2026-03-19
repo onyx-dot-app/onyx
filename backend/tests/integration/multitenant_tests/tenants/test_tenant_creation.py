@@ -26,7 +26,9 @@ def test_first_user_is_admin(reset_multitenant: None) -> None:  # noqa: ARG001
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 
 
-def test_admin_can_create_credential(reset_multitenant: None) -> None:  # noqa: ARG001
+def test_admin_can_create_credential(
+    reset_multitenant: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """Test that an admin user can create a credential in their tenant."""
     # Create admin user
     unique = uuid4().hex
@@ -45,7 +47,9 @@ def test_admin_can_create_credential(reset_multitenant: None) -> None:  # noqa: 
     assert test_credential is not None
 
 
-def test_admin_can_create_connector(reset_multitenant: None) -> None:  # noqa: ARG001
+def test_admin_can_create_connector(
+    reset_multitenant: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """Test that an admin user can create a connector in their tenant."""
     # Create admin user
     unique = uuid4().hex

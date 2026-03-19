@@ -75,8 +75,7 @@ def batch_delete(
 
     if failed_batches:
         logger.warning(
-            f"Failed to delete {len(failed_batches)} batches from {table_name}. "
-            f"Total deleted: {total_deleted}/{total_count}"
+            f"Failed to delete {len(failed_batches)} batches from {table_name}. Total deleted: {total_deleted}/{total_count}"
         )
         # Fail the migration to avoid silently succeeding on partial cleanup
         raise RuntimeError(

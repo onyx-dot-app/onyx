@@ -123,10 +123,7 @@ def fetch_messages(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 
-    initial_request_url = (
-        f"teams/{team_id}/channels/{channel_id}/messages/delta"
-        f"?$filter=lastModifiedDateTime gt {startfmt}"
-    )
+    initial_request_url = f"teams/{team_id}/channels/{channel_id}/messages/delta?$filter=lastModifiedDateTime gt {startfmt}"
 
     request_url: str | None = initial_request_url
 

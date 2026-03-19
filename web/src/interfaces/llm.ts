@@ -1,3 +1,8 @@
+import type {
+  OnboardingState,
+  OnboardingActions,
+} from "@/interfaces/onboarding";
+
 export enum LLMProviderName {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
@@ -110,11 +115,19 @@ export interface LLMProviderResponse<T> {
   default_vision: DefaultModel | null;
 }
 
+export type LLMModalVariant = "onboarding" | "llm-configuration";
+
 export interface LLMProviderFormProps {
+  variant?: LLMModalVariant;
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+
+  // Onboarding-specific (only when variant === "onboarding")
+  onboardingState?: OnboardingState;
+  onboardingActions?: OnboardingActions;
+  llmDescriptor?: WellKnownLLMProviderDescriptor;
 }
 
 // Param types for model fetching functions - use snake_case to match API structure
@@ -128,14 +141,6 @@ export interface BedrockFetchParams {
 
 export interface OllamaFetchParams {
   api_base?: string;
-  provider_name?: string;
-  signal?: AbortSignal;
-}
-
-export interface LMStudioFetchParams {
-  api_base?: string;
-  api_key?: string;
-  api_key_changed?: boolean;
   provider_name?: string;
   signal?: AbortSignal;
 }
@@ -162,10 +167,18 @@ export interface VertexAIFetchParams {
   model_configurations?: ModelConfiguration[];
 }
 
+export interface LMStudioFetchParams {
+  api_base?: string;
+  api_key?: string;
+  api_key_changed?: boolean;
+  provider_name?: string;
+  signal?: AbortSignal;
+}
+
 export type FetchModelsParams =
   | BedrockFetchParams
   | OllamaFetchParams
-  | LMStudioFetchParams
   | OpenRouterFetchParams
   | LiteLLMProxyFetchParams
-  | VertexAIFetchParams;
+  | VertexAIFetchParams
+  | LMStudioFetchParams;

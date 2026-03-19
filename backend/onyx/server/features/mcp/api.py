@@ -639,9 +639,7 @@ async def process_oauth_callback(
     db_session.commit()
 
     logger.info(
-        f"server_id={str(mcp_server.id)} "
-        f"server_name={mcp_server.name} "
-        f"return_path={state_data.return_path}"
+        f"server_id={str(mcp_server.id)} server_name={mcp_server.name} return_path={state_data.return_path}"
     )
 
     return MCPOAuthCallbackResponse(
@@ -1495,7 +1493,6 @@ def _upsert_mcp_server(
             # registration; otherwise, the provider will attempt it.
             cfg: MCPConnectionData = MCPConnectionData(headers={})
             if request.oauth_client_id:
-
                 client_info = OAuthClientInformationFull(
                     client_id=request.oauth_client_id,
                     client_secret=request.oauth_client_secret,

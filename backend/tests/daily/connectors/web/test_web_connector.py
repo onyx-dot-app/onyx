@@ -62,8 +62,7 @@ MERCURY_EXPECTED_QUOTE = "How can we help?"
 
 @pytest.mark.xfail(
     reason=(
-        "flaky. maybe we can improve how we avoid triggering bot protection or"
-        "maybe this is just how it has to be."
+        "flaky. maybe we can improve how we avoid triggering bot protection ormaybe this is just how it has to be."
     ),
 )
 def test_web_connector_bot_protection() -> None:

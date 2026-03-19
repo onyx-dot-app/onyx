@@ -75,8 +75,7 @@ def _decrypt_bytes(input_bytes: bytes, key: str | None = None) -> str:
         # Does NOT handle data encrypted with a different key — that
         # ciphertext is not valid UTF-8 and will raise below.
         logger.warning(
-            "AES decryption failed — falling back to raw decode. "
-            "Run the re-encrypt secrets script to rotate to the current key."
+            "AES decryption failed — falling back to raw decode. Run the re-encrypt secrets script to rotate to the current key."
         )
         try:
             return input_bytes.decode()

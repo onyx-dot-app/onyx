@@ -57,8 +57,7 @@ def salesforce_connector() -> SalesforceConnector:
 # TODO: make the credentials not expire
 @pytest.mark.skip(
     reason=(
-        "Credentials change over time, so this test will fail if run when "
-        "the credentials expire."
+        "Credentials change over time, so this test will fail if run when the credentials expire."
     )
 )
 def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -> None:
@@ -183,8 +182,7 @@ def test_salesforce_connector_poll_source(
 # TODO: make the credentials not expire
 @pytest.mark.skip(
     reason=(
-        "Credentials change over time, so this test will fail if run when "
-        "the credentials expire."
+        "Credentials change over time, so this test will fail if run when the credentials expire."
     )
 )
 def test_salesforce_connector_slim(salesforce_connector: SalesforceConnector) -> None:

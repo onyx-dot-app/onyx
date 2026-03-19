@@ -37,10 +37,27 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
-          # GitHub team slug authorized to trigger cherry-picks (e.g. "core-eng").
-          # For private/secret teams the GITHUB_TOKEN may need org:read scope;
-          # visible teams work with the default token.
-          ALLOWED_TEAM: "onyx-core-team"
+          # Explicit merger allowlist used because pull_request_target runs with
+          # the default GITHUB_TOKEN, which cannot reliably read org/team
+          # membership for this repository context.
+          ALLOWED_MERGERS: |
+            acaprau
+            bo-onyx
+            danelegend
+            duo-onyx
+            evan-onyx
+            jessicasingh7
+            jmelahman
+            joachim-danswer
+            justin-tahara
+            nmgarza5
+            raunakab
+            rohoswagger
+            subash-mohan
+            trial2onyx
+            wenxi-onyx
+            weves
+            yuhongsun96
         run: |
           echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
           echo "merged_by=${MERGED_BY}" >> "$GITHUB_OUTPUT"
@@ -64,19 +81,11 @@ jobs:
 
           echo "merge_commit_sha=${MERGE_COMMIT_SHA}" >> "$GITHUB_OUTPUT"
 
-          member_state_file="$(mktemp)"
-          member_err_file="$(mktemp)"
-          if ! gh api "orgs/${GITHUB_REPOSITORY_OWNER}/teams/${ALLOWED_TEAM}/memberships/${MERGED_BY}" --jq '.state' >"${member_state_file}" 2>"${member_err_file}"; then
-            api_err="$(tr '\n' ' ' < "${member_err_file}" | sed 's/[[:space:]]\+/ /g' | cut -c1-300)"
-            echo "gate_error=team-api-error" >> "$GITHUB_OUTPUT"
-            echo "::error::Team membership API call failed for ${MERGED_BY} in ${ALLOWED_TEAM}: ${api_err}"
-            exit 1
-          fi
-
-          member_state="$(cat "${member_state_file}")"
-          if [ "${member_state}" != "active" ]; then
-            echo "gate_error=not-team-member" >> "$GITHUB_OUTPUT"
-            echo "::error::${MERGED_BY} is not an active member of team ${ALLOWED_TEAM} (state: ${member_state}). Failing cherry-pick gate."
+          normalized_merged_by="$(printf '%s' "${MERGED_BY}" | tr '[:upper:]' '[:lower:]')"
+          normalized_allowed_mergers="$(printf '%s\n' "${ALLOWED_MERGERS}" | tr '[:upper:]' '[:lower:]')"
+          if ! printf '%s\n' "${normalized_allowed_mergers}" | grep -Fxq "${normalized_merged_by}"; then
+            echo "gate_error=not-allowed-merger" >> "$GITHUB_OUTPUT"
+            echo "::error::${MERGED_BY} is not in the explicit cherry-pick merger allowlist. Failing cherry-pick gate."
             exit 1
           fi
 
@@ -90,6 +99,7 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
+      cherry_pick_pr_url: ${{ steps.run_cherry_pick.outputs.pr_url }}
       cherry_pick_reason: ${{ steps.run_cherry_pick.outputs.reason }}
       cherry_pick_details: ${{ steps.run_cherry_pick.outputs.details }}
     runs-on: ubuntu-latest
@@ -137,7 +147,11 @@ jobs:
           fi
 
           if [ "${exit_code}" -eq 0 ]; then
+            pr_url="$(sed -n 's/^.*PR created successfully: \(https:\/\/github\.com\/[^[:space:]]\+\/pull\/[0-9]\+\).*$/\1/p' "$output_file" | tail -n 1)"
             echo "status=success" >> "$GITHUB_OUTPUT"
+            if [ -n "${pr_url}" ]; then
+              echo "pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
@@ -162,6 +176,55 @@ jobs:
         run: |
           echo "::error::Automated cherry-pick failed (${CHERRY_PICK_REASON})."
           exit 1
+
+  notify-slack-on-cherry-pick-success:
+    needs:
+      - resolve-cherry-pick-request
+      - cherry-pick-to-latest-release
+    if: needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && needs.resolve-cherry-pick-request.result == 'success' && needs.cherry-pick-to-latest-release.result == 'success'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Fail if Slack webhook secret is missing
+        env:
+          CHERRY_PICK_PRS_WEBHOOK: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
+        run: |
+          if [ -z "${CHERRY_PICK_PRS_WEBHOOK}" ]; then
+            echo "::error::CHERRY_PICK_PRS_WEBHOOK is not configured."
+            exit 1
+          fi
+
+      - name: Build cherry-pick success summary
+        id: success-summary
+        env:
+          SOURCE_PR_NUMBER: ${{ needs.resolve-cherry-pick-request.outputs.pr_number }}
+          MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
+          CHERRY_PICK_PR_URL: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_pr_url }}
+        run: |
+          source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
+          details="*Cherry-pick PR opened successfully.*\\n• author: {mention}\\n• source PR: ${source_pr_url}"
+          if [ -n "${CHERRY_PICK_PR_URL}" ]; then
+            details="${details}\\n• cherry-pick PR: ${CHERRY_PICK_PR_URL}"
+          fi
+          if [ -n "${MERGE_COMMIT_SHA}" ]; then
+            details="${details}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
+          fi
+
+          echo "details=${details}" >> "$GITHUB_OUTPUT"
+
+      - name: Notify #cherry-pick-prs about cherry-pick success
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
+          mention: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
+          details: ${{ steps.success-summary.outputs.details }}
+          title: "✅ Automated Cherry-Pick PR Opened"
+          ref-name: ${{ github.event.pull_request.base.ref }}
 
   notify-slack-on-cherry-pick-failure:
     needs:
@@ -199,10 +262,8 @@ jobs:
           reason_text="cherry-pick command failed"
           if [ "${GATE_ERROR}" = "missing-merge-commit-sha" ]; then
             reason_text="requested cherry-pick but merge commit SHA was missing"
-          elif [ "${GATE_ERROR}" = "team-api-error" ]; then
-            reason_text="team membership lookup failed while validating cherry-pick permissions"
-          elif [ "${GATE_ERROR}" = "not-team-member" ]; then
-            reason_text="merger is not an active member of the allowed team"
+          elif [ "${GATE_ERROR}" = "not-allowed-merger" ]; then
+            reason_text="merger is not in the explicit cherry-pick allowlist"
           elif [ "${CHERRY_PICK_REASON}" = "output-capture-failed" ]; then
             reason_text="failed to capture cherry-pick output for classification"
           elif [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
@@ -215,20 +276,21 @@ jobs:
           else
             failed_job_label="cherry-pick-to-latest-release"
           fi
-          failed_jobs="• ${failed_job_label}\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
+          details="• author: {mention}\\n• ${failed_job_label}\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
           if [ -n "${MERGE_COMMIT_SHA}" ]; then
-            failed_jobs="${failed_jobs}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
+            details="${details}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
           fi
           if [ -n "${details_excerpt}" ]; then
-            failed_jobs="${failed_jobs}\\n• excerpt: ${details_excerpt}"
+            details="${details}\\n• excerpt: ${details_excerpt}"
           fi
 
-          echo "jobs=${failed_jobs}" >> "$GITHUB_OUTPUT"
+          echo "details=${details}" >> "$GITHUB_OUTPUT"
 
       - name: Notify #cherry-pick-prs about cherry-pick failure
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.CHERRY_PICK_PRS_WEBHOOK }}
-          failed-jobs: ${{ steps.failure-summary.outputs.jobs }}
+          mention: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
+          details: ${{ steps.failure-summary.outputs.details }}
           title: "🚨 Automated Cherry-Pick Failed"
           ref-name: ${{ github.event.pull_request.base.ref }}

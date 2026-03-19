@@ -19,6 +19,7 @@ from typing import Optional
 from typing import Protocol
 from typing import Tuple
 from typing import TypeVar
+from urllib.parse import urlparse
 
 import jwt
 from email_validator import EmailNotValidError
@@ -31,6 +32,7 @@ from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 from fastapi import status
+from fastapi import WebSocket
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -129,9 +131,11 @@ from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import onyx_error_to_json_response
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
+from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
+from onyx.utils.telemetry import mt_cloud_identify
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -166,8 +170,7 @@ def verify_auth_setting() -> None:
         )
     if raw_auth_type == "disabled":
         logger.warning(
-            "AUTH_TYPE='disabled' is no longer supported. "
-            "Using 'basic' instead. Please update your configuration."
+            "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
         )
 
     logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
@@ -610,8 +613,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             char in PASSWORD_SPECIAL_CHARS for char in password
         ):
             raise exceptions.InvalidPasswordException(
-                reason="Password must contain at least one special character from the following set: "
-                f"{PASSWORD_SPECIAL_CHARS}."
+                reason=f"Password must contain at least one special character from the following set: {PASSWORD_SPECIAL_CHARS}."
             )
         return
 
@@ -792,6 +794,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         except Exception:
             logger.exception("Error deleting anonymous user cookie")
 
+        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+        mt_cloud_identify(
+            distinct_id=str(user.id),
+            properties={"email": user.email, "tenant_id": tenant_id},
+        )
+
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
@@ -810,11 +818,24 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_count = await get_user_count()
             logger.debug(f"Current tenant user count: {user_count}")
 
+            # Ensure a PostHog person profile exists for this user.
+            mt_cloud_identify(
+                distinct_id=str(user.id),
+                properties={"email": user.email, "tenant_id": tenant_id},
+            )
+
             mt_cloud_telemetry(
                 tenant_id=tenant_id,
-                distinct_id=user.email,
+                distinct_id=str(user.id),
                 event=MilestoneRecordType.USER_SIGNED_UP,
             )
+
+            if user_count == 1:
+                mt_cloud_telemetry(
+                    tenant_id=tenant_id,
+                    distinct_id=str(user.id),
+                    event=MilestoneRecordType.TENANT_CREATED,
+                )
 
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -878,7 +899,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
     async def on_after_forgot_password(
-        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
+        self,
+        user: User,
+        token: str,
+        request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
         if not EMAIL_CONFIGURED:
             logger.error(
@@ -897,7 +921,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
     async def on_after_request_verify(
-        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
+        self,
+        user: User,
+        token: str,
+        request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
         verify_email_domain(user.email)
 
@@ -1193,7 +1220,9 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
         return
 
     async def refresh_token(
-        self, token: Optional[str], user: User  # noqa: ARG002
+        self,
+        token: Optional[str],  # noqa: ARG002
+        user: User,  # noqa: ARG002
     ) -> str:
         """Issue a fresh JWT with a new expiry."""
         return await self.write_token(user)
@@ -1221,8 +1250,7 @@ def get_jwt_strategy() -> SingleTenantJWTStrategy:
 if AUTH_BACKEND == AuthBackend.JWT:
     if MULTI_TENANT or AUTH_TYPE == AuthType.CLOUD:
         raise ValueError(
-            "JWT auth backend is only supported for single-tenant, self-hosted deployments. "
-            "Use 'redis' or 'postgres' instead."
+            "JWT auth backend is only supported for single-tenant, self-hosted deployments. Use 'redis' or 'postgres' instead."
         )
     if not USER_AUTH_SECRET:
         raise ValueError("USER_AUTH_SECRET is required for JWT auth backend.")
@@ -1617,6 +1645,125 @@ async def current_admin_user(user: User = Depends(current_user)) -> User:
             detail="Access denied. User must be an admin to perform this action.",
         )
 
+    return user
+
+
+async def _get_user_from_token_data(token_data: dict) -> User | None:
+    """Shared logic: token data dict → User object.
+
+    Args:
+        token_data: Decoded token data containing 'sub' (user ID).
+
+    Returns:
+        User object if found and active, None otherwise.
+    """
+    user_id = token_data.get("sub")
+    if not user_id:
+        return None
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        return None
+
+    async with get_async_session_context_manager() as async_db_session:
+        user = await async_db_session.get(User, user_uuid)
+        if user is None or not user.is_active:
+            return None
+        return user
+
+
+_LOOPBACK_HOSTNAMES = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _is_same_origin(actual: str, expected: str) -> bool:
+    """Compare two origins for the WebSocket CSWSH check.
+
+    Scheme and hostname must match exactly.  Port must also match, except
+    when the hostname is a loopback address (localhost / 127.0.0.1 / ::1),
+    where port is ignored.  On loopback, all ports belong to the same
+    operator, so port differences carry no security significance — the
+    CSWSH threat is remote origins, not local ones.
+    """
+    a = urlparse(actual.rstrip("/"))
+    e = urlparse(expected.rstrip("/"))
+
+    if a.scheme != e.scheme or a.hostname != e.hostname:
+        return False
+
+    if a.hostname in _LOOPBACK_HOSTNAMES:
+        return True
+
+    actual_port = a.port or (443 if a.scheme == "https" else 80)
+    expected_port = e.port or (443 if e.scheme == "https" else 80)
+
+    return actual_port == expected_port
+
+
+async def current_user_from_websocket(
+    websocket: WebSocket,
+    token: str = Query(..., description="WebSocket authentication token"),
+) -> User:
+    """
+    WebSocket authentication dependency using query parameter.
+
+    Validates the WS token from query param and returns the User.
+    Raises BasicAuthenticationError if authentication fails.
+
+    The token must be obtained from POST /voice/ws-token before connecting.
+    Tokens are single-use and expire after 60 seconds.
+
+    Usage:
+        1. POST /voice/ws-token -> {"token": "xxx"}
+        2. Connect to ws://host/path?token=xxx
+
+    This applies the same auth checks as current_user() for HTTP endpoints.
+    """
+    # Check Origin header to prevent Cross-Site WebSocket Hijacking (CSWSH).
+    # Browsers always send Origin on WebSocket connections.
+    origin = websocket.headers.get("origin")
+    if not origin:
+        logger.warning("WS auth: missing Origin header")
+        raise BasicAuthenticationError(detail="Access denied. Missing origin.")
+
+    if not _is_same_origin(origin, WEB_DOMAIN):
+        logger.warning(f"WS auth: origin mismatch. Expected {WEB_DOMAIN}, got {origin}")
+        raise BasicAuthenticationError(detail="Access denied. Invalid origin.")
+
+    # Validate WS token in Redis (single-use, deleted after retrieval)
+    try:
+        token_data = await retrieve_ws_token_data(token)
+        if token_data is None:
+            raise BasicAuthenticationError(
+                detail="Access denied. Invalid or expired authentication token."
+            )
+    except BasicAuthenticationError:
+        raise
+    except Exception as e:
+        logger.error(f"WS auth: error during token validation: {e}")
+        raise BasicAuthenticationError(
+            detail="Authentication verification failed."
+        ) from e
+
+    # Get user from token data
+    user = await _get_user_from_token_data(token_data)
+    if user is None:
+        logger.warning(f"WS auth: user not found for id={token_data.get('sub')}")
+        raise BasicAuthenticationError(
+            detail="Access denied. User not found or inactive."
+        )
+
+    # Apply same checks as HTTP auth (verification, OIDC expiry, role)
+    user = await double_check_user(user)
+
+    # Block LIMITED users (same as current_user)
+    if user.role == UserRole.LIMITED:
+        logger.warning(f"WS auth: user {user.email} has LIMITED role")
+        raise BasicAuthenticationError(
+            detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
+        )
+
+    logger.debug(f"WS auth: authenticated {user.email}")
     return user
 
 

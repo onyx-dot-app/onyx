@@ -31,8 +31,7 @@ def _verify_document_permissions(
     if cc_pair.access_type == AccessType.PUBLIC:
         if "PUBLIC" not in acl_keys:
             raise ValueError(
-                f"Document {retrieved_doc['document_id']} is public but"
-                " does not have the PUBLIC ACL key"
+                f"Document {retrieved_doc['document_id']} is public but does not have the PUBLIC ACL key"
             )
 
     if f"user_email:{doc_creating_user.email}" not in acl_keys:
@@ -55,8 +54,7 @@ def _verify_document_permissions(
         found_doc_set_names = set(retrieved_doc.get("document_sets", {}).keys())
         if found_doc_set_names != set(doc_set_names):
             raise ValueError(
-                f"Document set names mismatch. \nFound: {found_doc_set_names}, \n"
-                f"Expected: {set(doc_set_names)}"
+                f"Document set names mismatch. \nFound: {found_doc_set_names}, \nExpected: {set(doc_set_names)}"
             )
 
 

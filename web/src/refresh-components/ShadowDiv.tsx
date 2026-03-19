@@ -105,7 +105,7 @@ export default function ShadowDiv({
   }, [containerRef, checkScroll]);
 
   return (
-    <div className="relative">
+    <div className="relative min-h-0">
       <div
         ref={containerRef}
         className={cn("overflow-y-auto", className)}
@@ -118,7 +118,7 @@ export default function ShadowDiv({
       {!bottomOnly && (
         <div
           className={cn(
-            "absolute top-0 left-0 right-0 pointer-events-none",
+            "absolute top-0 left-0 right-0 pointer-events-none transition-opacity duration-150",
             showTopShadow ? "opacity-100" : "opacity-0"
           )}
           style={{
@@ -132,7 +132,7 @@ export default function ShadowDiv({
       {!topOnly && (
         <div
           className={cn(
-            "absolute bottom-0 left-0 right-0 pointer-events-none",
+            "absolute bottom-0 left-0 right-0 pointer-events-none transition-opacity duration-150",
             showBottomShadow ? "opacity-100" : "opacity-0"
           )}
           style={{

@@ -734,7 +734,8 @@ def upsert_documents(
             }
         )
     on_conflict_stmt = insert_stmt.on_conflict_do_update(
-        index_elements=["id"], set_=update_set  # Conflict target
+        index_elements=["id"],
+        set_=update_set,  # Conflict target
     )
     db_session.execute(on_conflict_stmt)
     db_session.commit()
@@ -1071,8 +1072,7 @@ def prepare_to_modify_documents(
 
     if not lock_acquired:
         raise RuntimeError(
-            f"Failed to acquire locks after {_NUM_LOCK_ATTEMPTS} attempts "
-            f"for documents: {document_ids}"
+            f"Failed to acquire locks after {_NUM_LOCK_ATTEMPTS} attempts for documents: {document_ids}"
         )
 
 

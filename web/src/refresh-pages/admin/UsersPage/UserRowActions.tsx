@@ -6,36 +6,42 @@ import {
   SvgMoreHorizontal,
   SvgUsers,
   SvgXCircle,
-  SvgTrash,
-  SvgCheck,
+  SvgUserCheck,
+  SvgUserPlus,
+  SvgUserX,
+  SvgKey,
 } from "@opal/icons";
 import { Disabled } from "@opal/core";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover from "@/refresh-components/Popover";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import Separator from "@/refresh-components/Separator";
+import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
+import { approveRequest } from "./svc";
+import EditUserModal from "./EditUserModal";
 import {
-  deactivateUser,
-  activateUser,
-  deleteUser,
-  cancelInvite,
-  approveRequest,
-} from "./svc";
-import EditGroupsModal from "./EditGroupsModal";
+  CancelInviteModal,
+  DeactivateUserModal,
+  ActivateUserModal,
+  DeleteUserModal,
+  ResetPasswordModal,
+} from "./UserActionModals";
 import type { UserRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type ModalType =
-  | "deactivate"
-  | "activate"
-  | "delete"
-  | "cancelInvite"
-  | "editGroups"
-  | null;
+enum Modal {
+  DEACTIVATE = "deactivate",
+  ACTIVATE = "activate",
+  DELETE = "delete",
+  CANCEL_INVITE = "cancelInvite",
+  EDIT_GROUPS = "editGroups",
+  RESET_PASSWORD = "resetPassword",
+}
 
 interface UserRowActionsProps {
   user: UserRow;
@@ -50,83 +56,109 @@ export default function UserRowActions({
   user,
   onMutate,
 }: UserRowActionsProps) {
-  const [modal, setModal] = useState<ModalType>(null);
+  const [modal, setModal] = useState<Modal | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function handleAction(
-    action: () => Promise<void>,
-    successMessage: string
-  ) {
-    setIsSubmitting(true);
-    try {
-      await action();
-      onMutate();
-      toast.success(successMessage);
-      setModal(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  const openModal = (type: ModalType) => {
+  const openModal = (type: Modal) => {
     setPopoverOpen(false);
     setModal(type);
   };
 
+  const closeModal = () => setModal(null);
+
+  const closeAndMutate = () => {
+    setModal(null);
+    onMutate();
+  };
+
   // Status-aware action menus
   const actionButtons = (() => {
+    // SCIM-managed users get limited actions — most changes would be
+    // overwritten on the next IdP sync.
+    if (user.is_scim_synced) {
+      return (
+        <>
+          {user.id && (
+            <LineItem
+              icon={SvgUsers}
+              onClick={() => openModal(Modal.EDIT_GROUPS)}
+            >
+              Groups &amp; Roles
+            </LineItem>
+          )}
+          <Disabled disabled>
+            <LineItem danger icon={SvgUserX}>
+              Deactivate User
+            </LineItem>
+          </Disabled>
+          <Separator paddingXRem={0.5} />
+          <Text as="p" secondaryBody text03 className="px-3 py-1">
+            This is a synced SCIM user managed by your identity provider.
+          </Text>
+        </>
+      );
+    }
+
     switch (user.status) {
       case UserStatus.INVITED:
         return (
-          <Button
-            prominence="tertiary"
-            variant="danger"
+          <LineItem
+            danger
             icon={SvgXCircle}
-            onClick={() => openModal("cancelInvite")}
+            onClick={() => openModal(Modal.CANCEL_INVITE)}
           >
             Cancel Invite
-          </Button>
+          </LineItem>
         );
 
       case UserStatus.REQUESTED:
         return (
-          <Button
-            prominence="tertiary"
-            icon={SvgCheck}
+          <LineItem
+            icon={SvgUserCheck}
             onClick={() => {
               setPopoverOpen(false);
-              handleAction(
-                () => approveRequest(user.email),
-                "Request approved"
-              );
+              void (async () => {
+                try {
+                  await approveRequest(user.email);
+                  onMutate();
+                  toast.success("Request approved");
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : "An error occurred"
+                  );
+                }
+              })();
             }}
           >
             Approve
-          </Button>
+          </LineItem>
         );
 
       case UserStatus.ACTIVE:
         return (
           <>
             {user.id && (
-              <Button
-                prominence="tertiary"
+              <LineItem
                 icon={SvgUsers}
-                onClick={() => openModal("editGroups")}
+                onClick={() => openModal(Modal.EDIT_GROUPS)}
               >
-                Groups
-              </Button>
+                Groups &amp; Roles
+              </LineItem>
             )}
-            <Button
-              prominence="tertiary"
-              icon={SvgXCircle}
-              onClick={() => openModal("deactivate")}
+            <LineItem
+              icon={SvgKey}
+              onClick={() => openModal(Modal.RESET_PASSWORD)}
+            >
+              Reset Password
+            </LineItem>
+            <Separator paddingXRem={0.5} />
+            <LineItem
+              danger
+              icon={SvgUserX}
+              onClick={() => openModal(Modal.DEACTIVATE)}
             >
               Deactivate User
-            </Button>
+            </LineItem>
           </>
         );
 
@@ -134,29 +166,34 @@ export default function UserRowActions({
         return (
           <>
             {user.id && (
-              <Button
-                prominence="tertiary"
+              <LineItem
                 icon={SvgUsers}
-                onClick={() => openModal("editGroups")}
+                onClick={() => openModal(Modal.EDIT_GROUPS)}
               >
-                Groups
-              </Button>
+                Groups &amp; Roles
+              </LineItem>
             )}
-            <Button
-              prominence="tertiary"
-              icon={SvgCheck}
-              onClick={() => openModal("activate")}
+            <LineItem
+              icon={SvgKey}
+              onClick={() => openModal(Modal.RESET_PASSWORD)}
+            >
+              Reset Password
+            </LineItem>
+            <Separator paddingXRem={0.5} />
+            <LineItem
+              icon={SvgUserPlus}
+              onClick={() => openModal(Modal.ACTIVATE)}
             >
               Activate User
-            </Button>
-            <Button
-              prominence="tertiary"
-              variant="danger"
-              icon={SvgTrash}
-              onClick={() => openModal("delete")}
+            </LineItem>
+            <Separator paddingXRem={0.5} />
+            <LineItem
+              danger
+              icon={SvgUserX}
+              onClick={() => openModal(Modal.DELETE)}
             >
               Delete User
-            </Button>
+            </LineItem>
           </>
         );
 
@@ -167,151 +204,66 @@ export default function UserRowActions({
     }
   })();
 
-  // SCIM-managed users cannot be modified from the UI — changes would be
-  // overwritten on the next IdP sync.
-  if (user.is_scim_synced) {
-    return null;
-  }
-
   return (
     <>
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <Popover.Trigger asChild>
           <Button prominence="tertiary" icon={SvgMoreHorizontal} />
         </Popover.Trigger>
-        <Popover.Content align="end">
-          <div className="flex flex-col gap-0.5 p-1">{actionButtons}</div>
+        <Popover.Content align="end" width="sm">
+          <Section
+            gap={0.5}
+            height="auto"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            {actionButtons}
+          </Section>
         </Popover.Content>
       </Popover>
 
-      {modal === "editGroups" && user.id && (
-        <EditGroupsModal
+      {modal === Modal.EDIT_GROUPS && user.id && (
+        <EditUserModal
           user={user as UserRow & { id: string }}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           onMutate={onMutate}
         />
       )}
 
-      {modal === "cancelInvite" && (
-        <ConfirmationModalLayout
-          icon={SvgXCircle}
-          title="Cancel Invite"
-          onClose={() => setModal(null)}
-          submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  handleAction(
-                    () => cancelInvite(user.email),
-                    "Invite cancelled"
-                  );
-                }}
-              >
-                Cancel
-              </Button>
-            </Disabled>
-          }
-        >
-          <Text as="p" text03>
-            <Text as="span" text05>
-              {user.email}
-            </Text>{" "}
-            will no longer be able to join Onyx with this invite.
-          </Text>
-        </ConfirmationModalLayout>
+      {modal === Modal.CANCEL_INVITE && (
+        <CancelInviteModal
+          email={user.email}
+          onClose={closeModal}
+          onMutate={onMutate}
+        />
       )}
 
-      {modal === "deactivate" && (
-        <ConfirmationModalLayout
-          icon={SvgXCircle}
-          title="Deactivate User"
-          onClose={isSubmitting ? undefined : () => setModal(null)}
-          submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  await handleAction(
-                    () => deactivateUser(user.email),
-                    "User deactivated"
-                  );
-                }}
-              >
-                Deactivate
-              </Button>
-            </Disabled>
-          }
-        >
-          <Text as="p" text03>
-            <Text as="span" text05>
-              {user.email}
-            </Text>{" "}
-            will immediately lose access to Onyx. Their sessions and agents will
-            be preserved. Their license seat will be freed. You can reactivate
-            this account later.
-          </Text>
-        </ConfirmationModalLayout>
+      {modal === Modal.DEACTIVATE && (
+        <DeactivateUserModal
+          email={user.email}
+          onClose={closeModal}
+          onMutate={onMutate}
+        />
       )}
 
-      {modal === "activate" && (
-        <ConfirmationModalLayout
-          icon={SvgCheck}
-          title="Activate User"
-          onClose={isSubmitting ? undefined : () => setModal(null)}
-          submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                onClick={async () => {
-                  await handleAction(
-                    () => activateUser(user.email),
-                    "User activated"
-                  );
-                }}
-              >
-                Activate
-              </Button>
-            </Disabled>
-          }
-        >
-          <Text as="p" text03>
-            <Text as="span" text05>
-              {user.email}
-            </Text>{" "}
-            will regain access to Onyx.
-          </Text>
-        </ConfirmationModalLayout>
+      {modal === Modal.ACTIVATE && (
+        <ActivateUserModal
+          email={user.email}
+          onClose={closeModal}
+          onMutate={onMutate}
+        />
       )}
 
-      {modal === "delete" && (
-        <ConfirmationModalLayout
-          icon={SvgTrash}
-          title="Delete User"
-          onClose={isSubmitting ? undefined : () => setModal(null)}
-          submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  await handleAction(
-                    () => deleteUser(user.email),
-                    "User deleted"
-                  );
-                }}
-              >
-                Delete
-              </Button>
-            </Disabled>
-          }
-        >
-          <Text as="p" text03>
-            <Text as="span" text05>
-              {user.email}
-            </Text>{" "}
-            will be permanently removed from Onyx. All of their session history
-            will be deleted. Deletion cannot be undone.
-          </Text>
-        </ConfirmationModalLayout>
+      {modal === Modal.DELETE && (
+        <DeleteUserModal
+          email={user.email}
+          onClose={closeModal}
+          onMutate={onMutate}
+        />
+      )}
+
+      {modal === Modal.RESET_PASSWORD && (
+        <ResetPasswordModal email={user.email} onClose={closeModal} />
       )}
     </>
   );

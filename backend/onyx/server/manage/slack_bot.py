@@ -70,8 +70,7 @@ def _form_channel_config(
 
     if respond_tag_only and respond_member_group_list:
         raise ValueError(
-            "Cannot set OnyxBot to only respond to tags only and "
-            "also respond to a predetermined set of users."
+            "Cannot set OnyxBot to only respond to tags only and also respond to a predetermined set of users."
         )
 
     if (

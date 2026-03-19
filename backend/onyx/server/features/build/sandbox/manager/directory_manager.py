@@ -195,8 +195,7 @@ class DirectoryManager:
         persona = get_persona_info(user_work_area, user_level)
         if not persona:
             logger.debug(
-                f"No persona found for work_area={user_work_area}, "
-                f"level={user_level}, skipping org_info setup"
+                f"No persona found for work_area={user_work_area}, level={user_level}, skipping org_info setup"
             )
             return
 

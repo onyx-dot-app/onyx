@@ -453,14 +453,27 @@ wheels = [
 
 [[package]]
 name = "authlib"
-version = "1.6.7"
+version = "1.6.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/49/dc/ed1681bf1339dd6ea1ce56136bad4baabc6f7ad466e375810702b0237047/authlib-1.6.7.tar.gz", hash = "sha256:dbf10100011d1e1b34048c9d120e83f13b35d69a826ae762b93d2fb5aafc337b", size = 164950, upload-time = "2026-02-06T14:04:14.171Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/98/00d3dd826d46959ad8e32af2dbb2398868fd9fd0683c26e56d0789bd0e68/authlib-1.6.9.tar.gz", hash = "sha256:d8f2421e7e5980cc1ddb4e32d3f5fa659cfaf60d8eaf3281ebed192e4ab74f04", size = 165134, upload-time = "2026-03-02T07:44:01.998Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/00/3ed12264094ec91f534fae429945efbaa9f8c666f3aa7061cc3b2a26a0cd/authlib-1.6.7-py2.py3-none-any.whl", hash = "sha256:c637340d9a02789d2efa1d003a7437d10d3e565237bcb5fcbc6c134c7b95bab0", size = 244115, upload-time = "2026-02-06T14:04:12.141Z" },
+    { url = "https://files.pythonhosted.org/packages/53/23/b65f568ed0c22f1efacb744d2db1a33c8068f384b8c9b482b52ebdbc3ef6/authlib-1.6.9-py2.py3-none-any.whl", hash = "sha256:f08b4c14e08f0861dc18a32357b33fbcfd2ea86cfe3fe149484b4d764c4a0ac3", size = 244197, upload-time = "2026-03-02T07:44:00.307Z" },
+]
+
+[[package]]
+name = "azure-cognitiveservices-speech"
+version = "1.38.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/85/f4/4571c42cb00f8af317d5431f594b4ece1fbe59ab59f106947fea8e90cf89/azure_cognitiveservices_speech-1.38.0-py3-none-macosx_10_14_x86_64.whl", hash = "sha256:18dce915ab032711f687abb3297dd19176b9cbea562b322ee6fa7365ef4a5091", size = 6775838, upload-time = "2024-06-11T03:08:35.202Z" },
+    { url = "https://files.pythonhosted.org/packages/86/22/0ca2c59a573119950cad1f53531fec9872fc38810c405a4e1827f3d13a8e/azure_cognitiveservices_speech-1.38.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:9dd0800fbc4a8438c6dfd5747a658251914fe2d205a29e9b46158cadac6ab381", size = 6687975, upload-time = "2024-06-11T03:08:38.797Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/96/5436c09de3af3a9aefaa8cc00533c3a0f5d17aef5bbe017c17f0a30ad66e/azure_cognitiveservices_speech-1.38.0-py3-none-manylinux1_x86_64.whl", hash = "sha256:1c344e8a6faadb063cea451f0301e13b44d9724e1242337039bff601e81e6f86", size = 40022287, upload-time = "2024-06-11T03:08:16.777Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/2d/ba20d05ff77ec9870cd489e6e7a474ba7fe820524bcf6fd202025e0c11cf/azure_cognitiveservices_speech-1.38.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:1e002595a749471efeac3a54c80097946570b76c13049760b97a4b881d9d24af", size = 39788653, upload-time = "2024-06-11T03:08:30.405Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/21/25f8c37fb6868db4346ca977c287ede9e87f609885d932653243c9ed5f63/azure_cognitiveservices_speech-1.38.0-py3-none-win32.whl", hash = "sha256:16a530e6c646eb49ea0bc05cb45a9d28b99e4b67613f6c3a6c54e26e6bf65241", size = 1428364, upload-time = "2024-06-11T03:08:03.965Z" },
+    { url = "https://files.pythonhosted.org/packages/14/05/a6414a3481c5ee30c4f32742abe055e5f3ce4ff69e936089d86ece354067/azure_cognitiveservices_speech-1.38.0-py3-none-win_amd64.whl", hash = "sha256:1d38d8c056fb3f513a9ff27ab4e77fd08ca487f8788cc7a6df772c1ab2c97b54", size = 1539297, upload-time = "2024-06-11T03:08:01.304Z" },
 ]
 
 [[package]]
@@ -4227,6 +4240,7 @@ backend = [
     { name = "asana" },
     { name = "asyncpg" },
     { name = "atlassian-python-api" },
+    { name = "azure-cognitiveservices-speech" },
     { name = "beautifulsoup4" },
     { name = "boto3" },
     { name = "boto3-stubs", extra = ["s3"] },
@@ -4381,6 +4395,7 @@ requires-dist = [
     { name = "asana", marker = "extra == 'backend'", specifier = "==5.0.8" },
     { name = "asyncpg", marker = "extra == 'backend'", specifier = "==0.30.0" },
     { name = "atlassian-python-api", marker = "extra == 'backend'", specifier = "==3.41.16" },
+    { name = "azure-cognitiveservices-speech", marker = "extra == 'backend'", specifier = "==1.38.0" },
     { name = "beautifulsoup4", marker = "extra == 'backend'", specifier = "==4.12.3" },
     { name = "black", marker = "extra == 'dev'", specifier = "==25.1.0" },
     { name = "boto3", marker = "extra == 'backend'", specifier = "==1.39.11" },
@@ -4443,7 +4458,7 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'model-server'", specifier = "==2.4.1" },
     { name = "oauthlib", marker = "extra == 'backend'", specifier = "==3.2.2" },
     { name = "office365-rest-python-client", marker = "extra == 'backend'", specifier = "==2.6.2" },
-    { name = "onyx-devtools", marker = "extra == 'dev'", specifier = "==0.7.0" },
+    { name = "onyx-devtools", marker = "extra == 'dev'", specifier = "==0.7.1" },
     { name = "openai", specifier = "==2.14.0" },
     { name = "openapi-generator-cli", marker = "extra == 'dev'", specifier = "==7.17.0" },
     { name = "openinference-instrumentation", marker = "extra == 'backend'", specifier = "==0.1.42" },
@@ -4466,7 +4481,7 @@ requires-dist = [
     { name = "pygithub", marker = "extra == 'backend'", specifier = "==2.5.0" },
     { name = "pympler", marker = "extra == 'backend'", specifier = "==1.1" },
     { name = "pypandoc-binary", marker = "extra == 'backend'", specifier = "==1.16.2" },
-    { name = "pypdf", marker = "extra == 'backend'", specifier = "==6.8.0" },
+    { name = "pypdf", marker = "extra == 'backend'", specifier = "==6.9.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.3.5" },
     { name = "pytest-alembic", marker = "extra == 'dev'", specifier = "==0.12.1" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = "==1.3.0" },
@@ -4548,19 +4563,19 @@ requires-dist = [{ name = "onyx", extras = ["backend", "dev", "ee"], editable = 
 
 [[package]]
 name = "onyx-devtools"
-version = "0.7.0"
+version = "0.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
     { name = "openapi-generator-cli" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/9e/6957b11555da57d9e97092f4cd8ac09a86666264b0c9491838f4b27db5dc/onyx_devtools-0.7.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:ad962a168d46ea11dcde9fa3b37e4f12ec520b4a4cb4d49d8732de110d46c4b6", size = 3998057, upload-time = "2026-03-12T03:09:11.585Z" },
-    { url = "https://files.pythonhosted.org/packages/cd/90/c72f3d06ba677012d77c77de36195b6a32a15c755c79ba0282be74e3c366/onyx_devtools-0.7.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:e46d252e2b048ff053b03519c3a875998780738d7c334eaa1c9a32ff445e3e1a", size = 3687753, upload-time = "2026-03-12T03:09:11.742Z" },
-    { url = "https://files.pythonhosted.org/packages/10/42/4e9fe36eccf9f76d67ba8f4ff6539196a09cd60351fb63f5865e1544cbfa/onyx_devtools-0.7.0-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:f280bc9320e1cc310e7d753a371009bfaab02cc0e0cfd78559663b15655b5a50", size = 3560144, upload-time = "2026-03-12T03:12:24.02Z" },
-    { url = "https://files.pythonhosted.org/packages/76/40/36dc12d99760b358c7f39b27361cb18fa9681ffe194107f982d0e1a74016/onyx_devtools-0.7.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:e31df751c7540ae7e70a7fe8e1153c79c31c2254af6aa4c72c0dd54fa381d2ab", size = 3964387, upload-time = "2026-03-12T03:09:11.356Z" },
-    { url = "https://files.pythonhosted.org/packages/34/18/74744230c3820a5a7687335507ca5f1dbebab2c5325805041c1cd5703e6a/onyx_devtools-0.7.0-py3-none-win_amd64.whl", hash = "sha256:541bfd347c2d5b11e7f63ab5001d2594df91d215ad9d07b1562f5e715700f7e6", size = 4068030, upload-time = "2026-03-12T03:09:12.98Z" },
-    { url = "https://files.pythonhosted.org/packages/8c/78/1320436607d3ffcb321ba7b064556c020ea15843a7e7d903fbb7529a71f5/onyx_devtools-0.7.0-py3-none-win_arm64.whl", hash = "sha256:83016330a9d39712431916cc25b2fb2cfcaa0112a55cc4f919d545da3a8974f9", size = 3626409, upload-time = "2026-03-12T03:09:10.222Z" },
+    { url = "https://files.pythonhosted.org/packages/65/9d/74bcd02583706bdf90c8ac9084eb60bd71d0671392152410ab21b7b68ea1/onyx_devtools-0.7.1-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:178385dce0b413fd2a1f761055a99f556ec536ef5c32963fc273e751813621eb", size = 4007974, upload-time = "2026-03-17T21:10:39.267Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/f8/d8ddb32120428c083c60eb07244479da6e07eaebd31847658a049ab33815/onyx_devtools-0.7.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:7960ae6e440ebf1584e02d9e1d0c9ef543b1d54c2584cdcace15695aec3121b2", size = 3696924, upload-time = "2026-03-17T21:10:50.716Z" },
+    { url = "https://files.pythonhosted.org/packages/87/21/1e427280066db42ff9dd5f34c70b9dca5d9781f96d0d9a88aaa454fdb432/onyx_devtools-0.7.1-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:6785dda88ca0a3d8464a9bfab76a253ed90da89d53a9c4a67227980f37df1ccf", size = 3568300, upload-time = "2026-03-17T21:10:41.997Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/0e/afbbe1164b3d016ddb5352353cb2541eef5a8b2c04e8f02d5d1319cb8b8c/onyx_devtools-0.7.1-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:9e77f2b725c0c00061a3dda5eba199404b51638cec0bf54fc7611fee1f26db34", size = 3974668, upload-time = "2026-03-17T21:10:43.879Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/a5/22840643289ef4ca83931b7a79fba8f1db7e626b4b870d4b4f8206c4ff5f/onyx_devtools-0.7.1-py3-none-win_amd64.whl", hash = "sha256:de37daa0e4db9b5dccf94408a3422be4f821e380ab70081bd1032cec1e3c91e6", size = 4078640, upload-time = "2026-03-17T21:10:40.275Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/c1/a0295506a521d9942b0f55523781a113e4555420d800a386d5a2eb46a7ad/onyx_devtools-0.7.1-py3-none-win_arm64.whl", hash = "sha256:ab88c53ebda6dff27350316b4ac9bd5f258cd586c2109971a9d976411e1e22ea", size = 3636787, upload-time = "2026-03-17T21:10:37.492Z" },
 ]
 
 [[package]]
@@ -5443,11 +5458,11 @@ wheels = [
 
 [[package]]
 name = "pyasn1"
-version = "0.6.2"
+version = "0.6.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fe/b6/6e630dff89739fcd427e3f72b3d905ce0acb85a45d4ec3e2678718a3487f/pyasn1-0.6.2.tar.gz", hash = "sha256:9b59a2b25ba7e4f8197db7686c09fb33e658b98339fadb826e9512629017833b", size = 146586, upload-time = "2026-01-16T18:04:18.534Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/5f/6583902b6f79b399c9c40674ac384fd9cd77805f9e6205075f828ef11fb2/pyasn1-0.6.3.tar.gz", hash = "sha256:697a8ecd6d98891189184ca1fa05d1bb00e2f84b5977c481452050549c8a72cf", size = 148685, upload-time = "2026-03-17T01:06:53.382Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/b5/a96872e5184f354da9c84ae119971a0a4c221fe9b27a4d94bd43f2596727/pyasn1-0.6.2-py3-none-any.whl", hash = "sha256:1eb26d860996a18e9b6ed05e7aae0e9fc21619fcee6af91cca9bad4fbea224bf", size = 83371, upload-time = "2026-01-16T18:04:17.174Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/a0/7d793dce3fa811fe047d6ae2431c672364b462850c6235ae306c0efd025f/pyasn1-0.6.3-py3-none-any.whl", hash = "sha256:a80184d120f0864a52a073acc6fc642847d0be408e7c7252f31390c0f4eadcde", size = 83997, upload-time = "2026-03-17T01:06:52.036Z" },
 ]
 
 [[package]]
@@ -5628,11 +5643,11 @@ wheels = [
 
 [[package]]
 name = "pyjwt"
-version = "2.11.0"
+version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5c/5a/b46fa56bf322901eee5b0454a34343cdbdae202cd421775a8ee4e42fd519/pyjwt-2.11.0.tar.gz", hash = "sha256:35f95c1f0fbe5d5ba6e43f00271c275f7a1a4db1dab27bf708073b75318ea623", size = 98019, upload-time = "2026-01-30T19:59:55.694Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/10/e8192be5f38f3e8e7e046716de4cae33d56fd5ae08927a823bb916be36c1/pyjwt-2.12.0.tar.gz", hash = "sha256:2f62390b667cd8257de560b850bb5a883102a388829274147f1d724453f8fb02", size = 102511, upload-time = "2026-03-12T17:15:30.831Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6f/01/c26ce75ba460d5cd503da9e13b21a33804d38c2165dec7b716d06b13010c/pyjwt-2.11.0-py3-none-any.whl", hash = "sha256:94a6bde30eb5c8e04fee991062b534071fd1439ef58d2adc9ccb823e7bcd0469", size = 28224, upload-time = "2026-01-30T19:59:54.539Z" },
+    { url = "https://files.pythonhosted.org/packages/15/70/70f895f404d363d291dcf62c12c85fdd47619ad9674ac0f53364d035925a/pyjwt-2.12.0-py3-none-any.whl", hash = "sha256:9bb459d1bdd0387967d287f5656bf7ec2b9a26645d1961628cda1764e087fd6e", size = 29700, upload-time = "2026-03-12T17:15:29.257Z" },
 ]
 
 [package.optional-dependencies]
@@ -5712,11 +5727,11 @@ wheels = [
 
 [[package]]
 name = "pypdf"
-version = "6.8.0"
+version = "6.9.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b4/a3/e705b0805212b663a4c27b861c8a603dba0f8b4bb281f96f8e746576a50d/pypdf-6.8.0.tar.gz", hash = "sha256:cb7eaeaa4133ce76f762184069a854e03f4d9a08568f0e0623f7ea810407833b", size = 5307831, upload-time = "2026-03-09T13:37:40.591Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/fb/dc2e8cb006e80b0020ed20d8649106fe4274e82d8e756ad3e24ade19c0df/pypdf-6.9.1.tar.gz", hash = "sha256:ae052407d33d34de0c86c5c729be6d51010bf36e03035a8f23ab449bca52377d", size = 5311551, upload-time = "2026-03-17T10:46:07.876Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/ec/4ccf3bb86b1afe5d7176e1c8abcdbf22b53dd682ec2eda50e1caadcf6846/pypdf-6.8.0-py3-none-any.whl", hash = "sha256:2a025080a8dd73f48123c89c57174a5ff3806c71763ee4e49572dc90454943c7", size = 332177, upload-time = "2026-03-09T13:37:38.774Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/f4/75543fa802b86e72f87e9395440fe1a89a6d149887e3e55745715c3352ac/pypdf-6.9.1-py3-none-any.whl", hash = "sha256:f35a6a022348fae47e092a908339a8f3dc993510c026bb39a96718fc7185e89f", size = 333661, upload-time = "2026-03-17T10:46:06.286Z" },
 ]
 
 [[package]]

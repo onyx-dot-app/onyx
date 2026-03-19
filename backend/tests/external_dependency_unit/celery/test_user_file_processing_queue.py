@@ -186,10 +186,9 @@ class TestPerFileGuardKey:
                 guard_key
             ), "Guard key should be set in Redis after enqueue"
             ttl = int(redis_client.ttl(guard_key))  # type: ignore[arg-type]
-            assert 0 < ttl <= CELERY_USER_FILE_PROCESSING_TASK_EXPIRES, (
-                f"Guard key TTL {ttl}s is outside the expected range "
-                f"(0, {CELERY_USER_FILE_PROCESSING_TASK_EXPIRES}]"
-            )
+            assert (
+                0 < ttl <= CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
+            ), f"Guard key TTL {ttl}s is outside the expected range (0, {CELERY_USER_FILE_PROCESSING_TASK_EXPIRES}]"
         finally:
             redis_client.delete(guard_key)
 
@@ -231,10 +230,7 @@ class TestTaskExpiry:
                 assert (
                     call.kwargs.get("expires")
                     == CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
-                ), (
-                    "Task must be submitted with the correct expires value to prevent "
-                    "stale task accumulation"
-                )
+                ), "Task must be submitted with the correct expires value to prevent stale task accumulation"
         finally:
             redis_client.delete(guard_key)
 

@@ -575,8 +575,7 @@ def associate_credential_to_connector(
         )
 
         logger.info(
-            f"associate_credential_to_connector - running check_for_indexing: "
-            f"cc_pair={response.data}"
+            f"associate_credential_to_connector - running check_for_indexing: cc_pair={response.data}"
         )
 
         return response

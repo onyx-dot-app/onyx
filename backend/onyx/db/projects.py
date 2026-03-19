@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from starlette.background import BackgroundTasks
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
@@ -144,10 +145,10 @@ def upload_files_to_user_files_with_indexing(
                 kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
                 queue=OnyxCeleryQueues.USER_FILE_PROCESSING,
                 priority=OnyxCeleryPriority.HIGH,
+                expires=CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
             )
             logger.info(
-                f"Triggered indexing for user_file_id={user_file.id} "
-                f"with task_id={task.id}"
+                f"Triggered indexing for user_file_id={user_file.id} with task_id={task.id}"
             )
 
     return CategorizedFilesResult(

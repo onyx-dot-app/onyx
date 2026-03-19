@@ -126,8 +126,7 @@ class ToolRunnerResponse(BaseModel):
 
         if provided != 1:
             raise ValueError(
-                "Exactly one of 'tool_response', 'tool_message_content', "
-                "or 'tool_run_kickoff' must be provided"
+                "Exactly one of 'tool_response', 'tool_message_content', or 'tool_run_kickoff' must be provided"
             )
 
         return self

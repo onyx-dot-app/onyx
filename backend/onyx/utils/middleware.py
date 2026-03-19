@@ -19,7 +19,8 @@ from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
 
 
 def add_onyx_tenant_id_middleware(
-    app: FastAPI, logger: logging.LoggerAdapter  # noqa: ARG001
+    app: FastAPI,
+    logger: logging.LoggerAdapter,  # noqa: ARG001
 ) -> None:
     @app.middleware("http")
     async def set_tenant_id(
@@ -34,7 +35,9 @@ def add_onyx_tenant_id_middleware(
 
 
 def add_onyx_request_id_middleware(
-    app: FastAPI, prefix: str, logger: logging.LoggerAdapter  # noqa: ARG001
+    app: FastAPI,
+    prefix: str,
+    logger: logging.LoggerAdapter,  # noqa: ARG001
 ) -> None:
     @app.middleware("http")
     async def set_request_id(
@@ -71,7 +74,7 @@ def make_structured_onyx_request_id(prefix: str, request_url: str) -> str:
 
 def _make_onyx_request_id(prefix: str, hash_input: str) -> str:
     """helper function to return an id given a string input"""
-    hash_obj = hashlib.md5(hash_input.encode("utf-8"))
+    hash_obj = hashlib.md5(hash_input.encode("utf-8"), usedforsecurity=False)
     hash_bytes = hash_obj.digest()[:6]  # Truncate to 6 bytes
 
     # 6 bytes becomes 8 bytes. we shouldn't need to strip but just in case

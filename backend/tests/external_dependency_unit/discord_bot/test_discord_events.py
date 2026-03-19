@@ -547,7 +547,9 @@ class TestBotLifecycle:
 
         with (
             patch.object(
-                OnyxDiscordClient, "__init__", lambda self: None  # noqa: ARG005
+                OnyxDiscordClient,
+                "__init__",
+                lambda self: None,  # noqa: ARG005
             ),
             patch(
                 "onyx.onyxbot.discord.client.DiscordCacheManager",
@@ -579,7 +581,9 @@ class TestBotLifecycle:
 
         with (
             patch.object(
-                OnyxDiscordClient, "__init__", lambda self: None  # noqa: ARG005
+                OnyxDiscordClient,
+                "__init__",
+                lambda self: None,  # noqa: ARG005
             ),
         ):
             bot = OnyxDiscordClient()
@@ -603,7 +607,9 @@ class TestBotLifecycle:
 
         with (
             patch.object(
-                OnyxDiscordClient, "__init__", lambda self: None  # noqa: ARG005
+                OnyxDiscordClient,
+                "__init__",
+                lambda self: None,  # noqa: ARG005
             ),
             patch.object(OnyxDiscordClient, "is_closed", return_value=True),
         ):

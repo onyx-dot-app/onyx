@@ -193,8 +193,7 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
     if status_code == 400:
         if "does not exist for the field 'project'" in error_text:
             raise ConnectorValidationError(
-                f"The specified Jira project does not exist or you don't have access to it. "
-                f"JQL query: {jql}. Error: {error_text}"
+                f"The specified Jira project does not exist or you don't have access to it. JQL query: {jql}. Error: {error_text}"
             )
         raise ConnectorValidationError(
             f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
@@ -314,8 +313,7 @@ def _perform_jql_search_v2(
     Unfortunately, jira server/data center will forever use the v2 APIs that are now deprecated.
     """
     logger.debug(
-        f"Fetching Jira issues with JQL: {jql}, "
-        f"starting at {start}, max results: {max_results}"
+        f"Fetching Jira issues with JQL: {jql}, starting at {start}, max results: {max_results}"
     )
     try:
         issues = jira_client.search_issues(
@@ -366,8 +364,7 @@ def process_jira_issue(
     # Check ticket size
     if len(ticket_content.encode("utf-8")) > JIRA_CONNECTOR_MAX_TICKET_SIZE:
         logger.info(
-            f"Skipping {issue.key} because it exceeds the maximum size of "
-            f"{JIRA_CONNECTOR_MAX_TICKET_SIZE} bytes."
+            f"Skipping {issue.key} because it exceeds the maximum size of {JIRA_CONNECTOR_MAX_TICKET_SIZE} bytes."
         )
         return None
 

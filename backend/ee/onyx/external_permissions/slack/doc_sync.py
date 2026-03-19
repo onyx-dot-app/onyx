@@ -166,8 +166,7 @@ def slack_doc_sync(
     user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
     if not user_id_to_email_map:
         raise ValueError(
-            "No user id to email map found. Please check to make sure that "
-            "your Slack bot token has the `users:read.email` scope"
+            "No user id to email map found. Please check to make sure that your Slack bot token has the `users:read.email` scope"
         )
 
     workspace_permissions = _fetch_workspace_permissions(

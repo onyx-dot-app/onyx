@@ -261,7 +261,6 @@ def create_update_persona(
     try:
         # Featured persona validation
         if create_persona_request.featured:
-
             # Curators can edit featured personas, but not make them
             # TODO this will be reworked soon with RBAC permissions feature
             if user.role == UserRole.CURATOR or user.role == UserRole.GLOBAL_CURATOR:

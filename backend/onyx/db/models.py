@@ -64,6 +64,8 @@ from onyx.db.enums import (
     BuildSessionStatus,
     EmbeddingPrecision,
     HierarchyNodeType,
+    HookFailStrategy,
+    HookPoint,
     IndexingMode,
     OpenSearchDocumentMigrationStatus,
     OpenSearchTenantMigrationStatus,
@@ -168,7 +170,9 @@ class EncryptedString(_EncryptedBase):
     _is_json: bool = False
 
     def process_bind_param(
-        self, value: str | SensitiveValue[str] | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: str | SensitiveValue[str] | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
             # Handle both raw strings and SensitiveValue wrappers
@@ -179,7 +183,9 @@ class EncryptedString(_EncryptedBase):
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: bytes | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> SensitiveValue[str] | None:
         if value is not None:
             return SensitiveValue(
@@ -207,7 +213,9 @@ class EncryptedJson(_EncryptedBase):
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: bytes | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> SensitiveValue[dict[str, Any]] | None:
         if value is not None:
             return SensitiveValue(
@@ -259,7 +267,9 @@ class NullFilteredString(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(
-        self, value: str | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: str | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> str | None:
         if value is not None and "\x00" in value:
             logger.warning(f"NUL characters found in value: {value}")
@@ -267,7 +277,9 @@ class NullFilteredString(TypeDecorator):
         return value
 
     def process_result_value(
-        self, value: str | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: str | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> str | None:
         return value
 
@@ -352,6 +364,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     default_model: Mapped[str] = mapped_column(Text, nullable=True)
     # organized in typical structured fashion
     # formatted as `displayName__provider__modelName`
+
+    # Voice preferences
+    voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
+    voice_auto_playback: Mapped[bool] = mapped_column(Boolean, default=False)
+    voice_playback_speed: Mapped[float] = mapped_column(Float, default=1.0)
 
     # relationships
     credentials: Mapped[list["Credential"]] = relationship(
@@ -1757,8 +1774,7 @@ class ChunkStats(Base):
         NullFilteredString,
         primary_key=True,
         default=lambda context: (
-            f"{context.get_current_parameters()['document_id']}"
-            f"__{context.get_current_parameters()['chunk_in_doc_id']}"
+            f"{context.get_current_parameters()['document_id']}__{context.get_current_parameters()['chunk_in_doc_id']}"
         ),
         index=True,
     )
@@ -3061,6 +3077,65 @@ class ImageGenerationConfig(Base):
         Index(
             "ix_image_generation_config_model_configuration_id",
             "model_configuration_id",
+        ),
+    )
+
+
+class VoiceProvider(Base):
+    """Configuration for voice services (STT and TTS)."""
+
+    __tablename__ = "voice_provider"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    provider_type: Mapped[str] = mapped_column(
+        String
+    )  # "openai", "azure", "elevenlabs"
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    api_base: Mapped[str | None] = mapped_column(String, nullable=True)
+    custom_config: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    # Model/voice configuration
+    stt_model: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # e.g., "whisper-1"
+    tts_model: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # e.g., "tts-1", "tts-1-hd"
+    default_voice: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # e.g., "alloy", "echo"
+
+    # STT and TTS can use different providers - only one provider per type
+    is_default_stt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_default_tts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Enforce only one default STT provider and one default TTS provider at DB level
+    __table_args__ = (
+        Index(
+            "ix_voice_provider_one_default_stt",
+            "is_default_stt",
+            unique=True,
+            postgresql_where=(is_default_stt == True),  # noqa: E712
+        ),
+        Index(
+            "ix_voice_provider_one_default_tts",
+            "is_default_tts",
+            unique=True,
+            postgresql_where=(is_default_tts == True),  # noqa: E712
         ),
     )
 
@@ -4637,7 +4712,7 @@ class DocPermissionSyncAttempt(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<DocPermissionSyncAttempt(id={self.id!r}, " f"status={self.status!r})>"
+        return f"<DocPermissionSyncAttempt(id={self.id!r}, status={self.status!r})>"
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
@@ -4706,10 +4781,7 @@ class ExternalGroupPermissionSyncAttempt(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<ExternalGroupPermissionSyncAttempt(id={self.id!r}, "
-            f"status={self.status!r})>"
-        )
+        return f"<ExternalGroupPermissionSyncAttempt(id={self.id!r}, status={self.status!r})>"
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
@@ -5108,3 +5180,90 @@ class CacheStore(Base):
     expires_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class Hook(Base):
+    """Pairs a HookPoint with a customer-provided API endpoint.
+
+    At most one non-deleted Hook per HookPoint is allowed, enforced by a
+    partial unique index on (hook_point) where deleted=false.
+    """
+
+    __tablename__ = "hook"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    hook_point: Mapped[HookPoint] = mapped_column(
+        Enum(HookPoint, native_enum=False), nullable=False
+    )
+    endpoint_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    is_reachable: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )  # null = never validated, true = last check passed, false = last check failed
+    fail_strategy: Mapped[HookFailStrategy] = mapped_column(
+        Enum(HookFailStrategy, native_enum=False),
+        nullable=False,
+        default=HookFailStrategy.HARD,
+    )
+    timeout_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=30.0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    creator_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    creator: Mapped["User | None"] = relationship("User", foreign_keys=[creator_id])
+    execution_logs: Mapped[list["HookExecutionLog"]] = relationship(
+        "HookExecutionLog", back_populates="hook", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_hook_one_non_deleted_per_point",
+            "hook_point",
+            unique=True,
+            postgresql_where=(deleted == False),  # noqa: E712
+        ),
+    )
+
+
+class HookExecutionLog(Base):
+    """Records hook executions for health monitoring and debugging.
+
+    Currently only failures are logged; the is_success column exists so
+    success logging can be added later without a schema change.
+    Retention: rows older than 30 days are deleted by a nightly Celery task.
+    """
+
+    __tablename__ = "hook_execution_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hook_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("hook.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    is_success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    hook: Mapped["Hook"] = relationship("Hook", back_populates="execution_logs")

@@ -486,7 +486,9 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
     assert non_public_provider.name in admin_provider_names
 
 
-def test_provider_delete_clears_persona_references(reset: None) -> None:  # noqa: ARG001
+def test_provider_delete_clears_persona_references(
+    reset: None,  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """Test that deleting a provider automatically clears persona references."""
     admin_user = UserManager.create(name="admin_user")
 

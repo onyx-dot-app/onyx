@@ -44,13 +44,13 @@ class TestBuildVespaFilters:
         assert result == f'({SOURCE_TYPE} contains "web") and '
 
     def test_acl(self) -> None:
-        """Test with acls."""
+        """Test with acls — uses weightedSet operator for efficient matching."""
         # Single ACL
         filters = IndexFilters(access_control_list=["user1"])
         result = build_vespa_filters(filters)
         assert (
             result
-            == f'!({HIDDEN}=true) and (access_control_list contains "user1") and '
+            == f'!({HIDDEN}=true) and weightedSet(access_control_list, {{"user1":1}}) and '
         )
 
         # Multiple ACL's
@@ -58,7 +58,7 @@ class TestBuildVespaFilters:
         result = build_vespa_filters(filters)
         assert (
             result
-            == f'!({HIDDEN}=true) and (access_control_list contains "user2" or access_control_list contains "group2") and '
+            == f'!({HIDDEN}=true) and weightedSet(access_control_list, {{"user2":1, "group2":1}}) and '
         )
 
     def test_tenant_filter(self) -> None:
@@ -250,10 +250,7 @@ class TestBuildVespaFilters:
         result = build_vespa_filters(filters)
 
         expected = f"!({HIDDEN}=true) and "
-        expected += (
-            '(access_control_list contains "user1" or '
-            'access_control_list contains "group1") and '
-        )
+        expected += 'weightedSet(access_control_list, {"user1":1, "group1":1}) and '
         expected += f'({SOURCE_TYPE} contains "web") and '
         expected += f'({METADATA_LIST} contains "color{INDEX_SEPARATOR}red") and '
         # Knowledge scope filters are OR'd together
@@ -290,13 +287,40 @@ class TestBuildVespaFilters:
             user_file_ids=[id1],
         )
         result = build_vespa_filters(filters)
-        expected = (
-            f"!({HIDDEN}=true) and "
-            f'(({DOCUMENT_SETS} contains "engineering")'
-            f' or ({DOCUMENT_ID} contains "{str(id1)}")'
-            f") and "
-        )
+        expected = f'!({HIDDEN}=true) and (({DOCUMENT_SETS} contains "engineering") or ({DOCUMENT_ID} contains "{str(id1)}")) and '
         assert expected == result
+
+    def test_acl_large_list_uses_weighted_set(self) -> None:
+        """Verify that large ACL lists produce a weightedSet clause
+        instead of OR-chained contains — this is what prevents Vespa
+        HTTP 400 errors for users with thousands of permission groups."""
+        acl = [f"external_group:google_drive_{i}" for i in range(10_000)]
+        acl += ["user_email:user@example.com", "__PUBLIC__"]
+        filters = IndexFilters(access_control_list=acl)
+        result = build_vespa_filters(filters)
+
+        assert "weightedSet(access_control_list, {" in result
+        # Must NOT contain OR-chained contains clauses
+        assert "access_control_list contains" not in result
+        # All entries should be present
+        assert '"external_group:google_drive_0":1' in result
+        assert '"external_group:google_drive_9999":1' in result
+        assert '"user_email:user@example.com":1' in result
+        assert '"__PUBLIC__":1' in result
+
+    def test_acl_empty_strings_filtered(self) -> None:
+        """Empty strings in the ACL list should be filtered out."""
+        filters = IndexFilters(access_control_list=["user1", "", "group1"])
+        result = build_vespa_filters(filters)
+        assert (
+            result
+            == f'!({HIDDEN}=true) and weightedSet(access_control_list, {{"user1":1, "group1":1}}) and '
+        )
+
+        # All empty
+        filters = IndexFilters(access_control_list=["", ""])
+        result = build_vespa_filters(filters)
+        assert result == f"!({HIDDEN}=true) and "
 
     def test_empty_or_none_values(self) -> None:
         """Test with empty or None values in filter lists."""

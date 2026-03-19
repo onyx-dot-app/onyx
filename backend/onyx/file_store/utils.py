@@ -134,9 +134,7 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
         return chat_file
     finally:
         logger.debug(
-            f"load_user_file finished: file_id={user_file.file_id} "
-            f"chat_file_type={chat_file_type} "
-            f"status={status}"
+            f"load_user_file finished: file_id={user_file.file_id} chat_file_type={chat_file_type} status={status}"
         )
 
 

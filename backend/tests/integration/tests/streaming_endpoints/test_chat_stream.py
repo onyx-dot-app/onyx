@@ -61,7 +61,8 @@ def test_send_two_messages(basic_user: DATestUser) -> None:
 
 
 def test_send_message_simple_with_history(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     LLMProviderManager.create(user_performing_action=admin_user)
 
@@ -120,7 +121,8 @@ def test_send_message__basic_searches(
 
 
 def test_send_message_disconnect_and_cleanup(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     """
     Test that when a client disconnects mid-stream:
@@ -169,7 +171,6 @@ def test_send_message_disconnect_and_cleanup(
         if msg != TERMINATED_RESPONSE_MESSAGE and msg != LOADING_RESPONSE_MESSAGE:
             break
 
-    assert msg != TERMINATED_RESPONSE_MESSAGE and msg != LOADING_RESPONSE_MESSAGE, (
-        f"Assistant message should no longer be the terminated response message after cleanup, "
-        f"got: {msg}"
-    )
+    assert (
+        msg != TERMINATED_RESPONSE_MESSAGE and msg != LOADING_RESPONSE_MESSAGE
+    ), f"Assistant message should no longer be the terminated response message after cleanup, got: {msg}"

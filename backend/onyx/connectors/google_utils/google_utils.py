@@ -157,9 +157,7 @@ def _execute_single_retrieval(
             logger.error(f"Error executing request: {e}")
             raise e
         elif _is_rate_limit_error(e):
-            results = _execute_with_retry(
-                lambda: retrieval_function(**request_kwargs).execute()
-            )
+            results = _execute_with_retry(retrieval_function(**request_kwargs))
         elif e.resp.status == 404 or e.resp.status == 403:
             if continue_on_404_or_403:
                 logger.debug(f"Error executing request: {e}")

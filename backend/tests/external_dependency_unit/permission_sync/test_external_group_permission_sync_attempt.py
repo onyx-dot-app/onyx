@@ -93,7 +93,6 @@ def _cleanup_global_external_group_sync_attempts(db_session: Session) -> None:
 
 
 class TestExternalGroupPermissionSyncAttempt:
-
     def test_create_external_group_sync_attempt_with_cc_pair(
         self, db_session: Session
     ) -> None:

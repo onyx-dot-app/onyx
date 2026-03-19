@@ -126,6 +126,38 @@ export function useAdminLLMProviders() {
  * - `error` — The SWR error object, if any.
  * - `mutate` — SWR `mutate` function to trigger a revalidation.
  */
+/**
+ * Fetches the descriptor for a single well-known (built-in) LLM provider.
+ *
+ * Hits `GET /api/admin/llm/built-in/options/{providerEndpoint}` which returns
+ * the provider descriptor including its known models and the recommended
+ * default model.
+ *
+ * Used inside individual provider modals to pre-populate model lists
+ * before the user has entered credentials.
+ *
+ * @param providerEndpoint - The provider's API endpoint name (e.g. "openai", "anthropic").
+ *   Pass `null` to suppress the request.
+ */
+export function useWellKnownLLMProvider(providerEndpoint: string | null) {
+  const { data, error, isLoading } = useSWR<WellKnownLLMProviderDescriptor>(
+    providerEndpoint
+      ? `/api/admin/llm/built-in/options/${providerEndpoint}`
+      : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000,
+    }
+  );
+
+  return {
+    wellKnownLLMProvider: data ?? null,
+    isLoading,
+    error,
+  };
+}
+
 export function useWellKnownLLMProviders() {
   const {
     data: wellKnownLLMProviders,

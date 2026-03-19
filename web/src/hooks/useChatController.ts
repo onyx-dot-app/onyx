@@ -58,7 +58,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { usePostHog } from "posthog-js/react";
+import { track, AnalyticsEvent } from "@/lib/analytics";
 import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/hooks/useAgents";
@@ -147,7 +147,6 @@ export default function useChatController({
   const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
-  const posthog = usePostHog();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -764,8 +763,8 @@ export default function useChatController({
                 .user_message_id;
 
               // Track extension queries in PostHog (reuses isExtension/extensionContext from above)
-              if (isExtension && posthog) {
-                posthog.capture("extension_chat_query", {
+              if (isExtension) {
+                track(AnalyticsEvent.EXTENSION_CHAT_QUERY, {
                   extension_context: extensionContext,
                   assistant_id: liveAgent?.id,
                   has_files: effectiveFileDescriptors.length > 0,

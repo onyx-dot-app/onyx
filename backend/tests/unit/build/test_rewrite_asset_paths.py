@@ -87,10 +87,7 @@ class TestNextjsPathRewriting:
         )
 
     def test_rewrites_absolute_next_font_url(self) -> None:
-        html = (
-            '<link rel="preload" as="font" '
-            'href="https://craft-dev.onyx.app/_next/static/media/font.woff2">'
-        )
+        html = '<link rel="preload" as="font" href="https://craft-dev.onyx.app/_next/static/media/font.woff2">'
         result = rewrite(html)
         assert f'"{BASE}/_next/static/media/font.woff2"' in result
 
@@ -132,11 +129,7 @@ class TestRuntimeFixerInjection:
         ) < result.index("<title>x</title>")
 
     def test_rewritten_hmr_url_still_matches_shim_intercept_logic(self) -> None:
-        html = (
-            "<html><head></head><body>"
-            'new WebSocket("wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc")'
-            "</body></html>"
-        )
+        html = '<html><head></head><body>new WebSocket("wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc")</body></html>'
 
         rewritten = rewrite(html)
         assert '"wss://craft-dev.onyx.app/_next/webpack-hmr?id=abc"' not in rewritten
@@ -246,8 +239,7 @@ class TestProxyRequestWiring:
     def test_rewrites_absolute_link_header_font_preload_paths(self) -> None:
         headers = {
             "link": (
-                "<https://craft-dev.onyx.app/_next/static/media/font.woff2>; "
-                'rel=preload; as="font"; crossorigin'
+                '<https://craft-dev.onyx.app/_next/static/media/font.woff2>; rel=preload; as="font"; crossorigin'
             )
         }
 
