@@ -130,6 +130,7 @@ export const docxVariant: PreviewVariant = {
   width: "lg",
   height: "full",
   needsTextContent: false,
+  codeBackground: false,
   headerDescription: () => {
     if (lastDocxResult) {
       const count = lastDocxResult.wordCount;

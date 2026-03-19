@@ -19,12 +19,16 @@ class OnyxMimeTypes:
         PLAIN_TEXT_MIME_TYPE,
         "text/markdown",
         "text/x-markdown",
+        "text/x-log",
         "text/x-config",
         "text/tab-separated-values",
         "application/json",
         "application/xml",
         "text/xml",
         "application/x-yaml",
+        "application/yaml",
+        "text/yaml",
+        "text/x-yaml",
     }
     DOCUMENT_MIME_TYPES = {
         PDF_MIME_TYPE,
