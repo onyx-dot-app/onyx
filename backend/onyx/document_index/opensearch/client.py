@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from contextlib import AbstractContextManager
@@ -1062,7 +1063,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 f"Body: {get_new_body_without_vectors(body)}\n"
                 f"Search pipeline ID: {search_pipeline_id}\n"
                 f"Phase took: {phase_took}\n"
-                f"Profile: {profile}\n"
+                f"Profile: {json.dumps(profile, indent=2)}\n"
             )
         if timed_out:
             error_str = f"OpenSearch client error: Search timed out for index {self._index_name}."

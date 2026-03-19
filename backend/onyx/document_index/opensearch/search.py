@@ -404,11 +404,169 @@ class DocumentQuery:
                 DocumentQuery._get_match_highlights_configuration()
             )
 
-        # Explain is for scoring breakdowns.
+        # Explain is for scoring breakdowns. Setting this significantly
+        # increases query latency.
         if OPENSEARCH_EXPLAIN_ENABLED:
             final_hybrid_search_body["explain"] = True
 
         return final_hybrid_search_body
+
+    @staticmethod
+    def get_keyword_search_query(
+        query_text: str,
+        num_hits: int,
+        tenant_state: TenantState,
+        index_filters: IndexFilters,
+        include_hidden: bool,
+    ) -> dict[str, Any]:
+        """Returns a final keyword search query.
+
+        This query can be directly supplied to the OpenSearch client.
+
+        Args:
+            query_text: The text to query for.
+            num_hits: The final number of hits to return.
+            tenant_state: Tenant state containing the tenant ID.
+            index_filters: Filters for the hybrid search query.
+            include_hidden: Whether to include hidden documents.
+
+        Returns:
+            A dictionary representing the final keyword search query.
+        """
+        if num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
+            raise ValueError(
+                f"Bug: num_hits ({num_hits}) is greater than the current maximum allowed "
+                f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
+            )
+
+        keyword_search_filters = DocumentQuery._get_search_filters(
+            tenant_state=tenant_state,
+            include_hidden=include_hidden,
+            # TODO(andrei): We've done no filtering for PUBLIC_DOC_PAT up to
+            # now. This should not cause any issues but it can introduce
+            # redundant filters in queries that may affect performance.
+            access_control_list=index_filters.access_control_list,
+            source_types=index_filters.source_type or [],
+            tags=index_filters.tags or [],
+            document_sets=index_filters.document_set or [],
+            user_file_ids=index_filters.user_file_ids or [],
+            project_id=index_filters.project_id,
+            persona_id=index_filters.persona_id,
+            time_cutoff=index_filters.time_cutoff,
+            min_chunk_index=None,
+            max_chunk_index=None,
+            attached_document_ids=index_filters.attached_document_ids,
+            hierarchy_node_ids=index_filters.hierarchy_node_ids,
+        )
+
+        keyword_search_query = (
+            DocumentQuery._get_title_content_combined_keyword_search_query(
+                query_text, query_filter=keyword_search_filters
+            )
+        )
+
+        final_keyword_search_query: dict[str, Any] = {
+            "query": keyword_search_query,
+            "size": num_hits,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
+        }
+
+        if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
+            final_keyword_search_query["highlight"] = (
+                DocumentQuery._get_match_highlights_configuration()
+            )
+
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_keyword_search_query["profile"] = True
+
+        # Explain is for scoring breakdowns. Setting this significantly
+        # increases query latency.
+        if OPENSEARCH_EXPLAIN_ENABLED:
+            final_keyword_search_query["explain"] = True
+
+        return final_keyword_search_query
+
+    @staticmethod
+    def get_semantic_search_query(
+        query_embedding: list[float],
+        num_hits: int,
+        tenant_state: TenantState,
+        index_filters: IndexFilters,
+        include_hidden: bool,
+    ) -> dict[str, Any]:
+        """Returns a final semantic search query.
+
+        This query can be directly supplied to the OpenSearch client.
+
+        Args:
+            query_embedding: The vector embedding of the text to query for.
+            num_hits: The final number of hits to return.
+            tenant_state: Tenant state containing the tenant ID.
+            index_filters: Filters for the semantic search query.
+            include_hidden: Whether to include hidden documents.
+
+        Returns:
+            A dictionary representing the final semantic search query.
+        """
+        if num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
+            raise ValueError(
+                f"Bug: num_hits ({num_hits}) is greater than the current maximum allowed "
+                f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
+            )
+
+        semantic_search_filters = DocumentQuery._get_search_filters(
+            tenant_state=tenant_state,
+            include_hidden=include_hidden,
+            # TODO(andrei): We've done no filtering for PUBLIC_DOC_PAT up to
+            # now. This should not cause any issues but it can introduce
+            # redundant filters in queries that may affect performance.
+            access_control_list=index_filters.access_control_list,
+            source_types=index_filters.source_type or [],
+            tags=index_filters.tags or [],
+            document_sets=index_filters.document_set or [],
+            user_file_ids=index_filters.user_file_ids or [],
+            project_id=index_filters.project_id,
+            persona_id=index_filters.persona_id,
+            time_cutoff=index_filters.time_cutoff,
+            min_chunk_index=None,
+            max_chunk_index=None,
+            attached_document_ids=index_filters.attached_document_ids,
+            hierarchy_node_ids=index_filters.hierarchy_node_ids,
+        )
+
+        semantic_search_query = (
+            DocumentQuery._get_content_vector_similarity_search_query(
+                query_embedding,
+                vector_candidates=num_hits,
+                search_filters=semantic_search_filters,
+            )
+        )
+
+        final_semantic_search_query: dict[str, Any] = {
+            "query": semantic_search_query,
+            "size": num_hits,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
+        }
+
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_semantic_search_query["profile"] = True
+
+        # Explain is for scoring breakdowns. Setting this significantly
+        # increases query latency.
+        if OPENSEARCH_EXPLAIN_ENABLED:
+            final_semantic_search_query["explain"] = True
+
+        return final_semantic_search_query
 
     @staticmethod
     def get_random_search_query(
@@ -581,8 +739,9 @@ class DocumentQuery:
     def _get_content_vector_similarity_search_query(
         query_vector: list[float],
         vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
+        search_filters: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        return {
+        query = {
             "knn": {
                 CONTENT_VECTOR_FIELD_NAME: {
                     "vector": query_vector,
@@ -591,11 +750,19 @@ class DocumentQuery:
             }
         }
 
+        if search_filters is not None:
+            query["knn"][CONTENT_VECTOR_FIELD_NAME]["filter"] = {
+                "bool": {"filter": search_filters}
+            }
+
+        return query
+
     @staticmethod
     def _get_title_content_combined_keyword_search_query(
         query_text: str,
+        search_filters: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        return {
+        query = {
             "bool": {
                 "should": [
                     {
@@ -639,6 +806,11 @@ class DocumentQuery:
                 ]
             }
         }
+
+        if search_filters is not None:
+            query["bool"]["filter"] = search_filters
+
+        return query
 
     @staticmethod
     def _get_search_filters(
