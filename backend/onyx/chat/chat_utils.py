@@ -294,7 +294,7 @@ def process_kg_commands(
 def _get_or_extract_plaintext(
     file_id: str,
     extract_fn: Callable[[], str],
-) -> str | None:
+) -> str:
     """Load cached plaintext for a file, or extract and store it.
 
     Tries to read pre-stored plaintext from the file store.  On a miss,
