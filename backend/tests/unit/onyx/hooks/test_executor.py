@@ -1,7 +1,7 @@
 """Unit tests for the hook executor."""
 
+import json
 from typing import Any
-from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -13,7 +13,6 @@ from onyx.db.enums import HookPoint
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.executor import execute_hook
-from onyx.hooks.executor import execute_hook_sync
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
 
@@ -54,14 +53,11 @@ def _make_response(
     *,
     status_code: int = 200,
     json_return: Any = _RESPONSE_PAYLOAD,
-    raise_for_status_effect: Exception | None = None,
     json_side_effect: Exception | None = None,
 ) -> MagicMock:
-    """Build a response mock with controllable raise_for_status() and json() behaviour."""
+    """Build a response mock with controllable json() behaviour."""
     response = MagicMock()
     response.status_code = status_code
-    if raise_for_status_effect is not None:
-        response.raise_for_status.side_effect = raise_for_status_effect
     if json_side_effect is not None:
         response.json.side_effect = json_side_effect
     else:
@@ -69,40 +65,7 @@ def _make_response(
     return response
 
 
-def _setup_async_client(
-    mock_client_cls: MagicMock,
-    *,
-    response: MagicMock | None = None,
-    side_effect: Exception | None = None,
-) -> AsyncMock:
-    """Wire up the httpx.AsyncClient mock and return the inner client.
-
-    If side_effect is an httpx.HTTPStatusError, it is raised from
-    raise_for_status() (matching real httpx behaviour) and post() returns a
-    response mock with the matching status_code set.  All other exceptions are
-    raised directly from post().
-    """
-    mock_client = AsyncMock()
-
-    if isinstance(side_effect, httpx.HTTPStatusError):
-        # In real httpx, HTTPStatusError comes from raise_for_status(), not post().
-        # Wire a response mock that raises on raise_for_status() so status_code
-        # is captured before the exception fires, matching the executor's flow.
-        error_response = MagicMock()
-        error_response.status_code = side_effect.response.status_code
-        error_response.raise_for_status.side_effect = side_effect
-        mock_client.post = AsyncMock(return_value=error_response)
-    else:
-        mock_client.post = AsyncMock(
-            side_effect=side_effect, return_value=response if not side_effect else None
-        )
-
-    mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-    return mock_client
-
-
-def _setup_sync_client(
+def _setup_client(
     mock_client_cls: MagicMock,
     *,
     response: MagicMock | None = None,
@@ -147,7 +110,6 @@ def db_session() -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "hooks_available,hook",
     [
@@ -158,7 +120,7 @@ def db_session() -> MagicMock:
         pytest.param(True, _make_hook(endpoint_url=None), id="no_endpoint_url"),
     ],
 )
-async def test_early_exit_returns_skipped_with_no_db_writes(
+def test_early_exit_returns_skipped_with_no_db_writes(
     db_session: MagicMock,
     hooks_available: bool,
     hook: MagicMock | None,
@@ -172,7 +134,7 @@ async def test_early_exit_returns_skipped_with_no_db_writes(
         patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
     ):
-        result = await execute_hook(
+        result = execute_hook(
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
@@ -188,10 +150,7 @@ async def test_early_exit_returns_skipped_with_no_db_writes(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_success_returns_payload_and_sets_reachable(
-    db_session: MagicMock,
-) -> None:
+def test_success_returns_payload_and_sets_reachable(db_session: MagicMock) -> None:
     hook = _make_hook()
 
     with (
@@ -203,11 +162,10 @@ async def test_success_returns_payload_and_sets_reachable(
         patch("onyx.hooks.executor.get_session_with_current_tenant"),
         patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
-        patch("httpx.AsyncClient") as mock_client_cls,
+        patch("httpx.Client") as mock_client_cls,
     ):
-        _setup_async_client(mock_client_cls, response=_make_response())
-
-        result = await execute_hook(
+        _setup_client(mock_client_cls, response=_make_response())
+        result = execute_hook(
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
@@ -219,8 +177,7 @@ async def test_success_returns_payload_and_sets_reachable(
     mock_log.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_non_dict_json_response_is_a_failure(db_session: MagicMock) -> None:
+def test_non_dict_json_response_is_a_failure(db_session: MagicMock) -> None:
     """response.json() returning a non-dict (e.g. list) must be treated as failure."""
     hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
 
@@ -233,14 +190,13 @@ async def test_non_dict_json_response_is_a_failure(db_session: MagicMock) -> Non
         patch("onyx.hooks.executor.get_session_with_current_tenant"),
         patch("onyx.hooks.executor.update_hook__no_commit"),
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
-        patch("httpx.AsyncClient") as mock_client_cls,
+        patch("httpx.Client") as mock_client_cls,
     ):
-        _setup_async_client(
+        _setup_client(
             mock_client_cls,
             response=_make_response(json_return=["unexpected", "list"]),
         )
-
-        result = await execute_hook(
+        result = execute_hook(
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
@@ -252,8 +208,7 @@ async def test_non_dict_json_response_is_a_failure(db_session: MagicMock) -> Non
     assert "non-dict" in (log_kwargs["error_message"] or "")
 
 
-@pytest.mark.asyncio
-async def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
+def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
     """response.json() raising must be treated as failure with SOFT strategy."""
     hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
 
@@ -266,14 +221,15 @@ async def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
         patch("onyx.hooks.executor.get_session_with_current_tenant"),
         patch("onyx.hooks.executor.update_hook__no_commit"),
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
-        patch("httpx.AsyncClient") as mock_client_cls,
+        patch("httpx.Client") as mock_client_cls,
     ):
-        _setup_async_client(
+        _setup_client(
             mock_client_cls,
-            response=_make_response(json_side_effect=ValueError("not JSON")),
+            response=_make_response(
+                json_side_effect=json.JSONDecodeError("not JSON", "", 0)
+            ),
         )
-
-        result = await execute_hook(
+        result = execute_hook(
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
@@ -290,36 +246,35 @@ async def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "exception,fail_strategy,expected_type,expect_is_reachable_false",
+    "exception,fail_strategy,expected_type,expected_is_reachable",
     [
         pytest.param(
             httpx.ConnectError("refused"),
             HookFailStrategy.SOFT,
             HookSoftFailed,
-            True,
+            False,
             id="connect_error_soft",
         ),
         pytest.param(
             httpx.ConnectError("refused"),
             HookFailStrategy.HARD,
             OnyxError,
-            True,
+            False,
             id="connect_error_hard",
         ),
         pytest.param(
             httpx.TimeoutException("timeout"),
             HookFailStrategy.SOFT,
             HookSoftFailed,
-            False,
+            True,
             id="timeout_soft",
         ),
         pytest.param(
             httpx.TimeoutException("timeout"),
             HookFailStrategy.HARD,
             OnyxError,
-            False,
+            True,
             id="timeout_hard",
         ),
         pytest.param(
@@ -330,7 +285,7 @@ async def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
             ),
             HookFailStrategy.SOFT,
             HookSoftFailed,
-            False,
+            True,
             id="http_status_error_soft",
         ),
         pytest.param(
@@ -341,17 +296,17 @@ async def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
             ),
             HookFailStrategy.HARD,
             OnyxError,
-            False,
+            True,
             id="http_status_error_hard",
         ),
     ],
 )
-async def test_http_failure_paths(
+def test_http_failure_paths(
     db_session: MagicMock,
     exception: Exception,
     fail_strategy: HookFailStrategy,
     expected_type: type,
-    expect_is_reachable_false: bool,
+    expected_is_reachable: bool,
 ) -> None:
     hook = _make_hook(fail_strategy=fail_strategy)
 
@@ -364,32 +319,29 @@ async def test_http_failure_paths(
         patch("onyx.hooks.executor.get_session_with_current_tenant"),
         patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit"),
-        patch("httpx.AsyncClient") as mock_client_cls,
+        patch("httpx.Client") as mock_client_cls,
     ):
-        _setup_async_client(mock_client_cls, side_effect=exception)
+        _setup_client(mock_client_cls, side_effect=exception)
 
         if expected_type is OnyxError:
             with pytest.raises(OnyxError) as exc_info:
-                await execute_hook(
+                execute_hook(
                     db_session=db_session,
                     hook_point=HookPoint.QUERY_PROCESSING,
                     payload=_PAYLOAD,
                 )
             assert exc_info.value.error_code is OnyxErrorCode.HOOK_EXECUTION_FAILED
         else:
-            result = await execute_hook(
+            result = execute_hook(
                 db_session=db_session,
                 hook_point=HookPoint.QUERY_PROCESSING,
                 payload=_PAYLOAD,
             )
             assert isinstance(result, expected_type)
 
-    if expect_is_reachable_false:
-        mock_update.assert_called_once()
-        _, kwargs = mock_update.call_args
-        assert kwargs["is_reachable"] is False
-    else:
-        mock_update.assert_not_called()
+    mock_update.assert_called_once()
+    _, kwargs = mock_update.call_args
+    assert kwargs["is_reachable"] is expected_is_reachable
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +349,6 @@ async def test_http_failure_paths(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "api_key_value,expect_auth_header",
     [
@@ -405,7 +356,7 @@ async def test_http_failure_paths(
         pytest.param(None, False, id="api_key_absent"),
     ],
 )
-async def test_authorization_header(
+def test_authorization_header(
     db_session: MagicMock,
     api_key_value: str | None,
     expect_auth_header: bool,
@@ -422,11 +373,10 @@ async def test_authorization_header(
         patch("onyx.hooks.executor.get_session_with_current_tenant"),
         patch("onyx.hooks.executor.update_hook__no_commit"),
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit"),
-        patch("httpx.AsyncClient") as mock_client_cls,
+        patch("httpx.Client") as mock_client_cls,
     ):
-        mock_client = _setup_async_client(mock_client_cls, response=_make_response())
-
-        await execute_hook(
+        mock_client = _setup_client(mock_client_cls, response=_make_response())
+        execute_hook(
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
@@ -444,7 +394,6 @@ async def test_authorization_header(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "http_exception,expected_result",
     [
@@ -452,7 +401,7 @@ async def test_authorization_header(
         pytest.param(httpx.ConnectError("refused"), OnyxError, id="hard_fail_path"),
     ],
 )
-async def test_persist_session_failure_is_swallowed(
+def test_persist_session_failure_is_swallowed(
     db_session: MagicMock,
     http_exception: Exception | None,
     expected_result: Any,
@@ -470,9 +419,9 @@ async def test_persist_session_failure_is_swallowed(
             "onyx.hooks.executor.get_session_with_current_tenant",
             side_effect=RuntimeError("DB unavailable"),
         ),
-        patch("httpx.AsyncClient") as mock_client_cls,
+        patch("httpx.Client") as mock_client_cls,
     ):
-        _setup_async_client(
+        _setup_client(
             mock_client_cls,
             response=_make_response() if not http_exception else None,
             side_effect=http_exception,
@@ -480,14 +429,14 @@ async def test_persist_session_failure_is_swallowed(
 
         if expected_result is OnyxError:
             with pytest.raises(OnyxError) as exc_info:
-                await execute_hook(
+                execute_hook(
                     db_session=db_session,
                     hook_point=HookPoint.QUERY_PROCESSING,
                     payload=_PAYLOAD,
                 )
             assert exc_info.value.error_code is OnyxErrorCode.HOOK_EXECUTION_FAILED
         else:
-            result = await execute_hook(
+            result = execute_hook(
                 db_session=db_session,
                 hook_point=HookPoint.QUERY_PROCESSING,
                 payload=_PAYLOAD,
@@ -495,10 +444,7 @@ async def test_persist_session_failure_is_swallowed(
             assert result == expected_result
 
 
-@pytest.mark.asyncio
-async def test_is_reachable_failure_does_not_prevent_log(
-    db_session: MagicMock,
-) -> None:
+def test_is_reachable_failure_does_not_prevent_log(db_session: MagicMock) -> None:
     """is_reachable update failing (e.g. concurrent hook deletion) must not
     prevent the execution log from being written.
 
@@ -520,11 +466,10 @@ async def test_is_reachable_failure_does_not_prevent_log(
             side_effect=OnyxError(OnyxErrorCode.NOT_FOUND, "hook deleted"),
         ),
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
-        patch("httpx.AsyncClient") as mock_client_cls,
+        patch("httpx.Client") as mock_client_cls,
     ):
-        _setup_async_client(mock_client_cls, side_effect=httpx.ConnectError("refused"))
-
-        result = await execute_hook(
+        _setup_client(mock_client_cls, side_effect=httpx.ConnectError("refused"))
+        result = execute_hook(
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
@@ -532,56 +477,3 @@ async def test_is_reachable_failure_does_not_prevent_log(
 
     assert isinstance(result, HookSoftFailed)
     mock_log.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Sync executor smoke tests
-# ---------------------------------------------------------------------------
-
-
-def test_sync_success_returns_payload(db_session: MagicMock) -> None:
-    hook = _make_hook()
-
-    with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
-        patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
-            return_value=hook,
-        ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit"),
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit"),
-        patch("httpx.Client") as mock_client_cls,
-    ):
-        _setup_sync_client(mock_client_cls, response=_make_response())
-        result = execute_hook_sync(
-            db_session=db_session,
-            hook_point=HookPoint.QUERY_PROCESSING,
-            payload=_PAYLOAD,
-        )
-
-    assert result == _RESPONSE_PAYLOAD
-
-
-def test_sync_connect_error_soft_fail(db_session: MagicMock) -> None:
-    hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
-
-    with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
-        patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
-            return_value=hook,
-        ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit"),
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit"),
-        patch("httpx.Client") as mock_client_cls,
-    ):
-        _setup_sync_client(mock_client_cls, side_effect=httpx.ConnectError("refused"))
-        result = execute_hook_sync(
-            db_session=db_session,
-            hook_point=HookPoint.QUERY_PROCESSING,
-            payload=_PAYLOAD,
-        )
-
-    assert isinstance(result, HookSoftFailed)
