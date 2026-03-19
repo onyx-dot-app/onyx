@@ -59,7 +59,8 @@ class CanvasApiClient:
             .removesuffix(_CANVAS_API_VERSION)
             + _CANVAS_API_VERSION
         )
-        self._expected_host: str | None = urlparse(self.base_url).hostname
+        # Always a str — __init__ raises ValueError if hostname is missing.
+        self._expected_host: str = urlparse(self.base_url).hostname  # type: ignore[assignment]
 
     def get(
         self,
