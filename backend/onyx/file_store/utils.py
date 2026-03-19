@@ -23,43 +23,50 @@ from onyx.utils.timing import log_function_time
 logger = setup_logger()
 
 
-def user_file_id_to_plaintext_file_name(user_file_id: UUID) -> str:
-    """Generate a consistent file name for storing plaintext content of a user file."""
-    return f"plaintext_{user_file_id}"
+def plaintext_file_name_for_id(file_id: str) -> str:
+    """Generate a consistent file store key for cached plaintext of any file."""
+    return f"plaintext_{file_id}"
 
 
-def store_user_file_plaintext(user_file_id: UUID, plaintext_content: str) -> bool:
-    """
-    Store plaintext content for a user file in the file store.
+def store_plaintext(file_id: str, plaintext_content: str) -> bool:
+    """Store plaintext content in the file store, keyed by *file_id*.
 
-    Args:
-        user_file_id: The ID of the user file
-        plaintext_content: The plaintext content to store
+    Works for any file (user-uploaded, code-interpreter-generated, etc.).
 
     Returns:
-        bool: True if storage was successful, False otherwise
+        True if storage succeeded, False otherwise.
     """
-    # Skip empty content
     if not plaintext_content:
         return False
 
-    # Get plaintext file name
-    plaintext_file_name = user_file_id_to_plaintext_file_name(user_file_id)
-
+    plaintext_key = plaintext_file_name_for_id(file_id)
     try:
         file_store = get_default_file_store()
         file_content = BytesIO(plaintext_content.encode("utf-8"))
         file_store.save_file(
             content=file_content,
-            display_name=f"Plaintext for user file {user_file_id}",
+            display_name=f"Plaintext for {file_id}",
             file_origin=FileOrigin.PLAINTEXT_CACHE,
             file_type="text/plain",
-            file_id=plaintext_file_name,
+            file_id=plaintext_key,
         )
         return True
     except Exception as e:
-        logger.warning(f"Failed to store plaintext for user file {user_file_id}: {e}")
+        logger.warning(f"Failed to store plaintext for {file_id}: {e}")
         return False
+
+
+# --- Convenience wrappers for callers that use user-file UUIDs ---
+
+
+def user_file_id_to_plaintext_file_name(user_file_id: UUID) -> str:
+    """Generate a consistent file name for storing plaintext content of a user file."""
+    return plaintext_file_name_for_id(str(user_file_id))
+
+
+def store_user_file_plaintext(user_file_id: UUID, plaintext_content: str) -> bool:
+    """Store plaintext content for a user file (delegates to :func:`store_plaintext`)."""
+    return store_plaintext(str(user_file_id), plaintext_content)
 
 
 def load_chat_file_by_id(file_id: str) -> InMemoryChatFile:
