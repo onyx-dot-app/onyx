@@ -2,7 +2,7 @@ name: hop
 
 services:
   api_server:
-    image: hop-rag/activa-backend:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -56,7 +56,7 @@ services:
       - file-system:/app/file-system
 
   background:
-    image: hop-rag/activa-backend:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -124,7 +124,7 @@ services:
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
 
   web_server:
-    image: hop-rag/activa-web-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
     build:
       context: ../../web
       dockerfile: Dockerfile
@@ -148,7 +148,7 @@ services:
 
   # Uncomment the block below to enable the MCP server for Onyx.
   # mcp_server:
-  #   image: hop-rag/activa-backend:${IMAGE_TAG:-latest}
+  #   image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
   #   build:
   #     context: ../../backend
   #     dockerfile: Dockerfile
@@ -203,7 +203,7 @@ services:
         max-file: "6"
 
   inference_model_server:
-    image: hop-rag/activa-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -231,7 +231,7 @@ services:
         max-file: "6"
 
   indexing_model_server:
-    image: hop-rag/activa-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
