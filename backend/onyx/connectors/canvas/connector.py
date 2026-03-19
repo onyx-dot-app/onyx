@@ -536,7 +536,7 @@ class CanvasConnector(
             try:
                 if stage == "pages":
                     page = CanvasPage.from_api(item, course_id=course_id)
-                    if not _in_time_window(page.updated_at):
+                    if not page.updated_at or not _in_time_window(page.updated_at):
                         continue
                     doc = self._convert_page_to_document(page)
                     yield _maybe_attach_permissions(doc)
@@ -545,7 +545,7 @@ class CanvasConnector(
                     assignment = CanvasAssignment.from_api(
                         item, course_id=course_id
                     )
-                    if not _in_time_window(assignment.updated_at):
+                    if not assignment.updated_at or not _in_time_window(assignment.updated_at):
                         continue
                     doc = self._convert_assignment_to_document(assignment)
                     yield _maybe_attach_permissions(doc)
