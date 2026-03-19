@@ -17,6 +17,21 @@ Usage (Celery tasks and FastAPI handlers):
         # result is the response payload dict from the customer's endpoint
         ...
 
+is_reachable update policy
+--------------------------
+``is_reachable`` on the Hook row is updated selectively — only when the outcome
+carries meaningful signal about physical reachability:
+
+  NetworkError (DNS, connection refused)  → False  (cannot reach the server)
+  HTTP 401 / 403                          → False  (api_key revoked or invalid)
+  TimeoutException                        → None   (server may be slow, skip write)
+  Other HTTP errors (4xx / 5xx)           → None   (server responded, skip write)
+  Unknown exception                       → None   (no signal, skip write)
+  Non-JSON / non-dict response            → None   (server responded, skip write)
+  Success (2xx, valid dict)               → True   (confirmed reachable)
+
+None means "leave the current value unchanged" — no DB round-trip is made.
+
 DB session design
 -----------------
 The executor uses three sessions:
@@ -117,8 +132,8 @@ def _process_response(
     raise_for_status(), JSON decoding, and the dict shape check.
     """
     if exc is not None:
-        if isinstance(exc, httpx.ConnectError):
-            msg = f"Hook endpoint unreachable: {exc}"
+        if isinstance(exc, httpx.NetworkError):
+            msg = f"Hook network error (endpoint unreachable): {exc}"
             logger.warning(msg, exc_info=exc)
             return _HttpOutcome(
                 is_success=False,
@@ -132,7 +147,7 @@ def _process_response(
             logger.warning(msg, exc_info=exc)
             return _HttpOutcome(
                 is_success=False,
-                updated_is_reachable=True,
+                updated_is_reachable=None,  # timeout doesn't indicate unreachability
                 status_code=None,
                 error_message=msg,
                 response_payload=None,
@@ -141,7 +156,7 @@ def _process_response(
         logger.exception(msg, exc_info=exc)
         return _HttpOutcome(
             is_success=False,
-            updated_is_reachable=True,
+            updated_is_reachable=None,  # unknown error — don't make assumptions
             status_code=None,
             error_message=msg,
             response_payload=None,
@@ -158,9 +173,13 @@ def _process_response(
     except httpx.HTTPStatusError as e:
         msg = f"Hook returned HTTP {e.response.status_code}: {e.response.text}"
         logger.warning(msg, exc_info=e)
+        # 401/403 means the api_key has been revoked or is invalid — mark unreachable
+        # so the operator knows to update it. All other HTTP errors keep is_reachable
+        # as-is (server is up, the request just failed for application reasons).
+        auth_failed = e.response.status_code in (401, 403)
         return _HttpOutcome(
             is_success=False,
-            updated_is_reachable=True,
+            updated_is_reachable=False if auth_failed else None,
             status_code=status_code,
             error_message=msg,
             response_payload=None,
@@ -173,7 +192,7 @@ def _process_response(
         logger.warning(msg, exc_info=e)
         return _HttpOutcome(
             is_success=False,
-            updated_is_reachable=True,
+            updated_is_reachable=None,  # server responded — reachability unchanged
             status_code=status_code,
             error_message=msg,
             response_payload=None,
@@ -184,7 +203,7 @@ def _process_response(
         logger.warning(msg)
         return _HttpOutcome(
             is_success=False,
-            updated_is_reachable=True,
+            updated_is_reachable=None,  # server responded — reachability unchanged
             status_code=status_code,
             error_message=msg,
             response_payload=None,

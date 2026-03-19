@@ -32,6 +32,7 @@ def _make_hook(
     timeout_seconds: float = 5.0,
     fail_strategy: HookFailStrategy = HookFailStrategy.SOFT,
     hook_id: int = 1,
+    is_reachable: bool | None = None,
 ) -> MagicMock:
     hook = MagicMock()
     hook.is_active = is_active
@@ -40,6 +41,7 @@ def _make_hook(
     hook.timeout_seconds = timeout_seconds
     hook.id = hook_id
     hook.fail_strategy = fail_strategy
+    hook.is_reachable = is_reachable
     return hook
 
 
@@ -177,8 +179,36 @@ def test_success_returns_payload_and_sets_reachable(db_session: MagicMock) -> No
     mock_log.assert_not_called()
 
 
+def test_success_skips_reachable_write_when_already_true(db_session: MagicMock) -> None:
+    """Deduplication guard: a hook already at is_reachable=True that succeeds
+    must not trigger a DB write."""
+    hook = _make_hook(is_reachable=True)
+
+    with (
+        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch(
+            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            return_value=hook,
+        ),
+        patch("onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
+        patch("onyx.hooks.executor.create_hook_execution_log__no_commit"),
+        patch("httpx.Client") as mock_client_cls,
+    ):
+        _setup_client(mock_client_cls, response=_make_response())
+        result = execute_hook(
+            db_session=db_session,
+            hook_point=HookPoint.QUERY_PROCESSING,
+            payload=_PAYLOAD,
+        )
+
+    assert result == _RESPONSE_PAYLOAD
+    mock_update.assert_not_called()
+
+
 def test_non_dict_json_response_is_a_failure(db_session: MagicMock) -> None:
-    """response.json() returning a non-dict (e.g. list) must be treated as failure."""
+    """response.json() returning a non-dict (e.g. list) must be treated as failure.
+    The server responded, so is_reachable is not updated."""
     hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
 
     with (
@@ -188,7 +218,7 @@ def test_non_dict_json_response_is_a_failure(db_session: MagicMock) -> None:
             return_value=hook,
         ),
         patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit"),
+        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
         patch("httpx.Client") as mock_client_cls,
     ):
@@ -206,10 +236,12 @@ def test_non_dict_json_response_is_a_failure(db_session: MagicMock) -> None:
     _, log_kwargs = mock_log.call_args
     assert log_kwargs["is_success"] is False
     assert "non-dict" in (log_kwargs["error_message"] or "")
+    mock_update.assert_not_called()
 
 
 def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
-    """response.json() raising must be treated as failure with SOFT strategy."""
+    """response.json() raising must be treated as failure with SOFT strategy.
+    The server responded, so is_reachable is not updated."""
     hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
 
     with (
@@ -219,7 +251,7 @@ def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
             return_value=hook,
         ),
         patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit"),
+        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
         patch("httpx.Client") as mock_client_cls,
     ):
@@ -239,6 +271,7 @@ def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
     _, log_kwargs = mock_log.call_args
     assert log_kwargs["is_success"] is False
     assert "non-JSON" in (log_kwargs["error_message"] or "")
+    mock_update.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +282,7 @@ def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
 @pytest.mark.parametrize(
     "exception,fail_strategy,expected_type,expected_is_reachable",
     [
+        # NetworkError → is_reachable=False
         pytest.param(
             httpx.ConnectError("refused"),
             HookFailStrategy.SOFT,
@@ -263,20 +297,45 @@ def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
             False,
             id="connect_error_hard",
         ),
+        # 401/403 → is_reachable=False (api_key revoked)
+        pytest.param(
+            httpx.HTTPStatusError(
+                "401",
+                request=MagicMock(),
+                response=MagicMock(status_code=401, text="Unauthorized"),
+            ),
+            HookFailStrategy.SOFT,
+            HookSoftFailed,
+            False,
+            id="auth_401_soft",
+        ),
+        pytest.param(
+            httpx.HTTPStatusError(
+                "403",
+                request=MagicMock(),
+                response=MagicMock(status_code=403, text="Forbidden"),
+            ),
+            HookFailStrategy.HARD,
+            OnyxError,
+            False,
+            id="auth_403_hard",
+        ),
+        # TimeoutException → no is_reachable write (None)
         pytest.param(
             httpx.TimeoutException("timeout"),
             HookFailStrategy.SOFT,
             HookSoftFailed,
-            True,
+            None,
             id="timeout_soft",
         ),
         pytest.param(
             httpx.TimeoutException("timeout"),
             HookFailStrategy.HARD,
             OnyxError,
-            True,
+            None,
             id="timeout_hard",
         ),
+        # Other HTTP errors → no is_reachable write (None)
         pytest.param(
             httpx.HTTPStatusError(
                 "500",
@@ -285,7 +344,7 @@ def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
             ),
             HookFailStrategy.SOFT,
             HookSoftFailed,
-            True,
+            None,
             id="http_status_error_soft",
         ),
         pytest.param(
@@ -296,7 +355,7 @@ def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
             ),
             HookFailStrategy.HARD,
             OnyxError,
-            True,
+            None,
             id="http_status_error_hard",
         ),
     ],
@@ -306,7 +365,7 @@ def test_http_failure_paths(
     exception: Exception,
     fail_strategy: HookFailStrategy,
     expected_type: type,
-    expected_is_reachable: bool,
+    expected_is_reachable: bool | None,
 ) -> None:
     hook = _make_hook(fail_strategy=fail_strategy)
 
@@ -339,9 +398,12 @@ def test_http_failure_paths(
             )
             assert isinstance(result, expected_type)
 
-    mock_update.assert_called_once()
-    _, kwargs = mock_update.call_args
-    assert kwargs["is_reachable"] is expected_is_reachable
+    if expected_is_reachable is None:
+        mock_update.assert_not_called()
+    else:
+        mock_update.assert_called_once()
+        _, kwargs = mock_update.call_args
+        assert kwargs["is_reachable"] is expected_is_reachable
 
 
 # ---------------------------------------------------------------------------
