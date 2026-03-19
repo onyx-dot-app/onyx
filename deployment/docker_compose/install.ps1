@@ -445,20 +445,6 @@ function Fix-DockerCredStore {
         catch { Print-Warning "Could not reset Docker config: $_" }
     }
 
-    # Docker Desktop leaves credential helper binaries in PATH that fail
-    # under SYSTEM / Windows Server. Rename them so Docker can't find them.
-    foreach ($helper in @("docker-credential-desktop.exe", "docker-credential-wincred.exe")) {
-        $exe = Get-Command $helper -ErrorAction SilentlyContinue
-        if (-not $exe) { continue }
-        $src = $exe.Source
-        $dst = "$src.bak"
-        try {
-            Rename-Item -Path $src -NewName (Split-Path $dst -Leaf) -Force -ErrorAction Stop
-            Print-Info "Disabled incompatible credential helper: $helper -> $(Split-Path $dst -Leaf)"
-        } catch {
-            Print-Warning "Could not rename $helper : $_"
-        }
-    }
 }
 
 function Register-DockerService {
