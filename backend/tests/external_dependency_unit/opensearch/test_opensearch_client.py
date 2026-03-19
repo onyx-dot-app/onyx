@@ -1854,6 +1854,7 @@ class TestOpenSearchClient:
         # Refresh index to make documents searchable.
         test_client.refresh_index()
 
+        query_vector = _generate_test_vector(0.6)
         search_body = DocumentQuery.get_semantic_search_query(
             query_embedding=query_vector,
             num_hits=5,
@@ -1892,4 +1893,5 @@ class TestOpenSearchClient:
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
+        assert results[1].score
         assert 0.0 < results[1].score < 1.0
