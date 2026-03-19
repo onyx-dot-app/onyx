@@ -100,6 +100,8 @@ RUN uv pip install --system --no-cache-dir --upgrade \
     # Install here to avoid some packages being cleaned up above
     apt-get install -y \
         libxmlsec1-openssl \
+        # Install procps so kubernetes exec sessions can use ps aux for debugging
+        procps \
         # Install postgresql-client for easy manual tests
         postgresql-client && \
     apt-get autoremove -y && \
