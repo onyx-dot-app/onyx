@@ -48,7 +48,9 @@ const ResetPasswordPage: React.FC = () => {
     <AuthFlowContainer>
       <div className="flex flex-col w-full justify-center">
         <div className="flex">
-          <Title className="mb-2 mx-auto font-bold">Reset Password</Title>
+          <Title className="mb-2 mx-auto font-bold">
+            Restablecer contrasena
+          </Title>
         </div>
         {isWorking && <Spinner />}
         <Formik
@@ -57,21 +59,21 @@ const ResetPasswordPage: React.FC = () => {
             confirmPassword: "",
           }}
           validationSchema={Yup.object().shape({
-            password: Yup.string().required("Password is required"),
+            password: Yup.string().required("La contrasena es obligatoria"),
             confirmPassword: Yup.string()
-              .oneOf([Yup.ref("password"), undefined], "Passwords must match")
-              .required("Confirm Password is required"),
+              .oneOf([Yup.ref("password"), undefined], "Las contrasenas no coinciden")
+              .required("Confirma tu contrasena"),
           })}
           onSubmit={async (values) => {
             if (!token) {
-              toast.error("Invalid or missing reset token.");
+              toast.error("El token para restablecer no es valido.");
               return;
             }
             setIsWorking(true);
             try {
               await resetPassword(token, values.password);
               toast.success(
-                "Password reset successfully. Redirecting to login..."
+                "Contrasena actualizada. Redirigiendo al login..."
               );
               setTimeout(() => {
                 redirect("/auth/login");
@@ -79,10 +81,11 @@ const ResetPasswordPage: React.FC = () => {
             } catch (error) {
               if (error instanceof Error) {
                 toast.error(
-                  error.message || "An error occurred during password reset."
+                  error.message ||
+                    "Ocurrio un error mientras actualizabamos tu contrasena."
                 );
               } else {
-                toast.error("An unexpected error occurred. Please try again.");
+                toast.error("Ocurrio un error inesperado. Intentalo de nuevo.");
               }
             } finally {
               setIsWorking(false);
@@ -93,21 +96,21 @@ const ResetPasswordPage: React.FC = () => {
             <Form className="w-full flex flex-col items-stretch mt-2">
               <TextFormField
                 name="password"
-                label="New Password"
+                label="Nueva contrasena"
                 type="password"
-                placeholder="Enter your new password"
+                placeholder="Ingresa tu nueva contrasena"
               />
               <TextFormField
                 name="confirmPassword"
-                label="Confirm New Password"
+                label="Confirma la contrasena"
                 type="password"
-                placeholder="Confirm your new password"
+                placeholder="Confirma tu nueva contrasena"
               />
 
               <div className="flex">
                 <Disabled disabled={isSubmitting}>
                   <Button type="submit" width="full">
-                    Reset Password
+                    Restablecer contrasena
                   </Button>
                 </Disabled>
               </div>
@@ -117,7 +120,7 @@ const ResetPasswordPage: React.FC = () => {
         <div className="flex">
           <Text className="mt-4 mx-auto">
             <Link href="/auth/login" className="text-link font-medium">
-              Back to Login
+              Volver al login
             </Link>
           </Text>
         </div>

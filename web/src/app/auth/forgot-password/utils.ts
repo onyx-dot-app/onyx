@@ -10,7 +10,7 @@ export const forgotPassword = async (email: string): Promise<void> => {
   if (!response.ok) {
     const error = await response.json();
     const errorMessage =
-      error?.detail || "An error occurred during password reset.";
+      error?.detail || "Ocurrio un error mientras restableciamos la contrasena.";
     throw new Error(errorMessage);
   }
 };
@@ -30,10 +30,10 @@ export const resetPassword = async (
   if (!response.ok) {
     const error = await response.json();
     if (error?.detail?.code === "RESET_PASSWORD_INVALID_PASSWORD") {
-      throw new Error(error.detail.reason || "Invalid password");
+      throw new Error(error.detail.reason || "La contrasena no es valida");
     }
     const errorMessage =
-      error?.detail || "An error occurred during password reset.";
+      error?.detail || "Ocurrio un error mientras restableciamos la contrasena.";
     throw new Error(errorMessage);
   }
 };

@@ -1,25 +1,27 @@
 "use client";
 
-import { toast } from "@/hooks/useToast";
-import { basicLogin, basicSignup } from "@/lib/user";
-import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
+import Link from "next/link";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { requestEmailVerification } from "../lib";
 import { useMemo, useState } from "react";
+
 import { Spinner } from "@/components/Spinner";
-import Link from "next/link";
+import { toast } from "@/hooks/useToast";
+import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
+import { useCaptcha } from "@/lib/hooks/useCaptcha";
+import { basicLogin, basicSignup } from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
-import { FormikField } from "@/refresh-components/form/FormikField";
+import Button from "@/refresh-components/buttons/Button";
 import { FormField } from "@/refresh-components/form/FormField";
+import { FormikField } from "@/refresh-components/form/FormikField";
+import { APIFormFieldState } from "@/refresh-components/form/types";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
-import { APIFormFieldState } from "@/refresh-components/form/types";
-import { SvgArrowRightCircle } from "@opal/icons";
-import { useCaptcha } from "@/lib/hooks/useCaptcha";
-import Spacer from "@/refresh-components/Spacer";
+
+import { requestEmailVerification } from "../lib";
+
+const AUTH_INPUT_CLASSNAME =
+  "!rounded-12 !border-border-01 !bg-background-neutral-00 p-4 transition-colors duration-200 hover:!border-theme-orange-02 focus-within:!border-theme-orange-03 focus-within:!shadow-none";
 
 interface EmailPasswordFormProps {
   isSignup?: boolean;
@@ -50,12 +52,14 @@ export default function EmailPasswordForm({
     () => ({
       loading: isSignup
         ? isJoin
-          ? "Joining..."
-          : "Creating account..."
-        : "Signing in...",
+          ? "Uniendote..."
+          : "Creando cuenta..."
+        : "Ingresando...",
       success: isSignup
-        ? "Account created. Signing in..."
-        : "Signed in successfully.",
+        ? isJoin
+          ? "Acceso listo. Ingresando..."
+          : "Cuenta creada. Ingresando..."
+        : "Sesion iniciada correctamente.",
       error: errorMessage,
     }),
     [isSignup, isJoin, errorMessage]
@@ -74,28 +78,25 @@ export default function EmailPasswordForm({
         validateOnBlur={true}
         validationSchema={Yup.object().shape({
           email: Yup.string()
-            .email()
-            .required()
+            .email("Ingresa un correo valido")
+            .required("El correo es obligatorio")
             .transform((value) => value.toLowerCase()),
           password: Yup.string()
             .min(
               passwordMinLength,
-              `Password must be at least ${passwordMinLength} characters`
+              `La contrasena debe tener al menos ${passwordMinLength} caracteres`
             )
-            .required(),
+            .required("La contrasena es obligatoria"),
         })}
         onSubmit={async (values: { email: string; password: string }) => {
-          // Ensure email is lowercase
           const email: string = values.email.toLowerCase();
           setShowApiMessage(true);
           setApiStatus("loading");
           setErrorMessage("");
 
           if (isSignup) {
-            // login is fast, no need to show a spinner
             setIsWorking(true);
 
-            // Get captcha token for signup (if captcha is enabled)
             const captchaToken = await getCaptchaToken("signup");
 
             const response = await basicSignup(
@@ -109,25 +110,23 @@ export default function EmailPasswordForm({
               setIsWorking(false);
 
               const errorDetail: any = (await response.json()).detail;
-              let errorMsg: string = "Unknown error";
+              let errorMsg: string = "Error desconocido";
               if (typeof errorDetail === "object" && errorDetail.reason) {
                 errorMsg = errorDetail.reason;
               } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
-                errorMsg =
-                  "An account already exists with the specified email.";
+                errorMsg = "Ya existe una cuenta con este correo.";
               }
               if (response.status === 429) {
-                errorMsg = "Too many requests. Please try again later.";
+                errorMsg = "Demasiados intentos. Intentalo de nuevo mas tarde.";
               }
               setErrorMessage(errorMsg);
               setApiStatus("error");
-              toast.error(`Failed to sign up - ${errorMsg}`);
-              setIsWorking(false);
+              toast.error(`No se pudo crear la cuenta - ${errorMsg}`);
               return;
-            } else {
-              setApiStatus("success");
-              toast.success("Account created successfully. Please log in.");
             }
+
+            setApiStatus("success");
+            toast.success("Cuenta creada correctamente. Ahora inicia sesion.");
           }
 
           const loginResponse = await basicLogin(email, values.password);
@@ -135,135 +134,149 @@ export default function EmailPasswordForm({
             setApiStatus("success");
             if (isSignup && shouldVerify) {
               await requestEmailVerification(email);
-              // Use window.location.href to force a full page reload,
-              // ensuring app re-initializes with the new state (including
-              // server-side provider values)
               window.location.href = "/auth/waiting-on-verification";
             } else {
-              // The searchparam is purely for multi tenant developement purposes.
-              // It replicates the behavior of the case where a user
-              // has signed up with email / password as the only user to an instance
-              // and has just completed verification
               const validatedNextUrl = validateInternalRedirect(nextUrl);
               window.location.href = validatedNextUrl
                 ? validatedNextUrl
                 : `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
             }
-          } else {
-            setIsWorking(false);
-            const errorDetail: any = (await loginResponse.json()).detail;
-            let errorMsg: string = "Unknown error";
-            if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
-              errorMsg = "Invalid email or password";
-            } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
-              errorMsg = "Create an account to set a password";
-            } else if (typeof errorDetail === "string") {
-              errorMsg = errorDetail;
-            }
-            if (loginResponse.status === 429) {
-              errorMsg = "Too many requests. Please try again later.";
-            }
-            setErrorMessage(errorMsg);
-            setApiStatus("error");
-            toast.error(`Failed to login - ${errorMsg}`);
+            return;
           }
+
+          setIsWorking(false);
+          const errorDetail: any = (await loginResponse.json()).detail;
+          let errorMsg: string = "Error desconocido";
+          if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
+            errorMsg = "Credenciales invalidas";
+          } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
+            errorMsg = "Crea una cuenta para configurar tu contrasena";
+          } else if (typeof errorDetail === "string") {
+            errorMsg = errorDetail;
+          }
+          if (loginResponse.status === 429) {
+            errorMsg = "Demasiados intentos. Intentalo de nuevo mas tarde.";
+          }
+          setErrorMessage(errorMsg);
+          setApiStatus("error");
+          toast.error(`No se pudo iniciar sesion - ${errorMsg}`);
         }}
       >
-        {({ isSubmitting, isValid, dirty, values }) => {
-          return (
-            <Form className="gap-y-3">
-              <FormikField<string>
-                name="email"
-                render={(field, helper, meta, state) => (
-                  <FormField name="email" state={state} className="w-full">
-                    <FormField.Label>Email Address</FormField.Label>
-                    <FormField.Control>
-                      <InputTypeIn
-                        {...field}
-                        onChange={(e) => {
-                          if (showApiMessage && apiStatus === "error") {
-                            setShowApiMessage(false);
-                            setErrorMessage("");
-                            setApiStatus("loading");
-                          }
-                          field.onChange(e);
-                        }}
-                        placeholder="email@yourcompany.com"
-                        onClear={() => helper.setValue("")}
-                        data-testid="email"
-                        variant={apiStatus === "error" ? "error" : undefined}
-                        showClearButton={false}
-                      />
-                    </FormField.Control>
-                  </FormField>
-                )}
-              />
-
-              <FormikField<string>
-                name="password"
-                render={(field, helper, meta, state) => (
-                  <FormField name="password" state={state} className="w-full">
-                    <FormField.Label>Password</FormField.Label>
-                    <FormField.Control>
-                      <PasswordInputTypeIn
-                        {...field}
-                        onChange={(e) => {
-                          if (showApiMessage && apiStatus === "error") {
-                            setShowApiMessage(false);
-                            setErrorMessage("");
-                            setApiStatus("loading");
-                          }
-                          field.onChange(e);
-                        }}
-                        placeholder="∗∗∗∗∗∗∗∗∗∗∗∗∗∗"
-                        onClear={() => helper.setValue("")}
-                        data-testid="password"
-                        error={apiStatus === "error"}
-                        showClearButton={false}
-                      />
-                    </FormField.Control>
-                    {isSignup && !showApiMessage && (
-                      <FormField.Message
-                        messages={{
-                          idle: `Password must be at least ${passwordMinLength} characters`,
-                          error: meta.error,
-                          success: `Password must be at least ${passwordMinLength} characters`,
-                        }}
-                      />
-                    )}
-                    {showApiMessage && (
-                      <FormField.APIMessage
-                        state={apiStatus}
-                        messages={apiMessages}
-                      />
-                    )}
-                  </FormField>
-                )}
-              />
-
-              <Spacer rem={0.25} />
-              <Disabled disabled={isSubmitting || !isValid || !dirty}>
-                <Button
-                  type="submit"
-                  width="full"
-                  rightIcon={SvgArrowRightCircle}
-                >
-                  {isJoin ? "Join" : isSignup ? "Create Account" : "Sign In"}
-                </Button>
-              </Disabled>
-              {user?.is_anonymous_user && (
-                <Link
-                  href="/app"
-                  className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
-                >
-                  <span className="hover:border-b hover:border-dotted hover:border-action-link-05">
-                    or continue as guest
-                  </span>
-                </Link>
+        {({ isSubmitting, isValid, dirty }) => (
+          <Form className="flex w-full flex-col gap-4">
+            <FormikField<string>
+              name="email"
+              render={(field, helper, meta, state) => (
+                <FormField name="email" state={state} className="w-full">
+                  <FormField.Label className="pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] !text-text-03">
+                    Correo
+                  </FormField.Label>
+                  <FormField.Control>
+                    <InputTypeIn
+                      {...field}
+                      onChange={(e) => {
+                        if (showApiMessage && apiStatus === "error") {
+                          setShowApiMessage(false);
+                          setErrorMessage("");
+                          setApiStatus("loading");
+                        }
+                        field.onChange(e);
+                      }}
+                      placeholder="correo@tuempresa.com"
+                      onClear={() => helper.setValue("")}
+                      data-testid="email"
+                      variant={apiStatus === "error" ? "error" : undefined}
+                      showClearButton={false}
+                      className={AUTH_INPUT_CLASSNAME}
+                    />
+                  </FormField.Control>
+                  {meta.touched && meta.error && !showApiMessage && (
+                    <FormField.Message
+                      messages={{
+                        error: meta.error,
+                      }}
+                    />
+                  )}
+                </FormField>
               )}
-            </Form>
-          );
-        }}
+            />
+
+            <FormikField<string>
+              name="password"
+              render={(field, helper, meta, state) => (
+                <FormField name="password" state={state} className="w-full">
+                  <FormField.Label className="pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] !text-text-03">
+                    Contrasena
+                  </FormField.Label>
+                  <FormField.Control>
+                    <PasswordInputTypeIn
+                      {...field}
+                      onChange={(e) => {
+                        if (showApiMessage && apiStatus === "error") {
+                          setShowApiMessage(false);
+                          setErrorMessage("");
+                          setApiStatus("loading");
+                        }
+                        field.onChange(e);
+                      }}
+                      placeholder="Ingresa tu contrasena"
+                      onClear={() => helper.setValue("")}
+                      data-testid="password"
+                      error={apiStatus === "error"}
+                      showClearButton={false}
+                      className={AUTH_INPUT_CLASSNAME}
+                    />
+                  </FormField.Control>
+                  {isSignup && !showApiMessage && (
+                    <FormField.Message
+                      messages={{
+                        idle: `La contrasena debe tener al menos ${passwordMinLength} caracteres`,
+                        error: meta.error,
+                        success: `La contrasena debe tener al menos ${passwordMinLength} caracteres`,
+                      }}
+                    />
+                  )}
+                  {!isSignup && meta.touched && meta.error && !showApiMessage && (
+                    <FormField.Message
+                      messages={{
+                        error: meta.error,
+                      }}
+                    />
+                  )}
+                  {showApiMessage && (
+                    <FormField.APIMessage
+                      state={apiStatus}
+                      messages={apiMessages}
+                    />
+                  )}
+                </FormField>
+              )}
+            />
+
+            <div className="pt-2">
+              <Button
+                type="submit"
+                main
+                primary
+                className="w-full justify-center rounded-full !bg-theme-orange-04 px-6 py-3 shadow-01 hover:!bg-theme-orange-05 disabled:cursor-not-allowed disabled:!bg-background-neutral-04"
+                disabled={isSubmitting || !isValid || !dirty}
+              >
+                {isJoin ? "Unirme" : isSignup ? "Crear cuenta" : "Entrar"}
+              </Button>
+            </div>
+
+            {user?.is_anonymous_user && (
+              <Link
+                href="/app"
+                className="mx-auto w-full cursor-pointer text-center text-xs font-medium text-theme-orange-05"
+              >
+                <span className="hover:border-b hover:border-dotted hover:border-theme-orange-05">
+                  o continuar como invitado
+                </span>
+              </Link>
+            )}
+          </Form>
+        )}
       </Formik>
     </>
   );

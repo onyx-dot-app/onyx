@@ -1,24 +1,25 @@
 "use client";
 
+import Link from "next/link";
+import { Button } from "@opal/components";
+import { SvgImport } from "@opal/icons";
+
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { REGISTRATION_URL } from "@/lib/constants";
-import { Button } from "@opal/components";
-import Link from "next/link";
-import { SvgImport } from "@opal/icons";
 
 export default function Page() {
   return (
     <AuthFlowContainer>
       <div className="flex flex-col space-y-6">
-        <h2 className="text-2xl font-bold text-text-900 text-center">
-          Account Not Found
+        <h2 className="text-center text-2xl font-bold text-text-05">
+          Cuenta no encontrada
         </h2>
-        <p className="text-text-700 max-w-md text-center">
+        <p className="max-w-md text-center text-text-03">
           No encontramos tu cuenta en nuestros registros. Para acceder a la
-          aplicación, necesitas:
+          aplicacion, necesitas:
         </p>
-        <ul className="list-disc text-left text-text-600 w-full pl-6 mx-auto">
-          <li>Recibir una invitación a un equipo existente</li>
+        <ul className="mx-auto w-full list-disc pl-6 text-left text-text-03">
+          <li>Recibir una invitacion a un equipo existente</li>
           <li>Crear un nuevo equipo</li>
         </ul>
         <div className="flex justify-center">
@@ -27,16 +28,13 @@ export default function Page() {
             width="full"
             icon={SvgImport}
           >
-            Create New Organization
+            Crear nueva organizacion
           </Button>
         </div>
-        <p className="text-sm text-text-500 text-center">
-          Have an account with a different email?{" "}
-          <Link
-            href="/auth/login"
-            className="text-action-link-05 hover:underline"
-          >
-            Sign in
+        <p className="text-center text-sm text-text-03">
+          Tienes una cuenta con otro correo?{" "}
+          <Link href="/auth/login" className="text-action-link-05 hover:underline">
+            Inicia sesion
           </Link>
         </p>
       </div>
