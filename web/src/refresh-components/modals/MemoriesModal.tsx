@@ -76,17 +76,17 @@ function MemoryItem({
   }, [shouldHighlight, onHighlighted]);
 
   return (
-    <div
-      ref={wrapperRef}
-      className={cn(
-        "rounded-08 hover:bg-background-tint-00 w-full p-0.5",
-        "transition-colors ",
-        isHighlighting &&
-          "bg-action-link-01 border border-action-link-05 duration-700"
-      )}
-    >
-      <Section gap={0.25} alignItems="start">
-        <Section flexDirection="row" alignItems="start" gap={0.5}>
+    <Section gap={0.25} alignItems="start">
+      <Section flexDirection="row" alignItems="start" gap={0.5}>
+        <div
+          ref={wrapperRef}
+          className={cn(
+            "rounded-08 hover:bg-background-tint-00 w-full p-0.5",
+            "transition-colors ",
+            isHighlighting &&
+              "bg-action-link-01 border border-action-link-05 duration-700"
+          )}
+        >
           <InputTextArea
             ref={textareaRef}
             placeholder="Type or paste in a personal note or memory"
@@ -102,21 +102,21 @@ function MemoryItem({
             resizable={false}
             className={cn(!isFocused && "bg-transparent")}
           />
-          <Disabled disabled={!memory.content.trim() && memory.isNew}>
-            <Button
-              prominence="tertiary"
-              icon={SvgMinusCircle}
-              onClick={() => void onRemove(originalIndex)}
-              aria-label="Remove Line"
-              tooltip="Remove Line"
-            />
-          </Disabled>
-        </Section>
-        {isFocused && (
-          <CharacterCount value={memory.content} limit={MAX_MEMORY_LENGTH} />
-        )}
+        </div>
+        <Disabled disabled={!memory.content.trim() && memory.isNew}>
+          <Button
+            prominence="tertiary"
+            icon={SvgMinusCircle}
+            onClick={() => void onRemove(originalIndex)}
+            aria-label="Remove Line"
+            tooltip="Remove Line"
+          />
+        </Disabled>
       </Section>
-    </div>
+      {isFocused && (
+        <CharacterCount value={memory.content} limit={MAX_MEMORY_LENGTH} />
+      )}
+    </Section>
   );
 }
 
