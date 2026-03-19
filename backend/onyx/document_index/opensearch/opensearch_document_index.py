@@ -649,7 +649,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         chunks: Iterable[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> list[DocumentInsertionRecord]:
-        """Indexes a list of document chunks into the document index.
+        """Indexes an iterable of document chunks into the document index.
 
         Groups chunks by document ID and for each document, deletes existing
         chunks and indexes the new chunks in bulk.
