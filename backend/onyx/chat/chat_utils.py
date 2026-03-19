@@ -298,11 +298,8 @@ def _get_or_extract_plaintext(
     """Load cached plaintext for a file, or extract and store it.
 
     Tries to read pre-stored plaintext from the file store.  On a miss,
-    calls *extract_fn* to produce the text, then stores the result so
+    calls extract_fn to produce the text, then stores the result so
     future calls skip the expensive extraction.
-
-    Works for any file type (user-uploaded, code-interpreter-generated, etc.)
-    as long as a stable *file_id* is available.
     """
     file_store = get_default_file_store()
     plaintext_key = plaintext_file_name_for_id(file_id)
@@ -310,7 +307,6 @@ def _get_or_extract_plaintext(
     # Try cached plaintext first.
     try:
         plaintext_io = file_store.read_file(plaintext_key, mode="b")
-        logger.notice(f"Cache hit for id={file_id}")
         return plaintext_io.read().decode("utf-8")
     except Exception:
         pass
