@@ -3,17 +3,33 @@
 import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
 import useSWR from "swr";
 import Modal from "@/refresh-components/Modal";
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSecondsUntilExpiration } from "@/lib/time";
-import { refreshToken } from "@/lib/user";
+import { refreshToken, logout } from "@/lib/user";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
 import { Button } from "@opal/components";
-import { logout } from "@/lib/user";
 import { usePathname, useRouter } from "next/navigation";
 import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getExtensionContext } from "@/lib/extension/utils";
+
+const PUBLIC_PATHS = new Set(["/", "/login", "/register"]);
+const PUBLIC_PATH_PREFIXES = ["/auth", "/anonymous"];
+
+function isPublicPath(pathname: string | null): boolean {
+  if (!pathname) {
+    return false;
+  }
+
+  if (PUBLIC_PATHS.has(pathname)) {
+    return true;
+  }
+
+  return PUBLIC_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
 
 export default function AppHealthBanner() {
   const router = useRouter();
@@ -21,29 +37,48 @@ export default function AppHealthBanner() {
   const [expired, setExpired] = useState(false);
   const [showLoggedOutModal, setShowLoggedOutModal] = useState(false);
   const pathname = usePathname();
+  const isPublicPathname = isPublicPath(pathname);
   const expirationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timer | null>(null);
 
   const { user, mutateUser, userError } = useCurrentUser();
 
-  // Handle 403 errors from the /api/me endpoint
   useEffect(() => {
-    if (userError && userError.status === 403) {
-      logout().then(() => {
-        if (!pathname?.includes("/auth")) {
+    if (userError?.status !== 403) {
+      return;
+    }
+
+    let isActive = true;
+
+    void (async () => {
+      try {
+        await logout();
+      } finally {
+        if (isActive && !isPublicPathname) {
           setShowLoggedOutModal(true);
         }
-      });
-    }
-  }, [userError, pathname]);
+      }
+    })();
 
-  // Function to handle the "Log in" button click
+    return () => {
+      isActive = false;
+    };
+  }, [userError, isPublicPathname]);
+
+  useEffect(() => {
+    if (!(error instanceof RedirectError) && !expired) {
+      return;
+    }
+
+    if (!isPublicPathname) {
+      setShowLoggedOutModal(true);
+    }
+  }, [error, expired, isPublicPathname]);
+
   function handleLogin() {
     setShowLoggedOutModal(false);
     const { isExtension } = getExtensionContext();
     if (isExtension) {
-      // In the Chrome extension, open login in a new tab so OAuth popups
-      // work correctly (the extension iframe has no navigable URL origin).
       window.open(
         window.location.origin + "/auth/login",
         "_blank",
@@ -54,28 +89,24 @@ export default function AppHealthBanner() {
     }
   }
 
-  // Function to set up expiration timeout
   const setupExpirationTimeout = useCallback(
     (secondsUntilExpiration: number) => {
-      // Clear any existing timeout
       if (expirationTimeoutRef.current) {
         clearTimeout(expirationTimeoutRef.current);
       }
 
-      // Set timeout to show logout modal when session expires
       const timeUntilExpire = (secondsUntilExpiration + 10) * 1000;
       expirationTimeoutRef.current = setTimeout(() => {
         setExpired(true);
 
-        if (!pathname?.includes("/auth")) {
+        if (!isPublicPathname) {
           setShowLoggedOutModal(true);
         }
       }, timeUntilExpire);
     },
-    [pathname]
+    [isPublicPathname]
   );
 
-  // Clean up any timeouts/intervals when component unmounts
   useEffect(() => {
     return () => {
       if (expirationTimeoutRef.current) {
@@ -88,14 +119,16 @@ export default function AppHealthBanner() {
     };
   }, []);
 
-  // Set up token refresh logic if custom refresh URL exists
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      return;
+    }
 
     const secondsUntilExpiration = getSecondsUntilExpiration(user);
-    if (secondsUntilExpiration === null) return;
+    if (secondsUntilExpiration === null) {
+      return;
+    }
 
-    // Set up expiration timeout based on current user data
     setupExpirationTimeout(secondsUntilExpiration);
 
     if (NEXT_PUBLIC_CUSTOM_REFRESH_URL) {
@@ -126,14 +159,11 @@ export default function AppHealthBanner() {
               throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            // Wait for backend to process the token
             await new Promise((resolve) => setTimeout(resolve, 4000));
 
-            // Get updated user data
             const updatedUser = await mutateUser();
 
             if (updatedUser) {
-              // Reset expiration timeout with new expiration time
               const newSecondsUntilExpiration =
                 getSecondsUntilExpiration(updatedUser);
               if (newSecondsUntilExpiration !== null) {
@@ -144,7 +174,7 @@ export default function AppHealthBanner() {
               }
             }
 
-            break; // Success - exit the retry loop
+            break;
           } catch (error) {
             console.error(
               `Error refreshing token (attempt ${
@@ -157,7 +187,6 @@ export default function AppHealthBanner() {
             if (retryCount === maxRetries) {
               console.error("Max retry attempts reached");
             } else {
-              // Wait before retrying (exponential backoff)
               await new Promise((resolve) =>
                 setTimeout(resolve, Math.pow(2, retryCount) * 1000)
               );
@@ -166,10 +195,8 @@ export default function AppHealthBanner() {
         }
       };
 
-      // Set up refresh interval
-      const refreshInterval = 60 * 15; // 15 mins
+      const refreshInterval = 60 * 15;
 
-      // Clear any existing interval
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
       }
@@ -179,26 +206,25 @@ export default function AppHealthBanner() {
         refreshInterval * 1000
       );
 
-      // If we're going to expire before the next refresh, kick off a refresh now
       if (secondsUntilExpiration < refreshInterval) {
-        attemptTokenRefresh();
+        void attemptTokenRefresh();
       }
     }
   }, [user, setupExpirationTimeout, mutateUser]);
 
-  // Logged out modal
   if (showLoggedOutModal) {
     return (
       <Modal open>
         <Modal.Content width="sm" height="sm">
-          <Modal.Header icon={SvgLogOut} title="You Have Been Logged Out" />
+          <Modal.Header icon={SvgLogOut} title="Tu sesi\u00f3n ha finalizado" />
           <Modal.Body>
             <p className="text-sm">
-              Your session has expired. Please log in again to continue.
+              Tu sesi\u00f3n expir\u00f3. Inicia sesi\u00f3n de nuevo para
+              continuar.
             </p>
           </Modal.Body>
           <Modal.Footer>
-            <Button onClick={handleLogin}>Log In</Button>
+            <Button onClick={handleLogin}>Iniciar sesi\u00f3n</Button>
           </Modal.Footer>
         </Modal.Content>
       </Modal>
@@ -210,21 +236,18 @@ export default function AppHealthBanner() {
   }
 
   if (error instanceof RedirectError || expired) {
-    if (!pathname?.includes("/auth")) {
-      setShowLoggedOutModal(true);
-    }
     return null;
-  } else {
-    return (
-      <div className="fixed top-0 left-0 z-[101] w-full bg-status-error-01 p-3">
-        <Content
-          icon={SvgAlertTriangle}
-          title="The backend is currently unavailable"
-          description="Si es tu configuración inicial o acabas de actualizar el despliegue, es probable que el backend todavía se esté iniciando. Espera uno o dos minutos y luego recarga la página. Si no funciona, verifica la configuración del backend o contacta a un administrador."
-          sizePreset="main-content"
-          variant="section"
-        />
-      </div>
-    );
   }
+
+  return (
+    <div className="fixed top-0 left-0 z-[101] w-full bg-status-error-01 p-3">
+      <Content
+        icon={SvgAlertTriangle}
+        title="El backend no est\u00e1 disponible en este momento"
+        description="Si es tu configuraci\u00f3n inicial o acabas de actualizar el despliegue, es probable que el backend todav\u00eda se est\u00e9 iniciando. Espera uno o dos minutos y luego recarga la p\u00e1gina. Si el problema contin\u00faa, revisa la configuraci\u00f3n del backend o contacta a un administrador."
+        sizePreset="main-content"
+        variant="section"
+      />
+    </div>
+  );
 }

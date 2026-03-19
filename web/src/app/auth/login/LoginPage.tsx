@@ -39,7 +39,7 @@ export default function LoginPage({
         <Message
           success
           close={false}
-          text="Your email has been verified! Please sign in to continue."
+          text="Tu correo ya fue verificado. Inicia sesion para continuar."
           className="w-full mb-4"
         />
       )}
@@ -69,7 +69,7 @@ export default function LoginPage({
               <div className="flex flex-row items-center w-full gap-2">
                 <div className="flex-1 border-t border-text-01" />
                 <Text as="p" text03 mainUiMuted>
-                  or
+                  o
                 </Text>
                 <div className="flex-1 border-t border-text-01" />
               </div>
@@ -77,7 +77,9 @@ export default function LoginPage({
           )}
           <EmailPasswordForm shouldVerify={true} nextUrl={effectiveNextUrl} />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <Button href="/auth/forgot-password">Reset Password</Button>
+            <Button href="/auth/forgot-password">
+              Restablecer contrasena
+            </Button>
           )}
         </div>
       )}
@@ -90,8 +92,8 @@ export default function LoginPage({
       )}
 
       {!hidePageRedirect && (
-        <p className="text-center mt-4">
-          Don&apos;t have an account?{" "}
+        <Text as="p" className="mt-4 text-center text-sm text-text-03">
+          No tienes cuenta?{" "}
           <span
             onClick={() => {
               if (typeof window !== "undefined" && window.top) {
@@ -100,11 +102,11 @@ export default function LoginPage({
                 window.location.href = "/auth/signup";
               }
             }}
-            className="text-link font-medium cursor-pointer"
+            className="cursor-pointer font-medium text-theme-orange-05 transition-colors hover:text-theme-orange-04"
           >
-            Create an account
+            Crea una
           </span>
-        </p>
+        </Text>
       )}
     </div>
   );
