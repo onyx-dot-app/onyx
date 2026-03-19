@@ -77,6 +77,9 @@ class CanvasApiClient:
         ``_parse_next_link``, which validates the host against the configured
         Canvas base URL.  Passing an arbitrary URL would leak the bearer token.
         """
+        # full_url is used when following pagination (Canvas returns the
+        # next-page URL in the Link header).  For the first request we build
+        # the URL from the endpoint name instead.
         url = full_url if full_url else self._build_url(endpoint)
         headers = self._build_headers()
 
