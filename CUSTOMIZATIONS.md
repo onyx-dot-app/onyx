@@ -128,7 +128,7 @@ El sistema de color actual del fork vive principalmente en:
   - `stone-*`
   - `chalk-*`
   - `slate-*`
-- Los tokens de tema principal (`theme-primary-*`) siguen anclados sobre `onyx-ink-*` / `onyx-chrome-*`, es decir, el fork conserva alias historicos para compatibilidad aunque la marca visible sea ACTIVA.
+- Los tokens de tema principal (`theme-primary-*`) ahora se anclan sobre `activa-ink-*` / `activa-chrome-*`, alineando los nombres internos con la marca ACTIVA.
 - Los highlights tambien usan una familia nueva de acentos neon:
   - `highlight-match`
   - `highlight-selection`

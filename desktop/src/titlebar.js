@@ -1,11 +1,11 @@
-// Custom title bar for Onyx Desktop
-// This script injects a draggable title bar that matches Onyx design system
+// Custom title bar for Activa Desktop
+// This script injects a draggable title bar that matches the Activa design system
 
 (function () {
-  const TITLEBAR_ID = "onyx-desktop-titlebar";
+  const TITLEBAR_ID = "activa-desktop-titlebar";
   const TITLEBAR_HEIGHT = 36;
-  const STYLE_ID = "onyx-desktop-titlebar-style";
-  const VIEWPORT_VAR = "--onyx-desktop-viewport-height";
+  const STYLE_ID = "activa-desktop-titlebar-style";
+  const VIEWPORT_VAR = "--activa-desktop-viewport-height";
 
   // Wait for DOM to be ready
   if (document.readyState === "loading") {
@@ -49,50 +49,50 @@
     style.id = STYLE_ID;
     style.textContent = `
       :root {
-        --onyx-desktop-titlebar-height: ${TITLEBAR_HEIGHT}px;
-        --onyx-desktop-viewport-height: 100dvh;
-        --onyx-desktop-safe-height: calc(var(--onyx-desktop-viewport-height) - var(--onyx-desktop-titlebar-height));
+        --activa-desktop-titlebar-height: ${TITLEBAR_HEIGHT}px;
+        --activa-desktop-viewport-height: 100dvh;
+        --activa-desktop-safe-height: calc(var(--activa-desktop-viewport-height) - var(--activa-desktop-titlebar-height));
       }
 
       @supports not (height: 100dvh) {
         :root {
-          --onyx-desktop-viewport-height: 100vh;
+          --activa-desktop-viewport-height: 100vh;
         }
       }
 
       html,
       body {
-        height: var(--onyx-desktop-viewport-height);
-        min-height: var(--onyx-desktop-viewport-height);
+        height: var(--activa-desktop-viewport-height);
+        min-height: var(--activa-desktop-viewport-height);
         margin: 0;
         padding: 0;
         overflow: hidden;
       }
 
       body {
-        padding-top: var(--onyx-desktop-titlebar-height) !important;
+        padding-top: var(--activa-desktop-titlebar-height) !important;
         box-sizing: border-box;
       }
 
       body > div#__next,
       body > div#root,
       body > main {
-        height: var(--onyx-desktop-safe-height);
-        min-height: var(--onyx-desktop-safe-height);
+        height: var(--activa-desktop-safe-height);
+        min-height: var(--activa-desktop-safe-height);
         overflow: auto;
       }
 
       /* Override common Tailwind viewport helpers so content fits under the titlebar */
       .h-screen {
-        height: var(--onyx-desktop-safe-height) !important;
+        height: var(--activa-desktop-safe-height) !important;
       }
 
       .min-h-screen {
-        min-height: var(--onyx-desktop-safe-height) !important;
+        min-height: var(--activa-desktop-safe-height) !important;
       }
 
       .max-h-screen {
-        max-height: var(--onyx-desktop-safe-height) !important;
+        max-height: var(--activa-desktop-safe-height) !important;
       }
 
       #${TITLEBAR_ID} {
@@ -101,7 +101,7 @@
         user-select: none !important;
         -webkit-app-region: drag;
         background: rgba(255, 255, 255, 0.85);
-        height: var(--onyx-desktop-titlebar-height);
+        height: var(--activa-desktop-titlebar-height);
       }
 
       /* Dark mode support */
@@ -156,7 +156,7 @@
     const bodyHasDark = document.body?.classList.contains("dark");
     const isDark = htmlHasDark || bodyHasDark;
 
-    // Apply styles matching Onyx design system with translucent glass effect
+    // Apply styles matching the Activa design system with translucent glass effect
     titleBar.style.cssText = `
       position: fixed;
       top: 0;
