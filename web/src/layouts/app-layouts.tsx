@@ -562,7 +562,11 @@ function Root({ children, enableBackground }: AppRootProps) {
     inputWasFocused.current = false;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return;
-    document.getElementById("onyx-chat-input-textarea")?.focus();
+    const textarea = document.getElementById("onyx-chat-input-textarea");
+    // Only restore focus if no other element has grabbed it since mousedown.
+    if (textarea && document.activeElement !== textarea) {
+      textarea.focus();
+    }
   }, []);
   const horizontalBlurMask = `linear-gradient(
     to right,
