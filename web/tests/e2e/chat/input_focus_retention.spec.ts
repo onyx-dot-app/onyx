@@ -9,9 +9,7 @@ test.describe(`Chat Input Focus Retention`, () => {
     await page.waitForLoadState("networkidle");
   });
 
-  test("clicking empty space retains focus on chat input", async ({
-    page,
-  }, testInfo) => {
+  test("clicking empty space retains focus on chat input", async ({ page }) => {
     const textarea = page.locator("#onyx-chat-input-textarea");
     await textarea.waitFor({ state: "visible", timeout: 10000 });
 
@@ -30,7 +28,7 @@ test.describe(`Chat Input Focus Retention`, () => {
 
   test("clicking interactive elements still moves focus away", async ({
     page,
-  }, testInfo) => {
+  }) => {
     const textarea = page.locator("#onyx-chat-input-textarea");
     await textarea.waitFor({ state: "visible", timeout: 10000 });
 
