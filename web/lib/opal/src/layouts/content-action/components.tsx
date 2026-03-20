@@ -58,10 +58,10 @@ function ContentAction({
   paddingVariant = "lg",
   ...contentProps
 }: ContentActionProps) {
-  const { padding } = containerSizeVariants[paddingVariant];
+  const { padding, gap } = containerSizeVariants[paddingVariant];
 
   return (
-    <Section flexDirection="row" alignItems="stretch" gap={0.25}>
+    <Section flexDirection="row" alignItems="stretch" gap={gap}>
       <div className={cn("flex-1 min-w-0 self-center", padding)}>
         <Content {...contentProps} />
       </div>
