@@ -2,7 +2,7 @@
 # Usage: .\install.ps1 [OPTIONS]
 # Remote (with params):
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.ps1))) -Lite -NoPrompt
-# Remote (defaults only):
+# Remote (defaults only, configure via interaction during script):
 #   irm https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.ps1 | iex
 
 param(
@@ -57,11 +57,7 @@ function Print-Step {
 }
 
 function Test-Interactive {
-    if ($NoPrompt) { return $false }
-    try {
-        if ([Console]::IsInputRedirected) { return $false }
-        return $true
-    } catch { return [Environment]::UserInteractive }
+    return -not $NoPrompt
 }
 
 function Prompt-OrDefault {
@@ -89,12 +85,12 @@ function Prompt-VersionTag {
         Write-Host "  - Type a specific tag (e.g., craft-v1.0.0)"
         $version = Prompt-OrDefault "Enter tag [default: craft-latest]" "craft-latest"
     } else {
-        Write-Host "  - Press Enter for latest (recommended)"
+        Write-Host "  - Press Enter for edge (recommended)"
         Write-Host "  - Type a specific tag (e.g., v0.1.0)"
-        $version = Prompt-OrDefault "Enter tag [default: latest]" "latest"
+        $version = Prompt-OrDefault "Enter tag [default: edge]" "edge"
     }
     if     ($script:IncludeCraftMode -and $version -eq "craft-latest") { Print-Info "Selected: craft-latest (Craft enabled)" }
-    elseif ($version -eq "latest") { Print-Info "Selected: Latest tag" }
+    elseif ($version -eq "edge") { Print-Info "Selected: edge (latest nightly)" }
     else   { Print-Info "Selected: $version" }
     return $version
 }
@@ -103,16 +99,16 @@ function Prompt-DeploymentMode {
     param([string]$LiteOverlayPath)
     if ($script:LiteMode) { Print-Info "Deployment mode: Lite (set via -Lite flag)"; return }
     Print-Info "Which deployment mode would you like?"
-    Write-Host "  1) Standard  - Full deployment with search, connectors, and RAG"
-    Write-Host "  2) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
+    Write-Host "  1) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
     Write-Host "                  LLM chat, tools, file uploads, and Projects still work"
+    Write-Host "  2) Standard  - Full deployment with search, connectors, and RAG"
     $modeChoice = Prompt-OrDefault "Choose a mode (1 or 2) [default: 1]" "1"
     if ($modeChoice -eq "2") {
+        Print-Info "Selected: Standard mode"
+    } else {
         $script:LiteMode = $true
         Print-Info "Selected: Lite mode"
         if (-not (Ensure-OnyxFile $LiteOverlayPath "$($script:GitHubRawUrl)/$($script:LiteComposeFile)" $script:LiteComposeFile)) { exit 1 }
-    } else {
-        Print-Info "Selected: Standard mode"
     }
 }
 
@@ -358,7 +354,8 @@ function Invoke-OnyxShutdown {
         return
     }
     if (-not (Initialize-ComposeCommand)) { Print-OnyxError "Docker Compose not found."; exit 1 }
-    $result = Invoke-Compose -AutoDetect stop
+    $stopArgs = @("stop")
+    $result = Invoke-Compose -AutoDetect @stopArgs
     if ($result -ne 0) { Print-OnyxError "Failed to stop containers"; exit 1 }
     Print-Success "Onyx containers stopped (paused)"
 }
@@ -375,7 +372,8 @@ function Invoke-OnyxDeleteData {
     }
     $deployDir = Join-Path $script:InstallRoot "deployment"
     if ((Test-Path (Join-Path $deployDir "docker-compose.yml")) -and (Initialize-ComposeCommand)) {
-        $result = Invoke-Compose -AutoDetect down -v
+        $downArgs = @("down", "-v")
+        $result = Invoke-Compose -AutoDetect @downArgs
         if ($result -eq 0) { Print-Success "Containers and volumes removed" }
         else { Print-OnyxError "Failed to remove containers" }
     }
@@ -934,15 +932,6 @@ function Main {
     $liteOverlayPath = Join-Path $deploymentDir $script:LiteComposeFile
     if ($script:LiteMode) {
         if (-not (Ensure-OnyxFile $liteOverlayPath "$($script:GitHubRawUrl)/$($script:LiteComposeFile)" $script:LiteComposeFile)) { exit 1 }
-    } elseif (Test-Path $liteOverlayPath) {
-        if (Test-Path (Join-Path $deploymentDir ".env")) {
-            Print-Warning "Existing lite overlay found but -Lite was not passed."
-            $reply = Prompt-OrDefault "Remove lite overlay and switch to standard mode? (y/N)" "n"
-            if ($reply -match '^[Yy]') { Remove-Item -Force $liteOverlayPath; Print-Info "Switched to standard mode" }
-            else { $script:LiteMode = $true; Print-Info "Keeping lite mode" }
-        } else {
-            Remove-Item -Force $liteOverlayPath
-        }
     }
 
     $envTemplateDest = Join-Path $deploymentDir "env.template"
@@ -962,7 +951,8 @@ function Main {
     # Check if services are already running
     if ((Test-Path $composeDest) -and (Initialize-ComposeCommand)) {
         $running = @()
-        try { $running = @(Invoke-Compose -AutoDetect ps -q 2>$null | Where-Object { $_ }) } catch { }
+        $psArgs = @("ps", "-q")
+        try { $running = @(Invoke-Compose -AutoDetect @psArgs 2>$null | Where-Object { $_ }) } catch { }
         if ($running.Count -gt 0) {
             Print-OnyxError "Onyx services are currently running!"
             Print-Info "Run '.\install.ps1 -Shutdown' first, then re-run this script."
@@ -1028,6 +1018,12 @@ function Main {
         Print-Info "You can customize .env later for OAuth/SAML, AI models, domain settings, and Craft."
     }
 
+    # Clean up stale lite overlay if standard mode was selected
+    if (-not $script:LiteMode -and (Test-Path $liteOverlayPath)) {
+        Remove-Item -Force $liteOverlayPath
+        Print-Info "Removed previous lite overlay (switching to standard mode)"
+    }
+
     # ── Step 6: Check Ports ───────────────────────────────────────────────
     Print-Step "Checking for available ports"
     $availablePort = Find-AvailablePort 3000
@@ -1037,7 +1033,7 @@ function Main {
     Print-Success "Using port $availablePort for nginx"
 
     $currentImageTag = Get-EnvFileValue -Path $envFile -Key "IMAGE_TAG"
-    $useLatest = ($currentImageTag -eq "latest" -or $currentImageTag -match '^craft-')
+    $useLatest = ($currentImageTag -eq "edge" -or $currentImageTag -eq "latest" -or $currentImageTag -match '^craft-')
     if ($useLatest) { Print-Info "Using '$currentImageTag' tag - will force pull and recreate containers" }
 
     # For pinned version tags, re-download config files from that tag so the
@@ -1069,8 +1065,9 @@ function Main {
     # ── Step 8: Start Services ────────────────────────────────────────────
     Print-Step "Starting Onyx services"
     Print-Info "Launching containers..."
-    if ($useLatest) { $upResult = Invoke-Compose up -d --pull always --force-recreate }
-    else { $upResult = Invoke-Compose up -d }
+    $upArgs = @("up", "-d")
+    if ($useLatest) { $upArgs += @("--pull", "always", "--force-recreate") }
+    $upResult = Invoke-Compose @upArgs
     if ($upResult -ne 0) { Print-OnyxError "Failed to start Onyx services"; exit 1 }
 
     # ── Step 9: Container Health ──────────────────────────────────────────
@@ -1078,7 +1075,8 @@ function Main {
     Start-Sleep -Seconds 10
     $restartIssues = $false
     $containerIds = @()
-    try { $containerIds = @(Invoke-Compose ps -q 2>$null | Where-Object { $_ }) } catch { }
+    $psArgs = @("ps", "-q")
+    try { $containerIds = @(Invoke-Compose @psArgs 2>$null | Where-Object { $_ }) } catch { }
 
     foreach ($cid in $containerIds) {
         if ([string]::IsNullOrWhiteSpace($cid)) { continue }
