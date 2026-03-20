@@ -8,11 +8,11 @@ import { useScimToken } from "@/hooks/useScimToken";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import useUserCounts from "@/hooks/useUserCounts";
 import { UserStatus } from "@/lib/types";
-import type { StatusFilter } from "./UsersPage/interfaces";
+import type { StatusFilter } from "./interfaces";
 
-import UsersSummary from "./UsersPage/UsersSummary";
-import UsersTable from "./UsersPage/UsersTable";
-import InviteUsersModal from "./UsersPage/InviteUsersModal";
+import UsersSummary from "./UsersSummary";
+import UsersTable from "./UsersTable";
+import InviteUsersModal from "./InviteUsersModal";
 
 // ---------------------------------------------------------------------------
 // Users page content

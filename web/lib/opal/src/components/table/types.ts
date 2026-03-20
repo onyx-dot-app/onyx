@@ -4,9 +4,10 @@ import type {
   SortingState,
   VisibilityState,
 } from "@tanstack/react-table";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
+import type { TableVariant } from "@opal/components/table/TableElement";
 import type { IconFunctionComponent } from "@opal/types";
-import type { SortDirection } from "@/refresh-components/table/TableHead";
+import type { SortDirection } from "@opal/components/table/TableHead";
 
 // ---------------------------------------------------------------------------
 // Column width (mirrors useColumnWidths types)
@@ -129,25 +130,15 @@ export interface DataTableDraggableConfig {
   ) => void | Promise<void>;
 }
 
-export interface DataTableFooterSelection {
-  mode: "selection";
-  /** Whether the table supports selecting multiple rows. @default true */
-  multiSelect?: boolean;
-  /** When true, shows a "View" button that filters the table to only selected rows. @default false */
-  showView?: boolean;
-  /** Handler for the "Clear" button. When omitted, the default clearSelection is used. */
+/** Footer configuration. Mode is derived from `selectionBehavior` automatically. */
+export interface DataTableFooterConfig {
+  /** Handler for the "Clear" button (multi-select only). When omitted, the default clearSelection is used. */
   onClear?: () => void;
-}
-
-export interface DataTableFooterSummary {
-  mode: "summary";
-  /** Optional extra element rendered after the summary text (e.g. a download icon). */
+  /** Unit label for count pagination, e.g. "users", "documents" (multi-select only). */
+  units?: string;
+  /** Optional extra element rendered after the summary text, e.g. a download icon (summary mode only). */
   leftExtra?: ReactNode;
 }
-
-export type DataTableFooterConfig =
-  | DataTableFooterSelection
-  | DataTableFooterSummary;
 
 export interface DataTableProps<TData> {
   /** Row data array. */
@@ -166,8 +157,10 @@ export interface DataTableProps<TData> {
   draggable?: DataTableDraggableConfig;
   /** Footer configuration. */
   footer?: DataTableFooterConfig;
-  /** Table size variant. @default "regular" */
+  /** Table size variant. @default "lg" */
   size?: TableSize;
+  /** Visual row variant. @default "cards" */
+  variant?: TableVariant;
   /** Called whenever the set of selected row IDs changes. Receives IDs produced by `getRowId`. */
   onSelectionChange?: (selectedIds: string[]) => void;
   /** Called when a row is clicked (replaces the default selection toggle). */

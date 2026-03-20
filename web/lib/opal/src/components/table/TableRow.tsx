@@ -1,8 +1,8 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import { useTableSize } from "@/refresh-components/table/TableSizeContext";
-import type { TableSize } from "@/refresh-components/table/TableSizeContext";
+import { cn } from "@opal/utils";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
+import type { TableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -18,8 +18,6 @@ interface TableRowProps
   selected?: boolean;
   /** Disables interaction and applies disabled styling */
   disabled?: boolean;
-  /** Visual variant: "table" adds a bottom border, "list" adds rounded corners. Defaults to "list". */
-  variant?: "table" | "list";
   /** When provided, makes this row sortable via @dnd-kit */
   sortableId?: string;
   /** Show drag handle overlay. Defaults to true when sortableId is set. */
@@ -36,7 +34,6 @@ function SortableTableRow({
   sortableId,
   showDragHandle = true,
   size,
-  variant = "list",
   selected,
   disabled,
   ref: _externalRef,
@@ -66,7 +63,6 @@ function SortableTableRow({
       ref={setNodeRef}
       style={style}
       className="tbl-row group/row"
-      data-variant={variant}
       data-drag-handle={showDragHandle || undefined}
       data-selected={selected || undefined}
       data-disabled={disabled || undefined}
@@ -95,7 +91,7 @@ function SortableTableRow({
             {...listeners}
           >
             <SvgHandle
-              size={resolvedSize === "small" ? 12 : 16}
+              size={resolvedSize === "md" ? 12 : 16}
               className="text-border-02"
             />
           </button>
@@ -113,7 +109,6 @@ function TableRow({
   sortableId,
   showDragHandle,
   size,
-  variant = "list",
   selected,
   disabled,
   ref,
@@ -125,7 +120,6 @@ function TableRow({
         sortableId={sortableId}
         showDragHandle={showDragHandle}
         size={size}
-        variant={variant}
         selected={selected}
         disabled={disabled}
         ref={ref}
@@ -138,7 +132,6 @@ function TableRow({
     <tr
       ref={ref}
       className="tbl-row group/row"
-      data-variant={variant}
       data-selected={selected || undefined}
       data-disabled={disabled || undefined}
       {...props}

@@ -1,18 +1,17 @@
 import { memo } from "react";
 import { type Row, flexRender } from "@tanstack/react-table";
-import TableRow from "@/refresh-components/table/TableRow";
-import TableCell from "@/refresh-components/table/TableCell";
-import QualifierContainer from "@/refresh-components/table/QualifierContainer";
-import TableQualifier from "@/refresh-components/table/TableQualifier";
-import ActionsContainer from "@/refresh-components/table/ActionsContainer";
+import TableRow from "@opal/components/table/TableRow";
+import TableCell from "@opal/components/table/TableCell";
+import QualifierContainer from "@opal/components/table/QualifierContainer";
+import TableQualifier from "@opal/components/table/TableQualifier";
+import ActionsContainer from "@opal/components/table/ActionsContainer";
 import type {
   OnyxColumnDef,
   OnyxQualifierColumn,
-} from "@/refresh-components/table/types";
+} from "@opal/components/table/types";
 
 interface DragOverlayRowProps<TData> {
   row: Row<TData>;
-  variant?: "table" | "list";
   columnWidths?: Record<string, number>;
   columnKindMap?: Map<string, OnyxColumnDef<TData>>;
   qualifierColumn?: OnyxQualifierColumn<TData> | null;
@@ -21,7 +20,6 @@ interface DragOverlayRowProps<TData> {
 
 function DragOverlayRowInner<TData>({
   row,
-  variant,
   columnWidths,
   columnKindMap,
   qualifierColumn,
@@ -50,7 +48,7 @@ function DragOverlayRowInner<TData>({
         </colgroup>
       )}
       <tbody>
-        <TableRow variant={variant} selected={row.getIsSelected()}>
+        <TableRow selected={row.getIsSelected()}>
           {row.getVisibleCells().map((cell) => {
             const colDef = columnKindMap?.get(cell.column.id);
 

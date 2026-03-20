@@ -2,7 +2,14 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "@opal/*": ["./src/*"]
+      "@opal/*": ["./src/*"],
+      // TODO (@raunakab): Remove this once the table component migration is
+      // complete. The table internals still import app-layer modules (e.g.
+      // @/refresh-components/texts/Text, @/refresh-components/Popover) via the
+      // @/ alias. Without this entry the IDE cannot resolve those paths since
+      // opal's tsconfig only defines @opal/*. Once all @/ deps are replaced
+      // with opal-internal equivalents, this line should be deleted.
+      "@/*": ["../../src/*"]
     }
   },
   "include": ["src/**/*"],

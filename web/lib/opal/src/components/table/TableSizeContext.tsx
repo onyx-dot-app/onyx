@@ -1,10 +1,11 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import type { SizeVariants } from "@opal/types";
 
-type TableSize = "regular" | "small";
+type TableSize = Extract<SizeVariants, "md" | "lg">;
 
-const TableSizeContext = createContext<TableSize>("regular");
+const TableSizeContext = createContext<TableSize>("lg");
 
 interface TableSizeProviderProps {
   size: TableSize;
