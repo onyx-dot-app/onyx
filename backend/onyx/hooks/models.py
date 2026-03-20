@@ -114,7 +114,7 @@ class HookValidateResponse(BaseModel):
     error_message: str | None = None
 
 
-class HookFailureRecord(BaseModel):
+class HookExecutionRecord(BaseModel):
     error_message: str | None = None
     status_code: int | None = None
     duration_ms: int | None = None

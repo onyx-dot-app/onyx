@@ -21,7 +21,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.api_dependencies import require_hook_enabled
 from onyx.hooks.models import HookCreateRequest
-from onyx.hooks.models import HookFailureRecord
+from onyx.hooks.models import HookExecutionRecord
 from onyx.hooks.models import HookPointMetaResponse
 from onyx.hooks.models import HookResponse
 from onyx.hooks.models import HookUpdateRequest
@@ -435,15 +435,15 @@ def deactivate_hook(
 @router.get("/{hook_id}/execution-logs")
 def list_hook_execution_logs(
     hook_id: int,
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=10, ge=1, le=100),
     _: User = Depends(current_admin_user),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
-) -> list[HookFailureRecord]:
+) -> list[HookExecutionRecord]:
     _get_hook_or_404(db_session, hook_id)
     logs = get_hook_execution_logs(db_session=db_session, hook_id=hook_id, limit=limit)
     return [
-        HookFailureRecord(
+        HookExecutionRecord(
             error_message=log.error_message,
             status_code=log.status_code,
             duration_ms=log.duration_ms,
