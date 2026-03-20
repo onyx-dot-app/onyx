@@ -2,7 +2,7 @@ name: hop
 
 services:
   api_server:
-    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/hop-rag/activa-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -56,7 +56,7 @@ services:
       - file-system:/app/file-system
 
   background:
-    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/hop-rag/activa-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -124,7 +124,7 @@ services:
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
 
   web_server:
-    image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
+    image: ghcr.io/hop-rag/activa-web-server:${IMAGE_TAG:-latest}
     build:
       context: ../../web
       dockerfile: Dockerfile

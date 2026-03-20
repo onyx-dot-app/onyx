@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   extract-version:
@@ -35,8 +36,70 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "[OK] Version to deploy: $VERSION"
 
-  deploy:
+  build-backend:
     needs: extract-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198e19c3bc4c94 # v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/hop-rag/activa-backend:${{ needs.extract-version.outputs.version }}
+            ghcr.io/hop-rag/activa-backend:latest
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+  build-web:
+    needs: extract-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push web server image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198e19c3bc4c94 # v6
+        with:
+          context: ./web
+          file: ./web/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/hop-rag/activa-web-server:${{ needs.extract-version.outputs.version }}
+            ghcr.io/hop-rag/activa-web-server:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  deploy:
+    needs: [extract-version, build-backend, build-web]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -54,6 +117,7 @@ jobs:
           LEGACY_DEPLOY_DIR: /opt/onyx
           PROXY_CONTAINER: hop-proxy
           LEGACY_PROXY_CONTAINER: onyx-proxy
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
 
@@ -77,12 +141,14 @@ jobs:
             "$PREFERRED_DEPLOY_DIR" \
             "$LEGACY_DEPLOY_DIR" \
             "$PROXY_CONTAINER" \
-            "$LEGACY_PROXY_CONTAINER" <<'EOSSH'
+            "$LEGACY_PROXY_CONTAINER" \
+            "$GHCR_TOKEN" <<'EOSSH'
             BRANCH="$1"
             PREFERRED_DEPLOY_DIR="$2"
             LEGACY_DEPLOY_DIR="$3"
             PROXY_CONTAINER="$4"
             LEGACY_PROXY_CONTAINER="$5"
+            GHCR_TOKEN="$6"
             set -e
 
             if [ -d "$PREFERRED_DEPLOY_DIR" ]; then
@@ -120,6 +186,9 @@ jobs:
               echo "[ERROR] Missing docker-compose.yml in $(pwd)"
               exit 1
             fi
+
+            echo "[INFO] Logging into GHCR..."
+            echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u github-actions --password-stdin
 
             echo "[INFO] Pulling Docker images..."
             sudo docker compose pull
@@ -352,6 +421,7 @@ jobs:
           LEGACY_DEPLOY_DIR: /opt/onyx
           PROXY_CONTAINER: hop-proxy
           LEGACY_PROXY_CONTAINER: onyx-proxy
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
 
@@ -367,11 +437,13 @@ jobs:
             "$PREFERRED_DEPLOY_DIR" \
             "$LEGACY_DEPLOY_DIR" \
             "$PROXY_CONTAINER" \
-            "$LEGACY_PROXY_CONTAINER" <<'EOSSH'
+            "$LEGACY_PROXY_CONTAINER" \
+            "$GHCR_TOKEN" <<'EOSSH'
             PREFERRED_DEPLOY_DIR="$1"
             LEGACY_DEPLOY_DIR="$2"
             PROXY_CONTAINER="$3"
             LEGACY_PROXY_CONTAINER="$4"
+            GHCR_TOKEN="$5"
             set -e
 
             if [ -d "$PREFERRED_DEPLOY_DIR" ]; then
@@ -406,6 +478,7 @@ jobs:
             sudo docker stop "$LEGACY_PROXY_CONTAINER" 2>/dev/null || true
             sudo docker rm "$LEGACY_PROXY_CONTAINER" 2>/dev/null || true
 
+            echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u github-actions --password-stdin
             sudo docker compose pull
             sudo docker compose up -d --scale nginx=0 2>/dev/null || sudo docker compose up -d
             sleep 15

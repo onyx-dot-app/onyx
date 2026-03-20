@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   rollback:
@@ -51,6 +52,7 @@ jobs:
           LEGACY_DEPLOY_DIR: /opt/onyx
           PROXY_CONTAINER: hop-proxy
           LEGACY_PROXY_CONTAINER: onyx-proxy
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
 
@@ -72,12 +74,14 @@ jobs:
             "$PREFERRED_DEPLOY_DIR" \
             "$LEGACY_DEPLOY_DIR" \
             "$PROXY_CONTAINER" \
-            "$LEGACY_PROXY_CONTAINER" <<'EOSSH'
+            "$LEGACY_PROXY_CONTAINER" \
+            "$GHCR_TOKEN" <<'EOSSH'
             ROLLBACK_VERSION="$1"
             PREFERRED_DEPLOY_DIR="$2"
             LEGACY_DEPLOY_DIR="$3"
             PROXY_CONTAINER="$4"
             LEGACY_PROXY_CONTAINER="$5"
+            GHCR_TOKEN="$6"
             set -e
 
             if [ -d "$PREFERRED_DEPLOY_DIR" ]; then
@@ -131,6 +135,7 @@ jobs:
             sudo docker stop "$LEGACY_PROXY_CONTAINER" 2>/dev/null || true
             sudo docker rm "$LEGACY_PROXY_CONTAINER" 2>/dev/null || true
 
+            echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u github-actions --password-stdin
             sudo docker compose pull
             sudo docker compose up -d --scale nginx=0 2>/dev/null || sudo docker compose up -d
 
