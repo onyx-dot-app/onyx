@@ -754,7 +754,7 @@ def index_doc_batch(
         # in one set of metadata overwriting another one in vespa.
         # we still write data here for the immediate and most likely correct sync, but
         # to resolve this, an update of the last modified field at the end of this loop
-        # always triggers a final metadata sync via the celery queue
+        # always triggers a final metadata sync via the celery queu
         enricher = adapter.prepare_enrichment(
             context=context,
             tenant_id=tenant_id,
