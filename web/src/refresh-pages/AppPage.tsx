@@ -665,7 +665,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           noClick
         >
           {({ getRootProps }) => (
-            <div className="h-full w-full flex flex-col items-center outline-none relative">
+            <div
+              className="h-full w-full flex flex-col items-center outline-none relative"
+              {...getRootProps()}
+            >
               {/* Main content grid — 3 rows, animated */}
               <div
                 className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
