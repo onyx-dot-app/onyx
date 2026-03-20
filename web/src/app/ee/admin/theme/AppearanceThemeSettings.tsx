@@ -22,6 +22,7 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
+import useSWR from "swr";
 
 interface AppearanceThemeSettingsProps {
   selectedLogo: File | null;
@@ -174,15 +175,27 @@ export const AppearanceThemeSettings = forwardRef<
     };
   }, [logoObjectUrl]);
 
-  const getLogoSrc = () => {
+  // Use SWR to fetch and cache the logo URL, avoiding repeated fetches on every render
+  const { data: cachedLogoUrl } = useSWR(
+    values.use_custom_logo && !logoObjectUrl
+      ? "/api/enterprise-settings/logo"
+      : null,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 60000, // Cache for 1 minute
+    }
+  );
+
+  const getLogoSrc = useMemo(() => {
     if (logoObjectUrl) {
       return logoObjectUrl;
     }
     if (values.use_custom_logo) {
-      return `/api/enterprise-settings/logo?u=${Date.now()}`;
+      return cachedLogoUrl || `/api/enterprise-settings/logo`;
     }
     return undefined;
-  };
+  }, [logoObjectUrl, values.use_custom_logo, cachedLogoUrl]);
 
   // Determine which tabs should be enabled
   const hasLogo = Boolean(selectedLogo || values.use_custom_logo);
@@ -302,7 +315,7 @@ export const AppearanceThemeSettings = forwardRef<
           <FormField.Label>Application Logo</FormField.Label>
           <FormField.Control>
             <InputImage
-              src={getLogoSrc()}
+              src={getLogoSrc}
               onEdit={handleLogoEdit}
               onDrop={(file) => {
                 setSelectedLogo(file);
@@ -341,7 +354,7 @@ export const AppearanceThemeSettings = forwardRef<
         greeting_message={
           values.custom_greeting_message || "Welcome to Acme Chat"
         }
-        logoSrc={getLogoSrc()}
+        logoSrc={getLogoSrc}
         highlightTarget={highlightTarget}
       />
 
