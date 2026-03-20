@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-from collections import defaultdict
 from collections.abc import Generator
 
 from sqlalchemy.engine.util import TransactionalContext
@@ -97,9 +96,12 @@ class DocumentIndexingBatchAdapter:
         """Do all DB lookups once and return a per-chunk enricher."""
         updatable_ids = [doc.id for doc in context.updatable_docs]
 
-        doc_id_to_new_chunk_cnt: dict[str, int] = defaultdict(int)
+        doc_id_to_new_chunk_cnt: dict[str, int] = {
+            doc_id: 0 for doc_id in updatable_ids
+        }
         for chunk in chunks:
-            doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
+            if chunk.source_document.id in doc_id_to_new_chunk_cnt:
+                doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
 
         no_access = DocumentAccess.build(
             user_emails=[],
