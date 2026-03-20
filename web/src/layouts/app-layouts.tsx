@@ -67,6 +67,9 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import { APP_SLOGAN } from "@/lib/constants";
 
+const INTERACTIVE_SELECTOR =
+  "a, button, input, textarea, select, label, [role='button'], [tabindex], [contenteditable='true']";
+
 /**
  * App Header Component
  *
@@ -532,6 +535,29 @@ function Root({ children, enableBackground }: AppRootProps) {
   const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
   const showBackground = hasBackground && enableBackground;
+
+  const handleMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const activeEl = document.activeElement;
+      // If the AppInputBar is not active, do nothing.
+      if (
+        !(activeEl instanceof HTMLElement) ||
+        activeEl.id !== "onyx-chat-input-textarea"
+      ) {
+        return;
+      }
+      const target = event.target;
+      // If the clicked element is interactive, do nothing to allow it to focus.
+      if (
+        target instanceof HTMLElement &&
+        target.closest(INTERACTIVE_SELECTOR)
+      ) {
+        return;
+      }
+      event.preventDefault();
+    },
+    []
+  );
   const horizontalBlurMask = `linear-gradient(
     to right,
     transparent 0%,
@@ -549,6 +575,7 @@ function Root({ children, enableBackground }: AppRootProps) {
     */
     <div
       data-main-container
+      onMouseDown={handleMouseDown}
       className={cn(
         "@container flex flex-col h-full w-full relative overflow-hidden",
         showBackground && "bg-cover bg-center bg-fixed"
