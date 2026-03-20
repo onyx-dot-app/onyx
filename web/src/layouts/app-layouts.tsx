@@ -20,10 +20,15 @@
 
 "use client";
 
-import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
+import {
+  cn,
+  ensureHrefProtocol,
+  INTERACTIVE_SELECTOR,
+  noProp,
+} from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
@@ -532,6 +537,37 @@ function Root({ children, enableBackground }: AppRootProps) {
   const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
   const showBackground = hasBackground && enableBackground;
+
+  // Track whether the chat input was focused before a mousedown, so we can
+  // restore focus on mouseup if no text was selected. This preserves
+  // click-drag text selection while keeping the input focused on plain clicks.
+  const inputWasFocused = useRef(false);
+
+  const handleMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const activeEl = document.activeElement;
+      const isFocused =
+        activeEl instanceof HTMLElement &&
+        activeEl.id === "onyx-chat-input-textarea";
+      const target = event.target;
+      const isInteractive =
+        target instanceof HTMLElement && !!target.closest(INTERACTIVE_SELECTOR);
+      inputWasFocused.current = isFocused && !isInteractive;
+    },
+    []
+  );
+
+  const handleMouseUp = useCallback(() => {
+    if (!inputWasFocused.current) return;
+    inputWasFocused.current = false;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    const textarea = document.getElementById("onyx-chat-input-textarea");
+    // Only restore focus if no other element has grabbed it since mousedown.
+    if (textarea && document.activeElement !== textarea) {
+      textarea.focus();
+    }
+  }, []);
   const horizontalBlurMask = `linear-gradient(
     to right,
     transparent 0%,
@@ -549,6 +585,8 @@ function Root({ children, enableBackground }: AppRootProps) {
     */
     <div
       data-main-container
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
       className={cn(
         "@container flex flex-col h-full w-full relative overflow-hidden",
         showBackground && "bg-cover bg-center bg-fixed"
