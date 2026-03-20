@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from pydantic import BaseModel
 
 from onyx.db.enums import HookFailStrategy
 from onyx.db.enums import HookPoint
@@ -15,13 +16,15 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.executor import execute_hook
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
+from onyx.hooks.points.query_processing import QueryProcessingResponse
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 _PAYLOAD: dict[str, Any] = {"query": "test", "user_email": "u@example.com"}
-_RESPONSE_PAYLOAD: dict[str, Any] = {"rewritten_query": "better test"}
+# A valid QueryProcessingResponse payload — used by success-path tests.
+_RESPONSE_PAYLOAD: dict[str, Any] = {"query": "better test"}
 
 
 def _make_hook(
@@ -33,6 +36,7 @@ def _make_hook(
     fail_strategy: HookFailStrategy = HookFailStrategy.SOFT,
     hook_id: int = 1,
     is_reachable: bool | None = None,
+    hook_point: HookPoint = HookPoint.QUERY_PROCESSING,
 ) -> MagicMock:
     hook = MagicMock()
     hook.is_active = is_active
@@ -42,6 +46,7 @@ def _make_hook(
     hook.id = hook_id
     hook.fail_strategy = fail_strategy
     hook.is_reachable = is_reachable
+    hook.hook_point = hook_point
     return hook
 
 
@@ -152,7 +157,9 @@ def test_early_exit_returns_skipped_with_no_db_writes(
 # ---------------------------------------------------------------------------
 
 
-def test_success_returns_payload_and_sets_reachable(db_session: MagicMock) -> None:
+def test_success_returns_validated_model_and_sets_reachable(
+    db_session: MagicMock,
+) -> None:
     hook = _make_hook()
 
     with (
@@ -173,7 +180,8 @@ def test_success_returns_payload_and_sets_reachable(db_session: MagicMock) -> No
             payload=_PAYLOAD,
         )
 
-    assert result == _RESPONSE_PAYLOAD
+    assert isinstance(result, QueryProcessingResponse)
+    assert result.query == _RESPONSE_PAYLOAD["query"]
     _, update_kwargs = mock_update.call_args
     assert update_kwargs["is_reachable"] is True
     mock_log.assert_not_called()
@@ -202,7 +210,8 @@ def test_success_skips_reachable_write_when_already_true(db_session: MagicMock) 
             payload=_PAYLOAD,
         )
 
-    assert result == _RESPONSE_PAYLOAD
+    assert isinstance(result, QueryProcessingResponse)
+    assert result.query == _RESPONSE_PAYLOAD["query"]
     mock_update.assert_not_called()
 
 
@@ -457,16 +466,16 @@ def test_authorization_header(
 
 
 @pytest.mark.parametrize(
-    "http_exception,expected_result",
+    "http_exception,expect_onyx_error",
     [
-        pytest.param(None, _RESPONSE_PAYLOAD, id="success_path"),
-        pytest.param(httpx.ConnectError("refused"), OnyxError, id="hard_fail_path"),
+        pytest.param(None, False, id="success_path"),
+        pytest.param(httpx.ConnectError("refused"), True, id="hard_fail_path"),
     ],
 )
 def test_persist_session_failure_is_swallowed(
     db_session: MagicMock,
     http_exception: Exception | None,
-    expected_result: Any,
+    expect_onyx_error: bool,
 ) -> None:
     """DB session failure in _persist_result must not mask the real return value or OnyxError."""
     hook = _make_hook(fail_strategy=HookFailStrategy.HARD)
@@ -489,7 +498,7 @@ def test_persist_session_failure_is_swallowed(
             side_effect=http_exception,
         )
 
-        if expected_result is OnyxError:
+        if expect_onyx_error:
             with pytest.raises(OnyxError) as exc_info:
                 execute_hook(
                     db_session=db_session,
@@ -503,7 +512,135 @@ def test_persist_session_failure_is_swallowed(
                 hook_point=HookPoint.QUERY_PROCESSING,
                 payload=_PAYLOAD,
             )
-            assert result == expected_result
+            assert isinstance(result, QueryProcessingResponse)
+            assert result.query == _RESPONSE_PAYLOAD["query"]
+
+
+# ---------------------------------------------------------------------------
+# Response model validation
+# ---------------------------------------------------------------------------
+
+
+class _StrictResponse(BaseModel):
+    """Strict model used to reliably trigger a ValidationError in tests."""
+
+    required_field: str  # no default → missing key raises ValidationError
+
+
+def _make_strict_spec() -> MagicMock:
+    spec = MagicMock()
+    spec.response_model = _StrictResponse
+    return spec
+
+
+@pytest.mark.parametrize(
+    "fail_strategy,expected_type",
+    [
+        pytest.param(
+            HookFailStrategy.SOFT, HookSoftFailed, id="validation_failure_soft"
+        ),
+        pytest.param(HookFailStrategy.HARD, OnyxError, id="validation_failure_hard"),
+    ],
+)
+def test_response_validation_failure_respects_fail_strategy(
+    db_session: MagicMock,
+    fail_strategy: HookFailStrategy,
+    expected_type: type,
+) -> None:
+    """A response that fails response_model validation is treated like any other
+    hook failure: logged, is_reachable left unchanged, fail_strategy respected."""
+    hook = _make_hook(fail_strategy=fail_strategy)
+
+    with (
+        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch(
+            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            return_value=hook,
+        ),
+        patch("onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
+        patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
+        patch(
+            "onyx.hooks.executor.get_hook_point_spec",
+            return_value=_make_strict_spec(),
+        ),
+        patch("httpx.Client") as mock_client_cls,
+    ):
+        # Response payload is missing required_field → ValidationError
+        _setup_client(mock_client_cls, response=_make_response(json_return={}))
+
+        if expected_type is OnyxError:
+            with pytest.raises(OnyxError) as exc_info:
+                execute_hook(
+                    db_session=db_session,
+                    hook_point=HookPoint.QUERY_PROCESSING,
+                    payload=_PAYLOAD,
+                )
+            assert exc_info.value.error_code is OnyxErrorCode.HOOK_EXECUTION_FAILED
+        else:
+            result = execute_hook(
+                db_session=db_session,
+                hook_point=HookPoint.QUERY_PROCESSING,
+                payload=_PAYLOAD,
+            )
+            assert isinstance(result, HookSoftFailed)
+
+    # is_reachable must not be updated — server responded correctly
+    mock_update.assert_not_called()
+    # failure must be logged
+    mock_log.assert_called_once()
+    _, log_kwargs = mock_log.call_args
+    assert log_kwargs["is_success"] is False
+    assert "validation" in (log_kwargs["error_message"] or "").lower()
+
+
+# ---------------------------------------------------------------------------
+# Outer soft-fail guard in execute_hook
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "fail_strategy,expected_type",
+    [
+        pytest.param(HookFailStrategy.SOFT, HookSoftFailed, id="unexpected_exc_soft"),
+        pytest.param(HookFailStrategy.HARD, ValueError, id="unexpected_exc_hard"),
+    ],
+)
+def test_unexpected_exception_in_inner_respects_fail_strategy(
+    db_session: MagicMock,
+    fail_strategy: HookFailStrategy,
+    expected_type: type,
+) -> None:
+    """An unexpected exception raised by _execute_hook_inner (not an OnyxError from
+    HARD fail — e.g. a bug or an assertion error) must be swallowed and return
+    HookSoftFailed for SOFT strategy, or re-raised for HARD strategy."""
+    hook = _make_hook(fail_strategy=fail_strategy)
+
+    with (
+        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch(
+            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            return_value=hook,
+        ),
+        patch(
+            "onyx.hooks.executor._execute_hook_inner",
+            side_effect=ValueError("unexpected bug"),
+        ),
+    ):
+        if expected_type is HookSoftFailed:
+            result = execute_hook(
+                db_session=db_session,
+                hook_point=HookPoint.QUERY_PROCESSING,
+                payload=_PAYLOAD,
+            )
+            assert isinstance(result, HookSoftFailed)
+        else:
+            with pytest.raises(ValueError, match="unexpected bug"):
+                execute_hook(
+                    db_session=db_session,
+                    hook_point=HookPoint.QUERY_PROCESSING,
+                    payload=_PAYLOAD,
+                )
 
 
 def test_is_reachable_failure_does_not_prevent_log(db_session: MagicMock) -> None:
