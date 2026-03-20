@@ -319,6 +319,9 @@ class DocumentQuery:
         it MUST be supplied in addition to a search pipeline. The results from
         hybrid search are not meaningful without that step.
 
+        TODO(andrei): There is some duplicated logic in this function with
+        others in this file.
+
         Args:
             query_text: The text to query for.
             query_vector: The vector embedding of the text to query for.
@@ -423,6 +426,9 @@ class DocumentQuery:
 
         This query can be directly supplied to the OpenSearch client.
 
+        TODO(andrei): There is some duplicated logic in this function with
+        others in this file.
+
         Args:
             query_text: The text to query for.
             num_hits: The final number of hits to return.
@@ -502,6 +508,9 @@ class DocumentQuery:
         """Returns a final semantic search query.
 
         This query can be directly supplied to the OpenSearch client.
+
+        TODO(andrei): There is some duplicated logic in this function with
+        others in this file.
 
         Args:
             query_embedding: The vector embedding of the text to query for.
