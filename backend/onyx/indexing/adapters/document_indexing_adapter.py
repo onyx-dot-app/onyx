@@ -268,7 +268,7 @@ class DocumentChunkEnricher:
             ),
             tenant_id=self._tenant_id,
             aggregated_chunk_boost_factor=score,
-            ancestor_hierarchy_node_ids=self._doc_id_to_ancestor_ids.get(
-                chunk.source_document.id, []
-            ),
+            ancestor_hierarchy_node_ids=self._doc_id_to_ancestor_ids[
+                chunk.source_document.id
+            ],
         )
