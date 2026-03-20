@@ -129,7 +129,7 @@ def _validate_endpoint(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     try:
-        with httpx.Client(timeout=timeout_seconds) as client:
+        with httpx.Client(timeout=timeout_seconds, follow_redirects=False) as client:
             response = client.post(endpoint_url, headers=headers)
         if response.status_code in (401, 403):
             return HookValidateResponse(
