@@ -1,7 +1,3 @@
-import ipaddress
-import socket
-from urllib.parse import urlparse
-
 import httpx
 from fastapi import APIRouter
 from fastapi import Depends
@@ -34,6 +30,8 @@ from onyx.hooks.models import HookValidateStatus
 from onyx.hooks.registry import get_all_specs
 from onyx.hooks.registry import get_hook_point_spec
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException
+from onyx.utils.url import validate_outbound_http_url
 
 logger = setup_logger()
 
@@ -41,71 +39,16 @@ logger = setup_logger()
 # SSRF protection
 # ---------------------------------------------------------------------------
 
-# RFC 1918 private ranges, loopback, link-local (IMDS at 169.254.169.254),
-# shared address space, and IPv6 equivalents.
-_BLOCKED_NETWORKS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
-    ipaddress.ip_network("127.0.0.0/8"),  # loopback
-    ipaddress.ip_network("10.0.0.0/8"),  # RFC 1918
-    ipaddress.ip_network("172.16.0.0/12"),  # RFC 1918
-    ipaddress.ip_network("192.168.0.0/16"),  # RFC 1918
-    ipaddress.ip_network("169.254.0.0/16"),  # link-local / cloud IMDS
-    ipaddress.ip_network("100.64.0.0/10"),  # shared address space (RFC 6598)
-    ipaddress.ip_network("0.0.0.0/8"),  # "this" network
-    ipaddress.ip_network("::1/128"),  # IPv6 loopback
-    ipaddress.ip_network("fc00::/7"),  # IPv6 ULA
-    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
-]
-
 
 def _check_ssrf_safety(endpoint_url: str) -> None:
     """Raise OnyxError if endpoint_url could be used for SSRF.
 
-    Checks:
-    1. Scheme must be https.
-    2. All IPs the hostname resolves to must be public — private/reserved
-       ranges (RFC 1918, link-local, loopback, cloud IMDS) are blocked.
-
-    Note: this provides a good-faith pre-flight check. DNS rebinding attacks
-    (where the hostname re-resolves to a different IP after this check) are
-    outside the threat model for a single-tenant, admin-only API.
+    Delegates to validate_outbound_http_url with https_only=True.
     """
-    parsed = urlparse(endpoint_url)
-
-    scheme = (parsed.scheme or "").lower()
-    if scheme != "https":
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Hook endpoint URL must use https, got: {scheme!r}",
-        )
-
-    hostname = parsed.hostname
-    if not hostname:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Could not parse hostname from URL: {endpoint_url}",
-        )
-
     try:
-        resolved = socket.getaddrinfo(hostname, None)
-    except socket.gaierror as e:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Could not resolve hostname {hostname!r}: {e}",
-        )
-
-    for addr_info in resolved:
-        ip_str = addr_info[4][0]
-        try:
-            ip = ipaddress.ip_address(ip_str)
-        except ValueError:
-            continue
-        for blocked in _BLOCKED_NETWORKS:
-            if ip in blocked:
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    f"Hook endpoint URL resolves to a private or reserved IP address "
-                    f"({ip}), which is not permitted.",
-                )
+        validate_outbound_http_url(endpoint_url, https_only=True)
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
 
 # ---------------------------------------------------------------------------

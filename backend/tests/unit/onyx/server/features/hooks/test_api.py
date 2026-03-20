@@ -51,7 +51,7 @@ class TestCheckSsrfSafety:
     # --- scheme checks ---
 
     def test_https_is_allowed(self) -> None:
-        with patch("onyx.server.features.hooks.api.socket.getaddrinfo") as mock_dns:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_dns:
             mock_dns.return_value = [(None, None, None, None, ("93.184.216.34", 0))]
             self._call("https://example.com/hook")  # must not raise
 
@@ -82,7 +82,7 @@ class TestCheckSsrfSafety:
     )
     def test_private_ip_is_blocked(self, ip: str) -> None:
         with (
-            patch("onyx.server.features.hooks.api.socket.getaddrinfo") as mock_dns,
+            patch("onyx.utils.url.socket.getaddrinfo") as mock_dns,
             pytest.raises(OnyxError) as exc_info,
         ):
             mock_dns.return_value = [(None, None, None, None, (ip, 0))]
@@ -91,7 +91,7 @@ class TestCheckSsrfSafety:
         assert ip in (exc_info.value.detail or "")
 
     def test_public_ip_is_allowed(self) -> None:
-        with patch("onyx.server.features.hooks.api.socket.getaddrinfo") as mock_dns:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_dns:
             mock_dns.return_value = [(None, None, None, None, ("93.184.216.34", 0))]
             self._call("https://example.com/hook")  # must not raise
 
@@ -100,7 +100,7 @@ class TestCheckSsrfSafety:
 
         with (
             patch(
-                "onyx.server.features.hooks.api.socket.getaddrinfo",
+                "onyx.utils.url.socket.getaddrinfo",
                 side_effect=socket.gaierror("name not found"),
             ),
             pytest.raises(OnyxError) as exc_info,
