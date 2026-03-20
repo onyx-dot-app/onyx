@@ -60,18 +60,9 @@ export class UrlBuilder {
 export async function fetchSS(url: string, options?: RequestInit) {
   const cookieString = processCookies(await cookies());
 
-  // Determine caching strategy based on the endpoint
-  // Settings endpoints are relatively static and safe to cache during a single request
-  const isCacheableEndpoint =
-    url.includes("/settings") || url.includes("/enterprise-settings");
-
   const init: RequestInit = {
     credentials: "include",
-    // Use Next.js request deduplication for settings endpoints to prevent
-    // multiple identical requests during a single page render
-    cache: isCacheableEndpoint ? "force-cache" : "no-store",
-    // For cacheable endpoints, set a short revalidation time
-    ...(isCacheableEndpoint && { next: { revalidate: 60 } }),
+    cache: "no-store",
     ...options,
     headers: {
       ...options?.headers,
