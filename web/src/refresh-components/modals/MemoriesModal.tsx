@@ -64,7 +64,6 @@ function MemoryItem({
     if (!shouldHighlight) return;
 
     wrapperRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    textareaRef.current?.focus();
     setIsHighlighting(true);
 
     const timer = setTimeout(() => {
@@ -77,15 +76,14 @@ function MemoryItem({
 
   return (
     <div
-      ref={wrapperRef}
       className={cn(
-        "rounded-08 hover:bg-background-tint-00 w-full p-0.5",
+        "rounded-08 hover:bg-background-tint-00 w-full p-0.5 border border-transparent",
         "transition-colors ",
         isHighlighting &&
-          "bg-action-link-01 border border-action-link-05 duration-700"
+          "bg-action-link-01 hover:bg-action-link-01 border-action-link-05 duration-700"
       )}
     >
-      <Section gap={0.25} alignItems="start">
+      <Section ref={wrapperRef} gap={0.25} alignItems="start">
         <Section flexDirection="row" alignItems="start" gap={0.5}>
           <InputTextArea
             ref={textareaRef}
@@ -122,13 +120,29 @@ function MemoryItem({
   );
 }
 
+function resolveTargetMemoryId(
+  targetMemoryId: number | null | undefined,
+  targetIndex: number | null | undefined,
+  memories: MemoryItem[]
+): number | null {
+  if (targetMemoryId != null) return targetMemoryId;
+
+  if (targetIndex != null && memories.length > 0) {
+    // Backend index is ASC (oldest-first), frontend displays DESC (newest-first)
+    const descIdx = memories.length - 1 - targetIndex;
+    return memories[descIdx]?.id ?? null;
+  }
+
+  return memories[0]?.id ?? null;
+}
+
 interface MemoriesModalProps {
   memories?: MemoryItem[];
   onSaveMemories?: (memories: MemoryItem[]) => Promise<boolean>;
   onClose?: () => void;
   initialTargetMemoryId?: number | null;
   initialTargetIndex?: number | null;
-  highlightFirstOnOpen?: boolean;
+  highlightOnOpen?: boolean;
 }
 
 export default function MemoriesModal({
@@ -137,7 +151,7 @@ export default function MemoriesModal({
   onClose,
   initialTargetMemoryId,
   initialTargetIndex,
-  highlightFirstOnOpen = false,
+  highlightOnOpen = false,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
@@ -182,24 +196,17 @@ export default function MemoriesModal({
   );
 
   useEffect(() => {
-    if (initialTargetMemoryId != null) {
-      // Direct DB id available — use it
-      setHighlightMemoryId(initialTargetMemoryId);
-    } else if (initialTargetIndex != null && effectiveMemories.length > 0) {
-      // Backend index is ASC (oldest-first), but the frontend displays DESC
-      // (newest-first). Convert: descIdx = totalCount - 1 - ascIdx
-      const descIdx = effectiveMemories.length - 1 - initialTargetIndex;
-      const target = effectiveMemories[descIdx];
-      if (target) {
-        setHighlightMemoryId(target.id);
-      }
-    } else if (
-      highlightFirstOnOpen &&
-      effectiveMemories.length > 0 &&
-      effectiveMemories[0]
-    ) {
-      // Fallback: highlight the first displayed item (newest)
-      setHighlightMemoryId(effectiveMemories[0].id);
+    const targetId = resolveTargetMemoryId(
+      initialTargetMemoryId,
+      initialTargetIndex,
+      effectiveMemories
+    );
+    if (targetId == null) return;
+
+    if (highlightOnOpen) {
+      setHighlightMemoryId(targetId);
+    } else {
+      setFocusMemoryId(targetId);
     }
   }, [initialTargetMemoryId, initialTargetIndex]);
 
