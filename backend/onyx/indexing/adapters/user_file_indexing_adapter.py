@@ -246,9 +246,9 @@ class UserFileIndexingAdapter:
             user_file.last_project_sync_at = datetime.datetime.now(
                 datetime.timezone.utc
             )
-            user_file.chunk_count = enrichment.doc_id_to_new_chunk_cnt[
-                str(user_file.id)
-            ]
+            user_file.chunk_count = enrichment.doc_id_to_new_chunk_cnt.get(
+                str(user_file.id), 0
+            )
             user_file.token_count = enrichment.user_file_id_to_token_count[
                 str(user_file.id)
             ]
