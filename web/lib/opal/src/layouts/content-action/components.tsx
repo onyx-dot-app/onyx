@@ -1,4 +1,3 @@
-import { Section } from "@/layouts/general-layouts";
 import { Content, type ContentProps } from "@opal/layouts/content/components";
 import {
   containerSizeVariants,
@@ -15,7 +14,7 @@ type ContentActionProps = ContentProps & {
   rightChildren?: React.ReactNode;
 
   /**
-   * Padding applied around the `Content` area.
+   * Padding and gap applied around the `Content` area.
    * Uses the shared `SizeVariant` scale from `@opal/shared`.
    *
    * @default "lg"
@@ -61,14 +60,14 @@ function ContentAction({
   const { padding, gap } = containerSizeVariants[paddingVariant];
 
   return (
-    <Section flexDirection="row" alignItems="stretch" gap={gap}>
+    <div className={cn("flex flex-row items-stretch w-full", gap)}>
       <div className={cn("flex-1 min-w-0 self-center", padding)}>
         <Content {...contentProps} />
       </div>
       {rightChildren && (
         <div className="flex items-stretch shrink-0">{rightChildren}</div>
       )}
-    </Section>
+    </div>
   );
 }
 

@@ -32,42 +32,42 @@ type ContainerProperties = {
   height: string;
   minWidth: string;
   padding: string;
-  gap: number;
+  gap: string;
 };
 const containerSizeVariants: Record<
   ContainerSizeVariants,
   ContainerProperties
 > = {
-  fit: { height: "h-fit", minWidth: "", padding: "p-0", gap: 0 },
+  fit: { height: "h-fit", minWidth: "", padding: "p-0", gap: "gap-0" },
   lg: {
     height: "h-[2.25rem]",
     minWidth: "min-w-[2.25rem]",
     padding: "p-2",
-    gap: 0.5,
+    gap: "gap-[0.5rem]",
   },
   md: {
     height: "h-[1.75rem]",
     minWidth: "min-w-[1.75rem]",
     padding: "p-1",
-    gap: 0.25,
+    gap: "gap-[0.25rem]",
   },
   sm: {
     height: "h-[1.5rem]",
     minWidth: "min-w-[1.5rem]",
     padding: "p-1",
-    gap: 0.25,
+    gap: "gap-[0.25rem]",
   },
   xs: {
     height: "h-[1.25rem]",
     minWidth: "min-w-[1.25rem]",
     padding: "p-0.5",
-    gap: 0.125,
+    gap: "gap-[0.125rem]",
   },
   "2xs": {
     height: "h-[1rem]",
     minWidth: "min-w-[1rem]",
     padding: "p-0.5",
-    gap: 0.125,
+    gap: "gap-[0.125rem]",
   },
 } as const;
 
