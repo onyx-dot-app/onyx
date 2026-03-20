@@ -85,12 +85,12 @@ function Prompt-VersionTag {
         Write-Host "  - Type a specific tag (e.g., craft-v1.0.0)"
         $version = Prompt-OrDefault "Enter tag [default: craft-latest]" "craft-latest"
     } else {
-        Write-Host "  - Press Enter for latest (recommended)"
+        Write-Host "  - Press Enter for edge (recommended)"
         Write-Host "  - Type a specific tag (e.g., v0.1.0)"
-        $version = Prompt-OrDefault "Enter tag [default: latest]" "latest"
+        $version = Prompt-OrDefault "Enter tag [default: edge]" "edge"
     }
     if     ($script:IncludeCraftMode -and $version -eq "craft-latest") { Print-Info "Selected: craft-latest (Craft enabled)" }
-    elseif ($version -eq "latest") { Print-Info "Selected: Latest tag" }
+    elseif ($version -eq "edge") { Print-Info "Selected: edge (latest nightly)" }
     else   { Print-Info "Selected: $version" }
     return $version
 }
@@ -1033,7 +1033,7 @@ function Main {
     Print-Success "Using port $availablePort for nginx"
 
     $currentImageTag = Get-EnvFileValue -Path $envFile -Key "IMAGE_TAG"
-    $useLatest = ($currentImageTag -eq "latest" -or $currentImageTag -match '^craft-')
+    $useLatest = ($currentImageTag -eq "edge" -or $currentImageTag -eq "latest" -or $currentImageTag -match '^craft-')
     if ($useLatest) { Print-Info "Using '$currentImageTag' tag - will force pull and recreate containers" }
 
     # For pinned version tags, re-download config files from that tag so the

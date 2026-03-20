@@ -846,22 +846,22 @@ if [ -f "$ENV_FILE" ]; then
     if [ "$REPLY" = "update" ]; then
         print_info "Update selected. Which tag would you like to deploy?"
         echo ""
-        echo "• Press Enter for latest (recommended)"
+        echo "• Press Enter for edge (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
         if [ "$INCLUDE_CRAFT" = true ]; then
             prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
             VERSION="$REPLY"
         else
-            prompt_or_default "Enter tag [default: latest]: " "latest"
+            prompt_or_default "Enter tag [default: edge]: " "edge"
             VERSION="$REPLY"
         fi
         echo ""
 
         if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
             print_info "Selected: craft-latest (Craft enabled)"
-        elif [ "$VERSION" = "latest" ]; then
-            print_info "Selected: Latest version"
+        elif [ "$VERSION" = "edge" ]; then
+            print_info "Selected: edge (latest nightly)"
         else
             print_info "Selected: $VERSION"
         fi
@@ -923,18 +923,18 @@ else
         prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
         VERSION="$REPLY"
     else
-        echo "• Press Enter for latest (recommended)"
+        echo "• Press Enter for edge (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        prompt_or_default "Enter tag [default: latest]: " "latest"
+        prompt_or_default "Enter tag [default: edge]: " "edge"
         VERSION="$REPLY"
     fi
     echo ""
 
     if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
         print_info "Selected: craft-latest (Craft enabled)"
-    elif [ "$VERSION" = "latest" ]; then
-        print_info "Selected: Latest tag"
+    elif [ "$VERSION" = "edge" ]; then
+        print_info "Selected: edge (latest nightly)"
     else
         print_info "Selected: $VERSION"
     fi
@@ -1092,15 +1092,15 @@ fi
 export HOST_PORT=$AVAILABLE_PORT
 print_success "Using port $AVAILABLE_PORT for nginx"
 
-# Determine if we're using the latest tag or a craft tag (both should force pull)
+# Determine if we're using a floating tag (edge, latest, craft-*) that should force pull
 # Read IMAGE_TAG from .env file and remove any quotes or whitespace
 CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-if [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
+if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
     USE_LATEST=true
     if [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
         print_info "Using craft tag '$CURRENT_IMAGE_TAG' - will force pull and recreate containers"
     else
-        print_info "Using 'latest' tag - will force pull and recreate containers"
+        print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
     fi
 else
     USE_LATEST=false
