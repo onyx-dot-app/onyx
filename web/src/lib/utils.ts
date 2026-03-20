@@ -14,7 +14,7 @@ const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 const BARE_EMAIL_REGEX = /^[^\s@/]+@[^\s@/:]+\.[^\s@/:]+$/;
 
 export const INTERACTIVE_SELECTOR =
-  "a, button, input, textarea, select, label, [role='button'], [tabindex], [contenteditable='true']";
+  "a, button, input, textarea, select, label, [role='button'], [tabindex]:not([tabindex='-1']), [contenteditable='true']";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

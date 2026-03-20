@@ -667,7 +667,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           {({ getRootProps }) => (
             <div
               className="h-full w-full flex flex-col items-center outline-none relative"
-              {...getRootProps()}
+              {...getRootProps({ tabIndex: -1 })}
             >
               {/* Main content grid — 3 rows, animated */}
               <div
