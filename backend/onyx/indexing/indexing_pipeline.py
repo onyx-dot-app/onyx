@@ -1,5 +1,6 @@
 from collections import defaultdict
 from collections.abc import Callable
+from typing import cast
 from typing import Protocol
 
 from pydantic import BaseModel
@@ -751,13 +752,16 @@ def index_doc_batch(
         # in one set of metadata overwriting another one in vespa.
         # we still write data here for the immediate and most likely correct sync, but
         # to resolve this, an update of the last modified field at the end of this loop
-        # always triggers a final metadata sync via the celery queue
+        # always triggers a final metadata sync via the celery queu
         enricher = adapter.prepare_enrichment(
-            context=context, tenant_id=tenant_id, chunks=chunks
+            context=context,
+            tenant_id=tenant_id,
+            chunks=cast(list[DocAwareChunk], chunks_with_embeddings),
         )
 
         metadata_aware_chunks = [
-            enricher.enrich_chunk(chunk, 1.0) for chunk in chunks_with_embeddings
+            enricher.enrich_chunk(chunk, score)
+            for chunk, score in zip(chunks_with_embeddings, chunk_content_scores)
         ]
 
         short_descriptor_list = [
