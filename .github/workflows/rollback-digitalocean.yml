@@ -112,6 +112,7 @@ jobs:
             fi
 
             echo "[INFO] Applying rollback from $TARGET_REF..."
+            git checkout -- .
             git checkout "$TARGET_REF"
 
             echo "[INFO] Refreshing docker-compose.yml..."

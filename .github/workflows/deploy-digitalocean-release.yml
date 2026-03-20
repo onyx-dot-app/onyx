@@ -164,6 +164,7 @@ jobs:
 
             echo "[INFO] Updating code from release branch ($BRANCH)..."
             git fetch origin "$BRANCH"
+            git checkout -- .
             git checkout "origin/$BRANCH"
             git log -1 --oneline
 
