@@ -75,8 +75,8 @@ def format_sla_as_text(sla_data: dict[str, Any]) -> str:
         name = sla.get("name", "Unknown SLA")
         completed_cycles = sla.get("completedCycles", [])
         breached = any(c.get("breached", False) for c in completed_cycles)
-        ongoing = sla.get("ongoingCycle", {})
-        time_remaining = ongoing.get("remainingTime", {})
+        ongoing = sla.get("ongoingCycle") or {}
+        time_remaining = ongoing.get("remainingTime") or {}
 
         if ongoing.get("completed", False):
             status = "Completed"
