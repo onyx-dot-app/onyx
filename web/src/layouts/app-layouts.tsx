@@ -551,7 +551,7 @@ function Root({ children, enableBackground }: AppRootProps) {
         activeEl.id === "onyx-chat-input-textarea";
       const target = event.target;
       const isInteractive =
-        target instanceof HTMLElement && target.closest(INTERACTIVE_SELECTOR);
+        target instanceof HTMLElement && !!target.closest(INTERACTIVE_SELECTOR);
       inputWasFocused.current = isFocused && !isInteractive;
     },
     []
