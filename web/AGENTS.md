@@ -5,8 +5,16 @@ projects (including, but not limited to, `/web`, `/desktop`).
 
 # Components
 
-All UI components live in the **Opal** design system at `web/lib/opal/src/`. Always prefer Opal
-components over raw HTML elements or one-off implementations.
+UI components are spread across several directories while the codebase migrates to Opal:
+
+- **`web/lib/opal/src/`** — The Opal design system. Preferred for all new components.
+- **`web/src/refresh-components/`** — Production components not yet migrated to Opal.
+- **`web/src/sections/`** — Feature-specific composite components (cards, modals, etc.).
+- **`web/src/layouts/`** — Page-level layout components (settings pages, etc.).
+
+**Do NOT use anything from `web/src/components/`** — this directory contains legacy components
+that are being phased out. Always prefer Opal first; fall back to `refresh-components` only for
+components not yet available in Opal.
 
 ## Opal Layouts (`lib/opal/src/layouts/`)
 
@@ -414,12 +422,17 @@ const UserProfile = ({ userId }: UserProfileProps) => {
 
 ## 3. Props Interface Extraction
 
-**Extract prop types into their own interface definitions.**
+**Extract prop types into their own interface definitions. Keep prop interfaces in the same file
+as the component they belong to. Non-prop types (shared models, API response shapes, enums, etc.)
+should be placed in a co-located `interfaces.ts` file.**
 
-**Reason:** Functions just become easier to read.
+**Reason:** Prop interfaces are tightly coupled to their component and rarely imported elsewhere,
+so co-location keeps things simple. Shared types belong in `interfaces.ts` so they can be
+imported without pulling in component code.
 
 ```typescript
-// ✅ Good
+// ✅ Good — props interface in the same file as the component
+// UserCard.tsx
 interface UserCardProps {
   user: User
   showActions?: boolean
@@ -430,7 +443,17 @@ function UserCard({ user, showActions = false, onEdit }: UserCardProps) {
   return <div>User Card</div>
 }
 
-// ❌ Bad
+// ✅ Good — shared types in interfaces.ts
+// interfaces.ts
+export interface User {
+  id: string
+  name: string
+  role: UserRole
+}
+
+export type UserRole = "admin" | "member" | "viewer"
+
+// ❌ Bad — inline prop types
 function UserCard({
   user,
   showActions = false,
@@ -446,17 +469,29 @@ function UserCard({
 
 ## 4. Spacing Guidelines
 
-**Prefer padding over margins for spacing.**
+**Prefer padding over margins for spacing. When a library component exposes a padding prop
+(e.g., `paddingVariant`), use that prop instead of wrapping it in a `<div>` with padding classes.
+If a library component does not expose a padding override and you find yourself adding a wrapper
+div for spacing, consider updating the library component to accept one.**
 
-**Reason:** We want to consolidate usage to paddings instead of margins.
+**Reason:** We want to consolidate usage to paddings instead of margins, and minimize wrapper
+divs that exist solely for spacing.
 
 ```typescript
-// ✅ Good
+// ✅ Good — use the component's padding prop
+<ContentAction paddingVariant="md" ... />
+
+// ✅ Good — padding utilities when no component prop exists
 <div className="p-4 space-y-2">
   <div className="p-2">Content</div>
 </div>
 
-// ❌ Bad
+// ❌ Bad — wrapper div just for spacing
+<div className="p-4">
+  <ContentAction ... />
+</div>
+
+// ❌ Bad — margins
 <div className="m-4 space-y-2">
   <div className="m-2">Content</div>
 </div>
