@@ -20,7 +20,12 @@
 
 "use client";
 
-import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
+import {
+  cn,
+  ensureHrefProtocol,
+  INTERACTIVE_SELECTOR,
+  noProp,
+} from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import { useCallback, useMemo, useState, useEffect } from "react";
@@ -66,9 +71,6 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import { APP_SLOGAN } from "@/lib/constants";
-
-const INTERACTIVE_SELECTOR =
-  "a, button, input, textarea, select, label, [role='button'], [tabindex], [contenteditable='true']";
 
 /**
  * App Header Component
