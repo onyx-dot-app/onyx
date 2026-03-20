@@ -152,3 +152,101 @@ variable "waf_log_retention_days" {
   description = "Number of days to retain WAF logs"
   default     = 90
 }
+
+# OpenSearch Configuration Variables
+variable "enable_opensearch" {
+  type        = bool
+  description = "Whether to create an OpenSearch domain"
+  default     = false
+}
+
+variable "opensearch_engine_version" {
+  type        = string
+  description = "OpenSearch engine version"
+  default     = "3.3"
+}
+
+variable "opensearch_instance_type" {
+  type        = string
+  description = "Instance type for OpenSearch data nodes"
+  default     = "r8g.large.search"
+}
+
+variable "opensearch_instance_count" {
+  type        = number
+  description = "Number of OpenSearch data nodes"
+  default     = 3
+}
+
+variable "opensearch_dedicated_master_enabled" {
+  type        = bool
+  description = "Whether to enable dedicated master nodes for OpenSearch"
+  default     = true
+}
+
+variable "opensearch_dedicated_master_type" {
+  type        = string
+  description = "Instance type for dedicated master nodes"
+  default     = "m7g.large.search"
+}
+
+variable "opensearch_multi_az_with_standby_enabled" {
+  type        = bool
+  description = "Whether to enable Multi-AZ with Standby deployment"
+  default     = true
+}
+
+variable "opensearch_ebs_volume_size" {
+  type        = number
+  description = "EBS volume size in GiB per OpenSearch node"
+  default     = 512
+}
+
+variable "opensearch_ebs_throughput" {
+  type        = number
+  description = "Throughput in MiB/s for gp3 volumes"
+  default     = 256
+}
+
+variable "opensearch_internal_user_database_enabled" {
+  type        = bool
+  description = "Whether to enable the internal user database for fine-grained access control"
+  default     = true
+}
+
+variable "opensearch_master_user_name" {
+  type        = string
+  description = "Master user name for OpenSearch internal user database"
+  default     = null
+  sensitive   = true
+}
+
+variable "opensearch_master_user_password" {
+  type        = string
+  description = "Master user password for OpenSearch internal user database"
+  default     = null
+  sensitive   = true
+}
+
+variable "opensearch_domain_name" {
+  type        = string
+  description = "Override the OpenSearch domain name. If null, defaults to {name}-opensearch-{workspace}."
+  default     = null
+}
+
+variable "opensearch_enable_logging" {
+  type    = bool
+  default = false
+}
+
+variable "opensearch_log_retention_days" {
+  type        = number
+  description = "Number of days to retain OpenSearch CloudWatch logs (0 = never expire)"
+  default     = 0
+}
+
+variable "opensearch_subnet_ids" {
+  type        = list(string)
+  description = "Subnet IDs for OpenSearch. If empty, uses first 3 private subnets."
+  default     = []
+}
