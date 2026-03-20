@@ -309,7 +309,7 @@ def _get_or_extract_plaintext(
         plaintext_io = file_store.read_file(plaintext_key, mode="b")
         return plaintext_io.read().decode("utf-8")
     except Exception:
-        logger.error(f"Error when reading file, id={file_id}")
+        logger.exception(f"Error when reading file, id={file_id}")
 
     # Cache miss — extract and store.
     content_text = extract_fn()
