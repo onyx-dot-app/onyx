@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-from collections import defaultdict
 from collections.abc import Generator
 
 from sqlalchemy.engine.util import TransactionalContext
