@@ -21,12 +21,12 @@ import type {
  *
  * | Key   | Height        | Padding  | Gap      |
  * |-------|---------------|----------|----------|
- * | `lg`  | 2.25rem (36px)| `p-2`   | 0.5rem   |
- * | `md`  | 1.75rem (28px)| `p-1`   | 0.25rem  |
- * | `sm`  | 1.5rem (24px) | `p-1`   | 0.25rem  |
- * | `xs`  | 1.25rem (20px)| `p-0.5` | 0.125rem |
- * | `2xs` | 1rem (16px)   | `p-0.5` | 0.125rem |
- * | `fit` | h-fit         | `p-0`   | 0        |
+ * | `lg`  | 2.25rem (36px)| `p-2`    | 0.5rem   |
+ * | `md`  | 1.75rem (28px)| `p-1`    | 0.25rem  |
+ * | `sm`  | 1.5rem (24px) | `p-1`    | 0.25rem  |
+ * | `xs`  | 1.25rem (20px)| `p-0.5`  | 0.125rem |
+ * | `2xs` | 1rem (16px)   | `p-0.5`  | 0.125rem |
+ * | `fit` | h-fit         | `p-0`    | 0        |
  */
 type ContainerProperties = {
   height: string;
