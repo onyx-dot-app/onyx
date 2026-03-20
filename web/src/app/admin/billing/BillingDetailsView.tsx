@@ -395,7 +395,7 @@ function SeatsCard({
             <InputLayouts.Vertical title="Seats">
               <InputNumber
                 value={newSeatCount}
-                onChange={setNewSeatCount}
+                onChange={(v) => setNewSeatCount(v ?? 1)}
                 min={1}
                 defaultValue={totalSeats}
                 showReset

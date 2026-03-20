@@ -2,7 +2,7 @@
   /* Base layers */
   --z-base: 0;
   --z-content: 1;
-  --z-settings-header: 8;
+  --z-settings-header: 40;
   --z-app-layout: 9;
   --z-sticky: 10;
 

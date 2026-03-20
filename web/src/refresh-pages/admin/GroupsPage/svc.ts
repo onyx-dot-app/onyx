@@ -16,14 +16,18 @@ async function renameGroup(groupId: number, newName: string): Promise<void> {
   }
 }
 
-async function createGroup(name: string, userIds: string[]): Promise<void> {
+async function createGroup(
+  name: string,
+  userIds: string[],
+  ccPairIds: number[] = []
+): Promise<void> {
   const res = await fetch(USER_GROUP_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name,
       user_ids: userIds,
-      cc_pair_ids: [],
+      cc_pair_ids: ccPairIds,
     }),
   });
   if (!res.ok) {
