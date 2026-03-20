@@ -26,7 +26,7 @@ import type {
   StatusFilter,
   StatusCountMap,
 } from "./interfaces";
-import { getInitials } from "./utils";
+import { getUserInitials } from "@/lib/user";
 
 // ---------------------------------------------------------------------------
 // Column renderers
@@ -76,7 +76,8 @@ function buildColumns(onMutate: () => void) {
   return [
     tc.qualifier({
       content: "avatar-user",
-      getInitials: (row) => getInitials(row.personal_name, row.email),
+      getInitials: (row) =>
+        getUserInitials(row.personal_name, row.email) ?? "?",
       selectable: false,
     }),
     tc.column("email", {

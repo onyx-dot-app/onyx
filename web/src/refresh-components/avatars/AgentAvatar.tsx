@@ -4,10 +4,7 @@ import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { OnyxIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import {
-  DEFAULT_AGENT_AVATAR_SIZE_PX,
-  DEFAULT_AGENT_ID,
-} from "@/lib/constants";
+import { DEFAULT_AVATAR_SIZE_PX, DEFAULT_AGENT_ID } from "@/lib/constants";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import Image from "next/image";
 
@@ -18,7 +15,7 @@ export interface AgentAvatarProps {
 
 export default function AgentAvatar({
   agent,
-  size = DEFAULT_AGENT_AVATAR_SIZE_PX,
+  size = DEFAULT_AVATAR_SIZE_PX,
   ...props
 }: AgentAvatarProps) {
   const settings = useSettingsContext();
