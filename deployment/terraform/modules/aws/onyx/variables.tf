@@ -117,6 +117,18 @@ variable "waf_rate_limit_requests_per_5_minutes" {
   default     = 2000
 }
 
+variable "waf_allowed_ip_cidrs" {
+  type        = list(string)
+  description = "Optional IPv4 CIDR ranges allowed through the WAF. Leave empty to disable IP allowlisting."
+  default     = []
+}
+
+variable "waf_common_rule_set_count_rules" {
+  type        = list(string)
+  description = "Subrules within AWSManagedRulesCommonRuleSet to override to COUNT instead of BLOCK."
+  default     = []
+}
+
 variable "waf_api_rate_limit_requests_per_5_minutes" {
   type        = number
   description = "Rate limit for API requests per 5 minutes per IP address"

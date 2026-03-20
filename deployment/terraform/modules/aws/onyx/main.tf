@@ -88,6 +88,8 @@ module "waf" {
   tags = local.merged_tags
 
   # WAF configuration with sensible defaults
+  allowed_ip_cidrs                      = var.waf_allowed_ip_cidrs
+  common_rule_set_count_rules           = var.waf_common_rule_set_count_rules
   rate_limit_requests_per_5_minutes     = var.waf_rate_limit_requests_per_5_minutes
   api_rate_limit_requests_per_5_minutes = var.waf_api_rate_limit_requests_per_5_minutes
   geo_restriction_countries             = var.waf_geo_restriction_countries

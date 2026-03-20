@@ -127,6 +127,7 @@ Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
 - `postgres_username`, `postgres_password`
 - `create_vpc` (default true) or existing VPC details and `s3_vpc_endpoint_id`
+- WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention
 
 ### `vpc`
 - Builds a VPC sized for EKS with multiple private and public subnets
