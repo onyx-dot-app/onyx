@@ -2,7 +2,7 @@
 # Usage: .\install.ps1 [OPTIONS]
 # Remote (with params):
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.ps1))) -Lite -NoPrompt
-# Remote (defaults only):
+# Remote (defaults only, configure via interaction during script):
 #   irm https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.ps1 | iex
 
 param(
