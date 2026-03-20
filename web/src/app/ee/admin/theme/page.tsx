@@ -151,6 +151,8 @@ export default function ThemePage() {
       validationSchema={validationSchema}
       validateOnChange={false}
       onSubmit={async (values, formikHelpers) => {
+        let logoUploaded = false;
+
         // Handle logo upload if a new logo was selected
         if (selectedLogo) {
           const formData = new FormData();
@@ -167,7 +169,7 @@ export default function ThemePage() {
           }
           // Only clear the selected logo after a successful upload
           setSelectedLogo(null);
-          setLogoVersion((v) => v + 1);
+          logoUploaded = true;
           values.use_custom_logo = true;
         }
 
@@ -195,6 +197,9 @@ export default function ThemePage() {
         // dirty comparisons reflect the newly-saved values.
         if (success) {
           formikHelpers.resetForm({ values });
+          if (logoUploaded) {
+            setLogoVersion((v) => v + 1);
+          }
           toast.success("Appearance settings saved successfully!");
         }
 
