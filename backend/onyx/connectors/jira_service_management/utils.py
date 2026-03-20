@@ -83,9 +83,8 @@ def format_sla_as_text(sla_data: dict[str, Any]) -> str:
         elif breached:
             status = "BREACHED"
         else:
-            remaining = time_remaining.get("formattedValue", "unknown")
-            unit = time_remaining.get("unit", "")
-            status = f"{remaining} {unit} remaining" if remaining else "In progress"
+            remaining = time_remaining.get("friendly", "")
+            status = f"{remaining} remaining" if remaining else "In progress"
 
         lines.append(f"  - {name}: {status}")
 

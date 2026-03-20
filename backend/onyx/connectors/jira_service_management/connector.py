@@ -94,12 +94,12 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
         self,
         jsm_base_url: str,
         project_key: str | None = None,
-        labels_to_skip: list[str] = JSM_CONNECTOR_LABELS_TO_SKIP,
+        labels_to_skip: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.jsm_base_url = jsm_base_url.rstrip("/")
         self.project_key = project_key
-        self.labels_to_skip: set[str] = set(labels_to_skip)
+        self.labels_to_skip: set[str] = set(labels_to_skip if labels_to_skip is not None else JSM_CONNECTOR_LABELS_TO_SKIP)
         self.batch_size = batch_size
         self._auth: HTTPBasicAuth | None = None
 
