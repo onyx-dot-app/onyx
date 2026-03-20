@@ -60,9 +60,14 @@ export class UrlBuilder {
 export async function fetchSS(url: string, options?: RequestInit) {
   const cookieString = processCookies(await cookies());
 
+  // Settings endpoints should use force-cache with 60s revalidation for deduplication
+  const isSettingsEndpoint =
+    url === "/settings" || url === "/enterprise-settings";
+
   const init: RequestInit = {
     credentials: "include",
-    cache: "no-store",
+    cache: isSettingsEndpoint ? "force-cache" : "no-store",
+    ...(isSettingsEndpoint && { next: { revalidate: 60 } }),
     ...options,
     headers: {
       ...options?.headers,

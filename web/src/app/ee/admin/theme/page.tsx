@@ -32,6 +32,7 @@ export default function ThemePage() {
   const router = useRouter();
   const settings = useContext(SettingsContext);
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
+  const [logoVersion, setLogoVersion] = useState(0);
   const appearanceSettingsRef = useRef<AppearanceThemeSettingsRef>(null);
 
   if (!settings) {
@@ -166,6 +167,7 @@ export default function ThemePage() {
           }
           // Only clear the selected logo after a successful upload
           setSelectedLogo(null);
+          setLogoVersion((v) => v + 1);
           values.use_custom_logo = true;
         }
 
@@ -245,6 +247,7 @@ export default function ThemePage() {
                   ref={appearanceSettingsRef}
                   selectedLogo={selectedLogo}
                   setSelectedLogo={setSelectedLogo}
+                  logoVersion={logoVersion}
                   charLimits={CHAR_LIMITS}
                 />
               </SettingsLayouts.Body>
