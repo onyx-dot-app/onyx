@@ -240,6 +240,36 @@ function buildMockSearchStream(options: SearchMockOptions): string {
   return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
 }
 
+interface ErrorMockOptions {
+  error: string;
+  stack_trace?: string | null;
+  error_code?: string | null;
+  is_retryable?: boolean;
+  details?: Record<string, unknown> | null;
+}
+
+function buildMockErrorStream(options: ErrorMockOptions): string {
+  turnCounter += 1;
+  const userMessageId = turnCounter * 100 + 1;
+  const agentMessageId = turnCounter * 100 + 2;
+
+  const packets: Record<string, unknown>[] = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: agentMessageId,
+    },
+    {
+      error: options.error,
+      stack_trace: options.stack_trace ?? null,
+      error_code: options.error_code ?? null,
+      is_retryable: options.is_retryable ?? true,
+      details: options.details ?? null,
+    },
+  ];
+
+  return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
+}
+
 async function openChat(page: Page): Promise<void> {
   await page.goto("/app");
   await page.waitForLoadState("networkidle");
@@ -797,6 +827,74 @@ Set \`max_results\` to limit the number of returned documents.`;
         await screenshotChatContainer(
           page,
           `chat-heading-levels-h1-h4-${theme}`
+        );
+      });
+    });
+
+    test.describe.only("Error Banner and Stack Trace", () => {
+      const MOCK_STACK_TRACE = [
+        "Traceback (most recent call last):",
+        '  File "/app/backend/onyx/chat/process_message.py", line 400, in stream_chat_message_objects',
+        '    raise ValueError("Invalid configuration")',
+        '  File "/app/backend/onyx/llm/factory.py", line 85, in get_llm',
+        "    return self._get_llm(model_name)",
+        '  File "/app/backend/onyx/llm/factory.py", line 92, in _get_llm',
+        '    raise RuntimeError("Model not available")',
+        "RuntimeError: Model not available",
+      ].join("\n");
+
+      test("expanding stack trace scrolls it into view", async ({ page }) => {
+        await openChat(page);
+
+        await page.route("**/api/chat/send-chat-message", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/plain",
+            body: buildMockErrorStream({
+              error: "Failed to process your request",
+              stack_trace: MOCK_STACK_TRACE,
+              error_code: "VALIDATION_ERROR",
+              is_retryable: true,
+              details: { model: "gpt-4", provider: "openai" },
+            }),
+          });
+        });
+
+        // Send message manually (sendMessage waits for an AI message element,
+        // but error responses render an ErrorBanner instead).
+        await page
+          .locator("#onyx-chat-input-textarea")
+          .fill("trigger an error");
+        await page.locator("#onyx-chat-input-send-button").click();
+
+        // Wait for the error banner to appear
+        const stackTraceButton = page.getByRole("button", {
+          name: "Stack trace",
+        });
+        await expect(stackTraceButton).toBeVisible({ timeout: 15000 });
+
+        // The <pre> should not be visible yet
+        const stackTracePre = page.locator("pre.font-mono");
+        await expect(stackTracePre).not.toBeVisible();
+
+        // Click to expand the stack trace
+        await stackTraceButton.click();
+        await expect(stackTracePre).toBeVisible();
+
+        // Verify the stack trace <pre> element is scrolled into the viewport
+        const isInViewport = await stackTracePre.evaluate((el) => {
+          const rect = el.getBoundingClientRect();
+          return (
+            rect.bottom > 0 &&
+            rect.bottom <= window.innerHeight &&
+            rect.top >= 0
+          );
+        });
+        expect(isInViewport).toBe(true);
+
+        await screenshotChatContainer(
+          page,
+          `chat-error-stack-trace-expanded-${theme}`
         );
       });
     });
