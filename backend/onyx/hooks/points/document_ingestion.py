@@ -1,8 +1,17 @@
-from typing import Any
+from pydantic import BaseModel
 
 from onyx.db.enums import HookFailStrategy
 from onyx.db.enums import HookPoint
 from onyx.hooks.points.base import HookPointSpec
+
+
+# TODO(@Bo-Onyx): define payload and response fields
+class DocumentIngestionPayload(BaseModel):
+    pass
+
+
+class DocumentIngestionResponse(BaseModel):
+    pass
 
 
 class DocumentIngestionSpec(HookPointSpec):
@@ -18,12 +27,5 @@ class DocumentIngestionSpec(HookPointSpec):
     fail_hard_description = "The document will not be indexed."
     default_fail_strategy = HookFailStrategy.HARD
 
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        # TODO(@Bo-Onyx): define input schema
-        return {"type": "object", "properties": {}}
-
-    @property
-    def output_schema(self) -> dict[str, Any]:
-        # TODO(@Bo-Onyx): define output schema
-        return {"type": "object", "properties": {}}
+    payload_model = DocumentIngestionPayload
+    response_model = DocumentIngestionResponse
