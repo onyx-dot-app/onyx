@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Button } from "@opal/components";
@@ -36,6 +36,16 @@ export const ErrorBanner = ({
   resubmit?: () => void;
 }) => {
   const [isStackTraceExpanded, setIsStackTraceExpanded] = useState(false);
+  const stackTraceRef = useRef<HTMLPreElement>(null);
+
+  useEffect(() => {
+    if (isStackTraceExpanded && stackTraceRef.current) {
+      stackTraceRef.current.scrollIntoView({
+        behavior: "instant",
+        block: "end",
+      });
+    }
+  }, [isStackTraceExpanded]);
 
   return (
     <div className="text-red-700 mt-4 text-sm my-auto">
@@ -71,7 +81,10 @@ export const ErrorBanner = ({
                 />
               </div>
               {isStackTraceExpanded && (
-                <pre className="mt-2 p-3 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-xs text-neutral-700 dark:text-neutral-300 overflow-auto max-h-48 whitespace-pre-wrap font-mono">
+                <pre
+                  ref={stackTraceRef}
+                  className="mt-2 p-3 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-xs text-neutral-700 dark:text-neutral-300 overflow-auto max-h-48 whitespace-pre-wrap font-mono"
+                >
                   {stackTrace}
                 </pre>
               )}
