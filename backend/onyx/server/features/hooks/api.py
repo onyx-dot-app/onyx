@@ -1,3 +1,7 @@
+import ipaddress
+import socket
+from urllib.parse import urlparse
+
 import httpx
 from fastapi import APIRouter
 from fastapi import Depends
@@ -9,6 +13,7 @@ from onyx.auth.users import User
 from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.hook import create_hook__no_commit
 from onyx.db.hook import delete_hook__no_commit
 from onyx.db.hook import get_hook_by_id
@@ -28,6 +33,80 @@ from onyx.hooks.models import HookValidateResponse
 from onyx.hooks.models import HookValidateStatus
 from onyx.hooks.registry import get_all_specs
 from onyx.hooks.registry import get_hook_point_spec
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+# ---------------------------------------------------------------------------
+# SSRF protection
+# ---------------------------------------------------------------------------
+
+# RFC 1918 private ranges, loopback, link-local (IMDS at 169.254.169.254),
+# shared address space, and IPv6 equivalents.
+_BLOCKED_NETWORKS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
+    ipaddress.ip_network("127.0.0.0/8"),  # loopback
+    ipaddress.ip_network("10.0.0.0/8"),  # RFC 1918
+    ipaddress.ip_network("172.16.0.0/12"),  # RFC 1918
+    ipaddress.ip_network("192.168.0.0/16"),  # RFC 1918
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local / cloud IMDS
+    ipaddress.ip_network("100.64.0.0/10"),  # shared address space (RFC 6598)
+    ipaddress.ip_network("0.0.0.0/8"),  # "this" network
+    ipaddress.ip_network("::1/128"),  # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),  # IPv6 ULA
+    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
+]
+
+
+def _check_ssrf_safety(endpoint_url: str) -> None:
+    """Raise OnyxError if endpoint_url could be used for SSRF.
+
+    Checks:
+    1. Scheme must be https.
+    2. All IPs the hostname resolves to must be public — private/reserved
+       ranges (RFC 1918, link-local, loopback, cloud IMDS) are blocked.
+
+    Note: this provides a good-faith pre-flight check. DNS rebinding attacks
+    (where the hostname re-resolves to a different IP after this check) are
+    outside the threat model for a single-tenant, admin-only API.
+    """
+    parsed = urlparse(endpoint_url)
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme != "https":
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Hook endpoint URL must use https, got: {scheme!r}",
+        )
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Could not parse hostname from URL: {endpoint_url}",
+        )
+
+    try:
+        resolved = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as e:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Could not resolve hostname {hostname!r}: {e}",
+        )
+
+    for addr_info in resolved:
+        ip_str = addr_info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        for blocked in _BLOCKED_NETWORKS:
+            if ip in blocked:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Hook endpoint URL resolves to a private or reserved IP address "
+                    f"({ip}), which is not permitted.",
+                )
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -102,6 +181,7 @@ def _validate_endpoint(
       (operator should consider increasing timeout_seconds).
     - All other exceptions → cannot_connect.
     """
+    _check_ssrf_safety(endpoint_url)
     headers: dict[str, str] = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -118,14 +198,29 @@ def _validate_endpoint(
         # ConnectTimeout: TCP handshake never completed → cannot_connect.
         # ReadTimeout / WriteTimeout: TCP was established, server just responded slowly → timeout.
         if isinstance(exc, httpx.ConnectTimeout):
+            logger.warning(
+                "Hook endpoint validation: connect timeout for %s",
+                endpoint_url,
+                exc_info=exc,
+            )
             return HookValidateResponse(
                 status=HookValidateStatus.cannot_connect, error_message=str(exc)
             )
+        logger.warning(
+            "Hook endpoint validation: read/write timeout for %s",
+            endpoint_url,
+            exc_info=exc,
+        )
         return HookValidateResponse(
             status=HookValidateStatus.timeout,
             error_message="Endpoint timed out — consider increasing timeout_seconds.",
         )
     except Exception as exc:
+        logger.warning(
+            "Hook endpoint validation: connection error for %s",
+            endpoint_url,
+            exc_info=exc,
+        )
         return HookValidateResponse(
             status=HookValidateStatus.cannot_connect, error_message=str(exc)
         )
@@ -322,11 +417,15 @@ def activate_hook(
         timeout_seconds=hook.timeout_seconds,
     )
     if validation.status != HookValidateStatus.passed:
+        # Persist is_reachable=False in a separate session so the request
+        # session has no commits on the failure path and the transaction
+        # boundary stays clean.
         if hook.is_reachable is not False:
-            update_hook__no_commit(
-                db_session=db_session, hook_id=hook_id, is_reachable=False
-            )
-            db_session.commit()
+            with get_session_with_current_tenant() as side_session:
+                update_hook__no_commit(
+                    db_session=side_session, hook_id=hook_id, is_reachable=False
+                )
+                side_session.commit()
         _raise_for_validation_failure(validation)
 
     hook = update_hook__no_commit(

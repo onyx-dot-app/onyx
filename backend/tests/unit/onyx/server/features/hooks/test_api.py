@@ -1,6 +1,7 @@
 """Unit tests for onyx.server.features.hooks.api helpers.
 
 Covers:
+- _check_ssrf_safety: scheme enforcement and private-IP blocklist
 - _validate_endpoint: httpx exception → HookValidateStatus mapping
   ConnectTimeout     → cannot_connect  (TCP handshake never completed)
   ConnectError       → cannot_connect  (DNS / TLS failure)
@@ -19,6 +20,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.models import HookValidateResponse
 from onyx.hooks.models import HookValidateStatus
+from onyx.server.features.hooks.api import _check_ssrf_safety
 from onyx.server.features.hooks.api import _raise_for_validation_failure
 from onyx.server.features.hooks.api import _validate_endpoint
 
@@ -38,17 +40,89 @@ def _mock_response(status_code: int) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
+# _check_ssrf_safety
+# ---------------------------------------------------------------------------
+
+
+class TestCheckSsrfSafety:
+    def _call(self, url: str) -> None:
+        _check_ssrf_safety(url)
+
+    # --- scheme checks ---
+
+    def test_https_is_allowed(self) -> None:
+        with patch("onyx.server.features.hooks.api.socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(None, None, None, None, ("93.184.216.34", 0))]
+            self._call("https://example.com/hook")  # must not raise
+
+    @pytest.mark.parametrize(
+        "url", ["http://example.com/hook", "ftp://example.com/hook"]
+    )
+    def test_non_https_scheme_rejected(self, url: str) -> None:
+        with pytest.raises(OnyxError) as exc_info:
+            self._call(url)
+        assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+        assert "https" in (exc_info.value.detail or "").lower()
+
+    # --- private IP blocklist ---
+
+    @pytest.mark.parametrize(
+        "ip",
+        [
+            pytest.param("127.0.0.1", id="loopback"),
+            pytest.param("10.0.0.1", id="RFC1918-A"),
+            pytest.param("172.16.0.1", id="RFC1918-B"),
+            pytest.param("192.168.1.1", id="RFC1918-C"),
+            pytest.param("169.254.169.254", id="link-local-IMDS"),
+            pytest.param("100.64.0.1", id="shared-address-space"),
+            pytest.param("::1", id="IPv6-loopback"),
+            pytest.param("fc00::1", id="IPv6-ULA"),
+            pytest.param("fe80::1", id="IPv6-link-local"),
+        ],
+    )
+    def test_private_ip_is_blocked(self, ip: str) -> None:
+        with (
+            patch("onyx.server.features.hooks.api.socket.getaddrinfo") as mock_dns,
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            mock_dns.return_value = [(None, None, None, None, (ip, 0))]
+            self._call("https://internal.example.com/hook")
+        assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+        assert ip in (exc_info.value.detail or "")
+
+    def test_public_ip_is_allowed(self) -> None:
+        with patch("onyx.server.features.hooks.api.socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(None, None, None, None, ("93.184.216.34", 0))]
+            self._call("https://example.com/hook")  # must not raise
+
+    def test_dns_resolution_failure_raises(self) -> None:
+        import socket
+
+        with (
+            patch(
+                "onyx.server.features.hooks.api.socket.getaddrinfo",
+                side_effect=socket.gaierror("name not found"),
+            ),
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            self._call("https://no-such-host.example.com/hook")
+        assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+# ---------------------------------------------------------------------------
 # _validate_endpoint
 # ---------------------------------------------------------------------------
 
 
 class TestValidateEndpoint:
     def _call(self, *, api_key: str | None = _API_KEY) -> HookValidateResponse:
-        return _validate_endpoint(
-            endpoint_url=_URL,
-            api_key=api_key,
-            timeout_seconds=_TIMEOUT,
-        )
+        # Bypass SSRF check — tested separately in TestCheckSsrfSafety.
+        with patch("onyx.server.features.hooks.api._check_ssrf_safety"):
+            return _validate_endpoint(
+                endpoint_url=_URL,
+                api_key=api_key,
+                timeout_seconds=_TIMEOUT,
+            )
 
     @patch("onyx.server.features.hooks.api.httpx.Client")
     def test_2xx_returns_passed(self, mock_client_cls: MagicMock) -> None:
