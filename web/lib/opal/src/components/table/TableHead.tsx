@@ -1,7 +1,6 @@
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { TableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import { Button } from "@opal/components";
 import { SvgChevronDown, SvgChevronUp, SvgHandle, SvgSort } from "@opal/icons";
@@ -30,8 +29,6 @@ interface TableHeadCustomProps {
   icon?: (sorted: SortDirection) => IconFunctionComponent;
   /** Text alignment for the column. Defaults to `"left"`. */
   alignment?: "left" | "center" | "right";
-  /** Cell density. `"md"` uses tighter padding for denser layouts. */
-  size?: TableSize;
   /** Column width in pixels. Applied as an inline style on the `<th>`. */
   width?: number;
   /** When `true`, shows a bottom border on hover. Defaults to `true`. */
@@ -81,13 +78,11 @@ export default function TableHead({
   resizable,
   onResizeStart,
   alignment = "left",
-  size,
   width,
   bottomBorder = true,
   ...thProps
 }: TableHeadProps) {
-  const contextSize = useTableSize();
-  const resolvedSize = size ?? contextSize;
+  const resolvedSize = useTableSize();
   const isSmall = resolvedSize === "md";
   return (
     <th

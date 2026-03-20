@@ -1,5 +1,8 @@
+"use client";
+
 import React from "react";
 import { cn } from "@opal/utils";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import type { ExtremaSizeVariants, SizeVariants } from "@opal/types";
 
@@ -9,20 +12,15 @@ import type { ExtremaSizeVariants, SizeVariants } from "@opal/types";
 
 type TableSize = Extract<SizeVariants, "md" | "lg">;
 type TableVariant = "rows" | "cards";
-type TableQualifier = "simple" | "avatar" | "icon";
 type SelectionBehavior = "no-select" | "single-select" | "multi-select";
 
 interface TableProps
   extends WithoutStyles<React.TableHTMLAttributes<HTMLTableElement>> {
   ref?: React.Ref<HTMLTableElement>;
-  /** Size preset for the table. @default "lg" */
-  size?: TableSize;
   /** Visual row variant. @default "cards" */
   variant?: TableVariant;
   /** Row selection behavior. @default "no-select" */
   selectionBehavior?: SelectionBehavior;
-  /** Leading qualifier column type. @default null */
-  qualifier?: TableQualifier;
   /** Height behavior. `"fit"` = shrink to content, `"full"` = fill available space. */
   heightVariant?: ExtremaSizeVariants;
   /** Explicit pixel width for the table (e.g. from `table.getTotalSize()`).
@@ -38,14 +36,13 @@ interface TableProps
 
 function Table({
   ref,
-  size = "lg",
   variant = "cards",
   selectionBehavior = "no-select",
-  qualifier = "simple",
   heightVariant,
   width,
   ...props
 }: TableProps) {
+  const size = useTableSize();
   return (
     <table
       ref={ref}
@@ -54,7 +51,6 @@ function Table({
       data-size={size}
       data-variant={variant}
       data-selection={selectionBehavior}
-      data-qualifier={qualifier}
       data-height={heightVariant}
       {...props}
     />
@@ -62,10 +58,4 @@ function Table({
 }
 
 export default Table;
-export type {
-  TableProps,
-  TableSize,
-  TableVariant,
-  TableQualifier,
-  SelectionBehavior,
-};
+export type { TableProps, TableSize, TableVariant, SelectionBehavior };
