@@ -14,7 +14,7 @@ type ContentActionProps = ContentProps & {
   rightChildren?: React.ReactNode;
 
   /**
-   * Padding and gap applied around the `Content` area.
+   * Padding applied around the `Content` area.
    * Uses the shared `SizeVariant` scale from `@opal/shared`.
    *
    * @default "lg"
@@ -57,10 +57,10 @@ function ContentAction({
   paddingVariant = "lg",
   ...contentProps
 }: ContentActionProps) {
-  const { padding, gap } = containerSizeVariants[paddingVariant];
+  const { padding } = containerSizeVariants[paddingVariant];
 
   return (
-    <div className={cn("flex flex-row items-stretch w-full", gap)}>
+    <div className="flex flex-row items-stretch w-full">
       <div className={cn("flex-1 min-w-0 self-center", padding)}>
         <Content {...contentProps} />
       </div>
