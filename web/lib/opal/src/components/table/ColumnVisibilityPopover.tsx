@@ -32,7 +32,13 @@ function ColumnVisibilityPopover<TData extends RowData>({
   // User-defined columns only (exclude internal qualifier/actions)
   const dataColumns = table
     .getAllLeafColumns()
-    .filter((col) => !col.id.startsWith("__") && col.id !== "qualifier");
+    .filter(
+      (col) =>
+        !col.id.startsWith("__") &&
+        col.id !== "qualifier" &&
+        typeof col.columnDef.header === "string" &&
+        col.columnDef.header.trim() !== ""
+    );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
