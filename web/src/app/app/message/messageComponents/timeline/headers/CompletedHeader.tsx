@@ -63,7 +63,7 @@ function MemoryTagWithTooltip({
               gap={0.25}
               height="auto"
             >
-              <div className="p-1 w-full">
+              <div className="p-1">
                 <Text as="p" secondaryBody text03>
                   {memoryText}
                 </Text>
