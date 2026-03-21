@@ -66,20 +66,20 @@ class JSMConnector(PollConnector):
                 desc = req.get("issueDescription", "")
                 web_link = req.get("_links", {}).get("web", "")
 
-                        source=DocumentSource.JIRA,  # TODO: replace with DocumentSource.JSM once added to constants.py
-                    Document(
-                        id=f"jsm_{req_id}",
-                        sections=[
-                            TextSection(link=web_link, text=f"Summary: {summary}\nDescription: {desc}")
-                        ],
-                        source=DocumentSource.JIRA,
-                        semantic_identifier=summary,
-                        metadata={
-                            "status": req.get("currentStatus", {}).get("status", "unknown"),
-                            "request_id": req_id,
-                        },
-                    )
-                )
+doc_batch.append(
+    Document(
+        id=f"jsm_{req_id}",
+        sections=[
+            TextSection(link=web_link, text=f"Summary: {summary}\nDescription: {desc}")
+        ],
+        source=DocumentSource.JIRA,  # TODO(username): replace with DocumentSource.JSM once added
+        semantic_identifier=summary,
+        metadata={
+            "status": req.get("currentStatus", {}).get("status", "unknown"),
+            "request_id": req_id,
+        },
+    )
+)
 
             if doc_batch:
                 yield doc_batch
