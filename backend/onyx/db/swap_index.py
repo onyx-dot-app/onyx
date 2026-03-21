@@ -2,6 +2,7 @@ import time
 
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
@@ -149,6 +150,9 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
     Returns None if search settings did not change, or the old search settings if they
     did change.
     """
+    if DISABLE_VECTOR_DB:
+        return None
+
     # Default CC-pair created for Ingestion API unused here
     all_cc_pairs = get_connector_credential_pairs(db_session)
     cc_pair_count = max(len(all_cc_pairs) - 1, 0)

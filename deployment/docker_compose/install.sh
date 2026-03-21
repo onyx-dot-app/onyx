@@ -96,8 +96,8 @@ fi
 
 # When --lite is passed as a flag, lower resource thresholds early (before the
 # resource check). When lite is chosen interactively, the thresholds are adjusted
-# inside the new-deployment flow, after the resource check has already passed
-# with the standard thresholds — which is the safer direction.
+# after the resource check has already passed with the standard thresholds —
+# which is the safer direction.
 if [[ "$LITE_MODE" = true ]]; then
     EXPECTED_DOCKER_RAM_GB=4
     EXPECTED_DISK_GB=16
@@ -110,9 +110,6 @@ LITE_COMPOSE_FILE="docker-compose.onyx-lite.yml"
 # Build the -f flags for docker compose.
 # Pass "true" as $1 to auto-detect a previously-downloaded lite overlay
 # (used by shutdown/delete-data so users don't need to remember --lite).
-# Without the argument, the lite overlay is only included when --lite was
-# explicitly passed — preventing install/start from silently staying in
-# lite mode just because the file exists on disk from a prior run.
 compose_file_args() {
     local auto_detect="${1:-false}"
     local args="-f docker-compose.yml"
@@ -177,34 +174,42 @@ ensure_file() {
 
 # --- Interactive prompt helpers ---
 is_interactive() {
-    [[ "$NO_PROMPT" = false ]] && [[ -t 0 ]]
+    [[ "$NO_PROMPT" = false ]] && [[ -r /dev/tty ]] && [[ -w /dev/tty ]]
+}
+
+read_prompt_line() {
+    local prompt_text="$1"
+    if ! is_interactive; then
+        REPLY=""
+        return
+    fi
+    [[ -n "$prompt_text" ]] && printf "%s" "$prompt_text" > /dev/tty
+    IFS= read -r REPLY < /dev/tty || REPLY=""
+}
+
+read_prompt_char() {
+    local prompt_text="$1"
+    if ! is_interactive; then
+        REPLY=""
+        return
+    fi
+    [[ -n "$prompt_text" ]] && printf "%s" "$prompt_text" > /dev/tty
+    IFS= read -r -n 1 REPLY < /dev/tty || REPLY=""
+    printf "\n" > /dev/tty
 }
 
 prompt_or_default() {
     local prompt_text="$1"
     local default_value="$2"
-    if is_interactive; then
-        read -p "$prompt_text" -r REPLY
-        if [[ -z "$REPLY" ]]; then
-            REPLY="$default_value"
-        fi
-    else
-        REPLY="$default_value"
-    fi
+    read_prompt_line "$prompt_text"
+    [[ -z "$REPLY" ]] && REPLY="$default_value"
 }
 
 prompt_yn_or_default() {
     local prompt_text="$1"
     local default_value="$2"
-    if is_interactive; then
-        read -p "$prompt_text" -n 1 -r
-        echo ""
-        if [[ -z "$REPLY" ]]; then
-            REPLY="$default_value"
-        fi
-    else
-        REPLY="$default_value"
-    fi
+    read_prompt_char "$prompt_text"
+    [[ -z "$REPLY" ]] && REPLY="$default_value"
 }
 
 confirm_action() {
@@ -305,8 +310,8 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     echo "  • All user data and documents"
     echo ""
     if is_interactive; then
-        read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
-        echo ""
+        prompt_or_default "Are you sure you want to continue? Type 'DELETE' to confirm: " ""
+        echo "" > /dev/tty
         if [ "$REPLY" != "DELETE" ]; then
             print_info "Operation cancelled."
             exit 0
@@ -500,7 +505,7 @@ echo ""
 
 if is_interactive; then
     echo -e "${YELLOW}${BOLD}Please acknowledge and press Enter to continue...${NC}"
-    read -r
+    read_prompt_line ""
     echo ""
 else
     echo -e "${YELLOW}${BOLD}Running in non-interactive mode - proceeding automatically...${NC}"
@@ -745,25 +750,48 @@ if [ "$COMPOSE_VERSION" != "dev" ] && version_compare "$COMPOSE_VERSION" "2.24.0
     print_info "Proceeding with installation despite Docker Compose version compatibility issues..."
 fi
 
-# Handle lite overlay: ensure it if --lite, clean up stale copies otherwise
+# Ask for deployment mode (standard vs lite) unless already set via --lite flag
+if [[ "$LITE_MODE" = false ]]; then
+    print_info "Which deployment mode would you like?"
+    echo ""
+    echo "  1) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
+    echo "                  LLM chat, tools, file uploads, and Projects still work"
+    echo "  2) Standard  - Full deployment with search, connectors, and RAG"
+    echo ""
+    prompt_or_default "Choose a mode (1 or 2) [default: 1]: " "1"
+    echo ""
+
+    case "$REPLY" in
+        2)
+            print_info "Selected: Standard mode"
+            ;;
+        *)
+            LITE_MODE=true
+            print_info "Selected: Lite mode"
+            ;;
+    esac
+else
+    print_info "Deployment mode: Lite (set via --lite flag)"
+fi
+
+if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
+    print_error "--include-craft cannot be used with Lite mode."
+    print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+    exit 1
+fi
+
+if [[ "$LITE_MODE" = true ]]; then
+    EXPECTED_DOCKER_RAM_GB=4
+    EXPECTED_DISK_GB=16
+fi
+
+# Handle lite overlay file based on selected mode
 if [[ "$LITE_MODE" = true ]]; then
     ensure_file "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" \
         "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "${LITE_COMPOSE_FILE}" || exit 1
 elif [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
-    if [[ -f "${INSTALL_ROOT}/deployment/.env" ]]; then
-        print_warning "Existing lite overlay found but --lite was not passed."
-        prompt_yn_or_default "Remove lite overlay and switch to standard mode? (y/N): " "n"
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Keeping existing lite overlay. Pass --lite to keep using lite mode."
-            LITE_MODE=true
-        else
-            rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
-            print_info "Removed lite overlay (switching to standard mode)"
-        fi
-    else
-        rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
-        print_info "Removed previous lite overlay (switching to standard mode)"
-    fi
+    rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
+    print_info "Removed previous lite overlay (switching to standard mode)"
 fi
 
 ensure_file "${INSTALL_ROOT}/deployment/env.template" \
@@ -826,22 +854,22 @@ if [ -f "$ENV_FILE" ]; then
     if [ "$REPLY" = "update" ]; then
         print_info "Update selected. Which tag would you like to deploy?"
         echo ""
-        echo "• Press Enter for latest (recommended)"
+        echo "• Press Enter for edge (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
         if [ "$INCLUDE_CRAFT" = true ]; then
             prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
             VERSION="$REPLY"
         else
-            prompt_or_default "Enter tag [default: latest]: " "latest"
+            prompt_or_default "Enter tag [default: edge]: " "edge"
             VERSION="$REPLY"
         fi
         echo ""
 
         if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
             print_info "Selected: craft-latest (Craft enabled)"
-        elif [ "$VERSION" = "latest" ]; then
-            print_info "Selected: Latest version"
+        elif [ "$VERSION" = "edge" ]; then
+            print_info "Selected: edge (latest nightly)"
         else
             print_info "Selected: $VERSION"
         fi
@@ -893,45 +921,6 @@ else
     print_info "No existing .env file found. Setting up new deployment..."
     echo ""
 
-    # Ask for deployment mode (standard vs lite) unless already set via --lite flag
-    if [[ "$LITE_MODE" = false ]]; then
-        print_info "Which deployment mode would you like?"
-        echo ""
-        echo "  1) Standard  - Full deployment with search, connectors, and RAG"
-        echo "  2) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
-        echo "                  LLM chat, tools, file uploads, and Projects still work"
-        echo ""
-        prompt_or_default "Choose a mode (1 or 2) [default: 1]: " "1"
-        echo ""
-
-        case "$REPLY" in
-            2)
-                LITE_MODE=true
-                print_info "Selected: Lite mode"
-                ensure_file "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" \
-                    "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "${LITE_COMPOSE_FILE}" || exit 1
-                ;;
-            *)
-                print_info "Selected: Standard mode"
-                ;;
-        esac
-    else
-        print_info "Deployment mode: Lite (set via --lite flag)"
-    fi
-
-    # Validate lite + craft combination (could now be set interactively)
-    if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
-        print_error "--include-craft cannot be used with Lite mode."
-        print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
-        exit 1
-    fi
-
-    # Adjust resource expectations for lite mode
-    if [[ "$LITE_MODE" = true ]]; then
-        EXPECTED_DOCKER_RAM_GB=4
-        EXPECTED_DISK_GB=16
-    fi
-
     # Ask for version
     print_info "Which tag would you like to deploy?"
     echo ""
@@ -942,18 +931,18 @@ else
         prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
         VERSION="$REPLY"
     else
-        echo "• Press Enter for latest (recommended)"
+        echo "• Press Enter for edge (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        prompt_or_default "Enter tag [default: latest]: " "latest"
+        prompt_or_default "Enter tag [default: edge]: " "edge"
         VERSION="$REPLY"
     fi
     echo ""
 
     if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
         print_info "Selected: craft-latest (Craft enabled)"
-    elif [ "$VERSION" = "latest" ]; then
-        print_info "Selected: Latest tag"
+    elif [ "$VERSION" = "edge" ]; then
+        print_info "Selected: edge (latest nightly)"
     else
         print_info "Selected: $VERSION"
     fi
@@ -1111,15 +1100,15 @@ fi
 export HOST_PORT=$AVAILABLE_PORT
 print_success "Using port $AVAILABLE_PORT for nginx"
 
-# Determine if we're using the latest tag or a craft tag (both should force pull)
+# Determine if we're using a floating tag (edge, latest, craft-*) that should force pull
 # Read IMAGE_TAG from .env file and remove any quotes or whitespace
 CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-if [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
+if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
     USE_LATEST=true
     if [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
         print_info "Using craft tag '$CURRENT_IMAGE_TAG' - will force pull and recreate containers"
     else
-        print_info "Using 'latest' tag - will force pull and recreate containers"
+        print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
     fi
 else
     USE_LATEST=false
