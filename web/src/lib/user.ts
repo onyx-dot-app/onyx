@@ -128,3 +128,54 @@ export function getUserDisplayName(user: User | null): string {
   // If nothing works, then fall back to anonymous user name
   return "Anonymous";
 }
+
+/**
+ * Derive display initials from a user's name or email.
+ *
+ * - If a name is provided, uses the first letter of the first two words.
+ * - Falls back to the email local part, splitting on `.`, `_`, or `-`.
+ * - Returns `null` when no valid alpha initials can be derived.
+ */
+export function getUserInitials(
+  name: string | null,
+  email: string
+): string | null {
+  if (name) {
+    const words = name.trim().split(/\s+/);
+    if (words.length >= 2) {
+      const first = words[0]?.[0];
+      const second = words[1]?.[0];
+      if (first && second) {
+        const result = (first + second).toUpperCase();
+        if (/^[A-Z]{2}$/.test(result)) return result;
+      }
+      return null;
+    }
+    if (name.trim().length >= 1) {
+      const result = name.trim().slice(0, 2).toUpperCase();
+      if (/^[A-Z]{1,2}$/.test(result)) return result;
+    }
+  }
+
+  const local = email.split("@")[0];
+  if (!local || local.length === 0) return null;
+  const parts = local.split(/[._-]/);
+  if (parts.length >= 2) {
+    const first = parts[0]?.[0];
+    const second = parts[1]?.[0];
+    if (first && second) {
+      const result = (first + second).toUpperCase();
+      if (/^[A-Z]{2}$/.test(result)) return result;
+    }
+    return null;
+  }
+  if (local.length >= 2) {
+    const result = local.slice(0, 2).toUpperCase();
+    if (/^[A-Z]{2}$/.test(result)) return result;
+  }
+  if (local.length === 1) {
+    const result = local.toUpperCase();
+    if (/^[A-Z]$/.test(result)) return result;
+  }
+  return null;
+}
