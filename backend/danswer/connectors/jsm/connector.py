@@ -57,7 +57,6 @@ class JSMConnector(PollConnector):
                 if created_ts < start or created_ts > end:
                     continue
             for req in requests_list:
-                created_str = req.get("createdDate", {}).get("epochMillis")
                 req_id = req.get("issueId")
                 if req_id is None:
                     logger.warning("JSM ticket missing issueId, skipping ticket with keys=%s", list(req.keys()))
