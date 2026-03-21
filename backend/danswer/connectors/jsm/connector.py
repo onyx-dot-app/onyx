@@ -1,5 +1,4 @@
 import requests
-from collections.abc import Iterator
 from typing import Any
 
 from onyx.connectors.interfaces import PollConnector
@@ -13,7 +12,6 @@ logger = setup_logger()
 
 class JSMConnector(PollConnector):
     def __init__(self, base_url: str):
-        # Constructor only takes config, not credentials
         self.base_url = base_url.rstrip("/")
         self.email: str | None = None
         self.api_token: str | None = None
@@ -26,7 +24,7 @@ class JSMConnector(PollConnector):
             raise ValueError("JSM Connector requires both 'email' and 'api_token'.")
 
     def poll_source(
-        self, start: int, end: int
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput: 
         """Requirement: Must implement poll_source instead of load_from_source."""
         if not self.email or not self.api_token:
@@ -44,7 +42,6 @@ class JSMConnector(PollConnector):
                 response.raise_for_status()
                 data = response.json()
             except Exception as e:
-                # Requirement: Use structured logger and fail loudly
                 logger.exception(f"Failed to fetch from JSM: {e}")
                 raise
 
@@ -57,14 +54,13 @@ class JSMConnector(PollConnector):
                 desc = req.get("issueDescription", "")
                 web_link = req.get("_links", {}).get("web", "")
 
-                # Requirement: Yield list[Document], not Section
                 doc_batch.append(
                     Document(
                         id=f"jsm_{req_id}",
                         sections=[
                             Section(link=web_link, text=f"Summary: {summary}\nDescription: {desc}")
                         ],
-                        source=DocumentSource.JIRA, # Using JIRA as fallback
+                        source=DocumentSource.JIRA,
                         semantic_identifier=summary,
                         metadata={
                             "status": req.get("currentStatus", {}).get("status", "unknown"),
@@ -76,7 +72,6 @@ class JSMConnector(PollConnector):
             if doc_batch:
                 yield doc_batch
 
-            # Requirement: Implement pagination
             if data.get("isLastPage"):
                 break
             start_index += limit
