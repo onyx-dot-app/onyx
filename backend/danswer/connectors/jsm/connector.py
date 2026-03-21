@@ -64,7 +64,7 @@ class JSMConnector(PollConnector):
                     Document(
                         id=f"jsm_{req_id}",
                         sections=[
-                            Section(link=web_link, text=f"Summary: {summary}\nDescription: {desc}")
+                            TextSection(link=web_link, text=f"Summary: {summary}\nDescription: {desc}")
                         ],
                         source=DocumentSource.JIRA,
                         semantic_identifier=summary,
