@@ -11,7 +11,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
+created_str = req.get("createdDate", {}).get("epochMillis")
 class JSMConnector(PollConnector):
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
@@ -50,7 +50,7 @@ class JSMConnector(PollConnector):
             requests_list = data.get("values", [])
             doc_batch: list[Document] = []
             
-            created_str = req.get("createdDate", {}).get("epochMillis")
+            
             if created_str is not None:
                 created_ts = int(created_str) / 1000
                 if created_ts < start or created_ts > end:
