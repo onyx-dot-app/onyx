@@ -66,7 +66,7 @@ class JSMConnector(PollConnector):
                 desc = req.get("issueDescription", "")
                 web_link = req.get("_links", {}).get("web", "")
 
-                doc_batch.append(
+                        source=DocumentSource.JIRA,  # TODO: replace with DocumentSource.JSM once added to constants.py
                     Document(
                         id=f"jsm_{req_id}",
                         sections=[
