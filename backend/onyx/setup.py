@@ -146,8 +146,9 @@ def setup_onyx(
             ),
         )
         if not success:
-            raise RuntimeError(
-                "Could not connect to a document index within the specified timeout."
+            logger.warning(
+                "Could not connect to a document index within the specified timeout. "
+                "Continuing startup without document index — search will be unavailable."
             )
 
         logger.notice(f"Model Server: http://{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}")
