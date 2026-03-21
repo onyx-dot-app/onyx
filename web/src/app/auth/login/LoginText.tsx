@@ -12,11 +12,11 @@ export default function LoginText() {
       eyebrow="Cuenta"
       description="Accede a tu espacio de trabajo con contexto, permisos y trazabilidad."
     >
-        Inicia sesion en{" "}
-        <span className="text-theme-orange-05">
-          {(settings && settings?.enterpriseSettings?.application_name) ||
-            DEFAULT_APPLICATION_NAME}
-        </span>
+      Inicia sesion en{" "}
+      <span className="text-[var(--landing-accent)]">
+        {(settings && settings?.enterpriseSettings?.application_name) ||
+          DEFAULT_APPLICATION_NAME}
+      </span>
     </AuthPanelIntro>
   );
 }

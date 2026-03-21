@@ -82,11 +82,11 @@ const Page = async (props: {
             <div className="w-full justify-center mt-6">
               <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
               <div className="flex items-center w-full my-4">
-                <div className="flex-grow border-t border-border-01" />
-                <span className="mx-2 text-sm text-text-03">
+                <div className="flex-grow border-t border-[color:var(--landing-border)]" />
+                <span className="mx-2 text-sm text-[var(--landing-muted)]">
                   o
                 </span>
-                <div className="flex-grow border-t border-border-01" />
+                <div className="flex-grow border-t border-[color:var(--landing-border)]" />
               </div>
             </div>
           )}

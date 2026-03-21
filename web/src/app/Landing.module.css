@@ -1,0 +1,55 @@
+.landingFuture {
+  --landing-bg-top: rgba(129, 254, 254, 0.32);
+  --landing-bg-spot: rgba(51, 108, 250, 0.18);
+  --landing-surface: rgba(250, 251, 251, 0.88);
+  --landing-surface-alt: rgba(218, 223, 227, 0.52);
+  --landing-card: rgba(255, 255, 255, 0.82);
+  --landing-card-solid: rgba(250, 251, 251, 0.94);
+  --landing-card-tint: linear-gradient(
+    180deg,
+    rgba(192, 254, 252, 0.38) 0%,
+    rgba(250, 251, 251, 0.96) 100%
+  );
+  --landing-response: rgba(67, 106, 201, 0.12);
+  --landing-text: #101828;
+  --landing-muted: #535252;
+  --landing-accent: #336cfa;
+  --landing-accent-strong: #436ac9;
+  --landing-accent-soft: #81fefe;
+  --landing-accent-pale: rgba(192, 254, 252, 0.58);
+  --landing-border: rgba(67, 106, 201, 0.2);
+  --landing-border-strong: rgba(67, 106, 201, 0.34);
+  --landing-button-text: #fafbfb;
+  background:
+    radial-gradient(circle at 18% -5%, rgba(129, 254, 254, 0.28), transparent 26%),
+    radial-gradient(circle at 82% 12%, rgba(51, 108, 250, 0.16), transparent 24%),
+    linear-gradient(180deg, #fafbfb 0%, #eef4fb 100%);
+}
+
+:global(.dark) .landingFuture {
+  --landing-bg-top: rgba(129, 254, 254, 0.12);
+  --landing-bg-spot: rgba(51, 108, 250, 0.26);
+  --landing-surface: rgba(8, 14, 24, 0.92);
+  --landing-surface-alt: rgba(17, 27, 43, 0.82);
+  --landing-card: rgba(8, 14, 24, 0.88);
+  --landing-card-solid: rgba(10, 16, 28, 0.96);
+  --landing-card-tint: linear-gradient(
+    180deg,
+    rgba(67, 106, 201, 0.18) 0%,
+    rgba(8, 14, 24, 0.98) 100%
+  );
+  --landing-response: rgba(129, 254, 254, 0.1);
+  --landing-text: #fafbfb;
+  --landing-muted: #dadfe3;
+  --landing-accent: #336cfa;
+  --landing-accent-strong: #81fefe;
+  --landing-accent-soft: #c0fefc;
+  --landing-accent-pale: rgba(192, 254, 252, 0.12);
+  --landing-border: rgba(129, 254, 254, 0.14);
+  --landing-border-strong: rgba(67, 106, 201, 0.32);
+  --landing-button-text: #050b14;
+  background:
+    radial-gradient(circle at 18% -5%, rgba(129, 254, 254, 0.14), transparent 26%),
+    radial-gradient(circle at 82% 12%, rgba(51, 108, 250, 0.24), transparent 24%),
+    linear-gradient(180deg, #050b14 0%, #08101c 100%);
+}
