@@ -11,7 +11,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-created_str = req.get("createdDate", {}).get("epochMillis")
+
 class JSMConnector(PollConnector):
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
@@ -52,10 +52,12 @@ class JSMConnector(PollConnector):
             
             
             if created_str is not None:
+                created_str = req.get("createdDate", {}).get("epochMillis")
                 created_ts = int(created_str) / 1000
                 if created_ts < start or created_ts > end:
                     continue
             for req in requests_list:
+                created_str = req.get("createdDate", {}).get("epochMillis")
                 req_id = req.get("issueId")
                 if req_id is None:
                     logger.warning("JSM ticket missing issueId, skipping ticket with keys=%s", list(req.keys()))
