@@ -6,6 +6,7 @@ import {
 } from "@/components/settings/lib";
 import {
   CUSTOM_ANALYTICS_ENABLED,
+  DEFAULT_APPLICATION_NAME,
   GTM_ENABLED,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   NEXT_PUBLIC_CLOUD_ENABLED,
@@ -17,7 +18,11 @@ import { Inter } from "next/font/google";
 import { EnterpriseSettings, ApplicationStatus } from "@/interfaces/settings";
 import AppProvider from "@/providers/AppProvider";
 import { PHProvider } from "./providers";
-import { getAuthTypeMetadataSS, getCurrentUserSS } from "@/lib/userSS";
+import {
+  DEFAULT_AUTH_TYPE_METADATA,
+  getAuthTypeMetadataSS,
+  getCurrentUserSS,
+} from "@/lib/userSS";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
@@ -44,22 +49,58 @@ const hankenGrotesk = Hanken_Grotesk({
   display: "swap",
 });
 
-export async function generateMetadata(): Promise<Metadata> {
-  let logoLocation = "/onyx.ico";
-  let enterpriseSettings: EnterpriseSettings | null = null;
-  if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
-    enterpriseSettings = await (await fetchEnterpriseSettingsSS()).json();
-    logoLocation =
-      enterpriseSettings && enterpriseSettings.use_custom_logo
-        ? "/api/enterprise-settings/logo"
-        : "/onyx.ico";
+async function fetchEnterpriseSettingsForMetadata(): Promise<EnterpriseSettings | null> {
+  if (!SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
+    return null;
   }
 
+  try {
+    const response = await fetchEnterpriseSettingsSS();
+    if (!response.ok) {
+      console.error(
+        `fetchEnterpriseSettingsSS for metadata failed: status=${response.status}`
+      );
+      return null;
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("fetchEnterpriseSettingsSS for metadata exception:", error);
+    return null;
+  }
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const defaultDescription =
+    "ACTIVA, tu copiloto operativo para responder con evidencia interna y ejecutar acciones con control y auditoria.";
+  let logoLocation = "/activa.ico";
+  const enterpriseSettings = await fetchEnterpriseSettingsForMetadata();
+  logoLocation =
+    enterpriseSettings && enterpriseSettings.use_custom_logo
+      ? "/api/enterprise-settings/logo"
+      : "/activa.ico";
+
+  const applicationName =
+    enterpriseSettings?.application_name || DEFAULT_APPLICATION_NAME;
+
   return {
-    title: enterpriseSettings?.application_name || "Onyx",
-    description: "Question answering for your documents",
+    title: applicationName,
+    applicationName,
+    description: defaultDescription,
     icons: {
       icon: logoLocation,
+      shortcut: logoLocation,
+      apple: logoLocation,
+    },
+    openGraph: {
+      title: applicationName,
+      description: defaultDescription,
+      siteName: applicationName,
+    },
+    twitter: {
+      card: "summary",
+      title: applicationName,
+      description: defaultDescription,
     },
   };
 }
@@ -71,11 +112,40 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [combinedSettings, user, authTypeMetadata] = await Promise.all([
-    fetchSettingsSS(),
-    getCurrentUserSS(),
-    getAuthTypeMetadataSS(),
-  ]);
+  const [combinedSettingsResult, userResult, authTypeMetadataResult] =
+    await Promise.allSettled([
+      fetchSettingsSS(),
+      getCurrentUserSS(),
+      getAuthTypeMetadataSS(),
+    ]);
+
+  const combinedSettings =
+    combinedSettingsResult.status === "fulfilled"
+      ? combinedSettingsResult.value
+      : null;
+  const user = userResult.status === "fulfilled" ? userResult.value : null;
+  const authTypeMetadata =
+    authTypeMetadataResult.status === "fulfilled"
+      ? authTypeMetadataResult.value
+      : DEFAULT_AUTH_TYPE_METADATA;
+
+  if (combinedSettingsResult.status === "rejected") {
+    console.error(
+      "RootLayout fetchSettingsSS exception:",
+      combinedSettingsResult.reason
+    );
+  }
+
+  if (userResult.status === "rejected") {
+    console.error("RootLayout getCurrentUserSS exception:", userResult.reason);
+  }
+
+  if (authTypeMetadataResult.status === "rejected") {
+    console.error(
+      "RootLayout getAuthTypeMetadataSS exception:",
+      authTypeMetadataResult.reason
+    );
+  }
 
   const { folded } = await fetchAppSidebarMetadata(user);
 

@@ -13,7 +13,7 @@ Parameters:
       Default: ''
   DomainName:
       Type: String
-      Default: demo.danswer.ai
+      Default: demo.activa.ai
   Environment:
     Type: String
   ServiceName:

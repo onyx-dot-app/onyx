@@ -1,96 +1,96 @@
-# Enterprise Edition Contribution IP Assignment Agreement (DanswerAI, Inc.)
+# Acuerdo de cesion de propiedad intelectual para contribuciones a Enterprise Edition ([YOUR LEGAL ENTITY])
 
-**Effective Date:** ______________________
+**Fecha de entrada en vigor:** ______________________
 
-This Enterprise Edition Contribution IP Assignment Agreement (the “**Agreement**”) is entered into by and between:
+Este Acuerdo de cesion de propiedad intelectual para contribuciones a Enterprise Edition (el "**Acuerdo**") se celebra entre:
 
-- **DanswerAI, Inc.** (“**Company**”), the maintainer of the Onyx product, and  
-- **Contributor:** ______________________ (“**Contributor**”)
+- **[YOUR LEGAL ENTITY]** ("**Compania**"), mantenedora del repositorio HOP y del producto ACTIVA, y
+- **Contribuyente:** ______________________ ("**Contribuyente**")
 
-Company and Contributor may be referred to individually as a “**Party**” and collectively as the “**Parties**.”
+Compania y Contribuyente podran denominarse individualmente como una "**Parte**" y conjuntamente como las "**Partes**".
 
-## 1. Purpose and scope
+## 1. Objeto y alcance
 
-Onyx’s repository is primarily licensed under the MIT License, but includes **proprietary-licensed Enterprise Edition components** (as defined below). This Agreement applies **only** to Contributions made to the Enterprise Edition components and is intended to ensure Company owns all rights necessary to license, distribute, and commercialize Enterprise Edition features.
+El repositorio de HOP esta licenciado principalmente bajo la licencia MIT, pero incluye **componentes de Enterprise Edition con licencia propietaria** (segun se define mas abajo). Este Acuerdo aplica **solo** a las contribuciones realizadas sobre componentes de Enterprise Edition y busca asegurar que Compania posea todos los derechos necesarios para licenciar, distribuir y comercializar dichas funcionalidades.
 
-## 2. Definitions
+## 2. Definiciones
 
-2.1 **“Enterprise Edition” or “EE”** means (a) any source code, documentation, configuration, assets, tests, build scripts, or other materials located in or under **any directory named `ee`** anywhere in the repository (including nested paths), and (b) any other files or directories that are explicitly marked as proprietary or Enterprise Edition in repository documentation, file headers, or license notices, and (c) any derivative works, modifications, or additions to the foregoing.
+2.1 **"Enterprise Edition"** o **"EE"** significa: (a) cualquier codigo fuente, documentacion, configuracion, assets, tests, scripts de build u otros materiales ubicados en o debajo de **cualquier directorio llamado `ee`** dentro del repositorio, incluyendo rutas anidadas; (b) cualquier otro archivo o directorio marcado explicitamente como propietario o Enterprise Edition en la documentacion del repositorio, encabezados de archivo o avisos de licencia; y (c) cualquier obra derivada, modificacion o adicion a lo anterior.
 
-2.2 **“Contribution(s)”** means any work of authorship (including code, documentation, or other materials) that Contributor submits to Company for inclusion in EE, including via pull request, patch, commit, issue attachment, email, or any other submission method accepted by Company, and any modifications to existing EE materials.
+2.2 **"Contribucion(es)"** significa cualquier obra de autoria (incluyendo codigo, documentacion u otros materiales) que Contribuyente entregue a Compania para inclusion en EE, ya sea por pull request, patch, commit, adjunto en issue, correo electronico o cualquier otro metodo de envio aceptado por Compania, asi como cualquier modificacion de materiales EE existentes.
 
-2.3 **“Intellectual Property Rights”** means all rights worldwide in and to copyrights, moral rights, neighboring rights, trade secrets, mask work rights, design rights, database rights, patent rights, and any other proprietary rights, whether registered or unregistered.
+2.3 **"Derechos de Propiedad Intelectual"** significa todos los derechos a nivel mundial sobre copyright, derechos morales, derechos conexos, secretos comerciales, mask work rights, design rights, database rights, patent rights y cualquier otro derecho de propiedad intelectual o industrial, registrados o no registrados.
 
-## 3. Assignment of rights
+## 3. Cesion de derechos
 
-3.1 **Assignment.** To the maximum extent permitted by law, Contributor hereby **assigns and transfers to Company**, and agrees to assign and transfer to Company, **all right, title, and interest** in and to all Contributions and all associated Intellectual Property Rights, including all rights to reproduce, prepare derivative works, distribute, publicly perform, publicly display, and otherwise exploit the Contributions in any manner.
+3.1 **Cesion.** En la maxima medida permitida por la ley, Contribuyente por este acto **cede y transfiere a Compania**, y acepta ceder y transferir a Compania, **todo derecho, titulo e interes** sobre todas las Contribuciones y todos los Derechos de Propiedad Intelectual asociados, incluyendo todos los derechos para reproducir, preparar obras derivadas, distribuir, ejecutar publicamente, exhibir publicamente y explotar de cualquier otra manera las Contribuciones.
 
-3.2 **Future rights and further assurances.** Contributor agrees to execute and deliver (including electronically) any documents and take any actions reasonably requested by Company to perfect, record, or enforce Company’s rights in the Contributions. If Contributor fails to do so after reasonable request, Contributor appoints Company as Contributor’s attorney-in-fact solely to execute such documents on Contributor’s behalf.
+3.2 **Derechos futuros y actos adicionales.** Contribuyente acepta firmar y entregar (incluyendo de forma electronica) cualquier documento y realizar cualquier acto razonablemente solicitado por Compania para perfeccionar, registrar o hacer valer los derechos de Compania sobre las Contribuciones. Si Contribuyente no lo hace tras una solicitud razonable, Contribuyente designa a Compania como su apoderado exclusivamente para ejecutar dichos documentos en su nombre.
 
-3.3 **Work made for hire (where applicable).** To the extent any Contribution qualifies as a “work made for hire” under applicable law, it shall be deemed a work made for hire for Company. If not, it is assigned under Section 3.1.
+3.3 **Obra por encargo (cuando aplique).** En la medida en que alguna Contribucion califique legalmente como obra por encargo bajo la ley aplicable, se considerara una obra por encargo para Compania. Si no fuera asi, quedara cedida conforme a la Seccion 3.1.
 
-## 4. Moral rights waiver
+## 4. Renuncia a derechos morales
 
-To the extent permitted by law, Contributor **waives and agrees not to assert** any moral rights (including rights of attribution and integrity) or similar rights in the Contributions against Company or Company’s licensees, successors, or assigns.
+En la maxima medida permitida por la ley, Contribuyente **renuncia y acepta no ejercer** ningun derecho moral (incluyendo derechos de atribucion e integridad) u otros derechos similares sobre las Contribuciones frente a Compania o sus licenciatarios, sucesores o cesionarios.
 
-## 5. Patent rights (assignment / license)
+## 5. Derechos de patente (cesion / licencia)
 
-5.1 **Patent assignment.** To the maximum extent permitted by law, Contributor hereby assigns to Company all right, title, and interest in any patent rights that are **necessarily infringed** by making, using, selling, offering for sale, importing, or otherwise exploiting the Contributions or EE as incorporated with the Contributions.
+5.1 **Cesion de patentes.** En la maxima medida permitida por la ley, Contribuyente cede a Compania todo derecho, titulo e interes sobre cualquier derecho de patente que resulte **necesariamente infringido** por fabricar, usar, vender, ofrecer en venta, importar o explotar de cualquier otra manera las Contribuciones o EE incorporando dichas Contribuciones.
 
-5.2 **Fallback patent license.** If any patent rights cannot be assigned as a matter of law, Contributor grants Company a **perpetual, irrevocable, worldwide, transferable, sublicensable, royalty-free** license under such patent rights to make, have made, use, sell, offer for sale, import, and otherwise exploit the Contributions and EE.
+5.2 **Licencia subsidiaria de patentes.** Si algun derecho de patente no pudiera cederse por disposicion legal, Contribuyente otorga a Compania una licencia **perpetua, irrevocable, mundial, transferible, sublicenciable y libre de regalias** bajo dichos derechos de patente para fabricar, mandar fabricar, usar, vender, ofrecer en venta, importar y explotar de cualquier otra manera las Contribuciones y EE.
 
-## 6. Contributor representations
+## 6. Declaraciones del contribuyente
 
-Contributor represents and warrants that:
+Contribuyente declara y garantiza que:
 
-6.1 **Authority.** Contributor has the legal right and authority to enter into this Agreement and to make the assignments and grants herein.
+6.1 **Autoridad.** Tiene el derecho legal y la autoridad necesarios para celebrar este Acuerdo y realizar las cesiones y concesiones aqui previstas.
 
-6.2 **Originality / rights clearance.** Each Contribution is original to Contributor or Contributor has secured all necessary rights and permissions to submit it and to assign the rights described in this Agreement.
+6.2 **Originalidad / autorizaciones.** Cada Contribucion es original de Contribuyente o Contribuyente ha obtenido todos los derechos y permisos necesarios para enviarla y para ceder los derechos descritos en este Acuerdo.
 
-6.3 **No third-party restrictions.** Contributions are not subject to any employment, contractor, academic, or other agreement that would conflict with this Agreement or restrict assignment to Company. Contributor has not included any code or materials that require disclosure of source code or impose “copyleft” or similar reciprocal obligations on EE (including but not limited to GPL, AGPL, LGPL (in a way that would impose reciprocity on EE), or other licenses that would require EE to be distributed under different terms), unless Company has expressly agreed in writing.
+6.3 **Sin restricciones de terceros.** Las Contribuciones no estan sujetas a ningun acuerdo laboral, contractual, academico o de otra clase que entre en conflicto con este Acuerdo o limite la cesion a Compania. Contribuyente no ha incluido codigo o materiales que obliguen a divulgar codigo fuente o impongan obligaciones de tipo "copyleft" u obligaciones reciprocas similares sobre EE (incluyendo, entre otras, GPL, AGPL, LGPL en una forma que imponga reciprocidad sobre EE, u otras licencias que requieran distribuir EE bajo terminos distintos), salvo que Compania lo haya aceptado expresamente por escrito.
 
-6.4 **No confidential information.** Contributor will not submit any confidential or proprietary information of any third party (including an employer) as part of a Contribution.
+6.4 **Sin informacion confidencial.** Contribuyente no enviara informacion confidencial o propietaria de terceros (incluyendo la de un empleador) como parte de una Contribucion.
 
-## 7. Relationship to MIT-licensed portions of the repo
+## 7. Relacion con las partes MIT del repositorio
 
-This Agreement applies **only** to Contributions to EE as defined in Section 2.1. Contributions made solely to MIT-licensed portions of the repository remain governed by the repository’s applicable open-source licensing and contribution terms, unless a separate written agreement states otherwise.
+Este Acuerdo aplica **solo** a Contribuciones realizadas sobre EE segun la definicion de la Seccion 2.1. Las contribuciones hechas exclusivamente sobre porciones del repositorio licenciadas bajo MIT siguen rigiendose por la licencia open source y por los terminos de contribucion aplicables del repositorio, salvo que exista un acuerdo escrito separado.
 
-## 8. No obligation; consideration
+## 8. Sin obligacion; contraprestacion
 
-8.1 **No obligation to accept.** Company has no obligation to accept, merge, or distribute any Contribution.
+8.1 **Sin obligacion de aceptar.** Compania no tiene obligacion de aceptar, fusionar ni distribuir ninguna Contribucion.
 
-8.2 **Consideration.** Contributor agrees that the opportunity to contribute to EE and Company’s potential acceptance and use of the Contributions are adequate consideration for the assignments and grants in this Agreement.
+8.2 **Contraprestacion.** Contribuyente acepta que la oportunidad de contribuir a EE y la posible aceptacion y uso de las Contribuciones por parte de Compania constituyen una contraprestacion suficiente para las cesiones y concesiones previstas en este Acuerdo.
 
-## 9. Limitation of liability
+## 9. Limitacion de responsabilidad
 
-To the maximum extent permitted by law, **neither Party** will be liable to the other for any indirect, incidental, special, consequential, or punitive damages arising out of this Agreement.
+En la maxima medida permitida por la ley, **ninguna Parte** sera responsable frente a la otra por danos indirectos, incidentales, especiales, consecuenciales o punitivos derivados de este Acuerdo.
 
-## 10. Governing law; venue
+## 10. Ley aplicable y jurisdiccion
 
-This Agreement is governed by the laws of the **State of California**, excluding conflict-of-laws rules. The Parties agree to exclusive jurisdiction and venue in the state or federal courts located in **California**, unless prohibited by applicable law.
+Este Acuerdo se regira por las leyes del **Estado de California**, excluyendo sus reglas sobre conflicto de leyes. Las Partes aceptan jurisdiccion y competencia exclusiva en los tribunales estatales o federales ubicados en **California**, salvo que la ley aplicable lo prohiba.
 
-## 11. Miscellaneous
+## 11. Miscelaneos
 
-11.1 **Entire agreement.** This Agreement is the entire agreement between the Parties regarding EE Contributions and supersedes all prior or contemporaneous understandings on that subject.
+11.1 **Acuerdo completo.** Este Acuerdo constituye el acuerdo completo entre las Partes respecto de las Contribuciones a EE y reemplaza cualquier entendimiento previo o contemporaneo sobre ese asunto.
 
-11.2 **Amendment.** Any amendment must be in writing and signed by both Parties.
+11.2 **Modificaciones.** Cualquier modificacion debe constar por escrito y estar firmada por ambas Partes.
 
-11.3 **Severability.** If any provision is held unenforceable, the remaining provisions remain in full force and effect.
+11.3 **Divisibilidad.** Si alguna disposicion se considera inexigible, las demas disposiciones seguiran vigentes con pleno efecto.
 
-11.4 **Counterparts; electronic signatures.** This Agreement may be executed in counterparts, including via electronic signature, each of which is deemed an original.
+11.4 **Contrapartes y firma electronica.** Este Acuerdo puede firmarse en contrapartes, incluyendo firma electronica, y cada una se considerara original.
 
 ---
 
-## Signatures
+## Firmas
 
-**COMPANY:** DanswerAI, Inc.  
-By: ____________________________________  
-Name: __________________________________  
-Title: ___________________________________  
+**COMPANIA:** [YOUR LEGAL ENTITY]
+By: ____________________________________
+Name: __________________________________
+Title: ___________________________________
 Date: ___________________________________
 
-**CONTRIBUTOR:**  
-Signature: _______________________________  
-Name: ___________________________________  
-Email: ___________________________________  
+**CONTRIBUYENTE:**
+Signature: _______________________________
+Name: ___________________________________
+Email: ___________________________________
 Date: ___________________________________

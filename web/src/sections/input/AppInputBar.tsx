@@ -787,12 +787,12 @@ const AppInputBar = React.memo(
                     aria-multiline={true}
                     placeholder={
                       isRecording
-                        ? "Listening..."
+                        ? "Escuchando..."
                         : isVoicePlaybackActive
-                          ? "Onyx is speaking..."
+                          ? "La aplicación está respondiendo..."
                           : isSearchMode
-                            ? "Search connected sources"
-                            : "How can I help you today?"
+                            ? "Busca en tus fuentes conectadas"
+                            : "¿Cómo puedo ayudarte hoy?"
                     }
                     value={message}
                     onKeyDown={(event) => {

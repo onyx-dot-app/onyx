@@ -26,7 +26,9 @@ const ForgotPasswordPage: React.FC = () => {
     <AuthFlowContainer>
       <div className="flex flex-col w-full justify-center">
         <div className="flex">
-          <Title className="mb-2 mx-auto font-bold">Forgot Password</Title>
+          <Title className="mb-2 mx-auto font-bold">
+            Recuperar contrasena
+          </Title>
         </div>
         {isWorking && <Spinner />}
         <Formik
@@ -41,13 +43,13 @@ const ForgotPasswordPage: React.FC = () => {
             try {
               await forgotPassword(values.email);
               toast.success(
-                "Password reset email sent. Please check your inbox."
+                "Te enviamos el correo para restablecer la contrasena."
               );
             } catch (error) {
               const errorMessage =
                 error instanceof Error
                   ? error.message
-                  : "An error occurred. Please try again.";
+                  : "Ocurrio un error. Intentalo de nuevo.";
               toast.error(errorMessage);
             } finally {
               setIsWorking(false);
@@ -58,15 +60,15 @@ const ForgotPasswordPage: React.FC = () => {
             <Form className="w-full flex flex-col items-stretch mt-2">
               <TextFormField
                 name="email"
-                label="Email"
+                label="Correo"
                 type="email"
-                placeholder="email@yourcompany.com"
+                placeholder="correo@tuempresa.com"
               />
 
               <div className="flex">
                 <Disabled disabled={isSubmitting}>
                   <Button type="submit" width="full">
-                    Reset Password
+                    Restablecer contrasena
                   </Button>
                 </Disabled>
               </div>
@@ -76,7 +78,7 @@ const ForgotPasswordPage: React.FC = () => {
         <div className="flex">
           <Text className="mt-4 mx-auto">
             <Link href="/auth/login" className="text-link font-medium">
-              Back to Login
+              Volver al login
             </Link>
           </Text>
         </div>

@@ -4,6 +4,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -29,6 +30,7 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import SLACK_CHANNEL_ID
 
 logger_base = setup_logger()
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 
 def send_msg_ack_to_user(details: SlackMessageInfo, client: WebClient) -> None:
@@ -38,7 +40,7 @@ def send_msg_ack_to_user(details: SlackMessageInfo, client: WebClient) -> None:
             channel=details.channel_to_respond,
             thread_ts=details.msg_to_respond,
             receiver_ids=[details.sender_id],
-            text="Hi, we're evaluating your query :face_with_monocle:",
+            text="Hola, estamos evaluando tu consulta :face_with_monocle:",
         )
         return
 
@@ -206,7 +208,7 @@ def handle_message(
                 client=client,
                 channel=channel,
                 receiver_ids=[sender_id],
-                text="The OnyxBot slash command is not enabled for this channel",
+                text="Este comando no esta habilitado en este canal.",
                 thread_ts=None,
             )
 
@@ -236,11 +238,11 @@ def handle_message(
                         channel=channel,
                         thread_ts=message_info.msg_to_respond,
                         text=(
-                            "We weren't able to respond because your organization "
-                            "has reached its user seat limit. Since this is your "
-                            "first time interacting with the bot, a new account "
-                            "could not be created for you. Please contact your "
-                            "Onyx administrator to add more seats."
+                            "No pudimos responder porque tu organizacion alcanzo "
+                            "el limite de usuarios disponibles. Como es tu primera "
+                            "interaccion con el bot, no fue posible crear una cuenta "
+                            f"nueva para ti. Contacta a tu administrador de {BOT_BRAND} "
+                            "para agregar mas cupos."
                         ),
                     )
                     return False
@@ -264,11 +266,10 @@ def handle_message(
                         channel=channel,
                         thread_ts=message_info.msg_to_respond,
                         text=(
-                            "We weren't able to respond because your organization "
-                            "has reached its user seat limit. Your account is "
-                            "currently deactivated and cannot be reactivated "
-                            "until more seats are available. Please contact "
-                            "your Onyx administrator."
+                            "No pudimos responder porque tu organizacion alcanzo "
+                            "el limite de usuarios disponibles. Tu cuenta esta "
+                            "desactivada y no puede reactivarse hasta que haya "
+                            f"mas cupos. Contacta a tu administrador de {BOT_BRAND}."
                         ),
                     )
                     return False

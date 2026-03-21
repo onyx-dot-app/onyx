@@ -107,9 +107,10 @@ const PopoverClose = PopoverPrimitive.Close;
  * </Popover.Content>
  * ```
  */
-type PopoverWidths = "fit" | "md" | "lg" | "xl" | "trigger";
+type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "trigger";
 const widthClasses: Record<PopoverWidths, string> = {
   fit: "w-fit",
+  sm: "w-[10rem]",
   md: "w-[12rem]",
   lg: "w-[15rem]",
   xl: "w-[18rem]",
@@ -120,25 +121,29 @@ interface PopoverContentProps
     React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
   > {
   width?: PopoverWidths;
+  /** Portal container. Set to a DOM element to render inside it (e.g. inside a modal). */
+  container?: HTMLElement | null;
   ref?: React.Ref<React.ComponentRef<typeof PopoverPrimitive.Content>>;
 }
 function PopoverContent({
   width = "fit",
+  container,
   align = "center",
   sideOffset = 4,
   ref,
   ...props
 }: PopoverContentProps) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={container}>
       <PopoverPrimitive.Content
         ref={ref}
         align={align}
         sideOffset={sideOffset}
         collisionPadding={8}
         className={cn(
-          "bg-background-neutral-00 p-1 z-popover rounded-12 overflow-hidden border shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          "bg-background-neutral-00 p-1 z-popover rounded-12 border shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           "max-h-[var(--radix-popover-content-available-height)]",
+          "overflow-hidden",
           widthClasses[width]
         )}
         {...props}

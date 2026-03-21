@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 
 from onyx.configs.app_configs import DISCORD_BOT_INVOKE_CHAR
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.onyxbot.discord.api_client import OnyxAPIClient
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.onyxbot.discord.constants import CACHE_REFRESH_INTERVAL
@@ -19,6 +20,7 @@ from onyx.onyxbot.discord.utils import get_bot_token
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 
 class OnyxDiscordClient(commands.Bot):
@@ -197,7 +199,7 @@ def main() -> None:
     from onyx.db.engine.sql_engine import SqlEngine
     from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 
-    logger.info("Starting Onyx Discord Bot...")
+    logger.info(f"Starting {BOT_BRAND} Discord bot...")
 
     # Initialize the database engine (required before any DB operations)
     SqlEngine.init_engine(pool_size=20, max_overflow=5)

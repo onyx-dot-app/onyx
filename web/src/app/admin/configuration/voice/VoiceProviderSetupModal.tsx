@@ -16,7 +16,7 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { FormField } from "@/refresh-components/form/FormField";
 import { Vertical, Horizontal } from "@/layouts/input-layouts";
 import { Section } from "@/layouts/general-layouts";
-import { SvgArrowExchange, SvgOnyxLogo } from "@opal/icons";
+import { SvgActivaLogo, SvgArrowExchange } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import type { IconProps } from "@opal/types";
 import { VoiceProviderView } from "@/hooks/useVoiceProviders";
@@ -260,7 +260,7 @@ export default function VoiceProviderSetupModal({
         <SvgArrowExchange className="size-3 text-text-04" />
       </div>
       <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-        <SvgOnyxLogo size={24} className="text-text-04 shrink-0" />
+        <SvgActivaLogo size={24} className="text-text-04 shrink-0" />
       </div>
     </div>
   );
@@ -447,7 +447,7 @@ export default function VoiceProviderSetupModal({
                     >
                       Azure Portal (Keys and Endpoint)
                     </a>
-                    . Onyx extracts the speech region from this URL. Examples:
+                    . La aplicación extrae la región de voz desde esta URL. Ejemplos:
                     https://westus.api.cognitive.microsoft.com/ or
                     https://westus.tts.speech.microsoft.com/.
                   </>
@@ -484,7 +484,7 @@ export default function VoiceProviderSetupModal({
             {providerType === "openai" && mode === "tts" && (
               <Vertical
                 title="Default Model"
-                subDescription="This model will be used by Onyx by default for text-to-speech."
+                subDescription="Este modelo se usará por defecto para texto a voz."
                 nonInteractive
               >
                 <InputSelect value={ttsModel} onValueChange={setTtsModel}>

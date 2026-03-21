@@ -33,10 +33,10 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
 import {
   handleMoveOperation,
+  persistHideMoveCustomAgentModal,
   shouldShowMoveModal,
   showErrorNotification,
 } from "@/sections/sidebar/sidebarUtils";
-import { LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import { deleteChatSession } from "@/app/app/services/lib";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
@@ -269,11 +269,8 @@ function Header() {
         <MoveCustomAgentChatModal
           onCancel={resetMoveState}
           onConfirm={async (doNotShowAgain: boolean) => {
-            if (doNotShowAgain && typeof window !== "undefined") {
-              window.localStorage.setItem(
-                LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
-                "true"
-              );
+            if (doNotShowAgain) {
+              persistHideMoveCustomAgentModal();
             }
             if (pendingMoveProjectId != null) {
               await performMove(pendingMoveProjectId);
@@ -460,9 +457,9 @@ function Footer() {
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    `[Onyx ${
+    `[ACTIVA ${
       settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - ${APP_SLOGAN}`;
+    }](https://activa.ai/) - ${APP_SLOGAN}`;
 
   return (
     <footer

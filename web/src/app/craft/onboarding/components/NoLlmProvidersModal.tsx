@@ -56,12 +56,12 @@ export default function NoLlmProvidersModal({
                 LLM Provider Required
               </Text>
               <Text mainUiBody text03 className="max-w-sm">
-                Onyx Craft requires an LLM provider to be configured, but only
-                admins can set this up.
+                ACTIVA Craft necesita un proveedor de LLM configurado, pero
+                solo los administradores pueden hacerlo.
                 <br />
                 <br />
-                Please ask your admin to configure an LLM provider, or create a
-                new Onyx account to become an admin yourself!
+                Pídele a tu administrador que configure un proveedor de LLM o
+                crea una nueva cuenta para convertirte en administrador.
               </Text>
             </div>
           </div>

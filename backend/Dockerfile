@@ -1,11 +1,11 @@
 FROM python:3.11.7-slim-bookworm
 
-LABEL com.danswer.maintainer="founders@onyx.app"
-LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
-contains code for both the Community and Enterprise editions of Onyx. If you do not \
-have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
-Edition features outside of personal development or testing purposes. Please reach out to \
-founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+LABEL com.activa.maintainer="contact@activa.ai"
+LABEL com.activa.description="Esta imagen contiene el backend y la API de ACTIVA. \
+Incluye codigo de las ediciones Community y Enterprise. Si no tienes un contrato o acuerdo \
+con la entidad legal de ACTIVA, no estas autorizado a usar las funcionalidades Enterprise \
+fuera de desarrollo personal o pruebas. Para mas informacion escribe a contact@activa.ai. \
+Repositorio: https://github.com/HOP-RAG/HOP"
 
 # Build argument for Craft support (disabled by default)
 # Use --build-arg ENABLE_CRAFT=true to include Node.js and opencode CLI

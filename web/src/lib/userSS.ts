@@ -14,6 +14,16 @@ export interface AuthTypeMetadata {
   oauthEnabled: boolean;
 }
 
+export const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
+  authType: AuthType.BASIC,
+  autoRedirect: false,
+  requiresVerification: false,
+  anonymousUserEnabled: null,
+  passwordMinLength: 8,
+  hasUsers: true,
+  oauthEnabled: false,
+};
+
 export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
   const res = await fetch(buildUrl("/auth/type"));
   if (!res.ok) {

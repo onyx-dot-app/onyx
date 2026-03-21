@@ -158,19 +158,19 @@ Key inputs include:
 ### `s3`
 - Creates an S3 bucket for file storage and scopes access to the provided S3 gateway VPC endpoint
 
-## Installing the Onyx Helm chart (after Terraform)
-Once the cluster is active, deploy application workloads via Helm. You can use the chart in `deployment/helm/charts/onyx`.
+## Installing the Activa Helm chart (after Terraform)
+Once the cluster is active, deploy application workloads via Helm. You can use the chart in `deployment/helm/charts/activa`.
 
 ```bash
 # Set kubeconfig to your new cluster (if you’re not using the TF providers for kubernetes/helm)
 aws eks update-kubeconfig --name $(terraform output -raw cluster_name) --region ${AWS_REGION:-us-west-2}
 
-kubectl create namespace onyx --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace activa --dry-run=client -o yaml | kubectl apply -f -
 
 # If using AWS S3 via IRSA created by the EKS module, consider disabling MinIO
-# Replace the path below with the absolute or correct relative path to the onyx Helm chart
-helm upgrade --install onyx /path/to/onyx/deployment/helm/charts/onyx \
-  --namespace onyx \
+# Replace the path below with the absolute or correct relative path to the Activa Helm chart
+helm upgrade --install activa /path/to/hop/deployment/helm/charts/activa \
+  --namespace activa \
   --set minio.enabled=false \
   --set serviceAccount.create=false \
   --set serviceAccount.name=onyx-s3-access

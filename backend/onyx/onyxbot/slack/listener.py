@@ -29,6 +29,7 @@ from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import POD_NAME
 from onyx.configs.app_configs import POD_NAMESPACE
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
 from onyx.connectors.slack.utils import expert_info_from_slack_id
@@ -102,6 +103,7 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 # Prometheus metric for HPA
 active_tenants_gauge = Gauge(
@@ -962,7 +964,7 @@ def apologize_for_fail(
         client=client.web_client,
         channel=details.channel_to_respond,
         thread_ts=details.msg_to_respond,
-        text="Sorry, we weren't able to find anything relevant :cold_sweat:",
+        text="Lo siento, no pudimos encontrar nada relevante :cold_sweat:",
     )
 
 
@@ -1138,7 +1140,7 @@ def _check_tenant_gated(client: TenantSocketModeClient, req: SocketModeRequest) 
                 channel=channel,
                 thread_ts=thread_ts,
                 text=(
-                    "Your organization's subscription has expired. Please contact your Onyx administrator to restore access."
+                    f"La suscripcion de tu organizacion vencio. Contacta a tu administrador de {BOT_BRAND} para restaurar el acceso."
                 ),
             )
     logger.info(f"Blocked Slack request for gated tenant {get_current_tenant_id()}")

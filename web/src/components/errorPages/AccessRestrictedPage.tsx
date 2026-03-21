@@ -8,7 +8,10 @@ import { Disabled } from "@opal/core";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import {
+  DEFAULT_APPLICATION_NAME,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+} from "@/lib/constants";
 import { useLicense } from "@/hooks/useLicense";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { ApplicationStatus } from "@/interfaces/settings";
@@ -50,6 +53,9 @@ export default function AccessRestricted() {
     ApplicationStatus.SEAT_LIMIT_EXCEEDED;
   const hadPreviousLicense = license?.has_license === true;
   const showRenewalMessage = NEXT_PUBLIC_CLOUD_ENABLED || hadPreviousLicense;
+  const applicationName =
+    settings.enterpriseSettings?.application_name?.trim() ||
+    DEFAULT_APPLICATION_NAME;
 
   function getSeatLimitMessage() {
     const { used_seats, seat_count } = settings.settings;
@@ -64,9 +70,9 @@ export default function AccessRestricted() {
     ? getSeatLimitMessage()
     : showRenewalMessage
       ? NEXT_PUBLIC_CLOUD_ENABLED
-        ? "Your access to Onyx has been temporarily suspended due to a lapse in your subscription."
-        : "Your access to Onyx has been temporarily suspended due to a lapse in your license."
-      : "An Enterprise license is required to use Onyx. Your data is protected and will be available once a license is activated.";
+        ? `Tu acceso a ${applicationName} se suspendió temporalmente por un problema con tu suscripción.`
+        : `Tu acceso a ${applicationName} se suspendió temporalmente por un problema con tu licencia.`
+      : `Se requiere una licencia Enterprise para usar ${applicationName}. Tus datos están protegidos y volverán a estar disponibles cuando se active una licencia.`;
 
   const handleResubscribe = async () => {
     setIsLoading(true);
@@ -126,20 +132,18 @@ export default function AccessRestricted() {
       ) : NEXT_PUBLIC_CLOUD_ENABLED ? (
         <>
           <Text text03>
-            To reinstate your access and continue benefiting from Onyx&apos;s
-            powerful features, please update your payment information.
+            {`Para recuperar el acceso y seguir aprovechando ${applicationName}, actualiza tu información de pago.`}
           </Text>
 
           <Text text03>
-            If you&apos;re an admin, you can manage your subscription by
-            clicking the button below. For other users, please reach out to your
-            administrator to address this matter.
+            Si eres administrador, puedes gestionar la suscripción con el botón
+            de abajo. Si no, contacta a tu administrador para resolverlo.
           </Text>
 
           <div className="flex flex-row gap-2">
             <Disabled disabled={isLoading}>
               <Button onClick={handleResubscribe}>
-                {isLoading ? "Loading..." : "Resubscribe"}
+                {isLoading ? "Cargando..." : "Reactivar suscripción"}
               </Button>
             </Disabled>
             <Button
@@ -149,7 +153,7 @@ export default function AccessRestricted() {
                 window.location.reload();
               }}
             >
-              Log out
+              Cerrar sesión
             </Button>
           </div>
 
@@ -159,21 +163,21 @@ export default function AccessRestricted() {
         <>
           <Text text03>
             {hadPreviousLicense
-              ? "To reinstate your access and continue using Onyx, please contact your system administrator to renew your license."
-              : "To get started, please contact your system administrator to obtain an Enterprise license."}
+              ? `Para recuperar tu acceso y seguir usando ${applicationName}, contacta a tu administrador para renovar la licencia.`
+              : "Para comenzar, contacta a tu administrador del sistema para obtener una licencia Enterprise."}
           </Text>
 
           <Text text03>
-            If you are the administrator, please visit the{" "}
+            Si eres administrador, visita la página de{" "}
             <Link className={linkClassName} href="/admin/billing">
               Admin Billing
             </Link>{" "}
-            page to {hadPreviousLicense ? "renew" : "activate"} your license,
-            sign up through Stripe or reach out to{" "}
-            <a className={linkClassName} href="mailto:support@onyx.app">
-              support@onyx.app
+            para {hadPreviousLicense ? "renovar" : "activar"} la licencia,
+            completar el alta con Stripe o escribir a{" "}
+            <a className={linkClassName} href="mailto:contact@activa.ai">
+              contact@activa.ai
             </a>{" "}
-            for billing assistance.
+            si necesitas ayuda con facturación.
           </Text>
 
           <div className="flex flex-row gap-2">
@@ -183,21 +187,21 @@ export default function AccessRestricted() {
                 window.location.reload();
               }}
             >
-              Log out
+              Cerrar sesión
             </Button>
           </div>
         </>
       )}
 
       <Text text03>
-        Need help? Join our{" "}
+        ¿Necesitas ayuda? Únete a nuestra{" "}
         <InlineExternalLink
           className={linkClassName}
           href="https://discord.gg/4NA5SbzrWb"
         >
-          Discord community
+          comunidad de Discord
         </InlineExternalLink>{" "}
-        for support.
+        para recibir soporte.
       </Text>
     </ErrorPageLayout>
   );

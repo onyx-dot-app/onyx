@@ -1,16 +1,17 @@
-# Overview of Onyx Background Jobs
+# Resumen de jobs en background de ACTIVA
 
-The background jobs take care of:
-1. Pulling/Indexing documents (from connectors)
-2. Updating document metadata (from connectors)
-3. Cleaning up checkpoints and logic around indexing work (indexing indexing checkpoints and index attempt metadata)
-4. Handling user uploaded files and deletions (from the Projects feature and uploads via the Chat)
-5. Reporting metrics on things like queue length for monitoring purposes
+Los jobs en background que impulsan ACTIVA se encargan de:
 
-## Worker → Queue Mapping
+1. Hacer pull e indexar documentos desde conectores
+2. Actualizar metadata de documentos
+3. Limpiar checkpoints y estado de trabajos de indexacion
+4. Procesar archivos subidos por usuarios y sus eliminaciones
+5. Reportar metricas como longitud de colas para monitoreo
 
-| Worker | File | Queues |
-|--------|------|--------|
+## Mapeo worker -> cola
+
+| Worker | Archivo | Colas |
+|--------|---------|-------|
 | Primary | `apps/primary.py` | `celery` |
 | Light | `apps/light.py` | `vespa_metadata_sync`, `connector_deletion`, `doc_permissions_upsert`, `checkpoint_cleanup`, `index_attempt_cleanup` |
 | Heavy | `apps/heavy.py` | `connector_pruning`, `connector_doc_permissions_sync`, `connector_external_group_sync`, `csv_generation`, `sandbox` |
@@ -18,81 +19,86 @@ The background jobs take care of:
 | Docfetching | `apps/docfetching.py` | `connector_doc_fetching` |
 | User File Processing | `apps/user_file_processing.py` | `user_file_processing`, `user_file_project_sync`, `user_file_delete` |
 | Monitoring | `apps/monitoring.py` | `monitoring` |
-| Background (consolidated) | `apps/background.py` | All queues above except `celery` |
+| Background (consolidado) | `apps/background.py` | Todas las colas anteriores excepto `celery` |
 
-## Non-Worker Apps
-| App | File | Purpose |
-|-----|------|---------|
-| **Beat** | `beat.py` | Celery beat scheduler with `DynamicTenantScheduler` that generates per-tenant periodic task schedules |
-| **Client** | `client.py` | Minimal app for task submission from non-worker processes (e.g., API server) |
+## Apps que no son workers
 
-### Shared Module
-`app_base.py` provides:
-- `TenantAwareTask` - Base task class that sets tenant context
-- Signal handlers for logging, cleanup, and lifecycle events
-- Readiness probes and health checks
+| App | Archivo | Proposito |
+|-----|---------|-----------|
+| **Beat** | `beat.py` | Scheduler de Celery con `DynamicTenantScheduler` para generar tareas periodicas por tenant |
+| **Client** | `client.py` | App minima para enviar tareas desde procesos que no son workers, por ejemplo el API server |
 
+### Modulo compartido
 
-## Worker Details
+`app_base.py` provee:
 
-### Primary (Coordinator and task dispatcher)
-It is the single worker which handles tasks from the default celery queue. It is a singleton worker ensured by the `PRIMARY_WORKER` Redis lock
-which it touches every `CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 8` seconds (using Celery Bootsteps)
+- `TenantAwareTask` - Clase base que configura el contexto de tenant
+- Signal handlers para logging, limpieza y ciclo de vida
+- Readiness probes y health checks
 
-On startup:
-- waits for redis, postgres, document index to all be healthy
-- acquires the singleton lock
-- cleans all the redis states associated with background jobs
-- mark orphaned index attempts failed
+## Detalle de workers
 
-Then it cycles through its tasks as scheduled by Celery Beat:
+### Primary
 
-| Task | Frequency | Description |
-|------|-----------|-------------|
-| `check_for_indexing` | 15s | Scans for connectors needing indexing → dispatches to `DOCFETCHING` queue |
-| `check_for_vespa_sync_task` | 20s | Finds stale documents/document sets → dispatches sync tasks to `VESPA_METADATA_SYNC` queue |
-| `check_for_pruning` | 20s | Finds connectors due for pruning → dispatches to `CONNECTOR_PRUNING` queue |
-| `check_for_connector_deletion` | 20s | Processes deletion requests → dispatches to `CONNECTOR_DELETION` queue |
-| `check_for_user_file_processing` | 20s | Checks for user uploads → dispatches to `USER_FILE_PROCESSING` queue |
-| `check_for_checkpoint_cleanup` | 1h | Cleans up old indexing checkpoints |
-| `check_for_index_attempt_cleanup` | 30m | Cleans up old index attempts |
-| `kombu_message_cleanup_task` | periodic | Cleans orphaned Kombu messages from DB (Kombu being the messaging framework used by Celery) |
-| `celery_beat_heartbeat` | 1m | Heartbeat for Beat watchdog |
+Es el worker unico que maneja la cola `celery`. Se mantiene como singleton usando el lock de Redis `PRIMARY_WORKER`.
 
-Watchdog is a separate Python process managed by supervisord which runs alongside celery workers. It checks the ONYX_CELERY_BEAT_HEARTBEAT_KEY in
-Redis to ensure Celery Beat is not dead. Beat schedules the celery_beat_heartbeat for Primary to touch the key and share that it's still alive.
-See supervisord.conf for watchdog config.
+En startup:
 
+- espera a que Redis, Postgres y el indice documental esten sanos
+- adquiere el lock singleton
+- limpia estados de Redis asociados a jobs de background
+- marca como fallidos los index attempts huerfanos
+
+Luego ejecuta tareas programadas por Celery Beat:
+
+| Tarea | Frecuencia | Descripcion |
+|------|------------|-------------|
+| `check_for_indexing` | 15s | Busca conectores que necesiten indexacion y despacha a `DOCFETCHING` |
+| `check_for_vespa_sync_task` | 20s | Encuentra documentos o document sets desactualizados y despacha a `VESPA_METADATA_SYNC` |
+| `check_for_pruning` | 20s | Busca conectores que necesiten pruning y despacha a `CONNECTOR_PRUNING` |
+| `check_for_connector_deletion` | 20s | Procesa solicitudes de borrado y despacha a `CONNECTOR_DELETION` |
+| `check_for_user_file_processing` | 20s | Revisa uploads de usuario y despacha a `USER_FILE_PROCESSING` |
+| `check_for_checkpoint_cleanup` | 1h | Limpia checkpoints viejos |
+| `check_for_index_attempt_cleanup` | 30m | Limpia index attempts viejos |
+| `kombu_message_cleanup_task` | periodica | Limpia mensajes huerfanos de Kombu en DB |
+| `celery_beat_heartbeat` | 1m | Heartbeat del watchdog de Beat |
+
+El watchdog corre como un proceso Python separado administrado por `supervisord`.
 
 ### Light
-Fast and short living tasks that are not resource intensive. High concurrency:
-Can have 24 concurrent workers, each with a prefetch of 8 for a total of 192 tasks in flight at once.
 
-Tasks it handles:
-- Syncs access/permissions, document sets, boosts, hidden state
-- Deletes documents that are marked for deletion in Postgres
-- Cleanup of checkpoints and index attempts
+Maneja tareas rapidas y poco intensivas. Tiene alta concurrencia.
 
+Ejemplos:
+
+- sincronizacion de permisos y accesos
+- sync de document sets, boosts y hidden state
+- borrado de documentos marcados para eliminar
+- limpieza de checkpoints e index attempts
 
 ### Heavy
-Long running, resource intensive tasks, handles pruning and sandbox operations. Low concurrency - max concurrency of 4 with 1 prefetch.
 
-Does not interact with the Document Index, it handles the syncs with external systems. Large volume API calls to handle pruning and fetching permissions, etc.
+Maneja tareas largas o pesadas, especialmente pruning y operaciones sandbox. Tiene baja concurrencia.
 
-Generates CSV exports which may take a long time with significant data in Postgres.
+No interactua directamente con el Document Index; se enfoca en sincronizaciones con sistemas externos y llamadas API de alto volumen.
 
-Sandbox (new feature) for running Next.js, Python virtual env, OpenCode AI Agent, and access to knowledge files
+Tambien genera exports CSV y ejecuta el sandbox para Next.js, Python virtual env, OpenCode AI Agent y archivos de conocimiento.
 
+### Docprocessing, Docfetching y User File Processing
 
-### Docprocessing, Docfetching, User File Processing
-Docprocessing and Docfetching are for indexing documents:
-- Docfetching runs connectors to pull documents from external APIs (Google Drive, Confluence, etc.), stores batches to file storage, and dispatches docprocessing tasks
-- Docprocessing retrieves batches, runs the indexing pipeline (chunking, embedding), and indexes into the Document Index 
-User Files come from uploads directly via the input bar
+`Docfetching` y `Docprocessing` se encargan de la indexacion documental:
 
+- `Docfetching` ejecuta conectores, trae documentos desde APIs externas, guarda batches en file storage y despacha tareas de procesamiento
+- `Docprocessing` recupera esos batches, ejecuta chunking y embeddings, y luego indexa en el Document Index
+
+`User File Processing` se ocupa de archivos subidos directamente por usuarios.
 
 ### Monitoring
-Observability and metrics collections:
-- Queue lengths, connector success/failure, lconnector latencies
-- Memory of supervisor managed processes (workers, beat, slack)
-- Cloud and multitenant specific monitorings
+
+Recolecta observabilidad y metricas:
+
+- longitudes de colas
+- exito y fallo de conectores
+- latencias
+- memoria de procesos administrados por supervisor
+- metricas especificas de cloud y multitenancy

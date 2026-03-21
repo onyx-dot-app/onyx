@@ -25,11 +25,10 @@ SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_rem
 # Final stage - combine all downloads
 FROM base AS final
 
-LABEL com.danswer.maintainer="founders@onyx.app"
-LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \
-AI models for Onyx. This container and all the code is MIT Licensed and free for all to use. \
-You can find it at https://hub.docker.com/r/onyx/onyx-model-server. For more details, \
-visit https://github.com/onyx-dot-app/onyx."
+LABEL com.activa.maintainer="contact@activa.ai"
+LABEL com.activa.description="Esta imagen contiene el servidor de modelos de ACTIVA, \
+encargado de ejecutar los modelos de IA de la plataforma. Este contenedor y su codigo \
+se distribuyen bajo licencia MIT. Para mas detalles revisa https://github.com/HOP-RAG/HOP."
 
 # Create non-root user for security best practices
 RUN groupadd -g 1001 onyx && \

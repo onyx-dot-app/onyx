@@ -1,167 +1,165 @@
-## Get Started 🚀
+## Primeros pasos
 
-Onyx being a fully functional app, relies on some external software, specifically:
+ACTIVA dentro del repositorio HOP es una aplicacion full-stack y depende de software externo, en particular:
 
-- [Postgres](https://www.postgresql.org/) (Relational DB)
-- [Vespa](https://vespa.ai/) (Vector DB/Search Engine)
-- [Redis](https://redis.io/) (Cache)
-- [MinIO](https://min.io/) (File Store)
-- [Nginx](https://nginx.org/) (Not needed for development flows generally)
+- [Postgres](https://www.postgresql.org/) (base de datos relacional)
+- [Vespa](https://vespa.ai/) (base vectorial / motor de busqueda)
+- [Redis](https://redis.io/) (cache)
+- [MinIO](https://min.io/) (almacenamiento de archivos)
+- [Nginx](https://nginx.org/) (normalmente no hace falta para flujos de desarrollo)
 
-> **Note:**
-> This guide provides instructions to build and run Onyx locally from source with Docker containers providing the above external software. We believe this combination is easier for
-> development purposes. If you prefer to use pre-built container images, we provide instructions on running the full Onyx stack within Docker below.
+> **Nota:**
+> Esta guia explica como compilar y ejecutar ACTIVA localmente desde el codigo fuente usando contenedores Docker para los servicios externos anteriores. Consideramos que esta combinacion es la mas comoda para desarrollo. Si prefieres usar imagenes preconstruidas, mas abajo tambien se incluyen instrucciones para levantar todo el stack de ACTIVA dentro de Docker.
 
-### Local Set Up
+### Configuracion local
 
-Be sure to use Python version 3.11. For instructions on installing Python 3.11 on macOS, refer to the [contributing_macos.md](./contributing_macos.md) readme.
+Asegurate de usar Python 3.11. Si necesitas ayuda para instalarlo en macOS, revisa [contributing_macos.md](./contributing_macos.md).
 
-If using a lower version, modifications will have to be made to the code.
-If using a higher version, sometimes some libraries will not be available (i.e. we had problems with Tensorflow in the past with higher versions of python).
+Si usas una version menor, tendras que ajustar partes del codigo.
+Si usas una version mayor, algunas librerias pueden no estar disponibles o fallar (por ejemplo, antes tuvimos problemas con Tensorflow en versiones mas nuevas de Python).
 
-#### Backend: Python requirements
+#### Backend: requisitos de Python
 
-Currently, we use [uv](https://docs.astral.sh/uv/) and recommend creating a [virtual environment](https://docs.astral.sh/uv/pip/environments/#using-a-virtual-environment).
+Actualmente usamos [uv](https://docs.astral.sh/uv/) y recomendamos crear un [entorno virtual](https://docs.astral.sh/uv/pip/environments/#using-a-virtual-environment).
 
-For convenience here's a command for it:
+Por comodidad, aqui tienes un comando para hacerlo:
 
 ```bash
 uv venv .venv --python 3.11
 source .venv/bin/activate
 ```
 
-_For Windows, activate the virtual environment using Command Prompt:_
+_En Windows, activa el entorno virtual con Command Prompt:_
 
 ```bash
 .venv\Scripts\activate
 ```
 
-If using PowerShell, the command slightly differs:
+Si usas PowerShell, el comando cambia ligeramente:
 
 ```powershell
 .venv\Scripts\Activate.ps1
 ```
 
-Install the required python dependencies:
+Instala las dependencias de Python:
 
 ```bash
 uv sync --all-extras
 ```
 
-Install Playwright for Python (headless browser required by the Web Connector):
+Instala Playwright para Python (navegador headless requerido por el Web Connector):
 
 ```bash
 uv run playwright install
 ```
 
-#### Frontend: Node dependencies
+#### Frontend: dependencias de Node
 
-Onyx uses Node v22.20.0. We highly recommend you use [Node Version Manager (nvm)](https://github.com/nvm-sh/nvm)
-to manage your Node installations. Once installed, you can run
+El frontend de HOP usa Node `v22.20.0`. Recomendamos usar [Node Version Manager (nvm)](https://github.com/nvm-sh/nvm) para administrar versiones de Node. Una vez instalado, puedes ejecutar:
 
 ```bash
 nvm install 22 && nvm use 22
-node -v # verify your active version
+node -v # verifica la version activa
 ```
 
-Navigate to `onyx/web` and run:
+Entra a `web/` y ejecuta:
 
 ```bash
 npm i
 ```
 
-## Formatting and Linting
+## Formato y lint
 
 ### Backend
 
-For the backend, you'll need to setup pre-commit hooks (black / reorder-python-imports).
+Para el backend debes configurar los hooks de pre-commit (black / reorder-python-imports).
 
-Then run:
+Luego ejecuta:
 
 ```bash
 uv run pre-commit install
 ```
 
-Additionally, we use `mypy` for static type checking.
-Onyx is fully type-annotated, and we want to keep it that way!
-To run the mypy checks manually, run `uv run mypy .` from the `onyx/backend` directory.
+Tambien usamos `mypy` para chequeo estatico de tipos.
+El codebase esta completamente tipado y queremos mantenerlo asi.
+Para correr `mypy` manualmente, ejecuta `uv run mypy .` desde el directorio `backend/`.
 
 ### Web
 
-We use `prettier` for formatting. The desired version will be installed via a `npm i` from the `onyx/web` directory.
-To run the formatter, use `npx prettier --write .` from the `onyx/web` directory.
+Usamos `prettier` para formateo. La version correcta se instala con `npm i` dentro de `web/`.
+Para correr el formatter, usa `npx prettier --write .` desde `web/`.
 
-Pre-commit will also run prettier automatically on files you've recently touched. If re-formatted, your commit will fail.
-Re-stage your changes and commit again.
+Pre-commit tambien ejecuta prettier automaticamente sobre los archivos que tocaste. Si reformatea algo, tu commit va a fallar.
+Solo vuelve a stagear los cambios y haz commit otra vez.
 
-# Running the application for development
+# Ejecutar la aplicacion para desarrollo
 
-## Developing using VSCode Debugger (recommended)
+## Desarrollo con el depurador de VS Code (recomendado)
 
-**We highly recommend using VSCode debugger for development.**
-See [contributing_vscode.md](./contributing_vscode.md) for more details.
+**Recomendamos fuertemente usar el depurador de VS Code para desarrollar.**
+Consulta [contributing_vscode.md](./contributing_vscode.md) para mas detalles.
 
-Otherwise, you can follow the instructions below to run the application for development.
+Si prefieres, tambien puedes seguir las instrucciones manuales de abajo.
 
-## Manually running the application for development
-### Docker containers for external software
+## Ejecucion manual para desarrollo
+### Contenedores Docker para software externo
 
-You will need Docker installed to run these containers.
+Necesitas tener Docker instalado para levantar estos contenedores.
 
-First navigate to `onyx/deployment/docker_compose`, then start up Postgres/Vespa/Redis/MinIO with:
+Primero ve a `deployment/docker_compose` y despues inicia Postgres/Vespa/Redis/MinIO con:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d index relational_db cache minio
 ```
 
-(index refers to Vespa, relational_db refers to Postgres, and cache refers to Redis)
+(`index` corresponde a Vespa, `relational_db` a Postgres y `cache` a Redis)
 
-### Running Onyx locally
+### Ejecutar ACTIVA localmente
 
-To start the frontend, navigate to `onyx/web` and run:
+Para iniciar el frontend, entra a `web/` y ejecuta:
 
 ```bash
 npm run dev
 ```
 
-Next, start the model server which runs the local NLP models.
-Navigate to `onyx/backend` and run:
+Luego inicia el model server, que corre los modelos NLP locales.
+Entra a `backend/` y ejecuta:
 
 ```bash
 uvicorn model_server.main:app --reload --port 9000
 ```
 
-_For Windows (for compatibility with both PowerShell and Command Prompt):_
+_En Windows (compatible con PowerShell y Command Prompt):_
 
 ```bash
 powershell -Command "uvicorn model_server.main:app --reload --port 9000"
 ```
 
-The first time running Onyx, you will need to run the DB migrations for Postgres.
-After the first time, this is no longer required unless the DB models change.
+La primera vez que ejecutes ACTIVA, tendras que correr las migraciones de Postgres.
+Despues de eso ya no hace falta, salvo que cambien los modelos de base de datos.
 
-Navigate to `onyx/backend` and with the venv active, run:
+Entra a `backend/` y con el venv activo ejecuta:
 
 ```bash
 alembic upgrade head
 ```
 
-Next, start the task queue which orchestrates the background jobs.
-Jobs that take more time are run async from the API server.
+Despues inicia la cola de tareas que orquesta los jobs en background.
+Los jobs mas pesados se ejecutan de forma asincrona fuera del API server.
 
-Still in `onyx/backend`, run:
+Todavia en `backend/`, ejecuta:
 
 ```bash
 python ./scripts/dev_run_background_jobs.py
 ```
 
-To run the backend API server, navigate back to `onyx/backend` and run:
+Para correr el backend API server, vuelve a `backend/` y ejecuta:
 
 ```bash
 AUTH_TYPE=basic uvicorn onyx.main:app --reload --port 8080
 ```
 
-_For Windows (for compatibility with both PowerShell and Command Prompt):_
+_En Windows (compatible con PowerShell y Command Prompt):_
 
 ```bash
 powershell -Command "
@@ -170,35 +168,35 @@ powershell -Command "
 "
 ```
 
-> **Note:**
-> If you need finer logging, add the additional environment variable `LOG_LEVEL=DEBUG` to the relevant services.
+> **Nota:**
+> Si necesitas mas detalle en logs, agrega la variable de entorno `LOG_LEVEL=DEBUG` al servicio correspondiente.
 
-#### Wrapping up
+#### Cierre
 
-You should now have 4 servers running:
+En este punto deberias tener 4 procesos corriendo:
 
 - Web server
 - Backend API
 - Model server
 - Background jobs
 
-Now, visit `http://localhost:3000` in your browser. You should see the Onyx onboarding wizard where you can connect your external LLM provider to Onyx.
+Ahora visita `http://localhost:3000` en tu navegador. Deberias ver el asistente inicial de ACTIVA para conectar tu proveedor externo de LLM a la plataforma.
 
-You've successfully set up a local Onyx instance! 🏁
+Ya tienes una instancia local de ACTIVA funcionando.
 
-#### Running the Onyx application in a container
+#### Ejecutar ACTIVA dentro de contenedores
 
-You can run the full Onyx application stack from pre-built images including all external software dependencies.
+Tambien puedes correr todo el stack de ACTIVA usando imagenes preconstruidas, incluyendo dependencias externas.
 
-Navigate to `onyx/deployment/docker_compose` and run:
+Ve a `deployment/docker_compose` y ejecuta:
 
 ```bash
 docker compose up -d
 ```
 
-After Docker pulls and starts these containers, navigate to `http://localhost:3000` to use Onyx.
+Cuando Docker termine de descargar e iniciar los contenedores, abre `http://localhost:3000` para usar ACTIVA.
 
-If you want to make changes to Onyx and run those changes in Docker, you can also build a local version of the Onyx container images that incorporates your changes like so:
+Si quieres hacer cambios en ACTIVA y ejecutarlos dentro de Docker, tambien puedes construir una version local de las imagenes con tus modificaciones:
 
 ```bash
 docker compose up -d --build

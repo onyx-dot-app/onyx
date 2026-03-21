@@ -6,7 +6,7 @@ import pytest
 
 @pytest.fixture
 def jira_connector_config() -> dict[str, Any]:
-    jira_base_url = os.environ.get("JIRA_BASE_URL", "https://danswerai.atlassian.net")
+    jira_base_url = os.environ.get("JIRA_BASE_URL", "https://example.atlassian.net")
 
     return {
         "jira_base_url": jira_base_url,

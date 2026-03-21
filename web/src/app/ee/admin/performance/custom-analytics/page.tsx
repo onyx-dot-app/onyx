@@ -14,7 +14,7 @@ function Main() {
         <div className="mt-4">
           <Callout type="danger" title="Custom Analytics is not enabled.">
             To set up custom analytics scripts, please work with the team who
-            setup Onyx in your team to set the{" "}
+            configuró la aplicación en tu equipo para definir la{" "}
             <i>CUSTOM_ANALYTICS_SECRET_KEY</i> environment variable.
           </Callout>
         </div>
@@ -25,8 +25,9 @@ function Main() {
   return (
     <div>
       <Text className="mb-8">
-        This allows you to bring your own analytics tool to Onyx! Copy the Web
-        snippet from your analytics provider into the box below, and we&apos;ll
+        Esto te permite usar tu propia herramienta de analítica con la
+        aplicación. Copia el snippet web de tu proveedor en el cuadro de abajo
+        y lo
         start sending usage events.
       </Text>
 

@@ -1,5 +1,6 @@
 import Text from "@/refresh-components/texts/Text";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 
 export default function CloudError() {
   return (
@@ -9,8 +10,8 @@ export default function CloudError() {
       </Text>
 
       <Text as="p" text03>
-        Onyx is currently in a maintenance window. Please check back in a couple
-        of minutes.
+        {DEFAULT_APPLICATION_NAME} está en una ventana de mantenimiento.
+        Inténtalo de nuevo en un par de minutos.
       </Text>
 
       <Text as="p" text03>

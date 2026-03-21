@@ -4,9 +4,10 @@ import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import Image from "next/image";
 import {
+  DEFAULT_APPLICATION_NAME,
   LOGO_FOLDED_SIZE_PX,
   LOGO_UNFOLDED_SIZE_PX,
-  NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED,
+  NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_ACTIVA_POWERED,
 } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -66,14 +67,14 @@ export default function Logo({ folded, size, className }: LogoProps) {
             {opts.includeName && (
               <Truncated headingH3>{applicationName}</Truncated>
             )}
-            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
+            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_ACTIVA_POWERED && (
               <Text
                 secondaryBody
                 text03
                 className={"line-clamp-1 truncate"}
                 nowrap
               >
-                Powered by Onyx
+                {`Powered by ${DEFAULT_APPLICATION_NAME}`}
               </Text>
             )}
           </div>

@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to rollback to (e.g., 0.1.0, or 'latest-stable')"
+        description: "Version to roll back to (for example 0.1.0 or latest-stable)"
         required: true
         default: "latest-stable"
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   rollback:
@@ -22,16 +23,15 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Resolve version to rollback to
+      - name: Resolve rollback version
         id: resolve
         run: |
           VERSION_INPUT="${{ github.event.inputs.version }}"
 
           if [ "$VERSION_INPUT" = "latest-stable" ]; then
-            # Get the most recent deployed tag
             RESOLVED_VERSION=$(git tag -l 'deployed-*' --sort=-version:refname | head -1 | sed 's/deployed-//')
             if [ -z "$RESOLVED_VERSION" ]; then
-              echo "No deployed versions found. Available tags:"
+              echo "[ERROR] No deployed tags were found"
               git tag -l 'deployed-*'
               exit 1
             fi
@@ -39,152 +39,214 @@ jobs:
             RESOLVED_VERSION="$VERSION_INPUT"
           fi
 
-          echo "resolved-version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
-          echo "✓ Resolved version: $RESOLVED_VERSION"
+          echo "resolved-version=$RESOLVED_VERSION" >> "$GITHUB_OUTPUT"
+          echo "[OK] Resolved rollback version: $RESOLVED_VERSION"
 
-          # Verify the tag exists
-          if git rev-parse "deployed-$RESOLVED_VERSION" >/dev/null 2>&1; then
-            echo "✓ Found git tag: deployed-$RESOLVED_VERSION"
-          else
-            echo "⚠ Git tag 'deployed-$RESOLVED_VERSION' not found"
-            echo "  Proceeding anyway (will use main branch with version tag)"
-          fi
-
-      - name: Rollback Deployment
+      - name: Run rollback
         env:
           DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
           DEPLOY_USER: root
           ROLLBACK_VERSION: ${{ steps.resolve.outputs.resolved-version }}
+          PREFERRED_DEPLOY_DIR: /opt/hop
+          LEGACY_DEPLOY_DIR: /opt/onyx
+          PROXY_CONTAINER: hop-proxy
+          LEGACY_PROXY_CONTAINER: onyx-proxy
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
 
           if [ -z "$DEPLOY_KEY" ] || [ -z "$DEPLOY_HOST" ]; then
-            echo "❌ Missing required secrets: DROPLET_SSH_KEY, DROPLET_IP"
+            echo "[ERROR] Missing required secrets: DROPLET_SSH_KEY and DROPLET_IP"
             exit 1
           fi
 
-          # Setup SSH key
           mkdir -p ~/.ssh
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
 
-          DEPLOY_DIR="/opt/onyx"
+          echo "[INFO] Starting rollback to version $ROLLBACK_VERSION..."
 
-          echo "🔄 Rolling back to version $ROLLBACK_VERSION..."
-          echo "📍 Droplet: $DEPLOY_HOST"
-
-          # Perform rollback
-          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
-            set -e
-            cd /opt/onyx || exit 1
-
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- \
+            "$ROLLBACK_VERSION" \
+            "$PREFERRED_DEPLOY_DIR" \
+            "$LEGACY_DEPLOY_DIR" \
+            "$PROXY_CONTAINER" \
+            "$LEGACY_PROXY_CONTAINER" \
+            "$GHCR_TOKEN" <<'EOSSH'
             ROLLBACK_VERSION="$1"
+            PREFERRED_DEPLOY_DIR="$2"
+            LEGACY_DEPLOY_DIR="$3"
+            PROXY_CONTAINER="$4"
+            LEGACY_PROXY_CONTAINER="$5"
+            GHCR_TOKEN="$6"
+            set -e
 
-            echo "📸 Creating backup of current deployment..."
-            BACKUP_DIR="/opt/onyx-backup-$(date +%s)"
-            sudo cp -r . "$BACKUP_DIR"
-            echo "✓ Backup created at: $BACKUP_DIR"
-
-            # Pre-flight validation
-            echo "✓ Validating rollback prerequisites..."
-            if [ ! -f docker-compose.yml ]; then
-              echo "❌ CRITICAL: docker-compose.yml not found in $(pwd)"
+            if [ -d "$PREFERRED_DEPLOY_DIR" ]; then
+              DEPLOY_DIR="$PREFERRED_DEPLOY_DIR"
+            elif [ -d "$LEGACY_DEPLOY_DIR" ]; then
+              DEPLOY_DIR="$LEGACY_DEPLOY_DIR"
+            else
+              echo "[ERROR] No valid deployment directory exists"
               exit 1
             fi
-            echo "  ✓ docker-compose.yml found"
 
-            echo "📥 Pulling latest code from main..."
+            cd "$DEPLOY_DIR" || exit 1
+
+            BACKUP_DIR="/opt/hop-backup-$(date +%s)"
+            echo "[INFO] Creating backup at $BACKUP_DIR..."
+            sudo cp -r . "$BACKUP_DIR"
+
+            echo "[INFO] Syncing git references..."
+            git fetch origin --tags
             git fetch origin main
-            git reset --hard origin/main
 
-            echo "🛑 Stopping services..."
-            sudo docker compose down --remove-orphans
-
-            # Clean up any corrupted nginx state
-            echo "🧹 Cleaning up previous nginx state..."
-            sudo rm -rf nginx-simple.conf 2>/dev/null || true
-            if [ -d nginx-simple.conf ]; then
-              echo "  ✗ nginx-simple.conf is a directory (corrupted state), removing..."
-              sudo rm -rf nginx-simple.conf
+            if git rev-parse "deployed-$ROLLBACK_VERSION" >/dev/null 2>&1; then
+              TARGET_REF="deployed-$ROLLBACK_VERSION"
+            elif git rev-parse "v$ROLLBACK_VERSION" >/dev/null 2>&1; then
+              TARGET_REF="v$ROLLBACK_VERSION"
+            else
+              TARGET_REF="origin/main"
             fi
 
-            echo "🔄 Pulling Docker images..."
+            echo "[INFO] Applying rollback from $TARGET_REF..."
+            git checkout -- .
+            git checkout "$TARGET_REF"
+
+            echo "[INFO] Refreshing docker-compose.yml..."
+            if [ -f deployment/docker_compose/docker-compose.prod.yml ]; then
+              cp deployment/docker_compose/docker-compose.prod.yml docker-compose.yml
+            elif [ -f deployment/docker_compose/docker-compose.yml ]; then
+              cp deployment/docker_compose/docker-compose.yml docker-compose.yml
+            else
+              echo "[ERROR] No base compose file found for rollback"
+              exit 1
+            fi
+
+            if [ ! -f docker-compose.yml ]; then
+              echo "[ERROR] Missing docker-compose.yml after refresh"
+              exit 1
+            fi
+
+            sudo docker compose down --remove-orphans
+            sudo docker stop "$PROXY_CONTAINER" 2>/dev/null || true
+            sudo docker rm "$PROXY_CONTAINER" 2>/dev/null || true
+            sudo docker stop "$LEGACY_PROXY_CONTAINER" 2>/dev/null || true
+            sudo docker rm "$LEGACY_PROXY_CONTAINER" 2>/dev/null || true
+
+            echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u github-actions --password-stdin
             sudo docker compose pull
+            sudo docker compose up -d --scale nginx=0 2>/dev/null || sudo docker compose up -d
 
-            echo "🚀 Starting services..."
-            sudo docker compose up -d
-
-            echo "⏳ Waiting for services to initialize..."
             sleep 15
 
-            echo "📊 Running database migrations..."
             sudo docker compose exec -T api_server alembic upgrade head || true
 
-            echo "✅ Rollback to version $ROLLBACK_VERSION complete!"
-          EOSSH "$ROLLBACK_VERSION"
+            if [ -d nginx-simple.conf ]; then
+              sudo rm -rf nginx-simple.conf
+            fi
+            if [ ! -f nginx-simple.conf ]; then
+              echo "[ERROR] Missing nginx-simple.conf after rollback"
+              exit 1
+            fi
 
-          echo "✓ Rollback deployment complete"
+            sudo docker run -d \
+              --name "$PROXY_CONTAINER" \
+              --network hop_default \
+              -p 80:80 \
+              -p 443:443 \
+              -v "$(pwd)"/nginx-simple.conf:/etc/nginx/nginx.conf:ro \
+              -v /etc/letsencrypt:/etc/letsencrypt:ro \
+              -v /var/www/certbot:/var/www/certbot \
+              nginx:alpine >/dev/null
 
-      - name: Verify Rollback
+            echo "[OK] Rollback completed to $ROLLBACK_VERSION"
+          EOSSH
+
+          echo "[OK] Rollback completed"
+
+      - name: Verify rollback
         env:
           DEPLOY_KEY: ${{ secrets.DROPLET_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DROPLET_IP }}
           DEPLOY_USER: root
+          PREFERRED_DEPLOY_DIR: /opt/hop
+          LEGACY_DEPLOY_DIR: /opt/onyx
+          PROXY_CONTAINER: hop-proxy
         run: |
           set -e
 
-          # Setup SSH key
           mkdir -p ~/.ssh
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' >> ~/.ssh/config
 
-          echo "🔍 Verifying rollback health..."
+          echo "[INFO] Verifying rollback status..."
 
-          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" <<'EOSSH'
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- \
+            "$PREFERRED_DEPLOY_DIR" \
+            "$LEGACY_DEPLOY_DIR" \
+            "$PROXY_CONTAINER" <<'EOSSH'
+            PREFERRED_DEPLOY_DIR="$1"
+            LEGACY_DEPLOY_DIR="$2"
+            PROXY_CONTAINER="$3"
             set -e
-            cd /opt/onyx
 
-            echo "📋 Docker service status:"
+            if [ -d "$PREFERRED_DEPLOY_DIR" ]; then
+              DEPLOY_DIR="$PREFERRED_DEPLOY_DIR"
+            elif [ -d "$LEGACY_DEPLOY_DIR" ]; then
+              DEPLOY_DIR="$LEGACY_DEPLOY_DIR"
+            else
+              echo "[ERROR] No valid deployment directory exists"
+              exit 1
+            fi
+
+            cd "$DEPLOY_DIR" || exit 1
+
             sudo docker compose ps
 
-            echo ""
-            echo "🏥 Health checks:"
-
-            # Check API
-            if sudo docker compose exec -T api_server curl -s http://localhost:8080/health > /dev/null 2>&1; then
-              echo "✓ Backend API: healthy"
+            echo -n "Backend API: "
+            if sudo docker compose exec -T api_server curl -s http://localhost:8080/health >/dev/null 2>&1; then
+              echo "ok"
             else
-              echo "✗ Backend API: unhealthy (may still be initializing)"
-            fi
-
-            # Check PostgreSQL
-            if sudo docker compose exec -T relational_db pg_isready -U postgres > /dev/null 2>&1; then
-              echo "✓ PostgreSQL: healthy"
-            else
-              echo "✗ PostgreSQL: unhealthy"
+              echo "failed"
               exit 1
             fi
 
-            # Check Redis
-            if sudo docker compose exec -T cache redis-cli ping > /dev/null 2>&1; then
-              echo "✓ Redis: healthy"
+            echo -n "PostgreSQL: "
+            if sudo docker compose exec -T relational_db pg_isready -U postgres >/dev/null 2>&1; then
+              echo "ok"
             else
-              echo "✗ Redis: unhealthy"
+              echo "failed"
               exit 1
             fi
 
-            echo ""
-            echo "✅ Rollback verification passed!"
+            echo -n "Redis: "
+            if sudo docker compose exec -T cache redis-cli ping >/dev/null 2>&1; then
+              echo "ok"
+            else
+              echo "failed"
+              exit 1
+            fi
+
+            echo -n "Proxy nginx: "
+            if sudo docker ps | grep -q "$PROXY_CONTAINER" && curl -s http://localhost/ >/dev/null 2>&1; then
+              echo "ok"
+            else
+              echo "failed"
+              sudo docker logs "$PROXY_CONTAINER" 2>&1 | tail -20 || true
+              exit 1
+            fi
+
+            echo "[OK] Rollback verification passed"
           EOSSH
 
-      - name: Rollback Status
+      - name: Rollback summary
         if: success()
         run: |
-          echo "✅ Rollback successful!"
-          echo "🌐 Access: https://klugermax.com"
-          echo "📝 Backup saved on droplet in /opt/onyx-backup-*"
+          echo "[OK] Rollback succeeded"
+          echo "[INFO] Access: https://klugermax.com"
+          echo "[INFO] Backups saved in /opt/hop-backup-*"

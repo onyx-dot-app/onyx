@@ -95,7 +95,7 @@ export default function NonAdminStep() {
         >
           <ContentAction
             icon={SvgUser}
-            title="What should Onyx call you?"
+            title="¿Cómo debería llamarte la aplicación?"
             description="We will display this name in the app."
             sizePreset="main-ui"
             variant="section"

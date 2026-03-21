@@ -2,7 +2,7 @@ import * as Yup from "yup";
 import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
-import { DOCS_ADMINS_PATH } from "@/lib/constants";
+import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
@@ -151,7 +151,7 @@ export const connectorConfigs: Record<
     values: [
       {
         type: "text",
-        query: "Enter the website URL to scrape e.g. https://docs.onyx.app/:",
+        query: `Enter the website URL to scrape e.g. ${DOCS_BASE_URL}/:`,
         label: "Base URL",
         name: "base_url",
         optional: false,
@@ -422,8 +422,8 @@ export const connectorConfigs: Record<
                 label: "Include shared drives?",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "This will allow Onyx to index everything in the shared drives you have access to."
-                    : "This will allow Onyx to index everything in your Organization's shared drives.";
+                    ? "Esto permitirá indexar todo lo que haya en las unidades compartidas a las que tienes acceso."
+                    : "Esto permitirá indexar todo lo que haya en las unidades compartidas de tu organización.";
                 },
                 name: "include_shared_drives",
                 default: false,
@@ -437,8 +437,8 @@ export const connectorConfigs: Record<
                 },
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "This will allow Onyx to index everything in your My Drive."
-                    : "This will allow Onyx to index everything in everyone's My Drives.";
+                    ? "Esto permitirá indexar todo el contenido de tu My Drive."
+                    : "Esto permitirá indexar todo el contenido de los My Drive de toda la organización.";
                 },
                 name: "include_my_drives",
                 default: false,
@@ -446,7 +446,7 @@ export const connectorConfigs: Record<
               {
                 type: "checkbox",
                 description:
-                  "This will allow Onyx to index all files shared with you.",
+                  "Esto permitirá indexar todos los archivos compartidos contigo.",
                 label: "Include All Files Shared With You?",
                 name: "include_files_shared_with_me",
                 visibleCondition: (values, currentCredential) =>
@@ -514,7 +514,7 @@ export const connectorConfigs: Record<
         type: "checkbox",
         label: "Hide domain link-only files?",
         description:
-          "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
+          "Cuando está activado, se omiten los archivos compartidos de forma amplia (dominio o público) que igualmente requieren el enlace para acceder.",
         name: "exclude_domain_link_only",
         optional: true,
         default: false,
@@ -765,7 +765,7 @@ export const connectorConfigs: Record<
                 name: "requested_objects",
                 optional: true,
                 description:
-                  "Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'." +
+                  "Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and the application will default to indexing by 'Account'." +
                   "\n\nHint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities').",
               },
             ],
@@ -814,7 +814,7 @@ export const connectorConfigs: Record<
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
 • Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
 • Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
-• Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.
+• Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact support if you need another language supported.
 `,
       },
     ],

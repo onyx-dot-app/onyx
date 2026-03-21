@@ -175,7 +175,7 @@ describe("BedrockOnboardingForm", () => {
       // Should show IAM info message
       await waitFor(() => {
         expect(
-          screen.getByText(/Onyx will use the IAM role attached/i)
+          screen.getByText(/La aplicación usará el rol de IAM adjunto/i)
         ).toBeInTheDocument();
       });
     });

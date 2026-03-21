@@ -5,8 +5,19 @@ from onyx.server.settings import store as settings_store
 
 
 class _FakeKvStore:
-    def load(self, _key: str) -> dict:
-        raise KvKeyNotFoundError()
+    def __init__(self, values: dict[str, dict] | None = None) -> None:
+        self._values = values or {}
+        self.stored_values: list[tuple[str, dict | None]] = []
+
+    def load(self, key: str) -> dict:
+        if key not in self._values:
+            raise KvKeyNotFoundError()
+
+        return self._values[key]
+
+    def store(self, key: str, value: dict | None) -> None:
+        self.stored_values.append((key, value))
+        self._values[key] = value or {}
 
 
 class _FakeCache:
@@ -30,3 +41,21 @@ def test_load_settings_includes_user_file_max_upload_size_mb(
     settings = settings_store.load_settings()
 
     assert settings.user_file_max_upload_size_mb == 77
+
+
+def test_load_settings_migrates_legacy_settings_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kv_store = _FakeKvStore(
+        {settings_store.LEGACY_KV_SETTINGS_KEY: {"gpu_enabled": True}}
+    )
+
+    monkeypatch.setattr(settings_store, "get_kv_store", lambda: kv_store)
+    monkeypatch.setattr(settings_store, "get_cache_backend", lambda: _FakeCache())
+
+    settings = settings_store.load_settings()
+
+    assert settings.gpu_enabled is True
+    assert kv_store.stored_values == [
+        (settings_store.KV_SETTINGS_KEY, {"gpu_enabled": True})
+    ]

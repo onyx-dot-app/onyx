@@ -35,6 +35,7 @@ import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 
 export interface AgentCardProps {
   agent: MinimalPersonaSnapshot;
@@ -200,7 +201,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             <div className="flex flex-col gap-1 py-1 px-2">
               <Content
                 icon={SvgUser}
-                title={agent.owner?.email || "Onyx"}
+                title={agent.owner?.email || DEFAULT_APPLICATION_NAME}
                 sizePreset="secondary"
                 variant="body"
                 prominence="muted"

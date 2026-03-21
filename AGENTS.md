@@ -18,7 +18,9 @@ This file provides guidance to AI agents when working with code in this reposito
 
 ## Project Overview
 
-**Onyx** (formerly Danswer) is an open-source Gen-AI and Enterprise Search platform that connects to company documents, apps, and people. It features a modular architecture with both Community Edition (MIT licensed) and Enterprise Edition offerings.
+**HOP** es este repositorio y distribucion de despliegue, y **ACTIVA** es la marca del producto orientado al usuario final construida sobre el codebase original de Onyx. Internamente, muchos nombres de paquetes, directorios e identificadores tecnicos siguen usando `onyx` por compatibilidad con la arquitectura upstream y con las herramientas existentes.
+
+ACTIVA sigue siendo una plataforma modular de Gen-AI y busqueda empresarial que conecta documentos, aplicaciones y personas dentro de una organizacion. El repositorio todavia contiene rutas de Community Edition (licencia MIT) y Enterprise Edition.
 
 ### Background Workers (Celery)
 

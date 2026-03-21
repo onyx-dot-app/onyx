@@ -1319,7 +1319,7 @@ def get_connector_indexing_status(
     # Track admin page visit for analytics
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=user.email,
+        distinct_id=str(user.id),
         event=MilestoneRecordType.VISITED_ADMIN_PAGE,
     )
 
@@ -1533,7 +1533,7 @@ def create_connector_from_model(
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email,
+            distinct_id=str(user.id),
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
 
@@ -1611,7 +1611,7 @@ def create_connector_with_mock_credential(
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email,
+            distinct_id=str(user.id),
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
         return response
@@ -1915,9 +1915,7 @@ def submit_connector_request(
     if not connector_name:
         raise HTTPException(status_code=400, detail="Connector name cannot be empty")
 
-    # Get user identifier for telemetry
     user_email = user.email
-    distinct_id = user_email or tenant_id
 
     # Track connector request via PostHog telemetry (Cloud only)
     from shared_configs.configs import MULTI_TENANT
@@ -1925,11 +1923,11 @@ def submit_connector_request(
     if MULTI_TENANT:
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=distinct_id,
+            distinct_id=str(user.id),
             event=MilestoneRecordType.REQUESTED_CONNECTOR,
             properties={
                 "connector_name": connector_name,
-                "user_email": user_email,
+                "user_email": user.email,
             },
         )
 

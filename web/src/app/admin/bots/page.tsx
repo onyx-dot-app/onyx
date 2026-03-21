@@ -37,21 +37,22 @@ function Main() {
   return (
     <div className="mb-8">
       <p className="mb-2 text-sm text-muted-foreground">
-        Setup Slack bots that connect to Onyx. Once setup, you will be able to
-        ask questions to Onyx directly from Slack. Additionally, you can:
+        Configura bots de Slack conectados a la aplicación. Una vez listos,
+        podrás hacer preguntas directamente desde Slack. Además, podrás:
       </p>
 
       <div className="mb-2">
         <ul className="list-disc mt-2 ml-4 text-sm text-muted-foreground">
           <li>
-            Setup OnyxBot to automatically answer questions in certain channels.
+            Configurar el bot para responder automáticamente en ciertos
+            canales.
           </li>
           <li>
-            Choose which document sets OnyxBot should answer from, depending on
-            the channel the question is being asked.
+            Elegir desde qué conjuntos de documentos debe responder el bot,
+            según el canal donde se haga la pregunta.
           </li>
           <li>
-            Directly message OnyxBot to search just as you would in the web UI.
+            Escribirle directamente al bot para buscar igual que en la web.
           </li>
         </ul>
       </div>
@@ -66,7 +67,7 @@ function Main() {
         >
           guide{" "}
         </a>
-        found in the Onyx documentation to get started!
+        found in the documentation to get started!
       </p>
 
       <CreateButton href="/admin/bots/new">New Slack Bot</CreateButton>

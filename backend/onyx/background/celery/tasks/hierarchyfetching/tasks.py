@@ -29,6 +29,8 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.connectors.factory import ConnectorMissingException
+from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import HierarchyConnector
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
@@ -53,6 +55,26 @@ logger = setup_logger()
 
 # Hierarchy fetching runs once per day (24 hours in seconds)
 HIERARCHY_FETCH_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+def _connector_supports_hierarchy_fetching(
+    cc_pair: ConnectorCredentialPair,
+) -> bool:
+    """Return True only for connectors whose class implements HierarchyConnector."""
+    try:
+        connector_class = identify_connector_class(
+            cc_pair.connector.source,
+        )
+    except ConnectorMissingException as e:
+        task_logger.warning(
+            "Skipping hierarchy fetching enqueue for source=%s input_type=%s: %s",
+            cc_pair.connector.source,
+            cc_pair.connector.input_type,
+            str(e),
+        )
+        return False
+
+    return issubclass(connector_class, HierarchyConnector)
 
 
 def _is_hierarchy_fetching_due(cc_pair: ConnectorCredentialPair) -> bool:
@@ -186,7 +208,10 @@ def check_for_hierarchy_fetching(self: Task, *, tenant_id: str) -> int | None:
                     cc_pair_id=cc_pair_id,
                 )
 
-                if not cc_pair or not _is_hierarchy_fetching_due(cc_pair):
+                if not cc_pair or not _connector_supports_hierarchy_fetching(cc_pair):
+                    continue
+
+                if not _is_hierarchy_fetching_due(cc_pair):
                     continue
 
                 task_id = _try_creating_hierarchy_fetching_task(

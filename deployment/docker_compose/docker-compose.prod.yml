@@ -1,15 +1,15 @@
-name: onyx
+name: hop
 
 services:
   api_server:
-    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/hop-rag/activa-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
     command: >
       /bin/sh -c "
       alembic upgrade head &&
-      echo \"Starting Onyx Api Server\" &&
+      echo \"Starting ACTIVA API Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     depends_on:
       - relational_db
@@ -56,7 +56,7 @@ services:
       - file-system:/app/file-system
 
   background:
-    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/hop-rag/activa-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -124,7 +124,7 @@ services:
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
 
   web_server:
-    image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
+    image: ghcr.io/hop-rag/activa-web-server:${IMAGE_TAG:-latest}
     build:
       context: ../../web
       dockerfile: Dockerfile
@@ -280,15 +280,9 @@ services:
   opensearch:
     image: opensearchproject/opensearch:3.4.0
     restart: unless-stopped
-    # Controls whether this service runs. In order to enable it, add
-    # opensearch-enabled to COMPOSE_PROFILES in the environment for this
-    # docker-compose.
-    # NOTE: Now enabled on by default. To explicitly disable this service,
-    # uncomment this profile and ensure COMPOSE_PROFILES in your env does not
-    # list the profile, or when running docker compose, include all desired
-    # service names but this one. Additionally set
-    # OPENSEARCH_FOR_ONYX_ENABLED=false in your env.
-    # profiles: ["opensearch-enabled"]
+    # To enable OpenSearch, add opensearch-enabled to COMPOSE_PROFILES
+    # and set OPENSEARCH_FOR_ONYX_ENABLED=true in .env
+    profiles: ["opensearch-enabled"]
     environment:
       # We need discovery.type=single-node so that OpenSearch doesn't try
       # forming a cluster and waiting for other nodes to become live.

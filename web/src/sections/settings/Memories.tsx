@@ -24,7 +24,7 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
       {memories.length === 0 ? (
         <LineItem
           skeleton
-          description="Add personal note or memory that Onyx should remember."
+          description="Agrega una nota o recuerdo personal para tenerlo presente en futuras conversaciones."
           onClick={() => {
             setTargetMemoryId(null);
             memoriesModal.toggle(true);

@@ -112,7 +112,7 @@ jobs:
           IMAGES=(
             "ghcr.io/cloudnative-pg/cloudnative-pg:1.27.0"
             "quay.io/opstree/redis:v7.0.15"
-            "docker.io/onyxdotapp/onyx-web-server:latest"
+            "docker.io/hop-rag/activa-web-server:latest"
           )
 
           for image in "${IMAGES[@]}"; do
@@ -125,13 +125,13 @@ jobs:
           done
 
           echo "=== Images loaded into Kind cluster ==="
-          docker exec "$KIND_CLUSTER"-control-plane crictl images | grep -E "(cloudnative-pg|redis|onyx)" || echo "Some images may still be loading..."
+          docker exec "$KIND_CLUSTER"-control-plane crictl images | grep -E "(cloudnative-pg|redis|activa)" || echo "Some images may still be loading..."
 
       - name: Validate chart dependencies
         if: steps.list-changed.outputs.changed == 'true'
         run: |
           echo "=== Validating chart dependencies ==="
-          cd deployment/helm/charts/onyx
+          cd deployment/helm/charts/activa
           helm dependency update
           helm lint . --set auth.userauth.values.user_auth_secret=placeholder
 

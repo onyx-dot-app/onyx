@@ -4,6 +4,7 @@ from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.app_configs import SHOW_EXTRA_CONNECTORS
 from onyx.configs.app_configs import USER_FILE_MAX_UPLOAD_SIZE_MB
+from onyx.configs.constants import LEGACY_KV_SETTINGS_KEY
 from onyx.configs.constants import KV_SETTINGS_KEY
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
@@ -17,16 +18,35 @@ logger = setup_logger()
 SETTINGS_TTL = 30 * 24 * 60 * 60
 
 
-def load_settings() -> Settings:
+def _load_settings_payload() -> dict | None:
     kv_store = get_kv_store()
+
+    for key in (KV_SETTINGS_KEY, LEGACY_KV_SETTINGS_KEY):
+        try:
+            stored_settings = kv_store.load(key)
+        except KvKeyNotFoundError:
+            continue
+
+        if key != KV_SETTINGS_KEY:
+            kv_store.store(KV_SETTINGS_KEY, stored_settings)
+
+        return stored_settings
+
+    raise KvKeyNotFoundError()
+
+
+def load_settings() -> Settings:
     try:
-        stored_settings = kv_store.load(KV_SETTINGS_KEY)
+        stored_settings = _load_settings_payload()
         settings = (
             Settings.model_validate(stored_settings) if stored_settings else Settings()
         )
     except KvKeyNotFoundError:
         # Default to empty settings if no settings have been set yet
-        logger.debug(f"No settings found in KV store for key: {KV_SETTINGS_KEY}")
+        logger.debug(
+            "No settings found in KV store for keys: "
+            f"{KV_SETTINGS_KEY}, {LEGACY_KV_SETTINGS_KEY}"
+        )
         settings = Settings()
     except Exception as e:
         logger.error(f"Error loading settings from KV store: {str(e)}")

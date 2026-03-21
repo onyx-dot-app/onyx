@@ -47,9 +47,13 @@ import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,
   FEATURE_FLAGS,
-  LOCAL_STORAGE_KEYS,
 } from "@/sections/sidebar/constants";
-import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
+import {
+  handleMoveOperation,
+  persistHideMoveCustomAgentModal,
+  shouldHideMoveCustomAgentModal,
+  showErrorNotification,
+} from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { ChatSession } from "@/app/app/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
@@ -431,11 +435,7 @@ const MemoizedAppSidebarInner = memo(
             return;
           }
 
-          const hideModal =
-            typeof window !== "undefined" &&
-            window.localStorage.getItem(
-              LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
-            ) === "true";
+          const hideModal = shouldHideMoveCustomAgentModal();
 
           const isChatUsingDefaultAgent =
             chatSession.persona_id === DEFAULT_PERSONA_ID;
@@ -598,18 +598,12 @@ const MemoizedAppSidebarInner = memo(
       setShowIntroAnimation(true);
     }, []);
 
-    const vectorDbEnabled =
-      combinedSettings?.settings?.vector_db_enabled !== false;
-    const adminDefaultHref = vectorDbEnabled
-      ? "/admin/indexing/status"
-      : "/admin/agents";
-
     const settingsButton = useMemo(
       () => (
         <div>
           {(isAdmin || isCurator) && (
             <SidebarTab
-              href={adminDefaultHref}
+              href={isCurator ? "/admin/agents" : "/admin/configuration/llm"}
               icon={SvgSettings}
               folded={folded}
             >
@@ -624,14 +618,7 @@ const MemoizedAppSidebarInner = memo(
           />
         </div>
       ),
-      [
-        folded,
-        isAdmin,
-        isCurator,
-        handleShowBuildIntro,
-        isOnyxCraftEnabled,
-        adminDefaultHref,
-      ]
+      [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
     );
 
     return (
@@ -648,11 +635,8 @@ const MemoizedAppSidebarInner = memo(
               setPendingMoveProjectId(null);
             }}
             onConfirm={async (doNotShowAgain: boolean) => {
-              if (doNotShowAgain && typeof window !== "undefined") {
-                window.localStorage.setItem(
-                  LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
-                  "true"
-                );
+              if (doNotShowAgain) {
+                persistHideMoveCustomAgentModal();
               }
               const chat = pendingMoveChatSession;
               const target = pendingMoveProjectId;

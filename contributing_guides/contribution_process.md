@@ -1,38 +1,37 @@
-# Contribution Process
+# Proceso de contribucion
 
-## 1. Get the feature or enhancement approved
-Create a GitHub issue and see if there are upvotes. If you feel the feature is sufficiently value additive and you would like
-approval to contribute it to the repo, tag [Yuhong](https://github.com/yuhongsun96) to review.
+## 1. Consigue aprobacion para la mejora o funcionalidad
 
-If you do not get a response within a week, feel free to email yuhong@onyx.app and include the issue in the message.
+Crea un issue en GitHub y revisa si hay interes o votos positivos. Si crees que la propuesta aporta suficiente valor y quieres contribuirla al repositorio, etiqueta al equipo mantenedor para pedir revision.
 
-Not all small features and enhancements will be accepted as there is a balance between feature richness and bloat.
-We strive to provide the best user experience possible so we have to be intentional about what we include in the app.
+Si no recibes respuesta dentro de una semana, deja un comentario de seguimiento en el issue o usa el canal de contacto documentado del repositorio.
 
+No todas las mejoras pequenas se aceptaran. Siempre hay un equilibrio entre tener mas funcionalidades y evitar que el producto se vuelva pesado o confuso.
+Queremos ofrecer la mejor experiencia posible, asi que intentamos ser deliberados con lo que entra en la app.
 
-## 2. Get the design approved
-The Onyx team will either provide a design doc and PRD for the feature or request one from you, the contributor.
+## 2. Consigue aprobacion del diseno
 
-The scope and detail of the design will depend on the individual feature.
+El equipo mantenedor de HOP / ACTIVA te entregara un documento de diseno y un PRD para la funcionalidad, o te pedira que los prepares como contribuyente.
 
+El alcance y el nivel de detalle del diseno dependeran de la funcionalidad en cuestion.
 
-# 3. IP attribution for EE contributions
-If you are contributing features to Onyx Enterprise Edition, you are required to sign the IP Assignment Agreement in the
-contributing_guides directory.
+# 3. Atribucion de IP para contribuciones EE
 
+Si vas a contribuir funcionalidades a Enterprise Edition dentro de este repositorio, debes firmar el acuerdo de cesion de IP que esta en el directorio `contributing_guides`.
 
-## 4. Review and testing
-Your features must pass all tests and all comments must be addressed prior to merging.
+## 4. Revision y pruebas
 
+Tus cambios deben pasar todas las pruebas y todos los comentarios de review deben quedar resueltos antes del merge.
 
-# Implicit agreements
-If we approve an issue, we are promising you the following:
-- Your work will receive timely attention and we will put aside other high priority items to ensure you are not blocked.
-- You will receive necessary coaching on eng quality, system design, etc. to ensure the feature is completed well.
-- The Onyx team will pull resources and bandwidth from design, PM, and engineering to ensure that you have all the
-resources to build the feature to the quality required for merging.
+# Acuerdos implicitos
 
-Because this is a large investment from our team, we ask that you:
-- Thoroughly read all the requirements of the design docs, engineering best practices, and try to minimize overhead for
-the Onyx team.
-- Complete the feature in a timely manner to reduce context switching and an ongoing resource pull from the Onyx team.
+Si aprobamos un issue, te estamos prometiendo lo siguiente:
+
+- Tu trabajo recibira atencion oportuna y apartaremos tiempo de otras prioridades para que no quedes bloqueado.
+- Recibiras acompanamiento en calidad de ingenieria, diseno de sistemas y temas relacionados para que la funcionalidad salga bien.
+- El equipo mantenedor de HOP / ACTIVA coordinara recursos de diseno, PM e ingenieria para que tengas lo necesario y puedas llevar la funcionalidad al nivel requerido para merge.
+
+Como esto representa una inversion importante de tiempo del equipo, te pedimos que:
+
+- Leas con cuidado todos los requisitos de los documentos de diseno y las guias de buenas practicas de ingenieria, e intentes minimizar la carga operativa sobre el equipo mantenedor.
+- Completes la funcionalidad en un plazo razonable para reducir cambios de contexto y el costo continuo de soporte por parte del equipo mantenedor.

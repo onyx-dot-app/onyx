@@ -216,7 +216,7 @@ describe("useShowOnboarding", () => {
 
       expect(result.current.showOnboarding).toBe(false);
       expect(result.current.onboardingDismissed).toBe(true);
-      expect(localStorage.getItem("onyx:onboardingCompleted:user-1")).toBe(
+      expect(localStorage.getItem("activa:onboardingCompleted:user-1")).toBe(
         "true"
       );
     });
@@ -232,13 +232,13 @@ describe("useShowOnboarding", () => {
       });
 
       expect(result.current.onboardingDismissed).toBe(true);
-      expect(localStorage.getItem("onyx:onboardingCompleted:user-1")).toBe(
+      expect(localStorage.getItem("activa:onboardingCompleted:user-1")).toBe(
         "true"
       );
     });
 
     it("showOnboarding stays false when localStorage flag is set", () => {
-      localStorage.setItem("onyx:onboardingCompleted:user-1", "true");
+      localStorage.setItem("activa:onboardingCompleted:user-1", "true");
 
       const { result } = renderUseShowOnboarding({
         hasAnyProvider: false,
@@ -266,7 +266,7 @@ describe("useShowOnboarding", () => {
         result1.current.finishOnboarding();
       });
       expect(result1.current.onboardingDismissed).toBe(true);
-      expect(localStorage.getItem("onyx:onboardingCompleted:1")).toBe("true");
+      expect(localStorage.getItem("activa:onboardingCompleted:1")).toBe("true");
 
       // user-2 should still see onboarding
       const { result: result2 } = renderUseShowOnboarding({
@@ -276,7 +276,25 @@ describe("useShowOnboarding", () => {
       });
       expect(result2.current.showOnboarding).toBe(true);
       expect(result2.current.onboardingDismissed).toBe(false);
-      expect(localStorage.getItem("onyx:onboardingCompleted:2")).toBeNull();
+      expect(localStorage.getItem("activa:onboardingCompleted:2")).toBeNull();
+    });
+
+    it("migrates the legacy onboarding key to the activa prefix", () => {
+      localStorage.setItem("onyx:onboardingCompleted:user-1", "true");
+
+      const { result } = renderUseShowOnboarding({
+        hasAnyProvider: false,
+        chatSessionsCount: 0,
+      });
+
+      expect(result.current.showOnboarding).toBe(false);
+      expect(result.current.onboardingDismissed).toBe(true);
+      expect(localStorage.getItem("activa:onboardingCompleted:user-1")).toBe(
+        "true"
+      );
+      expect(
+        localStorage.getItem("onyx:onboardingCompleted:user-1")
+      ).toBeNull();
     });
   });
 });

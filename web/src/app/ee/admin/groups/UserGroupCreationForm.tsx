@@ -108,8 +108,9 @@ export default function UserGroupCreationForm({
                   </>
                 ) : (
                   <Text as="p" text03>
-                    Connectors are not available in Onyx Lite. Redeploy Onyx
-                    with DISABLE_VECTOR_DB=false to index knowledge via
+                    Los conectores no están disponibles en ACTIVA Lite.
+                    Vuelve a desplegar ACTIVA con DISABLE_VECTOR_DB=false para
+                    indexar conocimiento mediante
                     connectors.
                   </Text>
                 )}

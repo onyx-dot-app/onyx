@@ -12,9 +12,8 @@ import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
 import { ErrorTextLayout } from "@/layouts/input-layouts";
-
-// App domain should not be hardcoded
-const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+import { DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 
 export interface NewTenantModalProps {
   tenantInfo: NewTenantInfo;
@@ -29,8 +28,12 @@ export default function NewTenantModal({
 }: NewTenantModalProps) {
   const router = useRouter();
   const { user } = useUser();
+  const settings = useSettingsContext();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const applicationName =
+    settings?.enterpriseSettings?.application_name?.trim() ||
+    DEFAULT_APPLICATION_NAME;
 
   async function handleJoinTenant() {
     setIsLoading(true);
@@ -52,14 +55,14 @@ export default function NewTenantModal({
           throw new Error(
             errorData.detail ||
               errorData.message ||
-              "Failed to accept invitation"
+              "No se pudo aceptar la invitación"
           );
         }
 
-        toast.success("You have accepted the invitation.");
+        toast.success("Aceptaste la invitación.");
       } else {
         // For non-invite flow, just show success message
-        toast.success("Processing your team join request...");
+        toast.success("Estamos procesando tu solicitud para unirte al equipo...");
       }
 
       // Common logout and redirect for both flows
@@ -70,7 +73,7 @@ export default function NewTenantModal({
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to join the team. Please try again.";
+          : "No se pudo unir al equipo. Inténtalo de nuevo.";
 
       setError(message);
       toast.error(message);
@@ -100,17 +103,17 @@ export default function NewTenantModal({
         throw new Error(
           errorData.detail ||
             errorData.message ||
-            "Failed to decline invitation"
+            "No se pudo rechazar la invitación"
         );
       }
 
-      toast.info("You have declined the invitation.");
+      toast.info("Rechazaste la invitación.");
       onClose?.();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to decline the invitation. Please try again.";
+          : "No se pudo rechazar la invitación. Inténtalo de nuevo.";
 
       setError(message);
       toast.error(message);
@@ -120,16 +123,18 @@ export default function NewTenantModal({
   }
 
   const title = isInvite
-    ? `You have been invited to join ${
+    ? `Te invitaron a unirte a ${
         tenantInfo.number_of_users
-      } other teammate${
+      } integrante${
         tenantInfo.number_of_users === 1 ? "" : "s"
-      } of ${APP_DOMAIN}.`
-    : `Your request to join ${tenantInfo.number_of_users} other users of ${APP_DOMAIN} has been approved.`;
+      } más del equipo de ${applicationName}.`
+    : `Se aprobó tu solicitud para unirte a ${tenantInfo.number_of_users} usuario${
+        tenantInfo.number_of_users === 1 ? "" : "s"
+      } más del equipo de ${applicationName}.`;
 
   const description = isInvite
-    ? `By accepting this invitation, you will join the existing ${APP_DOMAIN} team and lose access to your current team. Note: you will lose access to your current agents, prompts, chats, and connected sources.`
-    : `To finish joining your team, please reauthenticate with ${user?.email}.`;
+    ? `Al aceptar esta invitación, te unirás al equipo actual de ${applicationName} y perderás acceso a tu equipo actual. Ten en cuenta que perderás acceso a tus agentes, prompts, chats y fuentes conectadas actuales.`
+    : `Para terminar de unirte al equipo, vuelve a autenticarte con ${user?.email}.`;
 
   return (
     <Modal open>
@@ -151,7 +156,7 @@ export default function NewTenantModal({
                     onClick={handleRejectInvite}
                     icon={SvgX}
                   >
-                    Decline
+                    Rechazar
                   </Button>
                 </Disabled>
               ) : undefined
@@ -161,11 +166,11 @@ export default function NewTenantModal({
                 <Button onClick={handleJoinTenant} rightIcon={SvgArrowRight}>
                   {isLoading
                     ? isInvite
-                      ? "Accepting..."
-                      : "Joining..."
+                      ? "Aceptando..."
+                      : "Uniéndote..."
                     : isInvite
-                      ? "Accept Invitation"
-                      : "Reauthenticate"}
+                      ? "Aceptar invitación"
+                      : "Volver a autenticarme"}
                 </Button>
               </Disabled>
             }

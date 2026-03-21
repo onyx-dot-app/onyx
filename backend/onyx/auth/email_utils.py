@@ -6,6 +6,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
 from email.utils import make_msgid
+from email.utils import parseaddr
+from urllib.parse import urlsplit
 
 import sendgrid  # type: ignore
 from sendgrid.helpers.mail import Attachment  # type: ignore
@@ -30,6 +32,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import ONYX_DISCORD_URL
+from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
@@ -154,6 +157,43 @@ HTML_EMAIL_TEMPLATE = """\
 """
 
 
+def _extract_domain_from_email_address(email_address: str | None) -> str | None:
+    _, parsed_email = parseaddr(email_address or "")
+    if not parsed_email or "@" not in parsed_email:
+        return None
+
+    return parsed_email.rsplit("@", maxsplit=1)[1]
+
+
+def _get_brand_email_domain(mail_from: str | None = None) -> str:
+    for candidate in (mail_from, EMAIL_FROM, SMTP_USER):
+        domain = _extract_domain_from_email_address(candidate)
+        if domain:
+            return domain
+
+    normalized_web_domain = (
+        WEB_DOMAIN if "://" in WEB_DOMAIN else f"https://{WEB_DOMAIN}"
+    )
+    web_domain = urlsplit(normalized_web_domain).hostname
+    if web_domain:
+        return web_domain
+
+    return "localhost"
+
+
+def _resolve_mail_from_address(mail_from: str | None = None) -> str:
+    return (
+        mail_from
+        or EMAIL_FROM
+        or SMTP_USER
+        or f"noreply@{_get_brand_email_domain(mail_from)}"
+    )
+
+
+def _get_subscription_pricing_url() -> str:
+    return f"{WEB_DOMAIN.rstrip('/')}/#pricing"
+
+
 def build_html_email(
     application_name: str | None,
     heading: str,
@@ -177,7 +217,7 @@ def build_html_email(
         cta_block=cta_block,
         community_link_fragment=community_link_fragment,
         year=datetime.now().year,
-    )
+    ).replace("\u00c2\u00a9", "&copy;").replace("\u00a9", "&copy;")
 
 
 def send_email(
@@ -210,7 +250,7 @@ def send_email_with_sendgrid(
     mail_from: str = EMAIL_FROM,
     inline_png: tuple[str, bytes] | None = None,
 ) -> None:
-    from_email = Email(mail_from) if mail_from else Email("noreply@onyx.app")
+    from_email = Email(_resolve_mail_from_address(mail_from))
     to_email = To(user_email)
 
     mail = Mail(
@@ -257,12 +297,12 @@ def send_email_with_smtplib(
 
     # Create a multipart/alternative message - this indicates these are alternative versions of the same content
     msg = MIMEMultipart("alternative")
+    resolved_mail_from = _resolve_mail_from_address(mail_from)
     msg["Subject"] = subject
     msg["To"] = user_email
-    if mail_from:
-        msg["From"] = mail_from
+    msg["From"] = resolved_mail_from
     msg["Date"] = formatdate(localtime=True)
-    msg["Message-ID"] = make_msgid(domain="onyx.app")
+    msg["Message-ID"] = make_msgid(domain=_get_brand_email_domain(resolved_mail_from))
 
     # Add text part first (lowest priority)
     text_part = MIMEText(text_body, "plain")
@@ -296,7 +336,7 @@ def send_email_with_smtplib(
 
 
 def send_subscription_cancellation_email(user_email: str) -> None:
-    """This is templated but isn't meaningful for whitelabeling."""
+    """Send a branded subscription cancellation email."""
 
     # Example usage of the reusable HTML
     try:
@@ -308,7 +348,7 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     except ModuleNotFoundError:
         application_name = ONYX_DEFAULT_APPLICATION_NAME
 
-    onyx_file = OnyxRuntime.get_emailable_logo()
+    logo_file = OnyxRuntime.get_emailable_logo()
 
     subject = f"Your {application_name} Subscription Has Been Canceled"
     heading = "Subscription Canceled"
@@ -318,7 +358,7 @@ def send_subscription_cancellation_email(user_email: str) -> None:
         "<p>If you change your mind, you can always come back!</p>"
     )
     cta_text = "Renew Subscription"
-    cta_link = "https://www.onyx.app/pricing"
+    cta_link = _get_subscription_pricing_url()
     html_content = build_html_email(
         application_name,
         heading,
@@ -329,14 +369,14 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     text_content = (
         "We're sorry to see you go.\n"
         "Your subscription has been canceled and will end on your next billing date.\n"
-        "If you change your mind, visit https://www.onyx.app/pricing"
+        f"If you change your mind, visit {cta_link}"
     )
     send_email(
         user_email,
         subject,
         html_content,
         text_content,
-        inline_png=("logo.png", onyx_file.data),
+        inline_png=("logo.png", logo_file.data),
     )
 
 
@@ -397,7 +437,7 @@ def send_user_email_invite(
     except ModuleNotFoundError:
         application_name = ONYX_DEFAULT_APPLICATION_NAME
 
-    onyx_file = OnyxRuntime.get_emailable_logo()
+    logo_file = OnyxRuntime.get_emailable_logo()
 
     subject = f"Invitation to Join {application_name} Organization"
 
@@ -410,7 +450,7 @@ def send_user_email_invite(
         subject,
         html_content,
         text_content,
-        inline_png=("logo.png", onyx_file.data),
+        inline_png=("logo.png", logo_file.data),
     )
 
 
@@ -430,11 +470,13 @@ def send_forgot_password_email(
     except ModuleNotFoundError:
         application_name = ONYX_DEFAULT_APPLICATION_NAME
 
-    onyx_file = OnyxRuntime.get_emailable_logo()
+    logo_file = OnyxRuntime.get_emailable_logo()
 
     subject = f"Reset Your {application_name} Password"
     heading = "Reset Your Password"
-    tenant_param = f"&tenant={tenant_id}" if tenant_id and MULTI_TENANT else ""
+    tenant_param = (
+        f"&{TENANT_ID_COOKIE_NAME}={tenant_id}" if tenant_id and MULTI_TENANT else ""
+    )
     message = "<p>Please click the button below to reset your password. This link will expire in 24 hours.</p>"
     cta_text = "Reset Password"
     cta_link = f"{WEB_DOMAIN}/auth/reset-password?token={token}{tenant_param}"
@@ -455,7 +497,7 @@ def send_forgot_password_email(
         html_content,
         text_content,
         mail_from,
-        inline_png=("logo.png", onyx_file.data),
+        inline_png=("logo.png", logo_file.data),
     )
 
 
@@ -475,7 +517,7 @@ def send_user_verification_email(
     except ModuleNotFoundError:
         application_name = ONYX_DEFAULT_APPLICATION_NAME
 
-    onyx_file = OnyxRuntime.get_emailable_logo()
+    logo_file = OnyxRuntime.get_emailable_logo()
 
     subject = f"{application_name} Email Verification"
     link = f"{WEB_DOMAIN}/auth/verify-email?token={token}"
@@ -496,5 +538,5 @@ def send_user_verification_email(
         html_content,
         text_content,
         mail_from,
-        inline_png=("logo.png", onyx_file.data),
+        inline_png=("logo.png", logo_file.data),
     )

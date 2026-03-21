@@ -79,8 +79,8 @@ export function AnnouncementBanner() {
                 </p>
               ) : notification.notif_type == "two_day_trial_ending" ? (
                 <p className="text-center">
-                  Your trial is ending soon - submit your billing information to
-                  continue using Onyx.{" "}
+                  Tu prueba está por terminar. Envía tu información de pago para
+                  seguir usando la aplicación.{" "}
                   <Link
                     href={"/admin/billing" as Route}
                     className="ml-2 underline cursor-pointer"

@@ -350,8 +350,8 @@ The widget uses CSS custom properties (CSS variables) for theming. All styles ar
 **Default Colors (aligned with web/src/app/css/colors.css):**
 
 ```css
---theme-primary-05: #1c1c1c; /* Buttons, accents (onyx-ink-95) */
---theme-primary-06: #000000; /* Hover state (onyx-ink-100) */
+--theme-primary-05: #1c1c1c; /* Buttons, accents (activa-ink-95) */
+--theme-primary-06: #000000; /* Hover state (activa-ink-100) */
 --background-neutral-00: #ffffff; /* Widget background (grey-00) */
 --background-neutral-03: #e6e6e6; /* Background hover (grey-10) */
 --text-04: #000000bf; /* Text (alpha-grey-100-75) */

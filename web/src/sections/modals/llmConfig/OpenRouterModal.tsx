@@ -208,7 +208,7 @@ export function OpenRouterModal({
                     formikProps={formikProps}
                     noModelConfigurationsMessage={
                       "Fetch available models first, then you'll be able to select " +
-                      "the models you want to make available in Onyx."
+                      "los modelos que quieres dejar disponibles en la aplicación."
                     }
                     recommendedDefaultModel={null}
                     shouldShowAutoUpdateToggle={false}

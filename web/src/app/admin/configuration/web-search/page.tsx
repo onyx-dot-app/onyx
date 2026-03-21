@@ -18,9 +18,9 @@ import {
   SvgArrowExchange,
   SvgArrowRightCircle,
   SvgCheckSquare,
+  SvgActivaLogo,
   SvgEdit,
   SvgGlobe,
-  SvgOnyxLogo,
   SvgX,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -346,7 +346,7 @@ export default function Page() {
       if (providerType === "onyx_web_crawler") {
         return {
           id: -1,
-          name: "Onyx Web Crawler",
+          name: "Crawler integrado",
           provider_type: "onyx_web_crawler",
           is_active: true,
           config: null,
@@ -1159,7 +1159,7 @@ export default function Page() {
                         alt: `${label} logo`,
                         fallback:
                           provider.provider_type === "onyx_web_crawler" ? (
-                            <SvgOnyxLogo size={16} />
+                            <SvgActivaLogo size={16} />
                           ) : undefined,
                         size: 16,
                         isHighlighted: isCurrentCrawler,
@@ -1372,7 +1372,7 @@ export default function Page() {
           } logo`,
           fallback:
             selectedContentProviderType === "onyx_web_crawler" ? (
-              <SvgOnyxLogo size={24} className="text-text-05" />
+              <SvgActivaLogo size={24} className="text-text-05" />
             ) : undefined,
           size: 24,
           containerSize: 28,

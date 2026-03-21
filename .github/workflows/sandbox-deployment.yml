@@ -1,4 +1,4 @@
-name: Build and Push Sandbox Image on Tag
+name: Build and Push ACTIVA Sandbox Image on Tag
 
 on:
   push:
@@ -60,7 +60,7 @@ jobs:
         if: steps.check.outputs.sandbox-changed == 'true'
         run: |
           # Query Docker Hub for the latest versioned tag
-          LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
+          LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/hop-rag/activa-sandbox/tags?page_size=100" \
             | jq -r '.results[].name' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | sort -V \
@@ -100,7 +100,7 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: onyxdotapp/sandbox
+      REGISTRY_IMAGE: hop-rag/activa-sandbox
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -125,7 +125,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # ratchet:docker/metadata-action@v6.0.0
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           flavor: |
@@ -170,7 +170,7 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: onyxdotapp/sandbox
+      REGISTRY_IMAGE: hop-rag/activa-sandbox
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -195,7 +195,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # ratchet:docker/metadata-action@v6.0.0
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           flavor: |
@@ -239,7 +239,7 @@ jobs:
     permissions:
       id-token: write
     env:
-      REGISTRY_IMAGE: onyxdotapp/sandbox
+      REGISTRY_IMAGE: hop-rag/activa-sandbox
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -268,7 +268,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # ratchet:docker/metadata-action@v6.0.0
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           flavor: |

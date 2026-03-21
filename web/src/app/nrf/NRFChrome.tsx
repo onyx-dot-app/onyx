@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { APP_SLOGAN } from "@/lib/constants";
 import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
@@ -70,9 +71,9 @@ export default function NRFChrome() {
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    `[Onyx ${
+    `[ACTIVA ${
       settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - Open Source AI Platform`;
+    }](https://activa.ai/) - ${APP_SLOGAN}`;
 
   const showModeToggle =
     isPaidEnterpriseFeaturesEnabled &&

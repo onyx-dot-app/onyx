@@ -8,12 +8,12 @@ import {
 import { redirect } from "next/navigation";
 import EmailPasswordForm from "../login/EmailPasswordForm";
 import SignInButton from "@/app/auth/login/SignInButton";
+import AuthPanelIntro from "@/components/auth/AuthPanelIntro";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { AuthType } from "@/lib/constants";
+import { AuthType, DEFAULT_APPLICATION_NAME } from "@/lib/constants";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -72,22 +72,20 @@ const Page = async (props: {
             cloud ? "" : "gap-6"
           )}
         >
-          <div className="w-full">
-            <Text as="p" headingH2 text05>
-              {cloud ? "Complete your sign up" : "Create account"}
-            </Text>
-            <Text as="p" text03>
-              Get started with Onyx
-            </Text>
-          </div>
+          <AuthPanelIntro
+            eyebrow="Cuenta"
+            description={`Empieza con ${DEFAULT_APPLICATION_NAME} y entra a un flujo de trabajo con evidencia, decisiones y ejecucion.`}
+          >
+            {cloud ? "Completa tu registro" : "Crea tu cuenta"}
+          </AuthPanelIntro>
           {cloud && authUrl && (
             <div className="w-full justify-center mt-6">
               <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
               <div className="flex items-center w-full my-4">
                 <div className="flex-grow border-t border-border-01" />
-                <Text as="p" mainUiMuted text03 className="mx-2">
-                  or
-                </Text>
+                <span className="mx-2 text-sm text-text-03">
+                  o
+                </span>
                 <div className="flex-grow border-t border-border-01" />
               </div>
             </div>

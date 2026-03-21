@@ -2,13 +2,13 @@
  * Integration Test: Email/Password Authentication Workflow
  *
  * Tests the complete user journey for logging in.
- * This tests the full workflow: form → validation → API call → redirect
+ * This tests the full workflow: form -> validation -> API call -> redirect
  */
 import React from "react";
-import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+
 import EmailPasswordForm from "./EmailPasswordForm";
 
-// Mock next/navigation (not used by this component, but required by dependencies)
 jest.mock("next/navigation", () => ({
   useRouter: () => ({
     push: jest.fn(),
@@ -31,7 +31,6 @@ describe("Email/Password Login Workflow", () => {
   test("allows user to login with valid credentials", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/login
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -39,23 +38,21 @@ describe("Email/Password Login Workflow", () => {
 
     render(<EmailPasswordForm isSignup={false} />);
 
-    // User fills out the form using placeholder text
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const emailInput = screen.getByTestId("email");
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "test@example.com");
     await user.type(passwordInput, "password123");
 
-    // User submits the form
-    const loginButton = screen.getByRole("button", { name: /sign in/i });
+    const loginButton = screen.getByRole("button", { name: /entrar/i });
     await user.click(loginButton);
 
-    // Verify success message is shown after login
     await waitFor(() => {
-      expect(screen.getByText(/signed in successfully\./i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/sesion iniciada correctamente\./i)
+      ).toBeInTheDocument();
     });
 
-    // Verify API was called with correct credentials
     expect(fetchSpy).toHaveBeenCalledWith(
       "/api/auth/login",
       expect.objectContaining({
@@ -66,7 +63,6 @@ describe("Email/Password Login Workflow", () => {
       })
     );
 
-    // Verify the request body contains email and password
     const callArgs = fetchSpy.mock.calls[0];
     const body = callArgs[1].body;
     expect(body.toString()).toContain("username=test%40example.com");
@@ -76,7 +72,6 @@ describe("Email/Password Login Workflow", () => {
   test("shows error message when login fails", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/login (failure)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 401,
@@ -85,21 +80,18 @@ describe("Email/Password Login Workflow", () => {
 
     render(<EmailPasswordForm isSignup={false} />);
 
-    // User fills out form with invalid credentials
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const emailInput = screen.getByTestId("email");
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "wrong@example.com");
     await user.type(passwordInput, "wrongpassword");
 
-    // User submits
-    const loginButton = screen.getByRole("button", { name: /sign in/i });
+    const loginButton = screen.getByRole("button", { name: /entrar/i });
     await user.click(loginButton);
 
-    // Verify field-level error message is displayed (not the toast)
     await waitFor(() => {
       expect(
-        screen.getByText(/^Invalid email or password$/i)
+        screen.getByText(/^Credenciales invalidas$/i)
       ).toBeInTheDocument();
     });
   });
@@ -120,13 +112,11 @@ describe("Email/Password Signup Workflow", () => {
   test("allows user to sign up and login with valid credentials", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/register
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
     } as Response);
 
-    // Mock POST /api/auth/login (after successful signup)
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -134,20 +124,17 @@ describe("Email/Password Signup Workflow", () => {
 
     render(<EmailPasswordForm isSignup={true} />);
 
-    // User fills out the signup form
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const emailInput = screen.getByTestId("email");
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "newuser@example.com");
     await user.type(passwordInput, "securepassword123");
 
-    // User submits the signup form
     const signupButton = screen.getByRole("button", {
-      name: /create account/i,
+      name: /crear cuenta/i,
     });
     await user.click(signupButton);
 
-    // Verify signup API was called
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/auth/register",
@@ -160,7 +147,6 @@ describe("Email/Password Signup Workflow", () => {
       );
     });
 
-    // Verify signup request body
     const signupCallArgs = fetchSpy.mock.calls[0];
     const signupBody = JSON.parse(signupCallArgs[1].body);
     expect(signupBody).toEqual({
@@ -170,7 +156,6 @@ describe("Email/Password Signup Workflow", () => {
       referral_source: undefined,
     });
 
-    // Verify login API was called after successful signup
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/auth/login",
@@ -180,18 +165,14 @@ describe("Email/Password Signup Workflow", () => {
       );
     });
 
-    // Verify success message is shown
     await waitFor(() => {
-      expect(
-        screen.getByText(/account created\. signing in/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/cuenta creada\. ingresando/i)).toBeInTheDocument();
     });
   });
 
   test("shows error when email already exists", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/register (failure - user exists)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 400,
@@ -200,25 +181,20 @@ describe("Email/Password Signup Workflow", () => {
 
     render(<EmailPasswordForm isSignup={true} />);
 
-    // User fills out form with existing email
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const emailInput = screen.getByTestId("email");
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "existing@example.com");
     await user.type(passwordInput, "password123");
 
-    // User submits
     const signupButton = screen.getByRole("button", {
-      name: /create account/i,
+      name: /crear cuenta/i,
     });
     await user.click(signupButton);
 
-    // Verify field-level error message is displayed (not the toast)
     await waitFor(() => {
       expect(
-        screen.getByText(
-          /^An account already exists with the specified email\.$/i
-        )
+        screen.getByText(/^Ya existe una cuenta con este correo\.$/i)
       ).toBeInTheDocument();
     });
   });
@@ -226,7 +202,6 @@ describe("Email/Password Signup Workflow", () => {
   test("shows rate limit error when too many requests", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/register (failure - rate limit)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 429,
@@ -235,23 +210,20 @@ describe("Email/Password Signup Workflow", () => {
 
     render(<EmailPasswordForm isSignup={true} />);
 
-    // User fills out form
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByPlaceholderText(/∗/);
+    const emailInput = screen.getByTestId("email");
+    const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "user@example.com");
     await user.type(passwordInput, "password123");
 
-    // User submits
     const signupButton = screen.getByRole("button", {
-      name: /create account/i,
+      name: /crear cuenta/i,
     });
     await user.click(signupButton);
 
-    // Verify field-level rate limit message is displayed (not the toast)
     await waitFor(() => {
       expect(
-        screen.getByText(/^Too many requests\. Please try again later\.$/i)
+        screen.getByText(/^Demasiados intentos\. Intentalo de nuevo mas tarde\.$/i)
       ).toBeInTheDocument();
     });
   });

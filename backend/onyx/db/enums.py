@@ -304,3 +304,13 @@ class LLMModelFlowType(str, PyEnum):
     CHAT = "chat"
     VISION = "vision"
     CONTEXTUAL_RAG = "contextual_rag"
+
+
+class HookPoint(str, PyEnum):
+    DOCUMENT_INGESTION = "document_ingestion"
+    QUERY_PROCESSING = "query_processing"
+
+
+class HookFailStrategy(str, PyEnum):
+    HARD = "hard"  # exception propagates, pipeline aborts
+    SOFT = "soft"  # log error, return original input, pipeline continues

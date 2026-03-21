@@ -18,6 +18,7 @@ from slack_sdk.models.blocks.block_elements import ImageElement
 from onyx.chat.models import ChatBasicResponse
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_DOCS_TO_DISPLAY
 from onyx.context.search.models import SearchDoc
@@ -47,6 +48,7 @@ from onyx.onyxbot.slack.utils import translate_vespa_highlight_to_slack
 from onyx.utils.text_processing import decode_escapes
 
 _MAX_BLURB_LEN = 45
+BOT_BRAND = ONYX_DEFAULT_APPLICATION_NAME
 
 
 def _format_doc_updated_at(updated_at: datetime | None) -> str | None:
@@ -64,14 +66,17 @@ def _format_doc_updated_at(updated_at: datetime | None) -> str | None:
 
 def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Block:
     text = (
-        f"Please provide feedback on <{thread_link}|this answer>. "
-        "This is essential to help us to improve the quality of the answers. "
-        "Please rate it by clicking the `Helpful` or `Not helpful` button. "
+        f"Por favor califica <{thread_link}|esta respuesta>. "
+        "Esto nos ayuda a mejorar la calidad de las respuestas. "
+        "Usa los botones `Util` o `No util`. "
     )
     if include_followup:
-        text += "\n\nIf you need more help, click the `I need more help from a human!` button. "
+        text += (
+            "\n\nSi necesitas mas ayuda, haz clic en el boton "
+            "`Necesito mas ayuda de una persona`."
+        )
 
-    text += "\n\nThanks!"
+    text += "\n\nGracias."
 
     return SectionBlock(text=text)
 
@@ -111,12 +116,12 @@ def _build_qa_feedback_block(
         elements=[
             ButtonElement(
                 action_id=LIKE_BLOCK_ACTION_ID,
-                text="👍 Helpful",
+                text="Util",
                 value=feedback_reminder_id,
             ),
             ButtonElement(
                 action_id=DISLIKE_BLOCK_ACTION_ID,
-                text="👎 Not helpful",
+                text="No util",
                 value=feedback_reminder_id,
             ),
         ],
@@ -182,12 +187,12 @@ def _build_ephemeral_publication_block(
         elements=[
             ButtonElement(
                 action_id=SHOW_EVERYONE_ACTION_ID,
-                text="📢 Share with Everyone",
+                text="Compartir con todos",
                 value=action_values_ephemeral_message.model_dump_json(),
             ),
             ButtonElement(
                 action_id=KEEP_TO_YOURSELF_ACTION_ID,
-                text="🤫  Keep to Yourself",
+                text="Solo para mi",
                 value=action_values_ephemeral_message.model_dump_json(),
             ),
         ],
@@ -197,24 +202,24 @@ def _build_ephemeral_publication_block(
 def get_document_feedback_blocks() -> Block:
     return SectionBlock(
         text=(
-            "- 'Up-Boost' if this document is a good source of information and should be "
-            "shown more often.\n"
-            "- 'Down-boost' if this document is a poor source of information and should be "
-            "shown less often.\n"
-            "- 'Hide' if this document is deprecated and should never be shown anymore."
+            "- 'Impulsar' si este documento es una buena fuente de informacion y "
+            "deberia mostrarse mas seguido.\n"
+            "- 'Reducir' si este documento es una fuente de baja calidad y deberia "
+            "mostrarse menos.\n"
+            "- 'Ocultar' si este documento esta obsoleto y no deberia mostrarse mas."
         ),
         accessory=RadioButtonsElement(
             options=[
                 Option(
-                    text=":thumbsup: Up-Boost",
+                    text=":thumbsup: Impulsar",
                     value=SearchFeedbackType.ENDORSE.value,
                 ),
                 Option(
-                    text=":thumbsdown: Down-Boost",
+                    text=":thumbsdown: Reducir",
                     value=SearchFeedbackType.REJECT.value,
                 ),
                 Option(
-                    text=":x: Hide",
+                    text=":x: Ocultar",
                     value=SearchFeedbackType.HIDE.value,
                 ),
             ]
@@ -231,7 +236,7 @@ def _build_doc_feedback_block(
     return ButtonElement(
         action_id=FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID,
         value=feedback_id,
-        text="Give Feedback",
+        text="Dar feedback",
     )
 
 
@@ -244,7 +249,7 @@ def get_restate_blocks(
         return []
 
     return [
-        HeaderBlock(text="Responding to the Query"),
+        HeaderBlock(text="Respuesta a la consulta"),
         SectionBlock(text=f"```{msg}```"),
     ]
 
@@ -254,7 +259,7 @@ def _build_documents_blocks(
     message_id: int | None,
     num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
-    header_text = "Reference Documents"
+    header_text = "Documentos de referencia"
     seen_docs_identifiers = set()
     section_blocks: list[Block] = [HeaderBlock(text=header_text)]
     included_docs = 0
@@ -280,7 +285,7 @@ def _build_documents_blocks(
         updated_at_line = ""
         updated_at_str = _format_doc_updated_at(d.updated_at)
         if updated_at_str:
-            updated_at_line = f"_Updated {updated_at_str}_\n"
+            updated_at_line = f"_Actualizado {updated_at_str}_\n"
 
         body_text = f">{remove_slack_text_interactions(match_str)}"
 
@@ -313,12 +318,12 @@ def _build_sources_blocks(
     if not cited_documents:
         return [
             SectionBlock(
-                text="*Warning*: no sources were cited for this answer, so it may be unreliable 😔"
+                text="*Advertencia*: esta respuesta no cito fuentes, asi que podria no ser confiable."
             )
         ]
 
     seen_docs_identifiers = set()
-    section_blocks: list[Block] = [SectionBlock(text="*Sources:*")]
+    section_blocks: list[Block] = [SectionBlock(text="*Fuentes:*")]
     included_docs = 0
     for citation_num, d in cited_documents:
         if d.document_id in seen_docs_identifiers:
@@ -340,7 +345,7 @@ def _build_sources_blocks(
             else doc_sem_id
         )
 
-        owner_str = f"By {d.primary_owners[0]}" if d.primary_owners else None
+        owner_str = f"Por {d.primary_owners[0]}" if d.primary_owners else None
         days_ago_str = _format_doc_updated_at(d.updated_at)
         final_metadata_str = " | ".join(
             ([owner_str] if owner_str else [])
@@ -356,7 +361,7 @@ def _build_sources_blocks(
                     [
                         ImageElement(
                             image_url=img_link,
-                            alt_text=f"{d.source_type.value} logo",
+                            alt_text=f"Logo de {d.source_type.value}",
                         )
                     ]
                     if img_link
@@ -468,7 +473,7 @@ def _build_continue_in_web_ui_block(
             elements=[
                 ButtonElement(
                     action_id=CONTINUE_IN_WEB_UI_ACTION_ID,
-                    text="Continue Chat in Onyx!",
+                    text=f"Continuar chat en {BOT_BRAND}",
                     style="primary",
                     url=f"{WEB_DOMAIN}/chat?slackChatId={chat_session.id}",
                 ),
@@ -483,12 +488,12 @@ def _build_follow_up_block(message_id: int | None) -> ActionsBlock:
             ButtonElement(
                 action_id=IMMEDIATE_RESOLVED_BUTTON_ACTION_ID,
                 style="primary",
-                text="I'm all set!",
+                text="Todo listo",
             ),
             ButtonElement(
                 action_id=FOLLOWUP_BUTTON_ACTION_ID,
                 style="danger",
-                text="I need more help from a human!",
+                text="Necesito mas ayuda de una persona",
             ),
         ],
     )
@@ -508,7 +513,7 @@ def build_follow_up_resolved_blocks(
     text = (
         tag_str
         + group_str
-        + "Someone has requested more help.\n\n:point_down:Please mark this resolved after answering!"
+        + "Alguien solicito mas ayuda.\n\n:point_down:Marca esto como resuelto despues de responder."
     )
     text_block = SectionBlock(text=text)
     button_block = ActionsBlock(
@@ -516,7 +521,7 @@ def build_follow_up_resolved_blocks(
             ButtonElement(
                 action_id=FOLLOWUP_BUTTON_RESOLVED_ACTION_ID,
                 style="primary",
-                text="Mark Resolved",
+                text="Marcar como resuelto",
             )
         ]
     )

@@ -245,7 +245,7 @@ TRACK_EXTERNAL_IDP_EXPIRY = (
 #####
 # DB Configs
 #####
-DOCUMENT_INDEX_NAME = "danswer_index"
+DOCUMENT_INDEX_NAME = "onyx_index"
 
 # OpenSearch Configs
 OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
@@ -818,7 +818,7 @@ MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0)
 
 # Should match the rerank-count value set in
-# backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
+# backend/onyx/document_index/vespa/app_config/schemas/onyx_chunk.sd.jinja.
 RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 
 
@@ -1045,6 +1045,8 @@ POD_NAMESPACE = os.environ.get("POD_NAMESPACE")
 
 
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
+
+HOOK_ENABLED = os.environ.get("HOOK_ENABLED", "").lower() == "true"
 
 INTEGRATION_TESTS_MODE = os.environ.get("INTEGRATION_TESTS_MODE", "").lower() == "true"
 

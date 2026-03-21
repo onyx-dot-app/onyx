@@ -22,11 +22,12 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
+import { DRAG_TYPES } from "@/sections/sidebar/constants";
 import {
+  handleMoveOperation,
+  persistHideMoveCustomAgentModal,
   shouldShowMoveModal,
   showErrorNotification,
-  handleMoveOperation,
 } from "@/sections/sidebar/sidebarUtils";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import useAppFocus from "@/hooks/useAppFocus";
@@ -479,11 +480,8 @@ const ChatButton = memo(
               setNavigateAfterMoveProjectId(null);
             }}
             onConfirm={async (doNotShowAgain: boolean) => {
-              if (doNotShowAgain && typeof window !== "undefined") {
-                window.localStorage.setItem(
-                  LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL,
-                  "true"
-                );
+              if (doNotShowAgain) {
+                persistHideMoveCustomAgentModal();
               }
               const target = pendingMoveProjectId;
               const shouldNavigate = navigateAfterMoveProjectId;

@@ -1,184 +1,179 @@
-# Engineering Principles, Style, and Correctness Guide
+# Guia de principios de ingenieria, estilo y correccion
 
-## Principles and collaboration
+## Principios y colaboracion
 
-- **Use 1-way vs 2-way doors.** For 2-way doors, move faster and iterate. For 1-way doors, be more deliberate.
-- **Consistency > being “right.”** Prefer consistent patterns across the codebase. If something is truly bad, fix it everywhere.
-- **Fix what you touch (selectively).**
-  - Don’t feel obligated to fix every best-practice issue you notice.
-  - Don’t introduce new bad practices.
-  - If your change touches code that violates best practices, fix it as part of the change.
-- **Don’t tack features on.** When adding functionality, restructure logically as needed to avoid muddying interfaces and accumulating tech debt.
+- **Usa puertas de 1 via vs 2 vias.** Si una decision es reversible, avanza rapido e itera. Si es dificil de revertir, procede con mas cuidado.
+- **La consistencia vale mas que "tener razon".** Prefiere patrones consistentes a lo largo del codebase. Si algo realmente esta mal, arreglalo en todos lados.
+- **Arregla lo que tocas (con criterio).**
+  - No hace falta corregir cada problema de buenas practicas que detectes.
+  - No introduzcas nuevas malas practicas.
+  - Si tu cambio toca codigo que ya viola buenas practicas, corrige eso dentro del mismo cambio cuando tenga sentido.
+- **No pegues funcionalidades encima.** Cuando agregues algo nuevo, reestructura de forma logica si hace falta para no embarrar interfaces ni acumular deuda tecnica.
 
 ---
 
-## Style and maintainability
+## Estilo y mantenibilidad
 
-### Comments and readability
-Add clear comments:
-- At logical boundaries (e.g., interfaces) so the reader doesn’t need to dig 10 layers deeper.
-- Wherever assumptions are made or something non-obvious/unexpected is done.
-- For complicated flows/functions.
-- Wherever it saves time (e.g., nontrivial regex patterns).
+### Comentarios y legibilidad
 
-### Errors and exceptions
-- **Fail loudly** rather than silently skipping work.
-  - Example: raise and let exceptions propagate instead of silently dropping a document.
-- **Don’t overuse `try/except`.**
-  - Put `try/except` at the correct logical level.
-  - Do not mask exceptions unless it is clearly appropriate.
+Agrega comentarios claros:
 
-### Typing
-- Everything should be **as strictly typed as possible**.
-- Use `cast` for annoying/loose-typed interfaces (e.g., results of `run_functions_tuples_in_parallel`).
-  - Only `cast` when the type checker sees `Any` or types are too loose.
-- Prefer types that are easy to read.
-  - Avoid dense types like `dict[tuple[str, str], list[list[float]]]`.
-  - Prefer domain models, e.g.:
-    - `EmbeddingModel(provider_name, model_name)` as a Pydantic model
+- En limites logicos como interfaces, para que quien lea no tenga que saltar diez capas mas abajo.
+- Donde haya supuestos implicitos o comportamiento poco obvio.
+- En flujos o funciones complicadas.
+- Siempre que ahorre tiempo real de comprension, por ejemplo con regex no triviales.
+
+### Errores y excepciones
+
+- **Falla de forma visible** en vez de omitir trabajo silenciosamente.
+  - Ejemplo: lanza la excepcion y deja que propague, en vez de descartar un documento en silencio.
+- **No abuses de `try/except`.**
+  - Ubicalos en el nivel logico correcto.
+  - No ocultes excepciones salvo que este claramente justificado.
+
+### Tipado
+
+- Todo debe quedar **lo mas estrictamente tipado posible**.
+- Usa `cast` para interfaces incomodas o demasiado laxas (por ejemplo resultados de `run_functions_tuples_in_parallel`).
+  - Solo usa `cast` cuando el type checker vea `Any` o los tipos sean demasiado flojos.
+- Prefiere tipos faciles de leer.
+  - Evita tipos densos como `dict[tuple[str, str], list[list[float]]]`.
+  - Prefiere modelos del dominio, por ejemplo:
+    - `EmbeddingModel(provider_name, model_name)` como modelo Pydantic
     - `dict[EmbeddingModel, list[EmbeddingVector]]`
 
-### State, objects, and boundaries
-- Keep **clear logical boundaries** for state containers and objects.
-- A **config** object should never contain things like a `db_session`.
-- Avoid state containers that are:
-  - overly nested, or
-  - huge + flat (use judgment).
-- Prefer **composition and functional style** over inheritance/OOP.
-- Prefer **no mutation** unless there’s a strong reason.
-- State objects should be **intentional and explicit**, ideally nonmutating.
-- Use interfaces/objects to create clear separation of responsibility.
-- Prefer simplicity when there’s no clear gain
-  - Avoid overcomplicated mechanisms like semaphores.
-  - Prefer **hash maps (dicts)** over tree structures unless there’s a strong reason.
+### Estado, objetos y limites
 
-### Naming
-- Name variables carefully and intentionally.
-- Prefer long, explicit names when undecided.
-- Avoid single-character variables except for small, self-contained utilities (or not at all).
-- Keep the same object/name consistent through the call stack and within functions when reasonable.
-  - Good: `for token in tokens:`
-  - Bad: `for msg in tokens:` (if iterating tokens)
-- Function names should bias toward **long + descriptive** for codebase search.
-  - IntelliSense can miss call sites; search works best with unique names.
-  - “Fetch versioned implementation” is an example of why this matters.
+- Manten **limites logicos claros** para contenedores de estado y objetos.
+- Un objeto de **config** nunca deberia incluir cosas como `db_session`.
+- Evita contenedores de estado:
+  - demasiado anidados, o
+  - enormes y planos al mismo tiempo.
+- Prefiere **composicion y estilo funcional** sobre herencia / OOP cuando no haya una ventaja clara.
+- Prefiere **no mutar** salvo que exista una razon fuerte.
+- Los objetos de estado deben ser **intencionales y explicitos**, idealmente inmutables o con mutacion muy controlada.
+- Usa interfaces u objetos para crear separaciones claras de responsabilidad.
+- Prefiere soluciones simples cuando no haya una ganancia evidente.
+  - Evita mecanismos demasiado complejos como semaforos.
+  - Prefiere **hash maps (`dict`)** sobre estructuras de arbol salvo que exista una razon fuerte.
 
-### Correctness by construction
-- Prefer self-contained correctness.
-  - Don’t rely on callers to “use it right” if you can make misuse hard.
-- Avoid redundancies:
-  - If a function takes an arg, it shouldn’t also take a state object that contains that same arg.
-- No dead code (unless there’s a very good reason).
-- No commented-out code in main or feature branches (unless there’s a very good reason).
-- No duplicate logic:
-  - Don’t copy/paste into branches when shared logic can live above the conditional.
-  - If you’re afraid to touch the original, you don’t understand it well enough.
-  - LLMs often create subtle duplicate logic—review carefully and remove it.
-  - Avoid “nearly identical” objects that confuse when to use which.
-- Avoid extremely long functions with chained logic:
-  - Encapsulate steps into helpers for readability, even if not reused.
-  - “Pythonic” multi-step expressions are OK in moderation; don’t trade clarity for cleverness.
+### Nombres
 
----
+- Nombra variables con cuidado e intencion.
+- Si dudas, elige nombres largos y explicitos.
+- Evita variables de un solo caracter salvo en utilidades muy pequenas y autocontenidas.
+- Manten el mismo objeto o nombre de forma consistente a lo largo del call stack y dentro de las funciones cuando sea razonable.
+  - Bien: `for token in tokens:`
+  - Mal: `for msg in tokens:` si estas iterando tokens
+- Los nombres de funciones deberian inclinarse por ser **largos y descriptivos** para facilitar busqueda en el codebase.
+  - IntelliSense puede perder referencias; la busqueda funciona mejor con nombres unicos.
 
-## Performance and correctness
+### Correccion por construccion
 
-- Avoid holding resources for extended periods:
-  - DB sessions
-  - locks/semaphores
-- Validate objects:
-  - on creation, and
-  - right before use.
-- Connector code (data → Onyx documents):
-  - Any in-memory structure that can grow without bound based on input must be periodically size-checked.
-  - If a connector is OOMing (often shows up as “missing celery tasks”), this is a top thing to check retroactively.
-- Async and event loops:
-  - Never introduce new async/event loop Python code, and try to make existing
-    async code synchronous when possible if it makes sense.
-    - Writing async code without 100% understanding the code and having a
-      concrete reason to do so is likely to introduce bugs and not add any
-      meaningful performance gains.
+- Prefiere que la correccion este encapsulada en el propio diseno.
+  - No dependas de que quien llama "lo use bien" si puedes hacer dificil el mal uso.
+- Evita redundancias:
+  - Si una funcion recibe un argumento, no deberia recibir tambien un objeto de estado que contenga ese mismo valor.
+- No dejes codigo muerto salvo que exista una razon muy fuerte.
+- No dejes codigo comentado en ramas principales o de feature salvo que exista una razon muy fuerte.
+- No dupliques logica:
+  - No copies y pegues dentro de ramas cuando la logica compartida pueda vivir arriba del condicional.
+  - Si te da miedo tocar la implementacion original, todavia no la entiendes lo suficiente.
+  - Los LLM suelen crear logica duplicada sutil; revisa con cuidado y eliminala.
+  - Evita objetos "casi identicos" que vuelvan confuso cuando usar cada uno.
+- Evita funciones excesivamente largas con logica encadenada:
+  - Encapsula pasos en helpers para mejorar legibilidad, aunque no se reutilicen.
+  - Expresiones "pythonicas" de varios pasos estan bien con moderacion; no sacrifiques claridad por ingenio.
 
 ---
 
-## Repository conventions: where code lives
+## Rendimiento y correccion
 
-- Pydantic + data models: `models.py` files.
-- DB interface functions (excluding lazy loading): `db/` directory.
-- LLM prompts: `prompts/` directory, roughly mirroring the code layout that uses them.
-- API routes: `server/` directory.
+- Evita retener recursos por periodos largos:
+  - sesiones de BD
+  - locks / semaforos
+- Valida objetos:
+  - al crearlos, y
+  - justo antes de usarlos.
+- Codigo de conectores (datos -> documentos indexados de la aplicacion):
+  - Cualquier estructura en memoria que pueda crecer sin limite en funcion de la entrada debe revisarse periodicamente por tamano.
+  - Si un conector esta causando OOM (a menudo se ve como "missing celery tasks"), este es de los primeros puntos para revisar.
+- Async y event loops:
+  - No introduzcas nuevo codigo async / event loop en Python y, cuando tenga sentido, intenta volver sincrono el codigo async existente.
+  - Escribir async sin entender al 100% el flujo ni tener una razon concreta suele introducir bugs sin aportar ganancias reales.
 
 ---
 
-## Pydantic and modeling rules
+## Convenciones del repositorio: donde vive cada cosa
 
-- Prefer **Pydantic** over dataclasses.
-- If absolutely required, use `allow_arbitrary_types`.
+- Modelos Pydantic y modelos de datos: archivos `models.py`.
+- Funciones de acceso a BD (excepto lazy loading): directorio `db/`.
+- Prompts de LLM: directorio `prompts/`, mas o menos espejado con el layout del codigo que los usa.
+- Rutas de API: directorio `server/`.
 
 ---
 
-## Data conventions
+## Reglas de Pydantic y modelado
 
-- Prefer explicit `None` over sentinel empty strings (usually; depends on intent).
-- Prefer explicit identifiers:
-  - Use string enums instead of integer codes.
-- Avoid magic numbers (co-location is good when necessary). **Always avoid magic strings.**
+- Prefiere **Pydantic** por encima de dataclasses.
+- Si de verdad hace falta, usa `allow_arbitrary_types`.
+
+---
+
+## Convenciones de datos
+
+- Prefiere `None` explicito sobre strings vacios usados como sentinel, salvo que la intencion requiera otra cosa.
+- Prefiere identificadores explicitos:
+  - Usa enums de string en vez de codigos enteros.
+- Evita numeros magicos. **Evita siempre strings magicos.**
 
 ---
 
 ## Logging
 
-- Log messages where they are created.
-- Don’t propagate log messages around just to log them elsewhere.
+- Registra los mensajes donde se crean.
+- No pases mensajes de log de un lado a otro solo para loguearlos en otro sitio.
 
 ---
 
-## Encapsulation
+## Encapsulacion
 
-- Don’t use private attributes/methods/properties from other classes/modules.
-- “Private” is private—respect that boundary.
-
----
-
-## SQLAlchemy guidance
-
-- Lazy loading is often bad at scale, especially across multiple list relationships.
-- Be careful when accessing SQLAlchemy object attributes:
-  - It can help avoid redundant DB queries,
-  - but it can also fail if accessed outside an active session,
-  - and lazy loading can add hidden DB dependencies to otherwise “simple” functions.
-- Reference: https://www.reddit.com/r/SQLAlchemy/comments/138f248/joinedload_vs_selectinload/
+- No uses atributos, metodos o propiedades privadas de otras clases o modulos.
+- "Private" significa privado: respeta ese limite.
 
 ---
 
-## Trunk-based development and feature flags
+## Guia de SQLAlchemy
 
-- **PRs should contain no more than 500 lines of real change.**
-- **Merge to main frequently.** Avoid long-lived feature branches—they create merge conflicts and integration pain.
-- **Use feature flags for incremental rollout.**
-  - Large features should be merged in small, shippable increments behind a flag.
-  - This allows continuous integration without exposing incomplete functionality.
-- **Keep flags short-lived.** Once a feature is fully rolled out, remove the flag and dead code paths promptly.
-- **Flag at the right level.** Prefer flagging at API/UI entry points rather than deep in business logic.
-- **Test both flag states.** Ensure the codebase works correctly with the flag on and off.
+- El lazy loading suele ser problematico a escala, especialmente a traves de varias relaciones tipo lista.
+- Ten cuidado al acceder a atributos de objetos SQLAlchemy:
+  - puede evitar consultas redundantes,
+  - pero tambien puede fallar fuera de una sesion activa,
+  - y el lazy loading puede introducir dependencias ocultas de base de datos en funciones aparentemente simples.
+- Referencia: https://www.reddit.com/r/SQLAlchemy/comments/138f248/joinedload_vs_selectinload/
+
+---
+
+## Trunk-based development y banderas de funcionalidad
+
+- **Los PRs no deberian superar 500 lineas de cambio real.**
+- **Haz merge a main con frecuencia.** Evita ramas largas de feature: generan conflictos y dolor de integracion.
+- **Usa banderas de funcionalidad para rollout incremental.**
+  - Las funcionalidades grandes deberian mergearse en incrementos pequenos y desplegables detras de una bandera.
+  - Eso permite integracion continua sin exponer funcionalidad incompleta.
+- **Haz que las banderas vivan poco tiempo.** Cuando una funcionalidad ya este totalmente desplegada, elimina la bandera y el codigo muerto asociado.
+- **Coloca la bandera en el nivel correcto.** Prefiere ponerla en el punto de entrada de API o UI, no profundamente en la logica de negocio.
+- **Prueba ambos estados de la bandera.** Asegura que el codebase funciona bien con la bandera activada y desactivada.
 
 ---
 
 ## Misc
 
-- Any TODOs you add in the code must be accompanied by either the name/username
-  of the owner of that TODO, or an issue number for an issue referencing that
-  piece of work.
-- Avoid module-level logic that runs on import, which leads to import-time side
-  effects. Essentially every piece of meaningful logic should exist within some
-  function that has to be explicitly invoked. Acceptable exceptions to this may
-  include loading environment variables or setting up loggers.
-  - If you find yourself needing something like this, you may want that logic to
-    exist in a file dedicated for manual execution (contains `if __name__ ==
-    "__main__":`) which should not be imported by anything else.
-- Related to the above, do not conflate Python scripts you intend to run from
-  the command line (contains `if __name__ == "__main__":`) with modules you
-  intend to import from elsewhere. If for some unlikely reason they have to be
-  the same file, any logic specific to executing the file (including imports)
-  should be contained in the `if __name__ == "__main__":` block.
-  - Generally these executable files exist in `backend/scripts/`.
+- Cualquier `TODO` que agregues al codigo debe incluir el nombre o usuario responsable, o el numero de un issue asociado a ese trabajo.
+- Evita logica a nivel de modulo que se ejecute al importar, porque genera efectos laterales al momento del import.
+  - Casi toda logica importante deberia vivir dentro de una funcion que se invoque explicitamente.
+  - Excepciones aceptables pueden incluir cargar variables de entorno o configurar loggers.
+- Si necesitas algo asi, probablemente esa logica deberia vivir en un archivo pensado para ejecucion manual (con `if __name__ == "__main__":`) y no ser importado desde otros modulos.
+- No mezcles scripts de Python pensados para ejecutarse desde linea de comandos (con `if __name__ == "__main__":`) con modulos pensados para ser importados.
+  - Si por alguna razon rara tienen que ser el mismo archivo, toda logica especifica de ejecucion, incluyendo imports, debe quedar dentro del bloque `if __name__ == "__main__":`.
+  - En general esos archivos ejecutables viven en `backend/scripts/`.

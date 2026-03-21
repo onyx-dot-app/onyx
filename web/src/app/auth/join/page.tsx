@@ -11,6 +11,7 @@ import SignInButton from "@/app/auth/login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import { AuthType } from "@/lib/constants";
+import Text from "@/refresh-components/texts/Text";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -60,7 +61,6 @@ const Page = async (props: {
   if (cloud && authTypeMetadata) {
     authUrl = await getAuthUrlSS(authTypeMetadata.authType, null);
   }
-  const emailDomain = defaultEmail?.split("@")[1];
 
   return (
     <AuthFlowContainer authState="join">
@@ -68,18 +68,23 @@ const Page = async (props: {
 
       <>
         <div className="absolute top-10x w-full"></div>
-        <div className="flex w-full flex-col justify-center">
-          <h2 className="text-center text-xl text-strong font-bold">
-            Re-authenticate to join team
-          </h2>
+        <div className="flex w-full flex-col justify-center gap-6">
+          <div className="flex flex-col gap-1">
+            <Text as="p" headingH2 className="text-text-05">
+              Unete a {teamName}
+            </Text>
+            <Text as="p" mainUiMuted className="text-text-03">
+              Inicia sesion o crea tu acceso para entrar al equipo.
+            </Text>
+          </div>
 
           {cloud && authUrl && (
             <div className="w-full justify-center">
               <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
               <div className="flex items-center w-full my-4">
-                <div className="flex-grow border-t border-background-300"></div>
-                <span className="px-4 text-text-500">or</span>
-                <div className="flex-grow border-t border-background-300"></div>
+                <div className="flex-grow border-t border-border-01"></div>
+                <span className="px-4 text-text-03">o</span>
+                <div className="flex-grow border-t border-border-01"></div>
               </div>
             </div>
           )}

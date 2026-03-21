@@ -17,9 +17,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "user",
-        sa.Column("user_preferences", sa.Text(), nullable=True),
+    op.execute(
+        "ALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS user_preferences TEXT"
     )
 
 

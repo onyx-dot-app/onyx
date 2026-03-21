@@ -1,18 +1,18 @@
 # =============================================================================
-# ONYX LITE — MINIMAL DEPLOYMENT VALUES
+# ACTIVA LITE — MINIMAL DEPLOYMENT VALUES
 # =============================================================================
-# Minimal Onyx deployment: no vector database, no Redis, no model servers.
+# Minimal Activa deployment: no vector database, no Redis, no model servers.
 # Only PostgreSQL is required. Connectors and RAG search are disabled, but the
 # core chat experience (LLM conversations, tools, user file uploads, Projects,
 # Agent knowledge) still works.
 #
 # Usage:
-#   helm install onyx ./deployment/helm/charts/onyx \
-#     -f ./deployment/helm/charts/onyx/values-lite.yaml
+#   helm install activa ./deployment/helm/charts/activa \
+#     -f ./deployment/helm/charts/activa/values-lite.yaml
 #
 # Or merged with your own overrides:
-#   helm install onyx ./deployment/helm/charts/onyx \
-#     -f ./deployment/helm/charts/onyx/values-lite.yaml \
+#   helm install activa ./deployment/helm/charts/activa \
+#     -f ./deployment/helm/charts/activa/values-lite.yaml \
 #     -f my-overrides.yaml
 # =============================================================================
 

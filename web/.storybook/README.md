@@ -1,46 +1,47 @@
-# Onyx Storybook
+# Storybook de ACTIVA
 
-Storybook is an isolated development environment for UI components. It renders each component in a standalone "story" outside of the main app, so you can visually verify appearance, interact with props, and catch regressions without navigating through the full application.
+Storybook es un entorno aislado para desarrollar componentes UI. Renderiza cada componente en una "story" independiente fuera de la app principal, para verificar apariencia, probar props y detectar regresiones sin navegar por toda la aplicacion.
 
-The Onyx Storybook covers the full component library — from low-level `@opal/core` primitives up through `refresh-components` — giving designers and engineers a shared reference for every visual state.
+El Storybook de ACTIVA cubre toda la libreria de componentes, desde primitivas de bajo nivel en `@opal/core` hasta `refresh-components`, y sirve como referencia compartida para diseno e ingenieria.
 
-**Production:** [onyx-storybook.vercel.app](https://onyx-storybook.vercel.app)
+**Produccion:** actualiza esta linea con la URL publica final del Storybook de ACTIVA cuando exista.
 
-## Running Locally
+## Ejecutarlo localmente
 
 ```bash
 cd web
-npm run storybook        # dev server on http://localhost:6006
-npm run storybook:build  # static build to storybook-static/
+npm run storybook
+npm run storybook:build
 ```
 
-The dev server hot-reloads when you edit a component or story file.
+- `npm run storybook` levanta el servidor en `http://localhost:6006`
+- `npm run storybook:build` genera la salida estatica en `storybook-static/`
 
-## Writing Stories
+## Escribir stories
 
-Stories are **co-located** next to their component source:
+Las stories viven junto al codigo fuente del componente:
 
-```
+```text
 lib/opal/src/core/interactive/
-├── components.tsx              ← the component
-├── Interactive.stories.tsx     ← the story
-└── styles.css
+|-- components.tsx
+|-- Interactive.stories.tsx
+`-- styles.css
 
 src/refresh-components/buttons/
-├── Button.tsx
-└── Button.stories.tsx
+|-- Button.tsx
+`-- Button.stories.tsx
 ```
 
-### Minimal Template
+### Plantilla minima
 
 ```tsx
 import type { Meta, StoryObj } from "@storybook/react";
 import { MyComponent } from "./MyComponent";
 
 const meta: Meta<typeof MyComponent> = {
-  title: "Category/MyComponent",   // sidebar path
+  title: "Category/MyComponent",
   component: MyComponent,
-  tags: ["autodocs"],               // generates a docs page from props
+  tags: ["autodocs"],
 };
 
 export default meta;
@@ -51,30 +52,32 @@ export const Default: Story = {
 };
 ```
 
-### Conventions
+### Convenciones
 
-- **Title format:** `Core/Name`, `Components/Name`, `Layouts/Name`, or `refresh-components/category/Name`
-- **Tags:** Add `tags: ["autodocs"]` to auto-generate a props docs page
-- **Decorators:** Components that use Radix tooltips need a `TooltipPrimitive.Provider` decorator
-- **Layout:** Use `parameters: { layout: "fullscreen" }` for modals/popovers that use portals
+- **Formato del titulo:** `Core/Name`, `Components/Name`, `Layouts/Name` o `refresh-components/category/Name`
+- **Tags:** usa `tags: ["autodocs"]` para generar docs automaticas desde props
+- **Decorators:** los componentes que usan tooltips de Radix suelen necesitar `TooltipPrimitive.Provider`
+- **Layout:** usa `parameters: { layout: "fullscreen" }` para modales o popovers que usan portales
 
-## Dark Mode
+## Dark mode
 
-Use the theme toggle (paint roller icon) in the Storybook toolbar to switch between light and dark modes. This adds/removes the `dark` class on the preview body, matching the app's `darkMode: "class"` Tailwind config. All color tokens from `colors.css` adapt automatically.
+Usa el selector de tema en la toolbar de Storybook para alternar entre light y dark mode. Esto agrega o quita la clase `dark` en el preview y deja que los tokens de `colors.css` se adapten automaticamente.
 
-## Deployment
+## Deploy
 
-The production Storybook is deployed as a static site on Vercel. The build runs `npm run storybook:build` which outputs to `storybook-static/`, and Vercel serves that directory.
+El Storybook de produccion se publica como sitio estatico. El build corre `npm run storybook:build`, genera `storybook-static/` y tu proveedor de hosting debe servir ese directorio.
 
-Deploys are triggered on merges to `main` when files in `web/lib/opal/`, `web/src/refresh-components/`, or `web/.storybook/` change.
+Los deploys se disparan cuando hay merges a `main` con cambios en:
 
-## Component Layers
+- `web/lib/opal/`
+- `web/src/refresh-components/`
+- `web/.storybook/`
 
-The sidebar organizes components by their layer in the design system:
+## Capas de componentes
 
-| Layer | Path | Examples |
-|-------|------|----------|
+| Capa | Ruta | Ejemplos |
+|------|------|----------|
 | **Core** | `lib/opal/src/core/` | Interactive, Hoverable |
 | **Components** | `lib/opal/src/components/` | Button, OpenButton, Tag |
 | **Layouts** | `lib/opal/src/layouts/` | Content, ContentAction, IllustrationContent |
-| **refresh-components** | `src/refresh-components/` | Inputs, tables, modals, text, cards, tiles, etc. |
+| **refresh-components** | `src/refresh-components/` | Inputs, tablas, modales, textos, cards, tiles, etc. |
