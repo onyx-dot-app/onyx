@@ -139,7 +139,7 @@ function resolveTargetMemoryId(
     return memories[descIdx]?.id ?? null;
   }
 
-  return memories[0]?.id ?? null;
+  return null;
 }
 
 interface MemoriesModalProps {
