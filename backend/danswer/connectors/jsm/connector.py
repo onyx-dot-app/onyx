@@ -2,8 +2,8 @@ import requests
 from collections.abc import Iterator
 from typing import Any
 
-from danswer.connectors.interfaces import GenerateDocumentsOutput
-from danswer.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.configs.constants import DocumentSource
@@ -25,7 +25,9 @@ class JSMConnector(PollConnector):
         if not self.email or not self.api_token:
             raise ValueError("JSM Connector requires both 'email' and 'api_token'.")
 
-    def poll_source(self, start: int, end: int) -> GenerateDocumentsOutput:
+    def poll_source(
+        self, start: int, end: int
+    ) -> GenerateDocumentsOutput: 
         """Requirement: Must implement poll_source instead of load_from_source."""
         if not self.email or not self.api_token:
             raise RuntimeError("Connector not initialized with credentials.")
