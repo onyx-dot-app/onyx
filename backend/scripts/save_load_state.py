@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 import subprocess
+import tempfile
+from typing import BinaryIO
 
 import requests
 
@@ -20,40 +22,160 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _sanitize_log_output(text: str) -> str:
+    if not text:
+        return text
+    if POSTGRES_PASSWORD:
+        return text.replace(POSTGRES_PASSWORD, "***REDACTED***")
+    return text
+
+
+def _run_command(args: list[str], stdout: BinaryIO | None = None) -> None:
+    try:
+        subprocess.run(
+            args,
+            check=True,
+            stdout=stdout,
+            stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or b"").decode("utf-8", errors="replace")
+        stderr = _sanitize_log_output(stderr).strip()
+        logger.error(f"Command failed: {args[0]} ({stderr})")
+        raise
+
+
+def _create_pgpass_file(db_host: str) -> str:
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        delete=False,
+        prefix=".pgpass_",
+    ) as tmp:
+        tmp.write(
+            f"{db_host}:{POSTGRES_PORT}:{POSTGRES_DB}:{POSTGRES_USER}:{POSTGRES_PASSWORD}\n"
+        )
+        local_pgpass_path = tmp.name
+
+    os.chmod(local_pgpass_path, 0o600)
+    return local_pgpass_path
+
+
+def _copy_pgpass_to_container(container_name: str, local_pgpass_path: str) -> str:
+    container_pgpass_path = "/tmp/.pgpass"
+
+    _run_command(
+        ["docker", "cp", local_pgpass_path, f"{container_name}:{container_pgpass_path}"]
+    )
+    _run_command(
+        ["docker", "exec", container_name, "chmod", "600", container_pgpass_path]
+    )
+
+    return container_pgpass_path
+
+
+def _cleanup_pgpass(
+    container_name: str, local_pgpass_path: str, container_pgpass_path: str
+) -> None:
+    try:
+        if os.path.exists(local_pgpass_path):
+            os.remove(local_pgpass_path)
+    except OSError:
+        logger.warning("Could not remove local temporary .pgpass file")
+
+    subprocess.run(
+        ["docker", "exec", container_name, "rm", "-f", container_pgpass_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
 def save_postgres(filename: str, container_name: str) -> None:
     logger.notice("Attempting to take Postgres snapshot")
-    cmd = f"docker exec {container_name} pg_dump -U {POSTGRES_USER} -h {POSTGRES_HOST} -p {POSTGRES_PORT} -W -F t {POSTGRES_DB}"
-    with open(filename, "w") as file:
-        subprocess.run(
-            cmd,
-            shell=True,
-            check=True,
-            stdout=file,
-            text=True,
-            input=f"{POSTGRES_PASSWORD}\n",
-        )
+
+    local_pgpass_path = _create_pgpass_file(POSTGRES_HOST)
+    container_pgpass_path = _copy_pgpass_to_container(container_name, local_pgpass_path)
+
+    try:
+        with open(filename, "wb") as file:
+            _run_command(
+                [
+                    "docker",
+                    "exec",
+                    "--env",
+                    f"PGPASSFILE={container_pgpass_path}",
+                    container_name,
+                    "pg_dump",
+                    "-U",
+                    POSTGRES_USER,
+                    "-h",
+                    POSTGRES_HOST,
+                    "-p",
+                    str(POSTGRES_PORT),
+                    "-w",
+                    "-F",
+                    "t",
+                    POSTGRES_DB,
+                ],
+                stdout=file,
+            )
+    finally:
+        _cleanup_pgpass(container_name, local_pgpass_path, container_pgpass_path)
 
 
 def load_postgres(filename: str, container_name: str) -> None:
     logger.notice("Attempting to load Postgres snapshot")
+
     try:
         alembic_cfg = Config("alembic.ini")
         command.upgrade(alembic_cfg, "head")
     except Exception as e:
-        logger.error(f"Alembic upgrade failed: {e}")
+        logger.error(f"Alembic upgrade failed: {_sanitize_log_output(str(e))}")
 
     host_file_path = os.path.abspath(filename)
-
-    copy_cmd = f"docker cp {host_file_path} {container_name}:/tmp/"
-    subprocess.run(copy_cmd, shell=True, check=True)
-
     container_file_path = f"/tmp/{os.path.basename(filename)}"
 
-    restore_cmd = (
-        f"docker exec {container_name} pg_restore --clean -U {POSTGRES_USER} "
-        f"-h localhost -p {POSTGRES_PORT} -d {POSTGRES_DB} -1 -F t {container_file_path}"
-    )
-    subprocess.run(restore_cmd, shell=True, check=True)
+    local_pgpass_path = _create_pgpass_file("localhost")
+    container_pgpass_path = _copy_pgpass_to_container(container_name, local_pgpass_path)
+
+    try:
+        _run_command(
+            ["docker", "cp", host_file_path, f"{container_name}:{container_file_path}"]
+        )
+
+        _run_command(
+            [
+                "docker",
+                "exec",
+                "--env",
+                f"PGPASSFILE={container_pgpass_path}",
+                container_name,
+                "pg_restore",
+                "--clean",
+                "-U",
+                POSTGRES_USER,
+                "-h",
+                "localhost",
+                "-p",
+                str(POSTGRES_PORT),
+                "-d",
+                POSTGRES_DB,
+                "-1",
+                "-F",
+                "t",
+                "-w",
+                container_file_path,
+            ]
+        )
+    finally:
+        _cleanup_pgpass(container_name, local_pgpass_path, container_pgpass_path)
+        subprocess.run(
+            ["docker", "exec", container_name, "rm", "-f", container_file_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
 
 
 def save_vespa(filename: str) -> None:
@@ -61,19 +183,22 @@ def save_vespa(filename: str) -> None:
     continuation = ""
     params = {}
     doc_jsons: list[dict] = []
+
     while continuation is not None:
         if continuation:
             params = {"continuation": continuation}
+
         response = requests.get(DOCUMENT_ID_ENDPOINT, params=params)
         response.raise_for_status()
         found = response.json()
         continuation = found.get("continuation")
         docs = found["documents"]
+
         for doc in docs:
             doc_json = {"update": doc["id"], "create": True, "fields": doc["fields"]}
             doc_jsons.append(doc_json)
 
-    with open(filename, "w") as jsonl_file:
+    with open(filename, "w", encoding="utf-8") as jsonl_file:
         for doc in doc_jsons:
             json_str = json.dumps(doc)
             jsonl_file.write(json_str + "\n")
@@ -81,7 +206,8 @@ def save_vespa(filename: str) -> None:
 
 def load_vespa(filename: str) -> None:
     headers = {"Content-Type": "application/json"}
-    with open(filename, "r") as f:
+
+    with open(filename, "r", encoding="utf-8") as f:
         for line in f:
             new_doc = json.loads(line.strip())
             doc_id = new_doc["update"].split("::")[-1]
@@ -126,11 +252,13 @@ if __name__ == "__main__":
 
     if args.load:
         load_postgres(
-            os.path.join(checkpoint_dir, "postgres_snapshot.tar"), postgres_container
+            os.path.join(checkpoint_dir, "postgres_snapshot.tar"),
+            postgres_container,
         )
         load_vespa(os.path.join(checkpoint_dir, "vespa_snapshot.jsonl"))
     else:
         save_postgres(
-            os.path.join(checkpoint_dir, "postgres_snapshot.tar"), postgres_container
+            os.path.join(checkpoint_dir, "postgres_snapshot.tar"),
+            postgres_container,
         )
         save_vespa(os.path.join(checkpoint_dir, "vespa_snapshot.jsonl"))
