@@ -51,7 +51,6 @@ function MemoryItem({
   const [isFocused, setIsFocused] = useState(false);
   const [isHighlighting, setIsHighlighting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (shouldFocus) {
@@ -63,7 +62,10 @@ function MemoryItem({
   useEffect(() => {
     if (!shouldHighlight) return;
 
-    wrapperRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    textareaRef.current?.scrollIntoView({
+      block: "center",
+      behavior: "smooth",
+    });
     setIsHighlighting(true);
 
     const timer = setTimeout(() => {
@@ -83,7 +85,7 @@ function MemoryItem({
           "bg-action-link-01 hover:bg-action-link-01 border-action-link-05 duration-700"
       )}
     >
-      <Section ref={wrapperRef} gap={0.25} alignItems="start">
+      <Section gap={0.25} alignItems="start">
         <Section flexDirection="row" alignItems="start" gap={0.5}>
           <InputTextArea
             ref={textareaRef}
