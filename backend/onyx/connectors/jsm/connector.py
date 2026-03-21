@@ -1,7 +1,7 @@
 import requests
 from typing import Any, Iterable
-from onyx.connectors.models import Section
-from onyx.connectors.interfaces import PollConnector
+from danswer.connectors.models import Section
+from danswer.connectors.interfaces import PollConnector
 
 class JSMConnector(PollConnector):
     """
