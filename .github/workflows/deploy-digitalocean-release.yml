@@ -31,7 +31,7 @@ jobs:
           if [ -n "$VERSION_INPUT" ] && [ "$VERSION_INPUT" != "latest" ]; then
             VERSION="$VERSION_INPUT"
           else
-            VERSION=$(echo "$BRANCH" | sed 's/release-//')
+            VERSION="${BRANCH#release-}"
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
