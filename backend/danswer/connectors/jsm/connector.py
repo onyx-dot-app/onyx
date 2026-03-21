@@ -1,8 +1,10 @@
 import requests
 from typing import Any
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import (
+    PollConnector, 
+    GenerateDocumentsOutput, 
+    SecondsSinceUnixEpoch 
+)
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.configs.constants import DocumentSource
@@ -16,17 +18,17 @@ class JSMConnector(PollConnector):
         self.email: str | None = None
         self.api_token: str | None = None
 
-    def load_credentials(self, credentials: dict[str, Any]) -> None:
-        """Requirement: Must implement load_credentials to be instantiable."""
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        
         self.email = credentials.get("email")
         self.api_token = credentials.get("api_token")
         if not self.email or not self.api_token:
             raise ValueError("JSM Connector requires both 'email' and 'api_token'.")
 
     def poll_source(
-        self, start: "float", end: "float"
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput: 
-        """Requirement: Must implement poll_source instead of load_from_source."""
+        
         if not self.email or not self.api_token:
             raise RuntimeError("Connector not initialized with credentials.")
 
@@ -51,7 +53,7 @@ class JSMConnector(PollConnector):
             for req in requests_list:
                 req_id = req.get("issueId")
                 if req_id is None:
-                    logger.warning(f"JSM ticket missing issueId, skipping: {req}")
+                    logger.warning("JSM ticket missing issueId, skipping ticket with keys=%s", list(req.keys()))
                     continue
                 req_id = str(req_id)
                 summary = req.get("summary", "No Title")
@@ -76,7 +78,7 @@ class JSMConnector(PollConnector):
             if doc_batch:
                 yield doc_batch
 
-           is_last = data.get("isLastPage", True)
+            is_last = data.get("isLastPage", True)
             if is_last or len(requests_list) < limit:
                 break
             start_index += limit
