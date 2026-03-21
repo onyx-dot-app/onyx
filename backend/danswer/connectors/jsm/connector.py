@@ -5,7 +5,6 @@ from onyx.connectors.interfaces import (
     GenerateDocumentsOutput, 
     SecondsSinceUnixEpoch 
 )
-from datetime import timezone, datetime
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.configs.constants import DocumentSource
