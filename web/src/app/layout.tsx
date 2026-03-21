@@ -83,11 +83,7 @@ export default async function RootLayout({
     combinedSettings?.settings.application_status ?? ApplicationStatus.ACTIVE;
 
   const getPageContent = async (content: React.ReactNode) => (
-    <html
-      lang="en"
-      className={`${inter.variable} ${hankenGrotesk.variable}`}
-      suppressHydrationWarning
-    >
+    <html lang="en" className={`${inter.variable}`} suppressHydrationWarning>
       <head>
         <meta
           name="viewport"
