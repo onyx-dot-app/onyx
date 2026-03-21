@@ -21,7 +21,7 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import { requestEmailVerification } from "../lib";
 
 const AUTH_INPUT_CLASSNAME =
-  "!rounded-12 !border-border-01 !bg-background-neutral-00 p-4 transition-colors duration-200 hover:!border-theme-orange-02 focus-within:!border-theme-orange-03 focus-within:!shadow-none";
+  "!rounded-12 !border-[color:var(--landing-border)] !bg-[color:var(--landing-card-solid)] !text-[var(--landing-text)] p-4 transition-colors duration-200 placeholder:!text-[var(--landing-muted)] hover:!border-[color:var(--landing-border-strong)] focus-within:!border-[color:var(--landing-accent)] focus-within:!shadow-none";
 
 interface EmailPasswordFormProps {
   isSignup?: boolean;
@@ -168,7 +168,7 @@ export default function EmailPasswordForm({
               name="email"
               render={(field, helper, meta, state) => (
                 <FormField name="email" state={state} className="w-full">
-                  <FormField.Label className="pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] !text-text-03">
+                  <FormField.Label className="pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] !text-[var(--landing-accent-strong)]">
                     Correo
                   </FormField.Label>
                   <FormField.Control>
@@ -205,7 +205,7 @@ export default function EmailPasswordForm({
               name="password"
               render={(field, helper, meta, state) => (
                 <FormField name="password" state={state} className="w-full">
-                  <FormField.Label className="pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] !text-text-03">
+                  <FormField.Label className="pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] !text-[var(--landing-accent-strong)]">
                     Contrasena
                   </FormField.Label>
                   <FormField.Control>
@@ -258,7 +258,7 @@ export default function EmailPasswordForm({
                 type="submit"
                 main
                 primary
-                className="w-full justify-center rounded-full !bg-theme-orange-04 px-6 py-3 shadow-01 hover:!bg-theme-orange-05 disabled:cursor-not-allowed disabled:!bg-background-neutral-04"
+                className="w-full justify-center rounded-full !border !border-[color:var(--landing-accent)] !bg-[var(--landing-accent)] px-6 py-3 !shadow-[0_18px_45px_-24px_rgba(51,108,250,0.7)] hover:!border-[color:var(--landing-accent-strong)] hover:!bg-[var(--landing-accent-strong)] disabled:cursor-not-allowed disabled:!border-[color:var(--landing-border)] disabled:!bg-[color:var(--landing-surface-alt)]"
                 disabled={isSubmitting || !isValid || !dirty}
               >
                 {isJoin ? "Unirme" : isSignup ? "Crear cuenta" : "Entrar"}
@@ -268,9 +268,9 @@ export default function EmailPasswordForm({
             {user?.is_anonymous_user && (
               <Link
                 href="/app"
-                className="mx-auto w-full cursor-pointer text-center text-xs font-medium text-theme-orange-05"
+                className="mx-auto w-full cursor-pointer text-center text-xs font-medium text-[var(--landing-accent)]"
               >
-                <span className="hover:border-b hover:border-dotted hover:border-theme-orange-05">
+                <span className="hover:border-b hover:border-dotted hover:border-[color:var(--landing-accent)]">
                   o continuar como invitado
                 </span>
               </Link>

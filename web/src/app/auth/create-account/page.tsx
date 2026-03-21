@@ -11,14 +11,14 @@ export default function Page() {
   return (
     <AuthFlowContainer>
       <div className="flex flex-col space-y-6">
-        <h2 className="text-center text-2xl font-bold text-text-05">
+        <h2 className="text-center text-2xl font-bold text-[var(--landing-text)]">
           Cuenta no encontrada
         </h2>
-        <p className="max-w-md text-center text-text-03">
+        <p className="max-w-md text-center text-[var(--landing-muted)]">
           No encontramos tu cuenta en nuestros registros. Para acceder a la
           aplicacion, necesitas:
         </p>
-        <ul className="mx-auto w-full list-disc pl-6 text-left text-text-03">
+        <ul className="mx-auto w-full list-disc pl-6 text-left text-[var(--landing-muted)]">
           <li>Recibir una invitacion a un equipo existente</li>
           <li>Crear un nuevo equipo</li>
         </ul>
@@ -31,9 +31,12 @@ export default function Page() {
             Crear nueva organizacion
           </Button>
         </div>
-        <p className="text-center text-sm text-text-03">
+        <p className="text-center text-sm text-[var(--landing-muted)]">
           Tienes una cuenta con otro correo?{" "}
-          <Link href="/auth/login" className="text-action-link-05 hover:underline">
+          <Link
+            href="/auth/login"
+            className="text-[var(--landing-accent)] hover:underline"
+          >
             Inicia sesion
           </Link>
         </p>

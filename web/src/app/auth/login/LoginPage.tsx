@@ -67,11 +67,16 @@ export default function LoginPage({
                 authType={authTypeMetadata?.authType}
               />
               <div className="flex flex-row items-center w-full gap-2">
-                <div className="flex-1 border-t border-text-01" />
-                <Text as="p" text03 mainUiMuted>
+                <div className="flex-1 border-t border-[color:var(--landing-border)]" />
+                <Text
+                  as="p"
+                  text03
+                  mainUiMuted
+                  className="text-[var(--landing-muted)]"
+                >
                   o
                 </Text>
-                <div className="flex-1 border-t border-text-01" />
+                <div className="flex-1 border-t border-[color:var(--landing-border)]" />
               </div>
             </>
           )}
@@ -92,7 +97,10 @@ export default function LoginPage({
       )}
 
       {!hidePageRedirect && (
-        <Text as="p" className="mt-4 text-center text-sm text-text-03">
+        <Text
+          as="p"
+          className="mt-4 text-center text-sm text-[var(--landing-muted)]"
+        >
           No tienes cuenta?{" "}
           <span
             onClick={() => {
@@ -102,7 +110,7 @@ export default function LoginPage({
                 window.location.href = "/auth/signup";
               }
             }}
-            className="cursor-pointer font-medium text-theme-orange-05 transition-colors hover:text-theme-orange-04"
+            className="cursor-pointer font-medium text-[var(--landing-accent)] transition-colors hover:text-[var(--landing-accent-strong)]"
           >
             Crea una
           </span>
