@@ -5,6 +5,7 @@ from onyx.connectors.interfaces import (
     GenerateDocumentsOutput, 
     SecondsSinceUnixEpoch 
 )
+from datetime import timezone, datetime
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.configs.constants import DocumentSource
@@ -49,7 +50,12 @@ class JSMConnector(PollConnector):
 
             requests_list = data.get("values", [])
             doc_batch: list[Document] = []
-
+            
+            created_str = req.get("createdDate", {}).get("epochMillis")
+            if created_str is not None:
+                created_ts = int(created_str) / 1000
+                if created_ts < start or created_ts > end:
+                    continue
             for req in requests_list:
                 req_id = req.get("issueId")
                 if req_id is None:
