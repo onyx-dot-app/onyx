@@ -71,7 +71,7 @@ class JSMConnector(PollConnector):
                         sections=[
                             TextSection(link=web_link, text=f"Summary: {summary}\nDescription: {desc}")
                         ],
-                        source=DocumentSource.JIRA,  # TODO(username): replace with DocumentSource.JSM once added
+                        source=DocumentSource.JIRA,  # TODO(Tony Fung): replace with DocumentSource.JSM once added
                         semantic_identifier=summary,
                         metadata={
                             "status": req.get("currentStatus", {}).get("status", "unknown"),
