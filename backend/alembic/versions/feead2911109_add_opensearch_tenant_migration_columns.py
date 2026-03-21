@@ -18,44 +18,25 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "opensearch_tenant_migration_record",
-        sa.Column("vespa_visit_continuation_token", sa.Text(), nullable=True),
+    op.execute(
+        "ALTER TABLE opensearch_tenant_migration_record "
+        "ADD COLUMN IF NOT EXISTS vespa_visit_continuation_token TEXT"
     )
-    op.add_column(
-        "opensearch_tenant_migration_record",
-        sa.Column(
-            "total_chunks_migrated",
-            sa.Integer(),
-            nullable=False,
-            server_default="0",
-        ),
+    op.execute(
+        "ALTER TABLE opensearch_tenant_migration_record "
+        "ADD COLUMN IF NOT EXISTS total_chunks_migrated INTEGER NOT NULL DEFAULT 0"
     )
-    op.add_column(
-        "opensearch_tenant_migration_record",
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
+    op.execute(
+        "ALTER TABLE opensearch_tenant_migration_record "
+        "ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()"
     )
-    op.add_column(
-        "opensearch_tenant_migration_record",
-        sa.Column(
-            "migration_completed_at",
-            sa.DateTime(timezone=True),
-            nullable=True,
-        ),
+    op.execute(
+        "ALTER TABLE opensearch_tenant_migration_record "
+        "ADD COLUMN IF NOT EXISTS migration_completed_at TIMESTAMPTZ"
     )
-    op.add_column(
-        "opensearch_tenant_migration_record",
-        sa.Column(
-            "enable_opensearch_retrieval",
-            sa.Boolean(),
-            nullable=False,
-            server_default="false",
-        ),
+    op.execute(
+        "ALTER TABLE opensearch_tenant_migration_record "
+        "ADD COLUMN IF NOT EXISTS enable_opensearch_retrieval BOOLEAN NOT NULL DEFAULT false"
     )
 
 
