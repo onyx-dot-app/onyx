@@ -454,6 +454,141 @@ class TestPaginate:
 
         assert pages == []
 
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_extracts_message_from_error_dict(self, mock_requests: MagicMock) -> None:
+        """Shape 1: {"error": {"message": "Not authorized"}}"""
+        mock_requests.get.return_value = _mock_response(
+            403, {"error": {"message": "Not authorized"}}
+        )
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Not authorized"
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_extracts_message_from_error_string(self, mock_requests: MagicMock) -> None:
+        """Shape 2: {"error": "Invalid access token"}"""
+        mock_requests.get.return_value = _mock_response(
+            401, {"error": "Invalid access token"}
+        )
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Invalid access token"
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_extracts_message_from_errors_list(self, mock_requests: MagicMock) -> None:
+        """Shape 3: {"errors": [{"message": "Invalid query"}]}"""
+        mock_requests.get.return_value = _mock_response(
+            400, {"errors": [{"message": "Invalid query"}]}
+        )
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Invalid query"
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_dict_takes_priority_over_errors_list(self, mock_requests: MagicMock) -> None:
+        """When both error shapes are present, error dict wins."""
+        mock_requests.get.return_value = _mock_response(
+            403, {"error": "Specific error", "errors": [{"message": "Generic"}]}
+        )
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Specific error"
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_falls_back_to_reason_when_no_json_message(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Empty error body falls back to response.reason."""
+        mock_requests.get.return_value = _mock_response(500, {})
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Error"  # from _mock_response's reason for >= 300
+
+        assert result == expected
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_invalid_json_on_success_raises(self, mock_requests: MagicMock) -> None:
+        """Invalid JSON on a 2xx response raises OnyxError."""
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.side_effect = ValueError("No JSON")
+        resp.headers = {"Link": ""}
+        mock_requests.get.return_value = resp
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError, match="Invalid JSON"):
+            client.get("courses")
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_invalid_json_on_error_falls_back_to_reason(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Invalid JSON on a 4xx response falls back to response.reason."""
+        resp = MagicMock()
+        resp.status_code = 500
+        resp.reason = "Internal Server Error"
+        resp.json.side_effect = ValueError("No JSON")
+        resp.headers = {"Link": ""}
+        mock_requests.get.return_value = resp
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        result = exc_info.value.detail
+        expected = "Internal Server Error"
+
+        assert result == expected
+
 
 # ---------------------------------------------------------------------------
 # CanvasApiClient._parse_next_link tests
