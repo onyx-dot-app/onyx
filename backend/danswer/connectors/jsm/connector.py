@@ -50,7 +50,7 @@ class JSMConnector(PollConnector):
             requests_list = data.get("values", [])
             doc_batch: list[Document] = []
             
-            created_str = req.get("createdDate", {}).get("epochMillis")
+             created_str = req.get("createdDate", {}).get("epochMillis")
             if created_str is not None:
                 created_ts = int(created_str) / 1000
                 if created_ts < start or created_ts > end:
