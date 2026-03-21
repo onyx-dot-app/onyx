@@ -174,34 +174,42 @@ ensure_file() {
 
 # --- Interactive prompt helpers ---
 is_interactive() {
-    [[ "$NO_PROMPT" = false ]]
+    [[ "$NO_PROMPT" = false ]] && [[ -r /dev/tty ]] && [[ -w /dev/tty ]]
+}
+
+read_prompt_line() {
+    local prompt_text="$1"
+    if ! is_interactive; then
+        REPLY=""
+        return
+    fi
+    [[ -n "$prompt_text" ]] && printf "%s" "$prompt_text" > /dev/tty
+    IFS= read -r REPLY < /dev/tty || REPLY=""
+}
+
+read_prompt_char() {
+    local prompt_text="$1"
+    if ! is_interactive; then
+        REPLY=""
+        return
+    fi
+    [[ -n "$prompt_text" ]] && printf "%s" "$prompt_text" > /dev/tty
+    IFS= read -r -n 1 REPLY < /dev/tty || REPLY=""
+    printf "\n" > /dev/tty
 }
 
 prompt_or_default() {
     local prompt_text="$1"
     local default_value="$2"
-    if is_interactive; then
-        read -p "$prompt_text" -r REPLY
-        if [[ -z "$REPLY" ]]; then
-            REPLY="$default_value"
-        fi
-    else
-        REPLY="$default_value"
-    fi
+    read_prompt_line "$prompt_text"
+    [[ -z "$REPLY" ]] && REPLY="$default_value"
 }
 
 prompt_yn_or_default() {
     local prompt_text="$1"
     local default_value="$2"
-    if is_interactive; then
-        read -p "$prompt_text" -n 1 -r
-        echo ""
-        if [[ -z "$REPLY" ]]; then
-            REPLY="$default_value"
-        fi
-    else
-        REPLY="$default_value"
-    fi
+    read_prompt_char "$prompt_text"
+    [[ -z "$REPLY" ]] && REPLY="$default_value"
 }
 
 confirm_action() {
@@ -302,8 +310,8 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     echo "  • All user data and documents"
     echo ""
     if is_interactive; then
-        read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
-        echo ""
+        prompt_or_default "Are you sure you want to continue? Type 'DELETE' to confirm: " ""
+        echo "" > /dev/tty
         if [ "$REPLY" != "DELETE" ]; then
             print_info "Operation cancelled."
             exit 0
@@ -497,7 +505,7 @@ echo ""
 
 if is_interactive; then
     echo -e "${YELLOW}${BOLD}Please acknowledge and press Enter to continue...${NC}"
-    read -r
+    read_prompt_line ""
     echo ""
 else
     echo -e "${YELLOW}${BOLD}Running in non-interactive mode - proceeding automatically...${NC}"
