@@ -1,12 +1,12 @@
 import requests
 from typing import Any
-
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import GenerateDocumentsOutput
-from danswer.connectors.models import Document
-from danswer.connectors.models import Section
-from danswer.configs.constants import DocumentSource
-from danswer.utils.logger import setup_logger
+from onyx.connectors.models import Document
+from onyx.connectors.models import Section
+from onyx.configs.constants import DocumentSource
+from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
@@ -24,7 +24,7 @@ class JSMConnector(PollConnector):
             raise ValueError("JSM Connector requires both 'email' and 'api_token'.")
 
     def poll_source(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+        self, start: "float", end: "float"
     ) -> GenerateDocumentsOutput: 
         """Requirement: Must implement poll_source instead of load_from_source."""
         if not self.email or not self.api_token:
@@ -49,7 +49,11 @@ class JSMConnector(PollConnector):
             doc_batch: list[Document] = []
 
             for req in requests_list:
-                req_id = str(req.get("issueId"))
+                req_id = req.get("issueId")
+                if req_id is None:
+                    logger.warning(f"JSM ticket missing issueId, skipping: {req}")
+                    continue
+                req_id = str(req_id)
                 summary = req.get("summary", "No Title")
                 desc = req.get("issueDescription", "")
                 web_link = req.get("_links", {}).get("web", "")
@@ -72,6 +76,7 @@ class JSMConnector(PollConnector):
             if doc_batch:
                 yield doc_batch
 
-            if data.get("isLastPage"):
+           is_last = data.get("isLastPage", True)
+            if is_last or len(requests_list) < limit:
                 break
             start_index += limit
