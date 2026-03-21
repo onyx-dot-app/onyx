@@ -51,10 +51,13 @@ function MemoryItem({
   const [isFocused, setIsFocused] = useState(false);
   const [isHighlighting, setIsHighlighting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (shouldFocus) {
-      textareaRef.current?.focus();
+    if (shouldFocus && textareaRef.current) {
+      const el = textareaRef.current;
+      el.focus();
+      el.selectionStart = el.selectionEnd = el.value.length;
       onFocused?.();
     }
   }, [shouldFocus, onFocused]);
@@ -62,8 +65,8 @@ function MemoryItem({
   useEffect(() => {
     if (!shouldHighlight) return;
 
-    textareaRef.current?.scrollIntoView({
-      block: "center",
+    wrapperRef.current?.scrollIntoView({
+      block: "start",
       behavior: "smooth",
     });
     setIsHighlighting(true);
@@ -78,8 +81,9 @@ function MemoryItem({
 
   return (
     <div
+      ref={wrapperRef}
       className={cn(
-        "rounded-08 hover:bg-background-tint-00 w-full p-0.5 border border-transparent",
+        "rounded-08 w-full p-0.5 border border-transparent",
         "transition-colors ",
         isHighlighting &&
           "bg-action-link-01 hover:bg-action-link-01 border-action-link-05 duration-700"
@@ -100,7 +104,7 @@ function MemoryItem({
             rows={3}
             maxLength={MAX_MEMORY_LENGTH}
             resizable={false}
-            className={cn(!isFocused && "bg-transparent")}
+            className="bg-background-tint-01 hover:bg-background-tint-00 focus-within:bg-background-tint-00"
           />
           <Disabled disabled={!memory.content.trim() && memory.isNew}>
             <Button
@@ -205,10 +209,9 @@ export default function MemoriesModal({
     );
     if (targetId == null) return;
 
+    setFocusMemoryId(targetId);
     if (highlightOnOpen) {
       setHighlightMemoryId(targetId);
-    } else {
-      setFocusMemoryId(targetId);
     }
   }, [initialTargetMemoryId, initialTargetIndex]);
 
