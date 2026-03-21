@@ -364,7 +364,7 @@ function Invoke-OnyxDeleteData {
     Write-Host "`n=== WARNING: This will permanently delete all Onyx data ===`n" -ForegroundColor Red
     Print-Warning "This action will remove all Onyx containers, volumes, files, and user data."
     if (Test-Interactive) {
-        $confirm = Read-Host "Type 'DELETE' to confirm"
+        $confirm = Prompt-OrDefault "Type 'DELETE' to confirm" ""
         if ($confirm -ne "DELETE") { Print-Info "Operation cancelled."; return }
     } else {
         Print-OnyxError "Cannot confirm destructive operation in non-interactive mode."
@@ -806,7 +806,7 @@ function Main {
 
     if (Test-Interactive) {
         Write-Host "`nPlease acknowledge and press Enter to continue..." -ForegroundColor Yellow
-        Read-Host | Out-Null
+        $null = Prompt-OrDefault "" ""
     } else {
         Write-Host "`nRunning in non-interactive mode - proceeding automatically..." -ForegroundColor Yellow
     }
