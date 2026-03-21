@@ -203,7 +203,7 @@ services:
         max-file: "6"
 
   inference_model_server:
-    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:v3.0.2
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -231,7 +231,7 @@ services:
         max-file: "6"
 
   indexing_model_server:
-    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
+    image: onyxdotapp/onyx-model-server:v3.0.2
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
@@ -395,7 +395,7 @@ services:
       - /data
 
   code-interpreter:
-    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
+    image: onyxdotapp/code-interpreter:0.1.0
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
     env_file:
