@@ -64,7 +64,7 @@ function CreateGroupPage() {
     try {
       await createGroup(trimmed, selectedUserIds, selectedCcPairIds);
       toast.success(`Group "${trimmed}" created`);
-      router.push("/admin/groups2");
+      router.push("/admin/groups");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to create group");
     } finally {
@@ -76,7 +76,7 @@ function CreateGroupPage() {
     <Section flexDirection="row" gap={0.5} width="auto" height="auto">
       <Button
         prominence="tertiary"
-        onClick={() => router.push("/admin/groups2")}
+        onClick={() => router.push("/admin/groups")}
       >
         Cancel
       </Button>

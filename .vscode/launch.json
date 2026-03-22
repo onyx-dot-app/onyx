@@ -15,10 +15,10 @@
     {
       "name": "Run All Onyx Services",
       "configurations": [
-        "Web Server",
+        // "Web Server",
         "Model Server",
         "API Server",
-        "MCP Server",
+        // "MCP Server",
         "Slack Bot",
         "Celery primary",
         "Celery light",
@@ -95,7 +95,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["model_server.main:app", "--reload", "--port", "9000"],
+      "args": ["model_server.main:app", "--reload", "--port", "9010"],
       "presentation": {
         "group": "2"
       },
@@ -113,7 +113,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["onyx.main:app", "--reload", "--port", "8080"],
+      "args": ["onyx.main:app", "--reload", "--port", "8090"],
       "presentation": {
         "group": "2"
       },
@@ -166,7 +166,7 @@
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "MCP_SERVER_ENABLED": "true",
-        "MCP_SERVER_PORT": "8090",
+        "MCP_SERVER_PORT": "8100",
         "MCP_SERVER_CORS_ORIGINS": "http://localhost:*",
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
@@ -175,7 +175,7 @@
         "onyx.mcp_server.api:mcp_app",
         "--reload",
         "--port",
-        "8090",
+        "8100",
         "--timeout-graceful-shutdown",
         "0"
       ],
@@ -530,10 +530,7 @@
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "uv",
-      "runtimeArgs": [
-        "sync",
-        "--all-extras"
-      ],
+      "runtimeArgs": ["sync", "--all-extras"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "presentation": {
@@ -657,14 +654,7 @@
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "uv",
-      "runtimeArgs": [
-        "run",
-        "--with",
-        "onyx-devtools",
-        "ods",
-        "db",
-        "upgrade"
-      ],
+      "runtimeArgs": ["run", "--with", "onyx-devtools", "ods", "db", "upgrade"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "presentation": {
@@ -683,7 +673,11 @@
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "backend"
       },
-      "args": ["--filename", "backend/generated/openapi.json", "--generate-python-client"]
+      "args": [
+        "--filename",
+        "backend/generated/openapi.json",
+        "--generate-python-client"
+      ]
     },
     {
       // script to debug multi tenant db issues
@@ -712,7 +706,7 @@
       "name": "Debug React Web App in Chrome",
       "type": "chrome",
       "request": "launch",
-      "url": "http://localhost:3000",
+      "url": "http://localhost:3010",
       "webRoot": "${workspaceFolder}/web"
     }
   ]
