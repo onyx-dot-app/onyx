@@ -1,0 +1,38 @@
+# VictoriaMetrics scrape configuration
+# Compatible with Prometheus scrape_configs format.
+#
+# Exporter targets will be added here as they are deployed
+# (see issues #84, #85, #86).
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # VictoriaMetrics self-monitoring
+  - job_name: victoriametrics
+    static_configs:
+      - targets: ["localhost:8428"]
+
+  # Uncomment as exporters are deployed:
+
+  # PostgreSQL exporter (#84)
+  # - job_name: postgres
+  #   static_configs:
+  #     - targets: ["postgres-exporter:9187"]
+
+  # Redis exporter (#84)
+  # - job_name: redis
+  #   static_configs:
+  #     - targets: ["redis-exporter:9121"]
+
+  # Celery exporter (#85)
+  # - job_name: celery
+  #   static_configs:
+  #     - targets: ["celery-exporter:9808"]
+
+  # FastAPI /metrics endpoint (#86)
+  # - job_name: fastapi
+  #   static_configs:
+  #     - targets: ["api_server:8080"]
+  #   metrics_path: /metrics
