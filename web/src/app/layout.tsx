@@ -1,15 +1,11 @@
 import "./globals.css";
 
-import {
-  GTM_ENABLED,
-  SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
-  MODAL_ROOT_ID,
-} from "@/lib/constants";
+import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
 import { Metadata } from "next";
 
 import { Inter } from "next/font/google";
-import { EnterpriseSettings } from "@/interfaces/settings";
 import AppProvider from "@/providers/AppProvider";
+import DynamicMetadata from "@/components/DynamicMetadata";
 import { PHProvider } from "./providers";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
@@ -20,7 +16,6 @@ import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import AppHealthBanner from "@/sections/AppHealthBanner";
-import { buildUrl } from "@/lib/utilsSS";
 import CustomAnalyticsScript from "@/components/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/components/ProductGatingWrapper";
 
@@ -36,34 +31,13 @@ const hankenGrotesk = Hanken_Grotesk({
   display: "swap",
 });
 
-export async function generateMetadata(): Promise<Metadata> {
-  let logoLocation = "/onyx.ico";
-  let enterpriseSettings: EnterpriseSettings | null = null;
-  if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
-    try {
-      const res = await fetch(buildUrl("/enterprise-settings"), {
-        next: { revalidate: 300 },
-      });
-      if (res.ok) {
-        enterpriseSettings = await res.json();
-        logoLocation =
-          enterpriseSettings && enterpriseSettings.use_custom_logo
-            ? "/api/enterprise-settings/logo"
-            : "/onyx.ico";
-      }
-    } catch {
-      // Fall back to defaults if fetch fails
-    }
-  }
-
-  return {
-    title: enterpriseSettings?.application_name || "Onyx",
-    description: "Question answering for your documents",
-    icons: {
-      icon: logoLocation,
-    },
-  };
-}
+export const metadata: Metadata = {
+  title: "Onyx",
+  description: "Question answering for your documents",
+  icons: {
+    icon: "/onyx.ico",
+  },
+};
 
 // force-dynamic prevents Next.js from statically prerendering pages at build
 // time — many child routes use cookies() which requires dynamic rendering.
@@ -117,6 +91,7 @@ export default function RootLayout({
               <PHProvider>
                 <AppHealthBanner />
                 <AppProvider>
+                  <DynamicMetadata />
                   <CustomAnalyticsScript />
                   <Suspense fallback={null}>
                     <PostHogPageView />
