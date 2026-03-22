@@ -266,9 +266,6 @@ services:
     restart: unless-stopped
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
-    ports:
-      - "19071:19071"
-      - "8081:8081"
     volumes:
       - vespa_volume:/opt/vespa/var
     logging:
@@ -407,19 +404,6 @@ services:
     # Use tmpfs to prevent creation of anonymous volumes for /data
     tmpfs:
       - /data
-
-  dozzle:
-    image: amir20/dozzle:latest
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    ports:
-      - "9999:8080"
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
 
   code-interpreter:
     image: onyxdotapp/code-interpreter:0.1.0
