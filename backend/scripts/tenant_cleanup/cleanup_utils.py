@@ -1,6 +1,7 @@
 import csv
 import os
 import random
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -94,6 +95,14 @@ def get_control_plane_config() -> ControlPlaneConfig:
     )
 
 
+def _build_remote_command(args: list[str]) -> str:
+    return " ".join(shlex.quote(arg) for arg in args)
+
+
+def _escape_sql_literal(value: str) -> str:
+    return value.replace("'", "''")
+
+
 def execute_control_plane_query(
     query: str, tuple_only: bool = False
 ) -> subprocess.CompletedProcess:
@@ -114,15 +123,20 @@ def execute_control_plane_query(
     bastion_host = config.bastion_host
     pem_file_location = config.pem_file_location
 
-    # Build psql flags
-    psql_flags = "-t" if tuple_only else ""
-
-    # Build the SSH command with proper escaping
-    full_cmd = f'ssh -i {pem_file_location} ec2-user@{bastion_host} "psql {db_url} {psql_flags} -c \\"{query}\\""'
+    remote_command_parts = ["psql", db_url]
+    if tuple_only:
+        remote_command_parts.append("-t")
+    remote_command_parts.extend(["-c", query])
 
     result = subprocess.run(
-        full_cmd,
-        shell=True,
+        [
+            "ssh",
+            "-i",
+            pem_file_location,
+            f"ec2-user@{bastion_host}",
+            _build_remote_command(remote_command_parts),
+        ],
+        shell=False,
         check=True,
         capture_output=True,
         text=True,
@@ -143,7 +157,11 @@ def get_tenant_status(tenant_id: str) -> str | None:
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
-    query = f"SELECT application_status FROM tenant WHERE tenant_id = '{tenant_id}';"
+    safe_tenant_id = _escape_sql_literal(tenant_id)
+    query = (
+        "SELECT application_status FROM tenant "
+        f"WHERE tenant_id = '{safe_tenant_id}';"
+    )
 
     try:
         result = execute_control_plane_query(query, tuple_only=True)

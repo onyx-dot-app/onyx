@@ -322,9 +322,6 @@ services:
           memory: 4G
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
-    ports:
-      - "19071:19071"
-      - "8081:8081"
     volumes:
       - vespa_volume:/opt/vespa/var
     logging:

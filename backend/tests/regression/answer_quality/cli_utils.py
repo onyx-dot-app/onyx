@@ -1,9 +1,11 @@
 import json
 import os
+import shlex
 import socket
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from datetime import datetime
 from threading import Thread
 from typing import IO
@@ -12,10 +14,10 @@ import yaml
 from retry import retry
 
 
-def _run_command(command: str, stream_output: bool = False) -> tuple[str, str]:
+def _run_command(command: Sequence[str], stream_output: bool = False) -> tuple[str, str]:
     process = subprocess.Popen(
-        command,
-        shell=True,
+        list(command),
+        shell=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -52,9 +54,30 @@ def _run_command(command: str, stream_output: bool = False) -> tuple[str, str]:
     return "".join(stdout_lines), "".join(stderr_lines)
 
 
+def _get_container_names() -> list[str]:
+    stdout, _ = _run_command(["docker", "ps", "-a", "--format", "{{.Names}}"])
+    return [line.strip() for line in stdout.splitlines() if line.strip()]
+
+
+def _find_container_name(required_substrings: list[str]) -> str:
+    container_names = _get_container_names()
+    matches = [
+        name
+        for name in container_names
+        if all(substring in name for substring in required_substrings)
+    ]
+
+    if not matches:
+        raise RuntimeError(
+            f"No container found containing: {', '.join(required_substrings)}"
+        )
+
+    return matches[0]
+
+
 def get_current_commit_sha() -> str:
     print("Getting current commit SHA...")
-    stdout, _ = _run_command("git rev-parse HEAD")
+    stdout, _ = _run_command(["git", "rev-parse", "HEAD"])
     sha = stdout.strip()
     print(f"Current commit SHA: {sha}")
     return sha
@@ -62,7 +85,7 @@ def get_current_commit_sha() -> str:
 
 def switch_to_commit(commit_sha: str) -> None:
     print(f"Switching to commit: {commit_sha}...")
-    _run_command(f"git checkout {commit_sha}")
+    _run_command(["git", "checkout", commit_sha])
     print(f"Successfully switched to commit: {commit_sha}")
     print("Repository updated successfully.")
 
@@ -75,16 +98,10 @@ def get_docker_container_env_vars(env_name: str) -> dict:
 
     combined_env_vars = {}
     for container_type in ["background", "api_server"]:
-        container_name = _run_command(
-            f"docker ps -a --format '{{{{.Names}}}}' | awk '/{container_type}/ && /{env_name}/'"
-        )[0].strip()
-        if not container_name:
-            raise RuntimeError(
-                f"No {container_type} container found with env_name: {env_name}"
-            )
+        container_name = _find_container_name([container_type, env_name])
 
         env_vars_json = _run_command(
-            f"docker inspect --format='{{{{json .Config.Env}}}}' {container_name}"
+            ["docker", "inspect", "--format={{json .Config.Env}}", container_name]
         )[0]
         env_vars_list = json.loads(env_vars_json.strip())
 
@@ -149,18 +166,26 @@ def start_docker_compose(
     print("Starting Docker Compose...")
     os.chdir(os.path.dirname(__file__))
     os.chdir("../../../../deployment/docker_compose/")
-    command = (
-        f"docker compose -f docker-compose.search-testing.yml -p onyx-{env_name} up -d"
-    )
-    command += " --build"
-    command += " --force-recreate"
+
+    command = [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.search-testing.yml",
+        "-p",
+        f"onyx-{env_name}",
+        "up",
+        "-d",
+        "--build",
+        "--force-recreate",
+    ]
 
     if only_state:
-        command += " index relational_db"
+        command.extend(["index", "relational_db"])
     else:
         if use_cloud_gpu:
-            command += " --scale indexing_model_server=0"
-            command += " --scale inference_model_server=0"
+            command.extend(["--scale", "indexing_model_server=0"])
+            command.extend(["--scale", "inference_model_server=0"])
         if launch_web_ui:
             web_ui_port = 3000
             while _is_port_in_use(web_ui_port):
@@ -168,10 +193,10 @@ def start_docker_compose(
             print(f"UI will be launched at http://localhost:{web_ui_port}")
             os.environ["NGINX_PORT"] = str(web_ui_port)
         else:
-            command += " --scale web_server=0"
-            command += " --scale nginx=0"
+            command.extend(["--scale", "web_server=0"])
+            command.extend(["--scale", "nginx=0"])
 
-    print("Docker Command:\n", command)
+    print("Docker Command:\n", shlex.join(command))
 
     _run_command(command, stream_output=True)
     print("Containers have been launched")
@@ -182,9 +207,9 @@ def cleanup_docker(env_name: str) -> None:
         f"Deleting Docker containers, volumes, and networks for project env_name: {env_name}"
     )
 
-    stdout, _ = _run_command("docker ps -a --format '{{json .}}'")
+    stdout, _ = _run_command(["docker", "ps", "-a", "--format", "{{json .}}"])
 
-    containers = [json.loads(line) for line in stdout.splitlines()]
+    containers = [json.loads(line) for line in stdout.splitlines() if line.strip()]
     if not env_name:
         env_name = datetime.now().strftime("-%Y")
     project_name = f"onyx{env_name}"
@@ -195,14 +220,14 @@ def cleanup_docker(env_name: str) -> None:
     if not containers_to_delete:
         print(f"No containers found for project: {project_name}")
     else:
-        container_ids = " ".join([c["ID"] for c in containers_to_delete])
-        _run_command(f"docker rm -f {container_ids}")
+        container_ids = [c["ID"] for c in containers_to_delete]
+        _run_command(["docker", "rm", "-f", *container_ids])
 
         print(
             f"Successfully deleted {len(containers_to_delete)} containers for project: {project_name}"
         )
 
-    stdout, _ = _run_command("docker volume ls --format '{{.Name}}'")
+    stdout, _ = _run_command(["docker", "volume", "ls", "--format", "{{.Name}}"])
 
     volumes = stdout.splitlines()
 
@@ -213,13 +238,12 @@ def cleanup_docker(env_name: str) -> None:
         return
 
     # Delete filtered volumes
-    volume_names = " ".join(volumes_to_delete)
-    _run_command(f"docker volume rm {volume_names}")
+    _run_command(["docker", "volume", "rm", *volumes_to_delete])
 
     print(
         f"Successfully deleted {len(volumes_to_delete)} volumes for project: {project_name}"
     )
-    stdout, _ = _run_command("docker network ls --format '{{.Name}}'")
+    stdout, _ = _run_command(["docker", "network", "ls", "--format", "{{.Name}}"])
 
     networks = stdout.splitlines()
 
@@ -228,8 +252,7 @@ def cleanup_docker(env_name: str) -> None:
     if not networks_to_delete:
         print(f"No networks found containing env_name: {env_name}")
     else:
-        network_names = " ".join(networks_to_delete)
-        _run_command(f"docker network rm {network_names}")
+        _run_command(["docker", "network", "rm", *networks_to_delete])
 
         print(
             f"Successfully deleted {len(networks_to_delete)} networks containing env_name: {env_name}"
@@ -245,8 +268,8 @@ def get_api_server_host_port(env_name: str) -> str:
     """
     container_name = "api_server"
 
-    stdout, _ = _run_command("docker ps -a --format '{{json .}}'")
-    containers = [json.loads(line) for line in stdout.splitlines()]
+    stdout, _ = _run_command(["docker", "ps", "-a", "--format", "{{json .}}"])
+    containers = [json.loads(line) for line in stdout.splitlines() if line.strip()]
     server_jsons = []
 
     for container in containers:
@@ -289,17 +312,10 @@ def get_api_server_host_port(env_name: str) -> str:
 def restart_vespa_container(env_name: str) -> None:
     print(f"Restarting Vespa container for env_name: {env_name}")
 
-    # Find the Vespa container
-    stdout, _ = _run_command(
-        f"docker ps -a --format '{{{{.Names}}}}' | awk '/index-1/ && /{env_name}/'"
-    )
-    container_name = stdout.strip()
-
-    if not container_name:
-        raise RuntimeError(f"No Vespa container found with env_name: {env_name}")
+    container_name = _find_container_name(["index-1", env_name])
 
     # Restart the container
-    _run_command(f"docker restart {container_name}")
+    _run_command(["docker", "restart", container_name])
 
     print(f"Vespa container '{container_name}' has begun restarting")
 
