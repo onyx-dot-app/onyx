@@ -643,8 +643,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=CORS_ALLOWED_ORIGIN,  # Configurable via environment variable
-        allow_credentials=True,
+        allow_origins=CORS_ALLOWED_ORIGIN,
+        allow_credentials=bool(CORS_ALLOWED_ORIGIN) and "*" not in CORS_ALLOWED_ORIGIN,
         allow_methods=["*"],
         allow_headers=["*"],
     )

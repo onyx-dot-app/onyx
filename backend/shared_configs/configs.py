@@ -99,6 +99,8 @@ STRICT_CHUNK_TOKEN_LIMIT = (
 # Set up Sentry integration (for error logging)
 SENTRY_DSN = os.environ.get("SENTRY_DSN")
 
+ENVIRONMENT = (os.environ.get("ENVIRONMENT") or "not_explicitly_set").lower()
+
 
 # Fields which should only be set on new search setting
 PRESERVED_SEARCH_FIELDS = [
@@ -124,11 +126,11 @@ def validate_cors_origin(origin: str) -> None:
 
 
 # Examples of valid values for the environment variable:
-# - "" (allow all origins)
+# - "" (deny all origins by default)
 # - "http://example.com" (single origin)
 # - "http://example.com,https://example.org" (multiple origins)
-# - "*" (allow all origins)
-CORS_ALLOWED_ORIGIN_ENV = os.environ.get("CORS_ALLOWED_ORIGIN", "")
+# - "*" (allow all origins, non-production only)
+CORS_ALLOWED_ORIGIN_ENV = os.environ.get("CORS_ALLOWED_ORIGIN", "").strip()
 
 # Explicitly declare the type of CORS_ALLOWED_ORIGIN
 CORS_ALLOWED_ORIGIN: List[str]
@@ -140,12 +142,28 @@ if CORS_ALLOWED_ORIGIN_ENV:
         for origin in CORS_ALLOWED_ORIGIN_ENV.split(",")
         if origin.strip()
     ]
-    # Validate each origin in the list
-    for origin in CORS_ALLOWED_ORIGIN:
-        validate_cors_origin(origin)
+
+    if "*" in CORS_ALLOWED_ORIGIN:
+        if len(CORS_ALLOWED_ORIGIN) > 1:
+            raise ValueError(
+                "CORS_ALLOWED_ORIGIN cannot combine '*' with specific origins"
+            )
+        if ENVIRONMENT == "production":
+            raise ValueError(
+                "CORS_ALLOWED_ORIGIN must be explicitly configured in production and cannot be '*'"
+            )
+    else:
+        # Validate each origin in the list
+        for origin in CORS_ALLOWED_ORIGIN:
+            validate_cors_origin(origin)
 else:
-    # If the environment variable is empty, allow all origins
-    CORS_ALLOWED_ORIGIN = ["*"]
+    # Secure default: deny all origins unless explicitly configured
+    CORS_ALLOWED_ORIGIN = []
+
+if ENVIRONMENT == "production" and not CORS_ALLOWED_ORIGIN:
+    raise ValueError(
+        "CORS_ALLOWED_ORIGIN must be explicitly configured in production"
+    )
 
 
 # Multi-tenancy configuration
@@ -209,8 +227,6 @@ SKIP_USERFILE_THRESHOLD_TENANT_LIST = (
     if SKIP_USERFILE_THRESHOLD_TENANT_IDS
     else None
 )
-
-ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"
 
 
 #####
