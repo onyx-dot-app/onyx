@@ -25,9 +25,6 @@ from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import TENANT_ID_PREFIX
 
-# Default number of pre-provisioned tenants to maintain
-DEFAULT_TARGET_AVAILABLE_TENANTS = 5
-
 # Soft time limit for tenant pre-provisioning tasks (in seconds)
 _TENANT_PROVISIONING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
 # Hard time limit for tenant pre-provisioning tasks (in seconds)
@@ -58,7 +55,7 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     lock_check: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_AVAILABLE_TENANTS_LOCK,
-        timeout=_TENANT_PROVISIONING_SOFT_TIME_LIMIT,
+        timeout=_TENANT_PROVISIONING_TIME_LIMIT,
     )
 
     # These tasks should never overlap
@@ -74,9 +71,7 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
             num_available_tenants = db_session.query(AvailableTenant).count()
 
         # Get the target number of available tenants
-        num_minimum_available_tenants = getattr(
-            TARGET_AVAILABLE_TENANTS, "value", DEFAULT_TARGET_AVAILABLE_TENANTS
-        )
+        num_minimum_available_tenants = TARGET_AVAILABLE_TENANTS
 
         # Calculate how many new tenants we need to provision
         if num_available_tenants < num_minimum_available_tenants:
@@ -98,7 +93,12 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
         task_logger.exception("Error in check_available_tenants task")
 
     finally:
-        lock_check.release()
+        try:
+            lock_check.release()
+        except Exception:
+            task_logger.warning(
+                "Could not release check lock (likely expired), continuing"
+            )
 
 
 def pre_provision_tenant() -> None:
@@ -113,7 +113,7 @@ def pre_provision_tenant() -> None:
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     lock_provision: RedisLock = r.lock(
         OnyxRedisLocks.CLOUD_PRE_PROVISION_TENANT_LOCK,
-        timeout=_TENANT_PROVISIONING_SOFT_TIME_LIMIT,
+        timeout=_TENANT_PROVISIONING_TIME_LIMIT,
     )
 
     # Allow multiple pre-provisioning tasks to run, but ensure they don't overlap
@@ -185,4 +185,9 @@ def pre_provision_tenant() -> None:
             except Exception:
                 task_logger.exception(f"Error during rollback for tenant: {tenant_id}")
     finally:
-        lock_provision.release()
+        try:
+            lock_provision.release()
+        except Exception:
+            task_logger.warning(
+                "Could not release provision lock (likely expired), continuing"
+            )
