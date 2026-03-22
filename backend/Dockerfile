@@ -10,6 +10,8 @@ Repositorio: https://github.com/HOP-RAG/HOP"
 # Build argument for Craft support (disabled by default)
 # Use --build-arg ENABLE_CRAFT=true to include Node.js and opencode CLI
 ARG ENABLE_CRAFT=false
+ARG NODE_VERSION=20.20.1
+ARG OPENCODE_VERSION=1.2.27
 
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
 ENV DANSWER_RUNNING_IN_DOCKER="true" \
@@ -36,6 +38,7 @@ RUN apt-get update && \
         cmake \
         curl \
         zip \
+        xz-utils \
         ca-certificates \
         libgnutls30 \
         libblkid1 \
@@ -55,20 +58,33 @@ RUN apt-get update && \
 # Conditionally install Node.js 20 for Craft (required for Next.js)
 # Only installed when ENABLE_CRAFT=true
 RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Installing Node.js 20 for Craft support..." && \
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-        apt-get install -y nodejs && \
-        rm -rf /var/lib/apt/lists/*; \
+        echo "Installing Node.js ${NODE_VERSION} for Craft support..." && \
+        ARCH="$(dpkg --print-architecture)" && \
+        case "${ARCH}" in \
+            amd64) NODE_ARCH="x64" ;; \
+            arm64) NODE_ARCH="arm64" ;; \
+            *) echo "Unsupported architecture: ${ARCH}" >&2; exit 1 ;; \
+        esac && \
+        cd /tmp && \
+        curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" && \
+        curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" && \
+        grep " node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz\$" SHASUMS256.txt | sha256sum -c - && \
+        tar -xJf "node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" -C /usr/local --strip-components=1 --no-same-owner && \
+        rm -f "/tmp/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" /tmp/SHASUMS256.txt && \
+        node --version && \
+        npm --version; \
     fi
 
 # Conditionally install opencode CLI for Craft agent functionality
 # Only installed when ENABLE_CRAFT=true
-# TODO: download a specific, versioned release of the opencode CLI
 RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Installing opencode CLI for Craft support..." && \
-        curl -fsSL https://opencode.ai/install | bash; \
+        echo "Installing opencode CLI v${OPENCODE_VERSION} for Craft support..." && \
+        npm install -g "opencode-ai@${OPENCODE_VERSION}" && \
+        npm cache clean --force && \
+        rm -rf /root/.npm && \
+        opencode --version; \
     fi
-ENV PATH="/root/.opencode/bin:${PATH}"
+ENV PATH="/usr/local/bin:/root/.opencode/bin:${PATH}"
 
 # Install Python dependencies
 # Remove py which is pulled in by retry, py is not needed and is a CVE
