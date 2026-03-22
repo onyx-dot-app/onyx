@@ -70,8 +70,8 @@ function Prompt-OrDefault {
 
 function Confirm-Action {
     param([string]$Description)
-    $reply = Prompt-OrDefault "Install $Description? (Y/n) [default: Y]" "Y"
-    if ($reply -match '^[Nn]') {
+    $reply = (Prompt-OrDefault "Install $Description? (Y/n) [default: Y]" "Y").Trim().ToLower()
+    if ($reply -match '^n') {
         Print-Warning "Skipping: $Description"
         return $false
     }
@@ -720,6 +720,7 @@ function Invoke-WslInstall {
     # Ensure WSL2 is available
     Invoke-NativeQuiet { wsl --status }
     if ($LASTEXITCODE -ne 0) {
+        if (-not (Confirm-Action "WSL2 (Windows Subsystem for Linux)")) { exit 1 }
         Print-Info "Installing WSL2..."
         try {
             $proc = Start-Process wsl -ArgumentList "--install", "--no-distribution" -Wait -PassThru -NoNewWindow
@@ -902,8 +903,8 @@ function Main {
     if ($resourceWarning) {
         Print-Warning "Onyx recommends at least $($script:ExpectedDockerRamGB)GB RAM and $($script:ExpectedDiskGB)GB disk for standard mode."
         Print-Warning "Lite mode requires less (1-4GB RAM, 8-16GB disk) but has no vector database."
-        $reply = Prompt-OrDefault "Do you want to continue anyway? (Y/n)" "y"
-        if ($reply -notmatch '^[Yy]') { Print-Info "Installation cancelled."; exit 1 }
+        $reply = (Prompt-OrDefault "Do you want to continue anyway? (Y/n)" "y").Trim().ToLower()
+        if ($reply -notmatch '^y') { Print-Info "Installation cancelled."; exit 1 }
         Print-Info "Proceeding despite resource limitations..."
     }
 
@@ -925,8 +926,8 @@ function Main {
     if ($composeVersion -ne "unknown" -and (Compare-SemVer $composeVersion "2.24.0") -lt 0) {
         Print-Warning "Docker Compose $composeVersion is older than 2.24.0 (required for env_file format)."
         Print-Info "Update Docker Desktop or install a newer Docker Compose. Installation may fail."
-        $reply = Prompt-OrDefault "Continue anyway? (Y/n)" "y"
-        if ($reply -notmatch '^[Yy]') { exit 1 }
+        $reply = (Prompt-OrDefault "Continue anyway? (Y/n)" "y").Trim().ToLower()
+        if ($reply -notmatch '^y') { exit 1 }
     }
 
     $liteOverlayPath = Join-Path $deploymentDir $script:LiteComposeFile
