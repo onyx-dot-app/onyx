@@ -2,7 +2,9 @@
 
 import React, {
   createContext,
+  useCallback,
   useContext,
+  useMemo,
   useState,
   useEffect,
   useRef,
@@ -66,29 +68,32 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // For auto_scroll and temperature_override_enabled:
   // - If user has a preference set, use that
   // - Otherwise, use the workspace setting if available
-  function mergeUserPreferences(currentUser: User | null): User | null {
-    if (!currentUser) return null;
-    return {
-      ...currentUser,
-      preferences: {
-        ...currentUser.preferences,
-        auto_scroll:
-          currentUser.preferences?.auto_scroll ??
-          updatedSettings?.settings?.auto_scroll ??
-          false,
-        temperature_override_enabled:
-          currentUser.preferences?.temperature_override_enabled ??
-          updatedSettings?.settings?.temperature_override_enabled ??
-          false,
-      },
-    };
-  }
+  const mergeUserPreferences = useCallback(
+    (currentUser: User | null): User | null => {
+      if (!currentUser) return null;
+      return {
+        ...currentUser,
+        preferences: {
+          ...currentUser.preferences,
+          auto_scroll:
+            currentUser.preferences?.auto_scroll ??
+            updatedSettings?.settings?.auto_scroll ??
+            false,
+          temperature_override_enabled:
+            currentUser.preferences?.temperature_override_enabled ??
+            updatedSettings?.settings?.temperature_override_enabled ??
+            false,
+        },
+      };
+    },
+    [updatedSettings]
+  );
 
   const [upToDateUser, setUpToDateUser] = useState<User | null>(null);
 
   useEffect(() => {
     setUpToDateUser(mergeUserPreferences(fetchedUser ?? null));
-  }, [fetchedUser, updatedSettings]);
+  }, [fetchedUser, mergeUserPreferences]);
 
   useEffect(() => {
     if (!posthog) return;
@@ -108,9 +113,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   // Use the custom token refresh hook — on refresh failure, revalidate via SWR
   // so the result goes through mergeUserPreferences
-  const onRefreshFail = async () => {
+  const onRefreshFail = useCallback(async () => {
     await mutateUser();
-  };
+  }, [mutateUser]);
   useTokenRefresh(upToDateUser, authTypeMetadata, onRefreshFail);
 
   // Sync user's theme preference from DB to next-themes on load

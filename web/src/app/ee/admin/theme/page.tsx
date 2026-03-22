@@ -14,7 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/interfaces/settings";
-import { useRouter } from "next/navigation";
+import { mutate } from "swr";
 
 const route = ADMIN_ROUTES.THEME;
 
@@ -29,7 +29,6 @@ const CHAR_LIMITS = {
 };
 
 export default function ThemePage() {
-  const router = useRouter();
   const settings = useContext(SettingsContext);
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const [logoVersion, setLogoVersion] = useState(0);
@@ -55,7 +54,7 @@ export default function ThemePage() {
       }),
     });
     if (response.ok) {
-      router.refresh();
+      await mutate("/api/enterprise-settings");
       return true;
     } else {
       const errorMsg = (await response.json()).detail;

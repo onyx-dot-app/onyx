@@ -28,8 +28,10 @@ export function AppSidebarProvider({ children }: AppSidebarProviderProps) {
   const [folded, setFoldedInternal] = useState(false);
 
   useEffect(() => {
-    const cookie = Cookies.get(SIDEBAR_TOGGLED_COOKIE_NAME);
-    if (cookie === "true") {
+    const stored =
+      Cookies.get(SIDEBAR_TOGGLED_COOKIE_NAME) ??
+      localStorage.getItem(SIDEBAR_TOGGLED_COOKIE_NAME);
+    if (stored === "true") {
       setFoldedInternal(true);
     }
   }, []);

@@ -18,6 +18,7 @@ import {
 import { HOST_URL, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import ErrorPage from "@/components/errorPages/ErrorPage";
+import { FetchError } from "@/lib/fetcher";
 
 export function SettingsProvider({
   children,
@@ -34,7 +35,9 @@ export function SettingsProvider({
   // This handles deployments where NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES is
   // unset but LICENSE_ENFORCEMENT_ENABLED defaults to true on the server.
   const eeEnabledRuntime =
-    !coreSettingsLoading && settings.ee_features_enabled !== false;
+    !coreSettingsLoading &&
+    !settingsError &&
+    settings.ee_features_enabled !== false;
 
   const {
     enterpriseSettings,
@@ -94,7 +97,16 @@ export function SettingsProvider({
     ]
   );
 
-  if (settingsError || enterpriseSettingsError) {
+  // Auth errors (401/403) are expected for unauthenticated users (e.g. login
+  // page). Fall through with default settings so the app can render normally.
+  const isAuthError = (err: Error | undefined) =>
+    err instanceof FetchError && (err.status === 401 || err.status === 403);
+
+  const hasFatalError =
+    (settingsError && !isAuthError(settingsError)) ||
+    (enterpriseSettingsError && !isAuthError(enterpriseSettingsError));
+
+  if (hasFatalError) {
     return NEXT_PUBLIC_CLOUD_ENABLED ? <CloudError /> : <ErrorPage />;
   }
 

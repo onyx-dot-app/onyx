@@ -12,7 +12,7 @@ import { EE_ENABLED } from "@/lib/constants";
 // flicker in the SettingsProvider error boundary when there's a transient blip.
 const SETTINGS_ERROR_RETRY_INTERVAL = 5_000;
 
-const DEFAULT_SETTINGS: Settings = {
+const DEFAULT_SETTINGS = {
   auto_scroll: true,
   application_status: ApplicationStatus.ACTIVE,
   gpu_enabled: false,
@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS: Settings = {
   deep_research_enabled: true,
   temperature_override_enabled: true,
   query_history_type: QueryHistoryType.NORMAL,
-};
+} satisfies Settings;
 
 export function useSettings(): {
   settings: Settings;
@@ -68,6 +68,11 @@ export function useEnterpriseSettings(eeEnabledRuntime: boolean): {
       revalidateOnReconnect: false,
       dedupingInterval: 30_000,
       errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
+      // Referential equality instead of SWR's default deep comparison.
+      // The logo image can change without the settings JSON changing
+      // (same use_custom_logo: true), so we need every mutate() call
+      // to propagate a new reference so cache-busters recalculate.
+      compare: (a, b) => a === b,
     }
   );
 

@@ -5,7 +5,7 @@ import { Metadata } from "next";
 
 import { Inter } from "next/font/google";
 import AppProvider from "@/providers/AppProvider";
-import DynamicMetadata from "@/components/DynamicMetadata";
+import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
@@ -16,8 +16,8 @@ import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import AppHealthBanner from "@/sections/AppHealthBanner";
-import CustomAnalyticsScript from "@/components/CustomAnalyticsScript";
-import ProductGatingWrapper from "@/components/ProductGatingWrapper";
+import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
+import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -34,9 +34,6 @@ const hankenGrotesk = Hanken_Grotesk({
 export const metadata: Metadata = {
   title: "Onyx",
   description: "Question answering for your documents",
-  icons: {
-    icon: "/onyx.ico",
-  },
 };
 
 // force-dynamic prevents Next.js from statically prerendering pages at build
