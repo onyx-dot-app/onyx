@@ -7,6 +7,7 @@ from celery.schedules import crontab
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import ENABLE_CELERY_MONITORING
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
@@ -120,16 +121,6 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
-        },
-    },
-    {
-        "name": "monitor-background-processes",
-        "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
-        "schedule": timedelta(minutes=5),
-        "options": {
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.MONITORING,
         },
     },
     # Sandbox cleanup tasks
@@ -249,6 +240,20 @@ if DISABLE_VECTOR_DB:
         t for t in beat_task_templates if t["name"] not in _VECTOR_DB_BEAT_TASK_NAMES
     ]
 
+if ENABLE_CELERY_MONITORING:
+    beat_task_templates.append(
+        {
+            "name": "monitor-background-processes",
+            "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
+            "schedule": timedelta(minutes=5),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+                "queue": OnyxCeleryQueues.MONITORING,
+            },
+        }
+    )
+
 
 def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:
     cloud_task: dict[str, Any] = {}
@@ -324,28 +329,34 @@ beat_cloud_tasks: list[dict] = [
 # tasks that only run self hosted
 tasks_to_schedule: list[dict] = []
 if not MULTI_TENANT:
+    if ENABLE_CELERY_MONITORING:
+        tasks_to_schedule.extend(
+            [
+                {
+                    "name": "monitor-celery-queues",
+                    "task": OnyxCeleryTask.MONITOR_CELERY_QUEUES,
+                    "schedule": timedelta(seconds=10),
+                    "options": {
+                        "priority": OnyxCeleryPriority.MEDIUM,
+                        "expires": BEAT_EXPIRES_DEFAULT,
+                        "queue": OnyxCeleryQueues.MONITORING,
+                    },
+                },
+                {
+                    "name": "monitor-process-memory",
+                    "task": OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
+                    "schedule": timedelta(minutes=5),
+                    "options": {
+                        "priority": OnyxCeleryPriority.LOW,
+                        "expires": BEAT_EXPIRES_DEFAULT,
+                        "queue": OnyxCeleryQueues.MONITORING,
+                    },
+                },
+            ]
+        )
+
     tasks_to_schedule.extend(
         [
-            {
-                "name": "monitor-celery-queues",
-                "task": OnyxCeleryTask.MONITOR_CELERY_QUEUES,
-                "schedule": timedelta(seconds=10),
-                "options": {
-                    "priority": OnyxCeleryPriority.MEDIUM,
-                    "expires": BEAT_EXPIRES_DEFAULT,
-                    "queue": OnyxCeleryQueues.MONITORING,
-                },
-            },
-            {
-                "name": "monitor-process-memory",
-                "task": OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
-                "schedule": timedelta(minutes=5),
-                "options": {
-                    "priority": OnyxCeleryPriority.LOW,
-                    "expires": BEAT_EXPIRES_DEFAULT,
-                    "queue": OnyxCeleryQueues.MONITORING,
-                },
-            },
             {
                 "name": "celery-beat-heartbeat",
                 "task": OnyxCeleryTask.CELERY_BEAT_HEARTBEAT,
