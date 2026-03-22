@@ -68,6 +68,14 @@ services:
         condition: service_started
         required: false
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
     # 2. Uncomment the ports below
@@ -157,6 +165,14 @@ services:
       indexing_model_server:
         condition: service_started
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
     environment:
       - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-postgres}
@@ -226,6 +242,14 @@ services:
     depends_on:
       - api_server
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     environment:
       - INTERNAL_URL=${INTERNAL_URL:-http://api_server:8080}
 
@@ -294,6 +318,14 @@ services:
       - path: .env
         required: false
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - model_cache_huggingface:/app/.cache/huggingface/
@@ -341,6 +373,14 @@ services:
       - path: .env
         required: false
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
     environment:
       - INDEXING_ONLY=True
     volumes:
@@ -373,6 +413,14 @@ services:
       - path: .env
         required: false
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
     # PRODUCTION: Override the defaults by passing in the environment variables
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -394,6 +442,14 @@ services:
   index:
     image: vespaengine/vespa:8.609.39
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
     env_file:
       - path: .env
         required: false
@@ -416,6 +472,14 @@ services:
   opensearch:
     image: opensearchproject/opensearch:3.4.0
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
     # To enable OpenSearch, add opensearch-enabled to COMPOSE_PROFILES
     # and set OPENSEARCH_FOR_ONYX_ENABLED=true in .env
     profiles: ["opensearch-enabled"]
@@ -454,6 +518,14 @@ services:
   nginx:
     image: nginx:1.25.5-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
     depends_on:
@@ -494,6 +566,14 @@ services:
   cache:
     image: redis:7.4-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
     # 2. Uncomment the ports below
@@ -513,6 +593,14 @@ services:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     profiles: ["s3-filestore"]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
     # 2. Uncomment the ports below
@@ -540,6 +628,14 @@ services:
     image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
     env_file:
       - path: .env
         required: false
