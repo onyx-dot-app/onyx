@@ -583,6 +583,42 @@ def get_latest_index_attempt_for_cc_pair_id(
     return db_session.execute(stmt).scalar_one_or_none()
 
 
+def get_latest_successful_index_attempt_for_cc_pair_id(
+    db_session: Session,
+    connector_credential_pair_id: int,
+    secondary_index: bool = False,
+) -> IndexAttempt | None:
+    """Returns the most recent successful index attempt for the given cc pair,
+    filtered to the current (or future) search settings.
+    Uses MAX(id) semantics to match get_latest_index_attempts_by_status."""
+    status = IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
+    stmt = (
+        select(IndexAttempt)
+        .where(
+            IndexAttempt.connector_credential_pair_id == connector_credential_pair_id,
+            IndexAttempt.status == IndexingStatus.SUCCESS,
+        )
+        .join(SearchSettings)
+        .where(SearchSettings.status == status)
+        .order_by(desc(IndexAttempt.id))
+        .limit(1)
+    )
+    return db_session.execute(stmt).scalar_one_or_none()
+
+
+def get_latest_successful_index_attempts_parallel(
+    secondary_index: bool = False,
+) -> Sequence[IndexAttempt]:
+    """Batch version: returns the latest successful index attempt per cc pair.
+    Eager-loads the cc_pair relationship for use after the session closes."""
+    with get_session_with_current_tenant() as db_session:
+        return get_latest_index_attempts_by_status(
+            secondary_index=secondary_index,
+            db_session=db_session,
+            status=IndexingStatus.SUCCESS,
+        )
+
+
 def count_index_attempts_for_cc_pair(
     db_session: Session,
     cc_pair_id: int,
