@@ -18,6 +18,14 @@ services:
       - minio
       - inference_model_server
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
@@ -73,6 +81,14 @@ services:
       - inference_model_server
       - indexing_model_server
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
@@ -135,6 +151,14 @@ services:
     depends_on:
       - api_server
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     environment:
       - INTERNAL_URL=http://api_server:8080
     env_file:
@@ -190,6 +214,14 @@ services:
     shm_size: 1g
     command: -c 'max_connections=250'
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
     # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
     env_file:
       - path: .env
@@ -215,6 +247,14 @@ services:
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       # Set to debug to get more fine-grained logs
@@ -243,6 +283,14 @@ services:
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
@@ -264,6 +312,14 @@ services:
   index:
     image: vespaengine/vespa:8.609.39
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
     volumes:
@@ -277,6 +333,14 @@ services:
   opensearch:
     image: opensearchproject/opensearch:3.4.0
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
     # To enable OpenSearch, add opensearch-enabled to COMPOSE_PROFILES
     # and set OPENSEARCH_FOR_ONYX_ENABLED=true in .env
     profiles: ["opensearch-enabled"]
@@ -315,6 +379,14 @@ services:
   nginx:
     image: nginx:1.25.5-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
     depends_on:
@@ -355,6 +427,14 @@ services:
   certbot:
     image: certbot/certbot
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
     volumes:
       - ../data/certbot/conf:/etc/letsencrypt
       - ../data/certbot/www:/var/www/certbot
@@ -368,6 +448,14 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER not set}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD not set}
@@ -384,6 +472,14 @@ services:
   uptime-kuma:
     image: louislam/uptime-kuma:1
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     volumes:
       - uptime_kuma_data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -398,6 +494,14 @@ services:
   cache:
     image: redis:7.4-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     # docker silently mounts /data even without an explicit volume mount, which enables
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
@@ -405,10 +509,39 @@ services:
     tmpfs:
       - /data
 
+  dozzle:
+    image: amir20/dozzle:latest
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "9999:8080"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
   code-interpreter:
     image: onyxdotapp/code-interpreter:0.1.0
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
     env_file:
       - path: .env
         required: false
