@@ -380,6 +380,7 @@ jobs:
     needs: [extract-version, deploy, verify]
     if: needs.deploy.result == 'success' && needs.verify.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
