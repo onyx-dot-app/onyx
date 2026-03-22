@@ -10,6 +10,7 @@ import argparse
 import csv
 import json
 import os
+import shlex
 import subprocess
 import sys
 from datetime import datetime
@@ -93,25 +94,30 @@ def collect_control_plane_data() -> list[dict[str, Any]]:
     if not pem_file_location:
         raise ValueError("PEM_FILE_LOCATION is not set")
 
-    full_cmd = (
-        f"ssh -i {pem_file_location} ec2-user@{bastion_host} "
-        f"\"psql {db_url} -c '\\copy (SELECT * FROM tenant) "
-        f"to '/tmp/control_plane_data.csv' with (format csv);'\""
+    remote_sql = "\\copy (SELECT * FROM tenant) to '/tmp/control_plane_data.csv' with (format csv);"
+    remote_command = " ".join(
+        shlex.quote(part) for part in ["psql", db_url, "-c", remote_sql]
     )
 
     result = subprocess.run(
-        full_cmd,
-        shell=True,
+        ["ssh", "-i", pem_file_location, f"ec2-user@{bastion_host}", remote_command],
         check=True,
         capture_output=True,
         text=True,
     )
 
     # Copy the CSV file from the bastion to local machine
-    copy_cmd = f"scp -i {pem_file_location} ec2-user@{bastion_host}:/tmp/control_plane_data.csv ."
-
     copy_result = subprocess.run(
-        copy_cmd, shell=True, check=True, capture_output=True, text=True
+        [
+            "scp",
+            "-i",
+            pem_file_location,
+            f"ec2-user@{bastion_host}:/tmp/control_plane_data.csv",
+            ".",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
 
     if copy_result.stderr:
