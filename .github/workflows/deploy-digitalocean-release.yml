@@ -128,16 +128,29 @@ jobs:
           fi
 
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' '  ServerAliveInterval 30' '  ServerAliveCountMax 10' >> ~/.ssh/config
+          : > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          if ! ssh-keyscan -H -t rsa,ecdsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+            echo "[ERROR] Failed to fetch SSH host key for $DEPLOY_HOST"
+            exit 1
+          fi
 
           echo "[INFO] Deploying version $VERSION to DigitalOcean ($DEPLOY_HOST)"
           echo "[INFO] Preferred deployment directory: $PREFERRED_DEPLOY_DIR"
           echo "[INFO] Backward compatibility enabled with: $LEGACY_DEPLOY_DIR"
 
-          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- \
+          ssh \
+          -i ~/.ssh/deploy_key \
+          -o StrictHostKeyChecking=yes \
+          -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+          -o ServerAliveInterval=30 \
+          -o ServerAliveCountMax=10 \
+          "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- \
+
             "$BRANCH" \
             "$PREFERRED_DEPLOY_DIR" \
             "$LEGACY_DEPLOY_DIR" \
@@ -276,14 +289,26 @@ jobs:
           set -e
 
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' '  ServerAliveInterval 30' '  ServerAliveCountMax 10' >> ~/.ssh/config
+          : > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          if ! ssh-keyscan -H -t rsa,ecdsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+            echo "[ERROR] Failed to fetch SSH host key for $DEPLOY_HOST"
+            exit 1
+          fi
 
           echo "[INFO] Running deployment health checks..."
 
-          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- \
+          ssh \
+          -i ~/.ssh/deploy_key \
+          -o StrictHostKeyChecking=yes \
+          -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+          -o ServerAliveInterval=30 \
+          -o ServerAliveCountMax=10 \
+          "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- \
             "$PREFERRED_DEPLOY_DIR" \
             "$LEGACY_DEPLOY_DIR" \
             "$PROXY_CONTAINER" \
@@ -432,12 +457,24 @@ jobs:
           echo "[WARN] Deployment verification failed. Starting automatic rollback..."
 
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -t rsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          printf '%s\n' 'Host *' '  StrictHostKeyChecking no' '  UserKnownHostsFile=/dev/null' '  ServerAliveInterval 30' '  ServerAliveCountMax 10' >> ~/.ssh/config
+          : > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
-          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- \
+          if ! ssh-keyscan -H -t rsa,ecdsa,ed25519 "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+            echo "[ERROR] Failed to fetch SSH host key for $DEPLOY_HOST"
+            exit 1
+          fi
+
+          ssh \
+          -i ~/.ssh/deploy_key \
+          -o StrictHostKeyChecking=yes \
+          -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+          -o ServerAliveInterval=30 \
+          -o ServerAliveCountMax=10 \
+          "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s -- \
             "$PREFERRED_DEPLOY_DIR" \
             "$LEGACY_DEPLOY_DIR" \
             "$PROXY_CONTAINER" \
