@@ -100,6 +100,7 @@ jobs:
             sudo cp -r . "$BACKUP_DIR"
 
             echo "[INFO] Syncing git references..."
+            git remote prune origin
             git fetch origin --tags
             git fetch origin main
 

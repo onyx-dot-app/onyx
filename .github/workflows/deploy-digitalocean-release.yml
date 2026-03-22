@@ -164,6 +164,7 @@ jobs:
             cd "$DEPLOY_DIR" || exit 1
 
             echo "[INFO] Updating code from release branch ($BRANCH)..."
+            git remote prune origin
             git fetch origin "$BRANCH"
             git checkout -- .
             git checkout "origin/$BRANCH"
