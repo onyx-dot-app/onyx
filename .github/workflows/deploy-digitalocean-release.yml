@@ -18,6 +18,7 @@ permissions:
 jobs:
   extract-version:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.extract.outputs.version }}
     steps:
@@ -30,7 +31,7 @@ jobs:
           if [ -n "$VERSION_INPUT" ] && [ "$VERSION_INPUT" != "latest" ]; then
             VERSION="$VERSION_INPUT"
           else
-            VERSION=$(echo "$BRANCH" | sed 's/release-//')
+            VERSION="${BRANCH#release-}"
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -379,6 +380,7 @@ jobs:
     needs: [extract-version, deploy, verify]
     if: needs.deploy.result == 'success' && needs.verify.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
@@ -510,6 +512,7 @@ jobs:
     needs: [extract-version, deploy, verify, tag-deployment, auto-rollback]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Deployment summary
         run: |
