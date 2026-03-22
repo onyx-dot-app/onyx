@@ -287,7 +287,7 @@ services:
       # We need discovery.type=single-node so that OpenSearch doesn't try
       # forming a cluster and waiting for other nodes to become live.
       - discovery.type=single-node
-      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:?OPENSEARCH_ADMIN_PASSWORD not set}
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123}
       # This and the JVM config below come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
       # We do this to avoid unstable performance from page swaps.
       - bootstrap.memory_lock=true # Disable JVM heap memory swapping.
