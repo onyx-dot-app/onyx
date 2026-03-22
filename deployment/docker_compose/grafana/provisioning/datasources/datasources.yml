@@ -1,0 +1,18 @@
+apiVersion: 1
+prune: true
+
+datasources:
+  - name: VictoriaMetrics
+    uid: victoriametrics
+    type: prometheus
+    access: proxy
+    orgId: 1
+    url: ${GRAFANA_PROMETHEUS_URL}
+    isDefault: true
+    editable: true
+    version: 1
+    jsonData:
+      httpMethod: POST
+      prometheusType: Prometheus
+      timeInterval: 15s
+      manageAlerts: true
