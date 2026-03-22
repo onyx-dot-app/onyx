@@ -596,7 +596,9 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
         select(IndexAttempt)
         .where(
             IndexAttempt.connector_credential_pair_id == connector_credential_pair_id,
-            IndexAttempt.status == IndexingStatus.SUCCESS,
+            IndexAttempt.status.in_(
+                [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
+            ),
         )
         .join(SearchSettings)
         .where(SearchSettings.status == status)
@@ -610,13 +612,36 @@ def get_latest_successful_index_attempts_parallel(
     secondary_index: bool = False,
 ) -> Sequence[IndexAttempt]:
     """Batch version: returns the latest successful index attempt per cc pair.
-    Eager-loads the cc_pair relationship for use after the session closes."""
+    Covers both SUCCESS and COMPLETED_WITH_ERRORS (matching is_successful())."""
+    model_status = (
+        IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
+    )
     with get_session_with_current_tenant() as db_session:
-        return get_latest_index_attempts_by_status(
-            secondary_index=secondary_index,
-            db_session=db_session,
-            status=IndexingStatus.SUCCESS,
+        latest_ids = (
+            select(
+                IndexAttempt.connector_credential_pair_id,
+                func.max(IndexAttempt.id).label("max_id"),
+            )
+            .join(SearchSettings, IndexAttempt.search_settings_id == SearchSettings.id)
+            .where(
+                SearchSettings.status == model_status,
+                IndexAttempt.status.in_(
+                    [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
+                ),
+            )
+            .group_by(IndexAttempt.connector_credential_pair_id)
+            .subquery()
         )
+
+        stmt = select(IndexAttempt).join(
+            latest_ids,
+            (
+                IndexAttempt.connector_credential_pair_id
+                == latest_ids.c.connector_credential_pair_id
+            )
+            & (IndexAttempt.id == latest_ids.c.max_id),
+        )
+        return db_session.execute(stmt).scalars().all()
 
 
 def count_index_attempts_for_cc_pair(
