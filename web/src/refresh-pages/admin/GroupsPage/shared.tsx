@@ -73,7 +73,7 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
 // Columns
 // ---------------------------------------------------------------------------
 
-const tc = createTableColumns<MemberRow>();
+export const tc = createTableColumns<MemberRow>();
 
 export const baseColumns = [
   tc.qualifier(),

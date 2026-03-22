@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { Table, Button } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
-import { SvgUsers, SvgTrash } from "@opal/icons";
+import { SvgUsers, SvgTrash, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import Card from "@/refresh-components/cards/Card";
+import * as InputLayouts from "@/layouts/input-layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -18,12 +21,8 @@ import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import type { UserGroup } from "@/lib/types";
-import type {
-  ApiKeyDescriptor,
-  MemberRow,
-  TokenRateLimitDisplay,
-} from "./interfaces";
-import { apiKeyToMemberRow, memberTableColumns, PAGE_SIZE } from "./shared";
+import type { ApiKeyDescriptor, MemberRow, TokenRateLimitDisplay } from "./interfaces";
+import { apiKeyToMemberRow, baseColumns, tc, PAGE_SIZE } from "./shared";
 import {
   USER_GROUP_URL,
   renameGroup,
@@ -36,6 +35,8 @@ import {
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
+
+const addModeColumns = [...baseColumns, tc.actions({ showSorting: false })];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -89,6 +90,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [isAddingMembers, setIsAddingMembers] = useState(false);
   const initialAgentIdsRef = useRef<number[]>([]);
   const initialDocSetIdsRef = useRef<number[]>([]);
 
@@ -139,14 +141,41 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     return [...activeUsers, ...serviceAccountRows];
   }, [users, apiKeys]);
 
-  const initialRowSelection = useMemo(() => {
-    if (!group) return {};
+  const memberRows = useMemo(
+    () => allRows.filter((r) => selectedUserIds.includes(r.id ?? r.email)),
+    [allRows, selectedUserIds]
+  );
+
+  const currentRowSelection = useMemo(() => {
     const sel: Record<string, boolean> = {};
-    for (const u of group.users) {
-      sel[u.id] = true;
-    }
+    for (const id of selectedUserIds) sel[id] = true;
     return sel;
-  }, [group]);
+  }, [selectedUserIds]);
+
+  const handleRemoveMember = useCallback((userId: string) => {
+    setSelectedUserIds((prev) => prev.filter((id) => id !== userId));
+  }, []);
+
+  const memberColumns = useMemo(
+    () => [
+      ...baseColumns,
+      tc.actions({
+        showSorting: false,
+        showColumnVisibility: false,
+        cell: (row: MemberRow) => (
+          <IconButton
+            icon={SvgMinusCircle}
+            tertiary
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRemoveMember(row.id ?? row.email);
+            }}
+          />
+        ),
+      }),
+    ],
+    [handleRemoveMember]
+  );
 
   // Guard onSelectionChange: ignore updates until the form is fully initialized.
   // Without this, TanStack fires onSelectionChange before all rows are loaded,
@@ -260,13 +289,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const headerActions = (
     <Section flexDirection="row" gap={0.5} width="auto" height="auto">
       <Button
-        variant="danger"
-        prominence="tertiary"
-        icon={SvgTrash}
-        onClick={() => setShowDeleteModal(true)}
-        tooltip="Delete group"
-      />
-      <Button
         prominence="tertiary"
         onClick={() => router.push("/admin/groups2")}
       >
@@ -276,7 +298,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         onClick={handleSave}
         disabled={!groupName.trim() || isSubmitting || isSyncing}
       >
-        {isSubmitting ? "Saving..." : isSyncing ? "Syncing..." : "Save"}
+        {isSubmitting ? "Saving..." : isSyncing ? "Syncing..." : "Save Changes"}
       </Button>
     </Section>
   );
@@ -328,31 +350,81 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <InputTypeIn
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search users and accounts..."
-                  leftSearchIcon
-                />
-                <Table
-                  data={allRows as MemberRow[]}
-                  columns={memberTableColumns}
-                  getRowId={(row) => row.id ?? row.email}
-                  pageSize={PAGE_SIZE}
-                  searchTerm={searchTerm}
-                  selectionBehavior="multi-select"
-                  initialRowSelection={initialRowSelection}
-                  initialViewSelected
-                  onSelectionChange={handleSelectionChange}
-                  footer={{}}
-                  emptyState={
-                    <IllustrationContent
-                      illustration={SvgNoResult}
-                      title="No users found"
-                      description="No users match your search."
-                    />
-                  }
-                />
+                <Section
+                  flexDirection="row"
+                  gap={0.5}
+                  height="auto"
+                  alignItems="center"
+                  justifyContent="start"
+                >
+                  <InputTypeIn
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder={
+                      isAddingMembers
+                        ? "Search users and accounts..."
+                        : "Search members..."
+                    }
+                    leftSearchIcon
+                    className="flex-1"
+                  />
+                  {isAddingMembers ? (
+                    <Button
+                      prominence="secondary"
+                      onClick={() => setIsAddingMembers(false)}
+                    >
+                      Done
+                    </Button>
+                  ) : (
+                    <Button
+                      prominence="tertiary"
+                      icon={SvgPlusCircle}
+                      onClick={() => setIsAddingMembers(true)}
+                    >
+                      Add
+                    </Button>
+                  )}
+                </Section>
+
+                {isAddingMembers ? (
+                  <Table
+                    key="add-members"
+                    data={allRows}
+                    columns={addModeColumns}
+                    getRowId={(row) => row.id ?? row.email}
+                    qualifier="avatar"
+                    pageSize={PAGE_SIZE}
+                    searchTerm={searchTerm}
+                    selectionBehavior="multi-select"
+                    initialRowSelection={currentRowSelection}
+                    onSelectionChange={handleSelectionChange}
+                    footer={{}}
+                    emptyState={
+                      <IllustrationContent
+                        illustration={SvgNoResult}
+                        title="No users found"
+                        description="No users match your search."
+                      />
+                    }
+                  />
+                ) : (
+                  <Table
+                    data={memberRows}
+                    columns={memberColumns}
+                    getRowId={(row) => row.id ?? row.email}
+                    qualifier="avatar"
+                    pageSize={PAGE_SIZE}
+                    searchTerm={searchTerm}
+                    footer={{}}
+                    emptyState={
+                      <IllustrationContent
+                        illustration={SvgNoResult}
+                        title="No members"
+                        description="Add members to this group."
+                      />
+                    }
+                  />
+                )}
               </Section>
 
               <SharedGroupResources
@@ -368,6 +440,24 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 limits={tokenLimits}
                 onLimitsChange={setTokenLimits}
               />
+
+              {/* Delete This Group */}
+              <Card>
+                <InputLayouts.Horizontal
+                  title="Delete This Group"
+                  description="Members will lose access to any resources shared with this group."
+                  center
+                >
+                  <Button
+                    variant="danger"
+                    prominence="secondary"
+                    icon={SvgTrash}
+                    onClick={() => setShowDeleteModal(true)}
+                  >
+                    Delete Group
+                  </Button>
+                </InputLayouts.Horizontal>
+              </Card>
             </>
           )}
         </SettingsLayouts.Body>
@@ -377,7 +467,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         <ConfirmationModalLayout
           icon={SvgTrash}
           title="Delete Group"
-          description={`Are you sure you want to delete "${group?.name}"? This action cannot be undone.`}
           onClose={() => setShowDeleteModal(false)}
           submit={
             <Button
@@ -388,7 +477,16 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               {isDeleting ? "Deleting..." : "Delete"}
             </Button>
           }
-        />
+        >
+          <Text as="p" text03>
+            Members of group{" "}
+            <Text as="span" text05>
+              {group?.name}
+            </Text>{" "}
+            will lose access to any resources shared with this group, unless
+            they have been granted access directly. Deletion cannot be undone.
+          </Text>
+        </ConfirmationModalLayout>
       )}
     </>
   );
