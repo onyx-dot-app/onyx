@@ -1,13 +1,19 @@
 from onyx.cache.factory import get_cache_backend
+from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import DISABLE_USER_KNOWLEDGE
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.app_configs import SHOW_EXTRA_CONNECTORS
 from onyx.configs.constants import KV_SETTINGS_KEY
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.server.settings.models import (
+    DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
+)
+from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
 from onyx.server.settings.models import Settings
 from onyx.utils.logger import setup_logger
 
@@ -56,10 +62,28 @@ def load_settings() -> Settings:
 
     # Resolve context-aware defaults for fields not yet set by admin
     if settings.file_token_count_threshold_k is None:
-        settings.file_token_count_threshold_k = 10000 if DISABLE_VECTOR_DB else 200
+        settings.file_token_count_threshold_k = (
+            DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB
+            if DISABLE_VECTOR_DB
+            else DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
+        )
 
+    # When no admin value is stored, default to the lesser of the configured
+    # default and the hard ceiling so the effective default never exceeds the max.
     if settings.user_file_max_upload_size_mb is None:
-        settings.user_file_max_upload_size_mb = 100
+        settings.user_file_max_upload_size_mb = min(
+            DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
+            MAX_ALLOWED_UPLOAD_SIZE_MB,
+        )
+
+    # Clamp to env ceiling so stale KV values are capped even if the
+    # operator lowered MAX_ALLOWED_UPLOAD_SIZE_MB after a higher value
+    # was already saved (api.py only guards new writes).
+    if (
+        settings.user_file_max_upload_size_mb > 0
+        and settings.user_file_max_upload_size_mb > MAX_ALLOWED_UPLOAD_SIZE_MB
+    ):
+        settings.user_file_max_upload_size_mb = MAX_ALLOWED_UPLOAD_SIZE_MB
 
     return settings
 

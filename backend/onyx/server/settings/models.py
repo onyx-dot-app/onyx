@@ -4,10 +4,15 @@ from enum import Enum
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
+from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import QueryHistoryType
 from onyx.db.models import Notification as NotificationDBModel
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+
+DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB = 200
+DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB = 10000
 
 
 class PageType(str, Enum):
@@ -79,7 +84,9 @@ class Settings(BaseModel):
 
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True
-    user_file_max_upload_size_mb: int | None = Field(default=100, ge=0)
+    user_file_max_upload_size_mb: int | None = Field(
+        default=DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB, ge=0
+    )
     file_token_count_threshold_k: int | None = Field(
         default=None, ge=0  # thousands of tokens; None = context-aware default
     )
@@ -112,3 +119,5 @@ class UserSettings(Settings):
     hooks_enabled: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
+    # Hard ceiling for user_file_max_upload_size_mb, derived from env var.
+    max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB

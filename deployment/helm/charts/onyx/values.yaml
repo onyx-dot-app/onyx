@@ -1285,3 +1285,5 @@ configMap:
   DOMAIN: "localhost"
   # Chat Configs
   HARD_DELETE_CHATS: ""
+  MAX_ALLOWED_UPLOAD_SIZE_MB: ""
+  DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""

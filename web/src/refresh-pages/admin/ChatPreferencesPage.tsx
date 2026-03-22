@@ -199,18 +199,24 @@ interface NumericLimitFieldProps {
   name: FileLimitFieldName;
   defaultValue: string;
   saveSettings: (updates: Partial<Settings>) => Promise<void>;
+  maxValue?: number;
 }
 
 function NumericLimitField({
   name,
   defaultValue,
   saveSettings,
+  maxValue,
 }: NumericLimitFieldProps) {
   const { values, setFieldValue } =
     useFormikContext<ChatPreferencesFormValues>();
   const initialValue = useRef(values[name]);
   const restoringRef = useRef(false);
   const value = values[name];
+
+  const parsed = parseInt(value, 10);
+  const isOverMax =
+    maxValue !== undefined && !isNaN(parsed) && parsed > maxValue;
 
   const handleRestore = () => {
     restoringRef.current = true;
@@ -220,26 +226,40 @@ function NumericLimitField({
   };
 
   const handleBlur = () => {
+    // The restore button triggers a blur — skip since handleRestore already saved.
     if (restoringRef.current) {
       restoringRef.current = false;
       return;
     }
+
     const parsed = parseInt(value, 10);
-    if (!isNaN(parsed) && parsed < 0) {
+    const isValid = !isNaN(parsed);
+
+    // Reject negative values — revert to the last-saved value.
+    if (isValid && parsed < 0) {
       void setFieldValue(name, initialValue.current);
       return;
     }
-    if (isNaN(parsed) || parsed === 0) {
-      void setFieldValue(name, "");
-    } else if (value !== String(parsed)) {
-      void setFieldValue(name, String(parsed));
+
+    // Block save when the value exceeds the hard ceiling.
+    if (isValid && maxValue !== undefined && parsed > maxValue) {
+      return;
     }
+
+    // Treat empty input, NaN, and 0 as "no limit" (stored as 0).
+    const isNoLimit = !isValid || parsed === 0;
+    const normalizedDisplay = isNoLimit ? "" : String(parsed);
+    const settingsValue = isNoLimit ? 0 : parsed;
+
+    // Update the display to the canonical form (e.g. strip leading zeros).
+    if (value !== normalizedDisplay) {
+      void setFieldValue(name, normalizedDisplay);
+    }
+
+    // Persist only when the value actually changed.
     if (value !== initialValue.current) {
-      void saveSettings({
-        [name]: value === "" || isNaN(parsed) || parsed === 0 ? 0 : parsed,
-      });
-      initialValue.current =
-        isNaN(parsed) || parsed === 0 ? "" : String(parsed);
+      void saveSettings({ [name]: settingsValue });
+      initialValue.current = normalizedDisplay;
     }
   };
 
@@ -251,6 +271,7 @@ function NumericLimitField({
         showClearButton={false}
         pattern="[0-9]*"
         placeholder="No limit"
+        variant={isOverMax ? "error" : undefined}
         rightSection={
           value !== "" && value !== defaultValue ? (
             <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
@@ -272,24 +293,34 @@ function NumericLimitField({
 
 interface FileSizeLimitFieldsProps {
   saveSettings: (updates: Partial<Settings>) => Promise<void>;
-  vectorDbEnabled: boolean;
+  defaultUploadSizeMb: string;
+  defaultTokenThresholdK: string;
+  maxAllowedUploadSizeMb?: number;
 }
 
 function FileSizeLimitFields({
   saveSettings,
-  vectorDbEnabled,
+  defaultUploadSizeMb,
+  defaultTokenThresholdK,
+  maxAllowedUploadSizeMb,
 }: FileSizeLimitFieldsProps) {
-  const DEFAULT_UPLOAD_SIZE_MB = "100";
-  const DEFAULT_TOKEN_THRESHOLD_K = vectorDbEnabled ? "200" : "10000";
-
   return (
-    <div className="flex gap-4 w-full">
+    <div className="flex gap-4 w-full items-start">
       <div className="flex-1">
-        <InputLayouts.Vertical title="File Size Limit (MB)" nonInteractive>
+        <InputLayouts.Vertical
+          title="File Size Limit (MB)"
+          subDescription={
+            maxAllowedUploadSizeMb
+              ? `Max: ${maxAllowedUploadSizeMb} MB`
+              : undefined
+          }
+          nonInteractive
+        >
           <NumericLimitField
             name="user_file_max_upload_size_mb"
-            defaultValue={DEFAULT_UPLOAD_SIZE_MB}
+            defaultValue={defaultUploadSizeMb}
             saveSettings={saveSettings}
+            maxValue={maxAllowedUploadSizeMb}
           />
         </InputLayouts.Vertical>
       </div>
@@ -300,7 +331,7 @@ function FileSizeLimitFields({
         >
           <NumericLimitField
             name="file_token_count_threshold_k"
-            defaultValue={DEFAULT_TOKEN_THRESHOLD_K}
+            defaultValue={defaultTokenThresholdK}
             saveSettings={saveSettings}
           />
         </InputLayouts.Vertical>
@@ -855,7 +886,17 @@ function ChatPreferencesForm() {
                   >
                     <FileSizeLimitFields
                       saveSettings={saveSettings}
-                      vectorDbEnabled={vectorDbEnabled}
+                      defaultUploadSizeMb={
+                        settings?.settings.user_file_max_upload_size_mb?.toString() ??
+                        ""
+                      }
+                      defaultTokenThresholdK={
+                        settings?.settings.file_token_count_threshold_k?.toString() ??
+                        ""
+                      }
+                      maxAllowedUploadSizeMb={
+                        settings?.settings.max_allowed_upload_size_mb
+                      }
                     />
                   </InputLayouts.Vertical>
                 </Card>
