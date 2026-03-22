@@ -161,9 +161,7 @@ else:
     CORS_ALLOWED_ORIGIN = []
 
 if ENVIRONMENT == "production" and not CORS_ALLOWED_ORIGIN:
-    raise ValueError(
-        "CORS_ALLOWED_ORIGIN must be explicitly configured in production"
-    )
+    raise ValueError("CORS_ALLOWED_ORIGIN must be explicitly configured in production")
 
 
 # Multi-tenancy configuration
