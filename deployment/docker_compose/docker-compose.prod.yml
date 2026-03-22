@@ -394,6 +394,19 @@ services:
     tmpfs:
       - /data
 
+  dozzle:
+    image: amir20/dozzle:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "9999:8080"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
   code-interpreter:
     image: onyxdotapp/code-interpreter:0.1.0
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
