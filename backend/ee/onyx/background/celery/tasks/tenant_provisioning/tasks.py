@@ -74,11 +74,7 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
             num_available_tenants = db_session.query(AvailableTenant).count()
 
         # Get the target number of available tenants
-        num_minimum_available_tenants = (
-            TARGET_AVAILABLE_TENANTS
-            if TARGET_AVAILABLE_TENANTS is not None
-            else DEFAULT_TARGET_AVAILABLE_TENANTS
-        )
+        num_minimum_available_tenants = TARGET_AVAILABLE_TENANTS
 
         # Calculate how many new tenants we need to provision
         if num_available_tenants < num_minimum_available_tenants:
@@ -103,7 +99,7 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
         try:
             lock_check.release()
         except Exception:
-            task_logger.debug(
+            task_logger.warning(
                 "Could not release check lock (likely expired), continuing"
             )
 
@@ -195,6 +191,6 @@ def pre_provision_tenant() -> None:
         try:
             lock_provision.release()
         except Exception:
-            task_logger.debug(
+            task_logger.warning(
                 "Could not release provision lock (likely expired), continuing"
             )
