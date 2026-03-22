@@ -384,6 +384,20 @@ services:
       timeout: 20s
       retries: 3
 
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    volumes:
+      - uptime_kuma_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "3001:3001"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
   cache:
     image: redis:7.4-alpine
     restart: unless-stopped
@@ -425,5 +439,7 @@ volumes:
   # mcp_server_logs:
   # Shared volume for persistent document storage (Craft file-system mode)
   file-system:
+  # Uptime Kuma persistent data
+  uptime_kuma_data:
   # Persistent data for OpenSearch.
   opensearch-data:
