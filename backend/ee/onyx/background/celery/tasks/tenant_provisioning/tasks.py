@@ -25,9 +25,6 @@ from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import TENANT_ID_PREFIX
 
-# Default number of pre-provisioned tenants to maintain
-DEFAULT_TARGET_AVAILABLE_TENANTS = 5
-
 # Soft time limit for tenant pre-provisioning tasks (in seconds)
 _TENANT_PROVISIONING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
 # Hard time limit for tenant pre-provisioning tasks (in seconds)
