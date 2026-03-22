@@ -25,7 +25,7 @@ class QueryProcessingResponse(BaseModel):
         default=None,
         description=(
             "The query to use in the pipeline. "
-            "Null, empty string, or absent = reject the query."
+            "Null, empty string, whitespace-only, or absent = reject the query."
         ),
     )
     rejection_message: str | None = Field(

@@ -87,6 +87,15 @@ def test_empty_string_query_raises_query_rejected() -> None:
     assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
 
 
+def test_whitespace_only_query_raises_query_rejected() -> None:
+    """Whitespace-only string is truthy but meaningless — must be treated as rejection."""
+    with pytest.raises(OnyxError) as exc_info:
+        _apply_query_processing_hook(
+            QueryProcessingResponse(query="   "), "original query"
+        )
+    assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
+
+
 def test_absent_query_field_raises_query_rejected() -> None:
     """query defaults to None when not provided."""
     with pytest.raises(OnyxError) as exc_info:

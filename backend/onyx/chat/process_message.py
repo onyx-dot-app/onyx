@@ -70,6 +70,7 @@ from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType
@@ -450,12 +451,12 @@ def _apply_query_processing_hook(
             OnyxErrorCode.INTERNAL_ERROR,
             f"Expected QueryProcessingResponse from hook, got {type(hook_result).__name__}",
         )
-    if not hook_result.query:
+    if not (hook_result.query and hook_result.query.strip()):
         raise OnyxError(
             OnyxErrorCode.QUERY_REJECTED,
             hook_result.rejection_message or "Your query was rejected.",
         )
-    return hook_result.query
+    return hook_result.query.strip()
 
 
 def handle_stream_message_objects(
@@ -518,18 +519,6 @@ def handle_stream_message_objects(
         persona = chat_session.persona
 
         message_text = new_msg_req.message
-
-        # Query Processing hook — runs before the message is saved to DB.
-        hook_result = execute_hook(
-            db_session=db_session,
-            hook_point=HookPoint.QUERY_PROCESSING,
-            payload=QueryProcessingPayload(
-                query=message_text,
-                user_email=None if user.is_anonymous else user.email,
-                chat_session_id=str(chat_session.id),
-            ).model_dump(),
-        )
-        message_text = _apply_query_processing_hook(hook_result, message_text)
 
         user_identity = LLMUserIdentity(
             user_id=llm_user_identifier, session_id=str(chat_session.id)
@@ -622,6 +611,22 @@ def handle_stream_message_objects(
         if parent_message.message_type == MessageType.USER:
             user_message = parent_message
         else:
+            # New message — run the Query Processing hook before saving to DB.
+            # Skipped on regeneration: the message already exists and was accepted previously.
+            hook_result = execute_hook(
+                db_session=db_session,
+                hook_point=HookPoint.QUERY_PROCESSING,
+                payload=QueryProcessingPayload(
+                    query=message_text,
+                    # Pass None for anonymous users or authenticated users without an email
+                    # (e.g. some SSO flows). QueryProcessingPayload.user_email is str | None,
+                    # so None is accepted and serialised as null in both cases.
+                    user_email=None if user.is_anonymous else user.email,
+                    chat_session_id=str(chat_session.id),
+                ).model_dump(),
+            )
+            message_text = _apply_query_processing_hook(hook_result, message_text)
+
             user_message = create_new_chat_message(
                 chat_session_id=chat_session.id,
                 parent_message=parent_message,
@@ -960,6 +965,17 @@ def handle_stream_message_objects(
                 emitter=emitter,
                 state_container=state_container,
             )
+
+    except OnyxError as e:
+        if e.error_code is not OnyxErrorCode.QUERY_REJECTED:
+            log_onyx_error(e)
+        yield StreamingError(
+            error=e.detail,
+            error_code=e.error_code.code,
+            is_retryable=e.status_code >= 500,
+        )
+        db_session.rollback()
+        return
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")

@@ -643,6 +643,33 @@ def test_unexpected_exception_in_inner_respects_fail_strategy(
                 )
 
 
+def test_onyx_error_from_inner_is_never_swallowed_under_soft(
+    db_session: MagicMock,
+) -> None:
+    """OnyxError raised by _execute_hook_inner must be re-raised even under SOFT
+    strategy — the except OnyxError: raise guard must not let it get swallowed."""
+    hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
+
+    with (
+        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch(
+            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            return_value=hook,
+        ),
+        patch(
+            "onyx.hooks.executor._execute_hook_inner",
+            side_effect=OnyxError(OnyxErrorCode.HOOK_EXECUTION_FAILED, "hard fail"),
+        ),
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            execute_hook(
+                db_session=db_session,
+                hook_point=HookPoint.QUERY_PROCESSING,
+                payload=_PAYLOAD,
+            )
+        assert exc_info.value.error_code is OnyxErrorCode.HOOK_EXECUTION_FAILED
+
+
 def test_is_reachable_failure_does_not_prevent_log(db_session: MagicMock) -> None:
     """is_reachable update failing (e.g. concurrent hook deletion) must not
     prevent the execution log from being written.

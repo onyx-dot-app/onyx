@@ -283,6 +283,7 @@ def _execute_hook_inner(
     fail_strategy = hook.fail_strategy
     endpoint_url = hook.endpoint_url
     current_is_reachable: bool | None = hook.is_reachable
+    hook_point = hook.hook_point  # extract before HTTP call per design intent
 
     if not endpoint_url:
         raise ValueError(
@@ -300,7 +301,9 @@ def _execute_hook_inner(
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+        with httpx.Client(
+            timeout=timeout, follow_redirects=False
+        ) as client:  # SSRF guard: never follow redirects
             response = client.post(endpoint_url, json=payload, headers=headers)
     except Exception as e:
         exc = e
@@ -314,14 +317,13 @@ def _execute_hook_inner(
     # and fail_strategy is respected below.
     validated_model: BaseModel | None = None
     if outcome.is_success and outcome.response_payload is not None:
-        spec = get_hook_point_spec(hook.hook_point)
+        spec = get_hook_point_spec(hook_point)
         try:
             validated_model = spec.response_model.model_validate(
                 outcome.response_payload
             )
         except ValidationError as e:
             msg = f"Hook response failed validation against {spec.response_model.__name__}: {e}"
-            logger.warning(msg)
             outcome = _HttpOutcome(
                 is_success=False,
                 updated_is_reachable=None,  # server responded — reachability unchanged
@@ -372,6 +374,11 @@ def execute_hook(
 
     try:
         return _execute_hook_inner(hook, payload)
+    except OnyxError:
+        # OnyxError(HOOK_EXECUTION_FAILED) is only raised under HARD strategy in
+        # _execute_hook_inner, so re-raise unconditionally — never silently swallow
+        # an OnyxError into HookSoftFailed, even under SOFT.
+        raise
     except Exception:
         if hook.fail_strategy == HookFailStrategy.SOFT:
             logger.exception(
