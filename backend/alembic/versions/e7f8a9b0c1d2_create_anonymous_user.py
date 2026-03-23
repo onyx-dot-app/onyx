@@ -12,7 +12,6 @@ Create Date: 2026-01-15 14:00:00.000000
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.exc import IntegrityError
 
 
 # revision identifiers, used by Alembic.
@@ -116,49 +115,39 @@ def upgrade() -> None:
 
     # Migrate any remaining user_id=NULL records to anonymous user
     for table in TABLES_WITH_USER_ID:
-        try:
-            with connection.begin_nested():
-                # Exclude public credential (id=0) which must remain user_id=NULL
-                # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
-                # Exclude builtin personas (builtin_persona=True) which must remain user_id=NULL
-                # Exclude system input prompts (is_public=True with user_id=NULL) which must remain user_id=NULL
-                if table == "credential":
-                    condition = "user_id IS NULL AND id != 0"
-                elif table == "tool":
-                    condition = "user_id IS NULL AND in_code_tool_id IS NULL"
-                elif table == "persona":
-                    condition = "user_id IS NULL AND builtin_persona = false"
-                elif table == "inputprompt":
-                    condition = "user_id IS NULL AND is_public = false"
-                else:
-                    condition = "user_id IS NULL"
+        # Dedup notifications outside the savepoint so deletions persist
+        # even if the subsequent UPDATE rolls back
+        if table == "notification":
+            _dedupe_null_notifications(connection)
 
-                if table == "notification":
-                    _dedupe_null_notifications(connection)
-
-                result = connection.execute(
-                    sa.text(
-                        f"""
-                        UPDATE "{table}"
-                        SET user_id = :user_id
-                        WHERE {condition}
-                        """
-                    ),
-                    {"user_id": ANONYMOUS_USER_UUID},
-                )
-                if result.rowcount > 0:
-                    print(
-                        f"Updated {result.rowcount} rows in {table} to anonymous user"
-                    )
-        except IntegrityError as e:
-            if table == "notification":
-                # IntegrityError is expected only for notification (unique constraint
-                # on user_id + notif_type + additional_data). The dedup step above
-                # should prevent this, but handle it gracefully just in case.
-                print(f"Skipping {table} due to IntegrityError: {e}")
+        with connection.begin_nested():
+            # Exclude public credential (id=0) which must remain user_id=NULL
+            # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
+            # Exclude builtin personas (builtin_persona=True) which must remain user_id=NULL
+            # Exclude system input prompts (is_public=True with user_id=NULL) which must remain user_id=NULL
+            if table == "credential":
+                condition = "user_id IS NULL AND id != 0"
+            elif table == "tool":
+                condition = "user_id IS NULL AND in_code_tool_id IS NULL"
+            elif table == "persona":
+                condition = "user_id IS NULL AND builtin_persona = false"
+            elif table == "inputprompt":
+                condition = "user_id IS NULL AND is_public = false"
             else:
-                print(f"Failed migrating {table} to anonymous user: {e}")
-                raise
+                condition = "user_id IS NULL"
+
+            result = connection.execute(
+                sa.text(
+                    f"""
+                    UPDATE "{table}"
+                    SET user_id = :user_id
+                    WHERE {condition}
+                    """
+                ),
+                {"user_id": ANONYMOUS_USER_UUID},
+            )
+            if result.rowcount > 0:
+                print(f"Updated {result.rowcount} rows in {table} to anonymous user")
 
 
 def downgrade() -> None:
