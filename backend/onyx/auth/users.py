@@ -312,6 +312,14 @@ def verify_email_domain(email: str) -> None:
                 detail={"reason": "Please use @gmail.com instead of @googlemail.com."},
             )
 
+        if domain == "gmail.com" and "." in local_part:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "reason": "Gmail addresses with '.' are not allowed. Please use your base email address."
+                },
+            )
+
         if "+" in local_part and domain != "onyx.app":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
