@@ -12,6 +12,7 @@ Create Date: 2026-01-15 14:00:00.000000
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.exc import IntegrityError
 
 
 # revision identifiers, used by Alembic.
@@ -149,32 +150,38 @@ def upgrade() -> None:
                     print(
                         f"Updated {result.rowcount} rows in {table} to anonymous user"
                     )
-        except Exception as e:
-            print(f"Skipping {table}: {e}")
+        except IntegrityError as e:
+            if table == "notification":
+                # IntegrityError is expected only for notification (unique constraint
+                # on user_id + notif_type + additional_data). The dedup step above
+                # should prevent this, but handle it gracefully just in case.
+                print(f"Skipping {table} due to IntegrityError: {e}")
+            else:
+                print(f"Failed migrating {table} to anonymous user: {e}")
+                raise
 
 
 def downgrade() -> None:
     """
     Set anonymous user's records back to NULL and delete the anonymous user.
+
+    Note: Duplicate NULL-owned notifications removed during upgrade are not restored.
     """
     connection = op.get_bind()
 
     # Set records back to NULL
     for table in TABLES_WITH_USER_ID:
-        try:
-            with connection.begin_nested():
-                connection.execute(
-                    sa.text(
-                        f"""
-                        UPDATE "{table}"
-                        SET user_id = NULL
-                        WHERE user_id = :user_id
-                        """
-                    ),
-                    {"user_id": ANONYMOUS_USER_UUID},
-                )
-        except Exception:
-            pass
+        with connection.begin_nested():
+            connection.execute(
+                sa.text(
+                    f"""
+                    UPDATE "{table}"
+                    SET user_id = NULL
+                    WHERE user_id = :user_id
+                    """
+                ),
+                {"user_id": ANONYMOUS_USER_UUID},
+            )
 
     # Delete the anonymous user
     connection.execute(

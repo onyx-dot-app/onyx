@@ -404,6 +404,7 @@ def test_anonymous_user_migration_dedupes_null_notifications() -> None:
         ).fetchone()
 
     assert len(notifications) == 1
+    assert notifications[0].id == 2  # Higher id wins when timestamps are equal
     assert str(notifications[0].user_id) == ANONYMOUS_USER_UUID
     assert anonymous_user is not None
     assert anonymous_user.email == "anonymous@onyx.app"
