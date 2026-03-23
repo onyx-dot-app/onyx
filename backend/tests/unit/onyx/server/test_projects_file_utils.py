@@ -201,34 +201,32 @@ def test_categorize_uploaded_files_checks_size_before_text_extraction(
     assert result.rejected[0].reason == "Exceeds 1 MB file size limit"
 
 
-def test_categorize_no_size_limit_when_upload_size_mb_is_zero(
+def test_categorize_enforces_size_limit_when_upload_size_mb_is_positive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """upload_size_mb=0 means admin disabled the limit; oversized files accepted."""
-    _patch_common_dependencies(monkeypatch, upload_size_mb=0)
+    """A positive upload_size_mb is always enforced."""
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1)
     monkeypatch.setattr(utils, "estimate_image_tokens_for_upload", lambda _upload: 10)
 
-    upload = _make_upload("huge.png", size=999_999_999, content=b"x")
+    upload = _make_upload("huge.png", size=1048577, content=b"x")
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
-    assert len(result.acceptable) == 1
-    assert len(result.rejected) == 0
+    assert len(result.acceptable) == 0
+    assert len(result.rejected) == 1
 
 
-def test_categorize_no_token_limit_when_threshold_k_is_zero(
+def test_categorize_enforces_token_limit_when_threshold_k_is_positive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """token_threshold_k=0 means admin disabled the limit; high-token files accepted."""
-    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=0)
-    monkeypatch.setattr(
-        utils, "estimate_image_tokens_for_upload", lambda _upload: 999_999
-    )
+    """A positive token_threshold_k is always enforced."""
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=5)
+    monkeypatch.setattr(utils, "estimate_image_tokens_for_upload", lambda _upload: 6000)
 
     upload = _make_upload("big_image.png", size=100)
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
-    assert len(result.acceptable) == 1
-    assert len(result.rejected) == 0
+    assert len(result.acceptable) == 0
+    assert len(result.rejected) == 1
 
 
 def test_categorize_both_limits_enforced(

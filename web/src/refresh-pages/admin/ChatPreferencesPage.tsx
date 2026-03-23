@@ -246,10 +246,11 @@ function NumericLimitField({
       return;
     }
 
-    // Treat empty input, NaN, and 0 as "no limit" (stored as 0).
-    const isNoLimit = !isValid || parsed === 0;
-    const normalizedDisplay = isNoLimit ? "" : String(parsed);
-    const settingsValue = isNoLimit ? 0 : parsed;
+    // Treat empty input, NaN, and 0 as "restore default".
+    const isDefault = !isValid || parsed === 0;
+    const defaultParsed = parseInt(defaultValue, 10);
+    const normalizedDisplay = isDefault ? defaultValue : String(parsed);
+    const settingsValue = isDefault ? defaultParsed : parsed;
 
     // Update the display to the canonical form (e.g. strip leading zeros).
     if (value !== normalizedDisplay) {
@@ -270,7 +271,7 @@ function NumericLimitField({
         inputMode="numeric"
         showClearButton={false}
         pattern="[0-9]*"
-        placeholder="No limit"
+        placeholder={`Default: ${defaultValue}`}
         variant={isOverMax ? "error" : undefined}
         rightSection={
           (value || "") !== defaultValue ? (
@@ -1041,17 +1042,17 @@ export default function ChatPreferencesPage() {
     disable_default_assistant:
       settings.settings.disable_default_assistant ?? false,
 
-    // File limits — 0 means "no limit", show as empty string
+    // File limits — 0/null means "use default"
     user_file_max_upload_size_mb:
-      settings.settings.user_file_max_upload_size_mb === 0 ||
-      settings.settings.user_file_max_upload_size_mb == null
-        ? ""
-        : settings.settings.user_file_max_upload_size_mb.toString(),
+      (settings.settings.user_file_max_upload_size_mb ?? 0) <= 0
+        ? settings.settings.default_user_file_max_upload_size_mb?.toString() ??
+          "100"
+        : settings.settings.user_file_max_upload_size_mb!.toString(),
     file_token_count_threshold_k:
-      settings.settings.file_token_count_threshold_k === 0 ||
-      settings.settings.file_token_count_threshold_k == null
-        ? ""
-        : settings.settings.file_token_count_threshold_k.toString(),
+      (settings.settings.file_token_count_threshold_k ?? 0) <= 0
+        ? settings.settings.default_file_token_count_threshold_k?.toString() ??
+          "200"
+        : settings.settings.file_token_count_threshold_k!.toString(),
   };
 
   return (

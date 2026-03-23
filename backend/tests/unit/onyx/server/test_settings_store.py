@@ -82,10 +82,10 @@ def test_load_settings_preserves_explicit_value_when_vector_db_disabled(
     assert settings.file_token_count_threshold_k == 500
 
 
-def test_load_settings_preserves_zero_token_threshold(
+def test_load_settings_resolves_zero_token_threshold_to_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A value of 0 means 'no limit' — it should not be replaced by a default."""
+    """A value of 0 should be treated as unset and resolved to the default."""
     stored = Settings(file_token_count_threshold_k=0).model_dump()
     monkeypatch.setattr(settings_store, "get_kv_store", lambda: _FakeKvStore(stored))
     monkeypatch.setattr(settings_store, "get_cache_backend", lambda: _FakeCache())
@@ -93,20 +93,23 @@ def test_load_settings_preserves_zero_token_threshold(
 
     settings = settings_store.load_settings()
 
-    assert settings.file_token_count_threshold_k == 0
+    assert (
+        settings.file_token_count_threshold_k
+        == DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB
+    )
 
 
-def test_load_settings_preserves_zero_upload_size(
+def test_load_settings_resolves_zero_upload_size_to_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A value of 0 means 'no limit' — it should not be replaced by a default."""
+    """A value of 0 should be treated as unset and resolved to the default."""
     stored = Settings(user_file_max_upload_size_mb=0).model_dump()
     monkeypatch.setattr(settings_store, "get_kv_store", lambda: _FakeKvStore(stored))
     monkeypatch.setattr(settings_store, "get_cache_backend", lambda: _FakeCache())
 
     settings = settings_store.load_settings()
 
-    assert settings.user_file_max_upload_size_mb == 0
+    assert settings.user_file_max_upload_size_mb == DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 
 
 def test_load_settings_clamps_upload_size_to_env_max(
@@ -139,19 +142,20 @@ def test_load_settings_preserves_upload_size_within_max(
     assert settings.user_file_max_upload_size_mb == 150
 
 
-def test_load_settings_zero_upload_size_not_clamped(
+def test_load_settings_zero_upload_size_resolves_to_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A value of 0 (no limit) should not be clamped even when it technically
-    doesn't exceed the max — the >0 guard keeps it as-is."""
+    """A value of 0 should be treated as unset and resolved to the default,
+    clamped to MAX_ALLOWED_UPLOAD_SIZE_MB."""
     stored = Settings(user_file_max_upload_size_mb=0).model_dump()
     monkeypatch.setattr(settings_store, "get_kv_store", lambda: _FakeKvStore(stored))
     monkeypatch.setattr(settings_store, "get_cache_backend", lambda: _FakeCache())
     monkeypatch.setattr(settings_store, "MAX_ALLOWED_UPLOAD_SIZE_MB", 100)
+    monkeypatch.setattr(settings_store, "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", 100)
 
     settings = settings_store.load_settings()
 
-    assert settings.user_file_max_upload_size_mb == 0
+    assert settings.user_file_max_upload_size_mb == 100
 
 
 def test_load_settings_default_clamped_to_max(

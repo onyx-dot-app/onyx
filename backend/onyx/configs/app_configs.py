@@ -47,7 +47,9 @@ BLURB_SIZE = 128  # Number Encoder Tokens included in the chunk blurb
 
 # Hard ceiling for the admin-configurable file upload size (in MB).
 # Self-hosted customers can raise or lower this via the environment variable.
-MAX_ALLOWED_UPLOAD_SIZE_MB = int(os.environ.get("MAX_ALLOWED_UPLOAD_SIZE_MB", "250"))
+MAX_ALLOWED_UPLOAD_SIZE_MB = max(
+    0, int(os.environ.get("MAX_ALLOWED_UPLOAD_SIZE_MB", "250"))
+)
 
 # Default fallback for the per-user file upload size limit (in MB) when no
 # admin-configured value exists.  Clamped to MAX_ALLOWED_UPLOAD_SIZE_MB at

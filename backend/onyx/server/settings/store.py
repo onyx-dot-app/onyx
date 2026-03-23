@@ -60,17 +60,17 @@ def load_settings() -> Settings:
     settings.show_extra_connectors = SHOW_EXTRA_CONNECTORS
     settings.opensearch_indexing_enabled = ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 
-    # Resolve context-aware defaults for fields not yet set by admin
-    if settings.file_token_count_threshold_k is None:
+    # Resolve context-aware defaults for fields not yet set by admin (0 = unset)
+    if not settings.file_token_count_threshold_k:
         settings.file_token_count_threshold_k = (
             DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB
             if DISABLE_VECTOR_DB
             else DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
         )
 
-    # When no admin value is stored, default to the lesser of the configured
-    # default and the hard ceiling so the effective default never exceeds the max.
-    if settings.user_file_max_upload_size_mb is None:
+    # When no admin value is stored (or 0), default to the lesser of the
+    # configured default and the hard ceiling.
+    if not settings.user_file_max_upload_size_mb:
         settings.user_file_max_upload_size_mb = min(
             DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
             MAX_ALLOWED_UPLOAD_SIZE_MB,
