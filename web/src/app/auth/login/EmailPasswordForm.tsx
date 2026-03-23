@@ -116,11 +116,6 @@ export default function EmailPasswordForm({
                   "An account already exists with the specified email.";
               } else if (typeof errorDetail === "string" && errorDetail) {
                 errorMsg = errorDetail;
-              } else if (
-                typeof errorDetail === "object" &&
-                errorDetail?.reason
-              ) {
-                errorMsg = errorDetail.reason;
               }
               if (response.status === 429) {
                 errorMsg = "Too many requests. Please try again later.";
