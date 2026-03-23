@@ -183,6 +183,7 @@ export default function LineItem({
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (disabled) {
       e.preventDefault();
+      e.stopPropagation();
       return;
     }
     props.onClick?.(e);
