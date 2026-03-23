@@ -120,6 +120,7 @@ export default function AgentRowActions({
 
       refreshAgent();
       onMutate();
+      shareModal.toggle(false);
     },
     [
       agent.id,
