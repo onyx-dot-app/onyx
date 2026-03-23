@@ -135,6 +135,8 @@ from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
+from onyx.utils.telemetry import mt_cloud_alias
+from onyx.utils.telemetry import mt_cloud_get_anon_id
 from onyx.utils.telemetry import mt_cloud_identify
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
@@ -808,6 +810,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             logger.exception("Error deleting anonymous user cookie")
 
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+
+        # Link the anonymous PostHog session to the identified user so that
+        # pre-login session recordings and events merge into one person profile.
+        if anon_id := mt_cloud_get_anon_id(request):
+            mt_cloud_alias(distinct_id=str(user.id), anonymous_id=anon_id)
+
         mt_cloud_identify(
             distinct_id=str(user.id),
             properties={"email": user.email, "tenant_id": tenant_id},
@@ -830,6 +838,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         try:
             user_count = await get_user_count()
             logger.debug(f"Current tenant user count: {user_count}")
+
+            # Link the anonymous PostHog session to the identified user so
+            # that pre-signup session recordings merge into one person profile.
+            if anon_id := mt_cloud_get_anon_id(request):
+                mt_cloud_alias(distinct_id=str(user.id), anonymous_id=anon_id)
 
             # Ensure a PostHog person profile exists for this user.
             mt_cloud_identify(
@@ -859,9 +872,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             attribute="get_marketing_posthog_cookie_name",
             noop_return_value=None,
         )
-        parse_marketing_cookie = fetch_ee_implementation_or_noop(
+        parse_posthog_cookie = fetch_ee_implementation_or_noop(
             module="onyx.utils.posthog_client",
-            attribute="parse_marketing_cookie",
+            attribute="parse_posthog_cookie",
             noop_return_value=None,
         )
         capture_and_sync_with_alternate_posthog = fetch_ee_implementation_or_noop(
@@ -875,7 +888,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             and user_count is not None
             and (marketing_cookie_name := get_marketing_posthog_cookie_name())
             and (marketing_cookie_value := request.cookies.get(marketing_cookie_name))
-            and (parsed_cookie := parse_marketing_cookie(marketing_cookie_value))
+            and (parsed_cookie := parse_posthog_cookie(marketing_cookie_value))
         ):
             marketing_anonymous_id = parsed_cookie["distinct_id"]
 
