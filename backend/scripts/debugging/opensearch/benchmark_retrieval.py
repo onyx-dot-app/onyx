@@ -23,13 +23,13 @@ from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
 from onyx.indexing.models import IndexingSetting
+from scripts.debugging.opensearch.constants import DEV_TENANT_ID
 from scripts.debugging.opensearch.embedding_io import load_query_embedding_from_file
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
 DEFAULT_N = 50
-DEV_TENANT_ID = "tenant_dev"
 
 
 def main() -> None:

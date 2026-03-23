@@ -14,11 +14,10 @@ import time
 from onyx.context.search.utils import get_query_embedding
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from scripts.debugging.opensearch.constants import DEV_TENANT_ID
 from scripts.debugging.opensearch.embedding_io import save_query_embedding_to_file
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
-DEV_TENANT_ID = "tenant_dev"
 
 
 def main() -> None:
