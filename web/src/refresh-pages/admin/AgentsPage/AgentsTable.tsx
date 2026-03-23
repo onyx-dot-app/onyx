@@ -17,6 +17,7 @@ import AgentRowActions from "@/refresh-pages/admin/AgentsPage/AgentRowActions";
 import { updateAgentDisplayPriorities } from "@/refresh-pages/admin/AgentsPage/svc";
 import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
 import type { Persona } from "@/app/admin/agents/interfaces";
+import { SvgTrash } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -80,16 +81,15 @@ const tc = createTableColumns<AgentRow>();
 
 function buildColumns(onMutate: () => void) {
   return [
-    tc.displayColumn({
-      id: "avatar",
-      cell: (row) => (
+    tc.qualifier({
+      content: "icon",
+      background: true,
+      getContent: (row) => (props) => (
         <AgentAvatar
           agent={row as unknown as MinimalPersonaSnapshot}
-          size={32}
+          size={props.size}
         />
       ),
-      width: { fixed: 48 },
-      enableHiding: false,
     }),
     tc.column("name", {
       header: "Name",
