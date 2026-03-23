@@ -86,7 +86,7 @@ async def test_get_or_create_user_skips_inactive(
     """Inactive users should not be re-authenticated via JWT."""
     monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
-    monkeypatch.setattr(users_module, "verify_email_domain", lambda _: None)
+    monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
 
     email = "inactive@example.com"
     payload: dict[str, Any] = {"email": email}
@@ -126,7 +126,7 @@ async def test_get_or_create_user_handles_race_conditions(
     """If provisioning races, newly inactive users should still be blocked."""
     monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", True)
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
-    monkeypatch.setattr(users_module, "verify_email_domain", lambda _: None)
+    monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
 
     email = "race@example.com"
     payload: dict[str, Any] = {"email": email}
@@ -182,7 +182,7 @@ async def test_get_or_create_user_provisions_new_user(
     monkeypatch.setattr(users_module, "TRACK_EXTERNAL_IDP_EXPIRY", False)
     monkeypatch.setattr(users_module, "generate_password", lambda: "TempPass123!")
     monkeypatch.setattr(users_module, "verify_email_is_invited", lambda _: None)
-    monkeypatch.setattr(users_module, "verify_email_domain", lambda _: None)
+    monkeypatch.setattr(users_module, "verify_email_domain", lambda *_a, **_kw: None)
 
     recorded: dict[str, Any] = {}
 

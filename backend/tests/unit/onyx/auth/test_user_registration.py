@@ -138,7 +138,9 @@ class TestDisposableEmailValidation:
             pass  # We just want to verify domain check passed
 
         # Verify domain validation was called
-        mock_verify_domain.assert_called_once_with(mock_user_create.email)
+        mock_verify_domain.assert_called_once_with(
+            mock_user_create.email, is_registration=True
+        )
 
 
 class TestMultiTenantInviteLogic:
@@ -490,7 +492,9 @@ class TestCaseInsensitiveEmailMatching:
             pass
 
         # Verify flow
-        mock_verify_domain.assert_called_once_with(user_create.email)
+        mock_verify_domain.assert_called_once_with(
+            user_create.email, is_registration=True
+        )
 
     @patch("onyx.auth.users.is_disposable_email")
     @patch("onyx.auth.users.verify_email_domain")
@@ -540,5 +544,7 @@ class TestCaseInsensitiveEmailMatching:
             pass
 
         # Verify flow
-        mock_verify_domain.assert_called_once_with(mock_user_create.email)
+        mock_verify_domain.assert_called_once_with(
+            mock_user_create.email, is_registration=True
+        )
         mock_verify_invited.assert_called_once()  # Existing tenant = invite needed
