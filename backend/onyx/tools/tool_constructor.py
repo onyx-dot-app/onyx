@@ -9,6 +9,7 @@ from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.mcp import get_all_mcp_tools_for_server
@@ -143,6 +144,30 @@ def construct_tools(
     # This flow is for search so we do not get all indices.
     document_index = get_default_document_index(search_settings, None, db_session)
 
+    persona_search_info = PersonaSearchInfo(
+        document_set_names=[ds.name for ds in persona.document_sets],
+        has_user_files=bool(persona.user_files),
+        search_start_date=persona.search_start_date,
+        attached_document_ids=[doc.id for doc in persona.attached_documents],
+        hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
+    )
+
+    def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
+        return SearchTool(
+            tool_id=tool_id,
+            emitter=emitter,
+            user=user,
+            persona_search_info=persona_search_info,
+            llm=llm,
+            document_index=document_index,
+            user_selected_filters=config.user_selected_filters,
+            project_id_filter=config.project_id_filter,
+            persona_id_filter=config.persona_id_filter,
+            bypass_acl=config.bypass_acl,
+            slack_context=config.slack_context,
+            enable_slack_search=config.enable_slack_search,
+        )
+
     added_search_tool = False
     for db_tool_model in persona.tools:
         # If allowed_tool_ids is specified, skip tools not in the allowed list
@@ -176,22 +201,9 @@ def construct_tools(
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
-                search_tool = SearchTool(
-                    tool_id=db_tool_model.id,
-                    emitter=emitter,
-                    user=user,
-                    persona=persona,
-                    llm=llm,
-                    document_index=document_index,
-                    user_selected_filters=search_tool_config.user_selected_filters,
-                    project_id_filter=search_tool_config.project_id_filter,
-                    persona_id_filter=search_tool_config.persona_id_filter,
-                    bypass_acl=search_tool_config.bypass_acl,
-                    slack_context=search_tool_config.slack_context,
-                    enable_slack_search=search_tool_config.enable_slack_search,
-                )
-
-                tool_dict[db_tool_model.id] = [search_tool]
+                tool_dict[db_tool_model.id] = [
+                    _build_search_tool(db_tool_model.id, search_tool_config)
+                ]
 
             # Handle Image Generation Tool
             elif tool_cls.__name__ == ImageGenerationTool.__name__:
@@ -421,26 +433,12 @@ def construct_tools(
         # Get the database tool model for SearchTool
         search_tool_db_model = get_builtin_tool(db_session, SearchTool)
 
-        # Use the passed-in config if available, otherwise create a new one
         if not search_tool_config:
             search_tool_config = SearchToolConfig()
 
-        search_tool = SearchTool(
-            tool_id=search_tool_db_model.id,
-            emitter=emitter,
-            user=user,
-            persona=persona,
-            llm=llm,
-            document_index=document_index,
-            user_selected_filters=search_tool_config.user_selected_filters,
-            project_id_filter=search_tool_config.project_id_filter,
-            persona_id_filter=search_tool_config.persona_id_filter,
-            bypass_acl=search_tool_config.bypass_acl,
-            slack_context=search_tool_config.slack_context,
-            enable_slack_search=search_tool_config.enable_slack_search,
-        )
-
-        tool_dict[search_tool_db_model.id] = [search_tool]
+        tool_dict[search_tool_db_model.id] = [
+            _build_search_tool(search_tool_db_model.id, search_tool_config)
+        ]
 
     # Always inject MemoryTool when the user has the memory tool enabled,
     # bypassing persona tool associations and allowed_tool_ids filtering

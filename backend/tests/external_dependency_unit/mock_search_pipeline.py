@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import ChunkSearchRequest
 from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import PersonaSearchInfo
 from onyx.context.search.models import SearchDoc
-from onyx.db.models import Persona
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
@@ -139,7 +139,7 @@ def use_mock_search_pipeline(
         chunk_search_request: ChunkSearchRequest,
         document_index: DocumentIndex,  # noqa: ARG001
         user: User | None,  # noqa: ARG001
-        persona: Persona | None,  # noqa: ARG001
+        persona_search_info: PersonaSearchInfo | None,  # noqa: ARG001
         db_session: Session | None = None,  # noqa: ARG001
         auto_detect_filters: bool = False,  # noqa: ARG001
         llm: LLM | None = None,  # noqa: ARG001

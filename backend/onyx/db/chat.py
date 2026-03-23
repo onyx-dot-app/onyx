@@ -64,6 +64,9 @@ def get_chat_session_by_id(
             joinedload(ChatSession.persona).options(
                 selectinload(Persona.tools),
                 selectinload(Persona.user_files),
+                selectinload(Persona.document_sets),
+                selectinload(Persona.attached_documents),
+                selectinload(Persona.hierarchy_nodes),
             ),
             joinedload(ChatSession.project),
         )
