@@ -14,7 +14,7 @@ import time
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
-from onyx.db.engine.sql_engine import get_db_readonly_user_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.interfaces_new import TenantState
@@ -86,8 +86,8 @@ def main() -> None:
     if MULTI_TENANT:
         CURRENT_TENANT_ID_CONTEXTVAR.set(DEV_TENANT_ID)
 
-    SqlEngine.init_readonly_engine(pool_size=1, max_overflow=1)
-    with get_db_readonly_user_session_with_current_tenant() as session:
+    SqlEngine.init_engine(pool_size=1, max_overflow=0)
+    with get_session_with_current_tenant() as session:
         search_settings = get_current_search_settings(session)
         indexing_setting = IndexingSetting.from_db_model(search_settings)
 
