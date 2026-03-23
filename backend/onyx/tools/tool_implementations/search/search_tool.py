@@ -587,16 +587,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             persona_document_sets = (
                 [ds.name for ds in self.persona.document_sets] if self.persona else None
             )
-            user_file_ids = (
-                [uf.id for uf in self.persona.user_files] if self.persona else None
-            )
             federated_retrieval_infos = (
                 get_federated_retrieval_functions(
                     db_session=db_session,
                     user_id=self.user.id if self.user else None,
                     source_types=prefetch_source_types,
                     document_set_names=persona_document_sets,
-                    user_file_ids=user_file_ids,
+                    has_user_files=bool(self.persona and self.persona.user_files),
                 )
                 or []
             )

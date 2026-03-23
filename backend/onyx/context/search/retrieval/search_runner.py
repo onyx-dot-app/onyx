@@ -110,7 +110,9 @@ def search_chunks(
             user_id=user_id,
             source_types=list(source_filters) if source_filters else None,
             document_set_names=query_request.filters.document_set,
-            user_file_ids=query_request.filters.user_file_ids,
+            has_user_files=bool(
+                query_request.filters.persona_id or query_request.filters.project_id
+            ),
         )
 
     federated_sources = set(
