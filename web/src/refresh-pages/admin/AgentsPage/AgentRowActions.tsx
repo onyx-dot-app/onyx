@@ -16,7 +16,6 @@ import {
   SvgShare,
   SvgBarChart,
   SvgTrash,
-  SvgAlertCircle,
 } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -276,9 +275,7 @@ export default function AgentRowActions({
 
       {deleteOpen && (
         <ConfirmationModalLayout
-          icon={(props) => (
-            <SvgAlertCircle {...props} className="text-action-danger-05" />
-          )}
+          icon={SvgTrash}
           title="Delete Agent"
           onClose={isSubmitting ? undefined : () => setDeleteOpen(false)}
           submit={
