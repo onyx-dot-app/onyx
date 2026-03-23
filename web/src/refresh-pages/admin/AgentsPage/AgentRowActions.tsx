@@ -10,7 +10,7 @@ import {
   SvgMoreHorizontal,
   SvgEdit,
   SvgEye,
-  SvgEyeClosed,
+  SvgEyeOff,
   SvgStar,
   SvgStarOff,
   SvgShare,
@@ -103,7 +103,7 @@ export default function AgentRowActions({
         {!agent.is_listed ? (
           <Button
             prominence="tertiary"
-            icon={SvgEyeClosed}
+            icon={SvgEyeOff}
             tooltip="Re-list Agent"
             onClick={() =>
               handleAction(() => toggleAgentListed(agent.id, agent.is_listed))
@@ -138,7 +138,7 @@ export default function AgentRowActions({
               {[
                 <LineItem
                   key="visibility"
-                  icon={agent.is_listed ? SvgEyeClosed : SvgEye}
+                  icon={agent.is_listed ? SvgEyeOff : SvgEye}
                   onClick={() => {
                     setPopoverOpen(false);
                     handleAction(() =>
