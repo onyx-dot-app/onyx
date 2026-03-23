@@ -60,6 +60,8 @@ import {
   SvgSliders,
   SvgUsers,
   SvgTrash,
+  SvgPlus,
+  SvgMinusCircle,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
@@ -80,6 +82,8 @@ import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import Switch from "@/refresh-components/inputs/Switch";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -96,9 +100,25 @@ import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { InputPrompt } from "@/app/app/interfaces";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
+}
+
+interface LocalPromptShortcut {
+  id?: number;
+  key: number;
+  prompt: string;
+  content: string;
+  active: boolean;
+}
+
+interface PersistedPromptShortcut {
+  id: number;
+  prompt: string;
+  content: string;
+  active: boolean;
 }
 
 function FormWarningsEffect() {
@@ -441,6 +461,93 @@ function StarterMessages() {
   );
 }
 
+function PromptShortcutsEditor({
+  shortcuts,
+  onChange,
+}: {
+  shortcuts: LocalPromptShortcut[];
+  onChange: (shortcuts: LocalPromptShortcut[]) => void;
+}) {
+  const canRemoveShortcut = shortcuts.length > 1;
+
+  function updateShortcut(
+    key: number,
+    updates: Partial<Pick<LocalPromptShortcut, "prompt" | "content" | "active">>
+  ) {
+    onChange(
+      shortcuts.map((shortcut) =>
+        shortcut.key === key ? { ...shortcut, ...updates } : shortcut
+      )
+    );
+  }
+
+  function removeShortcut(key: number) {
+    const next = shortcuts.filter((shortcut) => shortcut.key !== key);
+    onChange(
+      next.length > 0
+        ? next
+        : [{ key: Date.now(), prompt: "", content: "", active: true }]
+    );
+  }
+
+  return (
+    <GeneralLayouts.Section gap={0.75}>
+      {shortcuts.map((shortcut) => {
+        const isEmpty =
+          !shortcut.prompt.trim().length && !shortcut.content.trim().length;
+
+        return (
+          <div
+            key={shortcut.key}
+            className="w-full grid grid-cols-[1fr_min-content] gap-x-1 gap-y-1"
+          >
+            <InputTypeIn
+              prefixText="/"
+              placeholder="Summarize"
+              value={shortcut.prompt}
+              onChange={(e) =>
+                updateShortcut(shortcut.key, { prompt: e.target.value })
+              }
+            />
+            <GeneralLayouts.Section>
+              <Disabled disabled={!canRemoveShortcut && isEmpty}>
+                <OpalButton
+                  icon={SvgMinusCircle}
+                  onClick={() => removeShortcut(shortcut.key)}
+                  prominence="tertiary"
+                  aria-label="Remove shortcut"
+                />
+              </Disabled>
+            </GeneralLayouts.Section>
+            <InputTextArea
+              placeholder="Provide a concise 1–2 sentence summary of the following:"
+              value={shortcut.content}
+              onChange={(e) =>
+                updateShortcut(shortcut.key, { content: e.target.value })
+              }
+              rows={3}
+            />
+          </div>
+        );
+      })}
+      <div>
+        <OpalButton
+          prominence="secondary"
+          icon={SvgPlus}
+          onClick={() =>
+            onChange([
+              ...shortcuts,
+              { key: Date.now(), prompt: "", content: "", active: true },
+            ])
+          }
+        >
+          Add Shortcut
+        </OpalButton>
+      </div>
+    </GeneralLayouts.Section>
+  );
+}
+
 export interface AgentEditorPageProps {
   agent?: FullPersona;
   refreshAgent?: () => void;
@@ -459,6 +566,149 @@ export default function AgentEditorPage({
   const canUpdateFeaturedStatus = isAdmin || isCurator;
   const vectorDbEnabled = useVectorDbEnabled();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const [promptShortcutsEnabled, setPromptShortcutsEnabled] = useState(true);
+  const [promptShortcuts, setPromptShortcuts] = useState<LocalPromptShortcut[]>(
+    [{ key: Date.now(), prompt: "", content: "", active: true }]
+  );
+  const [initialPromptShortcuts, setInitialPromptShortcuts] = useState<
+    PersistedPromptShortcut[]
+  >([]);
+  const [initialPromptShortcutsEnabled, setInitialPromptShortcutsEnabled] =
+    useState(true);
+  const [createdAgentId, setCreatedAgentId] = useState<number | null>(null);
+
+  async function getApiErrorDetail(
+    response: Response,
+    fallback: string
+  ): Promise<string> {
+    const errorData = (await response.json().catch(() => ({}))) as {
+      detail?: unknown;
+    };
+    const { detail } = errorData;
+    if (typeof detail === "string") {
+      return detail || fallback;
+    }
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) =>
+          typeof item === "object" && item !== null && "msg" in item
+            ? String((item as Record<string, unknown>).msg)
+            : String(item)
+        )
+        .filter(Boolean);
+      return messages.length > 0 ? messages.join("; ") : fallback;
+    }
+    if (typeof detail === "object" && detail !== null && "msg" in detail) {
+      return String((detail as Record<string, unknown>).msg) || fallback;
+    }
+    return fallback;
+  }
+
+  useEffect(() => {
+    async function loadPromptShortcuts() {
+      if (!existingAgent) {
+        setPromptShortcuts([
+          { key: Date.now(), prompt: "", content: "", active: true },
+        ]);
+        setPromptShortcutsEnabled(true);
+        return;
+      }
+
+      const response = await fetch(
+        `/api/persona/${existingAgent.id}/input_prompt`
+      );
+      if (!response.ok) {
+        toast.error("Failed to load agent shortcuts");
+        return;
+      }
+
+      const shortcuts = await response.json();
+      const mapped: LocalPromptShortcut[] = shortcuts
+        .map((shortcut: InputPrompt) => ({
+          id: shortcut.id,
+          key: shortcut.id,
+          prompt: shortcut.prompt,
+          content: shortcut.content,
+          active: shortcut.active,
+        }))
+        .sort((a: LocalPromptShortcut, b: LocalPromptShortcut) =>
+          (a.id ?? 0) > (b.id ?? 0) ? 1 : -1
+        );
+
+      const persistedMapped: PersistedPromptShortcut[] = mapped.map(
+        (shortcut) => ({
+          id: shortcut.id ?? 0,
+          prompt: shortcut.prompt,
+          content: shortcut.content,
+          active: shortcut.active,
+        })
+      );
+      const enabled = persistedMapped.some((s) => s.active);
+
+      setInitialPromptShortcuts(persistedMapped);
+      setInitialPromptShortcutsEnabled(enabled);
+      setPromptShortcutsEnabled(enabled);
+      setPromptShortcuts(
+        mapped.length > 0
+          ? mapped
+          : [{ key: Date.now(), prompt: "", content: "", active: true }]
+      );
+    }
+
+    loadPromptShortcuts();
+  }, [existingAgent?.id]);
+
+  async function syncPromptShortcuts(personaId: number) {
+    const validShortcuts = promptShortcuts
+      .filter((shortcut) => shortcut.prompt.trim() && shortcut.content.trim())
+      .map((shortcut) => ({
+        id: shortcut.id,
+        prompt: shortcut.prompt.trim(),
+        content: shortcut.content.trim(),
+        active: promptShortcutsEnabled ? shortcut.active : false,
+      }));
+
+    const syncResponse = await fetch(`/api/persona/${personaId}/input_prompt`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompts: validShortcuts,
+      }),
+    });
+
+    if (!syncResponse.ok) {
+      const detail = await getApiErrorDetail(
+        syncResponse,
+        "Failed to sync prompt shortcuts"
+      );
+      throw new Error(`Failed to sync prompt shortcuts: ${detail}`);
+    }
+
+    const syncedShortcuts = await syncResponse.json();
+    const normalizedShortcuts: PersistedPromptShortcut[] = syncedShortcuts
+      .map((shortcut: any) => ({
+        id: shortcut.id,
+        prompt: shortcut.prompt,
+        content: shortcut.content,
+        active: shortcut.active,
+      }))
+      .sort((a: PersistedPromptShortcut, b: PersistedPromptShortcut) =>
+        a.id > b.id ? 1 : -1
+      );
+
+    setInitialPromptShortcuts(normalizedShortcuts);
+    const enabled = normalizedShortcuts.some((s) => s.active);
+    setInitialPromptShortcutsEnabled(enabled);
+    setPromptShortcutsEnabled(enabled);
+    setPromptShortcuts(
+      normalizedShortcuts.length > 0
+        ? normalizedShortcuts.map((shortcut) => ({
+            ...shortcut,
+            key: shortcut.id,
+          }))
+        : [{ key: Date.now(), prompt: "", content: "", active: true }]
+    );
+  }
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -822,9 +1072,11 @@ export default function AgentEditorPage({
       };
 
       // Call API
+      const isUpdateOperation = !!existingAgent || createdAgentId !== null;
+      const targetAgentId = existingAgent?.id ?? createdAgentId;
       let personaResponse;
-      if (!!existingAgent) {
-        personaResponse = await updatePersona(existingAgent.id, submissionData);
+      if (isUpdateOperation && targetAgentId !== null) {
+        personaResponse = await updatePersona(targetAgentId, submissionData);
       } else {
         personaResponse = await createPersona(submissionData);
       }
@@ -832,19 +1084,25 @@ export default function AgentEditorPage({
       // Handle response
       if (!personaResponse || !personaResponse.ok) {
         const error = personaResponse
-          ? await personaResponse.text()
+          ? await getApiErrorDetail(personaResponse, "Unknown server error")
           : "No response received";
         toast.error(
-          `Failed to ${existingAgent ? "update" : "create"} agent - ${error}`
+          `Failed to ${
+            isUpdateOperation ? "update" : "create"
+          } agent - ${error}`
         );
         return;
       }
 
       // Success
       const agent = await personaResponse.json();
+      if (!isUpdateOperation) {
+        setCreatedAgentId(agent.id);
+      }
+      await syncPromptShortcuts(agent.id);
       toast.success(
         `Agent "${agent.name}" ${
-          existingAgent ? "updated" : "created"
+          isUpdateOperation ? "updated" : "created"
         } successfully`
       );
 
@@ -858,7 +1116,9 @@ export default function AgentEditorPage({
       appRouter({ agentId: agent.id });
     } catch (error) {
       console.error("Submit error:", error);
-      toast.error(`An error occurred: ${error}`);
+      toast.error(
+        error instanceof Error ? error.message : `An error occurred: ${error}`
+      );
     }
   }
 
@@ -952,6 +1212,33 @@ export default function AgentEditorPage({
   if (isToolsLoading || isMcpLoading || isOpenApiLoading) {
     return null;
   }
+
+  const normalizedCurrentShortcuts = promptShortcuts
+    .filter((shortcut) => shortcut.prompt.trim() && shortcut.content.trim())
+    .map((shortcut) => ({
+      id: shortcut.id ?? null,
+      prompt: shortcut.prompt.trim(),
+      content: shortcut.content.trim(),
+      active: promptShortcutsEnabled ? shortcut.active : false,
+    }))
+    .sort(
+      (a, b) =>
+        (a.id ?? Number.MAX_SAFE_INTEGER) - (b.id ?? Number.MAX_SAFE_INTEGER)
+    );
+
+  const normalizedInitialShortcuts = initialPromptShortcuts
+    .map((shortcut) => ({
+      id: shortcut.id,
+      prompt: shortcut.prompt.trim(),
+      content: shortcut.content.trim(),
+      active: initialPromptShortcutsEnabled ? shortcut.active : false,
+    }))
+    .sort((a, b) => a.id - b.id);
+
+  const promptShortcutsDirty =
+    promptShortcutsEnabled !== initialPromptShortcutsEnabled ||
+    JSON.stringify(normalizedCurrentShortcuts) !==
+      JSON.stringify(normalizedInitialShortcuts);
 
   return (
     <>
@@ -1205,7 +1492,7 @@ export default function AgentEditorPage({
                             disabled={
                               isSubmitting ||
                               !isValid ||
-                              !dirty ||
+                              (!dirty && !promptShortcutsDirty) ||
                               hasUploadingFiles
                             }
                           >
@@ -1278,6 +1565,36 @@ export default function AgentEditorPage({
                           optional
                         >
                           <StarterMessages />
+                        </InputLayouts.Vertical>
+                        <InputLayouts.Vertical
+                          name="prompt_shortcuts"
+                          title="Prompt Shortcuts"
+                          description="Shortcuts available in chat when this agent is selected. Type / in chat to use them."
+                          optional
+                        >
+                          <Card>
+                            <InputLayouts.Horizontal
+                              title="Use Prompt Shortcuts"
+                              description="Enable shortcuts to quickly insert common prompts."
+                            >
+                              <Switch
+                                checked={promptShortcutsEnabled}
+                                onCheckedChange={(checked) => {
+                                  setPromptShortcutsEnabled(checked);
+                                  setPromptShortcuts((prev) =>
+                                    prev.map((s) => ({ ...s, active: checked }))
+                                  );
+                                }}
+                              />
+                            </InputLayouts.Horizontal>
+
+                            {promptShortcutsEnabled && (
+                              <PromptShortcutsEditor
+                                shortcuts={promptShortcuts}
+                                onChange={setPromptShortcuts}
+                              />
+                            )}
+                          </Card>
                         </InputLayouts.Vertical>
                       </GeneralLayouts.Section>
 

@@ -20,6 +20,29 @@ class UpdateInputPromptRequest(BaseModel):
     active: bool
 
 
+class CreatePersonaInputPromptRequest(BaseModel):
+    prompt: str
+    content: str
+    active: bool = True
+
+
+class UpdatePersonaInputPromptRequest(BaseModel):
+    prompt: str
+    content: str
+    active: bool
+
+
+class SyncPersonaInputPromptItem(BaseModel):
+    id: int | None = None
+    prompt: str
+    content: str
+    active: bool
+
+
+class SyncPersonaInputPromptsRequest(BaseModel):
+    prompts: list[SyncPersonaInputPromptItem]
+
+
 class InputPromptResponse(BaseModel):
     id: int
     prompt: str
@@ -33,6 +56,7 @@ class InputPromptSnapshot(BaseModel):
     content: str
     active: bool
     user_id: UUID | None
+    persona_id: int | None
     is_public: bool
 
     @classmethod
@@ -43,5 +67,6 @@ class InputPromptSnapshot(BaseModel):
             content=input_prompt.content,
             active=input_prompt.active,
             user_id=input_prompt.user_id,
+            persona_id=input_prompt.persona_id,
             is_public=input_prompt.is_public,
         )
