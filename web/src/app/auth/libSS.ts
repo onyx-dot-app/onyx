@@ -20,7 +20,7 @@ export async function authErrorRedirect(
     if (typeof detail === "string" && detail) {
       redirect.cookies.set(AUTH_ERROR_COOKIE, detail, {
         httpOnly: true,
-        secure: true,
+        secure: request.nextUrl.protocol === "https:",
         sameSite: "strict",
         maxAge: 60,
         path: "/auth/error",
