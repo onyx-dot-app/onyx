@@ -235,7 +235,7 @@ export async function togglePersonaVisibility(
   personaId: number,
   isVisible: boolean
 ) {
-  const response = await fetch(`/api/admin/persona/${personaId}/visible`, {
+  const response = await fetch(`/api/admin/persona/${personaId}/listed`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
