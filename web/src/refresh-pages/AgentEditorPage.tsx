@@ -1201,18 +1201,33 @@ export default function AgentEditorPage({
                           >
                             Cancel
                           </OpalButton>
-                          <Disabled
-                            disabled={
-                              isSubmitting ||
-                              !isValid ||
-                              !dirty ||
-                              hasUploadingFiles
+                          <SimpleTooltip
+                            tooltip={
+                              isSubmitting
+                                ? "Saving changes..."
+                                : !isValid
+                                  ? "Please fix the errors in the form before saving."
+                                  : !dirty
+                                    ? "No changes have been made."
+                                    : hasUploadingFiles
+                                      ? "Please wait for files to finish uploading."
+                                      : undefined
                             }
+                            side="bottom"
                           >
-                            <OpalButton type="submit">
-                              {existingAgent ? "Save" : "Create"}
-                            </OpalButton>
-                          </Disabled>
+                            <Disabled
+                              disabled={
+                                isSubmitting ||
+                                !isValid ||
+                                !dirty ||
+                                hasUploadingFiles
+                              }
+                            >
+                              <OpalButton type="submit">
+                                {existingAgent ? "Save" : "Create"}
+                              </OpalButton>
+                            </Disabled>
+                          </SimpleTooltip>
                         </div>
                       }
                       backButton
