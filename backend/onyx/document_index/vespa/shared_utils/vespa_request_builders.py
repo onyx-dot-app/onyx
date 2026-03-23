@@ -203,10 +203,10 @@ def build_vespa_filters(
     # assistant can see.  When none are set, the assistant can see
     # everything.
     #
-    # persona_id is a primary trigger — a persona with user files IS
+    # persona_id_filter is a primary trigger — a persona with user files IS
     # explicit knowledge, so it can start a knowledge scope on its own.
     #
-    # project_id is additive — it widens the scope to also cover
+    # project_id_filter is additive — it widens the scope to also cover
     # overflowing project files but never restricts on its own (a chat
     # inside a project should still search team knowledge).
     knowledge_scope_parts: list[str] = []
@@ -214,11 +214,14 @@ def build_vespa_filters(
     _append(
         knowledge_scope_parts, _build_or_filters(DOCUMENT_SETS, filters.document_set)
     )
-    _append(knowledge_scope_parts, _build_persona_filter(filters.persona_id))
+    _append(knowledge_scope_parts, _build_persona_filter(filters.persona_id_filter))
 
-    # project_id only widens an existing scope.
+    # project_id_filter only widens an existing scope.
     if knowledge_scope_parts:
-        _append(knowledge_scope_parts, _build_user_project_filter(filters.project_id))
+        _append(
+            knowledge_scope_parts,
+            _build_user_project_filter(filters.project_id_filter),
+        )
 
     if len(knowledge_scope_parts) > 1:
         filter_parts.append("(" + " or ".join(knowledge_scope_parts) + ")")

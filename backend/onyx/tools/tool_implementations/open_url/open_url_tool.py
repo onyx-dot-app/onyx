@@ -764,7 +764,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             tags=None,
             access_control_list=access_control_list,
             tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
-            project_id=None,
+            project_id_filter=None,
         )
 
     def _merge_indexed_and_crawled_results(

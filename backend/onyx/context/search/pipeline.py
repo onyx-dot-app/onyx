@@ -38,8 +38,8 @@ logger = setup_logger()
 def _build_index_filters(
     user_provided_filters: BaseFilters | None,
     user: User,  # Used for ACLs, anonymous users only see public docs
-    project_id: int | None,
-    persona_id: int | None,
+    project_id_filter: int | None,
+    persona_id_filter: int | None,
     persona_document_sets: list[str] | None,
     persona_time_cutoff: datetime | None,
     db_session: Session | None = None,
@@ -105,8 +105,8 @@ def _build_index_filters(
         user_acl_filters = build_access_filters_for_user(user, db_session)
 
     final_filters = IndexFilters(
-        project_id=project_id,
-        persona_id=persona_id,
+        project_id_filter=project_id_filter,
+        persona_id_filter=persona_id_filter,
         source_type=source_filter,
         document_set=document_set_filter,
         time_cutoff=time_filter,
@@ -252,10 +252,11 @@ def search_pipeline(
     db_session: Session | None = None,
     auto_detect_filters: bool = False,
     llm: LLM | None = None,
-    # If a project ID is provided, it will be exclusively scoped to that project
-    project_id: int | None = None,
-    # If a persona_id is provided, search scopes to files attached to this persona
-    persona_id: int | None = None,
+    # Vespa metadata filters for overflowing user files.  NOT the raw IDs
+    # of the current project/persona — only set when user files couldn't fit
+    # in the LLM context and need to be searched via vector DB.
+    project_id_filter: int | None = None,
+    persona_id_filter: int | None = None,
     # Pre-fetched data — when provided, avoids DB queries (no session needed)
     acl_filters: list[str] | None = None,
     embedding_model: EmbeddingModel | None = None,
@@ -285,8 +286,8 @@ def search_pipeline(
     filters = _build_index_filters(
         user_provided_filters=chunk_search_request.user_selected_filters,
         user=user,
-        project_id=project_id,
-        persona_id=persona_id,
+        project_id_filter=project_id_filter,
+        persona_id_filter=persona_id_filter,
         persona_document_sets=persona_document_sets,
         persona_time_cutoff=persona_time_cutoff,
         db_session=db_session,

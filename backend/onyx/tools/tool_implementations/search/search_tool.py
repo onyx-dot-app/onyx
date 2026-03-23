@@ -244,10 +244,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         document_index: DocumentIndex,
         # Respecting user selections
         user_selected_filters: BaseFilters | None,
-        # If the chat is part of a project
-        project_id: int | None,
-        # If set, search scopes to files attached to this persona
-        persona_id: int | None = None,
+        # Vespa metadata filters for overflowing user files.  NOT the raw IDs
+        # of the current project/persona — only set when user files couldn't
+        # fit in the LLM context and need to be searched via vector DB.
+        project_id_filter: int | None,
+        persona_id_filter: int | None = None,
         bypass_acl: bool = False,
         # Slack context for federated Slack search (tokens fetched internally)
         slack_context: SlackContext | None = None,
@@ -261,8 +262,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.llm = llm
         self.document_index = document_index
         self.user_selected_filters = user_selected_filters
-        self.project_id = project_id
-        self.persona_id = persona_id
+        self.project_id_filter = project_id_filter
+        self.persona_id_filter = persona_id_filter
         self.bypass_acl = bypass_acl
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
@@ -451,13 +452,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 hybrid_alpha=hybrid_alpha,
                 # For projects, the search scope is the project and has no other limits
                 user_selected_filters=(
-                    self.user_selected_filters if self.project_id is None else None
+                    self.user_selected_filters
+                    if self.project_id_filter is None
+                    else None
                 ),
                 bypass_acl=self.bypass_acl,
                 limit=num_hits,
             ),
-            project_id=self.project_id,
-            persona_id=self.persona_id,
+            project_id_filter=self.project_id_filter,
+            persona_id_filter=self.persona_id_filter,
             document_index=self.document_index,
             user=self.user,
             persona=self.persona,
@@ -574,7 +577,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             # Federated retrieval functions (non-Slack; Slack is separate)
-            if self.project_id is not None:
+            if self.project_id_filter is not None:
                 # Project mode ignores user filters → no federated sources
                 prefetch_source_types = None
             else:
