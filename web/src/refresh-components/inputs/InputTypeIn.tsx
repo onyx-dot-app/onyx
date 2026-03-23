@@ -151,7 +151,6 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
         )}
 
         <input
-          {...props}
           ref={setInputRef}
           type="text"
           disabled={disabled}
@@ -163,6 +162,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
             innerClasses[variant],
             textClasses[variant]
           )}
+          {...props}
         />
 
         {showClearButton && !disabled && !isReadOnly && (
