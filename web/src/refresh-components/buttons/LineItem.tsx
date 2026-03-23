@@ -163,7 +163,7 @@ export default function LineItem({
   ref,
   ...props
 }: LineItemProps) {
-  // Determine variant (mutually exclusive, with priority order: strikethrough > danger > action > muted > main)
+  // Determine variant (mutually exclusive, with priority order: strikethrough > disabled > danger > action > muted > main)
   const variant = strikethrough
     ? "strikethrough"
     : disabled

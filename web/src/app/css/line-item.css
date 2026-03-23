@@ -41,6 +41,14 @@
   }
 }
 
+.line-item-button-disabled {
+  @apply bg-transparent cursor-not-allowed;
+}
+
+.line-item-button-disabled-emphasized {
+  @apply bg-transparent cursor-not-allowed;
+}
+
 .line-item-button-danger {
   @apply bg-transparent hover:bg-background-tint-02;
 
