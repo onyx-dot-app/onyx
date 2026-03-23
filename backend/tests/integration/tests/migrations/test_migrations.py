@@ -7,6 +7,7 @@ import json
 import pytest
 from sqlalchemy import text
 
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from tests.integration.common_utils.reset import downgrade_postgres
@@ -237,7 +238,6 @@ def test_jira_connector_migration() -> None:
     upgrade_postgres(
         database="postgres", config_name="alembic", revision="da42808081e3"
     )
-
     # Verify the upgrade was applied correctly
     with get_session_with_current_tenant() as db_session:
         results = db_session.execute(
@@ -322,3 +322,89 @@ def test_jira_connector_migration() -> None:
             == "https://example.atlassian.net/projects/TEST"
         )
         assert config_2["batch_size"] == 50
+
+
+def test_anonymous_user_migration_dedupes_null_notifications() -> None:
+    downgrade_postgres(
+        database="postgres", config_name="alembic", revision="base", clear_data=True
+    )
+    upgrade_postgres(
+        database="postgres",
+        config_name="alembic",
+        revision="f7ca3e2f45d9",
+    )
+
+    with get_session_with_current_tenant() as db_session:
+        db_session.execute(
+            text(
+                """
+                INSERT INTO notification (
+                    id,
+                    notif_type,
+                    user_id,
+                    dismissed,
+                    last_shown,
+                    first_shown,
+                    title,
+                    description,
+                    additional_data
+                )
+                VALUES
+                    (
+                        1,
+                        'RELEASE_NOTES',
+                        NULL,
+                        FALSE,
+                        NOW(),
+                        NOW(),
+                        'Onyx v2.10.0 is available!',
+                        'Check out what''s new in v2.10.0',
+                        '{"version":"v2.10.0","link":"https://docs.onyx.app/changelog#v2-10-0"}'::jsonb
+                    ),
+                    (
+                        2,
+                        'RELEASE_NOTES',
+                        NULL,
+                        FALSE,
+                        NOW(),
+                        NOW(),
+                        'Onyx v2.10.0 is available!',
+                        'Check out what''s new in v2.10.0',
+                        '{"version":"v2.10.0","link":"https://docs.onyx.app/changelog#v2-10-0"}'::jsonb
+                    )
+                """
+            )
+        )
+        db_session.commit()
+
+    upgrade_postgres(
+        database="postgres", config_name="alembic", revision="e7f8a9b0c1d2"
+    )
+
+    with get_session_with_current_tenant() as db_session:
+        notifications = db_session.execute(
+            text(
+                """
+                SELECT id, user_id
+                FROM notification
+                ORDER BY id
+                """
+            )
+        ).fetchall()
+
+        anonymous_user = db_session.execute(
+            text(
+                """
+                SELECT id, email, role
+                FROM "user"
+                WHERE id = :user_id
+                """
+            ),
+            {"user_id": ANONYMOUS_USER_UUID},
+        ).fetchone()
+
+    assert len(notifications) == 1
+    assert str(notifications[0].user_id) == ANONYMOUS_USER_UUID
+    assert anonymous_user is not None
+    assert anonymous_user.email == "anonymous@onyx.app"
+    assert anonymous_user.role == "LIMITED"

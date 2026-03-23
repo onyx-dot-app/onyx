@@ -36,6 +36,50 @@ TABLES_WITH_USER_ID = [
 ]
 
 
+def _dedupe_null_notifications(connection: sa.Connection) -> None:
+    # Multiple NULL-owned notifications can exist because the unique index treats
+    # NULL user_id values as distinct. Before migrating them to the anonymous
+    # user, collapse duplicates and remove rows that would conflict with an
+    # already-existing anonymous notification.
+    connection.execute(
+        sa.text(
+            """
+            WITH ranked_null_notifications AS (
+                SELECT
+                    id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY notif_type, COALESCE(additional_data, '{}'::jsonb)
+                        ORDER BY first_shown DESC, last_shown DESC, id DESC
+                    ) AS row_num
+                FROM notification
+                WHERE user_id IS NULL
+            )
+            DELETE FROM notification
+            WHERE id IN (
+                SELECT id
+                FROM ranked_null_notifications
+                WHERE row_num > 1
+            )
+            """
+        )
+    )
+
+    connection.execute(
+        sa.text(
+            """
+            DELETE FROM notification AS null_owned
+            USING notification AS anonymous_owned
+            WHERE null_owned.user_id IS NULL
+              AND anonymous_owned.user_id = :user_id
+              AND null_owned.notif_type = anonymous_owned.notif_type
+              AND COALESCE(null_owned.additional_data, '{}'::jsonb) =
+                  COALESCE(anonymous_owned.additional_data, '{}'::jsonb)
+            """
+        ),
+        {"user_id": ANONYMOUS_USER_UUID},
+    )
+
+
 def upgrade() -> None:
     """
     Create the anonymous user for anonymous access feature.
@@ -65,35 +109,42 @@ def upgrade() -> None:
 
     # Migrate any remaining user_id=NULL records to anonymous user
     for table in TABLES_WITH_USER_ID:
-        try:
-            # Exclude public credential (id=0) which must remain user_id=NULL
-            # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
-            # Exclude builtin personas (builtin_persona=True) which must remain user_id=NULL
-            # Exclude system input prompts (is_public=True with user_id=NULL) which must remain user_id=NULL
-            if table == "credential":
-                condition = "user_id IS NULL AND id != 0"
-            elif table == "tool":
-                condition = "user_id IS NULL AND in_code_tool_id IS NULL"
-            elif table == "persona":
-                condition = "user_id IS NULL AND builtin_persona = false"
-            elif table == "inputprompt":
-                condition = "user_id IS NULL AND is_public = false"
-            else:
-                condition = "user_id IS NULL"
-            result = connection.execute(
-                sa.text(
-                    f"""
-                    UPDATE "{table}"
-                    SET user_id = :user_id
-                    WHERE {condition}
-                    """
-                ),
-                {"user_id": ANONYMOUS_USER_UUID},
-            )
-            if result.rowcount > 0:
-                print(f"Updated {result.rowcount} rows in {table} to anonymous user")
-        except Exception as e:
-            print(f"Skipping {table}: {e}")
+        with connection.begin_nested():
+            try:
+                # Exclude public credential (id=0) which must remain user_id=NULL
+                # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
+                # Exclude builtin personas (builtin_persona=True) which must remain user_id=NULL
+                # Exclude system input prompts (is_public=True with user_id=NULL) which must remain user_id=NULL
+                if table == "credential":
+                    condition = "user_id IS NULL AND id != 0"
+                elif table == "tool":
+                    condition = "user_id IS NULL AND in_code_tool_id IS NULL"
+                elif table == "persona":
+                    condition = "user_id IS NULL AND builtin_persona = false"
+                elif table == "inputprompt":
+                    condition = "user_id IS NULL AND is_public = false"
+                else:
+                    condition = "user_id IS NULL"
+
+                if table == "notification":
+                    _dedupe_null_notifications(connection)
+
+                result = connection.execute(
+                    sa.text(
+                        f"""
+                        UPDATE "{table}"
+                        SET user_id = :user_id
+                        WHERE {condition}
+                        """
+                    ),
+                    {"user_id": ANONYMOUS_USER_UUID},
+                )
+                if result.rowcount > 0:
+                    print(
+                        f"Updated {result.rowcount} rows in {table} to anonymous user"
+                    )
+            except Exception as e:
+                print(f"Skipping {table}: {e}")
 
 
 def downgrade() -> None:
@@ -104,19 +155,20 @@ def downgrade() -> None:
 
     # Set records back to NULL
     for table in TABLES_WITH_USER_ID:
-        try:
-            connection.execute(
-                sa.text(
-                    f"""
-                    UPDATE "{table}"
-                    SET user_id = NULL
-                    WHERE user_id = :user_id
-                    """
-                ),
-                {"user_id": ANONYMOUS_USER_UUID},
-            )
-        except Exception:
-            pass
+        with connection.begin_nested():
+            try:
+                connection.execute(
+                    sa.text(
+                        f"""
+                        UPDATE "{table}"
+                        SET user_id = NULL
+                        WHERE user_id = :user_id
+                        """
+                    ),
+                    {"user_id": ANONYMOUS_USER_UUID},
+                )
+            except Exception:
+                pass
 
     # Delete the anonymous user
     connection.execute(
