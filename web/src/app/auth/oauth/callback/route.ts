@@ -1,4 +1,4 @@
-import { extractErrorDetail } from "@/app/auth/lib";
+import { authErrorRedirect } from "@/app/auth/lib";
 import { getDomain } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
@@ -24,12 +24,7 @@ export const GET = async (request: NextRequest) => {
   }
 
   if (!setCookieHeader) {
-    const errorUrl = new URL("/auth/error", getDomain(request));
-    const detail = await extractErrorDetail(response);
-    if (detail) {
-      errorUrl.searchParams.set("message", detail);
-    }
-    return NextResponse.redirect(errorUrl);
+    return authErrorRedirect(request, response);
   }
 
   // Get the redirect URL from the backend's 'Location' header, or default to '/'
