@@ -314,21 +314,19 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ../data/nginx:/etc/nginx/conf.d
+      - ../data/nginx:/nginx-templates:ro
       - ../data/sslcerts:/etc/nginx/sslcerts
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "6"
-    # The specified script waits for the api_server to start up.
-    # Without this we've seen issues where nginx shows no error logs but
-    # does not recieve any traffic
-    # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
-    # in order to make this work on both Unix-like systems and windows
     command: >
-      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh
-      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.prod.no-letsencrypt"
+      /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf
+      && cp -a /nginx-templates/. /etc/nginx/conf.d/
+      && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
+      && chmod +x /tmp/run-nginx.sh
+      && /tmp/run-nginx.sh app.conf.template.prod.no-letsencrypt"
     env_file:
       - .env.nginx
     environment:

@@ -63,7 +63,6 @@ function UsersTable({ users }: { users: User[] }) {
 | `onRowClick` | `(row: TData) => void` | — | Row click handler |
 | `searchTerm` | `string` | — | Global text filter |
 | `height` | `number \| string` | — | Max scrollable height |
-| `headerBackground` | `string` | — | Sticky header background |
 | `serverSide` | `ServerSideConfig` | — | Server-side pagination/sorting/filtering |
 | `emptyState` | `ReactNode` | — | Empty state content |
 

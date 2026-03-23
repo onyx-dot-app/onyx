@@ -94,7 +94,6 @@ function buildColumns(onMutate: () => void) {
     tc.column("name", {
       header: "Name",
       weight: 25,
-      minWidth: 150,
       cell: (value) => (
         <Text as="span" mainUiBody text05>
           {value}
@@ -104,7 +103,6 @@ function buildColumns(onMutate: () => void) {
     tc.column("description", {
       header: "Description",
       weight: 35,
-      minWidth: 200,
       cell: (value) => (
         <Text as="span" mainUiBody text03>
           {value || "\u2014"}
@@ -114,13 +112,11 @@ function buildColumns(onMutate: () => void) {
     tc.column("owner", {
       header: "Created By",
       weight: 20,
-      minWidth: 140,
       cell: renderCreatedByColumn,
     }),
     tc.column("is_public", {
       header: "Access",
       weight: 12,
-      minWidth: 100,
       cell: renderAccessColumn,
     }),
     tc.actions({

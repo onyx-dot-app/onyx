@@ -154,7 +154,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
     onRowClick,
     searchTerm,
     height,
-    headerBackground,
     serverSide,
     emptyState,
   } = props;
@@ -348,11 +347,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
                     typeof height === "number" ? `${height}px` : height,
                   overflowY: "auto" as const,
                 }
-              : undefined),
-            ...(headerBackground
-              ? ({
-                  "--table-header-bg": headerBackground,
-                } as React.CSSProperties)
               : undefined),
           }}
         >

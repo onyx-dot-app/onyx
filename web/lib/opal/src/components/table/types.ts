@@ -165,9 +165,6 @@ export interface DataTableProps<TData> {
    * Accepts a pixel number (e.g. `300`) or a CSS value string (e.g. `"50vh"`).
    */
   height?: number | string;
-  /** Background color for the sticky header row, preventing rows from showing
-   *  through when scrolling. Accepts any CSS color value. */
-  headerBackground?: string;
   /**
    * Enable server-side mode. When provided:
    * - TanStack uses manualPagination/manualSorting/manualFiltering

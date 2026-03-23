@@ -42,12 +42,8 @@ class HookUpdateRequest(BaseModel):
     name: str | None = None
     endpoint_url: str | None = None
     api_key: NonEmptySecretStr | None = None
-    fail_strategy: HookFailStrategy | None = (
-        None  # if None in model_fields_set, reset to spec default
-    )
-    timeout_seconds: float | None = Field(
-        default=None, gt=0
-    )  # if None in model_fields_set, reset to spec default
+    fail_strategy: HookFailStrategy | None = None
+    timeout_seconds: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def require_at_least_one_field(self) -> "HookUpdateRequest":
@@ -60,6 +56,14 @@ class HookUpdateRequest(BaseModel):
             and not (self.endpoint_url or "").strip()
         ):
             raise ValueError("endpoint_url cannot be cleared.")
+        if "fail_strategy" in self.model_fields_set and self.fail_strategy is None:
+            raise ValueError(
+                "fail_strategy cannot be null; omit the field to leave it unchanged."
+            )
+        if "timeout_seconds" in self.model_fields_set and self.timeout_seconds is None:
+            raise ValueError(
+                "timeout_seconds cannot be null; omit the field to leave it unchanged."
+            )
         return self
 
 
@@ -90,38 +94,28 @@ class HookResponse(BaseModel):
     fail_strategy: HookFailStrategy
     timeout_seconds: float  # always resolved — None from request is replaced with spec default before DB write
     is_active: bool
+    is_reachable: bool | None
     creator_email: str | None
     created_at: datetime
     updated_at: datetime
 
 
+class HookValidateStatus(str, Enum):
+    passed = "passed"  # server responded (any status except 401/403)
+    auth_failed = "auth_failed"  # server responded with 401 or 403
+    timeout = (
+        "timeout"  # TCP connected, but read/write timed out (server exists but slow)
+    )
+    cannot_connect = "cannot_connect"  # could not connect to the server
+
+
 class HookValidateResponse(BaseModel):
-    success: bool
+    status: HookValidateStatus
     error_message: str | None = None
 
 
-# ---------------------------------------------------------------------------
-# Health models
-# ---------------------------------------------------------------------------
-
-
-class HookHealthStatus(str, Enum):
-    healthy = "healthy"  # green — reachable, no failures in last 1h
-    degraded = "degraded"  # yellow — reachable, failures in last 1h
-    unreachable = "unreachable"  # red — is_reachable=false or null
-
-
-class HookFailureRecord(BaseModel):
+class HookExecutionRecord(BaseModel):
     error_message: str | None = None
     status_code: int | None = None
     duration_ms: int | None = None
     created_at: datetime
-
-
-class HookHealthResponse(BaseModel):
-    status: HookHealthStatus
-    recent_failures: list[HookFailureRecord] = Field(
-        default_factory=list,
-        description="Last 10 failures, newest first",
-        max_length=10,
-    )
