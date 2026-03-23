@@ -85,9 +85,16 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
             f"To provision: {tenants_to_provision}"
         )
 
-        # just provision one tenant each time we run this ... increase if needed.
-        if tenants_to_provision > 0:
-            pre_provision_tenant()
+        for i in range(tenants_to_provision):
+            task_logger.info(f"Provisioning tenant {i + 1}/{tenants_to_provision}")
+            try:
+                pre_provision_tenant()
+            except Exception:
+                task_logger.exception(
+                    f"Failed to provision tenant {i + 1}/{tenants_to_provision}, "
+                    "continuing with remaining tenants"
+                )
+                continue
 
     except Exception:
         task_logger.exception("Error in check_available_tenants task")
