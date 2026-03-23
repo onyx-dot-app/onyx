@@ -7,8 +7,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import type { MinimalUserSnapshot, User } from "@/lib/types";
-import { getUserDisplayName } from "@/lib/user";
+import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useAdminPersonas } from "@/hooks/useAdminPersonas";
@@ -58,7 +57,7 @@ function renderCreatedByColumn(
   }
   return (
     <Text as="span" mainUiBody text03>
-      {row.owner ? getUserDisplayName(row.owner as unknown as User) : "\u2014"}
+      {row.owner?.email ?? "\u2014"}
     </Text>
   );
 }
