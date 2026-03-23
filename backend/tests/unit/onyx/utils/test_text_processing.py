@@ -7,7 +7,6 @@ from onyx.utils.text_processing import has_unescaped_quote
 from onyx.utils.text_processing import has_unescaped_quote
 
 class TestNormalizeCurlyQuotes:
-class TestNormalizeCurlyQuotes:
     """Tests for the normalize_curly_quotes function."""
     
     def test_normalize_curly_quotes(self) -> None:
