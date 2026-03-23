@@ -14,7 +14,8 @@ import time
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
-from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import get_db_readonly_user_session_with_current_tenant
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -23,9 +24,11 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 from onyx.indexing.models import IndexingSetting
 from scripts.debugging.opensearch.embedding_io import load_query_embedding_from_file
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import get_current_tenant_id
 
 DEFAULT_N = 50
+DEV_TENANT_ID = "tenant_dev"
 
 
 def main() -> None:
@@ -80,13 +83,17 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    dev_tenant_id = POSTGRES_DEFAULT_SCHEMA if not MULTI_TENANT else "tenant_dev"
+    if MULTI_TENANT:
+        CURRENT_TENANT_ID_CONTEXTVAR.set(DEV_TENANT_ID)
 
-    with get_session_with_tenant(tenant_id=dev_tenant_id) as session:
+    SqlEngine.init_readonly_engine(pool_size=1, max_overflow=1)
+    with get_db_readonly_user_session_with_current_tenant() as session:
         search_settings = get_current_search_settings(session)
         indexing_setting = IndexingSetting.from_db_model(search_settings)
 
-    tenant_state = TenantState(tenant_id=dev_tenant_id, multitenant=MULTI_TENANT)
+    tenant_state = TenantState(
+        tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
+    )
     index = OpenSearchDocumentIndex(
         tenant_state=tenant_state,
         index_name=search_settings.index_name,
@@ -95,7 +102,7 @@ def main() -> None:
     )
     filters = IndexFilters(
         access_control_list=[],
-        tenant_id=dev_tenant_id,
+        tenant_id=get_current_tenant_id(),
     )
 
     if args.query_type == "hybrid":
@@ -130,12 +137,12 @@ def main() -> None:
     latencies: list[float] = []
     for i in range(args.n):
         start = time.perf_counter()
-        search_callable()
+        results = search_callable()
         elapsed_ms = (time.perf_counter() - start) * 1000
         latencies.append(elapsed_ms)
         # Print the current iteration and its elapsed time on the same line.
         print(
-            f"  [{i + 1:>{len(str(args.n))}}] {elapsed_ms:7.1f} ms",
+            f"  [{i + 1:>{len(str(args.n))}}] {elapsed_ms:7.1f} ms  ({len(results)} results)",
             end="\r",
             flush=True,
         )
