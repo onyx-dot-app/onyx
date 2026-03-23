@@ -1488,6 +1488,8 @@ async def _get_or_create_user_from_jwt(
         if not user.role.is_web_login():
             raise exceptions.UserNotExists()
     except exceptions.UserNotExists:
+        verify_email_domain(email, is_registration=True)
+
         logger.info("Provisioning user %s from JWT login", email)
         try:
             user = await user_manager.create(
