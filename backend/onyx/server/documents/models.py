@@ -330,6 +330,7 @@ class CCPairFullInfo(BaseModel):
         num_docs_indexed: int,  # not ideal, but this must be computed separately
         is_editable_for_current_user: bool,
         indexing: bool,
+        last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
         permission_syncing: bool = False,
         last_permission_sync_attempt_finished: datetime | None = None,
@@ -382,9 +383,7 @@ class CCPairFullInfo(BaseModel):
             creator_email=(
                 cc_pair_model.creator.email if cc_pair_model.creator else None
             ),
-            last_indexed=(
-                last_index_attempt.time_started if last_index_attempt else None
-            ),
+            last_indexed=last_successful_index_time,
             last_pruned=cc_pair_model.last_pruned,
             last_full_permission_sync=cls._get_last_full_permission_sync(cc_pair_model),
             overall_indexing_speed=overall_indexing_speed,

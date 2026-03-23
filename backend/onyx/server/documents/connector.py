@@ -3,6 +3,7 @@ import math
 import mimetypes
 import os
 import zipfile
+from datetime import datetime
 from io import BytesIO
 from typing import Any
 from typing import cast
@@ -109,6 +110,9 @@ from onyx.db.federated import fetch_all_federated_connectors_parallel
 from onyx.db.index_attempt import get_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempts_by_status
 from onyx.db.index_attempt import get_latest_index_attempts_parallel
+from onyx.db.index_attempt import (
+    get_latest_successful_index_attempts_parallel,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
@@ -1158,21 +1162,26 @@ def get_connector_indexing_status(
             ),
             (),
         ),
+        # Get most recent successful index attempts
+        (
+            lambda: get_latest_successful_index_attempts_parallel(
+                request.secondary_index,
+            ),
+            (),
+        ),
     ]
 
     if user and user.role == UserRole.ADMIN:
-        # For Admin users, we already got all the cc pair in editable_cc_pairs
-        # its not needed to get them again
         (
             editable_cc_pairs,
             federated_connectors,
             latest_index_attempts,
             latest_finished_index_attempts,
+            latest_successful_index_attempts,
         ) = run_functions_tuples_in_parallel(parallel_functions)
         non_editable_cc_pairs = []
     else:
         parallel_functions.append(
-            # Get non-editable connector/credential pairs
             (
                 lambda: get_connector_credential_pairs_for_user_parallel(
                     user, False, None, True, True, False, True, request.source
@@ -1186,6 +1195,7 @@ def get_connector_indexing_status(
             federated_connectors,
             latest_index_attempts,
             latest_finished_index_attempts,
+            latest_successful_index_attempts,
             non_editable_cc_pairs,
         ) = run_functions_tuples_in_parallel(parallel_functions)
 
@@ -1197,6 +1207,9 @@ def get_connector_indexing_status(
     latest_finished_index_attempts = cast(
         list[IndexAttempt], latest_finished_index_attempts
     )
+    latest_successful_index_attempts = cast(
+        list[IndexAttempt], latest_successful_index_attempts
+    )
 
     document_count_info = get_document_counts_for_all_cc_pairs(db_session)
 
@@ -1206,42 +1219,48 @@ def get_connector_indexing_status(
         for connector_id, credential_id, cnt in document_count_info
     }
 
-    cc_pair_to_latest_index_attempt: dict[tuple[int, int], IndexAttempt] = {
-        (
-            attempt.connector_credential_pair.connector_id,
-            attempt.connector_credential_pair.credential_id,
-        ): attempt
-        for attempt in latest_index_attempts
-    }
+    def _attempt_lookup(
+        attempts: list[IndexAttempt],
+    ) -> dict[int, IndexAttempt]:
+        return {attempt.connector_credential_pair_id: attempt for attempt in attempts}
 
-    cc_pair_to_latest_finished_index_attempt: dict[tuple[int, int], IndexAttempt] = {
-        (
-            attempt.connector_credential_pair.connector_id,
-            attempt.connector_credential_pair.credential_id,
-        ): attempt
-        for attempt in latest_finished_index_attempts
-    }
+    cc_pair_to_latest_index_attempt = _attempt_lookup(latest_index_attempts)
+    cc_pair_to_latest_finished_index_attempt = _attempt_lookup(
+        latest_finished_index_attempts
+    )
+    cc_pair_to_latest_successful_index_attempt = _attempt_lookup(
+        latest_successful_index_attempts
+    )
 
     def build_connector_indexing_status(
         cc_pair: ConnectorCredentialPair,
         is_editable: bool,
     ) -> ConnectorIndexingStatusLite | None:
-        # TODO remove this to enable ingestion API
         if cc_pair.name == "DefaultCCPair":
             return None
 
-        latest_attempt = cc_pair_to_latest_index_attempt.get(
-            (cc_pair.connector_id, cc_pair.credential_id)
-        )
+        latest_attempt = cc_pair_to_latest_index_attempt.get(cc_pair.id)
         latest_finished_attempt = cc_pair_to_latest_finished_index_attempt.get(
-            (cc_pair.connector_id, cc_pair.credential_id)
+            cc_pair.id
+        )
+        latest_successful_attempt = cc_pair_to_latest_successful_index_attempt.get(
+            cc_pair.id
         )
         doc_count = cc_pair_to_document_cnt.get(
             (cc_pair.connector_id, cc_pair.credential_id), 0
         )
 
         return _get_connector_indexing_status_lite(
-            cc_pair, latest_attempt, latest_finished_attempt, is_editable, doc_count
+            cc_pair,
+            latest_attempt,
+            latest_finished_attempt,
+            (
+                latest_successful_attempt.time_started
+                if latest_successful_attempt
+                else None
+            ),
+            is_editable,
+            doc_count,
         )
 
     # Process editable cc_pairs
@@ -1402,6 +1421,7 @@ def _get_connector_indexing_status_lite(
     cc_pair: ConnectorCredentialPair,
     latest_index_attempt: IndexAttempt | None,
     latest_finished_index_attempt: IndexAttempt | None,
+    last_successful_index_time: datetime | None,
     is_editable: bool,
     document_cnt: int,
 ) -> ConnectorIndexingStatusLite | None:
@@ -1435,7 +1455,7 @@ def _get_connector_indexing_status_lite(
             else None
         ),
         last_status=latest_index_attempt.status if latest_index_attempt else None,
-        last_success=cc_pair.last_successful_index_time,
+        last_success=last_successful_index_time,
         docs_indexed=document_cnt,
         latest_index_attempt_docs_indexed=(
             latest_index_attempt.total_docs_indexed if latest_index_attempt else None
