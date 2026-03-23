@@ -16,7 +16,7 @@ import AgentRowActions from "@/refresh-pages/admin/AgentsPage/AgentRowActions";
 import { updateAgentDisplayPriorities } from "@/refresh-pages/admin/AgentsPage/svc";
 import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
 import type { Persona } from "@/app/admin/agents/interfaces";
-import { SvgTrash } from "@opal/icons";
+import { SvgUser } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,17 +48,13 @@ function renderCreatedByColumn(
   _value: MinimalUserSnapshot | null,
   row: AgentRow
 ) {
-  if (row.builtin_persona) {
-    return (
-      <Text as="span" mainUiBody text03>
-        System
-      </Text>
-    );
-  }
   return (
-    <Text as="span" mainUiBody text03>
-      {row.owner?.email ?? "\u2014"}
-    </Text>
+    <Content
+      sizePreset="main-ui"
+      variant="section"
+      icon={SvgUser}
+      title={row.builtin_persona ? "System" : row.owner?.email ?? "\u2014"}
+    />
   );
 }
 
