@@ -553,9 +553,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         result = await db_session.execute(
             select(Persona.id)
             .where(
-                Persona.featured.is_(True),
+                Persona.is_featured.is_(True),
                 Persona.is_public.is_(True),
-                Persona.is_visible.is_(True),
+                Persona.is_listed.is_(True),
                 Persona.deleted.is_(False),
             )
             .order_by(

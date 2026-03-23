@@ -63,7 +63,7 @@ def _create_persona(db_session: Session, user: User) -> Persona:
         document_sets=[],
         users=[user],
         groups=[],
-        is_visible=True,
+        is_listed=True,
         is_public=True,
         display_priority=None,
         starter_messages=None,

@@ -123,7 +123,7 @@ class PersonaUpsertRequest(BaseModel):
     )
     search_start_date: datetime | None = None
     label_ids: list[int] | None = None
-    featured: bool = False
+    is_featured: bool = False
     display_priority: int | None = None
     # Accept string UUIDs from frontend
     user_file_ids: list[str] | None = None
@@ -165,9 +165,9 @@ class MinimalPersonaSnapshot(BaseModel):
     icon_name: str | None
 
     is_public: bool
-    is_visible: bool
+    is_listed: bool
     display_priority: int | None
-    featured: bool
+    is_featured: bool
     builtin_persona: bool
 
     # Used for filtering
@@ -218,9 +218,9 @@ class MinimalPersonaSnapshot(BaseModel):
             uploaded_image_id=persona.uploaded_image_id,
             icon_name=persona.icon_name,
             is_public=persona.is_public,
-            is_visible=persona.is_visible,
+            is_listed=persona.is_listed,
             display_priority=persona.display_priority,
-            featured=persona.featured,
+            is_featured=persona.is_featured,
             builtin_persona=persona.builtin_persona,
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
@@ -236,13 +236,13 @@ class PersonaSnapshot(BaseModel):
     name: str
     description: str
     is_public: bool
-    is_visible: bool
+    is_listed: bool
     uploaded_image_id: str | None
     icon_name: str | None
     # Return string UUIDs to frontend for consistency
     user_file_ids: list[str]
     display_priority: int | None
-    featured: bool
+    is_featured: bool
     builtin_persona: bool
     starter_messages: list[StarterMessage] | None
     tools: list[ToolSnapshot]
@@ -271,12 +271,12 @@ class PersonaSnapshot(BaseModel):
             name=persona.name,
             description=persona.description,
             is_public=persona.is_public,
-            is_visible=persona.is_visible,
+            is_listed=persona.is_listed,
             uploaded_image_id=persona.uploaded_image_id,
             icon_name=persona.icon_name,
             user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
-            featured=persona.featured,
+            is_featured=persona.is_featured,
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
             tools=[
@@ -337,12 +337,12 @@ class FullPersonaSnapshot(PersonaSnapshot):
             name=persona.name,
             description=persona.description,
             is_public=persona.is_public,
-            is_visible=persona.is_visible,
+            is_listed=persona.is_listed,
             uploaded_image_id=persona.uploaded_image_id,
             icon_name=persona.icon_name,
             user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
-            featured=persona.featured,
+            is_featured=persona.is_featured,
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
             users=[

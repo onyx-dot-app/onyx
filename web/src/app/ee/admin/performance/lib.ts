@@ -83,7 +83,7 @@ export interface PersonaSnapshot {
   id: number;
   name: string;
   description: string;
-  is_visible: boolean;
+  is_listed: boolean;
   is_public: boolean;
 }
 
