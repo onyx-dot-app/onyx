@@ -150,19 +150,17 @@ def main() -> None:
 
     print()
     print(f"Results over {args.n} invocations:")
-    print(f"  mean:   {statistics.mean(latencies):.1f} ms")
+    print(f"   mean: {statistics.mean(latencies):7.1f} ms")
     print(
-        f"  stdev:  {statistics.stdev(latencies):.1f} ms"
+        f"  stdev: {statistics.stdev(latencies):7.1f} ms"
         if args.n > 1
-        else "  stdev:  N/A (only 1 sample)"
+        else "  stdev: N/A (only 1 sample)"
     )
-    print(f"  max:    {max(latencies):.1f} ms (i: {latencies.index(max(latencies))})")
-    print(f"  min:    {min(latencies):.1f} ms (i: {latencies.index(min(latencies))})")
-    if args.n >= 4:
-        print(f"  p50:    {statistics.median(latencies):.1f} ms")
-        sorted_l = sorted(latencies)
-        p95_idx = int(0.95 * args.n) - 1
-        print(f"  p95:    {sorted_l[max(0, p95_idx)]:.1f} ms")
+    print(f"    max: {max(latencies):7.1f} ms (i: {latencies.index(max(latencies))})")
+    print(f"    min: {min(latencies):7.1f} ms (i: {latencies.index(min(latencies))})")
+    if args.n >= 20:
+        print(f"    p50: {statistics.median(latencies):7.1f} ms")
+        print(f"    p95: {statistics.quantiles(latencies, n=20)[-1]:7.1f} ms")
 
 
 if __name__ == "__main__":

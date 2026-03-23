@@ -2,9 +2,10 @@
 """A utility to interact with OpenSearch.
 
 Usage:
-    python3 opensearch_debug.py --help
-    python3 opensearch_debug.py list
-    python3 opensearch_debug.py delete <index_name>
+    source .venv/bin/activate
+    python backend/scripts/debugging/opensearch/opensearch_debug.py --help
+    python backend/scripts/debugging/opensearch/opensearch_debug.py list
+    python backend/scripts/debugging/opensearch/opensearch_debug.py delete <index_name>
 
 Environment Variables:
     OPENSEARCH_HOST: OpenSearch host
