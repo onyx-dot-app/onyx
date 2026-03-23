@@ -1,4 +1,4 @@
-"""External dependency tests for the old DocumentIndex interface.
+"""External dependency tests for the old and new DocumentIndex interfaces.
 
 These tests assume Vespa and OpenSearch are running.
 """
@@ -14,6 +14,9 @@ from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentUserFields
+from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchDocumentIndex,
+)
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchOldDocumentIndex,
 )
