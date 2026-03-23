@@ -186,7 +186,8 @@ def count_tokens(
 ) -> int:
     """Count tokens, chunking the input to avoid tiktoken stack overflow.
 
-    If token_limit is provided, stops early once the count exceeds it.
+    If token_limit is provided and the text is large enough to require
+    multiple chunks (> 500k chars), stops early once the count exceeds it.
     The returned value will be >= actual count but signals "over limit".
     """
     if len(text) <= _ENCODE_CHUNK_SIZE:
