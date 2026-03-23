@@ -1,3 +1,13 @@
+#!/usr/bin/env python3
+"""Embeds a query and saves the embedding to a file.
+
+Requires Onyx to be running as it reads search settings from the database.
+
+Usage:
+    source .venv/bin/activate
+    python backend/scripts/debugging/opensearch/embed_and_save.py --help
+"""
+
 import argparse
 import time
 
