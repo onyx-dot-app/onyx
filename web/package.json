@@ -153,6 +153,9 @@
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021",
     "@types/react": "19.2.10",
-    "@types/react-dom": "19.2.3"
+    "@types/react-dom": "19.2.3",
+    "jest-environment-jsdom": {
+      "jsdom": "^29.0.1"
+    }
   }
 }
