@@ -82,10 +82,10 @@ def test_load_settings_preserves_explicit_value_when_vector_db_disabled(
     assert settings.file_token_count_threshold_k == 500
 
 
-def test_load_settings_resolves_zero_token_threshold_to_default(
+def test_load_settings_preserves_zero_token_threshold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A value of 0 should be treated as unset and resolved to the default."""
+    """A value of 0 means 'no limit' and should be preserved."""
     stored = Settings(file_token_count_threshold_k=0).model_dump()
     monkeypatch.setattr(settings_store, "get_kv_store", lambda: _FakeKvStore(stored))
     monkeypatch.setattr(settings_store, "get_cache_backend", lambda: _FakeCache())
@@ -93,10 +93,7 @@ def test_load_settings_resolves_zero_token_threshold_to_default(
 
     settings = settings_store.load_settings()
 
-    assert (
-        settings.file_token_count_threshold_k
-        == DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB
-    )
+    assert settings.file_token_count_threshold_k == 0
 
 
 def test_load_settings_resolves_zero_upload_size_to_default(
