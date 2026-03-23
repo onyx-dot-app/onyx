@@ -1,4 +1,4 @@
-"""External dependency tests for the old and new DocumentIndex interfaces.
+"""External dependency tests for the old DocumentIndex interface.
 
 These tests assume Vespa and OpenSearch are running.
 """
