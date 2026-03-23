@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Benchmark OpenSearchDocumentIndex::hybrid_retrieval latency.
+"""Benchmarks OpenSearchDocumentIndex latency.
 
 Usage:
     source .venv/bin/activate
-    python backend/scripts/debugging/opensearch/benchmark_hybrid_retrieval.py
-    python backend/scripts/debugging/opensearch/benchmark_hybrid_retrieval.py --n 20
+    python backend/scripts/debugging/opensearch/benchmark_retrieval.py --help
 """
 
 import argparse
