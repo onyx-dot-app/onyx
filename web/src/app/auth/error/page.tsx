@@ -1,12 +1,13 @@
-import { cookies } from "next/headers";
-import { AUTH_ERROR_COOKIE } from "@/app/auth/libSS";
+"use client";
+
 import AuthErrorContent from "./AuthErrorContent";
+import { useSearchParams } from "next/navigation";
 
-async function Page() {
-  const cookieStore = await cookies();
-  const errorMessage = cookieStore.get(AUTH_ERROR_COOKIE)?.value || null;
+function Page() {
+  const searchParams = useSearchParams();
+  const error = searchParams?.get("error") || null;
 
-  return <AuthErrorContent message={errorMessage} />;
+  return <AuthErrorContent message={error} />;
 }
 
 export default Page;

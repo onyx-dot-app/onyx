@@ -3,31 +3,20 @@ import "server-only";
 import { getDomain } from "@/lib/redirectSS";
 import { NextRequest, NextResponse } from "next/server";
 
-export const AUTH_ERROR_COOKIE = "__auth_error";
-
 export async function authErrorRedirect(
   request: NextRequest,
   response: Response,
   redirectStatus?: number
 ): Promise<NextResponse> {
-  const redirect = NextResponse.redirect(
-    new URL("/auth/error", getDomain(request)),
-    redirectStatus
-  );
+  const errorUrl = new URL("/auth/error", getDomain(request));
   try {
     const body = await response.json();
     const detail = body?.detail;
     if (typeof detail === "string" && detail) {
-      redirect.cookies.set(AUTH_ERROR_COOKIE, detail, {
-        httpOnly: true,
-        secure: request.nextUrl.protocol === "https:",
-        sameSite: "strict",
-        maxAge: 60,
-        path: "/auth/error",
-      });
+      errorUrl.searchParams.set("error", detail);
     }
   } catch {
     // response may not be JSON
   }
-  return redirect;
+  return NextResponse.redirect(errorUrl, redirectStatus);
 }
