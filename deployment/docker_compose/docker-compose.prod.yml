@@ -566,6 +566,39 @@ services:
         max-size: "50m"
         max-file: "6"
 
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.117.1
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    volumes:
+      - victoriametrics_data:/victoria-metrics-data
+      - ./victoriametrics/scrape.yml:/etc/victoriametrics/scrape.yml:ro
+    command:
+      - "-promscrape.config=/etc/victoriametrics/scrape.yml"
+      - "-retentionPeriod=${VICTORIAMETRICS_RETENTION:-30d}"
+      - "-storageDataPath=/victoria-metrics-data"
+      - "-httpListenAddr=:8428"
+    ports:
+      - "8428:8428"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8428/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
   code-interpreter:
     image: onyxdotapp/code-interpreter:0.1.0
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
@@ -609,5 +642,7 @@ volumes:
   uptime_kuma_data:
   # Grafana persistent data
   grafana_data:
+  # VictoriaMetrics time-series data
+  victoriametrics_data:
   # Persistent data for OpenSearch.
   opensearch-data:
