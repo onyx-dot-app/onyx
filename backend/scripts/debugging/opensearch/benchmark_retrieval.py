@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Benchmarks OpenSearchDocumentIndex latency.
 
+Requires Onyx to be running as it reads search settings from the database.
+
 Usage:
     source .venv/bin/activate
     python backend/scripts/debugging/opensearch/benchmark_retrieval.py --help
