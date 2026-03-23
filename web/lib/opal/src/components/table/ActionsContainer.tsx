@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 
 interface ActionsContainerProps {
@@ -25,9 +24,7 @@ export default function ActionsContainer({
       data-size={size}
       onClick={onClick}
     >
-      <div className={cn("flex h-full items-center", "justify-end")}>
-        {children}
-      </div>
+      <div className="flex h-full items-center justify-end">{children}</div>
     </Tag>
   );
 }
