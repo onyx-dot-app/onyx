@@ -689,6 +689,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         current_chunks: list[DocMetadataAwareIndexChunk] = []
 
         def _flush_chunks(doc_chunks: list[DocMetadataAwareIndexChunk]) -> None:
+            assert len(doc_chunks) > 0, "doc_chunks is empty"
+
             # Create a batch of OpenSearch-formatted chunks for bulk insertion.
             # Since we are doing this in batches, an error occurring midway
             # can result in a state where chunks are deleted and not all the
