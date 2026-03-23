@@ -59,6 +59,8 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
   getImageAlt?: (row: TData) => string;
   /** Show a tinted background container behind the content. @default false */
   background?: boolean;
+  /** Icon size preset. Use `"lg"` for avatars, `"md"` for regular icons. @default "md" */
+  iconSize?: "lg" | "md";
 }
 
 /** Data column — accessor-based column with sorting/resizing. */

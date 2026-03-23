@@ -61,6 +61,7 @@ function DragOverlayRowInner<TData>({
                     imageSrc={qualifierColumn.getImageSrc?.(row.original)}
                     imageAlt={qualifierColumn.getImageAlt?.(row.original)}
                     background={qualifierColumn.background}
+                    iconSize={qualifierColumn.iconSize}
                     selectable={isSelectable}
                     selected={isSelectable && row.getIsSelected()}
                   />
