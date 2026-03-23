@@ -593,7 +593,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     user_id=self.user.id if self.user else None,
                     source_types=prefetch_source_types,
                     document_set_names=persona_document_sets,
-                    has_user_files=bool(self.persona and self.persona.user_files),
                 )
                 or []
             )

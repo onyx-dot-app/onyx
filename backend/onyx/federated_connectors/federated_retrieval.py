@@ -38,17 +38,7 @@ def get_federated_retrieval_functions(
     source_types: list[DocumentSource] | None,
     document_set_names: list[str] | None,
     slack_context: SlackContext | None = None,
-    has_user_files: bool = False,
 ) -> list[FederatedRetrievalInfo]:
-    # When User Knowledge (user files) is the only knowledge source enabled,
-    # skip federated connectors entirely. User Knowledge mode means the agent
-    # should ONLY use uploaded files, not team connectors like Slack.
-    if has_user_files and not document_set_names:
-        logger.debug(
-            "Skipping all federated connectors: User Knowledge mode enabled "
-            "(persona has user files and no document sets)"
-        )
-        return []
 
     # Check for Slack bot context first (regardless of user_id)
     if slack_context:

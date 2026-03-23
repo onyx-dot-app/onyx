@@ -73,12 +73,13 @@ class TestAssistantKnowledgeFilter:
 
         should_clauses = knowledge_filter["bool"]["should"]
         persona_found = any(
-            "term" in clause and PERSONAS_FIELD_NAME in clause.get("term", {})
+            clause.get("term", {}).get(PERSONAS_FIELD_NAME, {}).get("value")
+            == PERSONA_ID
             for clause in should_clauses
         )
         assert persona_found, (
-            f"Expected persona_id filter on {PERSONAS_FIELD_NAME} in should "
-            f"clauses. Got: {should_clauses}"
+            f"Expected persona_id={PERSONA_ID} filter on {PERSONAS_FIELD_NAME} "
+            f"in should clauses. Got: {should_clauses}"
         )
 
     def test_persona_id_alone_creates_knowledge_scope(self) -> None:
@@ -103,11 +104,12 @@ class TestAssistantKnowledgeFilter:
             knowledge_filter is not None
         ), "Expected persona_id alone to create a knowledge scope filter"
         persona_found = any(
-            "term" in clause and PERSONAS_FIELD_NAME in clause.get("term", {})
+            clause.get("term", {}).get(PERSONAS_FIELD_NAME, {}).get("value")
+            == PERSONA_ID
             for clause in knowledge_filter["bool"]["should"]
         )
         assert persona_found, (
-            f"Expected persona_id filter in knowledge scope. "
+            f"Expected persona_id={PERSONA_ID} filter in knowledge scope. "
             f"Got: {knowledge_filter}"
         )
 
