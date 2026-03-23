@@ -554,7 +554,7 @@ class WebConnector(LoadConnector):
             # asynchronously after the initial JS bundle have time to render.
             try:
                 # A bit of extra time to account for long-polling, websockets, etc.
-                page.wait_for_load_state("networkidle", PAGE_RENDER_TIMEOUT_MS)
+                page.wait_for_load_state("networkidle", timeout=PAGE_RENDER_TIMEOUT_MS)
             except TimeoutError:
                 pass
 
