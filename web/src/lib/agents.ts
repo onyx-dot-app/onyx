@@ -207,7 +207,7 @@ export async function updateAgentFeaturedStatus(
   isFeatured: boolean
 ): Promise<string | null> {
   try {
-    const response = await fetch(`/api/admin/persona/${agentId}/is-featured`, {
+    const response = await fetch(`/api/admin/persona/${agentId}/featured`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ is_featured: isFeatured }),

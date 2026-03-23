@@ -165,7 +165,7 @@ def patch_user_persona_public_status(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@admin_router.patch("/{persona_id}/is-featured")
+@admin_router.patch("/{persona_id}/featured")
 def patch_persona_featured_status(
     persona_id: int,
     is_featured_request: IsFeaturedRequest,

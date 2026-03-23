@@ -218,7 +218,7 @@ export async function togglePersonaFeatured(
   personaId: number,
   featured: boolean
 ) {
-  const response = await fetch(`/api/admin/persona/${personaId}/is-featured`, {
+  const response = await fetch(`/api/admin/persona/${personaId}/featured`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
