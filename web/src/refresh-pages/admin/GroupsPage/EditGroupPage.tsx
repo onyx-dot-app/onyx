@@ -3,30 +3,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import { Table, createTableColumns, Button } from "@opal/components";
-import { Content, IllustrationContent } from "@opal/layouts";
-import {
-  SvgUser,
-  SvgUserManage,
-  SvgUsers,
-  SvgGlobe,
-  SvgSlack,
-  SvgTrash,
-} from "@opal/icons";
+import { Table, Button } from "@opal/components";
+import { IllustrationContent } from "@opal/layouts";
+import { SvgUsers, SvgTrash } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
-import type { IconFunctionComponent } from "@opal/types";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import Separator from "@/refresh-components/Separator";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useAdminUsers from "@/hooks/useAdminUsers";
-import { UserRole, UserStatus, USER_ROLE_LABELS } from "@/lib/types";
 import type { UserGroup } from "@/lib/types";
-import type { UserRow } from "@/refresh-pages/admin/UsersPage/interfaces";
-import { getInitials } from "@/refresh-pages/admin/UsersPage/utils";
+import type { ApiKeyDescriptor, TokenRateLimitDisplay } from "./interfaces";
+import { apiKeyToMemberRow, memberTableColumns, PAGE_SIZE } from "./shared";
 import {
   USER_GROUP_URL,
   renameGroup,
@@ -38,134 +31,10 @@ import {
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
-import Separator from "@/refresh-components/Separator";
-
-// ---------------------------------------------------------------------------
-// API key (service account) types
-// ---------------------------------------------------------------------------
-
-interface ApiKeyDescriptor {
-  api_key_id: number;
-  api_key_display: string;
-  api_key_name: string | null;
-  api_key_role: UserRole;
-  user_id: string;
-}
-
-interface MemberRow extends UserRow {
-  api_key_display?: string;
-}
-
-function apiKeyToMemberRow(key: ApiKeyDescriptor): MemberRow {
-  return {
-    id: key.user_id,
-    email: "Service Account",
-    role: key.api_key_role,
-    status: UserStatus.ACTIVE,
-    is_active: true,
-    is_scim_synced: false,
-    personal_name: key.api_key_name ?? "Unnamed Key",
-    created_at: null,
-    updated_at: null,
-    groups: [],
-    api_key_display: key.api_key_display,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Token rate limit API types
-// ---------------------------------------------------------------------------
-
-interface TokenRateLimitDisplay {
-  token_id: number;
-  enabled: boolean;
-  token_budget: number;
-  period_hours: number;
-}
-
-// ---------------------------------------------------------------------------
-// Role icon mapping
-// ---------------------------------------------------------------------------
-
-const ROLE_ICONS: Partial<Record<UserRole, IconFunctionComponent>> = {
-  [UserRole.ADMIN]: SvgUserManage,
-  [UserRole.GLOBAL_CURATOR]: SvgGlobe,
-  [UserRole.SLACK_USER]: SvgSlack,
-};
-
-// ---------------------------------------------------------------------------
-// Column renderers
-// ---------------------------------------------------------------------------
-
-function renderNameColumn(email: string, row: MemberRow) {
-  return (
-    <Content
-      sizePreset="main-ui"
-      variant="section"
-      title={row.personal_name ?? email}
-      description={row.personal_name ? email : undefined}
-    />
-  );
-}
-
-function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
-  const Icon = (row.role && ROLE_ICONS[row.role]) || SvgUser;
-  return (
-    <div className="flex flex-row items-center gap-1">
-      <Icon className="w-4 h-4 text-text-03" />
-      <Text as="span" mainUiBody text03>
-        {row.role ? USER_ROLE_LABELS[row.role] ?? row.role : "\u2014"}
-      </Text>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Columns
-// ---------------------------------------------------------------------------
-
-const tc = createTableColumns<MemberRow>();
-
-const columns = [
-  tc.qualifier({
-    content: "avatar-user",
-    getInitials: (row) => getInitials(row.personal_name, row.email),
-    selectable: true,
-  }),
-  tc.column("email", {
-    header: "Name",
-    weight: 25,
-    minWidth: 180,
-    cell: renderNameColumn,
-  }),
-  tc.column("api_key_display", {
-    header: "",
-    weight: 15,
-    minWidth: 100,
-    enableSorting: false,
-    cell: (value) =>
-      value ? (
-        <Text as="span" secondaryBody text03>
-          {value}
-        </Text>
-      ) : null,
-  }),
-  tc.column("role", {
-    header: "Account Type",
-    weight: 15,
-    minWidth: 140,
-    cell: renderAccountTypeColumn,
-  }),
-  tc.actions({
-    showSorting: false,
-  }),
-];
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-
-const PAGE_SIZE = 10;
 
 interface EditGroupPageProps {
   groupId: number;
@@ -256,7 +125,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
   }, [tokenRateLimits]);
 
-  const allRows: MemberRow[] = useMemo(() => {
+  const allRows = useMemo(() => {
     const activeUsers = users.filter((u) => u.is_active);
     const serviceAccountRows = (apiKeys ?? []).map(apiKeyToMemberRow);
     return [...activeUsers, ...serviceAccountRows];
@@ -370,7 +239,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   }
 
   const headerActions = (
-    <div className="flex flex-row items-center gap-2 shrink-0">
+    <Section flexDirection="row" gap={0.5} width="auto" height="auto">
       <Button
         variant="danger"
         prominence="tertiary"
@@ -390,7 +259,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       >
         {isSubmitting ? "Saving..." : isSyncing ? "Syncing..." : "Save"}
       </Button>
-    </div>
+    </Section>
   );
 
   return (
@@ -415,7 +284,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           {!isLoading && !error && group && (
             <>
               {/* Group Name */}
-              <div className="flex flex-col gap-2">
+              <Section
+                gap={0.5}
+                height="auto"
+                alignItems="stretch"
+                justifyContent="start"
+              >
                 <Text mainUiBody text04>
                   Group Name
                 </Text>
@@ -424,12 +298,17 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
                 />
-              </div>
+              </Section>
 
               <Separator noPadding />
 
               {/* Members table */}
-              <div className="flex flex-col gap-3">
+              <Section
+                gap={0.75}
+                height="auto"
+                alignItems="stretch"
+                justifyContent="start"
+              >
                 <InputTypeIn
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -438,7 +317,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 />
                 <Table
                   data={allRows}
-                  columns={columns}
+                  columns={memberTableColumns}
                   getRowId={(row) => row.id ?? row.email}
                   qualifier="avatar"
                   pageSize={PAGE_SIZE}
@@ -456,7 +335,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     />
                   }
                 />
-              </div>
+              </Section>
 
               <SharedGroupResources
                 selectedCcPairIds={selectedCcPairIds}
