@@ -48,6 +48,7 @@ from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy import PrimaryKeyConstraint
 
+from onyx.auth.schemas import AccountType
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
@@ -78,6 +79,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     MCPServerStatus,
+    Permission,
     LLMModelFlowType,
     ThemePreference,
     DefaultAppMode,
@@ -301,6 +303,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, native_enum=False, default=UserRole.BASIC)
+    )
+    account_type: Mapped[AccountType | None] = mapped_column(
+        Enum(AccountType, native_enum=False), nullable=True
     )
 
     """
@@ -3971,6 +3976,8 @@ class SamlAccount(Base):
 class User__UserGroup(Base):
     __tablename__ = "user__user_group"
 
+    __table_args__ = (Index("ix_user__user_group_user_id", "user_id"),)
+
     is_curator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     user_group_id: Mapped[int] = mapped_column(
@@ -3978,6 +3985,31 @@ class User__UserGroup(Base):
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), primary_key=True, nullable=True
+    )
+
+
+class PermissionGrant(Base):
+    __tablename__ = "permission_grant"
+
+    __table_args__ = (
+        UniqueConstraint("group_id", "permission"),
+        Index("ix_permission_grant_group_id", "group_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("user_group.id"), nullable=False)
+    permission: Mapped[Permission] = mapped_column(
+        Enum(Permission, native_enum=False), nullable=False
+    )
+    granted_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id"), nullable=True
+    )
+    granted_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    group: Mapped["UserGroup"] = relationship(
+        "UserGroup", back_populates="permission_grants"
     )
 
 
@@ -4075,6 +4107,8 @@ class UserGroup(Base):
     is_up_for_deletion: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # whether this is a default group (e.g. "Basic", "Admins") that cannot be deleted
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Last time a user updated this user group
     time_last_modified_by_user: Mapped[datetime.datetime] = mapped_column(
@@ -4117,6 +4151,9 @@ class UserGroup(Base):
     # MCP servers accessible to this user group
     accessible_mcp_servers: Mapped[list["MCPServer"]] = relationship(
         "MCPServer", secondary="mcp_server__user_group", back_populates="user_groups"
+    )
+    permission_grants: Mapped[list["PermissionGrant"]] = relationship(
+        "PermissionGrant", back_populates="group"
     )
 
 

@@ -6,6 +6,22 @@ from fastapi_users import schemas
 from typing_extensions import override
 
 
+class AccountType(str, Enum):
+    """
+    What kind of account this is — determines whether the user
+    enters the group-based permission system.
+
+    STANDARD + SERVICE_ACCOUNT → participate in group system
+    BOT, EXT_PERM_USER, ANONYMOUS → fixed behavior
+    """
+
+    STANDARD = "standard"
+    BOT = "bot"
+    EXT_PERM_USER = "ext_perm_user"
+    SERVICE_ACCOUNT = "service_account"
+    ANONYMOUS = "anonymous"
+
+
 class UserRole(str, Enum):
     """
     User roles
