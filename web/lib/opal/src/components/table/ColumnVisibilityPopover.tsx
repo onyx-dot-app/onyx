@@ -8,6 +8,7 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { Button, LineItemButton, Tag } from "@opal/components";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgColumn, SvgCheck } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
 import Divider from "@/refresh-components/Divider";
@@ -19,14 +20,13 @@ import Divider from "@/refresh-components/Divider";
 interface ColumnVisibilityPopoverProps<TData extends RowData = RowData> {
   table: Table<TData>;
   columnVisibility: VisibilityState;
-  size?: "md" | "lg";
 }
 
 function ColumnVisibilityPopover<TData extends RowData>({
   table,
   columnVisibility,
-  size = "lg",
 }: ColumnVisibilityPopoverProps<TData>) {
+  const size = useTableSize();
   const [open, setOpen] = useState(false);
 
   // User-defined columns only (exclude internal qualifier/actions)
@@ -87,13 +87,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
 // Column definition factory
 // ---------------------------------------------------------------------------
 
-interface CreateColumnVisibilityColumnOptions {
-  size?: "md" | "lg";
-}
-
-function createColumnVisibilityColumn<TData>(
-  options?: CreateColumnVisibilityColumnOptions
-): ColumnDef<TData, unknown> {
+function createColumnVisibilityColumn<TData>(): ColumnDef<TData, unknown> {
   return {
     id: "__columnVisibility",
     size: 44,
@@ -104,7 +98,6 @@ function createColumnVisibilityColumn<TData>(
       <ColumnVisibilityPopover
         table={table}
         columnVisibility={table.getState().columnVisibility}
-        size={options?.size}
       />
     ),
     cell: () => null,

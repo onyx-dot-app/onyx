@@ -39,15 +39,12 @@ import type {
 import type { TableSize } from "@opal/components/table/TableSizeContext";
 
 // ---------------------------------------------------------------------------
-// Qualifier × SelectionBehavior
+// SelectionBehavior
 // ---------------------------------------------------------------------------
 
-type Qualifier = "simple" | "avatar" | "icon";
 type SelectionBehavior = "no-select" | "single-select" | "multi-select";
 
 export type DataTableProps<TData> = BaseDataTableProps<TData> & {
-  /** Leading qualifier column type. @default "simple" */
-  qualifier?: Qualifier;
   /** Row selection behavior. @default "no-select" */
   selectionBehavior?: SelectionBehavior;
 };
@@ -131,8 +128,8 @@ function processColumns<TData>(
  * ```tsx
  * const tc = createTableColumns<TeamMember>();
  * const columns = [
- *   tc.qualifier({ content: "avatar-user", getInitials: (r) => r.initials }),
- *   tc.column("name", { header: "Name", weight: 23, minWidth: 120 }),
+ *   tc.qualifier({ content: "icon", getContent: (r) => UserIcon }),
+ *   tc.column("name", { header: "Name", weight: 23 }),
  *   tc.column("email", { header: "Email", weight: 28 }),
  *   tc.actions(),
  * ];
@@ -152,13 +149,11 @@ export function Table<TData>(props: DataTableProps<TData>) {
     footer,
     size = "lg",
     variant = "cards",
-    qualifier = "simple",
     selectionBehavior = "no-select",
     onSelectionChange,
     onRowClick,
     searchTerm,
     height,
-    headerBackground,
     serverSide,
     emptyState,
   } = props;
@@ -166,11 +161,15 @@ export function Table<TData>(props: DataTableProps<TData>) {
   const effectivePageSize = pageSize ?? (footer ? 10 : data.length);
 
   // Whether the qualifier column should exist in the DOM.
-  // "simple" only gets a qualifier column for multi-select (checkboxes).
-  // "simple" + no-select/single-select = no qualifier column — single-select
-  // uses row-level background coloring instead.
+  // Derived from the column definitions: if a qualifier column exists with
+  // content !== "simple", always show it. If content === "simple" (or no
+  // qualifier column defined), show only for multi-select (checkboxes).
+  const qualifierColDef = columns.find(
+    (c): c is OnyxQualifierColumn<TData> => c.kind === "qualifier"
+  );
   const hasQualifierColumn =
-    qualifier !== "simple" || selectionBehavior === "multi-select";
+    (qualifierColDef != null && qualifierColDef.content !== "simple") ||
+    selectionBehavior === "multi-select";
 
   // 1. Process columns (memoized on columns + size)
   const { tanstackColumns, widthConfig, qualifierColumn, columnKindMap } =
@@ -349,15 +348,9 @@ export function Table<TData>(props: DataTableProps<TData>) {
                   overflowY: "auto" as const,
                 }
               : undefined),
-            ...(headerBackground
-              ? ({
-                  "--table-header-bg": headerBackground,
-                } as React.CSSProperties)
-              : undefined),
           }}
         >
           <TableElement
-            size={size}
             variant={variant}
             selectionBehavior={selectionBehavior}
             width={
@@ -419,14 +412,12 @@ export function Table<TData>(props: DataTableProps<TData>) {
                               columnVisibility={
                                 table.getState().columnVisibility
                               }
-                              size={size}
                             />
                           )}
                           {actionsDef.showSorting !== false && (
                             <SortingPopover
                               table={table}
                               sorting={table.getState().sorting}
-                              size={size}
                               footerText={actionsDef.sortingFooterText}
                             />
                           )}
@@ -541,12 +532,6 @@ export function Table<TData>(props: DataTableProps<TData>) {
                       if (cellColDef?.kind === "qualifier") {
                         const qDef = cellColDef as OnyxQualifierColumn<TData>;
 
-                        // Resolve content based on the qualifier prop:
-                        // - "simple" renders nothing (checkbox only when selectable)
-                        // - "avatar"/"icon" render from column config
-                        const qualifierContent =
-                          qualifier === "simple" ? "simple" : qDef.content;
-
                         return (
                           <QualifierContainer
                             key={cell.id}
@@ -554,10 +539,11 @@ export function Table<TData>(props: DataTableProps<TData>) {
                             onClick={(e) => e.stopPropagation()}
                           >
                             <TableQualifier
-                              content={qualifierContent}
-                              initials={qDef.getInitials?.(row.original)}
-                              icon={qDef.getIcon?.(row.original)}
+                              content={qDef.content}
+                              icon={qDef.getContent?.(row.original)}
                               imageSrc={qDef.getImageSrc?.(row.original)}
+                              imageAlt={qDef.getImageAlt?.(row.original)}
+                              background={qDef.background}
                               selectable={showQualifierCheckbox}
                               selected={
                                 showQualifierCheckbox && row.getIsSelected()

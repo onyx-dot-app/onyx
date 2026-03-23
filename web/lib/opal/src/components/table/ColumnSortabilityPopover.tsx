@@ -8,6 +8,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { Button, LineItemButton } from "@opal/components";
+import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgArrowUpDown, SvgSortOrder, SvgCheck } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
 import Divider from "@/refresh-components/Divider";
@@ -20,7 +21,6 @@ import Text from "@/refresh-components/texts/Text";
 interface SortingPopoverProps<TData extends RowData = RowData> {
   table: Table<TData>;
   sorting: SortingState;
-  size?: "md" | "lg";
   footerText?: string;
   ascendingLabel?: string;
   descendingLabel?: string;
@@ -29,11 +29,11 @@ interface SortingPopoverProps<TData extends RowData = RowData> {
 function SortingPopover<TData extends RowData>({
   table,
   sorting,
-  size = "lg",
   footerText,
   ascendingLabel = "Ascending",
   descendingLabel = "Descending",
 }: SortingPopoverProps<TData>) {
+  const size = useTableSize();
   const [open, setOpen] = useState(false);
   const sortableColumns = table
     .getAllLeafColumns()
@@ -158,7 +158,6 @@ function SortingPopover<TData extends RowData>({
 // ---------------------------------------------------------------------------
 
 interface CreateSortingColumnOptions {
-  size?: "md" | "lg";
   footerText?: string;
   ascendingLabel?: string;
   descendingLabel?: string;
@@ -177,7 +176,6 @@ function createSortingColumn<TData>(
       <SortingPopover
         table={table}
         sorting={table.getState().sorting}
-        size={options?.size}
         footerText={options?.footerText}
         ascendingLabel={options?.ascendingLabel}
         descendingLabel={options?.descendingLabel}
