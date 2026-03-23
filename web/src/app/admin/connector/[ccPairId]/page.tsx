@@ -626,10 +626,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <div className="w-[200px]">
             <div className="text-sm font-medium mb-1">Last Indexed</div>
             <div className="text-sm text-text-default">
-              {timeAgo(
-                indexAttempts?.find((attempt) => attempt.status === "success")
-                  ?.time_started
-              ) ?? "-"}
+              {timeAgo(ccPair?.last_indexed) ?? "-"}
             </div>
           </div>
 
