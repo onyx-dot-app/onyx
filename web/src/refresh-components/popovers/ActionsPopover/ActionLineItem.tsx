@@ -95,9 +95,8 @@ export default function ActionLineItem({
       <LineItem
         data-testid={`tool-option-${toolName}`}
         onClick={() => {
-          if (isSearchToolWithNoConnectors) return;
           if (isUnavailable) {
-            if (isForced) onForceToggle();
+            onForceToggle();
             return;
           }
           if (disabled) onToggle();
@@ -107,7 +106,8 @@ export default function ActionLineItem({
           else onClose?.();
         }}
         selected={isForced}
-        disabled={isSearchToolWithNoConnectors || isUnavailable}
+        disabled={isSearchToolWithNoConnectors || (isUnavailable && !isForced)}
+        muted={isUnavailable && isForced}
         strikethrough={disabled}
         icon={Icon}
         rightChildren={
