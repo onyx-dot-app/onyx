@@ -33,6 +33,8 @@ interface QualifierConfig<TData> {
   getImageAlt?: (row: TData) => string;
   /** Show a tinted background container behind the content. @default false */
   background?: boolean;
+  /** Icon size preset. `"lg"` = 28/24, `"md"` = 20/16. @default "md" */
+  iconSize?: "lg" | "md";
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +162,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         getImageSrc: config?.getImageSrc,
         getImageAlt: config?.getImageAlt,
         background: config?.background,
+        iconSize: config?.iconSize,
       };
     },
 
