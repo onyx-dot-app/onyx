@@ -6,6 +6,7 @@ These tests assume Vespa and OpenSearch are running.
 import time
 import uuid
 from collections.abc import Generator
+from collections.abc import Iterator
 
 import httpx
 import pytest
@@ -21,6 +22,7 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 )
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
+from onyx.indexing.models import DocMetadataAwareIndexChunk
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.document_index.conftest import EMBEDDING_DIM
 from tests.external_dependency_unit.document_index.conftest import make_chunk
@@ -201,3 +203,25 @@ class TestDocumentIndexNew:
             assert len(result_map) == 2
             assert result_map[existing_doc] is True
             assert result_map[new_doc] is False
+
+    def test_index_accepts_generator(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """index() accepts a generator (any iterable), not just a list."""
+        for document_index in document_indices:
+            doc_id = f"test_gen_{uuid.uuid4().hex[:8]}"
+            metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[3])
+
+            def chunk_gen() -> Iterator[DocMetadataAwareIndexChunk]:
+                for i in range(3):
+                    yield make_chunk(doc_id, chunk_id=i)
+
+            results = document_index.index(
+                chunks=chunk_gen(), indexing_metadata=metadata
+            )
+
+            assert len(results) == 1
+            assert results[0].document_id == doc_id
+            assert results[0].already_existed is False
