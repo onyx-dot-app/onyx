@@ -1,6 +1,6 @@
 "use client";
 
-import useSWR, { mutate as globalMutate } from "swr";
+import useSWR, { mutate } from "swr";
 import { useContext } from "react";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SettingsContext } from "@/providers/SettingsProvider";
@@ -27,7 +27,7 @@ export default function useShareableGroups() {
     errorHandlingFetcher
   );
 
-  const refreshShareableGroups = () => globalMutate(SHAREABLE_GROUPS_URL);
+  const refreshShareableGroups = () => mutate(SHAREABLE_GROUPS_URL);
 
   if (settingsLoading) {
     return {

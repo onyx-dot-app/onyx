@@ -21,5 +21,5 @@ export default function ProductGatingWrapper({
     return <GatedContentWrapper>{children}</GatedContentWrapper>;
   }
 
-  return <>{children}</>;
+  return children;
 }

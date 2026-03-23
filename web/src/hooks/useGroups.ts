@@ -1,6 +1,6 @@
 "use client";
 
-import useSWR, { mutate as globalMutate } from "swr";
+import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { UserGroup } from "@/lib/types";
 import { useContext } from "react";
@@ -49,7 +49,7 @@ export default function useGroups() {
     errorHandlingFetcher
   );
 
-  const refreshGroups = () => globalMutate(GROUPS_URL);
+  const refreshGroups = () => mutate(GROUPS_URL);
 
   if (settingsLoading) {
     return {
