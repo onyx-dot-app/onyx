@@ -120,6 +120,10 @@ export interface ModalContentProps
   > {
   width?: keyof typeof widthClasses;
   height?: keyof typeof heightClasses;
+  /** Vertical placement of the modal. `"center"` (default) centers in the
+   *  viewport/container. `"top"` pins the modal near the top of the viewport,
+   *  matching the position used by CommandMenu. */
+  position?: "center" | "top";
   preventAccidentalClose?: boolean;
   skipOverlay?: boolean;
   background?: "default" | "gray";
@@ -136,6 +140,7 @@ const ModalContent = React.forwardRef<
       children,
       width = "md",
       height = "fit",
+      position = "center",
       preventAccidentalClose = true,
       skipOverlay = false,
       background = "default",
@@ -267,27 +272,39 @@ const ModalContent = React.forwardRef<
 
     const { centerX, centerY, hasContainerCenter } = useContainerCenter();
 
+    const isTop = position === "top";
+
     const animationClasses = cn(
       "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
       "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
-      "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
+      !isTop &&
+        "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
       "duration-200"
     );
 
-    const containerStyle: React.CSSProperties | undefined = hasContainerCenter
-      ? ({
-          left: centerX,
-          top: centerY,
-          "--tw-enter-translate-x": "-50%",
-          "--tw-exit-translate-x": "-50%",
-          "--tw-enter-translate-y": "-50%",
-          "--tw-exit-translate-y": "-50%",
-        } as React.CSSProperties)
-      : undefined;
+    const containerStyle: React.CSSProperties | undefined =
+      hasContainerCenter && !isTop
+        ? ({
+            left: centerX,
+            top: centerY,
+            "--tw-enter-translate-x": "-50%",
+            "--tw-exit-translate-x": "-50%",
+            "--tw-enter-translate-y": "-50%",
+            "--tw-exit-translate-y": "-50%",
+          } as React.CSSProperties)
+        : hasContainerCenter && isTop
+          ? ({
+              left: centerX,
+              "--tw-enter-translate-x": "-50%",
+              "--tw-exit-translate-x": "-50%",
+            } as React.CSSProperties)
+          : undefined;
 
     const positionClasses = cn(
-      "fixed -translate-x-1/2 -translate-y-1/2",
-      !hasContainerCenter && "left-1/2 top-1/2"
+      "fixed -translate-x-1/2",
+      isTop
+        ? cn("top-[72px]", !hasContainerCenter && "left-1/2")
+        : cn("-translate-y-1/2", !hasContainerCenter && "left-1/2 top-1/2")
     );
 
     const dialogEventHandlers = {
