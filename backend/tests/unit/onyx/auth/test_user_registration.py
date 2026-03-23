@@ -15,7 +15,6 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
 
 from onyx.auth.schemas import UserCreate
 from onyx.auth.users import UserManager
@@ -423,7 +422,7 @@ class TestSeatLimitEnforcement:
             "onyx.auth.users.fetch_ee_implementation_or_noop",
             return_value=lambda *_a, **_kw: seat_result,
         ):
-            with pytest.raises(HTTPException) as exc:
+            with pytest.raises(OnyxError) as exc:
                 enforce_seat_limit(MagicMock())
 
             assert exc.value.status_code == 402

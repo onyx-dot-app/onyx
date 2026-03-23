@@ -6,11 +6,33 @@ import { Button } from "@opal/components";
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
+// Maps raw IdP/OAuth error codes to user-friendly messages.
+// If the message is a known code, we replace it; otherwise show it as-is.
+const ERROR_CODE_MESSAGES: Record<string, string> = {
+  access_denied: "Access was denied by your identity provider.",
+  login_required: "You need to log in with your identity provider first.",
+  consent_required:
+    "Your identity provider requires consent before continuing.",
+  interaction_required:
+    "Additional interaction with your identity provider is required.",
+  invalid_scope: "The requested permissions are not available.",
+  server_error:
+    "Your identity provider encountered an error. Please try again.",
+  temporarily_unavailable:
+    "Your identity provider is temporarily unavailable. Please try again later.",
+};
+
+function resolveMessage(raw: string | null): string | null {
+  if (!raw) return null;
+  return ERROR_CODE_MESSAGES[raw] ?? raw;
+}
+
 interface AuthErrorContentProps {
   message: string | null;
 }
 
-function AuthErrorContent({ message }: AuthErrorContentProps) {
+function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
+  const message = resolveMessage(rawMessage);
   return (
     <AuthFlowContainer>
       <div className="flex flex-col items-center gap-4">

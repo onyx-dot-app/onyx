@@ -5,15 +5,18 @@ export const AUTH_ERROR_COOKIE = "__auth_error";
 
 export async function authErrorRedirect(
   request: NextRequest,
-  response: Response
+  response: Response,
+  redirectStatus?: number
 ): Promise<NextResponse> {
   const redirect = NextResponse.redirect(
-    new URL("/auth/error", getDomain(request))
+    new URL("/auth/error", getDomain(request)),
+    redirectStatus
   );
   try {
     const body = await response.json();
-    if (body?.error_code && body?.detail) {
-      redirect.cookies.set(AUTH_ERROR_COOKIE, body.detail, {
+    const detail = body?.detail;
+    if (typeof detail === "string" && detail) {
+      redirect.cookies.set(AUTH_ERROR_COOKIE, detail, {
         httpOnly: true,
         secure: true,
         sameSite: "strict",

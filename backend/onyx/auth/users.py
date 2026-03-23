@@ -341,7 +341,7 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
     )(db_session, seats_needed=seats_needed)
 
     if result is not None and not result.available:
-        raise HTTPException(status_code=402, detail=result.error_message)
+        raise OnyxError(OnyxErrorCode.SEAT_LIMIT_EXCEEDED, result.error_message)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
