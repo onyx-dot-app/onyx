@@ -100,20 +100,33 @@ export default function AgentRowActions({
             />
           </div>
         )}
-        <div
-          className={cn(
-            !agent.is_featured &&
-              "opacity-0 group-hover/row:opacity-100 transition-opacity"
-          )}
-        >
+        {!agent.is_listed ? (
           <Button
             prominence="tertiary"
-            icon={SvgStar}
-            interaction={modal === Modal.TOGGLE_FEATURED ? "hover" : "rest"}
-            tooltip={agent.is_featured ? "Remove Featured" : "Set as Featured"}
-            onClick={() => openModal(Modal.TOGGLE_FEATURED)}
+            icon={SvgEyeClosed}
+            tooltip="Re-list Agent"
+            onClick={() =>
+              handleAction(() => toggleAgentListed(agent.id, agent.is_listed))
+            }
           />
-        </div>
+        ) : (
+          <div
+            className={cn(
+              !agent.is_featured &&
+                "opacity-0 group-hover/row:opacity-100 transition-opacity"
+            )}
+          >
+            <Button
+              prominence="tertiary"
+              icon={SvgStar}
+              interaction={modal === Modal.TOGGLE_FEATURED ? "hover" : "rest"}
+              tooltip={
+                agent.is_featured ? "Remove Featured" : "Set as Featured"
+              }
+              onClick={() => openModal(Modal.TOGGLE_FEATURED)}
+            />
+          </div>
+        )}
 
         {/* Overflow menu */}
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
@@ -133,7 +146,7 @@ export default function AgentRowActions({
                     );
                   }}
                 >
-                  {agent.is_listed ? "Hide Agent" : "Show Agent"}
+                  {agent.is_listed ? "Unlist Agent" : "List Agent"}
                 </LineItem>,
                 <LineItem
                   key="share"

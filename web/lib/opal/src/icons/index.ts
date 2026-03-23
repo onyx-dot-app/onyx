@@ -68,6 +68,7 @@ export { default as SvgExpand } from "@opal/icons/expand";
 export { default as SvgExternalLink } from "@opal/icons/external-link";
 export { default as SvgEye } from "@opal/icons/eye";
 export { default as SvgEyeClosed } from "@opal/icons/eye-closed";
+export { default as SvgEyeOff } from "@opal/icons/eye-off";
 export { default as SvgFiles } from "@opal/icons/files";
 export { default as SvgFileBraces } from "@opal/icons/file-braces";
 export { default as SvgFileChartPie } from "@opal/icons/file-chart-pie";
