@@ -1,23 +1,19 @@
 from __future__ import annotations
 
 import datetime
-import itertools
-import tempfile
-import requests
 from urllib.parse import urlparse
 from collections.abc import Generator
-from collections.abc import Iterator
+#from collections.abc import Iterator
 from typing import Any
-from typing import cast
+#from typing import cast
 from typing import ClassVar
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+#from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.mediawiki.family import family_class_dispatch
 from onyx.connectors.models import Document
 #from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
@@ -80,20 +76,20 @@ class PhabricatorConnector(LoadConnector, PollConnector):
         self.doc_base = urlparse(api_base)._replace(path="/w/").geturl()
         self.maniphest_base = urlparse(api_base)._replace(path="/").geturl()
 
-    def load_credentials(self, creds: dict[str, str]) -> None:
-        self.api_token = creds.get('phab_api_token', '')
+    def load_credentials(self, credentials: dict[str, str]) -> None:
+        self.api_token = credentials.get('phab_api_token', '')
 
-    def _get_docs(self, start = None, end = None) -> Generator[list[Document], None, None]:
+    def _get_docs(self, start : SecondsSinceUnixEpoch | None = None, end : SecondsSinceUnixEpoch | None = None) -> Generator[list[Document], None, None]:
         """
         Fetches documents from the Phabricator Phriction wiki.
         
         Yields:
             Document objects containing the title, path, PHID, and content.
         """
-        docs = get_phriction_docs(limit = -1, api_base=self.api_base, api_token=self.api_token, start=start, end=end)
+        docs = get_phriction_docs(limit = -1, api_base=self.api_base, api_token=self.api_token, start=start, end=end, logger=logger)
         for doc in docs:
             yield [_ph_to_doc(doc, self.doc_base)]
-        tickets = get_maniphest_tickets(limit = -1, api_base=self.api_base, api_token=self.api_token, start=start, end=end)
+        tickets = get_maniphest_tickets(limit = -1, api_base=self.api_base, api_token=self.api_token, start=start, end=end, logger=logger)
         for ticket in tickets:
             yield [_maniphest_to_doc(ticket, self.maniphest_base)]
 
@@ -106,7 +102,6 @@ class PhabricatorConnector(LoadConnector, PollConnector):
     def poll_source(self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch) -> GenerateDocumentsOutput:
         '''
         Polls for new documents
-        TODO
         '''
 
         return self._get_docs(start, end)
