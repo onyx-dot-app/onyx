@@ -171,6 +171,7 @@ export default function AgentsTable() {
   }
 
   if (error) {
+    console.error("Failed to load agents:", error);
     return (
       <Text as="p" secondaryBody text03>
         Failed to load agents. Please try refreshing the page.

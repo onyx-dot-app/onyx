@@ -5,7 +5,8 @@ async function parseErrorDetail(
   try {
     const body = await res.json();
     return body?.detail ?? fallback;
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse error response:", err);
     return fallback;
   }
 }
