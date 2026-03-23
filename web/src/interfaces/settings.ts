@@ -71,6 +71,10 @@ export interface Settings {
   version?: string | null;
   // Hard ceiling for user_file_max_upload_size_mb, derived from env var.
   max_allowed_upload_size_mb?: number;
+
+  // Factory defaults for the restore button.
+  default_user_file_max_upload_size_mb?: number;
+  default_file_token_count_threshold_k?: number;
 }
 
 export enum NotificationType {

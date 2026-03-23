@@ -273,7 +273,7 @@ function NumericLimitField({
         placeholder="No limit"
         variant={isOverMax ? "error" : undefined}
         rightSection={
-          value !== "" && value !== defaultValue ? (
+          (value || "") !== defaultValue ? (
             <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
               <IconButton
                 icon={SvgRefreshCw}
@@ -887,12 +887,12 @@ function ChatPreferencesForm() {
                     <FileSizeLimitFields
                       saveSettings={saveSettings}
                       defaultUploadSizeMb={
-                        settings?.settings.user_file_max_upload_size_mb?.toString() ??
-                        ""
+                        settings?.settings.default_user_file_max_upload_size_mb?.toString() ??
+                        "100"
                       }
                       defaultTokenThresholdK={
-                        settings?.settings.file_token_count_threshold_k?.toString() ??
-                        ""
+                        settings?.settings.default_file_token_count_threshold_k?.toString() ??
+                        "200"
                       }
                       maxAllowedUploadSizeMb={
                         settings?.settings.max_allowed_upload_size_mb

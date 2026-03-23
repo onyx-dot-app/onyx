@@ -9,6 +9,7 @@ from onyx import __version__ as onyx_version
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
 from onyx.auth.users import is_user_admin
+from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
 from onyx.configs.constants import KV_REINDEX_KEY
@@ -24,6 +25,10 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.build.utils import is_onyx_craft_enabled
+from onyx.server.settings.models import (
+    DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
+)
+from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
 from onyx.server.settings.models import Notification
 from onyx.server.settings.models import Settings
 from onyx.server.settings.models import UserSettings
@@ -96,6 +101,15 @@ def fetch_settings(
         hooks_enabled=HOOKS_AVAILABLE,
         version=onyx_version,
         max_allowed_upload_size_mb=MAX_ALLOWED_UPLOAD_SIZE_MB,
+        default_user_file_max_upload_size_mb=min(
+            DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
+            MAX_ALLOWED_UPLOAD_SIZE_MB,
+        ),
+        default_file_token_count_threshold_k=(
+            DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB
+            if DISABLE_VECTOR_DB
+            else DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
+        ),
     )
 
 

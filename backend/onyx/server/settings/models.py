@@ -121,3 +121,8 @@ class UserSettings(Settings):
     version: str | None = None
     # Hard ceiling for user_file_max_upload_size_mb, derived from env var.
     max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB
+    # Factory defaults so the frontend can show a "restore default" button.
+    default_user_file_max_upload_size_mb: int = DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
+    default_file_token_count_threshold_k: int = (
+        DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
+    )
