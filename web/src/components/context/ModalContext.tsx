@@ -3,8 +3,9 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import NewTeamModal from "@/components/modals/NewTeamModal";
 import NewTenantModal from "@/sections/modals/NewTenantModal";
-import { User, NewTenantInfo } from "@/lib/types";
+import { NewTenantInfo } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { useUser } from "@/providers/UserProvider";
 
 type ModalContextType = {
   showNewTeamModal: boolean;
@@ -27,23 +28,27 @@ export const useModalContext = () => {
 
 export const ModalProvider: React.FC<{
   children: React.ReactNode;
-  user: User | null;
-}> = ({ children, user }) => {
+}> = ({ children }) => {
+  const { user } = useUser();
   const [showNewTeamModal, setShowNewTeamModal] = useState(false);
   const [newTenantInfo, setNewTenantInfo] = useState<NewTenantInfo | null>(
-    user?.tenant_info?.new_tenant || null
+    null
   );
   const [invitationInfo, setInvitationInfo] = useState<NewTenantInfo | null>(
-    user?.tenant_info?.invitation || null
+    null
   );
 
-  // Initialize modal states based on user info
+  // Sync modal states with user info — clear when backend no longer has the data
   useEffect(() => {
     if (user?.tenant_info?.new_tenant) {
       setNewTenantInfo(user.tenant_info.new_tenant);
+    } else {
+      setNewTenantInfo(null);
     }
     if (user?.tenant_info?.invitation) {
       setInvitationInfo(user.tenant_info.invitation);
+    } else {
+      setInvitationInfo(null);
     }
   }, [user?.tenant_info]);
 

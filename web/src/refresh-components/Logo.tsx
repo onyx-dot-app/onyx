@@ -2,7 +2,6 @@
 
 import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import Image from "next/image";
 import {
   LOGO_FOLDED_SIZE_PX,
   LOGO_UNFOLDED_SIZE_PX,
@@ -26,31 +25,34 @@ export default function Logo({ folded, size, className }: LogoProps) {
   const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
   const applicationName = settings.enterpriseSettings?.application_name;
 
-  const logo = useMemo(
-    () =>
-      settings.enterpriseSettings?.use_custom_logo ? (
-        <div
-          className={cn(
-            "aspect-square rounded-full overflow-hidden relative flex-shrink-0",
-            className
-          )}
-          style={{ height: foldedSize, width: foldedSize }}
-        >
-          <Image
-            alt="Logo"
-            src="/api/enterprise-settings/logo"
-            fill
-            className="object-cover object-center"
-            sizes={`${foldedSize}px`}
-          />
-        </div>
-      ) : (
-        <OnyxIcon
-          size={foldedSize}
-          className={cn("flex-shrink-0", className)}
-        />
-      ),
-    [className, foldedSize, settings.enterpriseSettings?.use_custom_logo]
+  // Cache-buster: the logo URL never changes (/api/enterprise-settings/logo)
+  // so the browser serves the in-memory cached image even after an admin
+  // uploads a new one. Generating a fresh timestamp each time enterprise
+  // settings are revalidated by SWR appends a unique query param to force
+  // the browser to re-fetch the image.
+  const logoBuster = useMemo(
+    () => Date.now(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settings.enterpriseSettings]
+  );
+
+  const logo = settings.enterpriseSettings?.use_custom_logo ? (
+    <div
+      className={cn(
+        "aspect-square rounded-full overflow-hidden relative flex-shrink-0",
+        className
+      )}
+      style={{ height: foldedSize, width: foldedSize }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        alt="Logo"
+        src={`/api/enterprise-settings/logo?v=${logoBuster}`}
+        className="object-cover object-center w-full h-full"
+      />
+    </div>
+  ) : (
+    <OnyxIcon size={foldedSize} className={cn("flex-shrink-0", className)} />
   );
 
   const renderNameAndPoweredBy = (opts: {

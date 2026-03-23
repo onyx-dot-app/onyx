@@ -901,28 +901,40 @@ export const useUserGroups = (): {
   refreshUserGroups: () => void;
 } => {
   const combinedSettings = useContext(SettingsContext);
+  const isLoading = combinedSettings?.settingsLoading ?? false;
   const isPaidEnterpriseFeaturesEnabled =
-    combinedSettings && combinedSettings.enterpriseSettings !== null;
+    !isLoading &&
+    combinedSettings &&
+    combinedSettings.enterpriseSettings !== null;
 
   const swrResponse = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? USER_GROUP_URL : null,
     errorHandlingFetcher
   );
 
+  const refreshUserGroups = () => mutate(USER_GROUP_URL);
+
+  if (isLoading) {
+    return {
+      data: undefined,
+      isLoading: true,
+      error: "",
+      refreshUserGroups,
+    };
+  }
+
   if (!isPaidEnterpriseFeaturesEnabled) {
     return {
-      ...{
-        data: [],
-        isLoading: false,
-        error: "",
-      },
-      refreshUserGroups: () => {},
+      data: [],
+      isLoading: false,
+      error: "",
+      refreshUserGroups,
     };
   }
 
   return {
     ...swrResponse,
-    refreshUserGroups: () => mutate(USER_GROUP_URL),
+    refreshUserGroups,
   };
 };
 

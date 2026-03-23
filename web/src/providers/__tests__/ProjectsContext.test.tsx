@@ -68,6 +68,7 @@ const settingsValue: CombinedSettings = {
   webVersion: null,
   webDomain: null,
   isSearchModeAvailable: true,
+  settingsLoading: false,
 };
 
 const wrapper = ({ children }: PropsWithChildren) => (

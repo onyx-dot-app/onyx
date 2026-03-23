@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { User } from "@/lib/types";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
-import { AuthTypeMetadata } from "@/lib/userSS";
+import { AuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import { AuthType } from "@/lib/constants";
 
 // Refresh token every 10 minutes (600000ms)
