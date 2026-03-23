@@ -233,24 +233,20 @@ function NumericLimitField({
     }
 
     const parsed = parseInt(value, 10);
-    const isValid = !isNaN(parsed);
+    const isValid = !isNaN(parsed) && parsed > 0;
 
-    // Reject negative values — revert to the last-saved value.
-    if (isValid && parsed < 0) {
+    // Revert invalid input (empty, NaN, negative, zero) to last-saved value.
+    if (!isValid) {
       void setFieldValue(name, initialValue.current);
       return;
     }
 
     // Block save when the value exceeds the hard ceiling.
-    if (isValid && maxValue !== undefined && parsed > maxValue) {
+    if (maxValue !== undefined && parsed > maxValue) {
       return;
     }
 
-    // Treat empty input, NaN, and 0 as "restore default".
-    const isDefault = !isValid || parsed === 0;
-    const defaultParsed = parseInt(defaultValue, 10);
-    const normalizedDisplay = isDefault ? defaultValue : String(parsed);
-    const settingsValue = isDefault ? defaultParsed : parsed;
+    const normalizedDisplay = String(parsed);
 
     // Update the display to the canonical form (e.g. strip leading zeros).
     if (value !== normalizedDisplay) {
@@ -259,7 +255,7 @@ function NumericLimitField({
 
     // Persist only when the value actually changed.
     if (value !== initialValue.current) {
-      void saveSettings({ [name]: settingsValue });
+      void saveSettings({ [name]: parsed });
       initialValue.current = normalizedDisplay;
     }
   };
