@@ -131,7 +131,7 @@ class IsFeaturedRequest(BaseModel):
     is_featured: bool
 
 
-@admin_router.patch("/{persona_id}/visible")
+@admin_router.patch("/{persona_id}/listed")
 def patch_persona_visibility(
     persona_id: int,
     is_listed_request: IsListedRequest,
@@ -165,7 +165,7 @@ def patch_user_persona_public_status(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@admin_router.patch("/{persona_id}/featured")
+@admin_router.patch("/{persona_id}/is-featured")
 def patch_persona_featured_status(
     persona_id: int,
     is_featured_request: IsFeaturedRequest,

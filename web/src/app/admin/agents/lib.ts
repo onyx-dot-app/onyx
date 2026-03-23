@@ -218,7 +218,7 @@ export async function togglePersonaFeatured(
   personaId: number,
   featured: boolean
 ) {
-  const response = await fetch(`/api/admin/persona/${personaId}/featured`, {
+  const response = await fetch(`/api/admin/persona/${personaId}/is-featured`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -235,7 +235,7 @@ export async function togglePersonaVisibility(
   personaId: number,
   isVisible: boolean
 ) {
-  const response = await fetch(`/api/admin/persona/${personaId}/visible`, {
+  const response = await fetch(`/api/admin/persona/${personaId}/listed`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
