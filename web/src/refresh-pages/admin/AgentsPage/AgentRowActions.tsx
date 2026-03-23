@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -30,6 +30,15 @@ import {
 } from "@/refresh-pages/admin/AgentsPage/svc";
 import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
 import type { Route } from "next";
+import ShareAgentModal from "@/sections/modals/ShareAgentModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useAgent } from "@/hooks/useAgents";
+import {
+  updateAgentSharedStatus,
+  updateAgentFeaturedStatus,
+} from "@/lib/agents";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useUser } from "@/providers/UserProvider";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +58,12 @@ export default function AgentRowActions({
   onMutate,
 }: AgentRowActionsProps) {
   const router = useRouter();
+  const { isAdmin, isCurator } = useUser();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const canUpdateFeaturedStatus = isAdmin || isCurator;
+  const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
+  const shareModal = useCreateModal();
+
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -69,8 +84,66 @@ export default function AgentRowActions({
     }
   }
 
+  const handleShare = useCallback(
+    async (
+      userIds: string[],
+      groupIds: number[],
+      isPublic: boolean,
+      isFeatured: boolean,
+      labelIds: number[]
+    ) => {
+      const shareError = await updateAgentSharedStatus(
+        agent.id,
+        userIds,
+        groupIds,
+        isPublic,
+        isPaidEnterpriseFeaturesEnabled,
+        labelIds
+      );
+
+      if (shareError) {
+        toast.error(`Failed to share agent: ${shareError}`);
+        return;
+      }
+
+      if (canUpdateFeaturedStatus) {
+        const featuredError = await updateAgentFeaturedStatus(
+          agent.id,
+          isFeatured
+        );
+        if (featuredError) {
+          toast.error(`Failed to update featured status: ${featuredError}`);
+          refreshAgent();
+          return;
+        }
+      }
+
+      refreshAgent();
+      onMutate();
+    },
+    [
+      agent.id,
+      isPaidEnterpriseFeaturesEnabled,
+      canUpdateFeaturedStatus,
+      refreshAgent,
+      onMutate,
+    ]
+  );
+
   return (
     <>
+      <shareModal.Provider>
+        <ShareAgentModal
+          agentId={agent.id}
+          userIds={fullAgent?.users?.map((u) => u.id) ?? []}
+          groupIds={fullAgent?.groups ?? []}
+          isPublic={fullAgent?.is_public ?? false}
+          isFeatured={fullAgent?.is_featured ?? false}
+          labelIds={fullAgent?.labels?.map((l) => l.id) ?? []}
+          onShare={handleShare}
+        />
+      </shareModal.Provider>
+
       <div className="flex items-center gap-0.5">
         {/* TODO(@raunakab): abstract a more standardized way of doing this
             opacity-on-hover animation. Making Hoverable more extensible
@@ -128,9 +201,16 @@ export default function AgentRowActions({
 
         {/* Overflow menu */}
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-          <Popover.Trigger asChild>
-            <Button prominence="tertiary" icon={SvgMoreHorizontal} />
-          </Popover.Trigger>
+          <div
+            className={cn(
+              !popoverOpen &&
+                "opacity-0 group-hover/row:opacity-100 transition-opacity"
+            )}
+          >
+            <Popover.Trigger asChild>
+              <Button prominence="tertiary" icon={SvgMoreHorizontal} />
+            </Popover.Trigger>
+          </div>
           <Popover.Content align="end" width="sm">
             <PopoverMenu>
               {[
@@ -156,19 +236,23 @@ export default function AgentRowActions({
                   icon={SvgShare}
                   onClick={() => {
                     setPopoverOpen(false);
+                    shareModal.toggle(true);
                   }}
                 >
                   Share
                 </LineItem>,
-                <LineItem
-                  key="stats"
-                  icon={SvgBarChart}
-                  onClick={() => {
-                    setPopoverOpen(false);
-                  }}
-                >
-                  Stats
-                </LineItem>,
+                isPaidEnterpriseFeaturesEnabled ? (
+                  <LineItem
+                    key="stats"
+                    icon={SvgBarChart}
+                    onClick={() => {
+                      setPopoverOpen(false);
+                      router.push(`/ee/agents/stats/${agent.id}` as Route);
+                    }}
+                  >
+                    Stats
+                  </LineItem>
+                ) : undefined,
                 !agent.builtin_persona ? null : undefined,
                 !agent.builtin_persona ? (
                   <LineItem

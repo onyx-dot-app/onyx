@@ -7,7 +7,8 @@ import SvgNoResult from "@opal/illustrations/no-result";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import type { MinimalUserSnapshot } from "@/lib/types";
+import type { MinimalUserSnapshot, User } from "@/lib/types";
+import { getUserDisplayName } from "@/lib/user";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useAdminPersonas } from "@/hooks/useAdminPersonas";
@@ -57,18 +58,26 @@ function renderCreatedByColumn(
   }
   return (
     <Text as="span" mainUiBody text03>
-      {row.owner?.email ?? "\u2014"}
+      {row.owner ? getUserDisplayName(row.owner as unknown as User) : "\u2014"}
     </Text>
   );
 }
 
-function renderAccessColumn(isPublic: boolean, row: AgentRow) {
+function getAccessTitle(row: AgentRow): string {
+  if (row.is_public) return "Public";
+  if (row.groups.length > 0 || row.users.length > 0) return "Shared";
+  return "Private";
+}
+
+function renderAccessColumn(_isPublic: boolean, row: AgentRow) {
   return (
     <Content
       sizePreset="main-ui"
       variant="section"
-      title={isPublic ? "Public" : "Private"}
-      description={row.is_featured ? "Featured" : undefined}
+      title={getAccessTitle(row)}
+      description={
+        !row.is_listed ? "Unlisted" : row.is_featured ? "Featured" : undefined
+      }
     />
   );
 }
