@@ -27,7 +27,7 @@ export async function toggleAgentFeatured(
   const res = await fetch(`/api/admin/persona/${agentId}/featured`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ featured: !currentlyFeatured }),
+    body: JSON.stringify({ is_featured: !currentlyFeatured }),
     credentials: "include",
   });
   if (!res.ok) {
@@ -37,14 +37,14 @@ export async function toggleAgentFeatured(
   }
 }
 
-export async function toggleAgentVisibility(
+export async function toggleAgentListed(
   agentId: number,
-  currentlyVisible: boolean
+  currentlyListed: boolean
 ): Promise<void> {
-  const res = await fetch(`/api/admin/persona/${agentId}/visible`, {
+  const res = await fetch(`/api/admin/persona/${agentId}/listed`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ is_visible: !currentlyVisible }),
+    body: JSON.stringify({ is_listed: !currentlyListed }),
     credentials: "include",
   });
   if (!res.ok) {

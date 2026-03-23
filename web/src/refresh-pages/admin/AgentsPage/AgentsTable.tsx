@@ -28,8 +28,8 @@ function toAgentRow(persona: Persona): AgentRow {
     name: persona.name,
     description: persona.description,
     is_public: persona.is_public,
-    is_visible: persona.is_visible,
-    featured: persona.featured,
+    is_listed: persona.is_listed,
+    is_featured: persona.is_featured,
     builtin_persona: persona.builtin_persona,
     display_priority: persona.display_priority,
     owner: persona.owner,
@@ -68,7 +68,7 @@ function renderAccessColumn(isPublic: boolean, row: AgentRow) {
       sizePreset="main-ui"
       variant="section"
       title={isPublic ? "Public" : "Private"}
-      description={row.featured ? "Featured" : undefined}
+      description={row.is_featured ? "Featured" : undefined}
     />
   );
 }

@@ -26,7 +26,7 @@ import { useRouter } from "next/navigation";
 import {
   deleteAgent,
   toggleAgentFeatured,
-  toggleAgentVisibility,
+  toggleAgentListed,
 } from "@/refresh-pages/admin/AgentsPage/svc";
 import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
 import type { Route } from "next";
@@ -102,7 +102,7 @@ export default function AgentRowActions({
         )}
         <div
           className={cn(
-            !agent.featured &&
+            !agent.is_featured &&
               "opacity-0 group-hover/row:opacity-100 transition-opacity"
           )}
         >
@@ -110,7 +110,7 @@ export default function AgentRowActions({
             prominence="tertiary"
             icon={SvgStar}
             interaction={modal === Modal.TOGGLE_FEATURED ? "hover" : "rest"}
-            tooltip={agent.featured ? "Remove Featured" : "Set as Featured"}
+            tooltip={agent.is_featured ? "Remove Featured" : "Set as Featured"}
             onClick={() => openModal(Modal.TOGGLE_FEATURED)}
           />
         </div>
@@ -125,15 +125,15 @@ export default function AgentRowActions({
               {[
                 <LineItem
                   key="visibility"
-                  icon={agent.is_visible ? SvgEyeClosed : SvgEye}
+                  icon={agent.is_listed ? SvgEyeClosed : SvgEye}
                   onClick={() => {
                     setPopoverOpen(false);
                     handleAction(() =>
-                      toggleAgentVisibility(agent.id, agent.is_visible)
+                      toggleAgentListed(agent.id, agent.is_listed)
                     );
                   }}
                 >
-                  {agent.is_visible ? "Hide Agent" : "Show Agent"}
+                  {agent.is_listed ? "Hide Agent" : "Show Agent"}
                 </LineItem>,
                 <LineItem
                   key="share"
@@ -202,9 +202,9 @@ export default function AgentRowActions({
 
       {modal === Modal.TOGGLE_FEATURED && (
         <ConfirmationModalLayout
-          icon={agent.featured ? SvgStarOff : SvgStar}
+          icon={agent.is_featured ? SvgStarOff : SvgStar}
           title={
-            agent.featured
+            agent.is_featured
               ? `Remove ${agent.name} from Featured`
               : `Feature ${agent.name}`
           }
@@ -214,18 +214,18 @@ export default function AgentRowActions({
               <Button
                 onClick={() => {
                   handleAction(() =>
-                    toggleAgentFeatured(agent.id, agent.featured)
+                    toggleAgentFeatured(agent.id, agent.is_featured)
                   );
                 }}
               >
-                {agent.featured ? "Unfeature" : "Feature"}
+                {agent.is_featured ? "Unfeature" : "Feature"}
               </Button>
             </Disabled>
           }
         >
           <div className="flex flex-col gap-2">
             <Text as="p" text03>
-              {agent.featured
+              {agent.is_featured
                 ? `This will remove ${agent.name} from the featured section on top of the explore agents list. New users will no longer see it pinned to their sidebar, but existing pins are unaffected.`
                 : "Featured agents appear at the top of the explore agents list and are automatically pinned to the sidebar for new users with access. Use this to highlight recommended agents across your organization."}
             </Text>

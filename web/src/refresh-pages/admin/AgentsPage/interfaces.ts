@@ -5,8 +5,8 @@ export interface AgentRow {
   name: string;
   description: string;
   is_public: boolean;
-  is_visible: boolean;
-  featured: boolean;
+  is_listed: boolean;
+  is_featured: boolean;
   builtin_persona: boolean;
   display_priority: number | null;
   owner: MinimalUserSnapshot | null;
