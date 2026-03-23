@@ -80,6 +80,7 @@ from onyx.db.enums import (
     MCPTransport,
     MCPServerStatus,
     Permission,
+    GrantSource,
     LLMModelFlowType,
     ThemePreference,
     DefaultAppMode,
@@ -3991,18 +3992,18 @@ class User__UserGroup(Base):
 class PermissionGrant(Base):
     __tablename__ = "permission_grant"
 
-    __table_args__ = (
-        UniqueConstraint("group_id", "permission"),
-        Index("ix_permission_grant_group_id", "group_id"),
-    )
+    __table_args__ = (UniqueConstraint("group_id", "permission"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     group_id: Mapped[int] = mapped_column(ForeignKey("user_group.id"), nullable=False)
     permission: Mapped[Permission] = mapped_column(
         Enum(Permission, native_enum=False), nullable=False
     )
+    grant_source: Mapped[GrantSource] = mapped_column(
+        Enum(GrantSource, native_enum=False), nullable=False
+    )
     granted_by: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id"), nullable=True
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
     granted_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

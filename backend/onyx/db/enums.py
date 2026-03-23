@@ -17,6 +17,14 @@ class AccountType(str, PyEnum):
     ANONYMOUS = "anonymous"
 
 
+class GrantSource(str, PyEnum):
+    """How a permission grant was created."""
+
+    USER = "user"
+    SCIM = "scim"
+    SYSTEM = "system"
+
+
 class IndexingStatus(str, PyEnum):
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"

@@ -11,6 +11,7 @@ import fastapi_users_db_sqlalchemy
 import sqlalchemy as sa
 
 from onyx.db.enums import AccountType
+from onyx.db.enums import GrantSource
 from onyx.db.enums import Permission
 
 
@@ -55,6 +56,11 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
+            "grant_source",
+            sa.Enum(GrantSource, native_enum=False),
+            nullable=False,
+        ),
+        sa.Column(
             "granted_by",
             fastapi_users_db_sqlalchemy.generics.GUID(),
             nullable=True,
@@ -70,17 +76,15 @@ def upgrade() -> None:
             ["group_id"],
             ["user_group.id"],
         ),
+        sa.ForeignKeyConstraint(
+            ["granted_by"],
+            ["user.id"],
+            ondelete="SET NULL",
+        ),
         sa.UniqueConstraint("group_id", "permission"),
     )
 
-    # 4. Index on permission_grant(group_id) for permission resolution JOIN
-    op.create_index(
-        "ix_permission_grant_group_id",
-        "permission_grant",
-        ["group_id"],
-    )
-
-    # 5. Index on user__user_group(user_id) — existing composite PK
+    # 4. Index on user__user_group(user_id) — existing composite PK
     #    has user_group_id as leading column; user-filtered queries need this
     op.create_index(
         "ix_user__user_group_user_id",
@@ -91,7 +95,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_user__user_group_user_id", table_name="user__user_group")
-    op.drop_index("ix_permission_grant_group_id", table_name="permission_grant")
     op.drop_table("permission_grant")
     op.drop_column("user_group", "is_default")
     op.drop_column("user", "account_type")
