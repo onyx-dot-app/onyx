@@ -3,6 +3,7 @@ Unit tests for the check_available_tenants task.
 
 Tests verify:
 - Provisioning loop calls pre_provision_tenant the correct number of times
+- Batch size is capped at _MAX_TENANTS_PER_RUN
 - A failure in one provisioning call does not stop subsequent calls
 - No provisioning happens when pool is already full
 - TARGET_AVAILABLE_TENANTS is respected
@@ -12,6 +13,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import (
+    _MAX_TENANTS_PER_RUN,
+)
 from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import (
     check_available_tenants,
 )
@@ -46,7 +50,7 @@ def mock_redis(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
 @pytest.fixture()
 def mock_pre_provision(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
-    mock = MagicMock()
+    mock = MagicMock(return_value=True)
     monkeypatch.setattr(
         "ee.onyx.background.celery.tasks.tenant_provisioning.tasks.pre_provision_tenant",
         mock,
@@ -85,12 +89,12 @@ class TestCheckAvailableTenants:
 
         assert mock_pre_provision.call_count == 3
 
-    def test_provisions_from_empty_pool(
+    def test_batch_capped_at_max_per_run(
         self,
         monkeypatch: pytest.MonkeyPatch,
         mock_pre_provision: MagicMock,
     ) -> None:
-        """When pool is empty, should provision the full target amount."""
+        """When pool needs more than _MAX_TENANTS_PER_RUN, cap the batch."""
         monkeypatch.setattr(
             "ee.onyx.background.celery.tasks.tenant_provisioning.tasks.TARGET_AVAILABLE_TENANTS",
             20,
@@ -99,7 +103,7 @@ class TestCheckAvailableTenants:
 
         _check_available_tenants()
 
-        assert mock_pre_provision.call_count == 20
+        assert mock_pre_provision.call_count == _MAX_TENANTS_PER_RUN
 
     def test_no_provisioning_when_pool_full(
         self,
@@ -145,14 +149,15 @@ class TestCheckAvailableTenants:
         )
         _mock_available_count(monkeypatch, 0)
 
-        # Fail on calls 2 and 4 (0-indexed: 1 and 3)
+        # Fail on calls 2 and 4 (1-indexed)
         call_count = 0
 
-        def side_effect() -> None:
+        def side_effect() -> bool:
             nonlocal call_count
             call_count += 1
             if call_count in (2, 4):
                 raise RuntimeError("provisioning failed")
+            return True
 
         mock_pre_provision.side_effect = side_effect
 
