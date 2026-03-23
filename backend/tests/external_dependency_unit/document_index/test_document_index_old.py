@@ -1,4 +1,4 @@
-"""External dependency tests for the old DocumentIndex interface.
+"""External dependency tests for the old and new DocumentIndex interfaces.
 
 These tests assume Vespa and OpenSearch are running.
 
@@ -23,13 +23,20 @@ from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentUserFields
+from onyx.document_index.interfaces_new import DocumentIndex as DocumentIndexNew
+from onyx.document_index.interfaces_new import IndexingMetadata
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
+from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchDocumentIndex,
+)
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchOldDocumentIndex,
 )
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
+from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.configs import MULTI_TENANT
@@ -396,3 +403,243 @@ class TestDocumentIndexOld:
                 batch_retrieval=True,
             )
             assert len(inference_chunks) == 0
+
+
+# ---------------------------------------------------------------------------
+# New DocumentIndex interface helpers, fixtures, and tests
+# ---------------------------------------------------------------------------
+
+
+def _make_chunk_new(
+    doc_id: str,
+    chunk_id: int = 0,
+    content: str = "test content",
+) -> DocMetadataAwareIndexChunk:
+    """Create a chunk suitable for external dependency testing (128-dim embeddings)."""
+    tenant_id = get_current_tenant_id()
+    access = DocumentAccess.build(
+        user_emails=[],
+        user_groups=[],
+        external_user_emails=[],
+        external_user_group_ids=[],
+        is_public=True,
+    )
+    embeddings = ChunkEmbedding(
+        full_embedding=[1.0] + [0.0] * 127,
+        mini_chunk_embeddings=[],
+    )
+    source_document = Document(
+        id=doc_id,
+        semantic_identifier="test_doc",
+        source=DocumentSource.FILE,
+        sections=[],
+        metadata={},
+        title="test title",
+    )
+    return DocMetadataAwareIndexChunk(
+        tenant_id=tenant_id,
+        access=access,
+        document_sets=set(),
+        user_project=[],
+        personas=[],
+        boost=0,
+        aggregated_chunk_boost_factor=0,
+        ancestor_hierarchy_node_ids=[],
+        embeddings=embeddings,
+        title_embedding=[1.0] + [0.0] * 127,
+        source_document=source_document,
+        title_prefix="",
+        metadata_suffix_keyword="",
+        metadata_suffix_semantic="",
+        contextual_rag_reserved_tokens=0,
+        doc_summary="",
+        chunk_context="",
+        mini_chunk_texts=None,
+        large_chunk_id=None,
+        chunk_id=chunk_id,
+        blurb=content[:50],
+        content=content,
+        source_links={0: ""},
+        image_file_id=None,
+        section_continuation=False,
+    )
+
+
+def _make_indexing_metadata(
+    doc_ids: list[str],
+    old_counts: list[int],
+    new_counts: list[int],
+) -> IndexingMetadata:
+    return IndexingMetadata(
+        doc_id_to_chunk_cnt_diff={
+            doc_id: IndexingMetadata.ChunkCounts(
+                old_chunk_cnt=old,
+                new_chunk_cnt=new,
+            )
+            for doc_id, old, new in zip(doc_ids, old_counts, new_counts)
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def vespa_document_index_new(
+    vespa_document_index: VespaIndex,  # noqa: ARG001 — ensures index exists
+    httpx_client: httpx.Client,
+    test_index_name: str,
+) -> Generator[VespaDocumentIndex, None, None]:
+    yield VespaDocumentIndex(
+        index_name=test_index_name,
+        tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
+        large_chunks_enabled=False,
+        httpx_client=httpx_client,
+    )
+
+
+@pytest.fixture(scope="module")
+def opensearch_document_index_new(
+    opensearch_document_index: OpenSearchOldDocumentIndex,  # noqa: ARG001 — ensures index exists
+    test_index_name: str,
+) -> Generator[OpenSearchDocumentIndex, None, None]:
+    yield OpenSearchDocumentIndex(
+        tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
+        index_name=test_index_name,
+        embedding_dim=128,
+        embedding_precision=EmbeddingPrecision.FLOAT,
+    )
+
+
+@pytest.fixture(scope="module")
+def new_document_indices(
+    vespa_document_index_new: VespaDocumentIndex,
+    opensearch_document_index_new: OpenSearchDocumentIndex,
+) -> Generator[list[DocumentIndexNew], None, None]:
+    yield [opensearch_document_index_new, vespa_document_index_new]
+
+
+class TestDocumentIndexNew:
+    """Tests the new DocumentIndex interface against real Vespa and OpenSearch."""
+
+    def test_index_single_new_doc(
+        self,
+        new_document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """Indexing a single new document returns one record with already_existed=False."""
+        for document_index in new_document_indices:
+            doc_id = f"test_single_new_{uuid.uuid4().hex[:8]}"
+            chunk = _make_chunk_new(doc_id)
+            metadata = _make_indexing_metadata([doc_id], old_counts=[0], new_counts=[1])
+
+            results = document_index.index(chunks=[chunk], indexing_metadata=metadata)
+
+            assert len(results) == 1
+            assert results[0].document_id == doc_id
+            assert results[0].already_existed is False
+
+    def test_index_existing_doc_already_existed_true(
+        self,
+        new_document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """Re-indexing a doc with previous chunks returns already_existed=True."""
+        for document_index in new_document_indices:
+            doc_id = f"test_existing_{uuid.uuid4().hex[:8]}"
+            chunk = _make_chunk_new(doc_id)
+
+            # First index — brand new document.
+            metadata_first = _make_indexing_metadata(
+                [doc_id], old_counts=[0], new_counts=[1]
+            )
+            document_index.index(chunks=[chunk], indexing_metadata=metadata_first)
+
+            # Allow near-real-time indexing to settle (needed for Vespa).
+            time.sleep(1)
+
+            # Re-index — old_chunk_cnt=1 signals the document already existed.
+            metadata_second = _make_indexing_metadata(
+                [doc_id], old_counts=[1], new_counts=[1]
+            )
+            results = document_index.index(
+                chunks=[chunk], indexing_metadata=metadata_second
+            )
+
+            assert len(results) == 1
+            assert results[0].already_existed is True
+
+    def test_index_multiple_docs(
+        self,
+        new_document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """Indexing multiple documents returns one record per unique document."""
+        for document_index in new_document_indices:
+            doc1 = f"test_multi_1_{uuid.uuid4().hex[:8]}"
+            doc2 = f"test_multi_2_{uuid.uuid4().hex[:8]}"
+            chunks = [
+                _make_chunk_new(doc1, chunk_id=0),
+                _make_chunk_new(doc1, chunk_id=1),
+                _make_chunk_new(doc2, chunk_id=0),
+            ]
+            metadata = _make_indexing_metadata(
+                [doc1, doc2], old_counts=[0, 0], new_counts=[2, 1]
+            )
+
+            results = document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            result_map = {r.document_id: r.already_existed for r in results}
+            assert len(result_map) == 2
+            assert result_map[doc1] is False
+            assert result_map[doc2] is False
+
+    def test_index_deduplicates_doc_ids_in_results(
+        self,
+        new_document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """Multiple chunks from the same document produce only one
+        DocumentInsertionRecord."""
+        for document_index in new_document_indices:
+            doc_id = f"test_dedup_{uuid.uuid4().hex[:8]}"
+            chunks = [_make_chunk_new(doc_id, chunk_id=i) for i in range(5)]
+            metadata = _make_indexing_metadata([doc_id], old_counts=[0], new_counts=[5])
+
+            results = document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            assert len(results) == 1
+            assert results[0].document_id == doc_id
+
+    def test_index_mixed_new_and_existing_docs(
+        self,
+        new_document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """A batch with both new and existing documents returns the correct
+        already_existed flag for each."""
+        for document_index in new_document_indices:
+            existing_doc = f"test_mixed_exist_{uuid.uuid4().hex[:8]}"
+            new_doc = f"test_mixed_new_{uuid.uuid4().hex[:8]}"
+
+            # Pre-index the existing document.
+            pre_chunk = _make_chunk_new(existing_doc)
+            pre_metadata = _make_indexing_metadata(
+                [existing_doc], old_counts=[0], new_counts=[1]
+            )
+            document_index.index(chunks=[pre_chunk], indexing_metadata=pre_metadata)
+
+            time.sleep(1)
+
+            # Now index a batch with the existing doc and a new doc.
+            chunks = [
+                _make_chunk_new(existing_doc, chunk_id=0),
+                _make_chunk_new(new_doc, chunk_id=0),
+            ]
+            metadata = _make_indexing_metadata(
+                [existing_doc, new_doc], old_counts=[1, 0], new_counts=[1, 1]
+            )
+
+            results = document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            result_map = {r.document_id: r.already_existed for r in results}
+            assert len(result_map) == 2
+            assert result_map[existing_doc] is True
+            assert result_map[new_doc] is False
