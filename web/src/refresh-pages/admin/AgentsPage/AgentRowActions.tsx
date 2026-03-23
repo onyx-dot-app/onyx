@@ -1,21 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Button, LineItemButton } from "@opal/components";
+import { Button } from "@opal/components";
+// TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
+import LineItem from "@/refresh-components/buttons/LineItem";
 import { Disabled } from "@opal/core";
+import { cn } from "@opal/utils";
 import {
   SvgMoreHorizontal,
   SvgEdit,
   SvgEye,
   SvgEyeClosed,
   SvgStar,
+  SvgStarOff,
   SvgShare,
   SvgBarChart,
   SvgTrash,
   SvgAlertCircle,
 } from "@opal/icons";
-import Popover from "@/refresh-components/Popover";
-import Divider from "@/refresh-components/Divider";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
@@ -55,15 +58,12 @@ export default function AgentRowActions({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function handleAction(
-    action: () => Promise<void>,
-    successMessage: string
-  ) {
+  async function handleAction(action: () => Promise<void>) {
     setIsSubmitting(true);
     try {
       await action();
       onMutate();
-      toast.success(successMessage);
+      toast.success(`${agent.name} updated successfully.`);
       setModal(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "An error occurred");
@@ -80,6 +80,10 @@ export default function AgentRowActions({
   return (
     <>
       <div className="flex items-center gap-0.5">
+        {/* TODO(@raunakab): abstract a more standardized way of doing this
+            opacity-on-hover animation. Making Hoverable more extensible
+            (e.g. supporting table row groups) would let us use it here
+            instead of raw Tailwind group-hover. */}
         {!agent.builtin_persona && (
           <div className="opacity-0 group-hover/row:opacity-100 transition-opacity">
             <Button
@@ -96,10 +100,16 @@ export default function AgentRowActions({
             />
           </div>
         )}
-        <div className="opacity-0 group-hover/row:opacity-100 transition-opacity">
+        <div
+          className={cn(
+            !agent.featured &&
+              "opacity-0 group-hover/row:opacity-100 transition-opacity"
+          )}
+        >
           <Button
             prominence="tertiary"
             icon={SvgStar}
+            interaction={modal === Modal.TOGGLE_FEATURED ? "hover" : "rest"}
             tooltip={agent.featured ? "Remove Featured" : "Set as Featured"}
             onClick={() => openModal(Modal.TOGGLE_FEATURED)}
           />
@@ -111,47 +121,51 @@ export default function AgentRowActions({
             <Button prominence="tertiary" icon={SvgMoreHorizontal} />
           </Popover.Trigger>
           <Popover.Content align="end" width="sm">
-            <Popover.Menu>
-              <LineItemButton
-                icon={agent.is_visible ? SvgEyeClosed : SvgEye}
-                title={agent.is_visible ? "Hide Agent" : "Show Agent"}
-                sizePreset="main-ui"
-                onClick={() => {
-                  setPopoverOpen(false);
-                  handleAction(
-                    () => toggleAgentVisibility(agent.id, agent.is_visible),
-                    agent.is_visible ? "Agent hidden" : "Agent visible"
-                  );
-                }}
-              />
-              <LineItemButton
-                icon={SvgShare}
-                title="Share"
-                sizePreset="main-ui"
-                onClick={() => {
-                  setPopoverOpen(false);
-                }}
-              />
-              <LineItemButton
-                icon={SvgBarChart}
-                title="Stats"
-                sizePreset="main-ui"
-                onClick={() => {
-                  setPopoverOpen(false);
-                }}
-              />
-              {!agent.builtin_persona && (
-                <>
-                  <Divider />
-                  <LineItemButton
+            <PopoverMenu>
+              {[
+                <LineItem
+                  key="visibility"
+                  icon={agent.is_visible ? SvgEyeClosed : SvgEye}
+                  onClick={() => {
+                    setPopoverOpen(false);
+                    handleAction(() =>
+                      toggleAgentVisibility(agent.id, agent.is_visible)
+                    );
+                  }}
+                >
+                  {agent.is_visible ? "Hide Agent" : "Show Agent"}
+                </LineItem>,
+                <LineItem
+                  key="share"
+                  icon={SvgShare}
+                  onClick={() => {
+                    setPopoverOpen(false);
+                  }}
+                >
+                  Share
+                </LineItem>,
+                <LineItem
+                  key="stats"
+                  icon={SvgBarChart}
+                  onClick={() => {
+                    setPopoverOpen(false);
+                  }}
+                >
+                  Stats
+                </LineItem>,
+                !agent.builtin_persona ? null : undefined,
+                !agent.builtin_persona ? (
+                  <LineItem
+                    key="delete"
                     icon={SvgTrash}
-                    title="Delete Agent"
-                    sizePreset="main-ui"
+                    danger
                     onClick={() => openModal(Modal.DELETE)}
-                  />
-                </>
-              )}
-            </Popover.Menu>
+                  >
+                    Delete
+                  </LineItem>
+                ) : undefined,
+              ]}
+            </PopoverMenu>
           </Popover.Content>
         </Popover>
       </div>
@@ -168,7 +182,7 @@ export default function AgentRowActions({
               <Button
                 variant="danger"
                 onClick={() => {
-                  handleAction(() => deleteAgent(agent.id), "Agent deleted");
+                  handleAction(() => deleteAgent(agent.id));
                 }}
               >
                 Delete
@@ -188,24 +202,23 @@ export default function AgentRowActions({
 
       {modal === Modal.TOGGLE_FEATURED && (
         <ConfirmationModalLayout
-          icon={SvgStar}
+          icon={agent.featured ? SvgStarOff : SvgStar}
           title={
-            agent.featured ? "Remove Featured Agent" : "Set Featured Agent"
+            agent.featured
+              ? `Remove ${agent.name} from Featured`
+              : `Feature ${agent.name}`
           }
           onClose={isSubmitting ? undefined : () => setModal(null)}
           submit={
             <Disabled disabled={isSubmitting}>
               <Button
                 onClick={() => {
-                  handleAction(
-                    () => toggleAgentFeatured(agent.id, agent.featured),
-                    agent.featured
-                      ? "Agent removed from featured"
-                      : "Agent set as featured"
+                  handleAction(() =>
+                    toggleAgentFeatured(agent.id, agent.featured)
                   );
                 }}
               >
-                {agent.featured ? "Remove Featured" : "Set as Featured"}
+                {agent.featured ? "Unfeature" : "Feature"}
               </Button>
             </Disabled>
           }
@@ -213,13 +226,11 @@ export default function AgentRowActions({
           <div className="flex flex-col gap-2">
             <Text as="p" text03>
               {agent.featured
-                ? `Are you sure you want to remove the featured status of "${agent.name}"?`
-                : `Are you sure you want to set "${agent.name}" as a featured agent?`}
+                ? `This will remove ${agent.name} from the featured section on top of the explore agents list. New users will no longer see it pinned to their sidebar, but existing pins are unaffected.`
+                : "Featured agents appear at the top of the explore agents list and are automatically pinned to the sidebar for new users with access. Use this to highlight recommended agents across your organization."}
             </Text>
             <Text as="p" text03>
-              {agent.featured
-                ? "Removing featured status will not affect its visibility or accessibility."
-                : "Setting as featured will make this agent public and visible to all users."}
+              This does not change who can access this agent.
             </Text>
           </div>
         </ConfirmationModalLayout>

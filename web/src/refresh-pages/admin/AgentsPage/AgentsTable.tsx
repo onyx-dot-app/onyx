@@ -2,12 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { Table, createTableColumns } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Tag } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
@@ -63,12 +62,13 @@ function renderCreatedByColumn(
   );
 }
 
-function renderAccessColumn(isPublic: boolean) {
+function renderAccessColumn(isPublic: boolean, row: AgentRow) {
   return (
-    <Tag
-      color={isPublic ? "green" : "gray"}
-      size="sm"
+    <Content
+      sizePreset="main-ui"
+      variant="section"
       title={isPublic ? "Public" : "Private"}
+      description={row.featured ? "Featured" : undefined}
     />
   );
 }
