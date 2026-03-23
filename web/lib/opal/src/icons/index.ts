@@ -68,9 +68,14 @@ export { default as SvgExpand } from "@opal/icons/expand";
 export { default as SvgExternalLink } from "@opal/icons/external-link";
 export { default as SvgEye } from "@opal/icons/eye";
 export { default as SvgEyeClosed } from "@opal/icons/eye-closed";
+<<<<<<< HEAD
 export { default as SvgEyeOff } from "@opal/icons/eye-off";
 export { default as SvgFiles } from "@opal/icons/files";
+=======
+>>>>>>> 80f454800 (feat(hook): Add frontend feature control and admin hook page)
 export { default as SvgFileBraces } from "@opal/icons/file-braces";
+export { default as SvgFileBroadcast } from "@opal/icons/file-broadcast";
+export { default as SvgFiles } from "@opal/icons/files";
 export { default as SvgFileChartPie } from "@opal/icons/file-chart-pie";
 export { default as SvgFileSmall } from "@opal/icons/file-small";
 export { default as SvgFileText } from "@opal/icons/file-text";
@@ -90,6 +95,7 @@ export { default as SvgHashSmall } from "@opal/icons/hash-small";
 export { default as SvgHash } from "@opal/icons/hash";
 export { default as SvgHeadsetMic } from "@opal/icons/headset-mic";
 export { default as SvgHistory } from "@opal/icons/history";
+export { default as SvgHookNodes } from "@opal/icons/hook-nodes";
 export { default as SvgHourglass } from "@opal/icons/hourglass";
 export { default as SvgImage } from "@opal/icons/image";
 export { default as SvgImageSmall } from "@opal/icons/image-small";

@@ -4,6 +4,7 @@ import {
   SvgActivity,
   SvgArrowExchange,
   SvgAudio,
+  SvgHookNodes,
   SvgBarChart,
   SvgBookOpen,
   SvgBubbleText,
@@ -226,6 +227,12 @@ export const ADMIN_ROUTES = {
     icon: SvgArrowExchange,
     title: "Document Index Migration",
     sidebarLabel: "Document Index Migration",
+  },
+  HOOKS: {
+    path: "/admin/hooks",
+    icon: SvgHookNodes,
+    title: "Hook Extensions",
+    sidebarLabel: "Hook Extensions",
   },
   SCIM: {
     path: "/admin/scim",
