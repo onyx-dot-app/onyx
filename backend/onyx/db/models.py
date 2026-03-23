@@ -3995,7 +3995,9 @@ class PermissionGrant(Base):
     __table_args__ = (UniqueConstraint("group_id", "permission"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    group_id: Mapped[int] = mapped_column(ForeignKey("user_group.id"), nullable=False)
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"), nullable=False
+    )
     permission: Mapped[Permission] = mapped_column(
         Enum(Permission, native_enum=False), nullable=False
     )
@@ -4154,7 +4156,7 @@ class UserGroup(Base):
         "MCPServer", secondary="mcp_server__user_group", back_populates="user_groups"
     )
     permission_grants: Mapped[list["PermissionGrant"]] = relationship(
-        "PermissionGrant", back_populates="group"
+        "PermissionGrant", back_populates="group", cascade="all, delete-orphan"
     )
 
 

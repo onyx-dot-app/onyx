@@ -75,6 +75,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["group_id"],
             ["user_group.id"],
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["granted_by"],
