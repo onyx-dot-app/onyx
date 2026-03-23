@@ -1,0 +1,1653 @@
+{
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": null,
+      "name": "Grafana",
+      "version": "10.2.2"
+    },
+    {
+      "type": "datasource",
+      "id": null,
+      "name": "Prometheus",
+      "version": "1.0.0",
+      "current": {
+        "selected": true,
+        "text": "VictoriaMetrics",
+        "value": "victoriametrics"
+      },
+      "options": [
+        {
+          "selected": true,
+          "text": "VictoriaMetrics",
+          "value": "victoriametrics"
+        }
+      ],
+      "query": "prometheus",
+      "regex": ""
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": null,
+      "panels": [],
+      "title": "Celery Worker Overview",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "Indicates if a worker has recently sent a heartbeat",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "from": 1,
+                "result": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "UP"
+                },
+                "to": 99999999999999
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": -99999999999999,
+                "result": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "DOWN"
+                },
+                "to": 0
+              },
+              "type": "range"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": null,
+      "options": {
+        "colorMode": "background_solid",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "celery_worker_up{instance=~\"$instance\"}",
+          "instant": false,
+          "legendFormat": "{{ instance }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Worker Up Status",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "The number of active workers in broker queue",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "from": 1,
+                "result": {
+                  "color": "green",
+                  "index": 0
+                },
+                "to": 999999999999999
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": -999999999999999,
+                "result": {
+                  "color": "red",
+                  "index": 1
+                },
+                "to": 0
+              },
+              "type": "range"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "id": null,
+      "options": {
+        "colorMode": "background_solid",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "celery_active_worker_count{instance=~\"$instance\"}",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active Worker Count",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "The number of active process in broker queue. Each worker may have more than one process",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "from": 1,
+                "result": {
+                  "color": "green",
+                  "index": 0
+                },
+                "to": 999999999999999
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": -999999999999999,
+                "result": {
+                  "color": "red",
+                  "index": 1
+                },
+                "to": 0
+              },
+              "type": "range"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "id": null,
+      "options": {
+        "colorMode": "background_solid",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "celery_active_process_count{instance=~\"$instance\"}",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active Proccess Count",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "The number of message in broker queue",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "id": null,
+      "options": {
+        "colorMode": "background_solid",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "celery_queue_length{instance=~\"$instance\"}",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Queue Length",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "The number of tasks the worker is currently processing",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "id": null,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "celery_worker_tasks_active{instance=~\"$instance\"}",
+          "instant": false,
+          "legendFormat": "{{ instance }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Worker Tasks Active",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "Histogram of runtime measurements for each task",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": null,
+              "options": "name"
+            },
+            "properties": [
+              {
+                "id": null,
+                "value": 236
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "id": null,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "frameIndex": 4,
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "length"
+          }
+        ]
+      },
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "celery_task_runtime_bucket{le!=\"+Inf\", instance=~\"$instance\", name=~\"$tasks\"}",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Task Runtime Bucket",
+      "transformations": [
+        {
+          "id": null,
+          "options": {
+            "refIdToStat": {
+              "A": "lastNotNull"
+            }
+          }
+        },
+        {
+          "id": null,
+          "options": {
+            "excludeByName": {
+              "__name__": true,
+              "hostname": true,
+              "instance": true,
+              "job": true
+            },
+            "indexByName": {
+              "Trend": 7,
+              "__name__": 0,
+              "hostname": 1,
+              "instance": 2,
+              "job": 3,
+              "le": 6,
+              "name": 4,
+              "queue_name": 5
+            },
+            "renameByName": {
+              "le": "length"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": null,
+      "panels": [],
+      "title": "Celery Tasks Overview",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "Sent when a task message is published",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 17
+      },
+      "id": null,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "increase(celery_task_sent_total{instance=~\"$instance\", name=~\"$tasks\"}[1m])",
+          "instant": false,
+          "legendFormat": "{{ name }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sent Tasks Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "Sent when the worker receives a task",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 17
+      },
+      "id": null,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "increase(celery_task_received_total{instance=~\"$instance\", name=~\"$tasks\"}[1m])",
+          "instant": false,
+          "legendFormat": "{{ name }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Received Tasks Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "Sent just before the worker executes the task",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 17
+      },
+      "id": null,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "increase(celery_task_started_total{instance=~\"$instance\", name=~\"$tasks\"}[1m])",
+          "instant": false,
+          "legendFormat": "{{ name }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Started Tasks Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "Sent if the task executed successfully",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 17
+      },
+      "id": null,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "increase(celery_task_succeeded_total{instance=~\"$instance\", name=~\"$tasks\"}[1m])",
+          "instant": false,
+          "legendFormat": "{{ name }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Succeeded Tasks Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "Sent if the execution of the task failed",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 25
+      },
+      "id": null,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "increase(celery_task_failed_total{instance=~\"$instance\", name=~\"$tasks\"}[1m])",
+          "instant": false,
+          "legendFormat": "{{ name }}_{{ exception }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Failed Tasks Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "Sent if the task failed, but will be retried in the future",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 25
+      },
+      "id": null,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "increase(celery_task_retried_total{instance=~\"$instance\", name=~\"$tasks\"}[1m])",
+          "instant": false,
+          "legendFormat": "{{ name }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Retried Tasks Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "Sent if the task has been revoked",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 25
+      },
+      "id": null,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "increase(celery_task_revoked_total{instance=~\"$instance\", name=~\"$tasks\"}[1m])",
+          "instant": false,
+          "legendFormat": "{{ name }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Revoked Tasks Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        },
+        "uid": {
+          "type": "prometheus",
+          "uid": "victoriametrics"
+        }
+      },
+      "description": "The task was rejected by the worker, possibly to be re-queued or moved to a dead letter queue",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 25
+      },
+      "id": null,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            },
+            "uid": {
+              "type": "prometheus",
+              "uid": "victoriametrics"
+            }
+          },
+          "editorMode": "code",
+          "expr": "increase(celery_task_rejected_total{instance=~\"$instance\", name=~\"$tasks\"}[1m])",
+          "instant": false,
+          "legendFormat": "{{ name }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Rejected Tasks Total",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 38,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "uid": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          }
+        },
+        "definition": "label_values(celery_worker_up,instance)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "instance",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(celery_worker_up,instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "uid": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          }
+        },
+        "definition": "label_values(celery_task_received_total,name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "tasks",
+        "multi": true,
+        "name": "tasks",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(celery_task_received_total,name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Celery Tasks Dashboard",
+  "uid": "dbdcb384-204f-44a1-8fe3-59ab969d0918",
+  "version": 1,
+  "weekStart": "",
+  "gnetId": 20076,
+  "description": "Simple dashboard for monitoring Celery tasks and workers. Suitable for Python developers who use Celery along with Flask, Django or FastAPI"
+}

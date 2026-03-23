@@ -491,6 +491,42 @@ services:
         max-size: "50m"
         max-file: "6"
 
+  grafana:
+    image: grafana/grafana:11.6.1
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD not set}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_UNIFIED_ALERTING_ENABLED=true
+      - GRAFANA_PROMETHEUS_URL=${GRAFANA_PROMETHEUS_URL:-http://victoriametrics:8428}
+      - GRAFANA_ALERT_EMAILS=${GRAFANA_ALERT_EMAILS:-alerts@example.invalid}
+      - GF_SMTP_ENABLED=${GRAFANA_SMTP_ENABLED:-false}
+      - GF_SMTP_HOST=${GRAFANA_SMTP_HOST:-}
+      - GF_SMTP_USER=${GRAFANA_SMTP_USER:-}
+      - GF_SMTP_PASSWORD=${GRAFANA_SMTP_PASSWORD:-}
+      - GF_SMTP_FROM_ADDRESS=${GRAFANA_SMTP_FROM_ADDRESS:-alerts@activa.local}
+      - GF_SMTP_FROM_NAME=${GRAFANA_SMTP_FROM_NAME:-ACTIVA Grafana}
+    ports:
+      - "3002:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
   cache:
     image: redis:7.4-alpine
     restart: unless-stopped
@@ -604,6 +640,8 @@ volumes:
   file-system:
   # Uptime Kuma persistent data
   uptime_kuma_data:
+  # Grafana persistent data
+  grafana_data:
   # VictoriaMetrics time-series data
   victoriametrics_data:
   # Persistent data for OpenSearch.

@@ -1,0 +1,12 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: ACTIVA Email Alerts
+    receivers:
+      - uid: activa_email_alerts
+        type: email
+        disableResolveMessage: false
+        settings:
+          addresses: ${GRAFANA_ALERT_EMAILS}
+          singleEmail: false

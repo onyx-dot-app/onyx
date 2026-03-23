@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: activa-dashboards
+    orgId: 1
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: true
