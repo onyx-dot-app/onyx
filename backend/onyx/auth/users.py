@@ -251,18 +251,12 @@ def verify_email_is_invited(email: str) -> None:
     whitelist = get_invited_users()
 
     if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"reason": "Email must be specified"},
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email must be specified")
 
     try:
         email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"reason": "Email is not valid"},
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email is not valid")
 
     for email_whitelist in whitelist:
         try:
@@ -279,12 +273,9 @@ def verify_email_is_invited(email: str) -> None:
         if email_info.normalized.lower() == email_info_whitelist.normalized.lower():
             return
 
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail={
-            "code": REGISTER_INVITE_ONLY_CODE,
-            "reason": "This workspace is invite-only. Please ask your admin to invite you.",
-        },
+    raise OnyxError(
+        OnyxErrorCode.UNAUTHORIZED,
+        "This workspace is invite-only. Please ask your admin to invite you.",
     )
 
 
@@ -403,10 +394,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     captcha_token or "", expected_action="signup"
                 )
             except CaptchaVerificationError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={"reason": str(e)},
-                )
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
         # We verify the password here to make sure it's valid before we proceed
         await self.validate_password(

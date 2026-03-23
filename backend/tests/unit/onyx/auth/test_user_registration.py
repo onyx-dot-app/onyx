@@ -334,7 +334,7 @@ class TestSAMLOIDCBehavior:
         mock_get_invited.return_value = ["allowed@example.com"]
 
         # Execute & Assert
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(OnyxError) as exc:
             verify_email_is_invited("newuser@example.com")
         assert exc.value.status_code == 403
 
@@ -388,7 +388,7 @@ class TestWhitelistBehavior:
         mock_get_invited.return_value = ["allowed@example.com"]
 
         # Execute & Assert
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(OnyxError) as exc:
             verify_email_is_invited("notallowed@example.com")
 
         assert exc.value.status_code == 403
