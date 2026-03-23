@@ -155,8 +155,8 @@ def main() -> None:
         if args.n > 1
         else "  stdev:  N/A (only 1 sample)"
     )
-    print(f"  min:    {min(latencies):.1f} ms")
-    print(f"  max:    {max(latencies):.1f} ms")
+    print(f"  max:    {max(latencies):.1f} ms (i: {latencies.index(max(latencies))})")
+    print(f"  min:    {min(latencies):.1f} ms (i: {latencies.index(min(latencies))})")
     if args.n >= 4:
         print(f"  p50:    {statistics.median(latencies):.1f} ms")
         sorted_l = sorted(latencies)
