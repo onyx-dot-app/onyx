@@ -19,7 +19,7 @@ class TestIsZeroWidthChar:
     """Tests for the is_zero_width_char function."""
 
     def test_returns_true_for_all_zero_width_characters(self) -> None:
-        for char in ZERO_WIDTH_CHARS:
+        for char in {"\u200b", "\u200c", "\u200d", "\ufeff", "\u2060"}:
             assert is_zero_width_char(char) is True
 
     def test_returns_false_for_normal_characters(self) -> None:
