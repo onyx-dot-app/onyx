@@ -294,7 +294,7 @@ def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
             verify_email_is_invited(email)
 
 
-def verify_email_domain(email: str) -> None:
+def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
     if email.count("@") != 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -303,6 +303,7 @@ def verify_email_domain(email: str) -> None:
 
     local_part, domain = email.split("@")
     domain = domain.lower()
+    local_part = local_part.lower()
 
     if AUTH_TYPE == AuthType.CLOUD:
         # Normalize googlemail.com to gmail.com (they deliver to the same inbox)
@@ -310,6 +311,16 @@ def verify_email_domain(email: str) -> None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"reason": "Please use @gmail.com instead of @googlemail.com."},
+            )
+
+        # Only block dotted Gmail on new signups — existing users must still be
+        # able to sign in with the address they originally registered with.
+        if is_registration and domain == "gmail.com" and "." in local_part:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "reason": "Gmail addresses with '.' are not allowed. Please use your base email address."
+                },
             )
 
         if "+" in local_part and domain != "onyx.app":
@@ -417,7 +428,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # Check for disposable emails BEFORE provisioning tenant
         # This prevents creating tenants for throwaway email addresses
         try:
-            verify_email_domain(user_create.email)
+            verify_email_domain(user_create.email, is_registration=True)
         except HTTPException as e:
             # Log blocked disposable email attempts
             if (
@@ -697,6 +708,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserNotExists()
 
                 except exceptions.UserNotExists:
+                    verify_email_domain(account_email, is_registration=True)
+
                     # Check seat availability before creating (single-tenant only)
                     with get_session_with_current_tenant() as sync_db:
                         enforce_seat_limit(sync_db)
