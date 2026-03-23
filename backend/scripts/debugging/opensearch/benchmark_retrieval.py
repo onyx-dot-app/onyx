@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Benchmark OpenSearchDocumentIndex::hybrid_retrieval latency.
+
+Usage:
+    source .venv/bin/activate
+    python backend/scripts/debugging/opensearch/benchmark_hybrid_retrieval.py
+    python backend/scripts/debugging/opensearch/benchmark_hybrid_retrieval.py --n 20
+"""
+
+import argparse
+import statistics
+import time
+
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
+from onyx.context.search.enums import QueryType
+from onyx.context.search.models import IndexFilters
+from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchDocumentIndex,
+)
+from onyx.indexing.models import IndexingSetting
+from scripts.debugging.opensearch.embedding_io import load_query_embedding_from_file
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+
+DEFAULT_N = 50
+
+
+def main() -> None:
+    def add_query_embedding_argument(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "-e",
+            "--embedding-file-path",
+            type=str,
+            required=True,
+            help="Path to the query embedding file.",
+        )
+
+    def add_query_string_argument(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "-q",
+            "--query",
+            type=str,
+            required=True,
+            help="Query string.",
+        )
+
+    parser = argparse.ArgumentParser(
+        description="A benchmarking tool to measure OpenSearch retrieval latency."
+    )
+    parser.add_argument(
+        "-n",
+        type=int,
+        default=DEFAULT_N,
+        help=f"Number of samples to take (default: {DEFAULT_N}).",
+    )
+    subparsers = parser.add_subparsers(
+        dest="query_type",
+        help="Query type to benchmark.",
+        required=True,
+    )
+
+    hybrid_parser = subparsers.add_parser(
+        "hybrid", help="Benchmark hybrid retrieval latency."
+    )
+    add_query_embedding_argument(hybrid_parser)
+    add_query_string_argument(hybrid_parser)
+
+    keyword_parser = subparsers.add_parser(
+        "keyword", help="Benchmark keyword retrieval latency."
+    )
+    add_query_string_argument(keyword_parser)
+
+    semantic_parser = subparsers.add_parser(
+        "semantic", help="Benchmark semantic retrieval latency."
+    )
+    add_query_embedding_argument(semantic_parser)
+
+    args = parser.parse_args()
+
+    dev_tenant_id = POSTGRES_DEFAULT_SCHEMA if not MULTI_TENANT else "tenant_dev"
+
+    with get_session_with_tenant(tenant_id=dev_tenant_id) as session:
+        search_settings = get_current_search_settings(session)
+        indexing_setting = IndexingSetting.from_db_model(search_settings)
+
+    tenant_state = TenantState(tenant_id=dev_tenant_id, multitenant=MULTI_TENANT)
+    index = OpenSearchDocumentIndex(
+        tenant_state=tenant_state,
+        index_name=search_settings.index_name,
+        embedding_dim=indexing_setting.final_embedding_dim,
+        embedding_precision=indexing_setting.embedding_precision,
+    )
+    filters = IndexFilters(
+        access_control_list=[],
+        tenant_id=dev_tenant_id,
+    )
+
+    if args.query_type == "hybrid":
+        embedding = load_query_embedding_from_file(args.embedding_file_path)
+        search_callable = lambda: index.hybrid_retrieval(  # noqa: E731
+            query=args.query,
+            query_embedding=embedding,
+            final_keywords=None,
+            # This arg doesn't do anything right now.
+            query_type=QueryType.KEYWORD,
+            filters=filters,
+            num_to_retrieve=NUM_RETURNED_HITS,
+        )
+    elif args.query_type == "keyword":
+        search_callable = lambda: index.keyword_retrieval(  # noqa: E731
+            query=args.query,
+            filters=filters,
+            num_to_retrieve=NUM_RETURNED_HITS,
+        )
+    elif args.query_type == "semantic":
+        embedding = load_query_embedding_from_file(args.embedding_file_path)
+        search_callable = lambda: index.semantic_retrieval(  # noqa: E731
+            query_embedding=embedding,
+            filters=filters,
+            num_to_retrieve=NUM_RETURNED_HITS,
+        )
+    else:
+        raise ValueError(f"Invalid query type: {args.query_type}")
+
+    print(f"Running {args.n} invocations of {args.query_type} retrieval...")
+
+    latencies: list[float] = []
+    for i in range(args.n):
+        start = time.perf_counter()
+        search_callable()
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        latencies.append(elapsed_ms)
+        # Print the current iteration and its elapsed time on the same line.
+        print(
+            f"  [{i + 1:>{len(str(args.n))}}] {elapsed_ms:7.1f} ms",
+            end="\r",
+            flush=True,
+        )
+
+    print()
+    print(f"Results over {args.n} invocations:")
+    print(f"  mean:   {statistics.mean(latencies):.1f} ms")
+    print(
+        f"  stdev:  {statistics.stdev(latencies):.1f} ms"
+        if args.n > 1
+        else "  stdev:  N/A (only 1 sample)"
+    )
+    print(f"  min:    {min(latencies):.1f} ms")
+    print(f"  max:    {max(latencies):.1f} ms")
+    if args.n >= 4:
+        print(f"  p50:    {statistics.median(latencies):.1f} ms")
+        sorted_l = sorted(latencies)
+        p95_idx = int(0.95 * args.n) - 1
+        print(f"  p95:    {sorted_l[max(0, p95_idx)]:.1f} ms")
+
+
+if __name__ == "__main__":
+    main()
