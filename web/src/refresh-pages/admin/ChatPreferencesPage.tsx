@@ -254,7 +254,7 @@ function NumericLimitField({
     }
 
     // Persist only when the value actually changed.
-    if (value !== initialValue.current) {
+    if (normalizedDisplay !== initialValue.current) {
       void saveSettings({ [name]: parsed });
       initialValue.current = normalizedDisplay;
     }

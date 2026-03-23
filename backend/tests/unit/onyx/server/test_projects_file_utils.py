@@ -229,6 +229,22 @@ def test_categorize_enforces_token_limit_when_threshold_k_is_positive(
     assert len(result.rejected) == 1
 
 
+def test_categorize_no_token_limit_when_threshold_k_is_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """token_threshold_k=0 means no token limit; high-token files are accepted."""
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=0)
+    monkeypatch.setattr(
+        utils, "estimate_image_tokens_for_upload", lambda _upload: 999_999
+    )
+
+    upload = _make_upload("huge_image.png", size=100)
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.rejected) == 0
+    assert len(result.acceptable) == 1
+
+
 def test_categorize_both_limits_enforced(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

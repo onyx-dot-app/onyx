@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import QueryHistoryType
@@ -123,6 +124,10 @@ class UserSettings(Settings):
     max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB
     # Factory defaults so the frontend can show a "restore default" button.
     default_user_file_max_upload_size_mb: int = DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
-    default_file_token_count_threshold_k: int = (
-        DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
+    default_file_token_count_threshold_k: int = Field(
+        default_factory=lambda: (
+            DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB
+            if DISABLE_VECTOR_DB
+            else DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
+        )
     )

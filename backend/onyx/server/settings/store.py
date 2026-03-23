@@ -60,8 +60,8 @@ def load_settings() -> Settings:
     settings.show_extra_connectors = SHOW_EXTRA_CONNECTORS
     settings.opensearch_indexing_enabled = ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 
-    # Resolve context-aware defaults for fields not yet set by admin (0 = unset)
-    if not settings.file_token_count_threshold_k:
+    # Resolve context-aware defaults for fields not yet set by admin (None = unset, 0 = no limit)
+    if settings.file_token_count_threshold_k is None:
         settings.file_token_count_threshold_k = (
             DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB
             if DISABLE_VECTOR_DB
