@@ -77,6 +77,7 @@ function buildColumns(onMutate: () => void) {
   return [
     tc.qualifier({
       content: "icon",
+      iconSize: "lg",
       getContent: (row) => {
         const user = {
           email: row.email,

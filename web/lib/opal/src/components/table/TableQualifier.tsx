@@ -26,11 +26,13 @@ interface TableQualifierProps {
   imageAlt?: string;
   /** Show a tinted background container behind the content. */
   background?: boolean;
+  /** Icon size preset. `"lg"` = 28/24, `"md"` = 20/16. @default "md" */
+  iconSize?: "lg" | "md";
 }
 
-const iconSizes = {
-  lg: 28,
-  md: 24,
+const iconSizesMap = {
+  lg: { lg: 28, md: 24 },
+  md: { lg: 20, md: 16 },
 } as const;
 
 function getOverlayStyles(selected: boolean, disabled: boolean) {
@@ -53,9 +55,10 @@ function TableQualifier({
   imageSrc,
   imageAlt = "",
   background = false,
+  iconSize: iconSizePreset = "md",
 }: TableQualifierProps) {
   const resolvedSize = useTableSize();
-  const iconSize = iconSizes[resolvedSize];
+  const iconSize = iconSizesMap[iconSizePreset][resolvedSize];
   const overlayStyles = getOverlayStyles(selected, disabled);
 
   function renderContent() {
