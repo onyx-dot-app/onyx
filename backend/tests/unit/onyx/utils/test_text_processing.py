@@ -4,9 +4,9 @@ from onyx.utils.text_processing import is_zero_width_char
 from onyx.utils.text_processing import decode_escapes
 from onyx.utils.text_processing import make_url_compatible
 from onyx.utils.text_processing import has_unescaped_quote
+from onyx.utils.text_processing import has_unescaped_quote
 
-
-
+class TestNormalizeCurlyQuotes:
 class TestNormalizeCurlyQuotes:
     """Tests for the normalize_curly_quotes function."""
     
