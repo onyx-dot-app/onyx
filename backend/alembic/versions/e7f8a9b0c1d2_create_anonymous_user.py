@@ -41,7 +41,7 @@ def _dedupe_null_notifications(connection: sa.Connection) -> None:
     # NULL user_id values as distinct. Before migrating them to the anonymous
     # user, collapse duplicates and remove rows that would conflict with an
     # already-existing anonymous notification.
-    connection.execute(
+    result = connection.execute(
         sa.text(
             """
             WITH ranked_null_notifications AS (
@@ -63,8 +63,10 @@ def _dedupe_null_notifications(connection: sa.Connection) -> None:
             """
         )
     )
+    if result.rowcount > 0:
+        print(f"Deleted {result.rowcount} duplicate NULL-owned notifications")
 
-    connection.execute(
+    result = connection.execute(
         sa.text(
             """
             DELETE FROM notification AS null_owned
@@ -78,6 +80,10 @@ def _dedupe_null_notifications(connection: sa.Connection) -> None:
         ),
         {"user_id": ANONYMOUS_USER_UUID},
     )
+    if result.rowcount > 0:
+        print(
+            f"Deleted {result.rowcount} NULL-owned notifications that conflict with existing anonymous-owned notifications"
+        )
 
 
 def upgrade() -> None:
@@ -109,8 +115,8 @@ def upgrade() -> None:
 
     # Migrate any remaining user_id=NULL records to anonymous user
     for table in TABLES_WITH_USER_ID:
-        with connection.begin_nested():
-            try:
+        try:
+            with connection.begin_nested():
                 # Exclude public credential (id=0) which must remain user_id=NULL
                 # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
                 # Exclude builtin personas (builtin_persona=True) which must remain user_id=NULL
@@ -143,8 +149,8 @@ def upgrade() -> None:
                     print(
                         f"Updated {result.rowcount} rows in {table} to anonymous user"
                     )
-            except Exception as e:
-                print(f"Skipping {table}: {e}")
+        except Exception as e:
+            print(f"Skipping {table}: {e}")
 
 
 def downgrade() -> None:
@@ -155,8 +161,8 @@ def downgrade() -> None:
 
     # Set records back to NULL
     for table in TABLES_WITH_USER_ID:
-        with connection.begin_nested():
-            try:
+        try:
+            with connection.begin_nested():
                 connection.execute(
                     sa.text(
                         f"""
@@ -167,8 +173,8 @@ def downgrade() -> None:
                     ),
                     {"user_id": ANONYMOUS_USER_UUID},
                 )
-            except Exception:
-                pass
+        except Exception:
+            pass
 
     # Delete the anonymous user
     connection.execute(
