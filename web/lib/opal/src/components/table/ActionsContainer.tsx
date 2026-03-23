@@ -25,12 +25,7 @@ export default function ActionsContainer({
       data-size={size}
       onClick={onClick}
     >
-      <div
-        className={cn(
-          "flex h-full items-center",
-          type === "cell" ? "justify-end" : "justify-center"
-        )}
-      >
+      <div className={cn("flex h-full items-center", "justify-end")}>
         {children}
       </div>
     </Tag>

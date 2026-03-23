@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@opal/components";
+import { Button, LineItemButton } from "@opal/components";
 import { Disabled } from "@opal/core";
 import {
   SvgMoreHorizontal,
@@ -9,13 +9,14 @@ import {
   SvgEye,
   SvgEyeClosed,
   SvgStar,
+  SvgShare,
+  SvgBarChart,
   SvgTrash,
   SvgAlertCircle,
 } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
-import Separator from "@/refresh-components/Separator";
+import Divider from "@/refresh-components/Divider";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
 import { useRouter } from "next/navigation";
@@ -78,69 +79,78 @@ export default function AgentRowActions({
 
   return (
     <>
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <Popover.Trigger asChild>
-          <Button prominence="tertiary" icon={SvgMoreHorizontal} />
-        </Popover.Trigger>
-        <Popover.Content align="end" width="sm">
-          <Section
-            gap={0.5}
-            height="auto"
-            alignItems="stretch"
-            justifyContent="start"
-          >
-            {!agent.builtin_persona && (
-              <Button
-                prominence="tertiary"
-                icon={SvgEdit}
+      <div className="flex items-center gap-0.5">
+        {!agent.builtin_persona && (
+          <Button
+            prominence="tertiary"
+            icon={SvgEdit}
+            tooltip="Edit Agent"
+            onClick={() =>
+              router.push(
+                `/app/agents/edit/${
+                  agent.id
+                }?u=${Date.now()}&admin=true` as Route
+              )
+            }
+          />
+        )}
+        <Button
+          prominence="tertiary"
+          icon={SvgStar}
+          tooltip={agent.featured ? "Remove Featured" : "Set as Featured"}
+          onClick={() => openModal(Modal.TOGGLE_FEATURED)}
+        />
+
+        {/* Overflow menu */}
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <Popover.Trigger asChild>
+            <Button prominence="tertiary" icon={SvgMoreHorizontal} />
+          </Popover.Trigger>
+          <Popover.Content align="end" width="sm">
+            <Popover.Menu>
+              <LineItemButton
+                icon={agent.is_visible ? SvgEyeClosed : SvgEye}
+                title={agent.is_visible ? "Hide Agent" : "Show Agent"}
+                sizePreset="main-ui"
                 onClick={() => {
                   setPopoverOpen(false);
-                  router.push(
-                    `/app/agents/edit/${
-                      agent.id
-                    }?u=${Date.now()}&admin=true` as Route
+                  handleAction(
+                    () => toggleAgentVisibility(agent.id, agent.is_visible),
+                    agent.is_visible ? "Agent hidden" : "Agent visible"
                   );
                 }}
-              >
-                Edit Agent
-              </Button>
-            )}
-            <Button
-              prominence="tertiary"
-              icon={agent.is_visible ? SvgEyeClosed : SvgEye}
-              onClick={() => {
-                setPopoverOpen(false);
-                handleAction(
-                  () => toggleAgentVisibility(agent.id, agent.is_visible),
-                  agent.is_visible ? "Agent hidden" : "Agent visible"
-                );
-              }}
-            >
-              {agent.is_visible ? "Hide Agent" : "Show Agent"}
-            </Button>
-            <Button
-              prominence="tertiary"
-              icon={SvgStar}
-              onClick={() => openModal(Modal.TOGGLE_FEATURED)}
-            >
-              {agent.featured ? "Remove Featured" : "Set as Featured"}
-            </Button>
-            {!agent.builtin_persona && (
-              <>
-                <Separator paddingXRem={0.5} />
-                <Button
-                  prominence="tertiary"
-                  variant="danger"
-                  icon={SvgTrash}
-                  onClick={() => openModal(Modal.DELETE)}
-                >
-                  Delete Agent
-                </Button>
-              </>
-            )}
-          </Section>
-        </Popover.Content>
-      </Popover>
+              />
+              <LineItemButton
+                icon={SvgShare}
+                title="Share"
+                sizePreset="main-ui"
+                onClick={() => {
+                  setPopoverOpen(false);
+                }}
+              />
+              <LineItemButton
+                icon={SvgBarChart}
+                title="Stats"
+                sizePreset="main-ui"
+                onClick={() => {
+                  setPopoverOpen(false);
+                }}
+              />
+              {!agent.builtin_persona && (
+                <>
+                  <Divider />
+                  <LineItemButton
+                    icon={SvgTrash}
+                    title="Delete Agent"
+                    sizePreset="main-ui"
+                    onClick={() => openModal(Modal.DELETE)}
+                  />
+                </>
+              )}
+            </Popover.Menu>
+          </Popover.Content>
+        </Popover>
+      </div>
 
       {modal === Modal.DELETE && (
         <ConfirmationModalLayout
