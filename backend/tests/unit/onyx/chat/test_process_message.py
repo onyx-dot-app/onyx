@@ -1,6 +1,6 @@
 import pytest
 
-from onyx.chat.process_message import _apply_query_processing_hook
+from onyx.chat.process_message import _resolve_query_processing_hook_result
 from onyx.chat.process_message import remove_answer_citations
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -43,7 +43,7 @@ def test_remove_answer_citations_preserves_non_citation_markdown_links() -> None
 
 
 # ---------------------------------------------------------------------------
-# Query Processing hook response handling (_apply_query_processing_hook)
+# Query Processing hook response handling (_resolve_query_processing_hook_result)
 # ---------------------------------------------------------------------------
 
 
@@ -56,23 +56,23 @@ def test_wrong_model_type_raises_internal_error() -> None:
         pass
 
     with pytest.raises(OnyxError) as exc_info:
-        _apply_query_processing_hook(_OtherModel(), "original query")
+        _resolve_query_processing_hook_result(_OtherModel(), "original query")
     assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
 
 
 def test_hook_skipped_leaves_message_text_unchanged() -> None:
-    result = _apply_query_processing_hook(HookSkipped(), "original query")
+    result = _resolve_query_processing_hook_result(HookSkipped(), "original query")
     assert result == "original query"
 
 
 def test_hook_soft_failed_leaves_message_text_unchanged() -> None:
-    result = _apply_query_processing_hook(HookSoftFailed(), "original query")
+    result = _resolve_query_processing_hook_result(HookSoftFailed(), "original query")
     assert result == "original query"
 
 
 def test_null_query_raises_query_rejected() -> None:
     with pytest.raises(OnyxError) as exc_info:
-        _apply_query_processing_hook(
+        _resolve_query_processing_hook_result(
             QueryProcessingResponse(query=None), "original query"
         )
     assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
@@ -81,7 +81,7 @@ def test_null_query_raises_query_rejected() -> None:
 def test_empty_string_query_raises_query_rejected() -> None:
     """Empty string is falsy — must be treated as rejection, same as None."""
     with pytest.raises(OnyxError) as exc_info:
-        _apply_query_processing_hook(
+        _resolve_query_processing_hook_result(
             QueryProcessingResponse(query=""), "original query"
         )
     assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
@@ -90,7 +90,7 @@ def test_empty_string_query_raises_query_rejected() -> None:
 def test_whitespace_only_query_raises_query_rejected() -> None:
     """Whitespace-only string is truthy but meaningless — must be treated as rejection."""
     with pytest.raises(OnyxError) as exc_info:
-        _apply_query_processing_hook(
+        _resolve_query_processing_hook_result(
             QueryProcessingResponse(query="   "), "original query"
         )
     assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
@@ -99,13 +99,15 @@ def test_whitespace_only_query_raises_query_rejected() -> None:
 def test_absent_query_field_raises_query_rejected() -> None:
     """query defaults to None when not provided."""
     with pytest.raises(OnyxError) as exc_info:
-        _apply_query_processing_hook(QueryProcessingResponse(), "original query")
+        _resolve_query_processing_hook_result(
+            QueryProcessingResponse(), "original query"
+        )
     assert exc_info.value.error_code is OnyxErrorCode.QUERY_REJECTED
 
 
 def test_rejection_message_surfaced_in_error_when_provided() -> None:
     with pytest.raises(OnyxError) as exc_info:
-        _apply_query_processing_hook(
+        _resolve_query_processing_hook_result(
             QueryProcessingResponse(
                 query=None, rejection_message="Queries about X are not allowed."
             ),
@@ -117,7 +119,7 @@ def test_rejection_message_surfaced_in_error_when_provided() -> None:
 def test_fallback_rejection_message_when_none() -> None:
     """No rejection_message → generic fallback used in OnyxError detail."""
     with pytest.raises(OnyxError) as exc_info:
-        _apply_query_processing_hook(
+        _resolve_query_processing_hook_result(
             QueryProcessingResponse(query=None, rejection_message=None),
             "original query",
         )
@@ -125,7 +127,7 @@ def test_fallback_rejection_message_when_none() -> None:
 
 
 def test_nonempty_query_rewrites_message_text() -> None:
-    result = _apply_query_processing_hook(
+    result = _resolve_query_processing_hook_result(
         QueryProcessingResponse(query="rewritten query"), "original query"
     )
     assert result == "rewritten query"

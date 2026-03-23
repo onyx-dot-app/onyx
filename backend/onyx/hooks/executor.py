@@ -350,8 +350,9 @@ def _execute_hook_inner(
         return HookSoftFailed()
 
     if validated_model is None:
-        raise ValueError(
-            f"validated_model is None for successful hook call (hook_id={hook_id})"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"validated_model is None for successful hook call (hook_id={hook_id})",
         )
     return validated_model
 
@@ -372,17 +373,15 @@ def execute_hook(
     if isinstance(hook, HookSkipped):
         return hook
 
+    fail_strategy = hook.fail_strategy
+    hook_id = hook.id
+
     try:
         return _execute_hook_inner(hook, payload)
-    except OnyxError:
-        # OnyxError(HOOK_EXECUTION_FAILED) is only raised under HARD strategy in
-        # _execute_hook_inner, so re-raise unconditionally — never silently swallow
-        # an OnyxError into HookSoftFailed, even under SOFT.
-        raise
     except Exception:
-        if hook.fail_strategy == HookFailStrategy.SOFT:
+        if fail_strategy == HookFailStrategy.SOFT:
             logger.exception(
-                f"Unexpected error in hook execution (soft fail) for hook_id={hook.id}"
+                f"Unexpected error in hook execution (soft fail) for hook_id={hook_id}"
             )
             return HookSoftFailed()
         raise

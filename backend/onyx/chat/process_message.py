@@ -433,7 +433,7 @@ def determine_search_params(
     )
 
 
-def _apply_query_processing_hook(
+def _resolve_query_processing_hook_result(
     hook_result: BaseModel | HookSkipped | HookSoftFailed,
     message_text: str,
 ) -> str:
@@ -613,19 +613,24 @@ def handle_stream_message_objects(
         else:
             # New message — run the Query Processing hook before saving to DB.
             # Skipped on regeneration: the message already exists and was accepted previously.
-            hook_result = execute_hook(
-                db_session=db_session,
-                hook_point=HookPoint.QUERY_PROCESSING,
-                payload=QueryProcessingPayload(
-                    query=message_text,
-                    # Pass None for anonymous users or authenticated users without an email
-                    # (e.g. some SSO flows). QueryProcessingPayload.user_email is str | None,
-                    # so None is accepted and serialised as null in both cases.
-                    user_email=None if user.is_anonymous else user.email,
-                    chat_session_id=str(chat_session.id),
-                ).model_dump(),
-            )
-            message_text = _apply_query_processing_hook(hook_result, message_text)
+            # Skip the hook for empty/whitespace-only messages — no meaningful query
+            # to process, and SendMessageRequest.message has no min_length guard.
+            if message_text.strip():
+                hook_result = execute_hook(
+                    db_session=db_session,
+                    hook_point=HookPoint.QUERY_PROCESSING,
+                    payload=QueryProcessingPayload(
+                        query=message_text,
+                        # Pass None for anonymous users or authenticated users without an email
+                        # (e.g. some SSO flows). QueryProcessingPayload.user_email is str | None,
+                        # so None is accepted and serialised as null in both cases.
+                        user_email=None if user.is_anonymous else user.email,
+                        chat_session_id=str(chat_session.id),
+                    ).model_dump(),
+                )
+                message_text = _resolve_query_processing_hook_result(
+                    hook_result, message_text
+                )
 
             user_message = create_new_chat_message(
                 chat_session_id=chat_session.id,
