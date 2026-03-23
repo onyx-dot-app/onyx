@@ -36,7 +36,11 @@ export function useMemoryManager({
 
     setLocalMemories((prev) => {
       const emptyNewItems = prev.filter((m) => m.isNew && !m.content.trim());
-      return [...emptyNewItems, ...existingMemories];
+      const availableSlots = MAX_MEMORY_COUNT - existingMemories.length;
+      return [
+        ...emptyNewItems.slice(0, Math.max(0, availableSlots)),
+        ...existingMemories,
+      ];
     });
     initialMemoriesRef.current = memories;
   }, [memories]);
