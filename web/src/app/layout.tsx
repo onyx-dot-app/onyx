@@ -3,7 +3,6 @@ import "./globals.css";
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
 import { Metadata } from "next";
 
-import { Inter } from "next/font/google";
 import AppProvider from "@/providers/AppProvider";
 import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
@@ -18,12 +17,6 @@ import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import AppHealthBanner from "@/sections/AppHealthBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
@@ -50,7 +43,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${hankenGrotesk.variable}`}
+      className={`${hankenGrotesk.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -76,7 +69,7 @@ export default function RootLayout({
         )}
       </head>
 
-      <body className={`relative ${inter.variable} font-hanken`}>
+      <body className={`relative font-hanken`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
