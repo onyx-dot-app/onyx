@@ -10,7 +10,7 @@ from alembic import op
 import fastapi_users_db_sqlalchemy
 import sqlalchemy as sa
 
-from onyx.auth.schemas import AccountType
+from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
 
 

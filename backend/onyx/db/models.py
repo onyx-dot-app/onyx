@@ -48,7 +48,7 @@ from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy import PrimaryKeyConstraint
 
-from onyx.auth.schemas import AccountType
+from onyx.db.enums import AccountType
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
