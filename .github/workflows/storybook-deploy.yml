@@ -1,4 +1,9 @@
 name: Storybook Deploy
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: prj_sG49mVsA25UsxIPhN2pmBJlikJZM
+  VERCEL_CLI: vercel@50.14.1
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
 concurrency:
   group: storybook-deploy-production
@@ -15,12 +20,8 @@ on:
       - "web/.storybook/**"
       - "web/package.json"
       - "web/package-lock.json"
-
 permissions:
-  contents: write
-  pages: write
-  id-token: write
-
+  contents: read
 jobs:
   Deploy-Storybook:
     runs-on: ubuntu-latest
@@ -28,27 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v4
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
-
-      - name: Create gh-pages branch if it does not exist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if ! git ls-remote --exit-code --heads origin gh-pages; then
-            echo "gh-pages branch not found — creating it now..."
-            git config user.name "${{ github.actor }}"
-            git config user.email "${{ github.actor }}@users.noreply.github.com"
-            git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
-            git checkout --orphan gh-pages
-            git rm -rf .
-            git commit --allow-empty -m "Initialize gh-pages branch"
-            git push origin gh-pages
-            git checkout ${{ github.ref_name }}
-          else
-            echo "gh-pages branch already exists — skipping creation."
-          fi
 
       - name: Setup node
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
@@ -65,14 +46,9 @@ jobs:
         working-directory: web
         run: npm run storybook:build
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d231e62369c1b2520 # ratchet:peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./web/storybook-static
-          publish_branch: gh-pages
-          destination_dir: storybook
-          commit_message: "Deploy Storybook to GitHub Pages"
+      - name: Deploy to Vercel (Production)
+        working-directory: web
+        run: npx --yes "$VERCEL_CLI" deploy storybook-static/ --prod --yes --token="$VERCEL_TOKEN"
 
   notify-slack-on-failure:
     needs: Deploy-Storybook
