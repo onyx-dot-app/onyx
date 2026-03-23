@@ -411,7 +411,6 @@ class PersonaSearchInfo(BaseModel):
     """
 
     document_set_names: list[str]
-    has_user_files: bool
     search_start_date: datetime | None
     attached_document_ids: list[str]
     hierarchy_node_ids: list[int]

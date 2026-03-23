@@ -144,15 +144,13 @@ def construct_tools(
     # This flow is for search so we do not get all indices.
     document_index = get_default_document_index(search_settings, None, db_session)
 
-    persona_search_info = PersonaSearchInfo(
-        document_set_names=[ds.name for ds in persona.document_sets],
-        has_user_files=bool(persona.user_files),
-        search_start_date=persona.search_start_date,
-        attached_document_ids=[doc.id for doc in persona.attached_documents],
-        hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
-    )
-
     def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
+        persona_search_info = PersonaSearchInfo(
+            document_set_names=[ds.name for ds in persona.document_sets],
+            search_start_date=persona.search_start_date,
+            attached_document_ids=[doc.id for doc in persona.attached_documents],
+            hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
+        )
         return SearchTool(
             tool_id=tool_id,
             emitter=emitter,
