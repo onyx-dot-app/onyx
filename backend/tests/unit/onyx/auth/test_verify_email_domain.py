@@ -72,6 +72,16 @@ def test_verify_email_domain_rejects_dotted_gmail_on_registration(
     assert "'.'" in str(exc.value.detail)
 
 
+def test_verify_email_domain_dotted_gmail_allowed_when_not_registration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(users, "VALID_EMAIL_DOMAINS", [], raising=False)
+    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.CLOUD, raising=False)
+
+    # Existing user signing in — should not be blocked
+    verify_email_domain("first.last@gmail.com", is_registration=False)
+
+
 def test_verify_email_domain_allows_dotted_non_gmail_on_registration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -303,6 +303,7 @@ def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
 
     local_part, domain = email.split("@")
     domain = domain.lower()
+    local_part = local_part.lower()
 
     if AUTH_TYPE == AuthType.CLOUD:
         # Normalize googlemail.com to gmail.com (they deliver to the same inbox)
