@@ -28,6 +28,7 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
+from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
@@ -53,8 +54,16 @@ def get_chat_session_by_id(
     db_session: Session,
     include_deleted: bool = False,
     is_shared: bool = False,
+    eager_load_persona: bool = False,
 ) -> ChatSession:
     stmt = select(ChatSession).where(ChatSession.id == chat_session_id)
+
+    if eager_load_persona:
+        stmt = stmt.options(
+            selectinload(ChatSession.persona).selectinload(Persona.tools),
+            selectinload(ChatSession.persona).selectinload(Persona.user_files),
+            selectinload(ChatSession.project),
+        )
 
     if is_shared:
         stmt = stmt.where(ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC)

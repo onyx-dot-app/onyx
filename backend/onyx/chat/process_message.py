@@ -474,11 +474,18 @@ def handle_stream_message_objects(
                 db_session=db_session,
             )
             yield CreateChatSessionID(chat_session_id=chat_session.id)
+            chat_session = get_chat_session_by_id(
+                chat_session_id=chat_session.id,
+                user_id=user_id,
+                db_session=db_session,
+                eager_load_persona=True,
+            )
         else:
             chat_session = get_chat_session_by_id(
                 chat_session_id=new_msg_req.chat_session_id,
                 user_id=user_id,
                 db_session=db_session,
+                eager_load_persona=True,
             )
 
         persona = chat_session.persona
