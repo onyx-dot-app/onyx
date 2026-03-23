@@ -35,11 +35,6 @@ import type { Route } from "next";
 // Types
 // ---------------------------------------------------------------------------
 
-enum Modal {
-  DELETE = "delete",
-  TOGGLE_FEATURED = "toggleFeatured",
-}
-
 interface AgentRowActionsProps {
   agent: AgentRow;
   onMutate: () => void;
@@ -54,28 +49,25 @@ export default function AgentRowActions({
   onMutate,
 }: AgentRowActionsProps) {
   const router = useRouter();
-  const [modal, setModal] = useState<Modal | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [featuredOpen, setFeaturedOpen] = useState(false);
+  const [unlistOpen, setUnlistOpen] = useState(false);
 
-  async function handleAction(action: () => Promise<void>) {
+  async function handleAction(action: () => Promise<void>, close: () => void) {
     setIsSubmitting(true);
     try {
       await action();
       onMutate();
       toast.success(`${agent.name} updated successfully.`);
-      setModal(null);
+      close();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsSubmitting(false);
     }
   }
-
-  const openModal = (type: Modal) => {
-    setPopoverOpen(false);
-    setModal(type);
-  };
 
   return (
     <>
@@ -106,7 +98,10 @@ export default function AgentRowActions({
             icon={SvgEyeOff}
             tooltip="Re-list Agent"
             onClick={() =>
-              handleAction(() => toggleAgentListed(agent.id, agent.is_listed))
+              handleAction(
+                () => toggleAgentListed(agent.id, agent.is_listed),
+                () => {}
+              )
             }
           />
         ) : (
@@ -119,11 +114,14 @@ export default function AgentRowActions({
             <Button
               prominence="tertiary"
               icon={SvgStar}
-              interaction={modal === Modal.TOGGLE_FEATURED ? "hover" : "rest"}
+              interaction={featuredOpen ? "hover" : "rest"}
               tooltip={
                 agent.is_featured ? "Remove Featured" : "Set as Featured"
               }
-              onClick={() => openModal(Modal.TOGGLE_FEATURED)}
+              onClick={() => {
+                setPopoverOpen(false);
+                setFeaturedOpen(true);
+              }}
             />
           </div>
         )}
@@ -141,9 +139,14 @@ export default function AgentRowActions({
                   icon={agent.is_listed ? SvgEyeOff : SvgEye}
                   onClick={() => {
                     setPopoverOpen(false);
-                    handleAction(() =>
-                      toggleAgentListed(agent.id, agent.is_listed)
-                    );
+                    if (agent.is_listed) {
+                      setUnlistOpen(true);
+                    } else {
+                      handleAction(
+                        () => toggleAgentListed(agent.id, agent.is_listed),
+                        () => {}
+                      );
+                    }
                   }}
                 >
                   {agent.is_listed ? "Unlist Agent" : "List Agent"}
@@ -172,7 +175,10 @@ export default function AgentRowActions({
                     key="delete"
                     icon={SvgTrash}
                     danger
-                    onClick={() => openModal(Modal.DELETE)}
+                    onClick={() => {
+                      setPopoverOpen(false);
+                      setDeleteOpen(true);
+                    }}
                   >
                     Delete
                   </LineItem>
@@ -183,19 +189,22 @@ export default function AgentRowActions({
         </Popover>
       </div>
 
-      {modal === Modal.DELETE && (
+      {deleteOpen && (
         <ConfirmationModalLayout
           icon={(props) => (
             <SvgAlertCircle {...props} className="text-action-danger-05" />
           )}
           title="Delete Agent"
-          onClose={isSubmitting ? undefined : () => setModal(null)}
+          onClose={isSubmitting ? undefined : () => setDeleteOpen(false)}
           submit={
             <Disabled disabled={isSubmitting}>
               <Button
                 variant="danger"
                 onClick={() => {
-                  handleAction(() => deleteAgent(agent.id));
+                  handleAction(
+                    () => deleteAgent(agent.id),
+                    () => setDeleteOpen(false)
+                  );
                 }}
               >
                 Delete
@@ -213,7 +222,7 @@ export default function AgentRowActions({
         </ConfirmationModalLayout>
       )}
 
-      {modal === Modal.TOGGLE_FEATURED && (
+      {featuredOpen && (
         <ConfirmationModalLayout
           icon={agent.is_featured ? SvgStarOff : SvgStar}
           title={
@@ -221,13 +230,14 @@ export default function AgentRowActions({
               ? `Remove ${agent.name} from Featured`
               : `Feature ${agent.name}`
           }
-          onClose={isSubmitting ? undefined : () => setModal(null)}
+          onClose={isSubmitting ? undefined : () => setFeaturedOpen(false)}
           submit={
             <Disabled disabled={isSubmitting}>
               <Button
                 onClick={() => {
-                  handleAction(() =>
-                    toggleAgentFeatured(agent.id, agent.is_featured)
+                  handleAction(
+                    () => toggleAgentFeatured(agent.id, agent.is_featured),
+                    () => setFeaturedOpen(false)
                   );
                 }}
               >
@@ -241,6 +251,39 @@ export default function AgentRowActions({
               {agent.is_featured
                 ? `This will remove ${agent.name} from the featured section on top of the explore agents list. New users will no longer see it pinned to their sidebar, but existing pins are unaffected.`
                 : "Featured agents appear at the top of the explore agents list and are automatically pinned to the sidebar for new users with access. Use this to highlight recommended agents across your organization."}
+            </Text>
+            <Text as="p" text03>
+              This does not change who can access this agent.
+            </Text>
+          </div>
+        </ConfirmationModalLayout>
+      )}
+
+      {unlistOpen && (
+        <ConfirmationModalLayout
+          icon={SvgEyeOff}
+          title={`Unlist ${agent.name}`}
+          onClose={isSubmitting ? undefined : () => setUnlistOpen(false)}
+          submit={
+            <Disabled disabled={isSubmitting}>
+              <Button
+                onClick={() => {
+                  handleAction(
+                    () => toggleAgentListed(agent.id, agent.is_listed),
+                    () => setUnlistOpen(false)
+                  );
+                }}
+              >
+                Unlist
+              </Button>
+            </Disabled>
+          }
+        >
+          <div className="flex flex-col gap-2">
+            <Text as="p" text03>
+              Unlisted agents don&apos;t appear in the explore agents list but
+              remain accessible via direct link, and to users who have
+              previously used or pinned them.
             </Text>
             <Text as="p" text03>
               This does not change who can access this agent.
