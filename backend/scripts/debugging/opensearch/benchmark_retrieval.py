@@ -146,7 +146,7 @@ def main() -> None:
         latencies.append(elapsed_ms)
         # Print the current iteration and its elapsed time on the same line.
         print(
-            f"  [{i + 1:>{len(str(args.n))}}] {elapsed_ms:7.1f} ms  ({len(results)} results) (top result doc ID, chunk idx: {results[0].document_id if results else 'N/A'}, {results[0].chunk_id if results else 'N/A'})",
+            f"  [{i:>{len(str(args.n))}}] {elapsed_ms:7.1f} ms  ({len(results)} results) (top result doc ID, chunk idx: {results[0].document_id if results else 'N/A'}, {results[0].chunk_id if results else 'N/A'})",
             end="\r",
             flush=True,
         )
