@@ -92,9 +92,7 @@ export default function TableHead({
       data-size={resolvedSize}
       data-bottom-border={bottomBorder || undefined}
     >
-      <div
-        className={cn("flex items-center gap-1", alignmentFlexClass[alignment])}
-      >
+      <div className="flex items-center gap-1">
         <div className="table-head-label">
           <Text
             mainUiAction={!isSmall}
