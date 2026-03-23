@@ -101,6 +101,12 @@ function MemoryItem({
               setIsFocused(false);
               void onBlur(originalIndex);
             }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                textareaRef.current?.blur();
+              }
+            }}
             rows={3}
             maxLength={MAX_MEMORY_LENGTH}
             resizable={false}
