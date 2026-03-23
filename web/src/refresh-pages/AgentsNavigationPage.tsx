@@ -361,10 +361,10 @@ export default function AgentsNavigationPage() {
   ]);
 
   const featuredAgents = [
-    ...memoizedCurrentlyVisibleAgents.filter((agent) => agent.featured),
+    ...memoizedCurrentlyVisibleAgents.filter((agent) => agent.is_featured),
   ];
   const allAgents = memoizedCurrentlyVisibleAgents.filter(
-    (agent) => !agent.featured
+    (agent) => !agent.is_featured
   );
 
   const agentCount = featuredAgents.length + allAgents.length;

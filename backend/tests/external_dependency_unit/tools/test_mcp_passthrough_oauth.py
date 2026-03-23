@@ -52,7 +52,7 @@ def _create_test_persona_with_mcp_tool(
         document_sets=[],
         users=[user],
         groups=[],
-        is_visible=True,
+        is_listed=True,
         is_public=True,
         display_priority=None,
         starter_messages=None,

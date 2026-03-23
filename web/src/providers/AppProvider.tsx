@@ -6,15 +6,9 @@
  * at the root layout level (`app/layout.tsx`) and provides global state
  * and functionality to the entire application.
  *
- * ## Why a Wrapper?
- *
- * Instead of nesting dozens of providers in the layout file (which becomes
- * unwieldy and hard to maintain), we compose them here in a logical order.
- * This pattern:
- * - Keeps the layout file clean
- * - Makes provider dependencies explicit
- * - Allows easy addition/removal of providers
- * - Ensures consistent provider ordering across the app
+ * All data is fetched client-side by individual providers via SWR hooks,
+ * eliminating server-side data fetching from the root layout and preventing
+ * RSC prefetch amplification.
  *
  * ## Provider Hierarchy (outermost to innermost)
  *
@@ -25,45 +19,13 @@
  * 5. **ModalProvider** - Global modal state management
  * 6. **AppSidebarProvider** - Sidebar open/closed state
  * 7. **QueryControllerProvider** - Search/Chat mode + query lifecycle
- *
- * ## Usage
- *
- * This component is used once in `app/layout.tsx`:
- *
- * ```tsx
- * <AppProvider user={user} settings={settings} authTypeMetadata={authType}>
- *   {children}
- * </AppProvider>
- * ```
- *
- * Individual providers can then be accessed via their respective hooks:
- * - `useSettingsContext()` - from SettingsProvider
- * - `useUser()` - from UserProvider
- * - `useAppBackground()` - from AppBackgroundProvider
- * - `useQueryController()` - from QueryControllerProvider (includes appMode)
- * - etc.
- *
- * @TODO(@raunakab): The providers wrapped by this component are currently
- * scattered across multiple directories:
- * - `@/providers/UserProvider`
- * - `@/components/chat/ProviderContext`
- * - `@/providers/SettingsProvider`
- * - `@/components/context/ModalContext`
- * - `@/providers/AppSidebarProvider`
- *
- * These should eventually be consolidated into the `/web/src/providers`
- * directory for consistency and discoverability. This would make it clear
- * where all global state providers live.
  */
 "use client";
 
-import { CombinedSettings } from "@/interfaces/settings";
 import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
-import { User } from "@/lib/types";
 import { ModalProvider } from "@/components/context/ModalContext";
-import { AuthTypeMetadata } from "@/lib/userSS";
 import { AppSidebarProvider } from "@/providers/AppSidebarProvider";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
@@ -71,30 +33,16 @@ import ToastProvider from "@/providers/ToastProvider";
 
 interface AppProviderProps {
   children: React.ReactNode;
-  user: User | null;
-  settings: CombinedSettings;
-  authTypeMetadata: AuthTypeMetadata;
-  folded?: boolean;
 }
 
-export default function AppProvider({
-  children,
-  user,
-  settings,
-  authTypeMetadata,
-  folded,
-}: AppProviderProps) {
+export default function AppProvider({ children }: AppProviderProps) {
   return (
-    <SettingsProvider settings={settings}>
-      <UserProvider
-        settings={settings}
-        user={user}
-        authTypeMetadata={authTypeMetadata}
-      >
+    <SettingsProvider>
+      <UserProvider>
         <AppBackgroundProvider>
           <ProviderContextProvider>
-            <ModalProvider user={user}>
-              <AppSidebarProvider folded={!!folded}>
+            <ModalProvider>
+              <AppSidebarProvider>
                 <QueryControllerProvider>
                   <ToastProvider>{children}</ToastProvider>
                 </QueryControllerProvider>

@@ -51,9 +51,9 @@ export interface MinimalPersonaSnapshot {
   icon_name?: string;
 
   is_public: boolean;
-  is_visible: boolean;
+  is_listed: boolean;
   display_priority: number | null;
-  featured: boolean;
+  is_featured: boolean;
   builtin_persona: boolean;
 
   labels?: PersonaLabel[];

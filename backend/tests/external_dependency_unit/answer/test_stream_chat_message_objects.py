@@ -83,7 +83,7 @@ def test_stream_chat_message_objects_without_web_search(
         db_session=db_session,
         tool_ids=[],  # Explicitly no tools
         document_set_ids=None,
-        is_visible=True,
+        is_listed=True,
     )
 
     # Create a chat session with our test persona

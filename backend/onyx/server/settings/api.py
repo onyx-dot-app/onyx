@@ -5,6 +5,7 @@ from fastapi import Depends
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from onyx import __version__ as onyx_version
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
 from onyx.auth.users import is_user_admin
@@ -79,6 +80,7 @@ def fetch_settings(
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
         vector_db_enabled=not DISABLE_VECTOR_DB,
+        version=onyx_version,
     )
 
 
