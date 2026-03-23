@@ -20,6 +20,7 @@ from fastapi import HTTPException
 from onyx.auth.schemas import UserCreate
 from onyx.auth.users import UserManager
 from onyx.configs.constants import AuthType
+from onyx.error_handling.exceptions import OnyxError
 
 # Note: Only async test methods are marked with @pytest.mark.asyncio individually
 # to avoid warnings on synchronous tests
@@ -89,11 +90,11 @@ class TestDisposableEmailValidation:
         user_manager = UserManager(MagicMock())
 
         # Execute & Assert
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(OnyxError) as exc:
             await user_manager.create(mock_user_create)
 
         assert exc.value.status_code == 400
-        assert "Disposable email" in str(exc.value.detail)
+        assert "Disposable email" in exc.value.detail
         # Verify we never got to tenant provisioning
         mock_fetch_ee.assert_not_called()
 

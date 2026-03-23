@@ -2,19 +2,27 @@
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { Button } from "@opal/components";
+import { useSearchParams } from "next/navigation";
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
-const Page = () => {
+function Page() {
+  const searchParams = useSearchParams();
+  const message = searchParams?.get("message");
+
   return (
     <AuthFlowContainer>
       <div className="flex flex-col space-y-6 max-w-md mx-auto">
         <h2 className="text-2xl font-bold text-text-900 text-center">
           Authentication Error
         </h2>
-        <p className="text-text-700 text-center">
-          There was a problem with your login attempt.
-        </p>
+        {message ? (
+          <p className="text-text-700 text-center">{message}</p>
+        ) : (
+          <p className="text-text-700 text-center">
+            There was a problem with your login attempt.
+          </p>
+        )}
         <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4 shadow-sm">
           <h3 className="text-red-800 dark:text-red-400 font-semibold mb-2">
             Possible Issues:
@@ -54,6 +62,6 @@ const Page = () => {
       </div>
     </AuthFlowContainer>
   );
-};
+}
 
 export default Page;

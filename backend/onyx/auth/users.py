@@ -296,10 +296,7 @@ def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
 
 def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
     if email.count("@") != 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email is not valid",
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email is not valid")
 
     local_part, domain = email.split("@")
     domain = domain.lower()
@@ -308,45 +305,36 @@ def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
     if AUTH_TYPE == AuthType.CLOUD:
         # Normalize googlemail.com to gmail.com (they deliver to the same inbox)
         if domain == "googlemail.com":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"reason": "Please use @gmail.com instead of @googlemail.com."},
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Please use @gmail.com instead of @googlemail.com.",
             )
 
         # Only block dotted Gmail on new signups — existing users must still be
         # able to sign in with the address they originally registered with.
         if is_registration and domain == "gmail.com" and "." in local_part:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "reason": "Gmail addresses with '.' are not allowed. Please use your base email address."
-                },
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Gmail addresses with '.' are not allowed. Please use your base email address.",
             )
 
         if "+" in local_part and domain != "onyx.app":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "reason": "Email addresses with '+' are not allowed. Please use your base email address."
-                },
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Email addresses with '+' are not allowed. Please use your base email address.",
             )
 
     # Check if email uses a disposable/temporary domain
     if is_disposable_email(email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "reason": "Disposable email addresses are not allowed. Please use a permanent email address."
-            },
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Disposable email addresses are not allowed. Please use a permanent email address.",
         )
 
     # Check domain whitelist if configured
     if VALID_EMAIL_DOMAINS:
         if domain not in VALID_EMAIL_DOMAINS:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email domain is not valid",
-            )
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email domain is not valid")
 
 
 def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
@@ -429,12 +417,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # This prevents creating tenants for throwaway email addresses
         try:
             verify_email_domain(user_create.email, is_registration=True)
-        except HTTPException as e:
+        except OnyxError as e:
             # Log blocked disposable email attempts
-            if (
-                e.status_code == status.HTTP_400_BAD_REQUEST
-                and "Disposable email" in str(e.detail)
-            ):
+            if "Disposable email" in e.detail:
                 domain = (
                     user_create.email.split("@")[-1]
                     if "@" in user_create.email
