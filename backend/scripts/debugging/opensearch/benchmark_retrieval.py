@@ -84,6 +84,9 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if args.n < 1:
+        raise ValueError("Number of samples must be at least 1.")
+
     if MULTI_TENANT:
         CURRENT_TENANT_ID_CONTEXTVAR.set(DEV_TENANT_ID)
 
