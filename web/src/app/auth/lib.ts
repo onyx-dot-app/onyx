@@ -12,7 +12,7 @@ export async function authErrorRedirect(
   );
   try {
     const body = await response.json();
-    if (body?.detail) {
+    if (body?.error_code && body?.detail) {
       redirect.cookies.set(AUTH_ERROR_COOKIE, body.detail, {
         httpOnly: true,
         sameSite: "strict",
