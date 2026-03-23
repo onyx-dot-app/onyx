@@ -81,25 +81,29 @@ export default function AgentRowActions({
     <>
       <div className="flex items-center gap-0.5">
         {!agent.builtin_persona && (
+          <div className="opacity-0 group-hover/row:opacity-100 transition-opacity">
+            <Button
+              prominence="tertiary"
+              icon={SvgEdit}
+              tooltip="Edit Agent"
+              onClick={() =>
+                router.push(
+                  `/app/agents/edit/${
+                    agent.id
+                  }?u=${Date.now()}&admin=true` as Route
+                )
+              }
+            />
+          </div>
+        )}
+        <div className="opacity-0 group-hover/row:opacity-100 transition-opacity">
           <Button
             prominence="tertiary"
-            icon={SvgEdit}
-            tooltip="Edit Agent"
-            onClick={() =>
-              router.push(
-                `/app/agents/edit/${
-                  agent.id
-                }?u=${Date.now()}&admin=true` as Route
-              )
-            }
+            icon={SvgStar}
+            tooltip={agent.featured ? "Remove Featured" : "Set as Featured"}
+            onClick={() => openModal(Modal.TOGGLE_FEATURED)}
           />
-        )}
-        <Button
-          prominence="tertiary"
-          icon={SvgStar}
-          tooltip={agent.featured ? "Remove Featured" : "Set as Featured"}
-          onClick={() => openModal(Modal.TOGGLE_FEATURED)}
-        />
+        </div>
 
         {/* Overflow menu */}
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
