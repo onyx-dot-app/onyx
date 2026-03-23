@@ -3467,9 +3467,9 @@ class Persona(Base):
     builtin_persona: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Featured personas are highlighted in the UI
-    featured: Mapped[bool] = mapped_column(Boolean, default=False)
-    # controls whether the persona is available to be selected by users
-    is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    # controls whether the persona is listed in user-facing agent lists
+    is_listed: Mapped[bool] = mapped_column(Boolean, default=True)
     # controls the ordering of personas in the UI
     # higher priority personas are displayed first, ties are resolved by the ID,
     # where lower value IDs (e.g. created earlier) are displayed first

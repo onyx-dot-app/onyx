@@ -169,7 +169,7 @@ class DATestPersona(BaseModel):
     users: list[str]
     groups: list[int]
     label_ids: list[int]
-    featured: bool = False
+    is_featured: bool = False
 
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None
