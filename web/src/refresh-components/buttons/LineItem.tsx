@@ -180,8 +180,16 @@ export default function LineItem({
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
 
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (disabled) {
+      e.preventDefault();
+      return;
+    }
+    props.onClick?.(e);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!interactive) {
+    if (!interactive || disabled) {
       props.onKeyDown?.(e);
       return;
     }
@@ -196,7 +204,7 @@ export default function LineItem({
   };
 
   const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!interactive) {
+    if (!interactive || disabled) {
       props.onKeyUp?.(e);
       return;
     }
@@ -213,6 +221,7 @@ export default function LineItem({
       ref={ref}
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}
+      aria-disabled={disabled || undefined}
       className={cn(
         "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
         !!(children && description) ? "items-start" : "items-center",
@@ -220,6 +229,7 @@ export default function LineItem({
       )}
       data-selected={selected}
       {...props}
+      onClick={handleClick}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
     >
