@@ -19,6 +19,8 @@ export interface PreviewVariant
   matches: (semanticIdentifier: string | null, mimeType: string) => boolean;
   /** Whether the fetcher should read the blob as text. */
   needsTextContent: boolean;
+  /** Whether the variant renders on a code-style background (bg-background-code-01). */
+  codeBackground: boolean;
   /** String shown below the title in the modal header. */
   headerDescription: (ctx: PreviewContext) => string;
   /** Body content. */

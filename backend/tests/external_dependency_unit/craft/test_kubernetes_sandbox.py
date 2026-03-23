@@ -502,8 +502,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
                 "/bin/sh",
                 "-c",
                 (
-                    f"curl -s -o /dev/null -w '%{{http_code}}' "
-                    f"http://localhost:{test_nextjs_port}/ 2>/dev/null || echo 'failed'"
+                    f"curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{test_nextjs_port}/ 2>/dev/null || echo 'failed'"
                 ),
             ]
             resp = k8s_stream(
@@ -559,10 +558,9 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
         expected_url_pattern = (
             f"http://{expected_service_name}.{SANDBOX_NAMESPACE}.svc.cluster.local:"
         )
-        assert nextjs_url.startswith(expected_url_pattern), (
-            f"Next.js URL should follow cluster service format. "
-            f"Expected to start with: {expected_url_pattern}, Got: {nextjs_url}"
-        )
+        assert nextjs_url.startswith(
+            expected_url_pattern
+        ), f"Next.js URL should follow cluster service format. Expected to start with: {expected_url_pattern}, Got: {nextjs_url}"
         assert (
             str(SANDBOX_NEXTJS_PORT_START) in nextjs_url
         ), f"Next.js URL should contain port {SANDBOX_NEXTJS_PORT_START}. Got: {nextjs_url}"
@@ -586,10 +584,10 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
             tty=False,
         )
         print(f"DEBUG: Cluster URL health check response: {resp}")
-        assert resp and resp.strip() in ("200", "304"), (
-            f"Next.js server should be accessible via cluster URL {nextjs_url}. "
-            f"Got response: {resp}"
-        )
+        assert resp and resp.strip() in (
+            "200",
+            "304",
+        ), f"Next.js server should be accessible via cluster URL {nextjs_url}. Got response: {resp}"
 
     finally:
         # Clean up: terminate the sandbox

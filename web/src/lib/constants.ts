@@ -1,3 +1,5 @@
+export const IS_DEV = process.env.NODE_ENV === "development";
+
 export enum AuthType {
   BASIC = "basic",
   GOOGLE_OAUTH = "google_oauth",
@@ -108,7 +110,6 @@ export const CREDENTIAL_JSON = "credential_json";
 
 export const MODAL_ROOT_ID = "modal-root";
 
-export const ANONYMOUS_USER_NAME = "Anonymous";
 export const UNNAMED_CHAT = "New Chat";
 
 export const DEFAULT_AGENT_ID = 0;
@@ -124,10 +125,12 @@ export const MAX_FILES_TO_SHOW = 3;
 export const MOBILE_SIDEBAR_BREAKPOINT_PX = 640;
 export const DESKTOP_SMALL_BREAKPOINT_PX = 912;
 export const DESKTOP_MEDIUM_BREAKPOINT_PX = 1232;
-export const DEFAULT_AGENT_AVATAR_SIZE_PX = 18;
+export const DEFAULT_AVATAR_SIZE_PX = 18;
 export const HORIZON_DISTANCE_PX = 800;
 export const LOGO_FOLDED_SIZE_PX = 24;
 export const LOGO_UNFOLDED_SIZE_PX = 88;
 
 export const DEFAULT_CONTEXT_TOKENS = 120_000;
 export const MAX_CHUNKS_FED_TO_CHAT = 25;
+
+export const APP_SLOGAN = "Open Source AI Platform";

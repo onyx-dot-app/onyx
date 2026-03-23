@@ -316,10 +316,7 @@ class TestMergeToolCalls:
 
 class TestImageHistoryExtraction:
     def test_extracts_image_file_ids_from_json_response(self) -> None:
-        msg = (
-            '[{"file_id":"img-1","revised_prompt":"v1"},'
-            '{"file_id":"img-2","revised_prompt":"v2"}]'
-        )
+        msg = '[{"file_id":"img-1","revised_prompt":"v1"},{"file_id":"img-2","revised_prompt":"v2"}]'
         assert _extract_image_file_ids_from_tool_response_message(msg) == [
             "img-1",
             "img-2",

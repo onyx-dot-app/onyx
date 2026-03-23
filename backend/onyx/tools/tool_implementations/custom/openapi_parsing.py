@@ -25,8 +25,7 @@ class MethodSpec(BaseModel):
 
         if content:
             raise ValueError(
-                f"Unsupported content type: '{list(content.keys())[0]}'. "
-                f"Only 'application/json' is supported."
+                f"Unsupported content type: '{list(content.keys())[0]}'. Only 'application/json' is supported."
             )
 
         return {}

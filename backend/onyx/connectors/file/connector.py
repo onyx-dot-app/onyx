@@ -202,8 +202,7 @@ def _process_file(
             )
             sections.append(image_section)
             logger.debug(
-                f"Created ImageSection for embedded image {idx} "
-                f"in {file_name}, stored as: {stored_file_name}"
+                f"Created ImageSection for embedded image {idx} in {file_name}, stored as: {stored_file_name}"
             )
         except Exception as e:
             logger.warning(
@@ -279,8 +278,7 @@ class LocalFileConnector(LoadConnector):
                 logger.warning(f"Failed to load metadata from file store: {e}")
         elif self._zip_metadata_deprecated:
             logger.warning(
-                "Using deprecated inline zip_metadata dict. "
-                "Re-upload files to use the new file store format."
+                "Using deprecated inline zip_metadata dict. Re-upload files to use the new file store format."
             )
             zip_metadata = self._zip_metadata_deprecated
 

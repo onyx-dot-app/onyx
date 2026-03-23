@@ -114,10 +114,7 @@ def _link_file_to_persona(
     db_session.commit()
 
 
-_PATCH_QUEUE_DEPTH = (
-    "onyx.background.celery.tasks.user_file_processing.tasks"
-    ".get_user_file_project_sync_queue_depth"
-)
+_PATCH_QUEUE_DEPTH = "onyx.background.celery.tasks.user_file_processing.tasks.get_user_file_project_sync_queue_depth"
 
 
 @contextmanager

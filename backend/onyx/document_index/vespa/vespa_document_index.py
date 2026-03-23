@@ -251,10 +251,7 @@ def _update_single_chunk(
         fields=vespa_put_fields,
     )
 
-    vespa_url = (
-        f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}"
-        "?create=true"
-    )
+    vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}?create=true"
 
     try:
         resp = http_client.put(
@@ -726,11 +723,7 @@ class VespaDocumentIndex(DocumentIndex):
         where_clause = (
             f'tenant_id contains "{self._tenant_id}"' if self._multitenant else "true"
         )
-        yql = (
-            f"select documentid from {self._index_name} "
-            f"where {where_clause} "
-            f"limit 0"
-        )
+        yql = f"select documentid from {self._index_name} where {where_clause} limit 0"
         params: dict[str, str | int] = {
             "yql": yql,
             "ranking.profile": "unranked",

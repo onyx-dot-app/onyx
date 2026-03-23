@@ -186,7 +186,6 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
             # Check if the Celery task actually exists
             try:
-
                 result: AsyncResult = AsyncResult(attempt.celery_task_id)
 
                 # If the task is not in PENDING state, it exists in Celery
@@ -207,8 +206,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
             except Exception:
                 # If we can't check the task status, be conservative and continue
                 logger.warning(
-                    f"Could not verify Celery task status on startup for attempt {attempt.id}, "
-                    f"task_id={attempt.celery_task_id}"
+                    f"Could not verify Celery task status on startup for attempt {attempt.id}, task_id={attempt.celery_task_id}"
                 )
 
 
@@ -278,8 +276,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
                 lock.reacquire()
             else:
                 task_logger.warning(
-                    "Full acquisition of primary worker lock. "
-                    "Reasons could be worker restart or lock expiration."
+                    "Full acquisition of primary worker lock. Reasons could be worker restart or lock expiration."
                 )
                 lock = r.lock(
                     OnyxRedisLocks.PRIMARY_WORKER,
@@ -320,6 +317,7 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.docprocessing",
             "onyx.background.celery.tasks.evals",
             "onyx.background.celery.tasks.hierarchyfetching",
+            "onyx.background.celery.tasks.hooks",
             "onyx.background.celery.tasks.periodic",
             "onyx.background.celery.tasks.pruning",
             "onyx.background.celery.tasks.shared",

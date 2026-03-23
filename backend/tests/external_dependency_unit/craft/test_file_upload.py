@@ -31,7 +31,9 @@ if TYPE_CHECKING:
 
 @pytest.fixture(scope="function")
 def sandbox(
-    db_session: Session, test_user: User, tenant_context: None  # noqa: ARG001
+    db_session: Session,
+    test_user: User,
+    tenant_context: None,  # noqa: ARG001
 ) -> Sandbox:
     """Create a test sandbox for the user (sandboxes are per-user, not per-session)."""
     sandbox = Sandbox(

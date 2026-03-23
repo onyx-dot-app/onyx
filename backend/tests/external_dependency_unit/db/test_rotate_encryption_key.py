@@ -130,7 +130,9 @@ class TestRotateCredential:
 
     @pytest.fixture()
     def credential_id(
-        self, db_session: Session, tenant_context: None  # noqa: ARG002
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
     ) -> Generator[int, None, None]:
         """Insert a Credential row with raw encrypted bytes, clean up after."""
         config = {"api_key": "sk-test-1234", "endpoint": "https://example.com"}
@@ -223,7 +225,9 @@ class TestRotateInternetSearchProvider:
 
     @pytest.fixture()
     def isp_id(
-        self, db_session: Session, tenant_context: None  # noqa: ARG002
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
     ) -> Generator[int, None, None]:
         """Insert an InternetSearchProvider row with raw encrypted bytes."""
         encrypted = _encrypt_string("sk-secret-api-key", key=OLD_KEY)
@@ -266,7 +270,9 @@ class TestRotateInternetSearchProvider:
         assert _decrypt_bytes(raw, key=NEW_KEY) == "sk-secret-api-key"
 
     def test_rotates_from_unencrypted(
-        self, db_session: Session, tenant_context: None  # noqa: ARG002
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test rotating data that was stored without any encryption key."""
         result = db_session.execute(

@@ -68,8 +68,7 @@ def process_with_prompt_cache(
     # If provider doesn't support caching, combine and return unchanged
     if not provider_adapter.supports_caching():
         logger.debug(
-            f"Provider {llm_config.model_provider} does not support caching, "
-            "combining messages without caching"
+            f"Provider {llm_config.model_provider} does not support caching, combining messages without caching"
         )
         # Use no-op adapter to combine messages
         from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider

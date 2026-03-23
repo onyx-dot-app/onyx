@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 import uuid
 from collections.abc import Generator
 
@@ -27,6 +28,9 @@ from onyx.db.engine.sql_engine import SqlEngine
 _BACKEND_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
 )
+
+_DROP_SCHEMA_MAX_RETRIES = 3
+_DROP_SCHEMA_RETRY_DELAY_SEC = 2
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +52,39 @@ def _run_script(
         text=True,
         env=env,
     )
+
+
+def _force_drop_schema(engine: Engine, schema: str) -> None:
+    """Terminate backends using *schema* then drop it, retrying on deadlock.
+
+    Background Celery workers may discover test schemas (they match the
+    ``tenant_`` prefix) and hold locks on tables inside them.  A bare
+    ``DROP SCHEMA … CASCADE`` can deadlock with those workers, so we
+    first kill their connections and retry if we still hit a deadlock.
+    """
+    for attempt in range(_DROP_SCHEMA_MAX_RETRIES):
+        try:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        """
+                        SELECT pg_terminate_backend(l.pid)
+                        FROM pg_locks l
+                        JOIN pg_class c ON c.oid = l.relation
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = :schema
+                          AND l.pid != pg_backend_pid()
+                        """
+                    ),
+                    {"schema": schema},
+                )
+                conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+                conn.commit()
+            return
+        except Exception:
+            if attempt == _DROP_SCHEMA_MAX_RETRIES - 1:
+                raise
+            time.sleep(_DROP_SCHEMA_RETRY_DELAY_SEC)
 
 
 # ---------------------------------------------------------------------------
@@ -93,24 +130,18 @@ def tenant_schema_at_head(
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(
             text(
-                f'CREATE TABLE "{schema}".alembic_version '
-                f"(version_num VARCHAR(32) NOT NULL)"
+                f'CREATE TABLE "{schema}".alembic_version (version_num VARCHAR(32) NOT NULL)'
             )
         )
         conn.execute(
-            text(
-                f'INSERT INTO "{schema}".alembic_version (version_num) '
-                f"VALUES (:rev)"
-            ),
+            text(f'INSERT INTO "{schema}".alembic_version (version_num) VALUES (:rev)'),
             {"rev": current_head_rev},
         )
         conn.commit()
 
     yield schema
 
-    with engine.connect() as conn:
-        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
-        conn.commit()
+    _force_drop_schema(engine, schema)
 
 
 @pytest.fixture
@@ -127,9 +158,7 @@ def tenant_schema_empty(engine: Engine) -> Generator[str, None, None]:
 
     yield schema
 
-    with engine.connect() as conn:
-        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
-        conn.commit()
+    _force_drop_schema(engine, schema)
 
 
 @pytest.fixture
@@ -142,23 +171,19 @@ def tenant_schema_bad_rev(engine: Engine) -> Generator[str, None, None]:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(
             text(
-                f'CREATE TABLE "{schema}".alembic_version '
-                f"(version_num VARCHAR(32) NOT NULL)"
+                f'CREATE TABLE "{schema}".alembic_version (version_num VARCHAR(32) NOT NULL)'
             )
         )
         conn.execute(
             text(
-                f'INSERT INTO "{schema}".alembic_version (version_num) '
-                f"VALUES ('00000bad0000')"
+                f"INSERT INTO \"{schema}\".alembic_version (version_num) VALUES ('00000bad0000')"
             )
         )
         conn.commit()
 
     yield schema
 
-    with engine.connect() as conn:
-        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
-        conn.commit()
+    _force_drop_schema(engine, schema)
 
 
 # ---------------------------------------------------------------------------

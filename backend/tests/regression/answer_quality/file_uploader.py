@@ -95,7 +95,7 @@ def manage_file_upload(zip_file_path: str, env_name: str) -> None:
 
     for file in unzipped_file_paths:
         os.unlink(file)
-    print(f"Total time taken: {(time.time() - start_time)/60} minutes")
+    print(f"Total time taken: {(time.time() - start_time) / 60} minutes")
 
 
 if __name__ == "__main__":

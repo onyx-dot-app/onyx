@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 from datetime import datetime
 from datetime import timedelta
@@ -69,7 +71,8 @@ def setup_chat_session(reset: None) -> tuple[DATestUser, str]:  # noqa: ARG001
     reason="Chat history tests are enterprise only",
 )
 def test_chat_history_endpoints(
-    reset: None, setup_chat_session: tuple[DATestUser, str]  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    setup_chat_session: tuple[DATestUser, str],
 ) -> None:
     admin_user, first_chat_id = setup_chat_session
 
@@ -126,7 +129,8 @@ def test_chat_history_endpoints(
     reason="Chat history tests are enterprise only",
 )
 def test_chat_history_csv_export(
-    reset: None, setup_chat_session: tuple[DATestUser, str]  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    setup_chat_session: tuple[DATestUser, str],
 ) -> None:
     admin_user, _ = setup_chat_session
 
@@ -137,12 +141,12 @@ def test_chat_history_csv_export(
     assert headers["Content-Type"] == "text/csv; charset=utf-8"
     assert "Content-Disposition" in headers
 
-    # Verify CSV content
-    csv_lines = csv_content.strip().split("\n")
-    assert len(csv_lines) == 3  # Header + 2 QA pairs
-    assert "chat_session_id" in csv_content
-    assert "user_message" in csv_content
-    assert "ai_response" in csv_content
+    # Use csv.reader to properly handle newlines inside quoted fields
+    csv_rows = list(csv.reader(io.StringIO(csv_content)))
+    assert len(csv_rows) == 3  # Header + 2 QA pairs
+    assert csv_rows[0][0] == "chat_session_id"
+    assert "user_message" in csv_rows[0]
+    assert "ai_response" in csv_rows[0]
     assert "What was the Q1 revenue?" in csv_content
     assert "What about Q2 revenue?" in csv_content
 
@@ -154,5 +158,5 @@ def test_chat_history_csv_export(
         end_time=past_end,
         user_performing_action=admin_user,
     )
-    csv_lines = csv_content.strip().split("\n")
-    assert len(csv_lines) == 1  # Only header, no data rows
+    csv_rows = list(csv.reader(io.StringIO(csv_content)))
+    assert len(csv_rows) == 1  # Only header, no data rows

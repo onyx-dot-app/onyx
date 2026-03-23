@@ -154,8 +154,7 @@ def on_task_postrun(
         tenant_id = cast(str, kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
 
     task_logger.debug(
-        f"Task {task.name} (ID: {task_id}) completed with state: {state} "
-        f"{f'for tenant_id={tenant_id}' if tenant_id else ''}"
+        f"Task {task.name} (ID: {task_id}) completed with state: {state} {f'for tenant_id={tenant_id}' if tenant_id else ''}"
     )
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -211,7 +210,9 @@ def on_task_postrun(
 
 
 def on_celeryd_init(
-    sender: str, conf: Any = None, **kwargs: Any  # noqa: ARG001
+    sender: str,  # noqa: ARG001
+    conf: Any = None,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
 ) -> None:
     """The first signal sent on celery worker startup"""
 
@@ -277,10 +278,7 @@ def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
         time.sleep(WAIT_INTERVAL)
 
     if not ready:
-        msg = (
-            f"Redis: Readiness probe did not succeed within the timeout "
-            f"({WAIT_LIMIT} seconds). Exiting..."
-        )
+        msg = f"Redis: Readiness probe did not succeed within the timeout ({WAIT_LIMIT} seconds). Exiting..."
         logger.error(msg)
         raise WorkerShutdown(msg)
 
@@ -319,10 +317,7 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
         time.sleep(WAIT_INTERVAL)
 
     if not ready:
-        msg = (
-            f"Database: Readiness probe did not succeed within the timeout "
-            f"({WAIT_LIMIT} seconds). Exiting..."
-        )
+        msg = f"Database: Readiness probe did not succeed within the timeout ({WAIT_LIMIT} seconds). Exiting..."
         logger.error(msg)
         raise WorkerShutdown(msg)
 
@@ -349,10 +344,7 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
             f"Primary worker is not ready yet. elapsed={time_elapsed:.1f} timeout={WAIT_LIMIT:.1f}"
         )
         if time_elapsed > WAIT_LIMIT:
-            msg = (
-                f"Primary worker was not ready within the timeout. "
-                f"({WAIT_LIMIT} seconds). Exiting..."
-            )
+            msg = f"Primary worker was not ready within the timeout. ({WAIT_LIMIT} seconds). Exiting..."
             logger.error(msg)
             raise WorkerShutdown(msg)
 
@@ -522,7 +514,9 @@ def reset_tenant_id(
     CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
 
 
-def wait_for_vespa_or_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+def wait_for_vespa_or_shutdown(
+    sender: Any, **kwargs: Any  # noqa: ARG001
+) -> None:  # noqa: ARG001
     """Waits for Vespa to become ready subject to a timeout.
     Raises WorkerShutdown if the timeout is reached."""
 

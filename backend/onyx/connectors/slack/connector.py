@@ -897,9 +897,7 @@ class SlackConnector(
                 raw_channels, self.channels, self.channel_regex_enabled
             )
             logger.info(
-                f"Channels - initial checkpoint: "
-                f"all={len(raw_channels)} "
-                f"post_filtering={len(filtered_channels)}"
+                f"Channels - initial checkpoint: all={len(raw_channels)} post_filtering={len(filtered_channels)}"
             )
 
             checkpoint.channel_ids = [c["id"] for c in filtered_channels]
@@ -972,11 +970,7 @@ class SlackConnector(
             )
 
             logger.info(
-                f"Retrieved messages: "
-                f"{len(message_batch)=} "
-                f"{channel=} "
-                f"{oldest=} "
-                f"{latest=}"
+                f"Retrieved messages: {len(message_batch)=} {channel=} {oldest=} {latest=}"
             )
 
             # message_batch[0] is the newest message (Slack returns newest to oldest)
@@ -1063,10 +1057,7 @@ class SlackConnector(
             )
 
             logger.info(
-                f"Current channel processing stats: "
-                f"{range_start=} "
-                f"range_end={end} "
-                f"percent_complete={range_percent_complete=:.2f}"
+                f"Current channel processing stats: {range_start=} range_end={end} percent_complete={range_percent_complete=:.2f}"
             )
 
             checkpoint.seen_thread_ts = list(seen_thread_ts)

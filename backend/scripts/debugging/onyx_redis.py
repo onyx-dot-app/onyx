@@ -229,9 +229,7 @@ def purge_by_match_and_type(
     """
 
     logger.info(
-        f"purge_by_match_and_type start: "
-        f"match_pattern={match_pattern} "
-        f"match_type={match_type}"
+        f"purge_by_match_and_type start: match_pattern={match_pattern} match_type={match_type}"
     )
 
     # cursor = "0"

@@ -35,7 +35,6 @@ def upgrade() -> None:
     # environment variables MUST be set. Otherwise, an exception will be raised.
 
     if not MULTI_TENANT:
-
         # Enable pg_trgm extension if not already enabled
         op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
@@ -481,8 +480,7 @@ def upgrade() -> None:
         f"ON kg_entity USING GIN (name {POSTGRES_DEFAULT_SCHEMA}.gin_trgm_ops)"
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_kg_entity_normalization_trigrams "
-        "ON kg_entity USING GIN (name_trigrams)"
+        "CREATE INDEX IF NOT EXISTS idx_kg_entity_normalization_trigrams ON kg_entity USING GIN (name_trigrams)"
     )
 
     # Create kg_entity trigger to update kg_entity.name and its trigrams

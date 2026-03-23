@@ -47,6 +47,8 @@ RUN apt-get update && \
         gcc \
         nano \
         vim \
+        # Install procps so kubernetes exec sessions can use ps aux for debugging
+        procps \
         libjemalloc2 \
         && \
     rm -rf /var/lib/apt/lists/* && \

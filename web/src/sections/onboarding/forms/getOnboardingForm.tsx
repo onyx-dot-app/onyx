@@ -4,16 +4,16 @@ import {
   LLMProviderName,
 } from "@/interfaces/llm";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
-import { OpenAIOnboardingForm } from "./OpenAIOnboardingForm";
-import { AnthropicOnboardingForm } from "./AnthropicOnboardingForm";
-import { OllamaOnboardingForm } from "./OllamaOnboardingForm";
-import { LMStudioOnboardingForm } from "./LMStudioOnboardingForm";
-import { AzureOnboardingForm } from "./AzureOnboardingForm";
-import { BedrockOnboardingForm } from "./BedrockOnboardingForm";
-import { VertexAIOnboardingForm } from "./VertexAIOnboardingForm";
-import { OpenRouterOnboardingForm } from "./OpenRouterOnboardingForm";
-import { LiteLLMProxyOnboardingForm } from "./LiteLLMProxyOnboardingForm";
-import { CustomOnboardingForm } from "./CustomOnboardingForm";
+import OpenAIModal from "@/sections/modals/llmConfig/OpenAIModal";
+import AnthropicModal from "@/sections/modals/llmConfig/AnthropicModal";
+import OllamaModal from "@/sections/modals/llmConfig/OllamaModal";
+import AzureModal from "@/sections/modals/llmConfig/AzureModal";
+import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
+import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
+import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
+import CustomModal from "@/sections/modals/llmConfig/CustomModal";
+import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
+import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 
 // Display info for LLM provider cards - title is the product name, displayName is the company/platform
 const PROVIDER_DISPLAY_INFO: Record<
@@ -78,128 +78,53 @@ export function getOnboardingForm({
   open,
   onOpenChange,
 }: OnboardingFormProps): React.ReactNode {
+  const sharedProps = {
+    variant: "onboarding" as const,
+    onboardingState,
+    onboardingActions,
+    open,
+    onOpenChange,
+  };
+
   // Handle custom provider
   if (isCustomProvider || !llmDescriptor) {
-    return (
-      <CustomOnboardingForm
-        onboardingState={onboardingState}
-        onboardingActions={onboardingActions}
-        open={open}
-        onOpenChange={onOpenChange}
-      />
-    );
+    return <CustomModal {...sharedProps} />;
   }
 
-  // Map provider name to form component
+  const providerProps = {
+    ...sharedProps,
+    llmDescriptor,
+  };
+
   switch (llmDescriptor.name) {
     case LLMProviderName.OPENAI:
-      return (
-        <OpenAIOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
+      return <OpenAIModal {...providerProps} />;
 
     case LLMProviderName.ANTHROPIC:
-      return (
-        <AnthropicOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
+      return <AnthropicModal {...providerProps} />;
 
     case LLMProviderName.OLLAMA_CHAT:
-      return (
-        <OllamaOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
-
-    case LLMProviderName.LM_STUDIO:
-      return (
-        <LMStudioOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
+      return <OllamaModal {...providerProps} />;
 
     case LLMProviderName.AZURE:
-      return (
-        <AzureOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
+      return <AzureModal {...providerProps} />;
 
     case LLMProviderName.BEDROCK:
-      return (
-        <BedrockOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
+      return <BedrockModal {...providerProps} />;
 
     case LLMProviderName.VERTEX_AI:
-      return (
-        <VertexAIOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
+      return <VertexAIModal {...providerProps} />;
 
     case LLMProviderName.OPENROUTER:
-      return (
-        <OpenRouterOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
+      return <OpenRouterModal {...providerProps} />;
+
+    case LLMProviderName.LM_STUDIO:
+      return <LMStudioForm {...providerProps} />;
 
     case LLMProviderName.LITELLM_PROXY:
-      return (
-        <LiteLLMProxyOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
+      return <LiteLLMProxyModal {...providerProps} />;
 
     default:
-      // Fallback to custom form for unknown providers
-      return (
-        <CustomOnboardingForm
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
+      return <CustomModal {...sharedProps} />;
   }
 }

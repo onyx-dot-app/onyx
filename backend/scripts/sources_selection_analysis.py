@@ -401,8 +401,7 @@ class SelectionAnalysis:
             if response.status_code != 200:
                 color_output(
                     (
-                        "something goes wrong while requesting the Onyx API "
-                        f"for the query '{query}': {response.text}"
+                        f"something goes wrong while requesting the Onyx API for the query '{query}': {response.text}"
                     ),
                     model="critical",
                 )
@@ -700,7 +699,7 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "-q" "--queries",
+        "-q--queries",
         type=str,
         action="extend",
         default=[],

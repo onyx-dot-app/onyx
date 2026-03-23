@@ -44,6 +44,7 @@ from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import OAUTH_ENABLED
+from onyx.configs.app_configs import OIDC_PKCE_ENABLED
 from onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
 from onyx.configs.app_configs import OPENID_CONFIG_URL
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
@@ -61,6 +62,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
+from onyx.hooks.registry import validate_registry
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
@@ -75,6 +77,7 @@ from onyx.server.features.default_assistant.api import (
 )
 from onyx.server.features.document_set.api import router as document_set_router
 from onyx.server.features.hierarchy.api import router as hierarchy_router
+from onyx.server.features.hooks.api import router as hook_router
 from onyx.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
@@ -119,6 +122,9 @@ from onyx.server.manage.opensearch_migration.api import (
 from onyx.server.manage.search_settings import router as search_settings_router
 from onyx.server.manage.slack_bot import router as slack_bot_management_router
 from onyx.server.manage.users import router as user_router
+from onyx.server.manage.voice.api import admin_router as voice_admin_router
+from onyx.server.manage.voice.user_api import router as voice_router
+from onyx.server.manage.voice.websocket_api import router as voice_websocket_router
 from onyx.server.manage.web_search.api import (
     admin_router as web_search_admin_router,
 )
@@ -304,6 +310,7 @@ def validate_no_vector_db_settings() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     validate_no_vector_db_settings()
     validate_cache_backend_settings()
+    validate_registry()
 
     # Set recursion limit
     if SYSTEM_RECURSION_LIMIT is not None:
@@ -447,6 +454,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     register_onyx_exception_handlers(application)
 
+    include_router_with_global_prefix_prepended(application, hook_router)
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, query_router)
@@ -497,6 +505,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, embedding_router)
     include_router_with_global_prefix_prepended(application, web_search_router)
     include_router_with_global_prefix_prepended(application, web_search_admin_router)
+    include_router_with_global_prefix_prepended(application, voice_admin_router)
+    include_router_with_global_prefix_prepended(application, voice_router)
+    include_router_with_global_prefix_prepended(application, voice_websocket_router)
     include_router_with_global_prefix_prepended(
         application, opensearch_migration_admin_router
     )
@@ -597,6 +608,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
                 associate_by_email=True,
                 is_verified_by_default=True,
                 redirect_url=f"{WEB_DOMAIN}/auth/oidc/callback",
+                enable_pkce=OIDC_PKCE_ENABLED,
             ),
             prefix="/auth/oidc",
         )

@@ -243,8 +243,7 @@ class ACPExecClient:
                     stderr_data = self._ws_client.read_stderr(timeout=0.01)
                     if stderr_data:
                         logger.warning(
-                            f"[ACP] stderr pod={self._pod_name}: "
-                            f"{stderr_data.strip()[:500]}"
+                            f"[ACP] stderr pod={self._pod_name}: {stderr_data.strip()[:500]}"
                         )
 
                     # Read stdout
@@ -264,8 +263,7 @@ class ACPExecClient:
                                     self._response_queue.put(message)
                                 except json.JSONDecodeError:
                                     logger.warning(
-                                        f"[ACP] Invalid JSON from agent: "
-                                        f"{line[:100]}"
+                                        f"[ACP] Invalid JSON from agent: {line[:100]}"
                                     )
 
                 else:
@@ -281,7 +279,7 @@ class ACPExecClient:
         """Stop the exec session and clean up."""
         session_ids = list(self._state.sessions.keys())
         logger.info(
-            f"[ACP] Stopping client: pod={self._pod_name} " f"sessions={session_ids}"
+            f"[ACP] Stopping client: pod={self._pod_name} sessions={session_ids}"
         )
         self._stop_reader.set()
 
@@ -489,16 +487,14 @@ class ACPExecClient:
             return None
 
         logger.info(
-            f"[ACP] Resuming existing session: acp_session={target_id} "
-            f"(found {len(sessions)})"
+            f"[ACP] Resuming existing session: acp_session={target_id} (found {len(sessions)})"
         )
 
         try:
             return self._resume_session(target_id, cwd, timeout)
         except Exception as e:
             logger.warning(
-                f"[ACP] session/resume failed for {target_id}: {e}, "
-                f"falling back to session/new"
+                f"[ACP] session/resume failed for {target_id}: {e}, falling back to session/new"
             )
             return None
 
@@ -544,15 +540,12 @@ class ACPExecClient:
         """
         if session_id not in self._state.sessions:
             raise RuntimeError(
-                f"Unknown session {session_id}. "
-                f"Known sessions: {list(self._state.sessions.keys())}"
+                f"Unknown session {session_id}. Known sessions: {list(self._state.sessions.keys())}"
             )
         packet_logger = get_packet_logger()
 
         logger.info(
-            f"[ACP] Sending prompt: "
-            f"acp_session={session_id} pod={self._pod_name} "
-            f"queue_backlog={self._response_queue.qsize()}"
+            f"[ACP] Sending prompt: acp_session={session_id} pod={self._pod_name} queue_backlog={self._response_queue.qsize()}"
         )
 
         prompt_content = [{"type": "text", "text": message}]
@@ -573,9 +566,7 @@ class ACPExecClient:
             if remaining <= 0:
                 completion_reason = "timeout"
                 logger.warning(
-                    f"[ACP] Prompt timeout: "
-                    f"acp_session={session_id} events={events_yielded}, "
-                    f"sending session/cancel"
+                    f"[ACP] Prompt timeout: acp_session={session_id} events={events_yielded}, sending session/cancel"
                 )
                 try:
                     self.cancel(session_id=session_id)
@@ -663,8 +654,7 @@ class ACPExecClient:
             # Handle requests from agent - send error response
             elif "method" in message_data and "id" in message_data:
                 logger.debug(
-                    f"[ACP] Unsupported agent request: "
-                    f"method={message_data['method']}"
+                    f"[ACP] Unsupported agent request: method={message_data['method']}"
                 )
                 self._send_error_response(
                     message_data["id"],

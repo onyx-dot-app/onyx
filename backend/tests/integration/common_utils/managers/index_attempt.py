@@ -94,10 +94,7 @@ class IndexAttemptManager:
             "page_size": page_size,
         }
 
-        url = (
-            f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}/index-attempts"
-            f"?{urlencode(query_params, doseq=True)}"
-        )
+        url = f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}/index-attempts?{urlencode(query_params, doseq=True)}"
         response = requests.get(
             url=url,
             headers=user_performing_action.headers,
@@ -210,8 +207,7 @@ class IndexAttemptManager:
                 )
 
             print(
-                f"Waiting for IndexAttempt {index_attempt_id} to complete. "
-                f"elapsed={elapsed:.2f} timeout={timeout}"
+                f"Waiting for IndexAttempt {index_attempt_id} to complete. elapsed={elapsed:.2f} timeout={timeout}"
             )
             time.sleep(5)
 

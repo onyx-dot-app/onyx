@@ -69,11 +69,7 @@ def format_relationship_id(relationship_id_name: str) -> str:
 def make_relationship_id(
     source_node: str, relationship_type: str, target_node: str
 ) -> str:
-    return (
-        f"{format_entity_id(source_node)}__"
-        f"{relationship_type.lower()}__"
-        f"{format_entity_id(target_node)}"
-    )
+    return f"{format_entity_id(source_node)}__{relationship_type.lower()}__{format_entity_id(target_node)}"
 
 
 def split_relationship_id(relationship_id_name: str) -> list[str]:
@@ -89,11 +85,7 @@ def format_relationship_type_id(relationship_type_id_name: str) -> str:
 def make_relationship_type_id(
     source_node_type: str, relationship_type: str, target_node_type: str
 ) -> str:
-    return (
-        f"{source_node_type.upper()}__"
-        f"{relationship_type.lower()}__"
-        f"{target_node_type.upper()}"
-    )
+    return f"{source_node_type.upper()}__{relationship_type.lower()}__{target_node_type.upper()}"
 
 
 def split_relationship_type_id(relationship_type_id_name: str) -> list[str]:

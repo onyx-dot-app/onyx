@@ -43,6 +43,7 @@ import {
   SvgArrowUp,
   SvgGlobe,
   SvgHourglass,
+  SvgMicrophone,
   SvgPlus,
   SvgPlusCircle,
   SvgSearch,
@@ -55,6 +56,10 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
+import MicrophoneButton from "@/sections/input/MicrophoneButton";
+import Waveform from "@/components/voice/Waveform";
+import { useVoiceMode } from "@/providers/VoiceModeProvider";
+import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 
 const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 200;
@@ -113,16 +118,72 @@ const AppInputBar = React.memo(
   }: AppInputBarProps) => {
     // Internal message state - kept local to avoid parent re-renders on every keystroke
     const [message, setMessage] = useState(initialMessage);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordingCycleCount, setRecordingCycleCount] = useState(0);
+    const [isMuted, setIsMuted] = useState(false);
+    const [audioLevel, setAudioLevel] = useState(0);
+    const stopRecordingRef = useRef<(() => Promise<string | null>) | null>(
+      null
+    );
+    const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const textAreaWrapperRef = useRef<HTMLDivElement>(null);
     const filesWrapperRef = useRef<HTMLDivElement>(null);
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const { user } = useUser();
+    const { user, isAdmin } = useUser();
     const { state } = useQueryController();
     const isClassifying = state.phase === "classifying";
     const isSearchActive =
       state.phase === "searching" || state.phase === "search-results";
+    const {
+      stopTTS,
+      isTTSPlaying,
+      isManualTTSPlaying,
+      isTTSLoading,
+      isAwaitingAutoPlaybackStart,
+      isTTSMuted,
+      toggleTTSMute,
+    } = useVoiceMode();
+    const { sttEnabled } = useVoiceStatus();
+    // Show mic button: always if STT configured, or greyed-out for admins to prompt setup
+    const showMicButton = sttEnabled || isAdmin;
+    const isVoicePlaybackActive =
+      isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
+    const isVoicePlaybackControllable = isVoicePlaybackActive && !isRecording;
+    const isTTSActuallySpeaking = isTTSPlaying || isManualTTSPlaying;
+    const appFocus = useAppFocus();
+    const isNewSession = appFocus.isNewSession();
+    const appMode = state.phase === "idle" ? state.appMode : undefined;
+    const isSearchMode =
+      (isNewSession && appMode === "search") || isSearchActive;
+
+    const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
+      setIsRecording((prevIsRecording) => {
+        if (!prevIsRecording && nextIsRecording) {
+          setRecordingCycleCount((count) => count + 1);
+        }
+        return nextIsRecording;
+      });
+    }, []);
+
+    // Wrapper for onSubmit that stops TTS first to prevent overlapping voices
+    const handleSubmit = useCallback(
+      (text: string) => {
+        stopTTS();
+        onSubmit(text);
+      },
+      [stopTTS, onSubmit]
+    );
+    const submitMessage = useCallback(
+      (text: string) => {
+        if (!text.trim()) {
+          return;
+        }
+        handleSubmit(text);
+      },
+      [handleSubmit]
+    );
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -142,10 +203,16 @@ const AppInputBar = React.memo(
         setMessage(initialMessage);
       }
     }, [initialMessage]);
-    const appFocus = useAppFocus();
-    const appMode = state.phase === "idle" ? state.appMode : undefined;
-    const isSearchMode =
-      (appFocus.isNewSession() && appMode === "search") || isSearchActive;
+    const shouldShowRecordingWaveformBelow =
+      isRecording &&
+      !isVoicePlaybackActive &&
+      (isNewSession || recordingCycleCount === 1);
+
+    useEffect(() => {
+      if (isNewSession && !initialMessage) {
+        setMessage("");
+      }
+    }, [isNewSession, initialMessage]);
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
@@ -558,9 +625,42 @@ const AppInputBar = React.memo(
               disabled={disabled}
             />
           </div>
+          {showMicButton &&
+            (sttEnabled ? (
+              <MicrophoneButton
+                onTranscription={(text) => setMessage(text)}
+                disabled={disabled || chatState === "streaming"}
+                autoSend={user?.preferences?.voice_auto_send ?? false}
+                autoListen={user?.preferences?.voice_auto_playback ?? false}
+                isNewSession={isNewSession}
+                chatState={chatState}
+                onRecordingChange={handleRecordingChange}
+                stopRecordingRef={stopRecordingRef}
+                currentMessage={message}
+                onRecordingStart={() => {}}
+                onAutoSend={(text) => {
+                  submitMessage(text);
+                }}
+                onMuteChange={setIsMuted}
+                setMutedRef={setMutedRef}
+                onAudioLevel={setAudioLevel}
+              />
+            ) : (
+              <Disabled disabled>
+                <Button
+                  icon={SvgMicrophone}
+                  aria-label="Set up voice"
+                  prominence="tertiary"
+                  tooltip="Voice not configured. Set up in admin settings."
+                />
+              </Disabled>
+            ))}
+
           <Disabled
             disabled={
-              (chatState === "input" && !message) ||
+              (chatState === "input" &&
+                !isVoicePlaybackControllable &&
+                !message) ||
               hasUploadingFiles ||
               isClassifying
             }
@@ -570,15 +670,18 @@ const AppInputBar = React.memo(
               icon={
                 isClassifying
                   ? SimpleLoader
-                  : chatState === "input"
-                    ? SvgArrowUp
-                    : SvgStop
+                  : chatState === "streaming" || isVoicePlaybackControllable
+                    ? SvgStop
+                    : SvgArrowUp
               }
               onClick={() => {
                 if (chatState == "streaming") {
+                  stopTTS({ manual: true });
                   stopGenerating();
+                } else if (isVoicePlaybackControllable) {
+                  stopTTS({ manual: true });
                 } else if (message) {
-                  onSubmit(message);
+                  submitMessage(message);
                 }
               }}
             />
@@ -593,7 +696,7 @@ const AppInputBar = React.memo(
           ref={containerRef}
           id="onyx-chat-input"
           className={cn(
-            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
+            "relative w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
             // # Note (from @raunakab):
             //
             // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
@@ -606,6 +709,32 @@ const AppInputBar = React.memo(
             // modes. See the corresponding note there for details.
           )}
         >
+          {/* Voice waveform overlay (positioned outside normal flow to avoid resizing input) */}
+          {isTTSActuallySpeaking ? (
+            <div className="absolute bottom-full mb-1 left-1 z-10">
+              <Waveform
+                variant="speaking"
+                isActive={isTTSActuallySpeaking}
+                isMuted={isTTSMuted}
+                onMuteToggle={toggleTTSMute}
+              />
+            </div>
+          ) : isRecording &&
+            !isVoicePlaybackActive &&
+            !shouldShowRecordingWaveformBelow ? (
+            <div className="absolute bottom-full mb-1 left-1 right-1 z-10">
+              <Waveform
+                variant="recording"
+                isActive={isRecording}
+                isMuted={isMuted}
+                audioLevel={audioLevel}
+                onMuteToggle={() => {
+                  setMutedRef.current?.(!isMuted);
+                }}
+              />
+            </div>
+          ) : null}
+
           {/* Attached Files */}
           <div
             ref={filesWrapperRef}
@@ -657,9 +786,13 @@ const AppInputBar = React.memo(
                     style={{ scrollbarWidth: "thin" }}
                     aria-multiline={true}
                     placeholder={
-                      isSearchMode
-                        ? "Search connected sources"
-                        : "How can I help you today?"
+                      isRecording
+                        ? "Listening..."
+                        : isVoicePlaybackActive
+                          ? "Onyx is speaking..."
+                          : isSearchMode
+                            ? "Search connected sources"
+                            : "How can I help you today?"
                     }
                     value={message}
                     onKeyDown={(event) => {
@@ -676,7 +809,7 @@ const AppInputBar = React.memo(
                           !isClassifying &&
                           !hasUploadingFiles
                         ) {
-                          onSubmit(message);
+                          submitMessage(message);
                         }
                       }
                     }}
@@ -743,7 +876,7 @@ const AppInputBar = React.memo(
                       if (chatState == "streaming") {
                         stopGenerating();
                       } else if (message) {
-                        onSubmit(message);
+                        submitMessage(message);
                       }
                     }}
                     prominence="tertiary"
@@ -755,6 +888,21 @@ const AppInputBar = React.memo(
           </div>
 
           {chatControls}
+
+          {/* First recording cycle waveform below input */}
+          {shouldShowRecordingWaveformBelow && (
+            <div className="absolute top-full mt-1 left-1 right-1 z-10">
+              <Waveform
+                variant="recording"
+                isActive={isRecording}
+                isMuted={isMuted}
+                audioLevel={audioLevel}
+                onMuteToggle={() => {
+                  setMutedRef.current?.(!isMuted);
+                }}
+              />
+            </div>
+          )}
         </div>
       </Disabled>
     );

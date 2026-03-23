@@ -155,10 +155,7 @@ def process_attachment(
                 )
 
         logger.info(
-            f"Downloading attachment: "
-            f"title={attachment['title']} "
-            f"length={attachment_size} "
-            f"link={attachment_link}"
+            f"Downloading attachment: title={attachment['title']} length={attachment_size} link={attachment_link}"
         )
 
         # Download the attachment
@@ -368,8 +365,7 @@ def handle_confluence_rate_limit(confluence_call: F) -> F:
             except requests.HTTPError as e:
                 delay_until = _handle_http_error(e, attempt)
                 logger.warning(
-                    f"HTTPError in confluence call. "
-                    f"Retrying in {delay_until} seconds..."
+                    f"HTTPError in confluence call. Retrying in {delay_until} seconds..."
                 )
                 while time.monotonic() < delay_until:
                     # in the future, check a signal here to exit

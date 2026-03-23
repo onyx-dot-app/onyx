@@ -162,8 +162,7 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
         ),
         "FIREFLIES": KGEntityTypeDefinition(
             description=(
-                f"A phone call transcript between us ({vendor_name}) "
-                "and another account or individuals, or an internal meeting."
+                f"A phone call transcript between us ({vendor_name}) and another account or individuals, or an internal meeting."
             ),
             attributes=KGEntityTypeAttributes(
                 classification_attributes={

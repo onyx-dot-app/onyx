@@ -50,8 +50,7 @@ def upgrade() -> None:
 
         if orphaned_count > 0:
             logger.warning(
-                f"WARNING: {orphaned_count} chat_session records still have "
-                f"folder_id without project_id. Proceeding anyway."
+                f"WARNING: {orphaned_count} chat_session records still have folder_id without project_id. Proceeding anyway."
             )
 
     # === Step 2: Drop chat_session.folder_id ===

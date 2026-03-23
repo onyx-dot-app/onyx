@@ -36,9 +36,11 @@ from onyx.db.memory import add_memory
 from onyx.db.memory import update_memory_at_index
 from onyx.db.memory import UserMemoryContext
 from onyx.db.models import Persona
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.utils import is_true_openai_model
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
@@ -70,6 +72,70 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+class EmptyLLMResponseError(RuntimeError):
+    """Raised when the streamed LLM response completes without a usable answer."""
+
+    def __init__(
+        self,
+        *,
+        provider: str,
+        model: str,
+        tool_choice: ToolChoiceOptions,
+        client_error_msg: str,
+        error_code: str = "EMPTY_LLM_RESPONSE",
+        is_retryable: bool = True,
+    ) -> None:
+        super().__init__(client_error_msg)
+        self.provider = provider
+        self.model = model
+        self.tool_choice = tool_choice
+        self.client_error_msg = client_error_msg
+        self.error_code = error_code
+        self.is_retryable = is_retryable
+
+
+def _build_empty_llm_response_error(
+    llm: LLM,
+    llm_step_result: LlmStepResult,
+    tool_choice: ToolChoiceOptions,
+) -> EmptyLLMResponseError:
+    provider = llm.config.model_provider
+    model = llm.config.model_name
+
+    # OpenAI quota exhaustion has reached us as a streamed "stop" with zero content.
+    # When the stream is completely empty and there is no reasoning/tool output, surface
+    # the likely account-level cause instead of a generic tool-calling error.
+    if (
+        not llm_step_result.reasoning
+        and provider == LlmProviderNames.OPENAI
+        and is_true_openai_model(provider, model)
+    ):
+        return EmptyLLMResponseError(
+            provider=provider,
+            model=model,
+            tool_choice=tool_choice,
+            client_error_msg=(
+                "The selected OpenAI model returned an empty streamed response "
+                "before producing any tokens. This commonly happens when the API "
+                "key or project has no remaining quota or billing is not enabled. "
+                "Verify quota and billing for this key and try again."
+            ),
+            error_code="BUDGET_EXCEEDED",
+            is_retryable=False,
+        )
+
+    return EmptyLLMResponseError(
+        provider=provider,
+        model=model,
+        tool_choice=tool_choice,
+        client_error_msg=(
+            "The selected model returned no final answer before the stream "
+            "completed. No text or tool calls were received from the upstream "
+            "provider."
+        ),
+    )
 
 
 def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
@@ -157,8 +223,7 @@ def _try_fallback_tool_extraction(
         )
     if extracted_tool_calls:
         logger.info(
-            f"Extracted {len(extracted_tool_calls)} tool call(s) from response text "
-            "as fallback"
+            f"Extracted {len(extracted_tool_calls)} tool call(s) from response text as fallback"
         )
         return (
             LlmStepResult(
@@ -397,8 +462,7 @@ def construct_message_history(
         ]
         if forgotten_meta:
             logger.debug(
-                f"FileReader: building forgotten-files message for "
-                f"{[(m.file_id, m.filename) for m in forgotten_meta]}"
+                f"FileReader: building forgotten-files message for {[(m.file_id, m.filename) for m in forgotten_meta]}"
             )
             forgotten_files_message = _create_file_tool_metadata_message(
                 forgotten_meta, token_counter
@@ -488,8 +552,7 @@ def _drop_orphaned_tool_call_responses(
                 sanitized.append(msg)
             else:
                 logger.debug(
-                    "Dropping orphaned tool response with tool_call_id=%s while "
-                    "constructing message history",
+                    "Dropping orphaned tool response with tool_call_id=%s while constructing message history",
                     msg.tool_call_id,
                 )
             continue
@@ -515,8 +578,7 @@ def _create_file_tool_metadata_message(
     ]
     for meta in file_metadata:
         lines.append(
-            f'- file_id="{meta.file_id}" filename="{meta.filename}" '
-            f"(~{meta.approx_char_count:,} chars)"
+            f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
         )
 
     message_content = "\n".join(lines)
@@ -617,7 +679,12 @@ def run_llm_loop(
             )
             citation_processor.update_citation_mapping(project_citation_mapping)
 
-        llm_step_result: LlmStepResult | None = None
+        llm_step_result = LlmStepResult(
+            reasoning=None,
+            answer=None,
+            tool_calls=None,
+            raw_answer=None,
+        )
 
         # Pass the total budget to construct_message_history, which will handle token allocation
         available_tokens = llm.config.max_input_tokens
@@ -1088,12 +1155,18 @@ def run_llm_loop(
                 # As long as 1 tool with citeable documents is called at any point, we ask the LLM to try to cite
                 should_cite_documents = True
 
-        if not llm_step_result or not llm_step_result.answer:
+        if not llm_step_result.answer and not llm_step_result.tool_calls:
+            raise _build_empty_llm_response_error(
+                llm=llm,
+                llm_step_result=llm_step_result,
+                tool_choice=tool_choice,
+            )
+
+        if not llm_step_result.answer:
             raise RuntimeError(
-                "The LLM did not return an answer. "
-                "Typically this is an issue with LLMs that do not support tool calling natively, "
-                "or the model serving API is not configured correctly. "
-                "This may also happen with models that are lower quality outputting invalid tool calls."
+                "The LLM did not return a final answer after tool execution. "
+                "Typically this indicates invalid tool-call output, a model/provider mismatch, "
+                "or serving API misconfiguration."
             )
 
         emitter.emit(

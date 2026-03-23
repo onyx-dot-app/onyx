@@ -118,6 +118,7 @@ function ContentSm({
       <span
         className={cn("opal-content-sm-title", config.titleFont)}
         style={{ height: config.lineHeight }}
+        title={title}
       >
         {title}
       </span>

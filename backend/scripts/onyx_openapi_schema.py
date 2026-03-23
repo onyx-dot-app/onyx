@@ -105,8 +105,7 @@ def generate_client(openapi_json_path: str, strip_tags: bool = True) -> None:
             print(f"Generated Python client at {output_dir}")
         else:
             print(
-                "Failed to generate Python client. "
-                "See backend/tests/integration/README.md for setup instructions.",
+                "Failed to generate Python client. See backend/tests/integration/README.md for setup instructions.",
                 file=sys.stderr,
             )
     finally:

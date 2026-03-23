@@ -330,6 +330,7 @@ class CCPairFullInfo(BaseModel):
         num_docs_indexed: int,  # not ideal, but this must be computed separately
         is_editable_for_current_user: bool,
         indexing: bool,
+        last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
         permission_syncing: bool = False,
         last_permission_sync_attempt_finished: datetime | None = None,
@@ -382,9 +383,7 @@ class CCPairFullInfo(BaseModel):
             creator_email=(
                 cc_pair_model.creator.email if cc_pair_model.creator else None
             ),
-            last_indexed=(
-                last_index_attempt.time_started if last_index_attempt else None
-            ),
+            last_indexed=last_successful_index_time,
             last_pruned=cc_pair_model.last_pruned,
             last_full_permission_sync=cls._get_last_full_permission_sync(cc_pair_model),
             overall_indexing_speed=overall_indexing_speed,
@@ -408,7 +407,7 @@ class FailedConnectorIndexingStatus(BaseModel):
     """Simplified version of ConnectorIndexingStatus for failed indexing attempts"""
 
     cc_pair_id: int
-    name: str | None
+    name: str
     error_msg: str | None
     is_deletable: bool
     connector_id: int
@@ -422,7 +421,7 @@ class ConnectorStatus(BaseModel):
     """
 
     cc_pair_id: int
-    name: str | None
+    name: str
     connector: ConnectorSnapshot
     credential: CredentialSnapshot
     access_type: AccessType
@@ -453,7 +452,7 @@ class DocsCountOperator(str, Enum):
 
 class ConnectorIndexingStatusLite(BaseModel):
     cc_pair_id: int
-    name: str | None
+    name: str
     source: DocumentSource
     access_type: AccessType
     cc_pair_status: ConnectorCredentialPairStatus
@@ -488,7 +487,7 @@ class ConnectorCredentialPairIdentifier(BaseModel):
 
 
 class ConnectorCredentialPairMetadata(BaseModel):
-    name: str | None = None
+    name: str
     access_type: AccessType
     auto_sync_options: dict[str, Any] | None = None
     groups: list[int] = Field(default_factory=list)
@@ -501,7 +500,7 @@ class CCStatusUpdateRequest(BaseModel):
 
 class ConnectorCredentialPairDescriptor(BaseModel):
     id: int
-    name: str | None = None
+    name: str
     connector: ConnectorSnapshot
     credential: CredentialSnapshot
     access_type: AccessType
@@ -511,7 +510,7 @@ class CCPairSummary(BaseModel):
     """Simplified connector-credential pair information with just essential data"""
 
     id: int
-    name: str | None
+    name: str
     source: DocumentSource
     access_type: AccessType
 

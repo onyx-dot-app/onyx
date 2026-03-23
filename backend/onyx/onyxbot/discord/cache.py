@@ -78,8 +78,7 @@ class DiscordCacheManager:
                 self._initialized = True
 
                 logger.info(
-                    f"Cache refresh complete: {len(new_guild_tenants)} guilds, "
-                    f"{len(new_api_keys)} tenants"
+                    f"Cache refresh complete: {len(new_guild_tenants)} guilds, {len(new_api_keys)} tenants"
                 )
 
             except Exception as e:

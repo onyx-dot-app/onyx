@@ -1,48 +1,33 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import DataTable from "@/refresh-components/table/DataTable";
-import { createTableColumns } from "@/refresh-components/table/columns";
+import { Table, createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
-import { SvgUser, SvgUsers, SvgSlack } from "@opal/icons";
+import { Button } from "@opal/components";
+import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import type { IconFunctionComponent } from "@opal/types";
-import {
-  UserRole,
-  UserStatus,
-  USER_ROLE_LABELS,
-  USER_STATUS_LABELS,
-} from "@/lib/types";
+import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { toast } from "@/hooks/useToast";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
+import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
+import GroupsCell from "./GroupsCell";
+import UserRowActions from "./UserRowActions";
+import UserRoleCell from "./UserRoleCell";
 import type {
   UserRow,
-  UserGroupInfo,
   GroupOption,
   StatusFilter,
   StatusCountMap,
 } from "./interfaces";
-import { getInitials } from "./utils";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const ROLE_ICONS: Record<UserRole, IconFunctionComponent> = {
-  [UserRole.BASIC]: SvgUser,
-  [UserRole.ADMIN]: SvgUser,
-  [UserRole.GLOBAL_CURATOR]: SvgUsers,
-  [UserRole.CURATOR]: SvgUsers,
-  [UserRole.LIMITED]: SvgUser,
-  [UserRole.EXT_PERM_USER]: SvgUser,
-  [UserRole.SLACK_USER]: SvgSlack,
-};
+import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import type { User } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Column renderers
@@ -56,56 +41,6 @@ function renderNameColumn(email: string, row: UserRow) {
       title={row.personal_name ?? email}
       description={row.personal_name ? email : undefined}
     />
-  );
-}
-
-function renderGroupsColumn(groups: UserGroupInfo[]) {
-  if (!groups.length) {
-    return (
-      <Text as="span" secondaryBody text03>
-        {"\u2014"}
-      </Text>
-    );
-  }
-  const visible = groups.slice(0, 2);
-  const overflow = groups.length - visible.length;
-  return (
-    <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
-      {visible.map((g) => (
-        <span
-          key={g.id}
-          className="inline-flex items-center flex-shrink-0 rounded-md bg-background-tint-02 px-2 py-0.5 whitespace-nowrap"
-        >
-          <Text as="span" secondaryBody text03>
-            {g.name}
-          </Text>
-        </span>
-      ))}
-      {overflow > 0 && (
-        <Text as="span" secondaryBody text03>
-          +{overflow}
-        </Text>
-      )}
-    </div>
-  );
-}
-
-function renderRoleColumn(role: UserRole | null) {
-  if (!role) {
-    return (
-      <Text as="span" secondaryBody text03>
-        —
-      </Text>
-    );
-  }
-  const Icon = ROLE_ICONS[role];
-  return (
-    <div className="flex items-center gap-1.5">
-      {Icon && <Icon size={14} className="text-text-03 shrink-0" />}
-      <Text as="span" mainUiBody text03>
-        {USER_ROLE_LABELS[role] ?? role}
-      </Text>
-    </div>
   );
 }
 
@@ -127,56 +62,65 @@ function renderStatusColumn(value: UserStatus, row: UserRow) {
 function renderLastUpdatedColumn(value: string | null) {
   return (
     <Text as="span" secondaryBody text03>
-      {timeAgo(value) ?? "\u2014"}
+      {value ? timeAgo(value) ?? "\u2014" : "\u2014"}
     </Text>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Columns (stable reference — defined at module scope)
+// Columns
 // ---------------------------------------------------------------------------
 
 const tc = createTableColumns<UserRow>();
 
-const columns = [
-  tc.qualifier({
-    content: "avatar-user",
-    getInitials: (row) => getInitials(row.personal_name, row.email),
-    selectable: false,
-  }),
-  tc.column("email", {
-    header: "Name",
-    weight: 22,
-    minWidth: 140,
-    cell: renderNameColumn,
-  }),
-  tc.column("groups", {
-    header: "Groups",
-    weight: 24,
-    minWidth: 200,
-    enableSorting: false,
-    cell: renderGroupsColumn,
-  }),
-  tc.column("role", {
-    header: "Account Type",
-    weight: 16,
-    minWidth: 180,
-    cell: renderRoleColumn,
-  }),
-  tc.column("status", {
-    header: "Status",
-    weight: 14,
-    minWidth: 100,
-    cell: renderStatusColumn,
-  }),
-  tc.column("updated_at", {
-    header: "Last Updated",
-    weight: 14,
-    minWidth: 100,
-    cell: renderLastUpdatedColumn,
-  }),
-  tc.actions(),
-];
+function buildColumns(onMutate: () => void) {
+  return [
+    tc.qualifier({
+      content: "icon",
+      iconSize: "lg",
+      getContent: (row) => {
+        const user = {
+          email: row.email,
+          personalization: row.personal_name
+            ? { name: row.personal_name }
+            : undefined,
+        } as User;
+        return (props) => <UserAvatar user={user} size={props.size} />;
+      },
+    }),
+    tc.column("email", {
+      header: "Name",
+      weight: 22,
+      cell: renderNameColumn,
+    }),
+    tc.column("groups", {
+      header: "Groups",
+      weight: 24,
+      enableSorting: false,
+      cell: (value, row) => (
+        <GroupsCell groups={value} user={row} onMutate={onMutate} />
+      ),
+    }),
+    tc.column("role", {
+      header: "Account Type",
+      weight: 16,
+      cell: (_value, row) => <UserRoleCell user={row} onMutate={onMutate} />,
+    }),
+    tc.column("status", {
+      header: "Status",
+      weight: 14,
+      cell: renderStatusColumn,
+    }),
+    tc.column("updated_at", {
+      header: "Last Updated",
+      weight: 14,
+      cell: renderLastUpdatedColumn,
+    }),
+    tc.actions({
+      cell: (row) => <UserRowActions user={row} onMutate={onMutate} />,
+    }),
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -213,7 +157,9 @@ export default function UsersTable({
     [allGroups]
   );
 
-  const { users, isLoading, error } = useAdminUsers();
+  const { users, isLoading, error, refresh } = useAdminUsers();
+
+  const columns = useMemo(() => buildColumns(refresh), [refresh]);
 
   // Client-side filtering
   const filteredUsers = useMemo(() => {
@@ -273,22 +219,40 @@ export default function UsersTable({
         roleCounts={roleCounts}
         statusCounts={statusCounts}
       />
-      {filteredUsers.length === 0 ? (
-        <IllustrationContent
-          illustration={SvgNoResult}
-          title="No users found"
-          description="No users match the current filters."
-        />
-      ) : (
-        <DataTable
-          data={filteredUsers}
-          columns={columns}
-          getRowId={(row) => row.id ?? row.email}
-          pageSize={PAGE_SIZE}
-          searchTerm={searchTerm}
-          footer={{ mode: "summary" }}
-        />
-      )}
+      <Table
+        data={filteredUsers}
+        columns={columns}
+        getRowId={(row) => row.id ?? row.email}
+        pageSize={PAGE_SIZE}
+        searchTerm={searchTerm}
+        emptyState={
+          <IllustrationContent
+            illustration={SvgNoResult}
+            title="No users found"
+            description="No users match the current filters."
+          />
+        }
+        footer={{
+          leftExtra: (
+            <Button
+              icon={SvgDownload}
+              prominence="tertiary"
+              size="sm"
+              tooltip="Download CSV"
+              aria-label="Download CSV"
+              onClick={() => {
+                downloadUsersCsv().catch((err) => {
+                  toast.error(
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to download CSV"
+                  );
+                });
+              }}
+            />
+          ),
+        }}
+      />
     </div>
   );
 }

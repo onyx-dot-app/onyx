@@ -807,7 +807,7 @@ def translate_db_message_to_chat_message_detail(
         for db_doc in chat_message.search_docs
     ]
     top_documents = sorted(
-        top_documents, key=lambda doc: (doc.score or 0.0), reverse=True
+        top_documents, key=lambda doc: doc.score or 0.0, reverse=True
     )
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,

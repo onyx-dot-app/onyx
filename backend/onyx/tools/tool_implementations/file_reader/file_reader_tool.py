@@ -102,8 +102,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
                         NUM_CHARS_FIELD: {
                             "type": "integer",
                             "description": (
-                                "Number of characters to return (max 16000). "
-                                "Defaults to 16000."
+                                "Number of characters to return (max 16000). Defaults to 16000."
                             ),
                         },
                     },
@@ -133,8 +132,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
             raise ToolCallException(
                 message=f"File {file_id} not in available files",
                 llm_facing_message=(
-                    f"File '{file_id}' is not available. "
-                    "Please use one of the file IDs listed in the context."
+                    f"File '{file_id}' is not available. Please use one of the file IDs listed in the context."
                 ),
             )
 
@@ -178,8 +176,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
             raise ToolCallException(
                 message=f"File {file_id} is not a text file (type={chat_file.file_type})",
                 llm_facing_message=(
-                    f"File '{chat_file.filename or file_id}' is a "
-                    f"{chat_file.file_type.value} file and cannot be read as text."
+                    f"File '{chat_file.filename or file_id}' is a {chat_file.file_type.value} file and cannot be read as text."
                 ),
             )
 
@@ -218,8 +215,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
 
         has_more = end_char < total_chars
         header = (
-            f"File: {file_name}\n"
-            f"Characters {start_char}-{end_char} of {total_chars}"
+            f"File: {file_name}\nCharacters {start_char}-{end_char} of {total_chars}"
         )
         if has_more:
             header += f" (use start_char={end_char} to continue reading)"

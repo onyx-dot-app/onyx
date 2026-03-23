@@ -22,18 +22,26 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
+from onyx.document_index.opensearch.constants import HybridSearchNormalizationPipeline
+from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
 from onyx.document_index.opensearch.opensearch_document_index import (
     generate_opensearch_filtered_access_control_list,
 )
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
+from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DocumentQuery
 from onyx.document_index.opensearch.search import (
-    MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+    get_min_max_normalization_pipeline_name_and_config,
 )
-from onyx.document_index.opensearch.search import MIN_MAX_NORMALIZATION_PIPELINE_NAME
+from onyx.document_index.opensearch.search import (
+    get_normalization_pipeline_name_and_config,
+)
+from onyx.document_index.opensearch.search import (
+    get_zscore_normalization_pipeline_name_and_config,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 
@@ -47,6 +55,63 @@ def _patch_global_tenant_state(monkeypatch: pytest.MonkeyPatch, state: bool) -> 
     """
     monkeypatch.setattr("shared_configs.configs.MULTI_TENANT", state)
     monkeypatch.setattr("onyx.document_index.opensearch.schema.MULTI_TENANT", state)
+
+
+def _patch_hybrid_search_subquery_configuration(
+    monkeypatch: pytest.MonkeyPatch, configuration: HybridSearchSubqueryConfiguration
+) -> None:
+    """
+    Patches HYBRID_SEARCH_SUBQUERY_CONFIGURATION wherever necessary for this
+    test file.
+
+    Args:
+        monkeypatch: The test instance's monkeypatch instance, used for
+            patching.
+        configuration: The intended state of
+            HYBRID_SEARCH_SUBQUERY_CONFIGURATION.
+    """
+    monkeypatch.setattr(
+        "onyx.document_index.opensearch.constants.HYBRID_SEARCH_SUBQUERY_CONFIGURATION",
+        configuration,
+    )
+    monkeypatch.setattr(
+        "onyx.document_index.opensearch.search.HYBRID_SEARCH_SUBQUERY_CONFIGURATION",
+        configuration,
+    )
+
+
+def _patch_hybrid_search_normalization_pipeline(
+    monkeypatch: pytest.MonkeyPatch, pipeline: HybridSearchNormalizationPipeline
+) -> None:
+    """
+    Patches HYBRID_SEARCH_NORMALIZATION_PIPELINE wherever necessary for this
+    test file.
+    """
+    monkeypatch.setattr(
+        "onyx.document_index.opensearch.constants.HYBRID_SEARCH_NORMALIZATION_PIPELINE",
+        pipeline,
+    )
+    monkeypatch.setattr(
+        "onyx.document_index.opensearch.search.HYBRID_SEARCH_NORMALIZATION_PIPELINE",
+        pipeline,
+    )
+
+
+def _patch_opensearch_match_highlights_disabled(
+    monkeypatch: pytest.MonkeyPatch, disabled: bool
+) -> None:
+    """
+    Patches OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED wherever necessary for this
+    test file.
+    """
+    monkeypatch.setattr(
+        "onyx.configs.app_configs.OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED",
+        disabled,
+    )
+    monkeypatch.setattr(
+        "onyx.document_index.opensearch.search.OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED",
+        disabled,
+    )
 
 
 def _create_test_document_chunk(
@@ -144,14 +209,27 @@ def test_client(
 @pytest.fixture(scope="function")
 def search_pipeline(test_client: OpenSearchIndexClient) -> Generator[None, None, None]:
     """Creates a search pipeline for testing with automatic cleanup."""
+    min_max_normalization_pipeline_name, min_max_normalization_pipeline_config = (
+        get_min_max_normalization_pipeline_name_and_config()
+    )
+    zscore_normalization_pipeline_name, zscore_normalization_pipeline_config = (
+        get_zscore_normalization_pipeline_name_and_config()
+    )
     test_client.create_search_pipeline(
-        pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-        pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+        pipeline_id=min_max_normalization_pipeline_name,
+        pipeline_body=min_max_normalization_pipeline_config,
+    )
+    test_client.create_search_pipeline(
+        pipeline_id=zscore_normalization_pipeline_name,
+        pipeline_body=zscore_normalization_pipeline_config,
     )
     yield  # Test runs here.
     try:
         test_client.delete_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+            pipeline_id=min_max_normalization_pipeline_name,
+        )
+        test_client.delete_search_pipeline(
+            pipeline_id=zscore_normalization_pipeline_name,
         )
     except Exception:
         pass
@@ -166,7 +244,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
 
         # Under test.
         # Should not raise.
@@ -182,7 +260,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test.
@@ -211,7 +289,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
 
         test_client.create_index(mappings=mappings, settings=settings)
 
@@ -225,7 +303,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
 
         # Under test and postcondition.
         # Should return False before creation.
@@ -245,7 +323,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test.
@@ -280,7 +358,7 @@ class TestOpenSearchClient:
                 },
             },
         }
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=initial_mappings, settings=settings)
 
         # Under test.
@@ -323,7 +401,7 @@ class TestOpenSearchClient:
                 "test_field": {"type": "keyword"},
             },
         }
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=initial_mappings, settings=settings)
 
         # Under test and postcondition.
@@ -358,7 +436,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=True
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         # Create once - should succeed.
         test_client.create_index(mappings=mappings, settings=settings)
 
@@ -377,18 +455,19 @@ class TestOpenSearchClient:
         self, test_client: OpenSearchIndexClient
     ) -> None:
         """Tests creating and deleting a search pipeline."""
+        # Precondition.
+        pipeline_name, pipeline_config = get_normalization_pipeline_name_and_config()
+
         # Under test and postcondition.
         # Should not raise.
         test_client.create_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-            pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+            pipeline_id=pipeline_name,
+            pipeline_body=pipeline_config,
         )
 
         # Under test and postcondition.
         # Should not raise.
-        test_client.delete_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
+        test_client.delete_search_pipeline(pipeline_id=pipeline_name)
 
     def test_index_document(
         self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
@@ -400,7 +479,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         doc = _create_test_document_chunk(
@@ -428,7 +507,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         docs = [
@@ -459,7 +538,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         doc = _create_test_document_chunk(
@@ -487,7 +566,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         original_doc = _create_test_document_chunk(
@@ -522,7 +601,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=False
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test and postcondition.
@@ -541,7 +620,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         doc = _create_test_document_chunk(
@@ -577,7 +656,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test.
@@ -598,7 +677,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index multiple documents.
@@ -674,7 +753,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Create a document to update.
@@ -723,7 +802,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Under test and postcondition.
@@ -734,22 +813,22 @@ class TestOpenSearchClient:
                 properties_to_update={"hidden": True},
             )
 
-    def test_hybrid_search_with_pipeline(
+    def test_hybrid_search_configurations_and_pipelines(
         self,
         test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Tests hybrid search with a normalization pipeline."""
+        """Tests all hybrid search configurations and pipelines."""
         # Precondition.
         _patch_global_tenant_state(monkeypatch, False)
+        _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
-
         # Index documents.
         docs = {
             "doc-1": _create_test_document_chunk(
@@ -780,40 +859,62 @@ class TestOpenSearchClient:
         # Refresh index to make documents searchable.
         test_client.refresh_index()
 
-        # Search query.
-        query_text = "Python programming"
-        query_vector = _generate_test_vector(0.12)
-        search_body = DocumentQuery.get_hybrid_search_query(
-            query_text=query_text,
-            query_vector=query_vector,
-            num_hits=5,
-            tenant_state=tenant_state,
-            # We're not worried about filtering here. tenant_id in this object
-            # is not relevant.
-            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
-            include_hidden=False,
-        )
+        for configuration in HybridSearchSubqueryConfiguration:
+            _patch_hybrid_search_subquery_configuration(monkeypatch, configuration)
+            for pipeline in HybridSearchNormalizationPipeline:
+                _patch_hybrid_search_normalization_pipeline(monkeypatch, pipeline)
+                pipeline_name, pipeline_config = (
+                    get_normalization_pipeline_name_and_config()
+                )
+                test_client.create_search_pipeline(
+                    pipeline_id=pipeline_name,
+                    pipeline_body=pipeline_config,
+                )
 
-        # Under test.
-        results = test_client.search(
-            body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
+                # Search query.
+                query_text = "Python programming"
+                query_vector = _generate_test_vector(0.12)
+                search_body = DocumentQuery.get_hybrid_search_query(
+                    query_text=query_text,
+                    query_vector=query_vector,
+                    num_hits=5,
+                    tenant_state=tenant_state,
+                    # We're not worried about filtering here. tenant_id in this object
+                    # is not relevant.
+                    index_filters=IndexFilters(
+                        access_control_list=None, tenant_id=None
+                    ),
+                    include_hidden=False,
+                )
 
-        # Postcondition.
-        assert len(results) == len(docs)
-        # Assert that all the chunks above are present.
-        assert all(chunk.document_chunk.document_id in docs.keys() for chunk in results)
-        # Make sure the chunk contents are preserved.
-        for i, chunk in enumerate(results):
-            assert chunk.document_chunk == docs[chunk.document_chunk.document_id]
-            # Make sure score reporting seems reasonable (it should not be None
-            # or 0).
-            assert chunk.score
-            # Make sure there is some kind of match highlight only for the first
-            # result. The other results are so bad they're not expected to have
-            # match highlights.
-            if i == 0:
-                assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
+                # Under test.
+                results = test_client.search(
+                    body=search_body, search_pipeline_id=pipeline_name
+                )
+
+                # Postcondition.
+                assert len(results) == len(docs)
+                # Assert that all the chunks above are present.
+                assert all(
+                    chunk.document_chunk.document_id in docs.keys() for chunk in results
+                )
+                # Make sure the chunk contents are preserved.
+                for i, chunk in enumerate(results):
+                    expected = docs[chunk.document_chunk.document_id]
+                    assert chunk.document_chunk == DocumentChunkWithoutVectors(
+                        **{
+                            k: getattr(expected, k)
+                            for k in DocumentChunkWithoutVectors.model_fields
+                        }
+                    )
+                    # Make sure score reporting seems reasonable (it should not be None
+                    # or 0).
+                    assert chunk.score
+                    # Make sure there is some kind of match highlight only for the first
+                    # result. The other results are so bad they're not expected to have
+                    # match highlights.
+                    if i == 0:
+                        assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_empty_index(
         self,
@@ -828,7 +929,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
         # Note no documents were indexed.
 
@@ -845,11 +946,10 @@ class TestOpenSearchClient:
             index_filters=IndexFilters(access_control_list=None, tenant_id=None),
             include_hidden=False,
         )
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
         # Under test.
-        results = test_client.search(
-            body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
+        results = test_client.search(body=search_body, search_pipeline_id=pipeline_name)
 
         # Postcondition.
         assert len(results) == 0
@@ -865,12 +965,13 @@ class TestOpenSearchClient:
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
+        _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         tenant_y = TenantState(tenant_id="tenant-y", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_x.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index documents with different public/hidden and tenant states.
@@ -948,11 +1049,10 @@ class TestOpenSearchClient:
             ),
             include_hidden=False,
         )
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
         # Under test.
-        results = test_client.search(
-            body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
+        results = test_client.search(body=search_body, search_pipeline_id=pipeline_name)
 
         # Postcondition.
         # Should only get the public, non-hidden document, and the private
@@ -962,7 +1062,12 @@ class TestOpenSearchClient:
         # ordered; we're just assuming which doc will be the first result here.
         assert results[0].document_chunk.document_id == "public-doc"
         # Make sure the chunk contents are preserved.
-        assert results[0].document_chunk == docs["public-doc"]
+        assert results[0].document_chunk == DocumentChunkWithoutVectors(
+            **{
+                k: getattr(docs["public-doc"], k)
+                for k in DocumentChunkWithoutVectors.model_fields
+            }
+        )
         # Make sure score reporting seems reasonable (it should not be None
         # or 0).
         assert results[0].score
@@ -970,7 +1075,12 @@ class TestOpenSearchClient:
         assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
         # Same for the second result.
         assert results[1].document_chunk.document_id == "private-doc-user-a"
-        assert results[1].document_chunk == docs["private-doc-user-a"]
+        assert results[1].document_chunk == DocumentChunkWithoutVectors(
+            **{
+                k: getattr(docs["private-doc-user-a"], k)
+                for k in DocumentChunkWithoutVectors.model_fields
+            }
+        )
         assert results[1].score
         assert results[1].match_highlights.get(CONTENT_FIELD_NAME, [])
 
@@ -986,11 +1096,12 @@ class TestOpenSearchClient:
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
+        _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_x.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index documents with varying relevance to the query.
@@ -1067,11 +1178,10 @@ class TestOpenSearchClient:
             index_filters=IndexFilters(access_control_list=[], tenant_id=None),
             include_hidden=False,
         )
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
         # Under test.
-        results = test_client.search(
-            body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
+        results = test_client.search(body=search_body, search_pipeline_id=pipeline_name)
 
         # Postcondition.
         # Should only get public, non-hidden documents (3 out of 5).
@@ -1118,7 +1228,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_x.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Although very unlikely in practice, let's use the same doc ID just to
@@ -1211,7 +1321,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Don't index any documents.
@@ -1238,7 +1348,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index chunks for two different documents.
@@ -1306,7 +1416,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index documents with different public/hidden and tenant states.
@@ -1383,7 +1493,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index docs with various ages.
@@ -1441,15 +1551,16 @@ class TestOpenSearchClient:
             ),
             include_hidden=False,
         )
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
         # Under test.
         last_week_results = test_client.search(
             body=last_week_search_body,
-            search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+            search_pipeline_id=pipeline_name,
         )
         last_six_months_results = test_client.search(
             body=last_six_months_search_body,
-            search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+            search_pipeline_id=pipeline_name,
         )
 
         # Postcondition.
@@ -1474,7 +1585,7 @@ class TestOpenSearchClient:
         mappings = DocumentSchema.get_document_schema(
             vector_dimension=128, multitenant=tenant_state.multitenant
         )
-        settings = DocumentSchema.get_index_settings()
+        settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
         # Index chunks for two different documents, one hidden one not.
@@ -1523,4 +1634,281 @@ class TestOpenSearchClient:
         for result in results:
             # Note each result must be from doc 1, which is not hidden.
             expected_result = doc1_chunks[result.document_chunk.chunk_index]
-            assert result.document_chunk == expected_result
+            assert result.document_chunk == DocumentChunkWithoutVectors(
+                **{
+                    k: getattr(expected_result, k)
+                    for k in DocumentChunkWithoutVectors.model_fields
+                }
+            )
+
+    def test_keyword_search(
+        self,
+        test_client: OpenSearchIndexClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """
+        Tests keyword search with filters for ACL, hidden documents, and tenant
+        isolation.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, True)
+        _patch_opensearch_match_highlights_disabled(monkeypatch, False)
+        tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
+        tenant_y = TenantState(tenant_id="tenant-y", multitenant=True)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_x.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Index documents with different public/hidden and tenant states.
+        docs = {
+            "public-doc": _create_test_document_chunk(
+                document_id="public-doc",
+                chunk_index=0,
+                content="Public document content",
+                hidden=False,
+                tenant_state=tenant_x,
+            ),
+            "hidden-doc": _create_test_document_chunk(
+                document_id="hidden-doc",
+                chunk_index=0,
+                content="Hidden document content, spooky",
+                hidden=True,
+                tenant_state=tenant_x,
+            ),
+            "private-doc-user-a": _create_test_document_chunk(
+                document_id="private-doc-user-a",
+                chunk_index=0,
+                content="Private document content, btw my SSN is 123-45-6789",
+                hidden=False,
+                tenant_state=tenant_x,
+                document_access=DocumentAccess.build(
+                    user_emails=["user-a@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+            ),
+            # Tests that we don't return documents that don't match keywords at
+            # all, even if they match filters.
+            "private-but-not-relevant-doc-user-a": _create_test_document_chunk(
+                document_id="private-but-not-relevant-doc-user-a",
+                chunk_index=0,
+                content="This text should not match the query at all",
+                hidden=False,
+                tenant_state=tenant_x,
+                document_access=DocumentAccess.build(
+                    user_emails=["user-a@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+            ),
+            "private-doc-user-b": _create_test_document_chunk(
+                document_id="private-doc-user-b",
+                chunk_index=0,
+                content="Private document content, btw my SSN is 987-65-4321",
+                hidden=False,
+                tenant_state=tenant_x,
+                document_access=DocumentAccess.build(
+                    user_emails=["user-b@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+            ),
+            "should-not-exist-from-tenant-x-pov": _create_test_document_chunk(
+                document_id="should-not-exist-from-tenant-x-pov",
+                chunk_index=0,
+                content="This is an entirely different tenant, x should never see this",
+                # Make this as permissive as possible to exercise tenant
+                # isolation.
+                hidden=False,
+                tenant_state=tenant_y,
+            ),
+        }
+        for doc in docs.values():
+            test_client.index_document(document=doc, tenant_state=doc.tenant_id)
+
+        # Refresh index to make documents searchable.
+        test_client.refresh_index()
+
+        # Should not match private-but-not-relevant-doc-user-a.
+        query_text = "document content"
+        search_body = DocumentQuery.get_keyword_search_query(
+            query_text=query_text,
+            num_hits=5,
+            tenant_state=tenant_x,
+            # The user should only be able to see their private docs. tenant_id
+            # in this object is not relevant.
+            index_filters=IndexFilters(
+                access_control_list=[prefix_user_email("user-a@example.com")],
+                tenant_id=None,
+            ),
+            include_hidden=False,
+        )
+
+        # Under test.
+        results = test_client.search(body=search_body, search_pipeline_id=None)
+
+        # Postcondition.
+        # Should only get the public, non-hidden document, and the private
+        # document for which the user has access.
+        assert len(results) == 2
+        # This should be the highest-ranked result, as a higher percentage of
+        # the content matches the query.
+        assert results[0].document_chunk.document_id == "public-doc"
+        # Make sure the chunk contents are preserved.
+        assert results[0].document_chunk == DocumentChunkWithoutVectors(
+            **{
+                k: getattr(docs["public-doc"], k)
+                for k in DocumentChunkWithoutVectors.model_fields
+            }
+        )
+        # Make sure score reporting seems reasonable (it should not be None
+        # or 0).
+        assert results[0].score
+        # Make sure there is some kind of match highlight.
+        assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
+        # Same for the second result.
+        assert results[1].document_chunk.document_id == "private-doc-user-a"
+        assert results[1].document_chunk == DocumentChunkWithoutVectors(
+            **{
+                k: getattr(docs["private-doc-user-a"], k)
+                for k in DocumentChunkWithoutVectors.model_fields
+            }
+        )
+        assert results[1].score
+        assert results[1].match_highlights.get(CONTENT_FIELD_NAME, [])
+        assert results[1].score < results[0].score
+
+    def test_semantic_search(
+        self,
+        test_client: OpenSearchIndexClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """
+        Tests semantic search with filters for ACL, hidden documents, and tenant
+        isolation.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, True)
+        tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
+        tenant_y = TenantState(tenant_id="tenant-y", multitenant=True)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_x.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Index documents with different public/hidden and tenant states.
+        docs = {
+            "public-doc": _create_test_document_chunk(
+                document_id="public-doc",
+                chunk_index=0,
+                content="Public document content",
+                hidden=False,
+                tenant_state=tenant_x,
+                # Make this identical to the query vector to test that this
+                # result is returned first.
+                content_vector=_generate_test_vector(0.6),
+            ),
+            "hidden-doc": _create_test_document_chunk(
+                document_id="hidden-doc",
+                chunk_index=0,
+                content="Hidden document content, spooky",
+                hidden=True,
+                tenant_state=tenant_x,
+            ),
+            "private-doc-user-a": _create_test_document_chunk(
+                document_id="private-doc-user-a",
+                chunk_index=0,
+                content="Private document content, btw my SSN is 123-45-6789",
+                hidden=False,
+                tenant_state=tenant_x,
+                document_access=DocumentAccess.build(
+                    user_emails=["user-a@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+                # Make this different from the query vector to test that this
+                # result is returned second.
+                content_vector=_generate_test_vector(0.5),
+            ),
+            "private-doc-user-b": _create_test_document_chunk(
+                document_id="private-doc-user-b",
+                chunk_index=0,
+                content="Private document content, btw my SSN is 987-65-4321",
+                hidden=False,
+                tenant_state=tenant_x,
+                document_access=DocumentAccess.build(
+                    user_emails=["user-b@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+            ),
+            "should-not-exist-from-tenant-x-pov": _create_test_document_chunk(
+                document_id="should-not-exist-from-tenant-x-pov",
+                chunk_index=0,
+                content="This is an entirely different tenant, x should never see this",
+                # Make this as permissive as possible to exercise tenant
+                # isolation.
+                hidden=False,
+                tenant_state=tenant_y,
+            ),
+        }
+        for doc in docs.values():
+            test_client.index_document(document=doc, tenant_state=doc.tenant_id)
+
+        # Refresh index to make documents searchable.
+        test_client.refresh_index()
+
+        query_vector = _generate_test_vector(0.6)
+        search_body = DocumentQuery.get_semantic_search_query(
+            query_embedding=query_vector,
+            num_hits=5,
+            tenant_state=tenant_x,
+            # The user should only be able to see their private docs. tenant_id
+            # in this object is not relevant.
+            index_filters=IndexFilters(
+                access_control_list=[prefix_user_email("user-a@example.com")],
+                tenant_id=None,
+            ),
+            include_hidden=False,
+        )
+
+        # Under test.
+        results = test_client.search(body=search_body, search_pipeline_id=None)
+
+        # Postcondition.
+        # Should only get the public, non-hidden document, and the private
+        # document for which the user has access.
+        assert len(results) == 2
+        # We explicitly expect this to be the highest-ranked result.
+        assert results[0].document_chunk.document_id == "public-doc"
+        # Make sure the chunk contents are preserved.
+        assert results[0].document_chunk == DocumentChunkWithoutVectors(
+            **{
+                k: getattr(docs["public-doc"], k)
+                for k in DocumentChunkWithoutVectors.model_fields
+            }
+        )
+        assert results[0].score == 1.0
+        # Same for the second result.
+        assert results[1].document_chunk.document_id == "private-doc-user-a"
+        assert results[1].document_chunk == DocumentChunkWithoutVectors(
+            **{
+                k: getattr(docs["private-doc-user-a"], k)
+                for k in DocumentChunkWithoutVectors.model_fields
+            }
+        )
+        assert results[1].score
+        assert 0.0 < results[1].score < 1.0

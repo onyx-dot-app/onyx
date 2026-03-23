@@ -24,6 +24,7 @@ from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_USER_FILE_DELETE_TASK_EXPIRES
 from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
 from onyx.configs.constants import CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT
@@ -33,6 +34,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import USER_FILE_DELETE_MAX_QUEUE_DEPTH
 from onyx.configs.constants import USER_FILE_PROCESSING_MAX_QUEUE_DEPTH
 from onyx.configs.constants import USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH
 from onyx.connectors.file.connector import LocalFileConnector
@@ -89,6 +91,17 @@ def _user_file_project_sync_queued_key(user_file_id: str | UUID) -> str:
 
 def _user_file_delete_lock_key(user_file_id: str | UUID) -> str:
     return f"{OnyxRedisLocks.USER_FILE_DELETE_LOCK_PREFIX}:{user_file_id}"
+
+
+def _user_file_delete_queued_key(user_file_id: str | UUID) -> str:
+    """Key that exists while a delete_single_user_file task is sitting in the queue.
+
+    The beat generator sets this with a TTL equal to CELERY_USER_FILE_DELETE_TASK_EXPIRES
+    before enqueuing and the worker deletes it as its first action.  This prevents
+    the beat from adding duplicate tasks for files that already have a live task
+    in flight.
+    """
+    return f"{OnyxRedisLocks.USER_FILE_DELETE_QUEUED_PREFIX}:{user_file_id}"
 
 
 def get_user_file_project_sync_queue_depth(celery_app: Celery) -> int:
@@ -285,8 +298,7 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
             lock.release()
 
     task_logger.info(
-        f"check_user_file_processing - Enqueued {enqueued} skipped_guard={skipped_guard} "
-        f"tasks for tenant={tenant_id}"
+        f"check_user_file_processing - Enqueued {enqueued} skipped_guard={skipped_guard} tasks for tenant={tenant_id}"
     )
     return None
 
@@ -317,8 +329,7 @@ def _process_user_file_without_vector_db(
         token_count: int | None = len(encode(combined_text))
     except Exception:
         task_logger.warning(
-            f"_process_user_file_without_vector_db - "
-            f"Failed to compute token count for {uf.id}, falling back to None"
+            f"_process_user_file_without_vector_db - Failed to compute token count for {uf.id}, falling back to None"
         )
         token_count = None
 
@@ -338,8 +349,7 @@ def _process_user_file_without_vector_db(
     db_session.commit()
 
     task_logger.info(
-        f"_process_user_file_without_vector_db - "
-        f"Completed id={uf.id} tokens={token_count}"
+        f"_process_user_file_without_vector_db - Completed id={uf.id} tokens={token_count}"
     )
 
 
@@ -366,8 +376,7 @@ def _process_user_file_with_indexing(
     )
     if current_search_settings is None:
         raise RuntimeError(
-            f"_process_user_file_with_indexing - "
-            f"No current search settings found for tenant={tenant_id}"
+            f"_process_user_file_with_indexing - No current search settings found for tenant={tenant_id}"
         )
 
     adapter = UserFileIndexingAdapter(
@@ -397,8 +406,7 @@ def _process_user_file_with_indexing(
     )
 
     task_logger.info(
-        f"_process_user_file_with_indexing - "
-        f"Indexing pipeline completed ={index_pipeline_result}"
+        f"_process_user_file_with_indexing - Indexing pipeline completed ={index_pipeline_result}"
     )
 
     if (
@@ -407,8 +415,7 @@ def _process_user_file_with_indexing(
         or index_pipeline_result.total_chunks == 0
     ):
         task_logger.error(
-            f"_process_user_file_with_indexing - "
-            f"Indexing pipeline failed id={user_file_id}"
+            f"_process_user_file_with_indexing - Indexing pipeline failed id={user_file_id}"
         )
         if uf.status != UserFileStatus.DELETING:
             uf.status = UserFileStatus.FAILED
@@ -535,7 +542,10 @@ def process_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001
+    *,
+    user_file_id: str,
+    tenant_id: str,
 ) -> None:
     process_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
@@ -549,7 +559,23 @@ def process_single_user_file(
     ignore_result=True,
 )
 def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
-    """Scan for user files with DELETING status and enqueue per-file tasks."""
+    """Scan for user files with DELETING status and enqueue per-file tasks.
+
+    Three mechanisms prevent queue runaway (mirrors check_user_file_processing):
+
+    1. **Queue depth backpressure** – if the broker queue already has more than
+       USER_FILE_DELETE_MAX_QUEUE_DEPTH items we skip this beat cycle entirely.
+
+    2. **Per-file queued guard** – before enqueuing a task we set a short-lived
+       Redis key (TTL = CELERY_USER_FILE_DELETE_TASK_EXPIRES).  If that key
+       already exists the file already has a live task in the queue, so we skip
+       it.  The worker deletes the key the moment it picks up the task so the
+       next beat cycle can re-enqueue if the file is still DELETING.
+
+    3. **Task expiry** – every enqueued task carries an `expires` value equal to
+       CELERY_USER_FILE_DELETE_TASK_EXPIRES.  If a task is still sitting in
+       the queue after that deadline, Celery discards it without touching the DB.
+    """
     task_logger.info("check_for_user_file_delete - Starting")
     redis_client = get_redis_client(tenant_id=tenant_id)
     lock: RedisLock = redis_client.lock(
@@ -558,8 +584,23 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
     )
     if not lock.acquire(blocking=False):
         return None
+
     enqueued = 0
+    skipped_guard = 0
     try:
+        # --- Protection 1: queue depth backpressure ---
+        # NOTE: must use the broker's Redis client (not redis_client) because
+        # Celery queues live on a separate Redis DB with CELERY_SEPARATOR keys.
+        r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
+        queue_len = celery_get_queue_length(OnyxCeleryQueues.USER_FILE_DELETE, r_celery)
+        if queue_len > USER_FILE_DELETE_MAX_QUEUE_DEPTH:
+            task_logger.warning(
+                f"check_for_user_file_delete - Queue depth {queue_len} exceeds "
+                f"{USER_FILE_DELETE_MAX_QUEUE_DEPTH}, skipping enqueue for "
+                f"tenant={tenant_id}"
+            )
+            return None
+
         with get_session_with_current_tenant() as db_session:
             user_file_ids = (
                 db_session.execute(
@@ -571,23 +612,40 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
                 .all()
             )
             for user_file_id in user_file_ids:
-                self.app.send_task(
-                    OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
-                    kwargs={"user_file_id": str(user_file_id), "tenant_id": tenant_id},
-                    queue=OnyxCeleryQueues.USER_FILE_DELETE,
-                    priority=OnyxCeleryPriority.HIGH,
+                # --- Protection 2: per-file queued guard ---
+                queued_key = _user_file_delete_queued_key(user_file_id)
+                guard_set = redis_client.set(
+                    queued_key,
+                    1,
+                    ex=CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+                    nx=True,
                 )
+                if not guard_set:
+                    skipped_guard += 1
+                    continue
+
+                # --- Protection 3: task expiry ---
+                try:
+                    self.app.send_task(
+                        OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
+                        kwargs={
+                            "user_file_id": str(user_file_id),
+                            "tenant_id": tenant_id,
+                        },
+                        queue=OnyxCeleryQueues.USER_FILE_DELETE,
+                        priority=OnyxCeleryPriority.HIGH,
+                        expires=CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+                    )
+                except Exception:
+                    redis_client.delete(queued_key)
+                    raise
                 enqueued += 1
-    except Exception as e:
-        task_logger.exception(
-            f"check_for_user_file_delete - Error enqueuing deletes - {e.__class__.__name__}"
-        )
-        return None
     finally:
         if lock.owned():
             lock.release()
+
     task_logger.info(
-        f"check_for_user_file_delete - Enqueued {enqueued} tasks for tenant={tenant_id}"
+        f"check_for_user_file_delete - Enqueued {enqueued} tasks, skipped_guard={skipped_guard} for tenant={tenant_id}"
     )
     return None
 
@@ -605,6 +663,9 @@ def delete_user_file_impl(
     file_lock: RedisLock | None = None
     if redis_locking:
         redis_client = get_redis_client(tenant_id=tenant_id)
+        # Clear the queued guard so the beat can re-enqueue if deletion fails
+        # and the file remains in DELETING status.
+        redis_client.delete(_user_file_delete_queued_key(user_file_id))
         file_lock = redis_client.lock(
             _user_file_delete_lock_key(user_file_id),
             timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -691,7 +752,10 @@ def delete_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file_delete(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001
+    *,
+    user_file_id: str,
+    tenant_id: str,
 ) -> None:
     delete_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True
@@ -761,8 +825,7 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
             lock.release()
 
     task_logger.info(
-        f"Enqueued {enqueued} "
-        f"Skipped guard {skipped_guard} tasks for tenant={tenant_id}"
+        f"Enqueued {enqueued} Skipped guard {skipped_guard} tasks for tenant={tenant_id}"
     )
     return None
 
@@ -876,7 +939,10 @@ def project_sync_user_file_impl(
     ignore_result=True,
 )
 def process_single_user_file_project_sync(
-    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001
+    *,
+    user_file_id: str,
+    tenant_id: str,
 ) -> None:
     project_sync_user_file_impl(
         user_file_id=user_file_id, tenant_id=tenant_id, redis_locking=True

@@ -5,10 +5,10 @@ import React from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
 import {
-  sizeVariants,
-  type SizeVariant,
+  containerSizeVariants,
+  type ContainerSizeVariants,
   widthVariants,
-  type WidthVariant,
+  type ExtremaSizeVariants,
 } from "@opal/shared";
 import { useDisabled } from "@opal/core/disabled/components";
 
@@ -73,14 +73,14 @@ interface InteractiveContainerProps
    *
    * @default "lg"
    */
-  heightVariant?: SizeVariant;
+  heightVariant?: ContainerSizeVariants;
 
   /**
    * Width preset controlling the container's horizontal size.
    *
    * @default "fit"
    */
-  widthVariant?: WidthVariant;
+  widthVariant?: ExtremaSizeVariants;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ function InteractiveContainer({
     target?: string;
     rel?: string;
   };
-  const { height, minWidth, padding } = sizeVariants[heightVariant];
+  const { height, minWidth, padding } = containerSizeVariants[heightVariant];
   const sharedProps = {
     ...rest,
     className: cn(

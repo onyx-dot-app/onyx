@@ -109,9 +109,7 @@ def try_creating_docfetching_task(
 
     except Exception:
         task_logger.exception(
-            f"try_creating_indexing_task - Unexpected exception: "
-            f"cc_pair={cc_pair.id} "
-            f"search_settings={search_settings.id}"
+            f"try_creating_indexing_task - Unexpected exception: cc_pair={cc_pair.id} search_settings={search_settings.id}"
         )
 
         # Clean up on failure

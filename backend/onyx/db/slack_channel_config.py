@@ -84,7 +84,8 @@ def create_slack_channel_persona(
 
 
 def _no_ee_standard_answer_categories(
-    *args: Any, **kwargs: Any  # noqa: ARG001
+    *args: Any,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
 ) -> list:
     return []
 

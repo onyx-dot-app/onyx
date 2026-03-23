@@ -158,7 +158,6 @@ def validate_active_indexing_attempts(
     logger.info("Validating active indexing attempts")
 
     with get_session_with_current_tenant() as db_session:
-
         # Find all active indexing attempts
         active_attempts = (
             db_session.execute(
@@ -190,8 +189,7 @@ def validate_active_indexing_attempts(
                 db_session.commit()
 
                 task_logger.info(
-                    f"Initialized heartbeat tracking for attempt {fresh_attempt.id}: "
-                    f"counter={fresh_attempt.heartbeat_counter}"
+                    f"Initialized heartbeat tracking for attempt {fresh_attempt.id}: counter={fresh_attempt.heartbeat_counter}"
                 )
                 continue
 
@@ -214,8 +212,7 @@ def validate_active_indexing_attempts(
                 db_session.commit()
 
                 task_logger.debug(
-                    f"Heartbeat advanced for attempt {fresh_attempt.id}: "
-                    f"new_counter={current_counter}"
+                    f"Heartbeat advanced for attempt {fresh_attempt.id}: new_counter={current_counter}"
                 )
                 continue
 
@@ -350,9 +347,7 @@ def monitor_indexing_attempt_progress(
         )
     except Exception as e:
         logger.exception(
-            f"Failed to monitor document processing completion: "
-            f"attempt={attempt.id} "
-            f"error={str(e)}"
+            f"Failed to monitor document processing completion: attempt={attempt.id} error={str(e)}"
         )
 
         # Mark the attempt as failed if monitoring fails
@@ -401,9 +396,7 @@ def check_indexing_completion(
 ) -> None:
 
     logger.info(
-        f"Checking for indexing completion: "
-        f"attempt={index_attempt_id} "
-        f"tenant={tenant_id}"
+        f"Checking for indexing completion: attempt={index_attempt_id} tenant={tenant_id}"
     )
 
     # Check if indexing is complete and all batches are processed
@@ -445,7 +438,7 @@ def check_indexing_completion(
             if attempt.status == IndexingStatus.IN_PROGRESS:
                 logger.error(
                     f"Indexing attempt {index_attempt_id} has been indexing for "
-                    f"{stalled_timeout_hours//2}-{stalled_timeout_hours} hours without progress. "
+                    f"{stalled_timeout_hours // 2}-{stalled_timeout_hours} hours without progress. "
                     f"Marking it as failed."
                 )
                 mark_attempt_failed(
@@ -695,17 +688,12 @@ def _kickoff_indexing_tasks(
 
         if attempt_id is not None:
             task_logger.info(
-                f"Connector indexing queued: "
-                f"index_attempt={attempt_id} "
-                f"cc_pair={cc_pair.id} "
-                f"search_settings={search_settings.id}"
+                f"Connector indexing queued: index_attempt={attempt_id} cc_pair={cc_pair.id} search_settings={search_settings.id}"
             )
             tasks_created += 1
         else:
             task_logger.error(
-                f"Failed to create indexing task: "
-                f"cc_pair={cc_pair.id} "
-                f"search_settings={search_settings.id}"
+                f"Failed to create indexing task: cc_pair={cc_pair.id} search_settings={search_settings.id}"
             )
 
     return tasks_created
@@ -901,9 +889,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 and secondary_search_settings.switchover_type == SwitchoverType.INSTANT
             ):
                 task_logger.info(
-                    f"Skipping secondary indexing: "
-                    f"switchover_type=INSTANT "
-                    f"for search_settings={secondary_search_settings.id}"
+                    f"Skipping secondary indexing: switchover_type=INSTANT for search_settings={secondary_search_settings.id}"
                 )
 
         # 2/3: VALIDATE
@@ -1005,8 +991,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 lock_beat.release()
             else:
                 task_logger.error(
-                    "check_for_indexing - Lock not owned on completion: "
-                    f"tenant={tenant_id}"
+                    f"check_for_indexing - Lock not owned on completion: tenant={tenant_id}"
                 )
                 redis_lock_dump(lock_beat, redis_client)
 
@@ -1060,8 +1045,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
                 lock.release()
             else:
                 task_logger.error(
-                    "check_for_checkpoint_cleanup - Lock not owned on completion: "
-                    f"tenant={tenant_id}"
+                    f"check_for_checkpoint_cleanup - Lock not owned on completion: tenant={tenant_id}"
                 )
 
 
@@ -1071,7 +1055,10 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
     bind=True,
 )
 def cleanup_checkpoint_task(
-    self: Task, *, index_attempt_id: int, tenant_id: str | None  # noqa: ARG001
+    self: Task,  # noqa: ARG001
+    *,
+    index_attempt_id: int,
+    tenant_id: str | None,
 ) -> None:
     """Clean up a checkpoint for a given index attempt"""
 
@@ -1084,9 +1071,7 @@ def cleanup_checkpoint_task(
         elapsed = time.monotonic() - start
 
         task_logger.info(
-            f"cleanup_checkpoint_task completed: tenant_id={tenant_id} "
-            f"index_attempt_id={index_attempt_id} "
-            f"elapsed={elapsed:.2f}"
+            f"cleanup_checkpoint_task completed: tenant_id={tenant_id} index_attempt_id={index_attempt_id} elapsed={elapsed:.2f}"
         )
 
 
@@ -1149,8 +1134,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
                 lock.release()
             else:
                 task_logger.error(
-                    "check_for_index_attempt_cleanup - Lock not owned on completion: "
-                    f"tenant={tenant_id}"
+                    f"check_for_index_attempt_cleanup - Lock not owned on completion: tenant={tenant_id}"
                 )
 
 
@@ -1160,7 +1144,10 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
     bind=True,
 )
 def cleanup_index_attempt_task(
-    self: Task, *, index_attempt_ids: list[int], tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001
+    *,
+    index_attempt_ids: list[int],
+    tenant_id: str,
 ) -> None:
     """Clean up an index attempt"""
     start = time.monotonic()
@@ -1207,15 +1194,13 @@ def _check_failure_threshold(
     FAILURE_RATIO_THRESHOLD = 0.1
     if total_failures > FAILURE_THRESHOLD and failure_ratio > FAILURE_RATIO_THRESHOLD:
         logger.error(
-            f"Connector run failed with '{total_failures}' errors "
-            f"after '{batch_num}' batches."
+            f"Connector run failed with '{total_failures}' errors after '{batch_num}' batches."
         )
         if last_failure and last_failure.exception:
             raise last_failure.exception from last_failure.exception
 
         raise RuntimeError(
-            f"Connector run encountered too many errors, aborting. "
-            f"Last error: {last_failure}"
+            f"Connector run encountered too many errors, aborting. Last error: {last_failure}"
         )
 
 
@@ -1339,9 +1324,7 @@ def _docprocessing_task(
             raise
 
     task_logger.info(
-        f"Processing document batch: "
-        f"attempt={index_attempt_id} "
-        f"batch_num={batch_num} "
+        f"Processing document batch: attempt={index_attempt_id} batch_num={batch_num} "
     )
 
     # Get the document batch storage
@@ -1599,9 +1582,7 @@ def _docprocessing_task(
 
     except Exception:
         task_logger.exception(
-            f"Document batch processing failed: "
-            f"batch_num={batch_num} "
-            f"attempt={index_attempt_id} "
+            f"Document batch processing failed: batch_num={batch_num} attempt={index_attempt_id} "
         )
 
         raise

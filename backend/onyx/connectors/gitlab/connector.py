@@ -95,7 +95,8 @@ def _convert_code_to_document(
 
     # Fetch the file content using the correct branch
     file_content_obj = project.files.get(
-        file_path=file["path"], ref=default_branch  # Use the default branch
+        file_path=file["path"],
+        ref=default_branch,  # Use the default branch
     )
     try:
         file_content = file_content_obj.decode().decode("utf-8")

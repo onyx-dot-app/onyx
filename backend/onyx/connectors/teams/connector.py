@@ -427,8 +427,7 @@ def _construct_semantic_identifier(channel: Channel, top_message: Message) -> st
 
     except Exception:
         logger.exception(
-            f"Error parsing snippet for message "
-            f"{top_message.id} with url {top_message.web_url}"
+            f"Error parsing snippet for message {top_message.id} with url {top_message.web_url}"
         )
         snippet = ""
 

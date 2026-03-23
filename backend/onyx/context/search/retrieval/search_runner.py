@@ -103,8 +103,7 @@ def search_chunks(
     else:
         if db_session is None:
             raise ValueError(
-                "Either db_session or prefetched_federated_retrieval_infos "
-                "must be provided"
+                "Either db_session or prefetched_federated_retrieval_infos must be provided"
             )
         federated_retrieval_infos = get_federated_retrieval_functions(
             db_session=db_session,
@@ -142,8 +141,7 @@ def search_chunks(
 
     if not top_chunks:
         logger.debug(
-            f"Hybrid search returned no results for query: {query_request.query}"
-            f"with filters: {query_request.filters}"
+            f"Hybrid search returned no results for query: {query_request.query}with filters: {query_request.filters}"
         )
         return []
 

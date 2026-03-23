@@ -1,0 +1,9 @@
+# Values for chart-testing (ct lint/install)
+# This file is automatically used by ct when running lint and install commands
+auth:
+  opensearch:
+    values:
+      opensearch_admin_password: "placeholder-OpenSearch1!"
+  userauth:
+    values:
+      user_auth_secret: "placeholder-for-ci-testing"

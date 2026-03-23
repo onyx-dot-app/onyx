@@ -103,8 +103,7 @@ def main() -> None:
         )
         if not requirements_file.exists():
             raise FileNotFoundError(
-                "Could not find requirements file. "
-                f"Expected at {requirements_file} or specify with --requirements"
+                f"Could not find requirements file. Expected at {requirements_file} or specify with --requirements"
             )
 
     # Show web template location

@@ -1219,15 +1219,16 @@ def test_code_interpreter_receives_chat_files(
         finally:
             ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults
 
-    # Verify: file uploaded, code executed via streaming, staged file cleaned up
+    # Verify: file uploaded and code executed via streaming.
     assert len(mock_ci_server.get_requests(method="POST", path="/v1/files")) == 1
     assert (
         len(mock_ci_server.get_requests(method="POST", path="/v1/execute/stream")) == 1
     )
 
-    delete_requests = mock_ci_server.get_requests(method="DELETE")
-    assert len(delete_requests) == 1
-    assert delete_requests[0].path.startswith("/v1/files/")
+    # Staged input files are intentionally NOT deleted — PythonTool caches their
+    # file IDs across agent-loop iterations to avoid re-uploading on every call.
+    # The code interpreter cleans them up via its own TTL.
+    assert len(mock_ci_server.get_requests(method="DELETE")) == 0
 
     execute_body = mock_ci_server.get_requests(
         method="POST", path="/v1/execute/stream"
@@ -1359,10 +1360,9 @@ def test_code_interpreter_replay_packets_include_code_and_output(
 
     # Extract PythonToolStart packets – these must contain the code
     start_packets = [p for p in packets if isinstance(p.obj, PythonToolStart)]
-    assert len(start_packets) == 1, (
-        f"Expected 1 PythonToolStart packet, got {len(start_packets)}. "
-        f"Packet types: {[type(p.obj).__name__ for p in packets]}"
-    )
+    assert (
+        len(start_packets) == 1
+    ), f"Expected 1 PythonToolStart packet, got {len(start_packets)}. Packet types: {[type(p.obj).__name__ for p in packets]}"
     start_obj = start_packets[0].obj
     assert isinstance(start_obj, PythonToolStart)
     assert start_obj.code == code

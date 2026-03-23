@@ -429,8 +429,7 @@ class CloudEmbedding:
                 # Log progress for large batches to track memory usage patterns
                 if batch_idx % 10 == 0 and batch_idx > 0:
                     logger.debug(
-                        f"VertexAI embedding progress: batch {batch_idx}/{len(batches)}, "
-                        f"total_embeddings={len(all_embeddings)}"
+                        f"VertexAI embedding progress: batch {batch_idx}/{len(batches)}, total_embeddings={len(all_embeddings)}"
                     )
 
             logger.debug(
@@ -583,8 +582,7 @@ async def cohere_rerank_api(
     except ApiError as err:
         if err.status_code == 402:
             logger.warning(
-                "Cohere rerank request rejected due to billing cap. "
-                "Falling back to retrieval ordering until billing resets."
+                "Cohere rerank request rejected due to billing cap. Falling back to retrieval ordering until billing resets."
             )
             raise CohereBillingLimitError(
                 "Cohere billing limit reached for reranking"

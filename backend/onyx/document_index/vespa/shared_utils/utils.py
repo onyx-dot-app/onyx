@@ -90,15 +90,13 @@ def wait_for_vespa_with_timeout(wait_interval: int = 5, wait_limit: int = 60) ->
                 return True
         except Exception as e:
             logger.warning(
-                f"Vespa: Readiness probe failed trying to connect to {url}. "
-                f"Exception: {e}"
+                f"Vespa: Readiness probe failed trying to connect to {url}. Exception: {e}"
             )
 
         time_elapsed = time.monotonic() - time_start
         if time_elapsed > wait_limit:
             logger.info(
-                f"Vespa: Readiness probe did not succeed within the timeout "
-                f"({wait_limit} seconds)."
+                f"Vespa: Readiness probe did not succeed within the timeout ({wait_limit} seconds)."
             )
             return False
 

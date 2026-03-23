@@ -35,6 +35,8 @@ class OnyxErrorCode(Enum):
     INSUFFICIENT_PERMISSIONS = ("INSUFFICIENT_PERMISSIONS", 403)
     ADMIN_ONLY = ("ADMIN_ONLY", 403)
     EE_REQUIRED = ("EE_REQUIRED", 403)
+    SINGLE_TENANT_ONLY = ("SINGLE_TENANT_ONLY", 403)
+    ENV_VAR_GATED = ("ENV_VAR_GATED", 403)
 
     # ------------------------------------------------------------------
     # Validation / Bad Request (400)
@@ -67,6 +69,11 @@ class OnyxErrorCode(Enum):
     SEAT_LIMIT_EXCEEDED = ("SEAT_LIMIT_EXCEEDED", 402)
 
     # ------------------------------------------------------------------
+    # Payload (413)
+    # ------------------------------------------------------------------
+    PAYLOAD_TOO_LARGE = ("PAYLOAD_TOO_LARGE", 413)
+
+    # ------------------------------------------------------------------
     # Connector / Credential Errors (400-range)
     # ------------------------------------------------------------------
     CONNECTOR_VALIDATION_FAILED = ("CONNECTOR_VALIDATION_FAILED", 400)
@@ -81,6 +88,7 @@ class OnyxErrorCode(Enum):
     SERVICE_UNAVAILABLE = ("SERVICE_UNAVAILABLE", 503)
     BAD_GATEWAY = ("BAD_GATEWAY", 502)
     LLM_PROVIDER_ERROR = ("LLM_PROVIDER_ERROR", 502)
+    HOOK_EXECUTION_FAILED = ("HOOK_EXECUTION_FAILED", 502)
     GATEWAY_TIMEOUT = ("GATEWAY_TIMEOUT", 504)
 
     def __init__(self, code: str, status_code: int) -> None:

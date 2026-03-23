@@ -214,8 +214,7 @@ class TestConnectorMappingIntegrity:
 
         if unmapped_sources:
             pytest.fail(
-                f"DocumentSource values without connector mappings: "
-                f"{[s.value for s in unmapped_sources]}"
+                f"DocumentSource values without connector mappings: {[s.value for s in unmapped_sources]}"
             )
 
     def test_mapping_format_consistency(self) -> None:

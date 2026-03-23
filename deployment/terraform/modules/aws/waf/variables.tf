@@ -9,6 +9,18 @@ variable "tags" {
   default     = {}
 }
 
+variable "allowed_ip_cidrs" {
+  type        = list(string)
+  description = "Optional IPv4 CIDR ranges allowed to reach the application. Leave empty to disable IP allowlisting."
+  default     = []
+}
+
+variable "common_rule_set_count_rules" {
+  type        = list(string)
+  description = "Subrules within AWSManagedRulesCommonRuleSet to override to COUNT instead of BLOCK."
+  default     = []
+}
+
 variable "rate_limit_requests_per_5_minutes" {
   type        = number
   description = "Rate limit for requests per 5 minutes per IP address"

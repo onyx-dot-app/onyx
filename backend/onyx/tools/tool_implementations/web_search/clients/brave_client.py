@@ -180,10 +180,7 @@ class BraveClient(WebSearchProvider):
 
 
 def _build_error_message(response: requests.Response) -> str:
-    return (
-        "Brave search failed "
-        f"(status {response.status_code}): {_extract_error_detail(response)}"
-    )
+    return f"Brave search failed (status {response.status_code}): {_extract_error_detail(response)}"
 
 
 def _extract_error_detail(response: requests.Response) -> str:

@@ -6,7 +6,8 @@ import {
   type InteractiveStatefulProps,
   type InteractiveStatefulInteraction,
 } from "@opal/core";
-import type { SizeVariant, WidthVariant } from "@opal/shared";
+import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
+import type { InteractiveContainerRoundingVariant } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { SvgChevronDownSmall } from "@opal/icons";
@@ -55,21 +56,34 @@ type OpenButtonContentProps =
       children?: string;
     };
 
-type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> &
-  OpenButtonContentProps & {
+type OpenButtonVariant = "select-light" | "select-heavy" | "select-tinted";
+
+type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
+  variant?: OpenButtonVariant;
+} & OpenButtonContentProps & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
-    size?: SizeVariant;
+    size?: ContainerSizeVariants;
 
     /** Width preset. */
-    width?: WidthVariant;
+    width?: ExtremaSizeVariants;
+
+    /**
+     * Content justify mode. When `"between"`, icon+label group left and
+     * chevron pushes to the right edge. Default keeps all items in a
+     * tight `gap-1` row.
+     */
+    justifyContent?: "between";
 
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
+
+    /** Override the default rounding derived from `size`. */
+    roundingVariant?: InteractiveContainerRoundingVariant;
   };
 
 // ---------------------------------------------------------------------------
@@ -82,9 +96,12 @@ function OpenButton({
   size = "lg",
   foldable,
   width,
+  justifyContent,
   tooltip,
   tooltipSide = "top",
+  roundingVariant: roundingVariantOverride,
   interaction,
+  variant = "select-heavy",
   ...statefulProps
 }: OpenButtonProps) {
   const { isDisabled } = useDisabled();
@@ -101,7 +118,7 @@ function OpenButton({
   const labelEl = children ? (
     <span
       className={cn(
-        "opal-button-label whitespace-nowrap",
+        "whitespace-nowrap",
         isLarge ? "font-main-ui-body" : "font-secondary-body"
       )}
     >
@@ -111,7 +128,7 @@ function OpenButton({
 
   const button = (
     <Interactive.Stateful
-      variant="select-heavy"
+      variant={variant}
       interaction={resolvedInteraction}
       {...statefulProps}
     >
@@ -120,24 +137,38 @@ function OpenButton({
         heightVariant={size}
         widthVariant={width}
         roundingVariant={
-          isLarge ? "default" : size === "2xs" ? "mini" : "compact"
+          roundingVariantOverride ??
+          (isLarge ? "default" : size === "2xs" ? "mini" : "compact")
         }
       >
         <div
           className={cn(
-            "opal-button interactive-foreground flex flex-row items-center gap-1",
-            foldable && "interactive-foldable-host"
+            "interactive-foreground flex flex-row items-center",
+            justifyContent === "between" ? "w-full justify-between" : "gap-1",
+            foldable &&
+              justifyContent !== "between" &&
+              "interactive-foldable-host"
           )}
         >
-          {iconWrapper(Icon, size, !foldable && !!children)}
-
-          {foldable ? (
-            <Interactive.Foldable>
-              {labelEl}
+          {justifyContent === "between" ? (
+            <>
+              <span className="flex flex-row items-center gap-1">
+                {iconWrapper(Icon, size, !foldable && !!children)}
+                {labelEl}
+              </span>
               {iconWrapper(ChevronIcon, size, !!children)}
-            </Interactive.Foldable>
+            </>
+          ) : foldable ? (
+            <>
+              {iconWrapper(Icon, size, !foldable && !!children)}
+              <Interactive.Foldable>
+                {labelEl}
+                {iconWrapper(ChevronIcon, size, !!children)}
+              </Interactive.Foldable>
+            </>
           ) : (
             <>
+              {iconWrapper(Icon, size, !foldable && !!children)}
               {labelEl}
               {iconWrapper(ChevronIcon, size, !!children)}
             </>

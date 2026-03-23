@@ -6,18 +6,12 @@
  * circular imports and gives every consumer a single source of truth.
  */
 
-// ---------------------------------------------------------------------------
-// Size Variants
-//
-// A named scale of size presets (lg → 2xs, plus fit) that map to Tailwind
-// utility classes for height, min-width, and padding.
-//
-// Consumers:
-//   - Interactive.Container  (height + min-width + padding)
-//   - Button                 (icon sizing)
-//   - ContentAction          (padding only)
-//   - Content (ContentXl / ContentLg / ContentMd)  (edit-button size)
-// ---------------------------------------------------------------------------
+import type {
+  SizeVariants,
+  OverridableExtremaSizeVariants,
+  ContainerSizeVariants,
+  ExtremaSizeVariants,
+} from "@opal/types";
 
 /**
  * Size-variant scale.
@@ -34,7 +28,16 @@
  * | `2xs` | 1rem (16px)   | `p-0.5` |
  * | `fit` | h-fit         | `p-0`   |
  */
-const sizeVariants = {
+type ContainerProperties = {
+  height: string;
+  minWidth: string;
+  padding: string;
+};
+const containerSizeVariants: Record<
+  ContainerSizeVariants,
+  ContainerProperties
+> = {
+  fit: { height: "h-fit", minWidth: "", padding: "p-0" },
   lg: { height: "h-[2.25rem]", minWidth: "min-w-[2.25rem]", padding: "p-2" },
   md: { height: "h-[1.75rem]", minWidth: "min-w-[1.75rem]", padding: "p-1" },
   sm: { height: "h-[1.5rem]", minWidth: "min-w-[1.5rem]", padding: "p-1" },
@@ -44,18 +47,14 @@ const sizeVariants = {
     padding: "p-0.5",
   },
   "2xs": { height: "h-[1rem]", minWidth: "min-w-[1rem]", padding: "p-0.5" },
-  fit: { height: "h-fit", minWidth: "", padding: "p-0" },
 } as const;
 
-/** Named size preset key. */
-type SizeVariant = keyof typeof sizeVariants;
-
 // ---------------------------------------------------------------------------
-// Width Variants
+// Width/Height Variants
 //
-// A named scale of width presets that map to Tailwind width utility classes.
+// A named scale of width/height presets that map to Tailwind width/height utility classes.
 //
-// Consumers:
+// Consumers (for width):
 //   - Interactive.Container  (widthVariant)
 //   - Button                 (width)
 //   - Content                (widthVariant)
@@ -70,13 +69,31 @@ type SizeVariant = keyof typeof sizeVariants;
  * | `fit`  | `w-fit`        |
  * | `full` | `w-full`       |
  */
-const widthVariants = {
-  auto: "w-auto",
+const widthVariants: Record<ExtremaSizeVariants, string> = {
   fit: "w-fit",
   full: "w-full",
 } as const;
 
-/** Named width preset key. */
-type WidthVariant = keyof typeof widthVariants;
+/**
+ * Height-variant scale.
+ *
+ * | Key    | Tailwind class |
+ * |--------|----------------|
+ * | `auto` | `h-auto`       |
+ * | `fit`  | `h-fit`        |
+ * | `full` | `h-full`       |
+ */
+const heightVariants: Record<ExtremaSizeVariants, string> = {
+  fit: "h-fit",
+  full: "h-full",
+} as const;
 
-export { sizeVariants, type SizeVariant, widthVariants, type WidthVariant };
+export {
+  type ExtremaSizeVariants,
+  type ContainerSizeVariants,
+  type OverridableExtremaSizeVariants,
+  type SizeVariants,
+  containerSizeVariants,
+  widthVariants,
+  heightVariants,
+};

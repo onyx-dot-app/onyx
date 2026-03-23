@@ -669,8 +669,7 @@ class SlackRateLimiter:
             client=client,
             channel=channel,
             receiver_ids=None,
-            text=f"Your question has been queued. You are in position {position}.\n"
-            f"Please wait a moment :hourglass_flowing_sand:",
+            text=f"Your question has been queued. You are in position {position}.\nPlease wait a moment :hourglass_flowing_sand:",
             thread_ts=thread_ts,
         )
 

@@ -13,6 +13,7 @@ export const codeVariant: PreviewVariant = {
   width: "md",
   height: "lg",
   needsTextContent: true,
+  codeBackground: true,
 
   headerDescription: (ctx) =>
     ctx.fileContent
@@ -22,7 +23,7 @@ export const codeVariant: PreviewVariant = {
       : "",
 
   renderContent: (ctx) => (
-    <CodePreview content={ctx.fileContent} language={ctx.language} />
+    <CodePreview normalize content={ctx.fileContent} language={ctx.language} />
   ),
 
   renderFooterLeft: (ctx) => (

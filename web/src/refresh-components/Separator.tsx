@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 export interface SeparatorProps
   extends React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root> {
   noPadding?: boolean;
+  /** Custom horizontal padding in rem. Overrides the default padding. */
+  paddingXRem?: number;
+  /** Custom vertical padding in rem. Overrides the default padding. */
+  paddingYRem?: number;
 }
 
 /**
@@ -34,7 +38,8 @@ const Separator = React.forwardRef(
   (
     {
       noPadding,
-
+      paddingXRem,
+      paddingYRem,
       className,
       orientation = "horizontal",
       decorative = true,
@@ -46,9 +51,23 @@ const Separator = React.forwardRef(
 
     return (
       <div
+        style={{
+          ...(paddingXRem != null
+            ? {
+                paddingLeft: `${paddingXRem}rem`,
+                paddingRight: `${paddingXRem}rem`,
+              }
+            : {}),
+          ...(paddingYRem != null
+            ? {
+                paddingTop: `${paddingYRem}rem`,
+                paddingBottom: `${paddingYRem}rem`,
+              }
+            : {}),
+        }}
         className={cn(
           isHorizontal ? "w-full" : "h-full",
-          !noPadding && (isHorizontal ? "py-4" : "px-4"),
+          paddingXRem == null && !noPadding && (isHorizontal ? "py-4" : "px-4"),
           className
         )}
       >

@@ -31,15 +31,13 @@ def get_schemas_needing_migration(
         conn.execute(text("CREATE TEMP TABLE _tenant_schemas_input (schema_name text)"))
         conn.execute(
             text(
-                "INSERT INTO _tenant_schemas_input (schema_name) "
-                "SELECT unnest(CAST(:schemas AS text[]))"
+                "INSERT INTO _tenant_schemas_input (schema_name) SELECT unnest(CAST(:schemas AS text[]))"
             ),
             {"schemas": tenant_schemas},
         )
         conn.execute(
             text(
-                "CREATE TEMP TABLE _alembic_version_snapshot "
-                "(schema_name text, version_num text)"
+                "CREATE TEMP TABLE _alembic_version_snapshot (schema_name text, version_num text)"
             )
         )
 

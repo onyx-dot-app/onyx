@@ -35,6 +35,7 @@ backend = [
     "alembic==1.10.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==3.41.16",
+    "azure-cognitiveservices-speech==1.38.0",
     "beautifulsoup4==4.12.3",
     "boto3==1.39.11",
     "boto3-stubs[s3]==1.39.11",
@@ -91,7 +92,7 @@ backend = [
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
     "pypandoc_binary==1.16.2",
-    "pypdf==6.8.0",
+    "pypdf==6.9.1",
     "pytest-mock==3.12.0",
     "pytest-playwright==0.7.0",
     "python-docx==1.1.2",
@@ -143,7 +144,7 @@ dev = [
     "matplotlib==3.10.8",
     "mypy-extensions==1.0.0",
     "mypy==1.13.0",
-    "onyx-devtools==0.7.0",
+    "onyx-devtools==0.7.1",
     "openapi-generator-cli==7.17.0",
     "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",
@@ -237,11 +238,14 @@ line-length = 130
 target-version = "py311"
 
 [tool.ruff.lint]
-ignore = []
+ignore = [
+  "E501", # Long lines are handled by Black.
+]
 select = [
   "ARG",
   "E",
   "F",
+  "S324",
   "W",
 ]
 

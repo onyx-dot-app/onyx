@@ -396,6 +396,7 @@ def construct_tools(
                     tool_definition=saved_tool.mcp_input_schema or {},
                     connection_config=connection_config,
                     user_email=user_email,
+                    user_id=str(user.id),
                     user_oauth_token=mcp_user_oauth_token,
                     additional_headers=additional_mcp_headers,
                 )
@@ -450,8 +451,7 @@ def construct_tools(
             tool_dict[memory_tool_db_model.id] = [memory_tool]
         except RuntimeError:
             logger.warning(
-                "MemoryTool not found in the database. "
-                "Run the latest alembic migration to seed it."
+                "MemoryTool not found in the database. Run the latest alembic migration to seed it."
             )
 
     tools: list[Tool] = []

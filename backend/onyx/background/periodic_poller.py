@@ -259,8 +259,7 @@ def _poller_loop(tenant_id: str) -> None:
 
     periodic_tasks = _build_periodic_tasks()
     logger.info(
-        f"Periodic poller started with {len(periodic_tasks)} periodic task(s): "
-        f"{[t.name for t in periodic_tasks]}"
+        f"Periodic poller started with {len(periodic_tasks)} periodic task(s): {[t.name for t in periodic_tasks]}"
     )
 
     while not _shutdown_event.is_set():

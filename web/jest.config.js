@@ -53,6 +53,8 @@ const sharedConfig = {
         // Testing & Mocking
         "msw",
         "until-async",
+        // Language Detection
+        "linguist-languages",
         // Markdown & Syntax Highlighting
         "react-markdown",
         "remark-.*", // All remark packages

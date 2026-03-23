@@ -51,8 +51,7 @@ def main() -> None:
                     print("No orphaned documents found")
                 else:
                     print(
-                        f"Finished processing all batches. Total documents "
-                        f"processed: {total_processed}"
+                        f"Finished processing all batches. Total documents processed: {total_processed}"
                     )
                 return
 
@@ -109,8 +108,7 @@ def main() -> None:
                         return doc_id
                     except Exception as e:
                         print(
-                            f"Error deleting document {doc_id} in Vespa and "
-                            f"will not delete from Postgres: {e}"
+                            f"Error deleting document {doc_id} in Vespa and will not delete from Postgres: {e}"
                         )
                         return None
 
@@ -137,8 +135,7 @@ def main() -> None:
 
             total_processed += len(successfully_vespa_deleted_doc_ids)
             print(
-                f"Successfully cleaned up {len(successfully_vespa_deleted_doc_ids)}"
-                f" orphaned documents in this batch"
+                f"Successfully cleaned up {len(successfully_vespa_deleted_doc_ids)} orphaned documents in this batch"
             )
             print(f"Total documents processed so far: {total_processed}")
 

@@ -2,6 +2,7 @@ import contextvars
 import threading
 import uuid
 from enum import Enum
+from typing import Any
 
 import requests
 
@@ -152,7 +153,7 @@ def mt_cloud_telemetry(
     tenant_id: str,
     distinct_id: str,
     event: MilestoneRecordType,
-    properties: dict | None = None,
+    properties: dict[str, Any] | None = None,
 ) -> None:
     if not MULTI_TENANT:
         return
@@ -161,8 +162,7 @@ def mt_cloud_telemetry(
     all_properties = {**properties} if properties else {}
     if properties and "tenant_id" in properties:
         logger.warning(
-            f"tenant_id already in properties: {properties}. "
-            f"Overwriting with new value {tenant_id}."
+            f"tenant_id already in properties: {properties}. Overwriting with new value {tenant_id}."
         )
     all_properties["tenant_id"] = tenant_id
 
@@ -174,3 +174,18 @@ def mt_cloud_telemetry(
         attribute="event_telemetry",
         fallback=noop_fallback,
     )(distinct_id, event, all_properties)
+
+
+def mt_cloud_identify(
+    distinct_id: str,
+    properties: dict[str, Any] | None = None,
+) -> None:
+    """Create/update a PostHog person profile (Cloud only)."""
+    if not MULTI_TENANT:
+        return
+
+    fetch_versioned_implementation_with_fallback(
+        module="onyx.utils.telemetry",
+        attribute="identify_user",
+        fallback=noop_fallback,
+    )(distinct_id, properties)

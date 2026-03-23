@@ -61,8 +61,7 @@ def _graph_api_get(
             ):
                 wait = min(int(resp.headers.get("Retry-After", str(2**attempt))), 60)
                 logger.warning(
-                    f"Graph API {resp.status_code} on attempt {attempt + 1}, "
-                    f"retrying in {wait}s: {url}"
+                    f"Graph API {resp.status_code} on attempt {attempt + 1}, retrying in {wait}s: {url}"
                 )
                 time.sleep(wait)
                 continue
@@ -72,8 +71,7 @@ def _graph_api_get(
             if attempt < GRAPH_API_MAX_RETRIES:
                 wait = min(2**attempt, 60)
                 logger.warning(
-                    f"Graph API connection error on attempt {attempt + 1}, "
-                    f"retrying in {wait}s: {url}"
+                    f"Graph API connection error on attempt {attempt + 1}, retrying in {wait}s: {url}"
                 )
                 time.sleep(wait)
                 continue
@@ -767,8 +765,7 @@ def get_sharepoint_external_groups(
 
     if not enumerate_all_ad_groups or get_access_token is None:
         logger.info(
-            "Skipping exhaustive Azure AD group enumeration. "
-            "Only groups found in site role assignments are included."
+            "Skipping exhaustive Azure AD group enumeration. Only groups found in site role assignments are included."
         )
         return external_user_groups
 

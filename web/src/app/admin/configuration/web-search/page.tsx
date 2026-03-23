@@ -23,10 +23,10 @@ import {
   SvgOnyxLogo,
   SvgX,
 } from "@opal/icons";
-import { ADMIN_ROUTE_CONFIG, ADMIN_PATHS } from "@/lib/admin-routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
 
-const route = ADMIN_ROUTE_CONFIG[ADMIN_PATHS.WEB_SEARCH]!;
+const route = ADMIN_ROUTES.WEB_SEARCH;
 import {
   SEARCH_PROVIDERS_URL,
   SEARCH_PROVIDER_DETAILS,

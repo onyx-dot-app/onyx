@@ -126,8 +126,7 @@ def ensure_source_node_exists(
         db_session.commit()
 
     logger.info(
-        f"Created SOURCE hierarchy node for {source.value}: "
-        f"id={source_node.id}, display_name={display_name}"
+        f"Created SOURCE hierarchy node for {source.value}: id={source_node.id}, display_name={display_name}"
     )
 
     return source_node
@@ -155,8 +154,7 @@ def resolve_parent_hierarchy_node_id(
 
     # Parent not found - fall back to SOURCE node
     logger.warning(
-        f"Parent hierarchy node not found: raw_id={raw_parent_id}, source={source}. "
-        "Falling back to SOURCE node."
+        f"Parent hierarchy node not found: raw_id={raw_parent_id}, source={source}. Falling back to SOURCE node."
     )
     source_node = get_source_hierarchy_node(db_session, source)
     return source_node.id if source_node else None
@@ -394,8 +392,7 @@ def link_hierarchy_nodes_to_documents(
 
     if nodes_to_update:
         logger.debug(
-            f"Linked {len(nodes_to_update)} hierarchy nodes to documents "
-            f"for source {source.value}"
+            f"Linked {len(nodes_to_update)} hierarchy nodes to documents for source {source.value}"
         )
 
     return len(nodes_to_update)
@@ -609,8 +606,7 @@ def update_hierarchy_node_permissions(
 
     if not existing_node:
         logger.warning(
-            f"Hierarchy node not found for permission update: "
-            f"raw_node_id={raw_node_id}, source={source}"
+            f"Hierarchy node not found for permission update: raw_node_id={raw_node_id}, source={source}"
         )
         return False
 
