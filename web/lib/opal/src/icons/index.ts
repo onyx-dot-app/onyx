@@ -159,6 +159,7 @@ export { default as SvgSort } from "@opal/icons/sort";
 export { default as SvgSortOrder } from "@opal/icons/sort-order";
 export { default as SvgSparkle } from "@opal/icons/sparkle";
 export { default as SvgStar } from "@opal/icons/star";
+export { default as SvgStarOff } from "@opal/icons/star-off";
 export { default as SvgStep1 } from "@opal/icons/step1";
 export { default as SvgStep2 } from "@opal/icons/step2";
 export { default as SvgStep3 } from "@opal/icons/step3";
