@@ -190,14 +190,16 @@ export default function LineItem({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!interactive || disabled) {
+    if (!interactive) {
       props.onKeyDown?.(e);
       return;
     }
 
     if (e.key === "Enter") {
       e.preventDefault();
-      (e.currentTarget as HTMLDivElement).click();
+      if (!disabled) {
+        (e.currentTarget as HTMLDivElement).click();
+      }
     } else if (e.key === " ") {
       e.preventDefault();
     }
@@ -205,14 +207,16 @@ export default function LineItem({
   };
 
   const handleKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!interactive || disabled) {
+    if (!interactive) {
       props.onKeyUp?.(e);
       return;
     }
 
     if (e.key === " ") {
       e.preventDefault();
-      (e.currentTarget as HTMLDivElement).click();
+      if (!disabled) {
+        (e.currentTarget as HTMLDivElement).click();
+      }
     }
     props.onKeyUp?.(e);
   };
