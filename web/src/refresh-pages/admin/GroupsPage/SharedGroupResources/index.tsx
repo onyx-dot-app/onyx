@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
 import { Content } from "@opal/layouts";
+import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
@@ -14,14 +15,9 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";
 import { getSourceMetadata } from "@/lib/sources";
 import type { ValidSources } from "@/lib/types";
-import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import ResourceContent from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/ResourceContent";
 import ResourcePopover from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/ResourcePopover";
-import type { PopoverSection } from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/ResourcePopover";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import type { PopoverSection } from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/interfaces";
 
 interface SharedGroupResourcesProps {
   selectedCcPairIds: number[];
@@ -212,11 +208,17 @@ function SharedGroupResources({
               ? onAgentIdsChange(selectedAgentIds.filter((id) => id !== a.id))
               : onAgentIdsChange([...selectedAgentIds, a.id]),
           render: (dimmed: boolean) => (
-            <AgentDropdownItem
-              agent={a}
-              shared={!a.is_public || dimmed}
-              dimmed={dimmed}
-            />
+            <LineItem
+              interactive={!dimmed}
+              muted={dimmed}
+              icon={(_props) => <AgentAvatar agent={a} size={16} />}
+              description="agent"
+              rightChildren={
+                !a.is_public || dimmed ? <SharedBadge /> : undefined
+              }
+            >
+              {a.name}
+            </LineItem>
           ),
         };
       });
@@ -255,10 +257,26 @@ function SharedGroupResources({
       />
       <SimpleCollapsible.Content>
         <Card>
-          <div className="flex flex-col gap-4 w-full">
+          <Section
+            gap={1}
+            height="auto"
+            alignItems="stretch"
+            justifyContent="start"
+            width="full"
+          >
             {/* Connectors & Document Sets */}
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-col gap-1">
+            <Section
+              gap={0.5}
+              height="auto"
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              <Section
+                gap={0.25}
+                height="auto"
+                alignItems="stretch"
+                justifyContent="start"
+              >
                 <Text mainUiAction text04>
                   Connectors & Document Sets
                 </Text>
@@ -268,9 +286,16 @@ function SharedGroupResources({
                   onSearchChange={setConnectorSearch}
                   sections={connectorDocSetSections}
                 />
-              </div>
+              </Section>
               {hasSelectedResources ? (
-                <div className="flex flex-wrap gap-1">
+                <Section
+                  flexDirection="row"
+                  wrap
+                  gap={0.25}
+                  height="auto"
+                  alignItems="start"
+                  justifyContent="start"
+                >
                   {selectedPairs.map((pair) => (
                     <ResourceContent
                       key={`c-${pair.cc_pair_id}`}
@@ -292,7 +317,7 @@ function SharedGroupResources({
                       onRemove={() => removeDocSet(ds.id)}
                     />
                   ))}
-                </div>
+                </Section>
               ) : (
                 <Content
                   icon={SvgEmpty}
@@ -302,13 +327,23 @@ function SharedGroupResources({
                   variant="section"
                 />
               )}
-            </div>
+            </Section>
 
             <Separator noPadding />
 
             {/* Agents */}
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-col gap-1">
+            <Section
+              gap={0.5}
+              height="auto"
+              alignItems="stretch"
+              justifyContent="start"
+            >
+              <Section
+                gap={0.25}
+                height="auto"
+                alignItems="stretch"
+                justifyContent="start"
+              >
                 <Text mainUiAction text04>
                   Agents
                 </Text>
@@ -318,9 +353,16 @@ function SharedGroupResources({
                   onSearchChange={setAgentSearch}
                   sections={agentSections}
                 />
-              </div>
+              </Section>
               {selectedAgentObjects.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
+                <Section
+                  flexDirection="row"
+                  wrap
+                  gap={0.25}
+                  height="auto"
+                  alignItems="start"
+                  justifyContent="start"
+                >
                   {selectedAgentObjects.map((agent) => (
                     <ResourceContent
                       key={agent.id}
@@ -334,7 +376,7 @@ function SharedGroupResources({
                       onRemove={() => removeAgent(agent.id)}
                     />
                   ))}
-                </div>
+                </Section>
               ) : (
                 <Content
                   icon={SvgXOctagon}
@@ -344,37 +386,11 @@ function SharedGroupResources({
                   variant="section"
                 />
               )}
-            </div>
-          </div>
+            </Section>
+          </Section>
         </Card>
       </SimpleCollapsible.Content>
     </SimpleCollapsible>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// AgentDropdownItem — agent row in the popover
-// ---------------------------------------------------------------------------
-
-function AgentDropdownItem({
-  agent,
-  shared,
-  dimmed,
-}: {
-  agent: MinimalPersonaSnapshot;
-  shared: boolean;
-  dimmed: boolean;
-}) {
-  return (
-    <LineItem
-      interactive={!dimmed}
-      muted={dimmed}
-      icon={(_props) => <AgentAvatar agent={agent} size={16} />}
-      description="agent"
-      rightChildren={shared ? <SharedBadge /> : undefined}
-    >
-      {agent.name}
-    </LineItem>
   );
 }
 

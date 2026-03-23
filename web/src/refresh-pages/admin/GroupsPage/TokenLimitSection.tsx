@@ -2,6 +2,7 @@
 
 import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button } from "@opal/components";
+import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
 import Text from "@/refresh-components/texts/Text";
@@ -57,7 +58,13 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
       />
       <SimpleCollapsible.Content>
         <Card>
-          <div className="flex flex-col gap-2 w-full">
+          <Section
+            gap={0.5}
+            height="auto"
+            alignItems="stretch"
+            justifyContent="start"
+            width="full"
+          >
             {/* Column headers */}
             <div className="flex flex-wrap items-center gap-1 pr-[40px]">
               <div className="flex-1 flex items-center min-w-[160px]">
@@ -114,7 +121,7 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
             >
               Add Limit
             </Button>
-          </div>
+          </Section>
         </Card>
       </SimpleCollapsible.Content>
     </SimpleCollapsible>
