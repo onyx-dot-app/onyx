@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -6,6 +7,7 @@ import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Request
 from fastapi import Response
 from fastapi import status
 from fastapi import UploadFile
@@ -33,6 +35,8 @@ from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -144,50 +148,61 @@ def put_logo(
     upload_logo(file=file, is_logotype=is_logotype)
 
 
-def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
+def _fetch_image_helper(request: Request, filename: str, label: str) -> Response:
     try:
         file_store = get_default_file_store()
-        onyx_file = file_store.get_file_with_mime_type(get_logo_filename())
-        if not onyx_file:
-            raise ValueError("get_onyx_file returned None!")
+        onyx_file = file_store.get_file_with_mime_type(filename)
     except Exception:
-        logger.exception("Faield to fetch logo file")
-        raise HTTPException(
-            status_code=404,
-            detail="No logo file found",
-        )
-    else:
-        return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
+        logger.exception("Failed to fetch %s file", label)
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to fetch {label} file")
+
+    if not onyx_file:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, f"No {label} file found")
+
+    etag_value = f'"{hashlib.md5(onyx_file.data, usedforsecurity=False).hexdigest()}"'
+    if_none_match = request.headers.get("if-none-match", "")
+    # Strip W/ prefix for weak comparison per RFC 9110 §13.1.2
+    client_etags = [
+        tag.strip().removeprefix("W/")
+        for tag in if_none_match.split(",")
+        if tag.strip()
+    ]
+    cache_headers = {
+        "ETag": etag_value,
+        "Cache-Control": "private, max-age=3600, must-revalidate",
+    }
+    if "*" in client_etags or etag_value in client_etags:
+        return Response(status_code=304, headers=cache_headers)
+
+    return Response(
+        content=onyx_file.data,
+        media_type=onyx_file.mime_type,
+        headers=cache_headers,
+    )
 
 
-def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001
-    try:
-        file_store = get_default_file_store()
-        onyx_file = file_store.get_file_with_mime_type(get_logotype_filename())
-        if not onyx_file:
-            raise ValueError("get_onyx_file returned None!")
-    except Exception:
-        raise HTTPException(
-            status_code=404,
-            detail="No logotype file found",
-        )
-    else:
-        return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
+def fetch_logo_helper(request: Request) -> Response:
+    return _fetch_image_helper(request, get_logo_filename(), "logo")
+
+
+def fetch_logotype_helper(request: Request) -> Response:
+    return _fetch_image_helper(request, get_logotype_filename(), "logotype")
 
 
 @basic_router.get("/logotype")
-def fetch_logotype(db_session: Session = Depends(get_session)) -> Response:
-    return fetch_logotype_helper(db_session)
+def fetch_logotype(request: Request) -> Response:
+    return fetch_logotype_helper(request)
 
 
 @basic_router.get("/logo")
 def fetch_logo(
-    is_logotype: bool = False, db_session: Session = Depends(get_session)
+    request: Request,
+    is_logotype: bool = False,
 ) -> Response:
     if is_logotype:
-        return fetch_logotype_helper(db_session)
+        return fetch_logotype_helper(request)
 
-    return fetch_logo_helper(db_session)
+    return fetch_logo_helper(request)
 
 
 @admin_router.put("/custom-analytics-script")
