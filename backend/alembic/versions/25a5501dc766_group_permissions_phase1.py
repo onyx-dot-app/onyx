@@ -71,6 +71,12 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
+        sa.Column(
+            "is_deleted",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.false(),
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(
             ["group_id"],

@@ -354,10 +354,10 @@ class Permission(str, PyEnum):
     BASIC_ACCESS = "basic"
 
     # Read tokens — implied only, never granted directly
-    VIEW_CONNECTORS = "read:connectors"
-    VIEW_DOCUMENT_SETS = "read:document_sets"
-    VIEW_AGENTS = "read:agents"
-    VIEW_USERS = "read:users"
+    READ_CONNECTORS = "read:connectors"
+    READ_DOCUMENT_SETS = "read:document_sets"
+    READ_AGENTS = "read:agents"
+    READ_USERS = "read:users"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -368,9 +368,9 @@ class Permission(str, PyEnum):
     MANAGE_LLMS = "manage:llms"
 
     # Toggle tokens
-    VIEW_AGENT_ANALYTICS = "read:agent_analytics"
+    READ_AGENT_ANALYTICS = "read:agent_analytics"
     MANAGE_ACTIONS = "manage:actions"
-    VIEW_QUERY_HISTORY = "read:query_history"
+    READ_QUERY_HISTORY = "read:query_history"
     MANAGE_USER_GROUPS = "manage:user_groups"
     CREATE_USER_API_KEYS = "create:user_api_keys"
     CREATE_SERVICE_ACCOUNT_API_KEYS = "create:service_account_api_keys"
@@ -386,9 +386,9 @@ class Permission(str, PyEnum):
 
 Permission.IMPLIED = frozenset(
     {
-        Permission.VIEW_CONNECTORS,
-        Permission.VIEW_DOCUMENT_SETS,
-        Permission.VIEW_AGENTS,
-        Permission.VIEW_USERS,
+        Permission.READ_CONNECTORS,
+        Permission.READ_DOCUMENT_SETS,
+        Permission.READ_AGENTS,
+        Permission.READ_USERS,
     }
 )

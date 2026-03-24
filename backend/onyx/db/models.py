@@ -4010,6 +4010,9 @@ class PermissionGrant(Base):
     granted_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
     group: Mapped["UserGroup"] = relationship(
         "UserGroup", back_populates="permission_grants"
