@@ -47,22 +47,23 @@ function FilterButton({
   tooltip,
   tooltipSide = "top",
   active = false,
+  interaction,
   ...statefulProps
 }: FilterButtonProps) {
-  // Derive open state: explicit prop > bounding-box hover > Radix data-state
+  // Derive open state: explicit prop > Radix data-state (injected via Slot chain)
   const dataState = (statefulProps as Record<string, unknown>)["data-state"] as
     | string
     | undefined;
   const resolvedInteraction: InteractiveStatefulInteraction =
-    statefulProps.interaction ?? dataState === "open" ? "hover" : "rest";
+    interaction ?? (dataState === "open" ? "hover" : "rest");
 
   const button = (
     <div className="relative">
       <Interactive.Stateful
+        {...statefulProps}
         variant="select-filter"
         interaction={resolvedInteraction}
         state={active ? "selected" : "empty"}
-        {...statefulProps}
       >
         <Interactive.Container type="button">
           <div className="interactive-foreground flex flex-row items-center gap-1">
@@ -84,6 +85,9 @@ function FilterButton({
 
       {active && (
         <div className="absolute right-2 top-1/2 -translate-y-1/2">
+          {/* Force hover state so the X stays visually prominent against
+              the inverted selected background — without this it renders
+              dimmed and looks disabled. */}
           <Button
             icon={SvgX}
             size="2xs"
