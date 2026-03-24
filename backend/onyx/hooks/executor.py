@@ -5,6 +5,7 @@ Usage (Celery tasks and FastAPI handlers):
         db_session=db_session,
         hook_point=HookPoint.QUERY_PROCESSING,
         payload={"query": "...", "user_email": "...", "chat_session_id": "..."},
+        response_type=QueryProcessingResponse,
     )
 
     if isinstance(result, HookSkipped):
@@ -14,7 +15,7 @@ Usage (Celery tasks and FastAPI handlers):
         # hook failed but fail strategy is SOFT — continue with original behavior
         ...
     else:
-        # result is the response payload dict from the customer's endpoint
+        # result is a validated Pydantic model instance (spec.response_model)
         ...
 
 is_reachable update policy
@@ -53,9 +54,11 @@ The executor uses three sessions:
 import json
 import time
 from typing import Any
+from typing import TypeVar
 
 import httpx
 from pydantic import BaseModel
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -79,6 +82,9 @@ class HookSkipped:
 
 class HookSoftFailed:
     """Hook was called but failed with SOFT fail strategy — continuing."""
+
+
+T = TypeVar("T", bound=BaseModel)
 
 
 # ---------------------------------------------------------------------------
@@ -268,22 +274,21 @@ def _persist_result(
 # ---------------------------------------------------------------------------
 
 
-def execute_hook(
-    *,
-    db_session: Session,
-    hook_point: HookPoint,
+def _execute_hook_inner(
+    hook: Hook,
     payload: dict[str, Any],
-) -> dict[str, Any] | HookSkipped | HookSoftFailed:
-    """Execute the hook for the given hook point synchronously."""
-    hook = _lookup_hook(db_session, hook_point)
-    if isinstance(hook, HookSkipped):
-        return hook
+    response_type: type[T],
+) -> T | HookSoftFailed:
+    """Make the HTTP call, validate the response, and return a typed model.
 
+    Raises OnyxError on HARD failure. Returns HookSoftFailed on SOFT failure.
+    """
     timeout = hook.timeout_seconds
     hook_id = hook.id
     fail_strategy = hook.fail_strategy
     endpoint_url = hook.endpoint_url
     current_is_reachable: bool | None = hook.is_reachable
+
     if not endpoint_url:
         raise ValueError(
             f"hook_id={hook_id} is active but has no endpoint_url — "
@@ -300,13 +305,36 @@ def execute_hook(
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        with httpx.Client(timeout=timeout) as client:
+        with httpx.Client(
+            timeout=timeout, follow_redirects=False
+        ) as client:  # SSRF guard: never follow redirects
             response = client.post(endpoint_url, json=payload, headers=headers)
     except Exception as e:
         exc = e
     duration_ms = int((time.monotonic() - start) * 1000)
 
     outcome = _process_response(response=response, exc=exc, timeout=timeout)
+
+    # Validate the response payload against response_type.
+    # A validation failure downgrades the outcome to a failure so it is logged,
+    # is_reachable is left unchanged (server responded — just a bad payload),
+    # and fail_strategy is respected below.
+    validated_model: T | None = None
+    if outcome.is_success and outcome.response_payload is not None:
+        try:
+            validated_model = response_type.model_validate(outcome.response_payload)
+        except ValidationError as e:
+            msg = (
+                f"Hook response failed validation against {response_type.__name__}: {e}"
+            )
+            outcome = _HttpOutcome(
+                is_success=False,
+                updated_is_reachable=None,  # server responded — reachability unchanged
+                status_code=outcome.status_code,
+                error_message=msg,
+                response_payload=None,
+            )
+
     # Skip the is_reachable write when the value would not change — avoids a
     # no-op DB round-trip on every call when the hook is already in the expected state.
     if outcome.updated_is_reachable == current_is_reachable:
@@ -323,8 +351,41 @@ def execute_hook(
             f"Hook execution failed (soft fail) for hook_id={hook_id}: {outcome.error_message}"
         )
         return HookSoftFailed()
-    if outcome.response_payload is None:
-        raise ValueError(
-            f"response_payload is None for successful hook call (hook_id={hook_id})"
+
+    if validated_model is None:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"validated_model is None for successful hook call (hook_id={hook_id})",
         )
-    return outcome.response_payload
+    return validated_model
+
+
+def execute_hook(
+    *,
+    db_session: Session,
+    hook_point: HookPoint,
+    payload: dict[str, Any],
+    response_type: type[T],
+) -> T | HookSkipped | HookSoftFailed:
+    """Execute the hook for the given hook point synchronously.
+
+    Returns HookSkipped if no active hook is configured, HookSoftFailed if the
+    hook failed with SOFT fail strategy, or a validated response model on success.
+    Raises OnyxError on HARD failure or if the hook is misconfigured.
+    """
+    hook = _lookup_hook(db_session, hook_point)
+    if isinstance(hook, HookSkipped):
+        return hook
+
+    fail_strategy = hook.fail_strategy
+    hook_id = hook.id
+
+    try:
+        return _execute_hook_inner(hook, payload, response_type)
+    except Exception:
+        if fail_strategy == HookFailStrategy.SOFT:
+            logger.exception(
+                f"Unexpected error in hook execution (soft fail) for hook_id={hook_id}"
+            )
+            return HookSoftFailed()
+        raise
