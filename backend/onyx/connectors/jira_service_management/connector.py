@@ -177,6 +177,9 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
     # ------------------------------------------------------------------
 
     def _build_document(self, issue: dict[str, Any]) -> Document | None:
+        if self._auth is None:
+            raise ConnectorMissingCredentialError("Jira Service Management")
+
         fields = issue.get("fields", {})
         issue_key = issue.get("key", "")
         if not issue_key:
@@ -366,6 +369,3 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
             raise ConnectorValidationError(
                 f"Could not connect to Jira Service Management: {exc}"
             ) from exc
-
-
-

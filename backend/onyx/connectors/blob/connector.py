@@ -240,7 +240,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 session = boto3.Session(botocore_session=botocore_session)
                 
                 # Build client kwargs for custom endpoint
-                client_kwargs: dict[str, Any] = {"service_name": "s3"}
+                client_kwargs = {"service_name": "s3"}
                 if self.endpoint_url:
                     client_kwargs["endpoint_url"] = self.endpoint_url
                     client_kwargs["region_name"] = credentials.get("region", "us-east-1")
@@ -259,7 +259,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 logger.debug("Using instance role authentication for S3 bucket.")
                 
                 # Build client kwargs for custom endpoint
-                client_kwargs: dict[str, Any] = {"service_name": "s3"}
+                client_kwargs = {"service_name": "s3"}
                 if self.endpoint_url:
                     client_kwargs["endpoint_url"] = self.endpoint_url
                     client_kwargs["region_name"] = credentials.get("region", "us-east-1")
