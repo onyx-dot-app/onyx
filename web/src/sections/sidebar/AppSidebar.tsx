@@ -678,21 +678,26 @@ const MemoizedAppSidebarInner = memo(
           <SidebarBody
             scrollKey="app-sidebar"
             footer={settingsButton}
-            actionButtons={
-              <div className="flex flex-col">
-                {newSessionButton}
-                {searchChatsButton}
-                {isOnyxCraftEnabled && buildButton}
-              </div>
+            pinnedContent={
+              folded ? (
+                <div className="flex flex-col">
+                  {newSessionButton}
+                  {searchChatsButton}
+                  {isOnyxCraftEnabled && buildButton}
+                  {moreAgentsButton}
+                  {newProjectButton}
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                  {newSessionButton}
+                  {searchChatsButton}
+                  {isOnyxCraftEnabled && buildButton}
+                </div>
+              )
             }
           >
-            {/* When folded, show icons immediately without waiting for data */}
-            {folded ? (
-              <>
-                {moreAgentsButton}
-                {newProjectButton}
-              </>
-            ) : isLoadingDynamicContent ? null : (
+            {/* When folded, all nav buttons are in topContent — nothing here */}
+            {folded ? null : isLoadingDynamicContent ? null : (
               <>
                 {/* Agents */}
                 <DndContext

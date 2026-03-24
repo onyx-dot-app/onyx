@@ -413,7 +413,7 @@ const MemoizedBuildSidebarInner = memo(
     return (
       <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
         <SidebarBody
-          actionButtons={
+          pinnedContent={
             <div className="flex flex-col gap-0.5">
               {newBuildButton}
               {buildConfigurePanel}
