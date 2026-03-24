@@ -10,10 +10,7 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-<<<<<<< HEAD
 from onyx.indexing.models import ChunkEmbedding
-=======
->>>>>>> 440818a08 (Max chunks)
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 
 
@@ -52,11 +49,7 @@ def _make_chunk(
         doc_summary="",
         chunk_context="",
         contextual_rag_reserved_tokens=0,
-<<<<<<< HEAD
         embeddings=ChunkEmbedding(full_embedding=[0.1] * 10, mini_chunk_embeddings=[]),
-=======
-        embeddings={"full_embedding": [0.1] * 10, "mini_chunk_embeddings": []},
->>>>>>> 440818a08 (Max chunks)
         title_embedding=[0.1] * 10,
         tenant_id="test_tenant",
         access=access,
@@ -69,19 +62,12 @@ def _make_chunk(
     )
 
 
-<<<<<<< HEAD
 def _make_index() -> tuple[OpenSearchDocumentIndex, MagicMock]:
     """Creates an OpenSearchDocumentIndex with a mocked client.
     Returns the index and the mock for bulk_index_documents."""
     mock_client = MagicMock()
     mock_bulk = MagicMock()
     mock_client.bulk_index_documents = mock_bulk
-=======
-def _make_index() -> OpenSearchDocumentIndex:
-    """Creates an OpenSearchDocumentIndex with a mocked client."""
-    mock_client = MagicMock()
-    mock_client.bulk_index_documents = MagicMock()
->>>>>>> 440818a08 (Max chunks)
 
     tenant_state = TenantState(tenant_id="test_tenant", multitenant=False)
 
@@ -90,11 +76,7 @@ def _make_index() -> OpenSearchDocumentIndex:
     index._client = mock_client
     index._tenant_state = tenant_state
 
-<<<<<<< HEAD
     return index, mock_bulk
-=======
-    return index
->>>>>>> 440818a08 (Max chunks)
 
 
 def _make_metadata(doc_id: str, chunk_count: int) -> IndexingMetadata:
@@ -109,17 +91,23 @@ def _make_metadata(doc_id: str, chunk_count: int) -> IndexingMetadata:
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d62d0c186 (.)
 @patch(
     "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
     100,
 )
+<<<<<<< HEAD
 def test_single_doc_under_batch_limit_flushes_once() -> None:
     """A document with fewer chunks than MAX_CHUNKS_PER_DOC_BATCH should flush once."""
     index, mock_bulk = _make_index()
 =======
 @patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+=======
+>>>>>>> d62d0c186 (.)
 def test_single_doc_under_batch_limit_flushes_once() -> None:
-    """A document with fewer chunks than CHUNKS_PER_BATCH should flush once."""
+    """A document with fewer chunks than MAX_CHUNKS_PER_DOC_BATCH should flush once."""
     index = _make_index()
 >>>>>>> 440818a08 (Max chunks)
     doc_id = "doc_1"
@@ -149,9 +137,12 @@ def test_single_doc_over_batch_limit_flushes_multiple_times() -> None:
     assert len(batch_arg.kwargs["documents"]) == num_chunks
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_single_doc_over_batch_limit_flushes_multiple_times() -> None:
-    """A document with more chunks than CHUNKS_PER_BATCH should flush multiple times."""
+    """A document with more chunks than MAX_CHUNKS_PER_DOC_BATCH should flush multiple times."""
     index = _make_index()
 >>>>>>> 440818a08 (Max chunks)
     doc_id = "doc_1"
@@ -186,9 +177,12 @@ def test_single_doc_exactly_at_batch_limit() -> None:
     assert batch_sizes == [100, 100, 50]
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_single_doc_exactly_at_batch_limit() -> None:
-    """A document with exactly CHUNKS_PER_BATCH chunks should flush once
+    """A document with exactly MAX_CHUNKS_PER_DOC_BATCH chunks should flush once
     (the flush happens on the next chunk, not at the boundary)."""
     index = _make_index()
 >>>>>>> 440818a08 (Max chunks)
@@ -222,7 +216,10 @@ def test_single_doc_one_over_batch_limit() -> None:
     assert index._client.bulk_index_documents.call_count == 1
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_single_doc_one_over_batch_limit() -> None:
     """101 chunks for one doc: first 100 flushed when the 101st arrives, then
     the 101st is flushed at the end."""
@@ -258,7 +255,10 @@ def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
     assert batch_sizes == [100, 1]
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
     """Multiple documents each under the batch limit should flush once per document."""
     index = _make_index()
@@ -296,7 +296,10 @@ def test_delete_called_once_per_document() -> None:
     assert index._client.bulk_index_documents.call_count == 3
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_delete_called_once_per_document() -> None:
     """Even with multiple flushes for a single document, delete should only be
     called once per document."""
