@@ -12,10 +12,10 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import CHUNKS_PER_BATCH
 from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_NAME
 from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
+from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY
@@ -170,7 +170,7 @@ def embed_chunks_in_batches(
     tenant_id: str,
     request_id: str | None,
 ) -> ChunkEmbeddingResult:
-    """Embeds chunks in batches of CHUNKS_PER_BATCH, spilling each batch to disk.
+    """Embeds chunks in batches of MAX_CHUNKS_PER_DOC_BATCH, spilling each batch to disk.
 
     For each batch:
       1. Embed the chunks via embed_chunks_with_failure_handling
@@ -185,7 +185,9 @@ def embed_chunks_in_batches(
     successful_chunk_ids: list[tuple[int, str]] = []
     all_embedding_failures: list[ConnectorFailure] = []
 
-    for batch_idx, chunk_batch in enumerate(batch_generator(chunks, CHUNKS_PER_BATCH)):
+    for batch_idx, chunk_batch in enumerate(
+        batch_generator(chunks, MAX_CHUNKS_PER_DOC_BATCH)
+    ):
         logger.debug(f"Embedding batch {batch_idx}: {len(chunk_batch)} chunks")
 
         chunks_with_embeddings, embedding_failures = embed_chunks_with_failure_handling(
