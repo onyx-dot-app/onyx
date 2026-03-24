@@ -22,9 +22,15 @@ function detectIfRealOpenAIProvider(provider: LLMProviderView) {
 export function getModalForExistingProvider(
   provider: LLMProviderView,
   open?: boolean,
-  onOpenChange?: (open: boolean) => void
+  onOpenChange?: (open: boolean) => void,
+  defaultModelName?: string
 ) {
-  const props = { existingLlmProvider: provider, open, onOpenChange };
+  const props = {
+    existingLlmProvider: provider,
+    open,
+    onOpenChange,
+    defaultModelName,
+  };
 
   switch (provider.provider) {
     case LLMProviderName.OPENAI:
