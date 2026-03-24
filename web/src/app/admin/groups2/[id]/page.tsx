@@ -9,5 +9,9 @@ export default function EditGroupRoute({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  return <EditGroupPage groupId={Number(id)} />;
+  const groupId = Number(id);
+  if (Number.isNaN(groupId)) {
+    return null;
+  }
+  return <EditGroupPage groupId={groupId} />;
 }
