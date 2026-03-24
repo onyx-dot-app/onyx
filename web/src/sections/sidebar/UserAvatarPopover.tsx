@@ -158,7 +158,8 @@ export default function UserAvatarPopover({
   // The GET endpoint also triggers a refresh if release notes are stale
   const { data: notifications } = useSWR<Notification[]>(
     "/api/notifications",
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {}
   );
 
   const userDisplayName = getUserDisplayName(user);

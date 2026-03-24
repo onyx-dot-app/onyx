@@ -22,6 +22,7 @@
  */
 "use client";
 
+import { SWRConfig } from "swr";
 import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
@@ -37,20 +38,24 @@ interface AppProviderProps {
 
 export default function AppProvider({ children }: AppProviderProps) {
   return (
-    <SettingsProvider>
-      <UserProvider>
-        <AppBackgroundProvider>
-          <ProviderContextProvider>
-            <ModalProvider>
-              <AppSidebarProvider>
-                <QueryControllerProvider>
-                  <ToastProvider>{children}</ToastProvider>
-                </QueryControllerProvider>
-              </AppSidebarProvider>
-            </ModalProvider>
-          </ProviderContextProvider>
-        </AppBackgroundProvider>
-      </UserProvider>
-    </SettingsProvider>
+    <SWRConfig
+      value={{ revalidateOnFocus: false, revalidateOnReconnect: false }}
+    >
+      <SettingsProvider>
+        <UserProvider>
+          <AppBackgroundProvider>
+            <ProviderContextProvider>
+              <ModalProvider>
+                <AppSidebarProvider>
+                  <QueryControllerProvider>
+                    <ToastProvider>{children}</ToastProvider>
+                  </QueryControllerProvider>
+                </AppSidebarProvider>
+              </ModalProvider>
+            </ProviderContextProvider>
+          </AppBackgroundProvider>
+        </UserProvider>
+      </SettingsProvider>
+    </SWRConfig>
   );
 }
