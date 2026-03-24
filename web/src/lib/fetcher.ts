@@ -32,11 +32,14 @@ export const skipRetryOnAuthError: NonNullable<
     (error.status === 401 || error.status === 403)
   )
     return;
-  // For non-auth errors, fall back to SWR's default exponential backoff.
-  setTimeout(
-    () => revalidate({ retryCount }),
-    Math.min(retryCount * 5000, 30000)
-  );
+  // For non-auth errors, retry with exponential backoff
+  if (
+    _config.errorRetryCount !== undefined &&
+    retryCount >= _config.errorRetryCount
+  )
+    return;
+  const delay = Math.min(2000 * 2 ** retryCount, 30000);
+  setTimeout(() => revalidate({ retryCount }), delay);
 };
 
 export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
