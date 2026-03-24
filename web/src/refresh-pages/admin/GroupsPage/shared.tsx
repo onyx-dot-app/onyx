@@ -4,7 +4,6 @@ import { SvgUser, SvgUserManage, SvgGlobe, SvgSlack } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { UserRole, UserStatus, USER_ROLE_LABELS } from "@/lib/types";
-import { getInitials } from "@/refresh-pages/admin/UsersPage/utils";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
@@ -77,21 +76,15 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
 const tc = createTableColumns<MemberRow>();
 
 export const baseColumns = [
-  tc.qualifier({
-    content: "avatar-user",
-    getInitials: (row) => getInitials(row.personal_name, row.email),
-    selectable: true,
-  }),
+  tc.qualifier(),
   tc.column("email", {
     header: "Name",
     weight: 25,
-    minWidth: 180,
     cell: renderNameColumn,
   }),
   tc.column("api_key_display", {
     header: "",
     weight: 15,
-    minWidth: 100,
     enableSorting: false,
     cell: (value) =>
       value ? (
@@ -103,7 +96,6 @@ export const baseColumns = [
   tc.column("role", {
     header: "Account Type",
     weight: 15,
-    minWidth: 140,
     cell: renderAccountTypeColumn,
   }),
 ];

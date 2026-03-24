@@ -16,7 +16,7 @@ import Separator from "@/refresh-components/Separator";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useAdminUsers from "@/hooks/useAdminUsers";
-import type { ApiKeyDescriptor } from "./interfaces";
+import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 import { createGroup } from "./svc";
 import { apiKeyToMemberRow, memberTableColumns, PAGE_SIZE } from "./shared";
 
@@ -38,7 +38,7 @@ function CreateGroupPage() {
   const isLoading = usersLoading || apiKeysLoading;
   const error = usersError ?? apiKeysError;
 
-  const allRows = useMemo(() => {
+  const allRows: MemberRow[] = useMemo(() => {
     const activeUsers = users.filter((u) => u.is_active);
     const serviceAccountRows = (apiKeys ?? []).map(apiKeyToMemberRow);
     return [...activeUsers, ...serviceAccountRows];
@@ -135,7 +135,6 @@ function CreateGroupPage() {
               data={allRows}
               columns={memberTableColumns}
               getRowId={(row) => row.id ?? row.email}
-              qualifier="avatar"
               pageSize={PAGE_SIZE}
               searchTerm={searchTerm}
               selectionBehavior="multi-select"
