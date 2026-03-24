@@ -127,6 +127,9 @@ class NotionConnector(LoadConnector, PollConnector):
         # Maps child page IDs to their containing page ID (discovered in _read_blocks).
         # Used to resolve block_id parent types to the actual containing page.
         self._child_page_parent_map: dict[str, str] = {}
+        # Maps data_source_id -> database_id (populated in _read_pages_from_database).
+        # Used to resolve data_source_id parent types back to the database.
+        self._data_source_to_database_map: dict[str, str] = {}
 
     @classmethod
     @override
@@ -374,8 +377,9 @@ class NotionConnector(LoadConnector, PollConnector):
             # Fallback to workspace if we don't know the parent
             return self.workspace_id
         elif parent_type == "data_source_id":
-            # Newer Notion API may use data_source_id for databases
-            return parent.get("database_id") or parent.get("data_source_id")
+            ds_id = parent.get("data_source_id")
+            if ds_id:
+                return self._data_source_to_database_map.get(ds_id, ds_id)
         elif parent_type in ["page_id", "database_id"]:
             return parent.get(parent_type)
 
@@ -527,6 +531,7 @@ class NotionConnector(LoadConnector, PollConnector):
         # Even legacy single-source databases have one entry in the array.
         data_sources = self._fetch_data_sources_for_database(database_id)
         for ds_id, _ds_name in data_sources:
+            self._data_source_to_database_map[ds_id] = database_id
             cursor = None
             while True:
                 data = self._fetch_data_source(ds_id, cursor)
@@ -838,22 +843,35 @@ class NotionConnector(LoadConnector, PollConnector):
     def _yield_database_hierarchy_nodes(
         self,
     ) -> Generator[HierarchyNode | Document, None, None]:
-        """Search for all databases and yield hierarchy nodes for each.
+        """Search for all data sources and yield hierarchy nodes for their parent databases.
 
         This must be called BEFORE page indexing so that database hierarchy nodes
         exist when pages inside databases reference them as parents.
+
+        With the new API, search returns data source objects instead of databases.
+        Multiple data sources can share the same parent database, so we use
+        database_id as the hierarchy node key and deduplicate via
+        _maybe_yield_hierarchy_node.
         """
         query_dict: dict[str, Any] = {
-            "filter": {"property": "object", "value": "database"},
+            "filter": {"property": "object", "value": "data_source"},
             "page_size": _NOTION_PAGE_SIZE,
         }
         pages_seen = 0
         while pages_seen < _MAX_PAGES:
             db_res = self._search_notion(query_dict)
-            for db in db_res.results:
-                db_id = db["id"]
-                # Extract title from the title array
-                title_arr = db.get("title", [])
+            for ds in db_res.results:
+                # Extract the parent database_id from the data source's parent
+                ds_parent = ds.get("parent", {})
+                db_id = ds_parent.get("database_id")
+                if not db_id:
+                    continue
+
+                # Populate the mapping so _get_parent_raw_id can resolve later
+                self._data_source_to_database_map[ds["id"]] = db_id
+
+                # Use the data source title as the database name
+                title_arr = ds.get("title", [])
                 db_name = None
                 if title_arr:
                     db_name = " ".join(
@@ -862,12 +880,13 @@ class NotionConnector(LoadConnector, PollConnector):
                 if not db_name:
                     db_name = f"Database {db_id}"
 
-                # Get parent using existing helper
-                parent_raw_id = self._get_parent_raw_id(db.get("parent"))
+                # Get the database's grandparent for the hierarchy
+                parent_raw_id = self._get_parent_raw_id(ds.get("database_parent"))
 
-                # Notion URLs omit dashes from UUIDs
-                db_url = db.get("url") or f"https://notion.so/{db_id.replace('-', '')}"
+                db_url = ds.get("url") or f"https://notion.so/{db_id.replace('-', '')}"
 
+                # _maybe_yield_hierarchy_node deduplicates by raw_node_id,
+                # so multiple data sources under one database produce one node.
                 node = self._maybe_yield_hierarchy_node(
                     raw_node_id=db_id,
                     raw_parent_id=parent_raw_id or self.workspace_id,
