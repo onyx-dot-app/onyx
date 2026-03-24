@@ -14,6 +14,7 @@ type InteractiveStatefulVariant =
   | "select-light"
   | "select-heavy"
   | "select-tinted"
+  | "select-filter"
   | "sidebar";
 type InteractiveStatefulState = "empty" | "filled" | "selected";
 type InteractiveStatefulInteraction = "rest" | "hover" | "active";

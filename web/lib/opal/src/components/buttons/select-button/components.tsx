@@ -1,5 +1,4 @@
 import "@opal/components/buttons/select-button/styles.css";
-import "@opal/components/tooltip.css";
 import {
   Interactive,
   useDisabled,
