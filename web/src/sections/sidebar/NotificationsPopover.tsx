@@ -42,7 +42,7 @@ export default function NotificationsPopover({
     data: notifications,
     mutate,
     isLoading,
-  } = useSWR<Notification[]>("/api/notifications", errorHandlingFetcher, {});
+  } = useSWR<Notification[]>("/api/notifications", errorHandlingFetcher);
 
   const handleNotificationClick = (notification: Notification) => {
     // Handle build_mode feature announcement specially - show intro animation

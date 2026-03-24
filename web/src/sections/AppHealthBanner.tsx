@@ -17,7 +17,7 @@ import { getExtensionContext } from "@/lib/extension/utils";
 
 export default function AppHealthBanner() {
   const router = useRouter();
-  const { error } = useSWR("/api/health", errorHandlingFetcher, {});
+  const { error } = useSWR("/api/health", errorHandlingFetcher);
   const [expired, setExpired] = useState(false);
   const [showLoggedOutModal, setShowLoggedOutModal] = useState(false);
   const pathname = usePathname();
