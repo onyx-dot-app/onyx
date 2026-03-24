@@ -881,10 +881,22 @@ def index_doc_batch(
         adapter.lock_context(context.updatable_docs),
         use_embed_stream(embedding_result.embedding_path) as embed_stream,
     ):
+        embedding_failed_doc_ids = {
+            f.failed_document.document_id
+            for f in embedding_result.connector_failures
+            if f.failed_document
+        }
+
+        # Filter to only successfully embedded chunks so
+        # doc_id_to_new_chunk_cnt reflects what's actually written to Vespa.
+        embedded_chunks = [
+            c for c in chunks if c.source_document.id not in embedding_failed_doc_ids
+        ]
+
         enricher = adapter.prepare_enrichment(
             context=context,
             tenant_id=tenant_id,
-            chunks=chunks,
+            chunks=embedded_chunks,
         )
 
         index_batch_params = IndexBatchParams(
@@ -893,12 +905,6 @@ def index_doc_batch(
             tenant_id=tenant_id,
             large_chunks_enabled=chunker.enable_large_chunks,
         )
-
-        embedding_failed_doc_ids = {
-            f.failed_document.document_id
-            for f in embedding_result.connector_failures
-            if f.failed_document
-        }
 
         primary_doc_idx_insertion_records: list[DocumentInsertionRecord] | None = None
         primary_doc_idx_vector_db_write_failures: list[ConnectorFailure] | None = None
