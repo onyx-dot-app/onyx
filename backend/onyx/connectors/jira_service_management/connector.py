@@ -315,7 +315,10 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
                 result = self._search_jql(jql, start_at=start_at, max_results=page_size)
             except requests.exceptions.HTTPError as exc:
                 if exc.response is not None and exc.response.status_code == 429:
-                    logger.warning("Rate limited by Jira API, aborting pagination")
+                    logger.warning(
+                        f"Rate limited by Jira API at offset {start_at}, aborting pagination. "
+                        f"Consider increasing poll frequency or reducing batch size."
+                    )
                     break
                 raise
             issues = result.get("issues", [])
@@ -337,7 +340,8 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
                 except Exception as exc:
                     logger.warning(
                         f"Failed to process JSM issue "
-                        f"{raw_issue.get('key', '?')}: {exc}"
+                        f"{raw_issue.get('key', '?')}: {exc}",
+                        exc_info=True,
                     )
 
             if doc_batch:
