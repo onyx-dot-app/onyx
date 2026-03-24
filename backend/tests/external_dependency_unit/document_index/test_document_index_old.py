@@ -15,9 +15,6 @@ from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchDocumentIndex,
-)
-from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchOldDocumentIndex,
 )
 from onyx.document_index.vespa.index import VespaIndex

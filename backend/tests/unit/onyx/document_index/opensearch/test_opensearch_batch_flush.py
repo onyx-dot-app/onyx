@@ -87,9 +87,12 @@ def _make_metadata(doc_id: str, chunk_count: int) -> IndexingMetadata:
     )
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_single_doc_under_batch_limit_flushes_once() -> None:
-    """A document with fewer chunks than CHUNKS_PER_BATCH should flush once."""
+    """A document with fewer chunks than MAX_CHUNKS_PER_DOC_BATCH should flush once."""
     index = _make_index()
     doc_id = "doc_1"
     num_chunks = 50
@@ -104,9 +107,12 @@ def test_single_doc_under_batch_limit_flushes_once() -> None:
     assert len(batch_arg.kwargs["documents"]) == num_chunks
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_single_doc_over_batch_limit_flushes_multiple_times() -> None:
-    """A document with more chunks than CHUNKS_PER_BATCH should flush multiple times."""
+    """A document with more chunks than MAX_CHUNKS_PER_DOC_BATCH should flush multiple times."""
     index = _make_index()
     doc_id = "doc_1"
     num_chunks = 250
@@ -125,9 +131,12 @@ def test_single_doc_over_batch_limit_flushes_multiple_times() -> None:
     assert batch_sizes == [100, 100, 50]
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_single_doc_exactly_at_batch_limit() -> None:
-    """A document with exactly CHUNKS_PER_BATCH chunks should flush once
+    """A document with exactly MAX_CHUNKS_PER_DOC_BATCH chunks should flush once
     (the flush happens on the next chunk, not at the boundary)."""
     index = _make_index()
     doc_id = "doc_1"
@@ -147,7 +156,10 @@ def test_single_doc_exactly_at_batch_limit() -> None:
     assert index._client.bulk_index_documents.call_count == 1
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_single_doc_one_over_batch_limit() -> None:
     """101 chunks for one doc: first 100 flushed when the 101st arrives, then
     the 101st is flushed at the end."""
@@ -168,7 +180,10 @@ def test_single_doc_one_over_batch_limit() -> None:
     assert batch_sizes == [100, 1]
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
     """Multiple documents each under the batch limit should flush once per document."""
     index = _make_index()
@@ -192,7 +207,10 @@ def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
     assert index._client.bulk_index_documents.call_count == 3
 
 
-@patch("onyx.document_index.opensearch.opensearch_document_index.CHUNKS_PER_BATCH", 100)
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
 def test_delete_called_once_per_document() -> None:
     """Even with multiple flushes for a single document, delete should only be
     called once per document."""
