@@ -263,7 +263,14 @@ class IndexingBatchAdapter(Protocol):
         context: "DocumentBatchPrepareContext",
         tenant_id: str,
         chunks: list[DocAwareChunk],
-    ) -> ChunkEnrichmentContext: ...
+    ) -> ChunkEnrichmentContext:
+        """Prepare per-chunk enrichment data (access, document sets, boost, etc.).
+
+        Precondition: ``chunks`` have already been through the embedding step
+        (i.e. they are ``IndexChunk`` instances with populated embeddings,
+        passed here as the base ``DocAwareChunk`` type).
+        """
+        ...
 
     def post_index(
         self,
