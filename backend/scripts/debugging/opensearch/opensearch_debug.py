@@ -2,9 +2,10 @@
 """A utility to interact with OpenSearch.
 
 Usage:
-    python3 opensearch_debug.py --help
-    python3 opensearch_debug.py list
-    python3 opensearch_debug.py delete <index_name>
+    source .venv/bin/activate
+    python backend/scripts/debugging/opensearch/opensearch_debug.py --help
+    python backend/scripts/debugging/opensearch/opensearch_debug.py list
+    python backend/scripts/debugging/opensearch/opensearch_debug.py delete <index_name>
 
 Environment Variables:
     OPENSEARCH_HOST: OpenSearch host
@@ -107,16 +108,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="A utility to interact with OpenSearch."
     )
+    add_standard_arguments(parser)
     subparsers = parser.add_subparsers(
         dest="command", help="Command to execute.", required=True
     )
 
-    list_parser = subparsers.add_parser("list", help="List all indices with info.")
-    add_standard_arguments(list_parser)
+    subparsers.add_parser("list", help="List all indices with info.")
 
     delete_parser = subparsers.add_parser("delete", help="Delete an index.")
     delete_parser.add_argument("index", help="Index name.", type=str)
-    add_standard_arguments(delete_parser)
 
     args = parser.parse_args()
 
