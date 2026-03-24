@@ -1,5 +1,4 @@
 import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 export interface AuthTypeMetadata {
@@ -22,6 +21,24 @@ const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
   oauthEnabled: false,
 };
 
+async function fetchAuthTypeMetadata(): Promise<AuthTypeMetadata> {
+  const res = await fetch("/api/auth/type");
+  if (!res.ok) throw new Error("Failed to fetch auth type metadata");
+  const data = await res.json();
+  const authType = NEXT_PUBLIC_CLOUD_ENABLED
+    ? AuthType.CLOUD
+    : (data.auth_type as AuthType);
+  return {
+    authType,
+    autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
+    requiresVerification: data.requires_verification,
+    anonymousUserEnabled: data.anonymous_user_enabled,
+    passwordMinLength: data.password_min_length,
+    hasUsers: data.has_users,
+    oauthEnabled: data.oauth_enabled,
+  };
+}
+
 export function useAuthTypeMetadata(): {
   authTypeMetadata: AuthTypeMetadata;
   isLoading: boolean;
@@ -29,21 +46,13 @@ export function useAuthTypeMetadata(): {
 } {
   const { data, error, isLoading } = useSWR<AuthTypeMetadata>(
     "/api/auth/type",
-    errorHandlingFetcher,
+    fetchAuthTypeMetadata,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       dedupingInterval: 30_000,
     }
   );
-
-  if (NEXT_PUBLIC_CLOUD_ENABLED && data) {
-    return {
-      authTypeMetadata: { ...data, authType: AuthType.CLOUD },
-      isLoading,
-      error,
-    };
-  }
 
   return {
     authTypeMetadata: data ?? DEFAULT_AUTH_TYPE_METADATA,
