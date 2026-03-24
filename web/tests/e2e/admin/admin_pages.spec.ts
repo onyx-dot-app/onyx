@@ -189,7 +189,7 @@ for (const theme of THEMES) {
         )}`;
         await expectScreenshot(page, {
           name: screenshotName,
-          mask: ['[data-testid="admin-date-range-selector"]'],
+          mask: ['[data-testid="admin-date-range-selector-button"]'],
         });
       });
     }
