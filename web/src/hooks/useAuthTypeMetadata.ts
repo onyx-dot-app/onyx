@@ -1,6 +1,15 @@
 import useSWR from "swr";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
+interface AuthTypeAPIResponse {
+  auth_type: string;
+  requires_verification: boolean;
+  anonymous_user_enabled: boolean | null;
+  password_min_length: number;
+  has_users: boolean;
+  oauth_enabled: boolean;
+}
+
 export interface AuthTypeMetadata {
   authType: AuthType;
   autoRedirect: boolean;
@@ -24,7 +33,7 @@ const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
 async function fetchAuthTypeMetadata(url: string): Promise<AuthTypeMetadata> {
   const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch auth type metadata");
-  const data = await res.json();
+  const data: AuthTypeAPIResponse = await res.json();
   const authType = NEXT_PUBLIC_CLOUD_ENABLED
     ? AuthType.CLOUD
     : (data.auth_type as AuthType);
