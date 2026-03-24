@@ -140,7 +140,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             )
 
         elif self.bucket_type == BlobType.S3:
-            self.endpoint_url = credentials.get("endpoint_url")
+            if "endpoint_url" in credentials:
+                self.endpoint_url = credentials["endpoint_url"]
             # For S3, we can use either access keys or IAM roles.
             authentication_method = credentials.get(
                 "authentication_method", "access_key"
