@@ -35,6 +35,12 @@ def on_task_prerun(
 ) -> None:
     app_base.on_task_prerun(sender, task_id, task, args, kwargs, **kwds)
 
+    from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
+    from onyx.server.metrics.indexing_task_metrics import on_indexing_task_prerun
+
+    on_celery_task_prerun(task_id, task)
+    on_indexing_task_prerun(task_id, task, kwargs)
+
 
 @signals.task_postrun.connect
 def on_task_postrun(
@@ -48,6 +54,12 @@ def on_task_postrun(
     **kwds: Any,
 ) -> None:
     app_base.on_task_postrun(sender, task_id, task, args, kwargs, retval, state, **kwds)
+
+    from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
+    from onyx.server.metrics.indexing_task_metrics import on_indexing_task_postrun
+
+    on_celery_task_postrun(task_id, task, state)
+    on_indexing_task_postrun(task_id, task, kwargs, state)
 
 
 @celeryd_init.connect
@@ -76,6 +88,9 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
 @worker_ready.connect
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
+    from onyx.server.metrics.metrics_server import start_metrics_server
+
+    start_metrics_server("docfetching")
     app_base.on_worker_ready(sender, **kwargs)
 
 
