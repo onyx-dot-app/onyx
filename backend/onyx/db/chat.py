@@ -16,6 +16,7 @@ from sqlalchemy import Row
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.exc import MultipleResultsFound
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
@@ -60,9 +61,11 @@ def get_chat_session_by_id(
 
     if eager_load_persona:
         stmt = stmt.options(
-            selectinload(ChatSession.persona).selectinload(Persona.tools),
-            selectinload(ChatSession.persona).selectinload(Persona.user_files),
-            selectinload(ChatSession.project),
+            joinedload(ChatSession.persona).options(
+                selectinload(Persona.tools),
+                selectinload(Persona.user_files),
+            ),
+            joinedload(ChatSession.project),
         )
 
     if is_shared:
