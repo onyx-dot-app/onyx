@@ -112,3 +112,8 @@ class UserGroupRename(BaseModel):
 class SetCuratorRequest(BaseModel):
     user_id: UUID
     is_curator: bool
+
+
+class UpdateGroupAgentsRequest(BaseModel):
+    added_agent_ids: list[int]
+    removed_agent_ids: list[int]

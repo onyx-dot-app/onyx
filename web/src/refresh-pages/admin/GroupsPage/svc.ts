@@ -64,49 +64,22 @@ async function updateAgentGroupSharing(
   const initialSet = new Set(initialAgentIds);
   const currentSet = new Set(currentAgentIds);
 
-  const added = currentAgentIds.filter((id) => !initialSet.has(id));
-  const removed = initialAgentIds.filter((id) => !currentSet.has(id));
+  const added_agent_ids = currentAgentIds.filter((id) => !initialSet.has(id));
+  const removed_agent_ids = initialAgentIds.filter((id) => !currentSet.has(id));
 
-  await Promise.all([
-    // For each added agent, add this group to its group_ids
-    ...added.map(async (agentId) => {
-      const agentRes = await fetch(`/api/persona/${agentId}`);
-      if (!agentRes.ok) {
-        throw new Error(`Failed to fetch agent ${agentId}`);
-      }
-      const agent = await agentRes.json();
-      const existingGroupIds: number[] = (agent.groups ?? []) as number[];
-      if (!existingGroupIds.includes(groupId)) {
-        existingGroupIds.push(groupId);
-      }
-      const shareRes = await fetch(`/api/persona/${agentId}/share`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ group_ids: existingGroupIds }),
-      });
-      if (!shareRes.ok) {
-        throw new Error(`Failed to share agent ${agentId} with group`);
-      }
-    }),
-    // For each removed agent, remove this group from its group_ids
-    ...removed.map(async (agentId) => {
-      const agentRes = await fetch(`/api/persona/${agentId}`);
-      if (!agentRes.ok) {
-        throw new Error(`Failed to fetch agent ${agentId}`);
-      }
-      const agent = await agentRes.json();
-      const existingGroupIds: number[] = (agent.groups ?? []) as number[];
-      const filtered = existingGroupIds.filter((id) => id !== groupId);
-      const shareRes = await fetch(`/api/persona/${agentId}/share`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ group_ids: filtered }),
-      });
-      if (!shareRes.ok) {
-        throw new Error(`Failed to update agent ${agentId} sharing`);
-      }
-    }),
-  ]);
+  if (added_agent_ids.length === 0 && removed_agent_ids.length === 0) return;
+
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/agents`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ added_agent_ids, removed_agent_ids }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(
+      detail?.detail ?? `Failed to update agent sharing: ${res.statusText}`
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
