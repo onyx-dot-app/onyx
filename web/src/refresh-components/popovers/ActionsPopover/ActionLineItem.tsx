@@ -128,20 +128,21 @@ export default function ActionLineItem({
               />
             )}
 
-            {!isSearchToolWithNoConnectors && !isUnavailable && (
-              // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-              <IconButton
-                icon={SvgSlash}
-                onClick={noProp(onToggle)}
-                internal
-                className={cn(
-                  !disabled && "invisible group-hover/LineItem:visible",
-                  // Hide when showing source count (it has its own hover behavior)
-                  shouldShowSourceCount && "!hidden"
-                )}
-                tooltip={disabled ? "Enable" : "Disable"}
-              />
-            )}
+              {!isSearchToolWithNoConnectors && !isUnavailable && (
+                // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
+                <IconButton
+                  icon={SvgSlash}
+                  onClick={noProp(onToggle)}
+                  internal
+                  aria-label={disabled ? "Enable" : "Disable"}
+                  className={cn(
+                    !disabled && "invisible group-hover/LineItem:visible",
+                    // Hide when showing source count (it has its own hover behavior)
+                    shouldShowSourceCount && "!hidden"
+                  )}
+                  tooltip={disabled ? "Enable" : "Disable"}
+                />
+              )}
 
             {isUnavailable && showAdminConfigure && adminConfigureHref && (
               <Button
@@ -178,30 +179,35 @@ export default function ActionLineItem({
               </span>
             )}
 
-            {isSearchToolAndNotInProject && (
-              <Button
-                icon={
-                  isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
-                }
-                onClick={noProp(() => {
-                  if (isSearchToolWithNoConnectors)
-                    router.push("/admin/add-connector");
-                  else onSourceManagementOpen?.();
-                })}
-                prominence="tertiary"
-                size="sm"
-                tooltip={
-                  isSearchToolWithNoConnectors
-                    ? "Add Connectors"
-                    : "Configure Connectors"
-                }
-              />
-            )}
-          </Section>
-        }
-      >
-        {label}
-      </LineItem>
+              {isSearchToolAndNotInProject && (
+                <Button
+                  aria-label={
+                    isSearchToolWithNoConnectors
+                      ? "Add Connectors"
+                      : "Configure Connectors"
+                  }
+                  icon={
+                    isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
+                  }
+                  onClick={noProp(() => {
+                    if (isSearchToolWithNoConnectors)
+                      router.push("/admin/add-connector");
+                    else onSourceManagementOpen?.();
+                  })}
+                  prominence="tertiary"
+                  size="sm"
+                  tooltip={
+                    isSearchToolWithNoConnectors
+                      ? "Add Connectors"
+                      : "Configure Connectors"
+                  }
+                />
+              )}
+            </Section>
+          }
+        >
+          {label}
+        </LineItem>
     </SimpleTooltip>
   );
 }
