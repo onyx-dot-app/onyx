@@ -800,6 +800,33 @@ def update_user_group(
     return db_user_group
 
 
+def rename_user_group(
+    db_session: Session,
+    user_group_id: int,
+    new_name: str,
+) -> UserGroup:
+    stmt = select(UserGroup).where(UserGroup.id == user_group_id)
+    db_user_group = db_session.scalar(stmt)
+    if db_user_group is None:
+        raise ValueError(f"UserGroup with id '{user_group_id}' not found")
+
+    _check_user_group_is_modifiable(db_user_group)
+
+    db_user_group.name = new_name
+    db_user_group.time_last_modified_by_user = func.now()
+
+    # CC pair documents in Vespa contain the group name, so we need to
+    # trigger a sync to update them with the new name.
+    _mark_user_group__cc_pair_relationships_outdated__no_commit(
+        db_session=db_session, user_group_id=user_group_id
+    )
+    if not DISABLE_VECTOR_DB:
+        db_user_group.is_up_to_date = False
+
+    db_session.commit()
+    return db_user_group
+
+
 def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> None:
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     db_user_group = db_session.scalar(stmt)

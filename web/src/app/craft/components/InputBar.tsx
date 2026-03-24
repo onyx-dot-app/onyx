@@ -13,6 +13,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useRouter } from "next/navigation";
+import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { cn, isImageFile } from "@/lib/utils";
 import { Disabled } from "@opal/core";
 import {
@@ -230,21 +231,11 @@ const InputBar = memo(
 
       const handlePaste = useCallback(
         (event: ClipboardEvent) => {
-          const items = event.clipboardData?.items;
-          if (items) {
-            const pastedFiles: File[] = [];
-            for (let i = 0; i < items.length; i++) {
-              const item = items[i];
-              if (item && item.kind === "file") {
-                const file = item.getAsFile();
-                if (file) pastedFiles.push(file);
-              }
-            }
-            if (pastedFiles.length > 0) {
-              event.preventDefault();
-              // Context handles session binding internally
-              uploadFiles(pastedFiles);
-            }
+          const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
+          if (pastedFiles.length > 0) {
+            event.preventDefault();
+            // Context handles session binding internally
+            uploadFiles(pastedFiles);
           }
         },
         [uploadFiles]

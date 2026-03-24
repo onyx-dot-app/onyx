@@ -11,6 +11,7 @@ from ee.onyx.db.user_group import fetch_user_groups
 from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.db.user_group import insert_user_group
 from ee.onyx.db.user_group import prepare_user_group_for_deletion
+from ee.onyx.db.user_group import rename_user_group
 from ee.onyx.db.user_group import update_user_curator_relationship
 from ee.onyx.db.user_group import update_user_group
 from ee.onyx.server.user_group.models import AddUsersToUserGroupRequest
@@ -18,6 +19,7 @@ from ee.onyx.server.user_group.models import MinimalUserGroupSnapshot
 from ee.onyx.server.user_group.models import SetCuratorRequest
 from ee.onyx.server.user_group.models import UserGroup
 from ee.onyx.server.user_group.models import UserGroupCreate
+from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
@@ -27,6 +29,8 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -85,6 +89,32 @@ def create_user_group(
             + "choose a different name.",
         )
     return UserGroup.from_model(db_user_group)
+
+
+@router.patch("/admin/user-group/rename")
+def rename_user_group_endpoint(
+    rename_request: UserGroupRename,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> UserGroup:
+    try:
+        return UserGroup.from_model(
+            rename_user_group(
+                db_session=db_session,
+                user_group_id=rename_request.id,
+                new_name=rename_request.name,
+            )
+        )
+    except IntegrityError:
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"User group with name '{rename_request.name}' already exists.",
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, msg)
+        raise OnyxError(OnyxErrorCode.CONFLICT, msg)
 
 
 @router.patch("/admin/user-group/{user_group_id}")
