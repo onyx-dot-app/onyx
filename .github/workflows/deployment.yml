@@ -1521,8 +1521,7 @@ jobs:
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-${{ matrix.component }}
       - extras=ecr-cache
-    timeout-minutes: 90
-    environment: release
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -1571,22 +1570,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Configure AWS credentials
-        if: steps.should-run.outputs.run == 'true'
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
-
-      - name: Get AWS Secrets
-        if: steps.should-run.outputs.run == 'true'
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
-        with:
-          secret-ids: |
-            DOCKER_USERNAME, deploy/docker-username
-            DOCKER_TOKEN, deploy/docker-token
-          parse-json-secrets: true
-
       - name: Determine scan image
         if: steps.should-run.outputs.run == 'true'
         id: scan-image
@@ -1606,16 +1589,17 @@ jobs:
       - name: Run Trivy vulnerability scanner
         if: steps.should-run.outputs.run == 'true'
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # ratchet:aquasecurity/trivy-action@v0.35.0
-        env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
-          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
-          # TRIVY_USERNAME: ${{ env.DOCKER_USERNAME }}
-          # TRIVY_PASSWORD: ${{ env.DOCKER_TOKEN }}
         with:
           image-ref: ${{ steps.scan-image.outputs.image }}
           severity: CRITICAL,HIGH
-          timeout: 20m
+          format: "sarif"
+          output: "trivy-results.sarif"
           trivyignores: ${{ matrix.trivyignore }}
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: "trivy-results.sarif"
 
   notify-slack-on-failure:
     needs:
