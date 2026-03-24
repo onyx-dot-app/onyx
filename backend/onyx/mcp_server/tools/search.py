@@ -104,7 +104,7 @@ async def search_indexed_documents(
     if isinstance(source_types, str):
         try:
             parsed = json.loads(source_types)
-            if isinstance(parsed, list):
+            if isinstance(parsed, list) and all(isinstance(s, str) for s in parsed):
                 source_types = parsed
             else:
                 source_types = [parsed] if isinstance(parsed, str) else [source_types]
