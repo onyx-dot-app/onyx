@@ -192,7 +192,15 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 botocore_session = get_session()
                 botocore_session._credentials = refreshable  # type: ignore[attr-defined]
                 session = boto3.Session(botocore_session=botocore_session)
-                self.s3_client = session.client("s3")
+                client_kwargs: dict[str, Any] = {"service_name": "s3"}
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+                    client_kwargs["region_name"] = credentials.get("region", "us-east-1")
+                    client_kwargs["config"] = Config(
+                        signature_version="s3v4",
+                        s3={"addressing_style": "path"},
+                    )
+                self.s3_client = session.client(**client_kwargs)
             elif authentication_method == "assume_role":
                 # We will assume the instance role to access S3.
                 logger.debug("Using instance role authentication for S3 bucket.")
