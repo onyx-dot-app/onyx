@@ -314,68 +314,44 @@
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
-   Select-Filter — Empty
+   Select-Filter — Empty & Filled (identical colors)
    --------------------------------------------------------------------------- */
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="empty"] {
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  ) {
   @apply bg-background-tint-01;
   --interactive-foreground: var(--text-02);
   --interactive-foreground-icon: var(--text-02);
 }
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="empty"]:hover:not(
-    [data-disabled]
-  ),
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="empty"][data-interaction="hover"]:not(
-    [data-disabled]
-  ) {
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  ):hover:not([data-disabled]),
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  )[data-interaction="hover"]:not([data-disabled]) {
   @apply bg-background-tint-02;
   --interactive-foreground: var(--text-04);
   --interactive-foreground-icon: var(--text-04);
 }
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="empty"]:active:not(
-    [data-disabled]
-  ),
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="empty"][data-interaction="active"]:not(
-    [data-disabled]
-  ) {
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  ):active:not([data-disabled]),
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  )[data-interaction="active"]:not([data-disabled]) {
   @apply bg-background-neutral-00;
   --interactive-foreground: var(--text-05);
   --interactive-foreground-icon: var(--text-05);
 }
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="empty"][data-disabled] {
-  @apply bg-transparent;
-  --interactive-foreground: var(--text-01);
-  --interactive-foreground-icon: var(--text-01);
-}
-
-/* ---------------------------------------------------------------------------
-   Select-Filter — Filled
-   --------------------------------------------------------------------------- */
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="filled"] {
-  @apply bg-background-tint-01;
-  --interactive-foreground: var(--text-02);
-  --interactive-foreground-icon: var(--text-02);
-}
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="filled"]:hover:not(
-    [data-disabled]
-  ),
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="filled"][data-interaction="hover"]:not(
-    [data-disabled]
-  ) {
-  @apply bg-background-tint-02;
-  --interactive-foreground: var(--text-04);
-  --interactive-foreground-icon: var(--text-04);
-}
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="filled"]:active:not(
-    [data-disabled]
-  ),
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="filled"][data-interaction="active"]:not(
-    [data-disabled]
-  ) {
-  @apply bg-background-tint-00;
-  --interactive-foreground: var(--text-05);
-  --interactive-foreground-icon: var(--text-05);
-}
-.interactive[data-interactive-variant="select-filter"][data-interactive-state="filled"][data-disabled] {
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  )[data-disabled] {
   @apply bg-transparent;
   --interactive-foreground: var(--text-01);
   --interactive-foreground-icon: var(--text-01);
