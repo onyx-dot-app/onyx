@@ -31,9 +31,6 @@ type ButtonProps = InteractiveStatelessProps &
      */
     size?: ContainerSizeVariants;
 
-    /** HTML button type. When provided, Container renders a `<button>` element. */
-    type?: "submit" | "button" | "reset";
-
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
