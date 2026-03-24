@@ -1,4 +1,3 @@
-import React from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { FilterButton } from "@opal/components";
 import { Disabled as DisabledProvider } from "@opal/core";

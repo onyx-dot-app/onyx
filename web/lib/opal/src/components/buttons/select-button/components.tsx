@@ -49,9 +49,6 @@ type SelectButtonProps = InteractiveStatefulProps &
      */
     size?: ContainerSizeVariants;
 
-    /** HTML button type. Container renders a `<button>` element. */
-    type?: "submit" | "button" | "reset";
-
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
