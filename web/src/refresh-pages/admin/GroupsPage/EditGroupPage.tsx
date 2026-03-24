@@ -181,15 +181,23 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     [handleRemoveMember]
   );
 
+  // IDs of members not visible in the add-mode table (e.g. inactive users).
+  // We preserve these so they aren't silently removed when the table fires
+  // onSelectionChange with only the visible rows.
+  const hiddenMemberIds = useMemo(() => {
+    const visibleIds = new Set(allRows.map((r) => r.id ?? r.email));
+    return selectedUserIds.filter((id) => !visibleIds.has(id));
+  }, [allRows, selectedUserIds]);
+
   // Guard onSelectionChange: ignore updates until the form is fully initialized.
   // Without this, TanStack fires onSelectionChange before all rows are loaded,
   // which overwrites selectedUserIds with a partial set.
   const handleSelectionChange = useCallback(
     (ids: string[]) => {
       if (!initialized) return;
-      setSelectedUserIds(ids);
+      setSelectedUserIds([...ids, ...hiddenMemberIds]);
     },
-    [initialized]
+    [initialized, hiddenMemberIds]
   );
 
   async function handleSave() {
