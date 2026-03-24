@@ -159,6 +159,7 @@ interface MemoriesModalProps {
   initialTargetMemoryId?: number | null;
   initialTargetIndex?: number | null;
   highlightOnOpen?: boolean;
+  focusNewLine?: boolean;
 }
 
 export default function MemoriesModal({
@@ -168,6 +169,7 @@ export default function MemoriesModal({
   initialTargetMemoryId,
   initialTargetIndex,
   highlightOnOpen = false,
+  focusNewLine = false,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
@@ -240,6 +242,19 @@ export default function MemoriesModal({
     onSaveMemories: effectiveSave,
     onNotify: (message, type) => toast[type](message),
   });
+
+  // Always start with an empty card; optionally focus it (View/Add button)
+  const hasAddedEmptyRef = useRef(false);
+  useEffect(() => {
+    if (hasAddedEmptyRef.current) return;
+    hasAddedEmptyRef.current = true;
+
+    const id = handleAddMemory();
+    if (id !== null && focusNewLine) {
+      setFocusMemoryId(id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onAddLine = () => {
     const id = handleAddMemory();
