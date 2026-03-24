@@ -806,7 +806,7 @@ MINI_CHUNK_SIZE = 150
 LARGE_CHUNK_RATIO = 4
 
 # The maximum number of chunks that can be held for 1 document processing batch
-# The purpose of this is to set an upper bouund on memory usage
+# The purpose of this is to set an upper bound on memory usage
 MAX_CHUNKS_PER_DOC_BATCH = int(os.environ.get("MAX_CHUNKS_PER_DOC_BATCH") or 1000)
 
 # Include the document level metadata in each chunk. If the metadata is too long, then it is thrown out
