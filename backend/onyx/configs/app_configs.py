@@ -59,9 +59,16 @@ MAX_ALLOWED_UPLOAD_SIZE_MB = _raw_max_upload_size_mb
 # Default fallback for the per-user file upload size limit (in MB) when no
 # admin-configured value exists.  Clamped to MAX_ALLOWED_UPLOAD_SIZE_MB at
 # runtime so this never silently exceeds the hard ceiling.
-DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = int(
+_raw_default_upload_size_mb = int(
     os.environ.get("DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", "100")
 )
+if _raw_default_upload_size_mb < 0:
+    logger.warning(
+        "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB=%d is negative; falling back to 100",
+        _raw_default_upload_size_mb,
+    )
+    _raw_default_upload_size_mb = 100
+DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _raw_default_upload_size_mb
 GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
