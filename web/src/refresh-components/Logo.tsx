@@ -40,7 +40,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
         "aspect-square rounded-full overflow-hidden relative flex-shrink-0",
         className
       )}
-      style={{ height: resolvedSize, width: resolvedSize }}
+      style={{ height: resolvedSize }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
