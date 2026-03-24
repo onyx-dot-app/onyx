@@ -87,7 +87,10 @@ export default function VertexAIModal({
           defaultModelName
         ),
         default_model_name:
-          defaultModelName ??
+          (defaultModelName &&
+          modelConfigurations.some((m) => m.name === defaultModelName)
+            ? defaultModelName
+            : undefined) ??
           wellKnownLLMProvider?.recommended_default_model?.name ??
           VERTEXAI_DEFAULT_MODEL,
         is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,

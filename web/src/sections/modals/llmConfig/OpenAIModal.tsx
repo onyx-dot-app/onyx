@@ -71,7 +71,10 @@ export default function OpenAIModal({
         ),
         api_key: existingLlmProvider?.api_key ?? "",
         default_model_name:
-          defaultModelName ??
+          (defaultModelName &&
+          modelConfigurations.some((m) => m.name === defaultModelName)
+            ? defaultModelName
+            : undefined) ??
           wellKnownLLMProvider?.recommended_default_model?.name ??
           DEFAULT_DEFAULT_MODEL_NAME,
         is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
