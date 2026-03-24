@@ -249,6 +249,11 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
             logger.info(f"Skipping {issue_key} — exceeds max ticket size.")
             return None
 
+        # Skip issues with no indexable content to avoid hollow documents
+        if not full_text.strip():
+            logger.debug(f"Skipping {issue_key} — no indexable content.")
+            return None
+
         # Metadata
         metadata: dict[str, str | list[str]] = {}
         if status_obj := fields.get("status"):
@@ -313,11 +318,11 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
                 result = self._search_jql(jql, start_at=start_at, max_results=page_size)
             except requests.exceptions.HTTPError as exc:
                 if exc.response is not None and exc.response.status_code == 429:
-                    logger.warning(
-                        f"Rate limited by Jira API at offset {start_at}, aborting pagination. "
-                        f"Consider increasing poll frequency or reducing batch size."
-                    )
-                    break
+                    raise requests.exceptions.HTTPError(
+                        f"Rate limited by Jira API at offset {start_at}. "
+                        f"Raising to allow orchestrator to retry.",
+                        response=exc.response,
+                    ) from exc
                 raise
             issues = result.get("issues", [])
             total: int = result.get("total", 0)
