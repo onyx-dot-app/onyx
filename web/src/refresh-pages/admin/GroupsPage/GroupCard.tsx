@@ -25,6 +25,7 @@ function GroupCard({ group }: GroupCardProps) {
   const builtIn = isBuiltInGroup(group);
   const isAdmin = group.name === "Admin";
   const isBasic = group.name === "Basic";
+  const isSyncing = !group.is_up_to_date;
 
   async function handleRename(newName: string) {
     try {
@@ -46,8 +47,8 @@ function GroupCard({ group }: GroupCardProps) {
         sizePreset="main-content"
         variant="section"
         tag={isBasic ? { title: "Default" } : undefined}
-        editable={!builtIn}
-        onTitleChange={!builtIn ? handleRename : undefined}
+        editable={!builtIn && !isSyncing}
+        onTitleChange={!builtIn && !isSyncing ? handleRename : undefined}
         rightChildren={
           <Section flexDirection="row" alignItems="start" gap={0}>
             <div className="py-1">
