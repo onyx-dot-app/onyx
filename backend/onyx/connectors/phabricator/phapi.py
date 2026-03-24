@@ -115,7 +115,7 @@ def get_maniphest_tickets(limit : int, api_base, api_token, user_phid_cache : Us
                 if rjson is None:
                     continue
                 phab_data += rjson.get('result', {}).get('data', [])
-                if rjson['result']['cursor']['after'] is None:
+                if rjson.get('result', {}).get('cursor', {}).get('after') is None:
                     break
                 q['after'] = rjson['result']['cursor']['after']
             q['limit'] = rem
@@ -144,8 +144,8 @@ def get_maniphest_tickets(limit : int, api_base, api_token, user_phid_cache : Us
                 rjson = res.json()
                 if rjson is None:
                     continue
-                phab_data += rjson['result']['data']
-                if rjson['result']['cursor']['after'] is None:
+                phab_data += rjson.get('result', {}).get('data', [])
+                if rjson.get('result', {}).get('cursor', {}).get('after') is None:
                     break
                 q['after'] = rjson['result']['cursor']['after']
     else:
@@ -160,7 +160,7 @@ def get_maniphest_tickets(limit : int, api_base, api_token, user_phid_cache : Us
         rjson = res.json()
         if rjson is None:
             return []
-        phab_data = rjson['result']['data']
+        phab_data = rjson.get('result', {}).get('data', [])
 
     for t in phab_data:
         if start is not None and t['fields']['dateModified'] < start:
