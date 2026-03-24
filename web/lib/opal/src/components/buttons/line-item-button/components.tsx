@@ -19,7 +19,17 @@ type ContentPassthroughProps = DistributiveOmit<
   "paddingVariant" | "widthVariant" | "ref" | "withInteractive"
 >;
 
-type LineItemButtonOwnProps = Omit<InteractiveStatefulProps, "variant"> & {
+type LineItemButtonOwnProps = Pick<
+  InteractiveStatefulProps,
+  | "state"
+  | "interaction"
+  | "onClick"
+  | "href"
+  | "target"
+  | "group"
+  | "ref"
+  | "type"
+> & {
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
 
