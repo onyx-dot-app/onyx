@@ -5,17 +5,29 @@
 import requests
 import math
 
-user_phid_cache : dict[str, str] = {}
+class UserPhidCache:
+    def __init__(self) -> None:
+        self.cache = {}
 
-def get_user_by_phid(phid : str | None, api_base : str, api_token : str, logger = None) -> str | None:
+    def found(self, phid : str) -> bool:
+        return phid in self.cache.keys()
+
+    def lookup(self, phid : str) -> str | None:
+        if phid in self.cache.keys():
+            return self.cache[phid]
+        return None
+
+    def add(self, phid : str, username : str) -> None:
+        self.cache[phid] = username
+
+def get_user_by_phid(phid : str | None, api_base : str, api_token : str, user_phid_cache : UserPhidCache, logger = None) -> str | None:
     '''
     Returns username based on the passed PHID, or None if it's not found
     '''
-    global user_phid_cache
     if phid is None:
         return None
-    if phid in user_phid_cache.keys():
-        return user_phid_cache[phid]
+    if user_phid_cache.found(phid):
+        return user_phid_cache.lookup(phid)
     q = {
         'api.token': api_token,
         'constraints[phids][]': phid,
@@ -33,10 +45,10 @@ def get_user_by_phid(phid : str | None, api_base : str, api_token : str, logger 
         return None
     username = rjson['result']['data'][0].get('fields', {}).get('username')
     if not username is None:
-        user_phid_cache[phid] = username
+        user_phid_cache.add(phid, username)
     return username
 
-def get_maniphest_tickets(limit : int, api_base, api_token, start = None, end = None, logger = None) -> list[dict[str, str]]:
+def get_maniphest_tickets(limit : int, api_base, api_token, user_phid_cache : UserPhidCache, start = None, end = None, logger = None) -> list[dict[str, str]]:
     '''
     Returns a list of the tickets as a dict with the following keys:
     - title: Ticket title
@@ -59,8 +71,8 @@ def get_maniphest_tickets(limit : int, api_base, api_token, start = None, end = 
             'PHID': ph_res['phid'],
             'description': ph_res['fields']['description']['raw'],
             'status': ph_res['fields']['status']['value'],
-            'owner': get_user_by_phid(ph_res['fields']['ownerPHID'], api_base, api_token, logger=logger),
-            'author': get_user_by_phid(ph_res['fields']['authorPHID'], api_base, api_token, logger=logger),
+            'owner': get_user_by_phid(ph_res['fields']['ownerPHID'], api_base, api_token, user_phid_cache, logger=logger),
+            'author': get_user_by_phid(ph_res['fields']['authorPHID'], api_base, api_token, user_phid_cache, logger=logger),
             'priority': ph_res['fields']['priority']['name'],
             'date_modified': ph_res['fields']['dateModified']
         }
@@ -78,7 +90,7 @@ def get_maniphest_tickets(limit : int, api_base, api_token, start = None, end = 
             if logger is None:
                 print(f'ERROR: {res.text}')
             else:
-                logger.error(print(f'maniphest.search error: {res.text}'))
+                logger.error(f'maniphest.search error: {res.text}')
             return []
         try:
             num_tts = res.json()['result']['data'][0]['id']
@@ -97,7 +109,7 @@ def get_maniphest_tickets(limit : int, api_base, api_token, start = None, end = 
                     if logger is None:
                         print(f'ERROR: {res.text}')
                     else:
-                        logger.error(print(f'maniphest.search error: {res.text}'))
+                        logger.error(f'maniphest.search error: {res.text}')
                     return []
                 rjson = res.json()
                 if rjson is None:
@@ -113,7 +125,7 @@ def get_maniphest_tickets(limit : int, api_base, api_token, start = None, end = 
                     if logger is None:
                         print(f'ERROR: {res.text}')
                     else:
-                        logger.error(print(f'maniphest.search error: {res.text}'))
+                        logger.error(f'maniphest.search error: {res.text}')
                     return []
                 rjson = res.json()
                 if not rjson is None:
@@ -127,7 +139,7 @@ def get_maniphest_tickets(limit : int, api_base, api_token, start = None, end = 
                     if logger is None:
                         print(f'ERROR: {res.text}')
                     else:
-                        logger.error(print(f'maniphest.search error: {res.text}'))
+                        logger.error(f'maniphest.search error: {res.text}')
                     return []
                 rjson = res.json()
                 if rjson is None:
@@ -143,7 +155,7 @@ def get_maniphest_tickets(limit : int, api_base, api_token, start = None, end = 
             if logger is None:
                 print(f'ERROR: {res.text}')
             else:
-                logger.error(print(f'maniphest.search error: {res.text}'))
+                logger.error(f'maniphest.search error: {res.text}')
             return []
         rjson = res.json()
         if rjson is None:
@@ -176,7 +188,7 @@ def get_phriction_doc_by_phid(phid : str, api_base : str, api_token : str, logge
         if logger is None:
             print(f'ERROR: {res.text}')
         else:
-            logger.error(print(f'phriction.content.search error: {res.text}'))
+            logger.error(f'phriction.content.search error: {res.text}')
         return None
     return res.json()
 
@@ -220,7 +232,7 @@ def get_phriction_docs(limit : int, api_base : str, api_token : str, start = Non
                     if logger is None:
                         print(f'ERROR: {res.text}')
                     else:
-                        logger.error(print(f'phriction.content.search error: {res.text}'))
+                        logger.error(f'phriction.content.search error: {res.text}')
                     return []
                 rjson = res.json()
                 phab_data += rjson['result']['data']
@@ -234,7 +246,7 @@ def get_phriction_docs(limit : int, api_base : str, api_token : str, start = Non
                     if logger is None:
                         print(f'ERROR: {res.text}')
                     else:
-                        logger.error(print(f'phriction.content.search error: {res.text}'))
+                        logger.error(f'phriction.content.search error: {res.text}')
                     return []
                 rjson = res.json()
                 phab_data += rjson['result']['data']
@@ -246,7 +258,7 @@ def get_phriction_docs(limit : int, api_base : str, api_token : str, start = Non
                     if logger is None:
                         print(f'ERROR: {res.text}')
                     else:
-                        logger.error(print(f'phriction.content.search error: {res.text}'))
+                        logger.error(f'phriction.content.search error: {res.text}')
                     return []
                 rjson = res.json()
                 phab_data += rjson['result']['data']
@@ -260,7 +272,7 @@ def get_phriction_docs(limit : int, api_base : str, api_token : str, start = Non
             if logger is None:
                 print(f'ERROR: {res.text}')
             else:
-                logger.error(print(f'phriction.content.search error: {res.text}'))
+                logger.error(f'phriction.content.search error: {res.text}')
             return []
         phab_data = res.json()['result']['data']
 
