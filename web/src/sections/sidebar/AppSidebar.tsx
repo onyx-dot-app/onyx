@@ -541,18 +541,7 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <ChatSearchCommandMenu
           trigger={
-            <SidebarTab
-              icon={SvgSearchMenu}
-              folded={folded}
-              // TODO (@raunakab)
-              //
-              // The internals of `SidebarTab` (`Interactive.Base`) was designed such that providing an `onClick` or `href` would trigger rendering a `cursor-pointer`.
-              // However, since instance is wired up as a "trigger", it doesn't have either of those explicitly specified.
-              // Therefore, the default cursor would be rendered.
-              //
-              // Specifying a dummy `onClick` handler solves that.
-              onClick={() => undefined}
-            >
+            <SidebarTab icon={SvgSearchMenu} folded={folded}>
               Search Chats
             </SidebarTab>
           }
