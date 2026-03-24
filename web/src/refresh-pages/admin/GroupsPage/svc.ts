@@ -90,6 +90,7 @@ interface DocumentSetSummary {
   id: number;
   description: string;
   cc_pair_summaries: { id: number }[];
+  federated_connector_summaries: { id: number }[];
   is_public: boolean;
   users: string[];
   groups: number[];
@@ -131,6 +132,9 @@ async function updateDocSetGroupSharing(
         id: ds.id,
         description: ds.description,
         cc_pair_ids: ds.cc_pair_summaries.map((cc) => cc.id),
+        federated_connectors: ds.federated_connector_summaries.map((fc) => ({
+          federated_connector_id: fc.id,
+        })),
         is_public: ds.is_public,
         users: ds.users,
         groups: updatedGroups,
@@ -154,6 +158,9 @@ async function updateDocSetGroupSharing(
         id: ds.id,
         description: ds.description,
         cc_pair_ids: ds.cc_pair_summaries.map((cc) => cc.id),
+        federated_connectors: ds.federated_connector_summaries.map((fc) => ({
+          federated_connector_id: fc.id,
+        })),
         is_public: ds.is_public,
         users: ds.users,
         groups: updatedGroups,
