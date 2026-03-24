@@ -52,6 +52,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
         <Popover.Trigger asChild>
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button
+            data-testid="admin-date-range-selector-button"
             secondary
             className={cn("justify-start", !value && "text-muted-foreground")}
             leftIcon={SvgCalendar}
