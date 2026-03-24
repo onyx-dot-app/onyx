@@ -110,7 +110,7 @@ def test_fallback_rejection_message_when_none() -> None:
             QueryProcessingResponse(query=None, rejection_message=None),
             "original query",
         )
-    assert "Your query was rejected." in str(exc_info.value)
+    assert "No rejection reason was provided." in str(exc_info.value)
 
 
 def test_nonempty_query_rewrites_message_text() -> None:

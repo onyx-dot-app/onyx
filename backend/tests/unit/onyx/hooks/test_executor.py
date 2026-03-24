@@ -537,12 +537,6 @@ class _StrictResponse(BaseModel):
     required_field: str  # no default → missing key raises ValidationError
 
 
-def _make_strict_spec() -> MagicMock:
-    spec = MagicMock()
-    spec.response_model = _StrictResponse
-    return spec
-
-
 @pytest.mark.parametrize(
     "fail_strategy,expected_type",
     [
@@ -570,10 +564,6 @@ def test_response_validation_failure_respects_fail_strategy(
         patch("onyx.hooks.executor.get_session_with_current_tenant"),
         patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
         patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
-        patch(
-            "onyx.hooks.executor.get_hook_point_spec",
-            return_value=_make_strict_spec(),
-        ),
         patch("httpx.Client") as mock_client_cls,
     ):
         # Response payload is missing required_field → ValidationError
@@ -585,7 +575,7 @@ def test_response_validation_failure_respects_fail_strategy(
                     db_session=db_session,
                     hook_point=HookPoint.QUERY_PROCESSING,
                     payload=_PAYLOAD,
-                    response_type=QueryProcessingResponse,
+                    response_type=_StrictResponse,
                 )
             assert exc_info.value.error_code is OnyxErrorCode.HOOK_EXECUTION_FAILED
         else:
@@ -593,7 +583,7 @@ def test_response_validation_failure_respects_fail_strategy(
                 db_session=db_session,
                 hook_point=HookPoint.QUERY_PROCESSING,
                 payload=_PAYLOAD,
-                response_type=QueryProcessingResponse,
+                response_type=_StrictResponse,
             )
             assert isinstance(result, HookSoftFailed)
 

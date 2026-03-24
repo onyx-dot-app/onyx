@@ -449,7 +449,8 @@ def _resolve_query_processing_hook_result(
     if not (hook_result.query and hook_result.query.strip()):
         raise OnyxError(
             OnyxErrorCode.QUERY_REJECTED,
-            hook_result.rejection_message or "Your query was rejected.",
+            hook_result.rejection_message
+            or "The hook extension for query processing did not return a valid query. No rejection reason was provided.",
         )
     return hook_result.query.strip()
 

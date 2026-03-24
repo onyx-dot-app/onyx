@@ -70,7 +70,6 @@ from onyx.db.hook import update_hook__no_commit
 from onyx.db.models import Hook
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.hooks.registry import get_hook_point_spec
 from onyx.hooks.utils import HOOKS_AVAILABLE
 from onyx.utils.logger import setup_logger
 
@@ -278,7 +277,7 @@ def _persist_result(
 def _execute_hook_inner(
     hook: Hook,
     payload: dict[str, Any],
-    response_type: type[T],  # noqa: ARG001 — used only for TypeVar inference; not needed at runtime  # fmt: skip
+    response_type: type[T],
 ) -> T | HookSoftFailed:
     """Make the HTTP call, validate the response, and return a typed model.
 
@@ -289,7 +288,6 @@ def _execute_hook_inner(
     fail_strategy = hook.fail_strategy
     endpoint_url = hook.endpoint_url
     current_is_reachable: bool | None = hook.is_reachable
-    hook_point = hook.hook_point  # extract before HTTP call per design intent
 
     if not endpoint_url:
         raise ValueError(
@@ -317,19 +315,18 @@ def _execute_hook_inner(
 
     outcome = _process_response(response=response, exc=exc, timeout=timeout)
 
-    # Validate the response payload against the spec's response_model.
+    # Validate the response payload against response_type.
     # A validation failure downgrades the outcome to a failure so it is logged,
     # is_reachable is left unchanged (server responded — just a bad payload),
     # and fail_strategy is respected below.
     validated_model: T | None = None
     if outcome.is_success and outcome.response_payload is not None:
-        spec = get_hook_point_spec(hook_point)
         try:
-            validated_model = spec.response_model.model_validate(  # type: ignore[assignment]
-                outcome.response_payload
-            )
+            validated_model = response_type.model_validate(outcome.response_payload)
         except ValidationError as e:
-            msg = f"Hook response failed validation against {spec.response_model.__name__}: {e}"
+            msg = (
+                f"Hook response failed validation against {response_type.__name__}: {e}"
+            )
             outcome = _HttpOutcome(
                 is_success=False,
                 updated_is_reachable=None,  # server responded — reachability unchanged
@@ -368,7 +365,7 @@ def execute_hook(
     db_session: Session,
     hook_point: HookPoint,
     payload: dict[str, Any],
-    response_type: type[T],  # noqa: ARG001 — used only for TypeVar inference; not needed at runtime  # fmt: skip
+    response_type: type[T],
 ) -> T | HookSkipped | HookSoftFailed:
     """Execute the hook for the given hook point synchronously.
 
