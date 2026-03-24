@@ -13,7 +13,6 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
-logger = setup_logger()
 
 JSM_DOC_SYNC_TAG = "jira_service_management_doc_sync"
 
