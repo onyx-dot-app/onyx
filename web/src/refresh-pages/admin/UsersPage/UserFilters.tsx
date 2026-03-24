@@ -9,7 +9,7 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import FilterButton from "@/refresh-components/buttons/FilterButton";
+import { FilterButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -167,8 +167,8 @@ export default function UserFilters({
         <Popover.Trigger asChild>
           <FilterButton
             aria-label="Filter by role"
-            leftIcon={SvgUsers}
-            active={hasRoleFilter}
+            icon={SvgUsers}
+            state={hasRoleFilter ? "selected" : "empty"}
             onClear={() => onRolesChange([])}
           >
             {roleLabel}
@@ -215,8 +215,8 @@ export default function UserFilters({
         <Popover.Trigger asChild>
           <FilterButton
             aria-label="Filter by group"
-            leftIcon={SvgUsers}
-            active={hasGroupFilter}
+            icon={SvgUsers}
+            state={hasGroupFilter ? "selected" : "empty"}
             onClear={() => onGroupsChange([])}
           >
             {groupLabel}
@@ -270,8 +270,8 @@ export default function UserFilters({
         <Popover.Trigger asChild>
           <FilterButton
             aria-label="Filter by status"
-            leftIcon={SvgUsers}
-            active={hasStatusFilter}
+            icon={SvgUsers}
+            state={hasStatusFilter ? "selected" : "empty"}
             onClear={() => onStatusesChange([])}
           >
             {statusLabel}

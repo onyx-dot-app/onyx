@@ -10,6 +10,7 @@ import { SvgX } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
+import { Button } from "@opal/components/buttons/button/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,47 +49,57 @@ function FilterButton({
   tooltipSide = "top",
   ...statefulProps
 }: FilterButtonProps) {
-  // Derive open state: explicit prop > Radix data-state (injected via Slot chain)
+  // Derive open state: explicit prop > bounding-box hover > Radix data-state
   const dataState = (statefulProps as Record<string, unknown>)["data-state"] as
     | string
     | undefined;
   const resolvedInteraction: InteractiveStatefulInteraction =
-    statefulProps.interaction ?? (dataState === "open" ? "hover" : "rest");
+    statefulProps.interaction ?? dataState === "open" ? "hover" : "rest";
+
+  const isSelected = statefulProps.state === "selected";
 
   const button = (
-    <Interactive.Stateful
-      variant="select-filter"
-      interaction={resolvedInteraction}
-      state={statefulProps.state}
-      {...statefulProps}
-    >
-      <Interactive.Container type="button">
-        <div className="interactive-foreground flex flex-row items-center gap-1">
-          {iconWrapper(Icon, "lg", true)}
-          <span className="whitespace-nowrap font-main-ui-action">
-            {children}
-          </span>
-          {statefulProps.state === "selected" ? (
-            <div
-              role="button"
-              aria-label="Clear filter"
-              className="interactive-foreground-icon p-0.5 rounded-04 hover:bg-background-tint-02 active:bg-background-neutral-00"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClear?.();
-              }}
-            >
-              <SvgX
-                className="shrink-0"
-                style={{ height: "0.75rem", width: "0.75rem" }}
-              />
-            </div>
-          ) : (
-            iconWrapper(ChevronIcon, "lg", true)
-          )}
+    <div className="relative">
+      <Interactive.Stateful
+        variant="select-filter"
+        interaction={resolvedInteraction}
+        state={statefulProps.state}
+        {...statefulProps}
+      >
+        <Interactive.Container type="button">
+          <div className="interactive-foreground flex flex-row items-center gap-1">
+            {iconWrapper(Icon, "lg", true)}
+            <span className="whitespace-nowrap font-main-ui-action">
+              {children}
+            </span>
+            {isSelected ? (
+              /* Invisible spacer — reserves the same space as the chevron
+                 so the absolutely-positioned clear Button overlays it
+                 without shifting layout. */
+              <div className="p-2" aria-hidden />
+            ) : (
+              iconWrapper(ChevronIcon, "lg", true)
+            )}
+          </div>
+        </Interactive.Container>
+      </Interactive.Stateful>
+
+      {isSelected && (
+        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+          <Button
+            icon={SvgX}
+            size="2xs"
+            prominence="tertiary"
+            tooltip="Clear filter"
+            interaction="hover"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear?.();
+            }}
+          />
         </div>
-      </Interactive.Container>
-    </Interactive.Stateful>
+      )}
+    </div>
   );
 
   if (!tooltip) return button;
