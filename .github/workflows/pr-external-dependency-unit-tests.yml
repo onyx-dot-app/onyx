@@ -13,6 +13,9 @@ on:
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
+      - ".github/actions/setup-playwright/**"
+      - "deployment/docker_compose/docker-compose.yml"
+      - "deployment/docker_compose/docker-compose.dev.yml"
   push:
     tags:
       - "v*.*.*"
