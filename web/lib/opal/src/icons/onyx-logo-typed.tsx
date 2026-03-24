@@ -7,9 +7,8 @@ interface OnyxLogoTypedProps {
   className?: string;
 }
 
-const SvgOnyxLogoTyped = ({ size: height, className }: OnyxLogoTypedProps) => {
-  // # NOTE(@raunakab):
-  // This ratio is not some random, magical number; it is available on Figma.
+// # NOTE(@raunakab):
+// This ratio is not some random, magical number; it is available on Figma.
 const HEIGHT_TO_GAP_RATIO = 5 / 16;
 
 const SvgOnyxLogoTyped = ({ size: height, className }: OnyxLogoTypedProps) => {
