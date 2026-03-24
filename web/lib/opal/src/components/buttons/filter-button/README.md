@@ -15,8 +15,8 @@ Interactive.Stateful → Interactive.Container → content row (icon + label + t
 FilterButton is a **narrower, filter-specific** variant:
 
 - It hardcodes `variant="select-filter"` (OpenButton uses `"select-heavy"`)
-- Its `state` is limited to `"empty" | "selected"` (OpenButton supports `"filled"` too)
-- When selected, the chevron is replaced by an absolutely-positioned clear `Button` with `prominence="tertiary"` — placed as a sibling outside the `<button>` to avoid nesting buttons
+- It exposes `active?: boolean` instead of the raw `state` prop (maps to `"selected"` / `"empty"` internally)
+- When active, the chevron is hidden via `visibility` and an absolutely-positioned clear `Button` with `prominence="tertiary"` overlays it — placed as a sibling outside the `<button>` to avoid nesting buttons
 - It uses the shared `ChevronIcon` from `buttons/chevron` (same as OpenButton)
 - It does not support `foldable`, `size`, or `width` — it is always `"lg"`
 
@@ -45,8 +45,8 @@ div.relative                               <- bounding wrapper
 |------|------|---------|-------------|
 | `icon` | `IconFunctionComponent` | **required** | Left icon component |
 | `children` | `string` | **required** | Label text between icon and trailing indicator |
-| `state` | `"empty" \| "selected"` | `"empty"` | Whether the filter has an active selection |
-| `onClear` | `() => void` | — | Called when the clear (X) button is clicked |
+| `active` | `boolean` | `false` | Whether the filter has an active selection |
+| `onClear` | `() => void` | **required** | Called when the clear (X) button is clicked |
 | `interaction` | `"rest" \| "hover" \| "active"` | auto | JS-controlled interaction override. Falls back to Radix `data-state="open"`. |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
 | `tooltipSide` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
@@ -61,7 +61,7 @@ import { SvgUser } from "@opal/icons";
 <Popover.Trigger asChild>
   <FilterButton
     icon={SvgUser}
-    state={hasSelection ? "selected" : "empty"}
+    active={hasSelection}
     onClear={() => clearSelection()}
   >
     {hasSelection ? selectionLabel : "Everyone"}
