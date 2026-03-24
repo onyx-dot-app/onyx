@@ -80,8 +80,9 @@ class PhabricatorConnector(LoadConnector, PollConnector):
         self.doc_base = urlparse(api_base)._replace(path="/w/").geturl()
         self.maniphest_base = urlparse(api_base)._replace(path="/").geturl()
 
-    def load_credentials(self, credentials: dict[str, str]) -> None:
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.api_token = credentials.get('phab_api_token', '')
+        return None
 
     def _get_docs(self, start : SecondsSinceUnixEpoch | None = None, end : SecondsSinceUnixEpoch | None = None) -> Generator[list[Document], None, None]:
         """

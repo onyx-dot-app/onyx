@@ -7,7 +7,7 @@ import math
 
 class UserPhidCache:
     def __init__(self) -> None:
-        self.cache = {}
+        self.cache : dict[str, str] = {}
 
     def found(self, phid : str) -> bool:
         return phid in self.cache.keys()
@@ -41,7 +41,7 @@ def get_user_by_phid(phid : str | None, api_base : str, api_token : str, user_ph
             logger.error(f'Error performing user.search: {res.text}')
         return None
     rjson = res.json()
-    if len(rjson['result']['data']) == 0:
+    if len(rjson.get('result', {}).get('data', [])) == 0:
         return None
     username = rjson['result']['data'][0].get('fields', {}).get('username')
     if not username is None:
