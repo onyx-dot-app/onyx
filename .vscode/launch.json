@@ -117,7 +117,8 @@
       "presentation": {
         "group": "2"
       },
-      "consoleTitle": "API Server Console"
+      "consoleTitle": "API Server Console",
+      "justMyCode": false
     },
     {
       "name": "Slack Bot",
@@ -268,7 +269,8 @@
       "presentation": {
         "group": "2"
       },
-      "consoleTitle": "Celery heavy Console"
+      "consoleTitle": "Celery heavy Console",
+      "justMyCode": false
     },
     {
       "name": "Celery kg_processing",
@@ -355,7 +357,8 @@
       "presentation": {
         "group": "2"
       },
-      "consoleTitle": "Celery user_file_processing Console"
+      "consoleTitle": "Celery user_file_processing Console",
+      "justMyCode": false
     },
     {
       "name": "Celery docfetching",
@@ -413,7 +416,8 @@
       "presentation": {
         "group": "2"
       },
-      "consoleTitle": "Celery docprocessing Console"
+      "consoleTitle": "Celery docprocessing Console",
+      "justMyCode": false
     },
     {
       "name": "Celery beat",
