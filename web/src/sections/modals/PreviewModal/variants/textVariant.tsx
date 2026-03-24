@@ -25,7 +25,7 @@ export const textVariant: PreviewVariant = {
     const lowerName = (name || "").toLowerCase();
     return TEXT_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
   },
-  width: "md",
+  width: "xl",
   height: "lg",
   needsTextContent: true,
   codeBackground: true,

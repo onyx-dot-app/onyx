@@ -76,10 +76,11 @@ const useModalContext = () => {
 };
 
 const widthClasses = {
-  lg: "w-[80dvw]",
-  md: "w-[60rem]",
-  "md-sm": "w-[50rem]",
-  sm: "w-[32rem]",
+  full: "w-[80dvw]",
+  xl: "w-[60rem]",
+  lg: "w-[50rem]",
+  md: "w-[40rem]",
+  sm: "w-[30rem]",
 };
 
 const heightClasses = {
@@ -97,20 +98,20 @@ const heightClasses = {
  * @example
  * ```tsx
  * // Using width and height props
- * <Modal.Content width="lg" height="full">
- *   {/* Large modal: w-[80dvw] h-[80dvh] *\/}
+ * <Modal.Content width="full" height="full">
+ *   {/* Full modal: w-[80dvw] h-[80dvh] *\/}
  * </Modal.Content>
  *
- * <Modal.Content width="md" height="fit">
- *   {/* Medium modal: w-[60rem] h-fit *\/}
+ * <Modal.Content width="xl" height="fit">
+ *   {/* XL modal: w-[60rem] h-fit *\/}
  * </Modal.Content>
  *
  * <Modal.Content width="sm" height="sm">
- *   {/* Small modal: w-[32rem] max-h-[30rem] *\/}
+ *   {/* Small modal: w-[30rem] max-h-[30rem] *\/}
  * </Modal.Content>
  *
  * <Modal.Content width="sm" height="lg">
- *   {/* Tall modal: w-[32rem] max-h-[calc(100dvh-4rem)] *\/}
+ *   {/* Tall modal: w-[30rem] max-h-[calc(100dvh-4rem)] *\/}
  * </Modal.Content>
  * ```
  */
@@ -138,7 +139,7 @@ const ModalContent = React.forwardRef<
   (
     {
       children,
-      width = "md",
+      width = "xl",
       height = "fit",
       position = "center",
       preventAccidentalClose = true,

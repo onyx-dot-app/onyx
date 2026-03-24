@@ -263,7 +263,7 @@ export default function CredentialStep({
                 open
                 onOpenChange={() => setCreateCredentialFormToggle(false)}
               >
-                <Modal.Content width="md" height="fit">
+                <Modal.Content width="xl" height="fit">
                   <Modal.Header
                     icon={SvgKey}
                     title={`Create a ${getSourceDisplayName(

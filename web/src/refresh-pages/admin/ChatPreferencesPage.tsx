@@ -767,7 +767,7 @@ function ChatPreferencesForm() {
         open={systemPromptModalOpen}
         onOpenChange={setSystemPromptModalOpen}
       >
-        <Modal.Content width="md" height="fit">
+        <Modal.Content width="xl" height="fit">
           <Modal.Header
             icon={SvgAddLines}
             title="System Prompt"

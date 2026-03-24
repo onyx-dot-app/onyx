@@ -98,7 +98,7 @@ export default function IndexAttemptErrorsModal({
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content width="lg" height="full">
+      <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgAlertTriangle}
           title="Indexing Errors"
