@@ -197,7 +197,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     # Use path-style addressing for S3-compatible
                     client_kwargs["config"] = Config(
                         signature_version="s3v4",
-                        addressing_style="path"
+                        s3={"addressing_style": "path"},
                     )
                 
                 # Add SSL verification setting

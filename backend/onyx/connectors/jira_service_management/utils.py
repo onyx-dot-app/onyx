@@ -20,7 +20,7 @@ def get_request_details(
     """Fetch JSM request details for an issue (request type, participants)."""
     url = f"{jsm_base_url}{_JSM_API_PATH}/request/{issue_key}"
     try:
-        response = requests.get(url, auth=auth, headers=_JSM_HEADERS, timeout=15)
+        response = requests.get(url, auth=auth, headers=_JSM_HEADERS, params={"expand": "participants"}, timeout=15)
         if response.status_code == 404:
             # Not a service desk request - return empty
             return {}
