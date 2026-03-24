@@ -1,4 +1,5 @@
 import pickle
+import shutil
 import tempfile
 from collections import defaultdict
 from collections.abc import Callable
@@ -258,9 +259,7 @@ def use_embed_stream(
     try:
         yield EmbedStream(tmpdir)
     finally:
-        for batch_file in tmpdir.glob("batch_*.pkl"):
-            batch_file.unlink(missing_ok=True)
-        tmpdir.rmdir()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def get_doc_ids_to_update(
