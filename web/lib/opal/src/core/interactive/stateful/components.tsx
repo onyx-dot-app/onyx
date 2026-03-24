@@ -4,7 +4,7 @@ import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import { useDisabled } from "@opal/core/disabled/components";
-import type { WithoutStyles } from "@opal/types";
+import type { ButtonType, WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +67,13 @@ interface InteractiveStatefulProps
   group?: string;
 
   /**
+   * HTML button type. When set to `"submit"`, `"button"`, or `"reset"`, the
+   * element is treated as inherently interactive for cursor styling purposes
+   * even without an explicit `onClick` or `href`.
+   */
+  type?: ButtonType;
+
+  /**
    * URL to navigate to when clicked. Passed through Slot to the child.
    */
   href?: string;
@@ -97,6 +104,7 @@ function InteractiveStateful({
   state = "empty",
   interaction = "rest",
   group,
+  type,
   href,
   target,
   ...props
@@ -107,7 +115,7 @@ function InteractiveStateful({
   // so Radix Slot-injected handlers don't bypass this guard.
   const classes = cn(
     "interactive",
-    !props.onClick && !href && "!cursor-default !select-auto",
+    !props.onClick && !href && !type && "!cursor-default !select-auto",
     group
   );
 

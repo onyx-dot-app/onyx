@@ -111,7 +111,9 @@ function MemoryItem({
                 textareaRef.current?.blur();
               }
             }}
-            rows={3}
+            rows={1}
+            autoResize
+            maxRows={3}
             maxLength={MAX_MEMORY_LENGTH}
             resizable={false}
             className="bg-background-tint-01 hover:bg-background-tint-00 focus-within:bg-background-tint-00"
