@@ -691,10 +691,19 @@ JSM_CONNECTOR_LABELS_TO_SKIP = [
 # Maximum size for JSM tickets in bytes (default: 100KB)
 try:
     _jsm_raw = os.environ.get("JSM_CONNECTOR_MAX_TICKET_SIZE")
-    JSM_CONNECTOR_MAX_TICKET_SIZE = int(_jsm_raw) if _jsm_raw else 100 * 1024
-    if JSM_CONNECTOR_MAX_TICKET_SIZE <= 0:
-        JSM_CONNECTOR_MAX_TICKET_SIZE = 100 * 1024
+    _jsm_size = int(_jsm_raw) if _jsm_raw else 100 * 1024
+    if _jsm_size <= 0:
+        import logging
+        logging.warning(
+            "JSM_CONNECTOR_MAX_TICKET_SIZE must be positive; defaulting to 100KB."
+        )
+        _jsm_size = 100 * 1024
+    JSM_CONNECTOR_MAX_TICKET_SIZE = _jsm_size
 except (ValueError, TypeError):
+    import logging
+    logging.warning(
+        f"Invalid JSM_CONNECTOR_MAX_TICKET_SIZE value; defaulting to 100KB."
+    )
     JSM_CONNECTOR_MAX_TICKET_SIZE = 100 * 1024
 
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
