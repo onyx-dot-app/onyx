@@ -9,7 +9,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "onyx.fullname" . }}
+    name: {{ include "onyx.fullname" . }}-web-server
   minReplicas: {{ .Values.webserver.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.webserver.autoscaling.maxReplicas }}
   metrics:
