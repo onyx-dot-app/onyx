@@ -314,6 +314,7 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
 
         start_at = 0
         page_size = min(self.batch_size, _JSM_PAGE_SIZE)
+        total = 0
 
         while True:
             try:
