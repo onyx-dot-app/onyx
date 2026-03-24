@@ -87,10 +87,10 @@ def format_sla_as_text(sla_data: dict[str, Any]) -> str:
         completed = bool(completed_cycles) and not ongoing
         time_remaining: dict[str, Any] = ongoing.get("remainingTime") or {}
 
-        if completed:
-            status = "Completed"
-        elif breached:
+        if breached:
             status = "BREACHED"
+        elif completed:
+            status = "Completed"
         else:
             remaining = time_remaining.get("friendly", "unknown")
             status = f"{remaining} remaining"
