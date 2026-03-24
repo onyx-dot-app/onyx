@@ -27,6 +27,7 @@ from onyx.db.user_file import fetch_persona_ids_for_user_files
 from onyx.db.user_file import fetch_user_project_ids_for_user_files
 from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
+from onyx.indexing.models import ChunkEnrichmentContext
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
@@ -229,8 +230,9 @@ class UserFileIndexingAdapter:
         context: DocumentBatchPrepareContext,
         updatable_chunk_data: list[UpdatableChunkData],  # noqa: ARG002
         filtered_documents: list[Document],  # noqa: ARG002
-        enrichment: UserFileChunkEnricher,
+        enrichment: ChunkEnrichmentContext,
     ) -> None:
+        assert isinstance(enrichment, UserFileChunkEnricher)
         user_file_ids = [doc.id for doc in context.updatable_docs]
 
         user_files = (

@@ -21,6 +21,7 @@ from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
+from onyx.indexing.models import ChunkEnrichmentContext
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
@@ -175,7 +176,7 @@ class DocumentIndexingBatchAdapter:
         context: DocumentBatchPrepareContext,
         updatable_chunk_data: list[UpdatableChunkData],
         filtered_documents: list[Document],
-        enrichment: DocumentChunkEnricher,
+        enrichment: ChunkEnrichmentContext,
     ) -> None:
         """Finalize DB updates, store plaintext, and mark docs as indexed."""
         updatable_ids = [doc.id for doc in context.updatable_docs]
