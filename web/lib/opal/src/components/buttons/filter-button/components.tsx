@@ -71,14 +71,9 @@ function FilterButton({
             <span className="whitespace-nowrap font-main-ui-action">
               {children}
             </span>
-            {active ? (
-              /* Invisible spacer — reserves the same space as the chevron
-                 so the absolutely-positioned clear Button overlays it
-                 without shifting layout. */
-              <div className="p-2" aria-hidden />
-            ) : (
-              iconWrapper(ChevronIcon, "lg", true)
-            )}
+            <div style={{ visibility: active ? "hidden" : "visible" }}>
+              {iconWrapper(ChevronIcon, "lg", true)}
+            </div>
           </div>
         </Interactive.Container>
       </Interactive.Stateful>
