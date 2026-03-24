@@ -663,7 +663,7 @@ export default function AgentEditorPage({
     shared_group_ids: existingAgent?.groups ?? [],
     is_public: existingAgent?.is_public ?? false,
     label_ids: existingAgent?.labels?.map((l) => l.id) ?? [],
-    featured: existingAgent?.featured ?? false,
+    is_featured: existingAgent?.is_featured ?? false,
   };
 
   const validationSchema = Yup.object().shape({
@@ -806,7 +806,7 @@ export default function AgentEditorPage({
         icon_name: values.icon_name,
         search_start_date: values.knowledge_cutoff_date || null,
         label_ids: values.label_ids,
-        featured: values.featured,
+        is_featured: values.is_featured,
         // display_priority: ...,
 
         user_file_ids: values.enable_knowledge ? values.user_file_ids : [],
@@ -967,6 +967,14 @@ export default function AgentEditorPage({
           validateOnChange
           validateOnBlur
           validateOnMount
+          initialTouched={{
+            description:
+              initialValues.description.length >
+              MAX_CHARACTERS_AGENT_DESCRIPTION,
+            starter_messages: initialValues.starter_messages.map(
+              (msg) => msg.length > MAX_CHARACTERS_STARTER_MESSAGE
+            ) as unknown as boolean,
+          }}
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
@@ -1051,7 +1059,7 @@ export default function AgentEditorPage({
                     userIds={values.shared_user_ids}
                     groupIds={values.shared_group_ids}
                     isPublic={values.is_public}
-                    isFeatured={values.featured}
+                    isFeatured={values.is_featured}
                     labelIds={values.label_ids}
                     onShare={async (
                       userIds,
@@ -1065,7 +1073,7 @@ export default function AgentEditorPage({
                         setFieldValue("shared_user_ids", userIds);
                         setFieldValue("shared_group_ids", groupIds);
                         setFieldValue("is_public", isPublic);
-                        setFieldValue("featured", isFeatured);
+                        setFieldValue("is_featured", isFeatured);
                         setFieldValue("label_ids", labelIds);
                         shareAgentModal.toggle(false);
                         return;
@@ -1149,7 +1157,7 @@ export default function AgentEditorPage({
                         }
 
                         applySharingFields();
-                        setFieldValue("featured", isFeatured);
+                        setFieldValue("is_featured", isFeatured);
                         shareAgentModal.toggle(false);
                         await refreshSharedUi();
                         return;
@@ -1201,18 +1209,33 @@ export default function AgentEditorPage({
                           >
                             Cancel
                           </OpalButton>
-                          <Disabled
-                            disabled={
-                              isSubmitting ||
-                              !isValid ||
-                              !dirty ||
-                              hasUploadingFiles
+                          <SimpleTooltip
+                            tooltip={
+                              isSubmitting
+                                ? "Saving changes..."
+                                : !isValid
+                                  ? "Please fix the errors in the form before saving."
+                                  : !dirty
+                                    ? "No changes have been made."
+                                    : hasUploadingFiles
+                                      ? "Please wait for files to finish uploading."
+                                      : undefined
                             }
+                            side="bottom"
                           >
-                            <OpalButton type="submit">
-                              {existingAgent ? "Save" : "Create"}
-                            </OpalButton>
-                          </Disabled>
+                            <Disabled
+                              disabled={
+                                isSubmitting ||
+                                !isValid ||
+                                !dirty ||
+                                hasUploadingFiles
+                              }
+                            >
+                              <OpalButton type="submit">
+                                {existingAgent ? "Save" : "Create"}
+                              </OpalButton>
+                            </Disabled>
+                          </SimpleTooltip>
                         </div>
                       }
                       backButton
@@ -1476,13 +1499,13 @@ export default function AgentEditorPage({
                               {canUpdateFeaturedStatus && (
                                 <>
                                   <InputLayouts.Horizontal
-                                    name="featured"
+                                    name="is_featured"
                                     title="Feature This Agent"
                                     description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
                                   >
-                                    <SwitchField name="featured" />
+                                    <SwitchField name="is_featured" />
                                   </InputLayouts.Horizontal>
-                                  {values.featured && !isShared && (
+                                  {values.is_featured && !isShared && (
                                     <Message
                                       static
                                       close={false}

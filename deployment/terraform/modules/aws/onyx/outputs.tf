@@ -32,3 +32,18 @@ output "postgres_dbi_resource_id" {
   description = "RDS DB instance resource id"
   value       = module.postgres.dbi_resource_id
 }
+
+output "opensearch_endpoint" {
+  description = "OpenSearch domain endpoint"
+  value       = var.enable_opensearch ? module.opensearch[0].domain_endpoint : null
+}
+
+output "opensearch_dashboard_endpoint" {
+  description = "OpenSearch Dashboards endpoint"
+  value       = var.enable_opensearch ? module.opensearch[0].kibana_endpoint : null
+}
+
+output "opensearch_domain_arn" {
+  description = "OpenSearch domain ARN"
+  value       = var.enable_opensearch ? module.opensearch[0].domain_arn : null
+}

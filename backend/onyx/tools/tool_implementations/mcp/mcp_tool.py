@@ -1,6 +1,8 @@
 import json
 from typing import Any
 
+from mcp.client.auth import OAuthClientProvider
+
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
@@ -47,6 +49,7 @@ class MCPTool(Tool[None]):
         tool_definition: dict[str, Any],
         connection_config: MCPConnectionConfig | None = None,
         user_email: str = "",
+        user_id: str = "",
         user_oauth_token: str | None = None,
         additional_headers: dict[str, str] | None = None,
     ) -> None:
@@ -56,6 +59,7 @@ class MCPTool(Tool[None]):
         self.mcp_server = mcp_server
         self.connection_config = connection_config
         self.user_email = user_email
+        self._user_id = user_id
         self._user_oauth_token = user_oauth_token
         self._additional_headers = additional_headers or {}
 
@@ -198,12 +202,42 @@ class MCPTool(Tool[None]):
                     llm_facing_response=llm_facing_response,
                 )
 
+            # For OAuth servers, construct OAuthClientProvider so the MCP SDK
+            # can refresh expired tokens automatically
+            auth: OAuthClientProvider | None = None
+            if (
+                self.mcp_server.auth_type == MCPAuthenticationType.OAUTH
+                and self.connection_config is not None
+                and self._user_id
+            ):
+                if self.mcp_server.transport == MCPTransport.SSE:
+                    logger.warning(
+                        f"MCP tool '{self._name}': OAuth token refresh is not supported "
+                        f"for SSE transport — auth provider will be ignored. "
+                        f"Re-authentication may be required after token expiry."
+                    )
+                else:
+                    from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
+                    from onyx.server.features.mcp.api import make_oauth_provider
+
+                    # user_id is the requesting user's UUID; safe here because
+                    # UNUSED_RETURN_PATH ensures redirect_handler raises immediately
+                    # and user_id is never consulted for Redis state lookups.
+                    auth = make_oauth_provider(
+                        self.mcp_server,
+                        self._user_id,
+                        UNUSED_RETURN_PATH,
+                        self.connection_config.id,
+                        None,
+                    )
+
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,
                 self._name,
                 llm_kwargs,
                 connection_headers=headers,
                 transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
+                auth=auth,
             )
 
             logger.info(f"MCP tool '{self._name}' executed successfully")
@@ -248,6 +282,7 @@ class MCPTool(Tool[None]):
                 "invalid token",
                 "invalid api key",
                 "invalid credentials",
+                "please reconnect to the server",
             ]
 
             is_auth_error = any(

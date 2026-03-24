@@ -351,7 +351,7 @@ def upsert_project_instructions(
 class ProjectPayload(BaseModel):
     project: UserProjectSnapshot
     files: list[UserFileSnapshot] | None = None
-    persona_id_to_featured: dict[int, bool] | None = None
+    persona_id_to_is_featured: dict[int, bool] | None = None
 
 
 @router.get(
@@ -370,11 +370,13 @@ def get_project_details(
         if session.persona_id is not None
     ]
     personas = get_personas_by_ids(persona_ids, db_session)
-    persona_id_to_featured = {persona.id: persona.featured for persona in personas}
+    persona_id_to_is_featured = {
+        persona.id: persona.is_featured for persona in personas
+    }
     return ProjectPayload(
         project=project,
         files=files,
-        persona_id_to_featured=persona_id_to_featured,
+        persona_id_to_is_featured=persona_id_to_is_featured,
     )
 
 

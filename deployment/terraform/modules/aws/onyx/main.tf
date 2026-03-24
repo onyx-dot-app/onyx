@@ -1,12 +1,13 @@
 locals {
-  workspace     = terraform.workspace
-  name          = var.name
-  merged_tags   = merge(var.tags, { tenant = local.name, environment = local.workspace })
-  vpc_name      = "${var.name}-vpc-${local.workspace}"
-  cluster_name  = "${var.name}-${local.workspace}"
-  bucket_name   = "${var.name}-file-store-${local.workspace}"
-  redis_name    = "${var.name}-redis-${local.workspace}"
-  postgres_name = "${var.name}-postgres-${local.workspace}"
+  workspace       = terraform.workspace
+  name            = var.name
+  merged_tags     = merge(var.tags, { tenant = local.name, environment = local.workspace })
+  vpc_name        = "${var.name}-vpc-${local.workspace}"
+  cluster_name    = "${var.name}-${local.workspace}"
+  bucket_name     = "${var.name}-file-store-${local.workspace}"
+  redis_name      = "${var.name}-redis-${local.workspace}"
+  postgres_name   = "${var.name}-postgres-${local.workspace}"
+  opensearch_name = var.opensearch_domain_name != null ? var.opensearch_domain_name : "${var.name}-opensearch-${local.workspace}"
 
   vpc_id          = var.create_vpc ? module.vpc[0].vpc_id : var.vpc_id
   private_subnets = var.create_vpc ? module.vpc[0].private_subnets : var.private_subnets
@@ -88,9 +89,46 @@ module "waf" {
   tags = local.merged_tags
 
   # WAF configuration with sensible defaults
+  allowed_ip_cidrs                      = var.waf_allowed_ip_cidrs
+  common_rule_set_count_rules           = var.waf_common_rule_set_count_rules
   rate_limit_requests_per_5_minutes     = var.waf_rate_limit_requests_per_5_minutes
   api_rate_limit_requests_per_5_minutes = var.waf_api_rate_limit_requests_per_5_minutes
   geo_restriction_countries             = var.waf_geo_restriction_countries
   enable_logging                        = var.waf_enable_logging
   log_retention_days                    = var.waf_log_retention_days
+}
+
+module "opensearch" {
+  source = "../opensearch"
+  count  = var.enable_opensearch ? 1 : 0
+
+  name   = local.opensearch_name
+  vpc_id = local.vpc_id
+  # Prefer setting subnet_ids explicitly if the state of private_subnets is
+  # unclear.
+  subnet_ids    = length(var.opensearch_subnet_ids) > 0 ? var.opensearch_subnet_ids : slice(local.private_subnets, 0, 3)
+  ingress_cidrs = [local.vpc_cidr_block]
+  tags          = local.merged_tags
+
+  # Reuse EKS security groups
+  security_group_ids = [module.eks.node_security_group_id, module.eks.cluster_security_group_id]
+
+  # Configuration
+  engine_version                = var.opensearch_engine_version
+  instance_type                 = var.opensearch_instance_type
+  instance_count                = var.opensearch_instance_count
+  dedicated_master_enabled      = var.opensearch_dedicated_master_enabled
+  dedicated_master_type         = var.opensearch_dedicated_master_type
+  multi_az_with_standby_enabled = var.opensearch_multi_az_with_standby_enabled
+  ebs_volume_size               = var.opensearch_ebs_volume_size
+  ebs_throughput                = var.opensearch_ebs_throughput
+
+  # Authentication
+  internal_user_database_enabled = var.opensearch_internal_user_database_enabled
+  master_user_name               = var.opensearch_master_user_name
+  master_user_password           = var.opensearch_master_user_password
+
+  # Logging
+  enable_logging     = var.opensearch_enable_logging
+  log_retention_days = var.opensearch_log_retention_days
 }

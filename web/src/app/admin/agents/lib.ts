@@ -22,7 +22,7 @@ interface PersonaUpsertRequest {
   uploaded_image_id: string | null;
   icon_name: string | null;
   search_start_date: Date | null;
-  featured: boolean;
+  is_featured: boolean;
   display_priority: number | null;
   label_ids: number[] | null;
   user_file_ids: string[] | null;
@@ -52,7 +52,7 @@ export interface PersonaUpsertParameters {
   search_start_date: Date | null;
   uploaded_image_id: string | null;
   icon_name: string | null;
-  featured: boolean;
+  is_featured: boolean;
   label_ids: number[] | null;
   user_file_ids: string[];
   // Hierarchy nodes (folders, spaces, channels) for scoped search
@@ -79,7 +79,7 @@ function buildPersonaUpsertRequest({
   document_ids,
   icon_name,
   uploaded_image_id,
-  featured,
+  is_featured,
   llm_model_provider_override,
   llm_model_version_override,
   starter_messages,
@@ -101,7 +101,7 @@ function buildPersonaUpsertRequest({
     remove_image,
     search_start_date,
     datetime_aware,
-    featured: featured ?? false,
+    is_featured: is_featured ?? false,
     llm_model_provider_override: llm_model_provider_override ?? null,
     llm_model_version_override: llm_model_version_override ?? null,
     starter_messages: starter_messages ?? null,
@@ -224,7 +224,7 @@ export async function togglePersonaFeatured(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      featured: !featured,
+      is_featured: !featured,
     }),
     credentials: "include",
   });
@@ -235,13 +235,13 @@ export async function togglePersonaVisibility(
   personaId: number,
   isVisible: boolean
 ) {
-  const response = await fetch(`/api/admin/persona/${personaId}/visible`, {
+  const response = await fetch(`/api/admin/persona/${personaId}/listed`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      is_visible: !isVisible,
+      is_listed: !isVisible,
     }),
     credentials: "include",
   });

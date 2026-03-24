@@ -2,7 +2,9 @@
 
 import React, {
   createContext,
+  useCallback,
   useContext,
+  useMemo,
   useState,
   useEffect,
   useRef,
@@ -13,12 +15,14 @@ import {
   UserRole,
   ThemePreference,
 } from "@/lib/types";
-import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
-import { CombinedSettings } from "@/interfaces/settings";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
-import { AuthTypeMetadata } from "@/lib/userSS";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import {
+  useAuthTypeMetadata,
+  AuthTypeMetadata,
+} from "@/hooks/useAuthTypeMetadata";
 import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
 import { useTheme } from "next-themes";
 
@@ -55,79 +59,64 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-export function UserProvider({
-  authTypeMetadata,
-  children,
-  user,
-  settings,
-}: {
-  authTypeMetadata: AuthTypeMetadata;
-  children: React.ReactNode;
-  user: User | null;
-  settings: CombinedSettings;
-}) {
+export function UserProvider({ children }: { children: React.ReactNode }) {
+  const { user: fetchedUser, mutateUser } = useCurrentUser();
+  const { authTypeMetadata } = useAuthTypeMetadata();
   const updatedSettings = useContext(SettingsContext);
   const posthog = usePostHog();
 
   // For auto_scroll and temperature_override_enabled:
   // - If user has a preference set, use that
   // - Otherwise, use the workspace setting if available
-  function mergeUserPreferences(
-    currentUser: User | null,
-    currentSettings: CombinedSettings | null
-  ): User | null {
-    if (!currentUser) return null;
-    return {
-      ...currentUser,
-      preferences: {
-        ...currentUser.preferences,
-        auto_scroll:
-          currentUser.preferences?.auto_scroll ??
-          currentSettings?.settings?.auto_scroll ??
-          false,
-        temperature_override_enabled:
-          currentUser.preferences?.temperature_override_enabled ??
-          currentSettings?.settings?.temperature_override_enabled ??
-          false,
-      },
-    };
-  }
-
-  const [upToDateUser, setUpToDateUser] = useState<User | null>(
-    mergeUserPreferences(user, settings)
+  const mergeUserPreferences = useCallback(
+    (currentUser: User | null): User | null => {
+      if (!currentUser) return null;
+      return {
+        ...currentUser,
+        preferences: {
+          ...currentUser.preferences,
+          auto_scroll:
+            currentUser.preferences?.auto_scroll ??
+            updatedSettings?.settings?.auto_scroll ??
+            false,
+          temperature_override_enabled:
+            currentUser.preferences?.temperature_override_enabled ??
+            updatedSettings?.settings?.temperature_override_enabled ??
+            false,
+        },
+      };
+    },
+    [updatedSettings]
   );
 
+  const [upToDateUser, setUpToDateUser] = useState<User | null>(null);
+
   useEffect(() => {
-    setUpToDateUser(mergeUserPreferences(user, updatedSettings));
-  }, [user, updatedSettings]);
+    setUpToDateUser(mergeUserPreferences(fetchedUser ?? null));
+  }, [fetchedUser, mergeUserPreferences]);
 
   useEffect(() => {
     if (!posthog) return;
 
-    if (user?.id) {
+    if (fetchedUser?.id) {
       const identifyData: Record<string, any> = {
-        email: user.email,
+        email: fetchedUser.email,
       };
-      if (user.team_name) {
-        identifyData.team_name = user.team_name;
+      if (fetchedUser.team_name) {
+        identifyData.team_name = fetchedUser.team_name;
       }
-      posthog.identify(user.id, identifyData);
+      posthog.identify(fetchedUser.id, identifyData);
     } else {
       posthog.reset();
     }
-  }, [posthog, user]);
+  }, [posthog, fetchedUser]);
 
-  const fetchUser = async () => {
-    try {
-      const currentUser = await getCurrentUser();
-      setUpToDateUser(currentUser);
-    } catch (error) {
-      console.error("Error fetching current user:", error);
-    }
-  };
-
-  // Use the custom token refresh hook
-  useTokenRefresh(upToDateUser, authTypeMetadata, fetchUser);
+  // Use the custom token refresh hook — on refresh failure, revalidate via SWR
+  // so the result goes through mergeUserPreferences
+  const onRefreshFail = useCallback(async () => {
+    await mutateUser();
+  }, [mutateUser]);
+  useTokenRefresh(upToDateUser, authTypeMetadata, onRefreshFail);
 
   // Sync user's theme preference from DB to next-themes on load
   const { setTheme, theme } = useTheme();
@@ -510,7 +499,7 @@ export function UserProvider({
   };
 
   const refreshUser = async () => {
-    await fetchUser();
+    await mutateUser();
   };
 
   return (

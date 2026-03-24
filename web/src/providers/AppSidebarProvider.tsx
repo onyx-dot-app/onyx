@@ -21,15 +21,20 @@ function setFoldedCookie(folded: boolean) {
 }
 
 export interface AppSidebarProviderProps {
-  folded: boolean;
   children: ReactNode;
 }
 
-export function AppSidebarProvider({
-  folded: initiallyFolded,
-  children,
-}: AppSidebarProviderProps) {
-  const [folded, setFoldedInternal] = useState(initiallyFolded);
+export function AppSidebarProvider({ children }: AppSidebarProviderProps) {
+  const [folded, setFoldedInternal] = useState(false);
+
+  useEffect(() => {
+    const stored =
+      Cookies.get(SIDEBAR_TOGGLED_COOKIE_NAME) ??
+      localStorage.getItem(SIDEBAR_TOGGLED_COOKIE_NAME);
+    if (stored === "true") {
+      setFoldedInternal(true);
+    }
+  }, []);
 
   const setFolded: Dispatch<SetStateAction<boolean>> = (value) => {
     setFoldedInternal((prev) => {

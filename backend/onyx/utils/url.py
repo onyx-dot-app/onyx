@@ -140,9 +140,19 @@ def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     return validated_ip, hostname, port
 
 
-def validate_outbound_http_url(url: str, *, allow_private_network: bool = False) -> str:
+def validate_outbound_http_url(
+    url: str,
+    *,
+    allow_private_network: bool = False,
+    https_only: bool = False,
+) -> str:
     """
     Validate a URL that will be used by backend outbound HTTP calls.
+
+    Args:
+        url: The URL to validate.
+        allow_private_network: If True, skip private/reserved IP checks.
+        https_only: If True, reject http:// URLs (only https:// is allowed).
 
     Returns:
         A normalized URL string with surrounding whitespace removed.
@@ -157,7 +167,12 @@ def validate_outbound_http_url(url: str, *, allow_private_network: bool = False)
 
     parsed = urlparse(normalized_url)
 
-    if parsed.scheme not in ("http", "https"):
+    if https_only:
+        if parsed.scheme != "https":
+            raise SSRFException(
+                f"Invalid URL scheme '{parsed.scheme}'. Only https is allowed."
+            )
+    elif parsed.scheme not in ("http", "https"):
         raise SSRFException(
             f"Invalid URL scheme '{parsed.scheme}'. Only http and https are allowed."
         )

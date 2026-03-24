@@ -76,7 +76,7 @@ export async function pinAgents(pinnedAgentIds: number[]) {
 export function filterAgents(
   assistants: MinimalPersonaSnapshot[]
 ): MinimalPersonaSnapshot[] {
-  let filteredAgents = assistants.filter((assistant) => assistant.is_visible);
+  let filteredAgents = assistants.filter((assistant) => assistant.is_listed);
   return filteredAgents.sort(personaComparator);
 }
 
@@ -210,7 +210,7 @@ export async function updateAgentFeaturedStatus(
     const response = await fetch(`/api/admin/persona/${agentId}/featured`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ featured: isFeatured }),
+      body: JSON.stringify({ is_featured: isFeatured }),
     });
 
     if (response.ok) {

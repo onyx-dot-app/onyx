@@ -25,18 +25,16 @@ import type { SortDirection } from "@opal/components/table/TableHead";
 interface QualifierConfig<TData> {
   /** Content type for body-row `<TableQualifier>`. @default "simple" */
   content?: QualifierContentType;
-  /** Content type for the header `<TableQualifier>`. @default "simple" */
-  headerContentType?: QualifierContentType;
-  /** Extract initials from a row (for "avatar-user" content). */
-  getInitials?: (row: TData) => string;
-  /** Extract icon from a row (for "icon" / "avatar-icon" content). */
-  getIcon?: (row: TData) => IconFunctionComponent;
-  /** Extract image src from a row (for "image" content). */
+  /** Return the icon component to render for a row (for "icon" content). */
+  getContent?: (row: TData) => IconFunctionComponent;
+  /** Return the image URL to render for a row (for "image" content). */
   getImageSrc?: (row: TData) => string;
-  /** Whether to show selection checkboxes on the qualifier. @default true */
-  selectable?: boolean;
-  /** Whether to render qualifier content in the header. @default true */
-  header?: boolean;
+  /** Return the image alt text for a row (for "image" content). @default "" */
+  getImageAlt?: (row: TData) => string;
+  /** Show a tinted background container behind the content. @default false */
+  background?: boolean;
+  /** Icon size preset. `"lg"` = 28/24, `"md"` = 20/16. @default "md" */
+  iconSize?: "lg" | "md";
 }
 
 // ---------------------------------------------------------------------------
@@ -58,8 +56,6 @@ interface DataColumnConfig<TData, TValue> {
   icon?: (sorted: SortDirection) => IconFunctionComponent;
   /** Column weight for proportional distribution. @default 20 */
   weight?: number;
-  /** Minimum column width in pixels. @default 50 */
-  minWidth?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,9 +128,9 @@ interface TableColumnsBuilder<TData> {
  * ```ts
  * const tc = createTableColumns<TeamMember>();
  * const columns = [
- *   tc.qualifier({ content: "avatar-user", getInitials: (r) => r.initials }),
- *   tc.column("name", { header: "Name", weight: 23, minWidth: 120 }),
- *   tc.column("email", { header: "Email", weight: 28, minWidth: 150 }),
+ *   tc.qualifier({ content: "icon", getContent: (r) => UserIcon }),
+ *   tc.column("name", { header: "Name", weight: 23 }),
+ *   tc.column("email", { header: "Email", weight: 28 }),
  *   tc.actions(),
  * ];
  * ```
@@ -162,12 +158,11 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         width: (size: TableSize) =>
           size === "md" ? { fixed: 36 } : { fixed: 44 },
         content,
-        headerContentType: config?.headerContentType,
-        getInitials: config?.getInitials,
-        getIcon: config?.getIcon,
+        getContent: config?.getContent,
         getImageSrc: config?.getImageSrc,
-        selectable: config?.selectable,
-        header: config?.header,
+        getImageAlt: config?.getImageAlt,
+        background: config?.background,
+        iconSize: config?.iconSize,
       };
     },
 
@@ -183,7 +178,6 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         enableHiding = true,
         icon,
         weight = 20,
-        minWidth = 50,
       } = config;
 
       const def = helper.accessor(accessor as any, {
@@ -201,7 +195,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         kind: "data",
         id: accessor as string,
         def,
-        width: { weight, minWidth },
+        width: { weight, minWidth: Math.max(header.length * 8 + 40, 80) },
         icon,
       };
     },

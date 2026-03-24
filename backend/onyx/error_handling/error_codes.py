@@ -88,6 +88,7 @@ class OnyxErrorCode(Enum):
     SERVICE_UNAVAILABLE = ("SERVICE_UNAVAILABLE", 503)
     BAD_GATEWAY = ("BAD_GATEWAY", 502)
     LLM_PROVIDER_ERROR = ("LLM_PROVIDER_ERROR", 502)
+    HOOK_EXECUTION_FAILED = ("HOOK_EXECUTION_FAILED", 502)
     GATEWAY_TIMEOUT = ("GATEWAY_TIMEOUT", 504)
 
     def __init__(self, code: str, status_code: int) -> None:

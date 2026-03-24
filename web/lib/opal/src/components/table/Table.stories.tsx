@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { Table, createTableColumns } from "@opal/components";
+import { SvgUser } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
 // Sample data
@@ -108,17 +109,14 @@ const tc = createTableColumns<User>();
 
 const columns = [
   tc.qualifier({
-    content: "avatar-user",
-    getInitials: (r) =>
-      r.name
-        .split(" ")
-        .map((n) => n[0])
-        .join(""),
+    content: "icon",
+    getContent: () => SvgUser,
+    background: true,
   }),
-  tc.column("name", { header: "Name", weight: 25, minWidth: 120 }),
-  tc.column("email", { header: "Email", weight: 30, minWidth: 160 }),
-  tc.column("role", { header: "Role", weight: 15, minWidth: 80 }),
-  tc.column("status", { header: "Status", weight: 15, minWidth: 80 }),
+  tc.column("name", { header: "Name", weight: 25 }),
+  tc.column("email", { header: "Email", weight: 30 }),
+  tc.column("role", { header: "Role", weight: 15 }),
+  tc.column("status", { header: "Status", weight: 15 }),
   tc.actions(),
 ];
 
@@ -142,7 +140,7 @@ export const Default: Story = {
       columns={columns}
       getRowId={(r) => r.id}
       pageSize={8}
-      footer={{ mode: "summary" }}
+      footer={{}}
     />
   ),
 };

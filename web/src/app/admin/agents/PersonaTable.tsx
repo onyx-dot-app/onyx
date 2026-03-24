@@ -26,7 +26,7 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
     return <Text as="p">Built-In</Text>;
   }
 
-  if (persona.featured) {
+  if (persona.is_featured) {
     return <Text as="p">Featured</Text>;
   }
 
@@ -153,7 +153,7 @@ export function PersonasTable({
     if (personaToToggleDefault) {
       const response = await togglePersonaFeatured(
         personaToToggleDefault.id,
-        personaToToggleDefault.featured
+        personaToToggleDefault.is_featured
       );
       if (response.ok) {
         refreshPersonas();
@@ -179,7 +179,7 @@ export function PersonasTable({
       {defaultModalOpen &&
         personaToToggleDefault &&
         (() => {
-          const isDefault = personaToToggleDefault.featured;
+          const isDefault = personaToToggleDefault.is_featured;
 
           const title = isDefault
             ? "Remove Featured Agent"
@@ -260,20 +260,20 @@ export function PersonasTable({
                   `}
               >
                 <div className="my-auto flex-none w-22">
-                  {!persona.featured ? (
+                  {!persona.is_featured ? (
                     <div className="text-error">Not Featured</div>
                   ) : (
                     "Featured"
                   )}
                 </div>
-                <Checkbox checked={persona.featured} />
+                <Checkbox checked={persona.is_featured} />
               </div>,
               <div
                 key="is_visible"
                 onClick={async () => {
                   const response = await togglePersonaVisibility(
                     persona.id,
-                    persona.is_visible
+                    persona.is_listed
                   );
                   if (response.ok) {
                     refreshPersonas();
@@ -288,13 +288,13 @@ export function PersonasTable({
                   `}
               >
                 <div className="my-auto w-fit">
-                  {!persona.is_visible ? (
+                  {!persona.is_listed ? (
                     <div className="text-error">Hidden</div>
                   ) : (
                     "Visible"
                   )}
                 </div>
-                <Checkbox checked={persona.is_visible} />
+                <Checkbox checked={persona.is_listed} />
               </div>,
               <div key="edit" className="flex">
                 <div className="mr-auto my-auto">
