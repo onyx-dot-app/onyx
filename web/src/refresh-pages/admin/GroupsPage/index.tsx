@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SvgPlusCircle, SvgUsers } from "@opal/icons";
 import { Button } from "@opal/components";
@@ -16,6 +17,7 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 
 function GroupsPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
@@ -40,7 +42,12 @@ function GroupsPage() {
             leftSearchIcon
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          <Button icon={SvgPlusCircle}>New Group</Button>
+          <Button
+            icon={SvgPlusCircle}
+            onClick={() => router.push("/admin/groups/create")}
+          >
+            New Group
+          </Button>
         </Section>
       </div>
 
