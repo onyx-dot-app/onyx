@@ -53,7 +53,7 @@ class NotionPage(BaseModel):
     id: str
     created_time: str
     last_edited_time: str
-    archived: bool
+    in_trash: bool
     properties: dict[str, Any]
     url: str
 
@@ -107,7 +107,7 @@ class NotionConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.headers = {
             "Content-Type": "application/json",
-            "Notion-Version": "2022-06-28",
+            "Notion-Version": "2026-03-11",
         }
         self.indexed_pages: set[str] = set()
         self.root_page_id = root_page_id
@@ -227,7 +227,11 @@ class NotionConnector(LoadConnector, PollConnector):
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_database_as_page(self, database_id: str) -> NotionPage:
-        """Attempt to fetch a database as a page."""
+        """Attempt to fetch a database as a page.
+
+        Note: As of API 2025-09-03, database objects no longer include
+        `properties` (schema moved to individual data sources).
+        """
         logger.debug(f"Fetching database for ID '{database_id}' as a page")
         database_url = f"https://api.notion.com/v1/databases/{database_id}"
         res = rl_requests.get(
@@ -246,18 +250,51 @@ class NotionConnector(LoadConnector, PollConnector):
             database_name[0].get("text", {}).get("content") if database_name else None
         )
 
+        db_data.setdefault("properties", {})
+
         return NotionPage(**db_data, database_name=database_name)
 
     @retry(tries=3, delay=1, backoff=2)
-    def _fetch_database(
-        self, database_id: str, cursor: str | None = None
+    def _fetch_data_sources_for_database(
+        self, database_id: str
+    ) -> list[tuple[str, str]]:
+        """Fetch the list of data sources for a database.
+
+        Returns list of (data_source_id, data_source_name) tuples.
+        """
+        logger.debug(f"Fetching data sources for database '{database_id}'")
+        res = rl_requests.get(
+            f"https://api.notion.com/v1/databases/{database_id}",
+            headers=self.headers,
+            timeout=_NOTION_CALL_TIMEOUT,
+        )
+        try:
+            res.raise_for_status()
+        except Exception as e:
+            if res.status_code == 404:
+                logger.error(
+                    f"Unable to access database with ID '{database_id}'. "
+                    f"This is likely due to the database not being shared "
+                    f"with the Onyx integration. Exact exception:\n{e}"
+                )
+                return []
+            logger.exception(f"Error fetching database - {res.json()}")
+            raise e
+
+        db_data = res.json()
+        data_sources = db_data.get("data_sources", [])
+        return [(ds["id"], ds.get("name", "")) for ds in data_sources]
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _fetch_data_source(
+        self, data_source_id: str, cursor: str | None = None
     ) -> dict[str, Any]:
-        """Fetch a database from it's ID via the Notion API."""
-        logger.debug(f"Fetching database for ID '{database_id}'")
-        block_url = f"https://api.notion.com/v1/databases/{database_id}/query"
+        """Query a data source via POST /v1/data_sources/{id}/query."""
+        logger.debug(f"Querying data source '{data_source_id}'")
+        url = f"https://api.notion.com/v1/data_sources/{data_source_id}/query"
         body = None if not cursor else {"start_cursor": cursor}
         res = rl_requests.post(
-            block_url,
+            url,
             headers=self.headers,
             json=body,
             timeout=_NOTION_CALL_TIMEOUT,
@@ -265,25 +302,14 @@ class NotionConnector(LoadConnector, PollConnector):
         try:
             res.raise_for_status()
         except Exception as e:
-            json_data = res.json()
-            code = json_data.get("code")
-            # Sep 3 2025 backend changed the error message for this case
-            # TODO: it is also now possible for there to be multiple data sources per database; at present we
-            # just don't handle that. We will need to upgrade the API to the current version + query the
-            # new data sources endpoint to handle that case correctly.
-            if code == "object_not_found" or (
-                code == "validation_error"
-                and "does not contain any data sources" in json_data.get("message", "")
-            ):
-                # this happens when a database is not shared with the integration
-                # in this case, we should just ignore the database
+            if res.status_code == 404:
                 logger.error(
-                    f"Unable to access database with ID '{database_id}'. "
-                    f"This is likely due to the database not being shared "
+                    f"Unable to access data source with ID '{data_source_id}'. "
+                    f"This is likely due to it not being shared "
                     f"with the Onyx integration. Exact exception:\n{e}"
                 )
                 return {"results": [], "next_cursor": None}
-            logger.exception(f"Error fetching database - {res.json()}")
+            logger.exception(f"Error querying data source - {res.json()}")
             raise e
         return res.json()
 
@@ -497,46 +523,51 @@ class NotionConnector(LoadConnector, PollConnector):
         if db_node:
             hierarchy_nodes.append(db_node)
 
-        cursor = None
-        while True:
-            data = self._fetch_database(database_id, cursor)
+        # Discover all data sources under this database, then query each one.
+        # Even legacy single-source databases have one entry in the array.
+        data_sources = self._fetch_data_sources_for_database(database_id)
+        for ds_id, _ds_name in data_sources:
+            cursor = None
+            while True:
+                data = self._fetch_data_source(ds_id, cursor)
 
-            for result in data["results"]:
-                obj_id = result["id"]
-                obj_type = result["object"]
-                text = self._properties_to_str(result.get("properties", {}))
-                if text:
-                    result_blocks.append(NotionBlock(id=obj_id, text=text, prefix="\n"))
+                for result in data["results"]:
+                    obj_id = result["id"]
+                    obj_type = result["object"]
+                    text = self._properties_to_str(result.get("properties", {}))
+                    if text:
+                        result_blocks.append(
+                            NotionBlock(id=obj_id, text=text, prefix="\n")
+                        )
 
-                if self.recursive_index_enabled:
-                    if obj_type == "page":
-                        logger.debug(
-                            f"Found page with ID '{obj_id}' in database '{database_id}'"
-                        )
-                        result_pages.append(result["id"])
-                    elif obj_type == "database":
-                        logger.debug(
-                            f"Found database with ID '{obj_id}' in database '{database_id}'"
-                        )
-                        # Get nested database name from properties if available
-                        nested_db_title = result.get("title", [])
-                        nested_db_name = None
-                        if nested_db_title and len(nested_db_title) > 0:
-                            nested_db_name = (
-                                nested_db_title[0].get("text", {}).get("content")
+                    if self.recursive_index_enabled:
+                        if obj_type == "page":
+                            logger.debug(
+                                f"Found page with ID '{obj_id}' in database '{database_id}'"
                             )
-                        nested_output = self._read_pages_from_database(
-                            obj_id,
-                            database_parent_raw_id=database_id,
-                            database_name=nested_db_name,
-                        )
-                        result_pages.extend(nested_output.child_page_ids)
-                        hierarchy_nodes.extend(nested_output.hierarchy_nodes)
+                            result_pages.append(result["id"])
+                        elif obj_type == "database":
+                            logger.debug(
+                                f"Found database with ID '{obj_id}' in database '{database_id}'"
+                            )
+                            nested_db_title = result.get("title", [])
+                            nested_db_name = None
+                            if nested_db_title and len(nested_db_title) > 0:
+                                nested_db_name = (
+                                    nested_db_title[0].get("text", {}).get("content")
+                                )
+                            nested_output = self._read_pages_from_database(
+                                obj_id,
+                                database_parent_raw_id=database_id,
+                                database_name=nested_db_name,
+                            )
+                            result_pages.extend(nested_output.child_page_ids)
+                            hierarchy_nodes.extend(nested_output.hierarchy_nodes)
 
-            if data["next_cursor"] is None:
-                break
+                if data["next_cursor"] is None:
+                    break
 
-            cursor = data["next_cursor"]
+                cursor = data["next_cursor"]
 
         return BlockReadOutput(
             blocks=result_blocks,
