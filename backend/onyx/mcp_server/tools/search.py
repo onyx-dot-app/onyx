@@ -107,7 +107,7 @@ async def search_indexed_documents(
             if isinstance(parsed, list):
                 source_types = parsed
             else:
-                source_types = [source_types]
+                source_types = [parsed] if isinstance(parsed, str) else [source_types]
         except (json.JSONDecodeError, TypeError):
             source_types = [source_types]
 
