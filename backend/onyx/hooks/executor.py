@@ -5,6 +5,7 @@ Usage (Celery tasks and FastAPI handlers):
         db_session=db_session,
         hook_point=HookPoint.QUERY_PROCESSING,
         payload={"query": "...", "user_email": "...", "chat_session_id": "..."},
+        response_type=QueryProcessingResponse,
     )
 
     if isinstance(result, HookSkipped):
@@ -53,7 +54,7 @@ The executor uses three sessions:
 import json
 import time
 from typing import Any
-from typing import TypeAlias
+from typing import TypeVar
 
 import httpx
 from pydantic import BaseModel
@@ -84,9 +85,7 @@ class HookSoftFailed:
     """Hook was called but failed with SOFT fail strategy — continuing."""
 
 
-# The return type of execute_hook: a validated response model, or a sentinel
-# indicating the hook was skipped or soft-failed.
-HookResult: TypeAlias = BaseModel | HookSkipped | HookSoftFailed
+T = TypeVar("T", bound=BaseModel)
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +278,8 @@ def _persist_result(
 def _execute_hook_inner(
     hook: Hook,
     payload: dict[str, Any],
-) -> BaseModel | HookSoftFailed:
+    response_type: type[T],  # noqa: ARG001 — used only for TypeVar inference; not needed at runtime  # fmt: skip
+) -> T | HookSoftFailed:
     """Make the HTTP call, validate the response, and return a typed model.
 
     Raises OnyxError on HARD failure. Returns HookSoftFailed on SOFT failure.
@@ -321,11 +321,11 @@ def _execute_hook_inner(
     # A validation failure downgrades the outcome to a failure so it is logged,
     # is_reachable is left unchanged (server responded — just a bad payload),
     # and fail_strategy is respected below.
-    validated_model: BaseModel | None = None
+    validated_model: T | None = None
     if outcome.is_success and outcome.response_payload is not None:
         spec = get_hook_point_spec(hook_point)
         try:
-            validated_model = spec.response_model.model_validate(
+            validated_model = spec.response_model.model_validate(  # type: ignore[assignment]
                 outcome.response_payload
             )
         except ValidationError as e:
@@ -368,7 +368,8 @@ def execute_hook(
     db_session: Session,
     hook_point: HookPoint,
     payload: dict[str, Any],
-) -> HookResult:
+    response_type: type[T],  # noqa: ARG001 — used only for TypeVar inference; not needed at runtime  # fmt: skip
+) -> T | HookSkipped | HookSoftFailed:
     """Execute the hook for the given hook point synchronously.
 
     Returns HookSkipped if no active hook is configured, HookSoftFailed if the
@@ -383,7 +384,7 @@ def execute_hook(
     hook_id = hook.id
 
     try:
-        return _execute_hook_inner(hook, payload)
+        return _execute_hook_inner(hook, payload, response_type)
     except Exception:
         if fail_strategy == HookFailStrategy.SOFT:
             logger.exception(

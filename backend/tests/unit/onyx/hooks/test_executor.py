@@ -145,6 +145,7 @@ def test_early_exit_returns_skipped_with_no_db_writes(
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
+            response_type=QueryProcessingResponse,
         )
 
     assert isinstance(result, HookSkipped)
@@ -178,6 +179,7 @@ def test_success_returns_validated_model_and_sets_reachable(
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
+            response_type=QueryProcessingResponse,
         )
 
     assert isinstance(result, QueryProcessingResponse)
@@ -208,6 +210,7 @@ def test_success_skips_reachable_write_when_already_true(db_session: MagicMock) 
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
+            response_type=QueryProcessingResponse,
         )
 
     assert isinstance(result, QueryProcessingResponse)
@@ -239,6 +242,7 @@ def test_non_dict_json_response_is_a_failure(db_session: MagicMock) -> None:
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
+            response_type=QueryProcessingResponse,
         )
 
     assert isinstance(result, HookSoftFailed)
@@ -274,6 +278,7 @@ def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
+            response_type=QueryProcessingResponse,
         )
 
     assert isinstance(result, HookSoftFailed)
@@ -397,6 +402,7 @@ def test_http_failure_paths(
                     db_session=db_session,
                     hook_point=HookPoint.QUERY_PROCESSING,
                     payload=_PAYLOAD,
+                    response_type=QueryProcessingResponse,
                 )
             assert exc_info.value.error_code is OnyxErrorCode.HOOK_EXECUTION_FAILED
         else:
@@ -404,6 +410,7 @@ def test_http_failure_paths(
                 db_session=db_session,
                 hook_point=HookPoint.QUERY_PROCESSING,
                 payload=_PAYLOAD,
+                response_type=QueryProcessingResponse,
             )
             assert isinstance(result, expected_type)
 
@@ -451,6 +458,7 @@ def test_authorization_header(
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
+            response_type=QueryProcessingResponse,
         )
 
     _, call_kwargs = mock_client.post.call_args
@@ -504,6 +512,7 @@ def test_persist_session_failure_is_swallowed(
                     db_session=db_session,
                     hook_point=HookPoint.QUERY_PROCESSING,
                     payload=_PAYLOAD,
+                    response_type=QueryProcessingResponse,
                 )
             assert exc_info.value.error_code is OnyxErrorCode.HOOK_EXECUTION_FAILED
         else:
@@ -511,6 +520,7 @@ def test_persist_session_failure_is_swallowed(
                 db_session=db_session,
                 hook_point=HookPoint.QUERY_PROCESSING,
                 payload=_PAYLOAD,
+                response_type=QueryProcessingResponse,
             )
             assert isinstance(result, QueryProcessingResponse)
             assert result.query == _RESPONSE_PAYLOAD["query"]
@@ -575,6 +585,7 @@ def test_response_validation_failure_respects_fail_strategy(
                     db_session=db_session,
                     hook_point=HookPoint.QUERY_PROCESSING,
                     payload=_PAYLOAD,
+                    response_type=QueryProcessingResponse,
                 )
             assert exc_info.value.error_code is OnyxErrorCode.HOOK_EXECUTION_FAILED
         else:
@@ -582,6 +593,7 @@ def test_response_validation_failure_respects_fail_strategy(
                 db_session=db_session,
                 hook_point=HookPoint.QUERY_PROCESSING,
                 payload=_PAYLOAD,
+                response_type=QueryProcessingResponse,
             )
             assert isinstance(result, HookSoftFailed)
 
@@ -632,6 +644,7 @@ def test_unexpected_exception_in_inner_respects_fail_strategy(
                 db_session=db_session,
                 hook_point=HookPoint.QUERY_PROCESSING,
                 payload=_PAYLOAD,
+                response_type=QueryProcessingResponse,
             )
             assert isinstance(result, HookSoftFailed)
         else:
@@ -640,6 +653,7 @@ def test_unexpected_exception_in_inner_respects_fail_strategy(
                     db_session=db_session,
                     hook_point=HookPoint.QUERY_PROCESSING,
                     payload=_PAYLOAD,
+                    response_type=QueryProcessingResponse,
                 )
 
 
@@ -672,6 +686,7 @@ def test_is_reachable_failure_does_not_prevent_log(db_session: MagicMock) -> Non
             db_session=db_session,
             hook_point=HookPoint.QUERY_PROCESSING,
             payload=_PAYLOAD,
+            response_type=QueryProcessingResponse,
         )
 
     assert isinstance(result, HookSoftFailed)

@@ -622,6 +622,7 @@ def handle_stream_message_objects(
                         user_email=None if user.is_anonymous else user.email,
                         chat_session_id=str(chat_session.id),
                     ).model_dump(),
+                    response_type=QueryProcessingResponse,
                 )
                 message_text = _resolve_query_processing_hook_result(
                     hook_result, message_text
