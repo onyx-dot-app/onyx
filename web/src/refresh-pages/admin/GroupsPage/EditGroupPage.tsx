@@ -26,6 +26,7 @@ import {
   updateGroup,
   deleteGroup,
   updateAgentGroupSharing,
+  updateDocSetGroupSharing,
   saveTokenLimits,
 } from "./svc";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
@@ -85,6 +86,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const initialAgentIdsRef = useRef<number[]>([]);
+  const initialDocSetIdsRef = useRef<number[]>([]);
 
   // Users and API keys
   const { users, isLoading: usersLoading, error: usersError } = useAdminUsers();
@@ -105,7 +107,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       setGroupName(group.name);
       setSelectedUserIds(group.users.map((u) => u.id));
       setSelectedCcPairIds(group.cc_pairs.map((cc) => cc.id));
-      setSelectedDocSetIds(group.document_sets.map((ds) => ds.id));
+      const docSetIds = group.document_sets.map((ds) => ds.id);
+      setSelectedDocSetIds(docSetIds);
+      initialDocSetIdsRef.current = docSetIds;
       const agentIds = group.personas.map((p) => p.id);
       setSelectedAgentIds(agentIds);
       initialAgentIdsRef.current = agentIds;
@@ -186,6 +190,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         groupId,
         initialAgentIdsRef.current,
         selectedAgentIds
+      );
+
+      // Update document set sharing (add/remove this group from changed doc sets)
+      await updateDocSetGroupSharing(
+        groupId,
+        initialDocSetIdsRef.current,
+        selectedDocSetIds
       );
 
       // Save token rate limits (create/update/delete)
