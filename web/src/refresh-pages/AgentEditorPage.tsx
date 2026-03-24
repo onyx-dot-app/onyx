@@ -967,6 +967,14 @@ export default function AgentEditorPage({
           validateOnChange
           validateOnBlur
           validateOnMount
+          initialTouched={{
+            description:
+              initialValues.description.length >
+              MAX_CHARACTERS_AGENT_DESCRIPTION,
+            starter_messages: initialValues.starter_messages.map(
+              (msg) => msg.length > MAX_CHARACTERS_STARTER_MESSAGE
+            ) as unknown as boolean,
+          }}
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
