@@ -62,9 +62,9 @@ function ResourcePopover({
             </div>
           ) : (
             sections.map(
-              (section) =>
+              (section, idx) =>
                 section.items.length > 0 && (
-                  <div key={section.label ?? "default"}>
+                  <div key={section.label ?? `section-${idx}`}>
                     {section.label && (
                       <Section
                         flexDirection="row"

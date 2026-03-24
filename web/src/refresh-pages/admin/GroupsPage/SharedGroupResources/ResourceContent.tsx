@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Content } from "@opal/layouts";
@@ -9,11 +10,11 @@ interface ResourceContentProps {
   /** SVG icon for connectors/doc sets. */
   icon?: IconFunctionComponent;
   /** Custom ReactNode icon (e.g. AgentAvatar). Takes priority over `icon`. */
-  leftContent?: React.ReactNode;
+  leftContent?: ReactNode;
   title: string;
   description?: string;
   /** Inline info rendered after description (e.g. source icon stack). */
-  infoContent?: React.ReactNode;
+  infoContent?: ReactNode;
   onRemove: () => void;
 }
 

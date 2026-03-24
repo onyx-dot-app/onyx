@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -28,15 +29,21 @@ interface TokenLimitSectionProps {
 // ---------------------------------------------------------------------------
 
 function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
+  const nextKeyRef = useRef(limits.length);
+  const keysRef = useRef<number[]>(limits.map((_, i) => i));
+
   function addLimit() {
     const emptyIndex = limits.findIndex(
       (l) => l.tokenBudget === null && l.periodHours === null
     );
     if (emptyIndex !== -1) return;
+    const key = nextKeyRef.current++;
+    keysRef.current = [...keysRef.current, key];
     onLimitsChange([...limits, { tokenBudget: null, periodHours: null }]);
   }
 
   function removeLimit(index: number) {
+    keysRef.current = keysRef.current.filter((_, i) => i !== index);
     onLimitsChange(limits.filter((_, i) => i !== index));
   }
 
@@ -87,7 +94,7 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
 
             {/* Limit rows */}
             {limits.map((limit, i) => (
-              <div key={i} className="flex items-center gap-1">
+              <div key={keysRef.current[i]} className="flex items-center gap-1">
                 <div className="flex-1">
                   <InputNumber
                     value={limit.tokenBudget}

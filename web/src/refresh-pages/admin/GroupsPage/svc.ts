@@ -145,7 +145,9 @@ async function updateDocSetGroupSharing(
 
   for (const dsId of added) {
     const ds = docSetMap.get(dsId);
-    if (!ds) continue;
+    if (!ds) {
+      throw new Error(`Document set ${dsId} not found`);
+    }
     const updatedGroups = ds.groups.includes(groupId)
       ? ds.groups
       : [...ds.groups, groupId];
@@ -168,7 +170,9 @@ async function updateDocSetGroupSharing(
 
   for (const dsId of removed) {
     const ds = docSetMap.get(dsId);
-    if (!ds) continue;
+    if (!ds) {
+      throw new Error(`Document set ${dsId} not found`);
+    }
     const updatedGroups = ds.groups.filter((id) => id !== groupId);
     const res = await fetch("/api/manage/admin/document-set", {
       method: "PATCH",

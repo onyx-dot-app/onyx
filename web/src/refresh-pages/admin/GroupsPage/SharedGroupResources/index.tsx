@@ -40,7 +40,11 @@ function SharedBadge() {
   );
 }
 
-function SourceIconStack({ sources }: { sources: { source: ValidSources }[] }) {
+interface SourceIconStackProps {
+  sources: { source: ValidSources }[];
+}
+
+function SourceIconStack({ sources }: SourceIconStackProps) {
   if (sources.length === 0) return null;
 
   const unique = Array.from(
