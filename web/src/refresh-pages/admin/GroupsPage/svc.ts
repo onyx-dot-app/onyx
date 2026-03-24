@@ -71,7 +71,9 @@ async function updateAgentGroupSharing(
   for (const agentId of added) {
     // Fetch current agent to get existing group associations
     const agentRes = await fetch(`/api/persona/${agentId}`);
-    if (!agentRes.ok) continue;
+    if (!agentRes.ok) {
+      throw new Error(`Failed to fetch agent ${agentId}`);
+    }
     const agent = await agentRes.json();
     const existingGroupIds: number[] = (agent.groups ?? []) as number[];
     if (!existingGroupIds.includes(groupId)) {
@@ -90,7 +92,9 @@ async function updateAgentGroupSharing(
   // For each removed agent, remove this group from its group_ids
   for (const agentId of removed) {
     const agentRes = await fetch(`/api/persona/${agentId}`);
-    if (!agentRes.ok) continue;
+    if (!agentRes.ok) {
+      throw new Error(`Failed to fetch agent ${agentId}`);
+    }
     const agent = await agentRes.json();
     const existingGroupIds: number[] = (agent.groups ?? []) as number[];
     const filtered = existingGroupIds.filter((id) => id !== groupId);
