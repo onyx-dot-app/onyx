@@ -336,8 +336,8 @@ class TestDocumentIndexOld:
             project_persona_filters = IndexFilters(
                 access_control_list=None,
                 tenant_id=tenant_id,
-                project_id=1,
-                persona_id=2,
+                project_id_filter=1,
+                persona_id_filter=2,
                 # We need this even though none of the chunks belong to a
                 # document set because project_id and persona_id are only
                 # additive filters in the event the agent has knowledge scope;
