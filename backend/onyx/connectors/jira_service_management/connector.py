@@ -94,12 +94,12 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
         self,
         jsm_base_url: str,
         project_key: str | None = None,
-        labels_to_skip: list[str] = JSM_CONNECTOR_LABELS_TO_SKIP,
+        labels_to_skip: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.jsm_base_url = jsm_base_url.rstrip("/")
         self.project_key = project_key
-        self.labels_to_skip: set[str] = set(labels_to_skip)
+        self.labels_to_skip: set[str] = set(labels_to_skip if labels_to_skip is not None else JSM_CONNECTOR_LABELS_TO_SKIP)
         self.batch_size = batch_size
         self._auth: HTTPBasicAuth | None = None
 
@@ -177,6 +177,9 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
     # ------------------------------------------------------------------
 
     def _build_document(self, issue: dict[str, Any]) -> Document | None:
+        if self._auth is None:
+            raise ConnectorMissingCredentialError("Jira Service Management")
+
         fields = issue.get("fields", {})
         issue_key = issue.get("key", "")
         if not issue_key:
@@ -366,6 +369,3 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
             raise ConnectorValidationError(
                 f"Could not connect to Jira Service Management: {exc}"
             ) from exc
-
-
-

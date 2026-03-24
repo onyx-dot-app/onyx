@@ -31,14 +31,6 @@ T = TypeVar("T")
 
 logger = setup_logger()
 
-# List of directories/Files to exclude
-exclude_patterns = [
-    "logs",
-    ".github/",
-    ".gitlab/",
-    ".pre-commit-config.yaml",
-]
-
 
 def _batch_gitlab_objects(git_objs: Iterable[T], batch_size: int) -> Iterator[list[T]]:
     it = iter(git_objs)
@@ -152,7 +144,7 @@ class GitlabConnector(LoadConnector, PollConnector):
             ".gitlab/",
             ".pre-commit-config.yaml",
         ]
-        if exclude_patterns:
+        if exclude_patterns is not None:
             self.exclude_patterns = exclude_patterns
         else:
             self.exclude_patterns = default_patterns
