@@ -200,6 +200,7 @@ interface NumericLimitFieldProps {
   defaultValue: string;
   saveSettings: (updates: Partial<Settings>) => Promise<void>;
   maxValue?: number;
+  allowZero?: boolean;
 }
 
 function NumericLimitField({
@@ -207,6 +208,7 @@ function NumericLimitField({
   defaultValue,
   saveSettings,
   maxValue,
+  allowZero = false,
 }: NumericLimitFieldProps) {
   const { values, setFieldValue } =
     useFormikContext<ChatPreferencesFormValues>();
@@ -233,9 +235,9 @@ function NumericLimitField({
     }
 
     const parsed = parseInt(value, 10);
-    const isValid = !isNaN(parsed) && parsed > 0;
+    const isValid = !isNaN(parsed) && (allowZero ? parsed >= 0 : parsed > 0);
 
-    // Revert invalid input (empty, NaN, negative, zero) to last-saved value.
+    // Revert invalid input (empty, NaN, negative) to last-saved value.
     if (!isValid) {
       void setFieldValue(name, initialValue.current);
       return;
@@ -330,6 +332,7 @@ function FileSizeLimitFields({
             name="file_token_count_threshold_k"
             defaultValue={defaultTokenThresholdK}
             saveSettings={saveSettings}
+            allowZero
           />
         </InputLayouts.Vertical>
       </div>
@@ -1038,17 +1041,18 @@ export default function ChatPreferencesPage() {
     disable_default_assistant:
       settings.settings.disable_default_assistant ?? false,
 
-    // File limits — 0/null means "use default"
+    // File limits — for upload size: 0/null means "use default";
+    // for token threshold: null means "use default", 0 means "no limit".
     user_file_max_upload_size_mb:
       (settings.settings.user_file_max_upload_size_mb ?? 0) <= 0
         ? settings.settings.default_user_file_max_upload_size_mb?.toString() ??
           "100"
         : settings.settings.user_file_max_upload_size_mb!.toString(),
     file_token_count_threshold_k:
-      (settings.settings.file_token_count_threshold_k ?? 0) <= 0
+      settings.settings.file_token_count_threshold_k == null
         ? settings.settings.default_file_token_count_threshold_k?.toString() ??
           "200"
-        : settings.settings.file_token_count_threshold_k!.toString(),
+        : settings.settings.file_token_count_threshold_k.toString(),
   };
 
   return (
