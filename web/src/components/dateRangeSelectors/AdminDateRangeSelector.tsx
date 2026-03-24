@@ -47,7 +47,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
   ];
 
   return (
-    <div className="grid gap-2">
+    <div data-testid="admin-date-range-selector" className="grid gap-2">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <Popover.Trigger asChild>
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
