@@ -173,12 +173,12 @@ def categorize_uploaded_files(
     # For token threshold: 0 means "no limit" (converted to None below).
     settings = load_settings()
     max_upload_size_mb = (
-        settings.user_file_max_upload_size_mb or 0
+        settings.user_file_max_upload_size_mb
     )  # always positive after load_settings()
     max_upload_size_bytes = (
         max_upload_size_mb * 1024 * 1024 if max_upload_size_mb else None
     )
-    token_threshold_k = settings.file_token_count_threshold_k or 0
+    token_threshold_k = settings.file_token_count_threshold_k
     token_threshold = (
         token_threshold_k * 1000 if token_threshold_k else None
     )  # 0 → None = no limit
