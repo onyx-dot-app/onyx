@@ -408,6 +408,14 @@ def _handle_http_error(e: requests.HTTPError, attempt: int) -> int:
 
         raise e
 
+    if e.response.status_code >= 500:
+        delay = min(STARTING_DELAY * (BACKOFF**attempt), MAX_DELAY)
+        logger.warning(
+            f"Server error {e.response.status_code}. "
+            f"Retrying in {delay} seconds (attempt {attempt + 1})..."
+        )
+        return math.ceil(time.monotonic() + delay)
+
     if (
         e.response.status_code != 429
         and RATE_LIMIT_MESSAGE_LOWERCASE not in e.response.text.lower()
