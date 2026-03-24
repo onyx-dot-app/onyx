@@ -40,17 +40,24 @@ def get_request_details(
 def get_sla_information(
     jsm_base_url: str, auth: HTTPBasicAuth, issue_key: str
 ) -> dict[str, Any]:
-    """Fetch SLA information for a JSM request."""
-    url = f"{jsm_base_url}{_JSM_API_PATH}/request/{issue_key}/sla"
+    """Fetch SLA information for a JSM request, following pagination."""
+    all_values: list[dict[str, Any]] = []
+    next_url: str | None = f"{jsm_base_url}{_JSM_API_PATH}/request/{issue_key}/sla"
     try:
-        response = requests.get(url, auth=auth, headers=_JSM_HEADERS, timeout=15)
-        if response.status_code == 404:
-            return {}
-        if response.status_code == 429:
-            logger.warning(f"Rate limited fetching SLA for {issue_key}")
-            return {}
-        response.raise_for_status()
-        return response.json()
+        while next_url:
+            response = requests.get(next_url, auth=auth, headers=_JSM_HEADERS, timeout=15)
+            if response.status_code == 404:
+                return {}
+            if response.status_code == 429:
+                logger.warning(f"Rate limited fetching SLA for {issue_key}")
+                return {}
+            response.raise_for_status()
+            data = response.json()
+            all_values.extend(data.get("values", []))
+            next_url = data.get("_links", {}).get("next")
+            if data.get("isLastPage", True):
+                break
+        return {"values": all_values}
     except requests.exceptions.RequestException:
         logger.warning(
             f"Failed to fetch SLA information for {issue_key}",
