@@ -17,9 +17,9 @@ export const buildDefaultInitialValues = (
 ) => {
   const defaultModelName =
     (currentDefaultModelName &&
-      existingLlmProvider?.model_configurations?.some(
-        (m) => m.name === currentDefaultModelName
-      )
+    existingLlmProvider?.model_configurations?.some(
+      (m) => m.name === currentDefaultModelName
+    )
       ? currentDefaultModelName
       : undefined) ??
     existingLlmProvider?.model_configurations?.[0]?.name ??
