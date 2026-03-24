@@ -1521,6 +1521,8 @@ jobs:
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-trivy-scan-${{ matrix.component }}
       - extras=ecr-cache
+    permissions:
+      security-events: write # needed for SARIF uploads
     timeout-minutes: 10
     strategy:
       fail-fast: false
