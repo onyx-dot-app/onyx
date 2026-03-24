@@ -7,6 +7,13 @@ on:
   merge_group:
   pull_request:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pr-python-connector-tests.yml"
+      - ".github/actions/setup-python-and-install-dependencies/**"
+      - ".github/actions/setup-playwright/**"
   push:
     tags:
       - "v*.*.*"
