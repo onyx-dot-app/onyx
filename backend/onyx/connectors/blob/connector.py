@@ -165,7 +165,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             )
 
         elif self.bucket_type == BlobType.S3:
-            self.endpoint_url = credentials.get("endpoint_url")
+            if "endpoint_url" in credentials:
+                self.endpoint_url = credentials["endpoint_url"]
             # For S3, we can use either access keys or IAM roles.
             authentication_method = credentials.get(
                 "authentication_method", "access_key"
@@ -267,7 +268,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     client_kwargs["region_name"] = credentials.get("region", "us-east-1")
                     client_kwargs["config"] = Config(
                         signature_version="s3v4",
-                        addressing_style="path"
+                        s3={"addressing_style": "path"},
                     )
                 if self.s3_skip_ssl_verification:
                     client_kwargs["verify"] = False
