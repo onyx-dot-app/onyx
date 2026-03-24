@@ -169,14 +169,19 @@ def categorize_uploaded_files(
     tokenizer = get_tokenizer(model_name=model_name, provider_type=provider_type)
 
     # Derive limits from admin-configurable settings.
-    # load_settings() always resolves 0/None to the context-aware default.
+    # For upload size: load_settings() resolves 0/None to a positive default.
+    # For token threshold: 0 means "no limit" (converted to None below).
     settings = load_settings()
-    max_upload_size_mb = settings.user_file_max_upload_size_mb or 0
+    max_upload_size_mb = (
+        settings.user_file_max_upload_size_mb or 0
+    )  # always positive after load_settings()
     max_upload_size_bytes = (
         max_upload_size_mb * 1024 * 1024 if max_upload_size_mb else None
     )
     token_threshold_k = settings.file_token_count_threshold_k or 0
-    token_threshold = token_threshold_k * 1000 if token_threshold_k else None
+    token_threshold = (
+        token_threshold_k * 1000 if token_threshold_k else None
+    )  # 0 → None = no limit
 
     for upload in files:
         try:

@@ -237,14 +237,32 @@ function NumericLimitField({
     const parsed = parseInt(value, 10);
     const isValid = !isNaN(parsed) && (allowZero ? parsed >= 0 : parsed > 0);
 
-    // Revert invalid input (empty, NaN, negative) to last-saved value.
+    // Revert invalid input (empty, NaN, negative).
     if (!isValid) {
-      void setFieldValue(name, initialValue.current);
+      if (allowZero) {
+        // Empty/invalid means "no limit" — persist 0 and clear the field.
+        void setFieldValue(name, "");
+        void saveSettings({ [name]: 0 });
+        initialValue.current = "";
+      } else {
+        void setFieldValue(name, initialValue.current);
+      }
       return;
     }
 
     // Block save when the value exceeds the hard ceiling.
     if (maxValue !== undefined && parsed > maxValue) {
+      return;
+    }
+
+    // For allowZero fields, 0 means "no limit" — clear the display
+    // so the "No limit" placeholder is visible, but still persist 0.
+    if (allowZero && parsed === 0) {
+      void setFieldValue(name, "");
+      if (initialValue.current !== "") {
+        void saveSettings({ [name]: 0 });
+        initialValue.current = "";
+      }
       return;
     }
 
@@ -269,7 +287,7 @@ function NumericLimitField({
         inputMode="numeric"
         showClearButton={false}
         pattern="[0-9]*"
-        placeholder={`Default: ${defaultValue}`}
+        placeholder={allowZero ? "No limit" : `Default: ${defaultValue}`}
         variant={isOverMax ? "error" : undefined}
         rightSection={
           (value || "") !== defaultValue ? (
@@ -1052,7 +1070,9 @@ export default function ChatPreferencesPage() {
       settings.settings.file_token_count_threshold_k == null
         ? settings.settings.default_file_token_count_threshold_k?.toString() ??
           "200"
-        : settings.settings.file_token_count_threshold_k.toString(),
+        : settings.settings.file_token_count_threshold_k === 0
+          ? ""
+          : settings.settings.file_token_count_threshold_k.toString(),
   };
 
   return (
