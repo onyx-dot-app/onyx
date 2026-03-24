@@ -65,6 +65,8 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
 
+    _setup_prometheus_collectors(sender)
+
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:
         return
@@ -72,8 +74,28 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     app_base.on_secondary_worker_init(sender, **kwargs)
 
 
+def _setup_prometheus_collectors(sender: Any) -> None:
+    """Register Prometheus collectors that need Redis/DB access.
+
+    Passes the Celery app so the queue depth collector can obtain a fresh
+    broker Redis client on each scrape (rather than holding a stale reference).
+    """
+    try:
+        from onyx.server.metrics.indexing_pipeline_setup import (
+            setup_indexing_pipeline_metrics,
+        )
+
+        setup_indexing_pipeline_metrics(sender.app)
+        logger.info("Prometheus indexing pipeline collectors registered")
+    except Exception:
+        logger.exception("Failed to register Prometheus indexing pipeline collectors")
+
+
 @worker_ready.connect
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
+    from onyx.server.metrics.metrics_server import start_metrics_server
+
+    start_metrics_server("monitoring")
     app_base.on_worker_ready(sender, **kwargs)
 
 
