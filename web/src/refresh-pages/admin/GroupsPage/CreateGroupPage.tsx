@@ -19,6 +19,9 @@ import useAdminUsers from "@/hooks/useAdminUsers";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 import { createGroup } from "./svc";
 import { apiKeyToMemberRow, memberTableColumns, PAGE_SIZE } from "./shared";
+import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
+import TokenLimitSection from "./TokenLimitSection";
+import type { TokenLimit } from "./TokenLimitSection";
 
 function CreateGroupPage() {
   const router = useRouter();
@@ -26,6 +29,12 @@ function CreateGroupPage() {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedCcPairIds, setSelectedCcPairIds] = useState<number[]>([]);
+  const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
+    { tokenBudget: null, periodHours: null },
+  ]);
 
   const { users, isLoading: usersLoading, error: usersError } = useAdminUsers();
 
@@ -53,7 +62,7 @@ function CreateGroupPage() {
 
     setIsSubmitting(true);
     try {
-      await createGroup(trimmed, selectedUserIds);
+      await createGroup(trimmed, selectedUserIds, selectedCcPairIds);
       toast.success(`Group "${trimmed}" created`);
       router.push("/admin/groups");
     } catch (e) {
@@ -81,7 +90,7 @@ function CreateGroupPage() {
   );
 
   return (
-    <SettingsLayouts.Root width="lg">
+    <SettingsLayouts.Root width="sm">
       <SettingsLayouts.Header
         icon={SvgUsers}
         title="Create Group"
@@ -150,6 +159,19 @@ function CreateGroupPage() {
             />
           </Section>
         )}
+        <SharedGroupResources
+          selectedCcPairIds={selectedCcPairIds}
+          onCcPairIdsChange={setSelectedCcPairIds}
+          selectedDocSetIds={selectedDocSetIds}
+          onDocSetIdsChange={setSelectedDocSetIds}
+          selectedAgentIds={selectedAgentIds}
+          onAgentIdsChange={setSelectedAgentIds}
+        />
+
+        <TokenLimitSection
+          limits={tokenLimits}
+          onLimitsChange={setTokenLimits}
+        />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
