@@ -47,19 +47,6 @@ def test_remove_answer_citations_preserves_non_citation_markdown_links() -> None
 # ---------------------------------------------------------------------------
 
 
-def test_wrong_model_type_raises_internal_error() -> None:
-    """If the executor ever returns an unexpected BaseModel type, raise INTERNAL_ERROR
-    rather than an AssertionError or AttributeError."""
-    from pydantic import BaseModel as PydanticBaseModel
-
-    class _OtherModel(PydanticBaseModel):
-        pass
-
-    with pytest.raises(OnyxError) as exc_info:
-        _resolve_query_processing_hook_result(_OtherModel(), "original query")
-    assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
-
-
 def test_hook_skipped_leaves_message_text_unchanged() -> None:
     result = _resolve_query_processing_hook_result(HookSkipped(), "original query")
     assert result == "original query"

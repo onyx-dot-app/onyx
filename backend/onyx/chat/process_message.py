@@ -434,7 +434,7 @@ def determine_search_params(
 
 
 def _resolve_query_processing_hook_result(
-    hook_result: BaseModel | HookSkipped | HookSoftFailed,
+    hook_result: QueryProcessingResponse | HookSkipped | HookSoftFailed,
     message_text: str,
 ) -> str:
     """Apply the Query Processing hook result to the message text.
@@ -446,11 +446,6 @@ def _resolve_query_processing_hook_result(
     """
     if isinstance(hook_result, (HookSkipped, HookSoftFailed)):
         return message_text
-    if not isinstance(hook_result, QueryProcessingResponse):
-        raise OnyxError(
-            OnyxErrorCode.INTERNAL_ERROR,
-            f"Expected QueryProcessingResponse from hook, got {type(hook_result).__name__}",
-        )
     if not (hook_result.query and hook_result.query.strip()):
         raise OnyxError(
             OnyxErrorCode.QUERY_REJECTED,

@@ -53,6 +53,7 @@ The executor uses three sessions:
 import json
 import time
 from typing import Any
+from typing import TypeAlias
 
 import httpx
 from pydantic import BaseModel
@@ -81,6 +82,11 @@ class HookSkipped:
 
 class HookSoftFailed:
     """Hook was called but failed with SOFT fail strategy — continuing."""
+
+
+# The return type of execute_hook: a validated response model, or a sentinel
+# indicating the hook was skipped or soft-failed.
+HookResult: TypeAlias = BaseModel | HookSkipped | HookSoftFailed
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +368,7 @@ def execute_hook(
     db_session: Session,
     hook_point: HookPoint,
     payload: dict[str, Any],
-) -> BaseModel | HookSkipped | HookSoftFailed:
+) -> HookResult:
     """Execute the hook for the given hook point synchronously.
 
     Returns HookSkipped if no active hook is configured, HookSoftFailed if the
