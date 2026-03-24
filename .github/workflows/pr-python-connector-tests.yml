@@ -13,6 +13,7 @@ on:
       - "uv.lock"
       - ".github/workflows/pr-python-connector-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
+      - ".github/actions/setup-playwright/**"
   push:
     tags:
       - "v*.*.*"
