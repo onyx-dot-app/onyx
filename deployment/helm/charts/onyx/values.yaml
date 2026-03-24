@@ -103,7 +103,7 @@ opensearch:
     - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
       valueFrom:
         secretKeyRef:
-          name: onyx-opensearch  # Must match auth.opensearch.secretName.
+          name: onyx-opensearch  # Must match auth.opensearch.secretName or auth.opensearch.existingSecret if defined.
           key: opensearch_admin_password  # Must match auth.opensearch.secretKeys value.
 
   resources:
