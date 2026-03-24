@@ -48,12 +48,14 @@ export const WithValue: Story = {
 };
 
 export const Disabled: Story = {
-  render: () => (
-    <InputSearch
-      placeholder="Search..."
-      value=""
-      onChange={() => {}}
-      disabled
-    />
-  ),
+  render: function DisabledStory() {
+    return (
+      <InputSearch
+        placeholder="Search..."
+        value=""
+        onChange={() => {}}
+        disabled
+      />
+    );
+  },
 };

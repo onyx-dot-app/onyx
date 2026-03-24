@@ -17,7 +17,7 @@ export default function HooksPage() {
 
   useEffect(() => {
     if (!settingsLoading && !settings.hooks_enabled) {
-      toast.error("This page needs to be enabled");
+      toast.info("Hook Extensions are not enabled for this deployment.");
       router.replace("/");
     }
   }, [settingsLoading, settings.hooks_enabled, router]);

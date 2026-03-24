@@ -43,6 +43,14 @@ export default function HooksContent() {
     return <SimpleLoader />;
   }
 
+  if (error) {
+    return (
+      <Text text03 secondaryBody>
+        Failed to load hook specifications. Please refresh the page.
+      </Text>
+    );
+  }
+
   const filtered = (specs ?? []).filter(
     (spec) =>
       spec.display_name.toLowerCase().includes(search.toLowerCase()) ||

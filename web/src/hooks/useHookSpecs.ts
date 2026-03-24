@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { HookPointMeta } from "@/app/admin/hooks/interfaces";
+import { HookPointMeta } from "@/refresh-pages/admin/HooksPage/interfaces";
 
 export function useHookSpecs() {
   const { data, isLoading, error } = useSWR<HookPointMeta[]>(
