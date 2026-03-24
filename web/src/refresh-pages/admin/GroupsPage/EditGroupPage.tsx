@@ -26,7 +26,13 @@ import type {
   MemberRow,
   TokenRateLimitDisplay,
 } from "./interfaces";
-import { apiKeyToMemberRow, baseColumns, tc, PAGE_SIZE } from "./shared";
+import {
+  apiKeyToMemberRow,
+  baseColumns,
+  memberTableColumns,
+  tc,
+  PAGE_SIZE,
+} from "./shared";
 import {
   USER_GROUP_URL,
   renameGroup,
@@ -40,7 +46,7 @@ import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupRe
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
 
-const addModeColumns = [...baseColumns, tc.actions({ showSorting: false })];
+const addModeColumns = memberTableColumns;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -145,10 +151,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     return [...activeUsers, ...serviceAccountRows];
   }, [users, apiKeys]);
 
-  const memberRows = useMemo(
-    () => allRows.filter((r) => selectedUserIds.includes(r.id ?? r.email)),
-    [allRows, selectedUserIds]
-  );
+  const memberRows = useMemo(() => {
+    const selected = new Set(selectedUserIds);
+    return allRows.filter((r) => selected.has(r.id ?? r.email));
+  }, [allRows, selectedUserIds]);
 
   const currentRowSelection = useMemo(() => {
     const sel: Record<string, boolean> = {};
