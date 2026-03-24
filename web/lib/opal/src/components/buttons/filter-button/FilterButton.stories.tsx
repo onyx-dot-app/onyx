@@ -24,15 +24,14 @@ type Story = StoryObj<typeof FilterButton>;
 export const Empty: Story = {
   args: {
     icon: SvgUser,
-    state: "empty",
     children: "Everyone",
   },
 };
 
-export const Selected: Story = {
+export const Active: Story = {
   args: {
     icon: SvgUser,
-    state: "selected",
+    active: true,
     children: "By alice@example.com",
     onClear: () => console.log("clear"),
   },
@@ -41,16 +40,15 @@ export const Selected: Story = {
 export const Open: Story = {
   args: {
     icon: SvgActions,
-    state: "empty",
     interaction: "hover",
     children: "All Actions",
   },
 };
 
-export const SelectedOpen: Story = {
+export const ActiveOpen: Story = {
   args: {
     icon: SvgActions,
-    state: "selected",
+    active: true,
     interaction: "hover",
     children: "2 selected",
     onClear: () => console.log("clear"),
@@ -60,7 +58,6 @@ export const SelectedOpen: Story = {
 export const Disabled: Story = {
   args: {
     icon: SvgTag,
-    state: "empty",
     children: "All Tags",
   },
   decorators: [
@@ -72,10 +69,10 @@ export const Disabled: Story = {
   ],
 };
 
-export const DisabledSelected: Story = {
+export const DisabledActive: Story = {
   args: {
     icon: SvgTag,
-    state: "selected",
+    active: true,
     children: "2 tags",
     onClear: () => console.log("clear"),
   },
@@ -91,14 +88,8 @@ export const DisabledSelected: Story = {
 export const StateComparison: Story = {
   render: () => (
     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-      <FilterButton icon={SvgUser} state="empty">
-        Everyone
-      </FilterButton>
-      <FilterButton
-        icon={SvgUser}
-        state="selected"
-        onClear={() => console.log("clear")}
-      >
+      <FilterButton icon={SvgUser}>Everyone</FilterButton>
+      <FilterButton icon={SvgUser} active onClear={() => console.log("clear")}>
         By alice@example.com
       </FilterButton>
     </div>
@@ -108,7 +99,6 @@ export const StateComparison: Story = {
 export const WithTooltip: Story = {
   args: {
     icon: SvgUser,
-    state: "empty",
     children: "Everyone",
     tooltip: "Filter by creator",
     tooltipSide: "bottom",

@@ -218,7 +218,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               <Popover.Trigger asChild>
                 <FilterButton
                   icon={SvgClock}
-                  state={!!timeFilter ? "selected" : "empty"}
+                  active={!!timeFilter}
                   onClear={() => {
                     setTimeFilter(null);
                     onRefineSearch(buildFilters({ time: null }));
@@ -254,7 +254,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               <Popover.Trigger asChild>
                 <FilterButton
                   icon={SvgTag}
-                  state={selectedTags.length > 0 ? "selected" : "empty"}
+                  active={selectedTags.length > 0}
                   onClear={() => {
                     setSelectedTags([]);
                     onRefineSearch(buildFilters({ tags: [] }));

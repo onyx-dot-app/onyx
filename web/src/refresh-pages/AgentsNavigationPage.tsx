@@ -466,7 +466,7 @@ export default function AgentsNavigationPage() {
               <Popover.Trigger asChild>
                 <FilterButton
                   icon={SvgUser}
-                  state={selectedCreatorIds.size > 0 ? "selected" : "empty"}
+                  active={selectedCreatorIds.size > 0}
                   onClear={() => setSelectedCreatorIds(new Set())}
                 >
                   {creatorFilterButtonText}
@@ -537,10 +537,8 @@ export default function AgentsNavigationPage() {
               <Popover.Trigger asChild>
                 <FilterButton
                   icon={SvgActions}
-                  state={
+                  active={
                     selectedActionIds.size > 0 || selectedMcpServerIds.size > 0
-                      ? "selected"
-                      : "empty"
                   }
                   onClear={() => {
                     setSelectedActionIds(new Set());

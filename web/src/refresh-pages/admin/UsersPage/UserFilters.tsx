@@ -168,7 +168,7 @@ export default function UserFilters({
           <FilterButton
             aria-label="Filter by role"
             icon={SvgUsers}
-            state={hasRoleFilter ? "selected" : "empty"}
+            active={hasRoleFilter}
             onClear={() => onRolesChange([])}
           >
             {roleLabel}
@@ -216,7 +216,7 @@ export default function UserFilters({
           <FilterButton
             aria-label="Filter by group"
             icon={SvgUsers}
-            state={hasGroupFilter ? "selected" : "empty"}
+            active={hasGroupFilter}
             onClear={() => onGroupsChange([])}
           >
             {groupLabel}
@@ -271,7 +271,7 @@ export default function UserFilters({
           <FilterButton
             aria-label="Filter by status"
             icon={SvgUsers}
-            state={hasStatusFilter ? "selected" : "empty"}
+            active={hasStatusFilter}
             onClear={() => onStatusesChange([])}
           >
             {statusLabel}

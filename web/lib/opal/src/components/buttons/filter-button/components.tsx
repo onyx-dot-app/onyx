@@ -1,7 +1,6 @@
 import {
   Interactive,
   type InteractiveStatefulInteraction,
-  type InteractiveStatefulState,
   type InteractiveStatefulProps,
 } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
@@ -24,8 +23,8 @@ interface FilterButtonProps
   /** Label text between icon and trailing indicator. */
   children: string;
 
-  /** Whether the filter is active (has a selection). */
-  state?: Extract<InteractiveStatefulState, "empty" | "selected">;
+  /** Whether the filter has an active selection. @default false */
+  active?: boolean;
 
   /** Called when the clear (X) button is clicked in active state. */
   onClear?: () => void;
@@ -47,6 +46,7 @@ function FilterButton({
   onClear,
   tooltip,
   tooltipSide = "top",
+  active = false,
   ...statefulProps
 }: FilterButtonProps) {
   // Derive open state: explicit prop > bounding-box hover > Radix data-state
@@ -56,14 +56,12 @@ function FilterButton({
   const resolvedInteraction: InteractiveStatefulInteraction =
     statefulProps.interaction ?? dataState === "open" ? "hover" : "rest";
 
-  const isSelected = statefulProps.state === "selected";
-
   const button = (
     <div className="relative">
       <Interactive.Stateful
         variant="select-filter"
         interaction={resolvedInteraction}
-        state={statefulProps.state}
+        state={active ? "selected" : "empty"}
         {...statefulProps}
       >
         <Interactive.Container type="button">
@@ -72,7 +70,7 @@ function FilterButton({
             <span className="whitespace-nowrap font-main-ui-action">
               {children}
             </span>
-            {isSelected ? (
+            {active ? (
               /* Invisible spacer — reserves the same space as the chevron
                  so the absolutely-positioned clear Button overlays it
                  without shifting layout. */
@@ -84,7 +82,7 @@ function FilterButton({
         </Interactive.Container>
       </Interactive.Stateful>
 
-      {isSelected && (
+      {active && (
         <div className="absolute right-2 top-1/2 -translate-y-1/2">
           <Button
             icon={SvgX}
