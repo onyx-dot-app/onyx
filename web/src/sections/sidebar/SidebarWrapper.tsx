@@ -38,7 +38,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   );
 
   return (
-    <div className="flex items-center pt-3 px-2 justify-between">
+    <div className="flex flex-row justify-between items-start pt-3 px-2">
       {folded === undefined ? (
         logo
       ) : folded && logoDisplayStyle !== "name_only" ? (
