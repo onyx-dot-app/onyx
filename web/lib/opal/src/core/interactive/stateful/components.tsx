@@ -14,6 +14,7 @@ type InteractiveStatefulVariant =
   | "select-light"
   | "select-heavy"
   | "select-tinted"
+  | "select-filter"
   | "sidebar";
 type InteractiveStatefulState = "empty" | "filled" | "selected";
 type InteractiveStatefulInteraction = "rest" | "hover" | "active";
@@ -30,6 +31,8 @@ interface InteractiveStatefulProps
    *
    * - `"select-light"` — transparent selected background (for inline toggles)
    * - `"select-heavy"` — tinted selected background (for list rows, model pickers)
+   * - `"select-tinted"` — like select-heavy but with a tinted rest background
+   * - `"select-filter"` — like select-tinted for empty/filled; selected state uses inverted tint backgrounds and inverted text (for filter buttons)
    * - `"sidebar"` — for sidebar navigation items
    *
    * @default "select-heavy"

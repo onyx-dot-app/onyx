@@ -1,4 +1,3 @@
-import "@opal/components/tooltip.css";
 import {
   Interactive,
   type InteractiveStatefulState,

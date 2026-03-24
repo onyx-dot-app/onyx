@@ -309,6 +309,89 @@
 }
 
 /* ===========================================================================
+   Select-Filter — empty/filled identical to Select-Tinted;
+   selected uses inverted tint backgrounds and inverted text
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Select-Filter — Empty & Filled (identical colors)
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  ) {
+  @apply bg-background-tint-01;
+  --interactive-foreground: var(--text-02);
+  --interactive-foreground-icon: var(--text-02);
+}
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  ):hover:not([data-disabled]),
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  )[data-interaction="hover"]:not([data-disabled]) {
+  @apply bg-background-tint-02;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-04);
+}
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  ):active:not([data-disabled]),
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  )[data-interaction="active"]:not([data-disabled]) {
+  @apply bg-background-neutral-00;
+  --interactive-foreground: var(--text-05);
+  --interactive-foreground-icon: var(--text-05);
+}
+.interactive[data-interactive-variant="select-filter"]:is(
+    [data-interactive-state="empty"],
+    [data-interactive-state="filled"]
+  )[data-disabled] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Select-Filter — Selected
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"] {
+  @apply bg-background-tint-inverted-03;
+  --interactive-foreground: var(--text-inverted-05);
+  --interactive-foreground-icon: var(--text-inverted-05);
+}
+.interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"][data-interaction="hover"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-inverted-04;
+  --interactive-foreground: var(--text-inverted-05);
+  --interactive-foreground-icon: var(--text-inverted-05);
+}
+.interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"]:active:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"][data-interaction="active"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-inverted-04;
+  --interactive-foreground: var(--text-inverted-04);
+  --interactive-foreground-icon: var(--text-inverted-04);
+}
+.interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"][data-disabled] {
+  @apply bg-background-neutral-04;
+  --interactive-foreground: var(--text-inverted-04);
+  --interactive-foreground-icon: var(--text-inverted-02);
+}
+
+/* ===========================================================================
    Sidebar
    =========================================================================== */
 

@@ -1,4 +1,3 @@
-import "@opal/components/tooltip.css";
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
 import type { TooltipSide } from "@opal/components";
