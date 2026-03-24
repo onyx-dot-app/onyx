@@ -69,8 +69,13 @@ class BaseFilters(BaseModel):
 
 
 class UserFileFilters(BaseModel):
-    project_id: int | None = None
-    persona_id: int | None = None
+    # Scopes search to user files tagged with a given project/persona in Vespa.
+    # These are NOT simply the IDs of the current project or persona — they are
+    # only set when the persona's/project's user files overflowed the LLM
+    # context window and must be searched via vector DB instead of being loaded
+    # directly into the prompt.
+    project_id_filter: int | None = None
+    persona_id_filter: int | None = None
 
 
 class AssistantKnowledgeFilters(BaseModel):

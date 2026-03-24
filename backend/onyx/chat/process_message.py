@@ -399,13 +399,13 @@ def determine_search_params(
     """
     is_custom_persona = persona_id != DEFAULT_PERSONA_ID
 
-    search_project_id: int | None = None
-    search_persona_id: int | None = None
+    project_id_filter: int | None = None
+    persona_id_filter: int | None = None
     if extracted_context_files.use_as_search_filter:
         if is_custom_persona:
-            search_persona_id = persona_id
+            persona_id_filter = persona_id
         else:
-            search_project_id = project_id
+            project_id_filter = project_id
 
     search_usage = SearchToolUsage.AUTO
     if not is_custom_persona and project_id:
@@ -418,8 +418,8 @@ def determine_search_params(
             search_usage = SearchToolUsage.DISABLED
 
     return SearchParams(
-        search_project_id=search_project_id,
-        search_persona_id=search_persona_id,
+        project_id_filter=project_id_filter,
+        persona_id_filter=persona_id_filter,
         search_usage=search_usage,
     )
 
@@ -711,8 +711,8 @@ def handle_stream_message_objects(
             llm=llm,
             search_tool_config=SearchToolConfig(
                 user_selected_filters=new_msg_req.internal_search_filters,
-                project_id=search_params.search_project_id,
-                persona_id=search_params.search_persona_id,
+                project_id_filter=search_params.project_id_filter,
+                persona_id_filter=search_params.persona_id_filter,
                 bypass_acl=bypass_acl,
                 slack_context=slack_context,
                 enable_slack_search=_should_enable_slack_search(

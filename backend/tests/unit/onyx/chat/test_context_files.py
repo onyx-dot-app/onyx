@@ -324,7 +324,7 @@ class TestExtractContextFiles:
 
 class TestSearchFilterDetermination:
     """Verify that determine_search_params correctly resolves
-    search_project_id, search_persona_id, and search_usage based on
+    project_id_filter, persona_id_filter, and search_usage based on
     the extraction result and the precedence rule.
     """
 
@@ -353,8 +353,8 @@ class TestSearchFilterDetermination:
                 uncapped_token_count=100,
             ),
         )
-        assert result.search_project_id is None
-        assert result.search_persona_id is None
+        assert result.project_id_filter is None
+        assert result.persona_id_filter is None
         assert result.search_usage == SearchToolUsage.AUTO
 
     def test_custom_persona_files_overflow_persona_filter(self) -> None:
@@ -364,8 +364,8 @@ class TestSearchFilterDetermination:
             project_id=99,
             extracted_context_files=self._make_context(use_as_search_filter=True),
         )
-        assert result.search_persona_id == 42
-        assert result.search_project_id is None
+        assert result.persona_id_filter == 42
+        assert result.project_id_filter is None
         assert result.search_usage == SearchToolUsage.AUTO
 
     def test_custom_persona_no_files_no_project_leak(self) -> None:
@@ -375,8 +375,8 @@ class TestSearchFilterDetermination:
             project_id=99,
             extracted_context_files=self._make_context(),
         )
-        assert result.search_project_id is None
-        assert result.search_persona_id is None
+        assert result.project_id_filter is None
+        assert result.persona_id_filter is None
         assert result.search_usage == SearchToolUsage.AUTO
 
     def test_default_persona_project_files_fit_disables_search(self) -> None:
@@ -389,7 +389,7 @@ class TestSearchFilterDetermination:
                 uncapped_token_count=100,
             ),
         )
-        assert result.search_project_id is None
+        assert result.project_id_filter is None
         assert result.search_usage == SearchToolUsage.DISABLED
 
     def test_default_persona_project_files_overflow_enables_search(self) -> None:
@@ -402,8 +402,8 @@ class TestSearchFilterDetermination:
                 uncapped_token_count=7000,
             ),
         )
-        assert result.search_project_id == 99
-        assert result.search_persona_id is None
+        assert result.project_id_filter == 99
+        assert result.persona_id_filter is None
         assert result.search_usage == SearchToolUsage.ENABLED
 
     def test_default_persona_no_project_auto(self) -> None:
@@ -413,7 +413,7 @@ class TestSearchFilterDetermination:
             project_id=None,
             extracted_context_files=self._make_context(),
         )
-        assert result.search_project_id is None
+        assert result.project_id_filter is None
         assert result.search_usage == SearchToolUsage.AUTO
 
     def test_default_persona_project_no_files_disables_search(self) -> None:

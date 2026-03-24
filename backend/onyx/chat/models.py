@@ -177,8 +177,8 @@ class ExtractedContextFiles(BaseModel):
 class SearchParams(BaseModel):
     """Resolved search filter IDs and search-tool usage for a chat turn."""
 
-    search_project_id: int | None
-    search_persona_id: int | None
+    project_id_filter: int | None
+    persona_id_filter: int | None
     search_usage: SearchToolUsage
 
 
