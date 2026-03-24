@@ -187,7 +187,10 @@ for (const theme of THEMES) {
           /\//g,
           "-"
         )}`;
-        await expectScreenshot(page, { name: screenshotName });
+        await expectScreenshot(page, {
+          name: screenshotName,
+          mask: ['[data-testid="admin-date-range-selector-button"]'],
+        });
       });
     }
   });
