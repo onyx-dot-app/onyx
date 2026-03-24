@@ -679,24 +679,16 @@ const MemoizedAppSidebarInner = memo(
             scrollKey="app-sidebar"
             footer={settingsButton}
             pinnedContent={
-              folded ? (
-                <div className="flex flex-col">
-                  {newSessionButton}
-                  {searchChatsButton}
-                  {isOnyxCraftEnabled && buildButton}
-                  {moreAgentsButton}
-                  {newProjectButton}
-                </div>
-              ) : (
-                <div className="flex flex-col">
-                  {newSessionButton}
-                  {searchChatsButton}
-                  {isOnyxCraftEnabled && buildButton}
-                </div>
-              )
+              <div className="flex flex-col">
+                {newSessionButton}
+                {searchChatsButton}
+                {isOnyxCraftEnabled && buildButton}
+                {folded && moreAgentsButton}
+                {folded && newProjectButton}
+              </div>
             }
           >
-            {/* When folded, all nav buttons are in topContent — nothing here */}
+            {/* When folded, all nav buttons are in pinnedContent — nothing here */}
             {folded ? null : isLoadingDynamicContent ? null : (
               <>
                 {/* Agents */}
