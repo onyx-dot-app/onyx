@@ -34,8 +34,7 @@ export default function HooksContent() {
 
   useEffect(() => {
     if (error) {
-      console.error("Failed to load hook specs", error);
-      toast.error("Failed to load hook specs");
+      toast.error("Failed to load hook specifications.");
     }
   }, [error]);
 
