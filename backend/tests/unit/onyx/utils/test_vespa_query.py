@@ -1,7 +1,6 @@
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
-from uuid import UUID
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
@@ -11,10 +10,10 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
-from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
+from onyx.document_index.vespa_constants import PERSONAS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import USER_PROJECT
@@ -151,31 +150,6 @@ class TestBuildVespaFilters:
         result = build_vespa_filters(filters)
         assert f"!({HIDDEN}=true) and " == result
 
-    def test_user_file_ids_filter(self) -> None:
-        """Test user file IDs filtering."""
-        id1 = UUID("00000000-0000-0000-0000-000000000123")
-        id2 = UUID("00000000-0000-0000-0000-000000000456")
-
-        # Single user file ID (UUID)
-        filters = IndexFilters(access_control_list=[], user_file_ids=[id1])
-        result = build_vespa_filters(filters)
-        assert (
-            f'!({HIDDEN}=true) and ({DOCUMENT_ID} contains "{str(id1)}") and ' == result
-        )
-
-        # Multiple user file IDs (UUIDs)
-        filters = IndexFilters(access_control_list=[], user_file_ids=[id1, id2])
-        result = build_vespa_filters(filters)
-        assert (
-            f'!({HIDDEN}=true) and ({DOCUMENT_ID} contains "{str(id1)}" or {DOCUMENT_ID} contains "{str(id2)}") and '
-            == result
-        )
-
-        # Empty user file IDs
-        filters = IndexFilters(access_control_list=[], user_file_ids=[])
-        result = build_vespa_filters(filters)
-        assert f"!({HIDDEN}=true) and " == result
-
     def test_user_project_filter(self) -> None:
         """Test user project filtering.
 
@@ -188,14 +162,13 @@ class TestBuildVespaFilters:
         result = build_vespa_filters(filters)
         assert f"!({HIDDEN}=true) and " == result
 
-        # project_id with user_file_ids → both OR'd
-        id1 = UUID("00000000-0000-0000-0000-000000000123")
+        # project_id with document_set → both OR'd
         filters = IndexFilters(
-            access_control_list=[], project_id=789, user_file_ids=[id1]
+            access_control_list=[], project_id=789, document_set=["set1"]
         )
         result = build_vespa_filters(filters)
         assert (
-            f'!({HIDDEN}=true) and (({DOCUMENT_ID} contains "{str(id1)}") or ({USER_PROJECT} contains "789")) and '
+            f'!({HIDDEN}=true) and (({DOCUMENT_SETS} contains "set1") or ({USER_PROJECT} contains "789")) and '
             == result
         )
 
@@ -233,17 +206,16 @@ class TestBuildVespaFilters:
     def test_combined_filters(self) -> None:
         """Test combining multiple filter types.
 
-        Knowledge-scope filters (document_set, user_file_ids, project_id,
-        persona_id) are OR'd together, while all other filters are AND'd.
+        Knowledge-scope filters (document_set, project_id, persona_id)
+        are OR'd together, while all other filters are AND'd.
         """
-        id1 = UUID("00000000-0000-0000-0000-000000000123")
         filters = IndexFilters(
             access_control_list=["user1", "group1"],
             source_type=[DocumentSource.WEB],
             tags=[Tag(tag_key="color", tag_value="red")],
             document_set=["set1"],
-            user_file_ids=[id1],
             project_id=789,
+            persona_id=42,
             time_cutoff=datetime(2023, 1, 1, tzinfo=timezone.utc),
         )
 
@@ -254,9 +226,10 @@ class TestBuildVespaFilters:
         expected += f'({SOURCE_TYPE} contains "web") and '
         expected += f'({METADATA_LIST} contains "color{INDEX_SEPARATOR}red") and '
         # Knowledge scope filters are OR'd together
+        # (persona_id is primary, project_id is additive — order reflects this)
         expected += (
             f'(({DOCUMENT_SETS} contains "set1")'
-            f' or ({DOCUMENT_ID} contains "{str(id1)}")'
+            f' or ({PERSONAS} contains "42")'
             f' or ({USER_PROJECT} contains "789")'
             f") and "
         )
@@ -276,18 +249,35 @@ class TestBuildVespaFilters:
         result = build_vespa_filters(filters)
         assert f'!({HIDDEN}=true) and ({DOCUMENT_SETS} contains "set1") and ' == result
 
-    def test_knowledge_scope_document_set_and_user_files_ored(self) -> None:
-        """Document set filter and user file IDs must be OR'd so that
-        connector documents (in the set) and user files (with specific
-        IDs) can both be found."""
-        id1 = UUID("00000000-0000-0000-0000-000000000123")
+    def test_persona_id_is_primary_knowledge_scope(self) -> None:
+        """persona_id alone should trigger a knowledge scope restriction
+        (a persona with user files IS explicit knowledge)."""
+        filters = IndexFilters(access_control_list=[], persona_id=42)
+        result = build_vespa_filters(filters)
+        assert f'!({HIDDEN}=true) and ({PERSONAS} contains "42") and ' == result
+
+    def test_persona_id_with_project_id(self) -> None:
+        """When persona_id triggers the scope, project_id should be
+        OR'd in additively."""
+        filters = IndexFilters(access_control_list=[], persona_id=42, project_id=789)
+        result = build_vespa_filters(filters)
+        expected = (
+            f"!({HIDDEN}=true) and "
+            f'(({PERSONAS} contains "42") or ({USER_PROJECT} contains "789")) and '
+        )
+        assert expected == result
+
+    def test_knowledge_scope_document_set_and_persona_ored(self) -> None:
+        """Document set filter and persona_id must be OR'd so that
+        connector documents (in the set) and persona user files can
+        both be found."""
         filters = IndexFilters(
             access_control_list=[],
             document_set=["engineering"],
-            user_file_ids=[id1],
+            persona_id=42,
         )
         result = build_vespa_filters(filters)
-        expected = f'!({HIDDEN}=true) and (({DOCUMENT_SETS} contains "engineering") or ({DOCUMENT_ID} contains "{str(id1)}")) and '
+        expected = f'!({HIDDEN}=true) and (({DOCUMENT_SETS} contains "engineering") or ({PERSONAS} contains "42")) and '
         assert expected == result
 
     def test_acl_large_list_uses_weighted_set(self) -> None:

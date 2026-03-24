@@ -2,7 +2,6 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -70,7 +69,6 @@ class BaseFilters(BaseModel):
 
 
 class UserFileFilters(BaseModel):
-    user_file_ids: list[UUID] | None = None
     project_id: int | None = None
     persona_id: int | None = None
 

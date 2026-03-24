@@ -764,7 +764,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             tags=None,
             access_control_list=access_control_list,
             tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
-            user_file_ids=None,
             project_id=None,
         )
 
