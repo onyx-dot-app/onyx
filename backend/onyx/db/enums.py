@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from enum import Enum as PyEnum
+from typing import ClassVar
 
 
 class AccountType(str, PyEnum):
@@ -375,3 +378,17 @@ class Permission(str, PyEnum):
 
     # Override — any permission check passes
     FULL_ADMIN_PANEL_ACCESS = "admin"
+
+    # Permissions that are implied by other grants and must never be stored
+    # directly in the permission_grant table.
+    IMPLIED: ClassVar[frozenset[Permission]]
+
+
+Permission.IMPLIED = frozenset(
+    {
+        Permission.VIEW_CONNECTORS,
+        Permission.VIEW_DOCUMENT_SETS,
+        Permission.VIEW_AGENTS,
+        Permission.VIEW_USERS,
+    }
+)

@@ -4015,6 +4015,14 @@ class PermissionGrant(Base):
         "UserGroup", back_populates="permission_grants"
     )
 
+    @validates("permission")
+    def _validate_permission(self, _key: str, value: Permission) -> Permission:
+        if value in Permission.IMPLIED:
+            raise ValueError(
+                f"{value!r} is an implied permission and cannot be granted directly"
+            )
+        return value
+
 
 class UserGroup__ConnectorCredentialPair(Base):
     __tablename__ = "user_group__connector_credential_pair"
