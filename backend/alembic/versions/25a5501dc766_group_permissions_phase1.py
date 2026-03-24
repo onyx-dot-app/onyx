@@ -1,7 +1,7 @@
 """group_permissions_phase1
 
 Revision ID: 25a5501dc766
-Revises: 689433b0d8de
+Revises: b728689f45b1
 Create Date: 2026-03-23 11:41:25.557442
 
 """
@@ -17,7 +17,7 @@ from onyx.db.enums import Permission
 
 # revision identifiers, used by Alembic.
 revision = "25a5501dc766"
-down_revision = "689433b0d8de"
+down_revision = "b728689f45b1"
 branch_labels = None
 depends_on = None
 
