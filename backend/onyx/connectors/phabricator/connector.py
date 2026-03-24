@@ -36,7 +36,7 @@ def _ph_to_doc(doc: dict[str, Any], doc_base : str) -> Document:
         path=doc['path'],
         doc_updated_at=datetime.datetime.fromtimestamp(doc['date_modified'], tz=datetime.timezone.utc),
         id=doc['PHID'],
-        sections=[TextSection(text=doc['content'], link=doc_base + doc['path'])],
+        sections=[TextSection(text=doc['content'], link=doc_base + doc['path'].lstrip('/'))],
         metadata={},
         source=DocumentSource.PHABRICATOR,
     )
