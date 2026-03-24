@@ -530,6 +530,11 @@ class NotionConnector(LoadConnector, PollConnector):
         # Discover all data sources under this database, then query each one.
         # Even legacy single-source databases have one entry in the array.
         data_sources = self._fetch_data_sources_for_database(database_id)
+        if not data_sources:
+            logger.warning(
+                f"Database '{database_id}' returned zero data sources — "
+                f"no pages will be indexed from this database."
+            )
         for ds_id, _ds_name in data_sources:
             self._data_source_to_database_map[ds_id] = database_id
             cursor = None
