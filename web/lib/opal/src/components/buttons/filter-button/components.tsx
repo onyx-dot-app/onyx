@@ -27,7 +27,7 @@ interface FilterButtonProps
   active?: boolean;
 
   /** Called when the clear (X) button is clicked in active state. */
-  onClear?: () => void;
+  onClear: () => void;
 
   /** Tooltip text shown on hover. */
   tooltip?: string;
