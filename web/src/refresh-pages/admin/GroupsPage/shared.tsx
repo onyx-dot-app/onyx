@@ -104,5 +104,3 @@ export const memberTableColumns = [
   ...baseColumns,
   tc.actions({ showSorting: false }),
 ];
-
-export { tc };
