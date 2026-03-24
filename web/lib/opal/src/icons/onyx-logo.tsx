@@ -1,19 +1,27 @@
 import type { IconProps } from "@opal/types";
-
 const SvgOnyxLogo = ({ size, ...props }: IconProps) => (
   <svg
-    width={size}
     height={size}
-    viewBox="0 0 56 56"
+    viewBox="0 0 64 64"
+    fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    stroke="currentColor"
     {...props}
   >
     <path
-      fillRule="evenodd"
-      clipRule="evenodd"
-      d="M28 0 10.869 7.77 28 15.539l17.131-7.77L28 0Zm0 40.461-17.131 7.77L28 56l17.131-7.77L28 40.461Zm20.231-29.592L56 28.001l-7.769 17.131L40.462 28l7.769-17.131ZM15.538 28 7.77 10.869 0 28l7.769 17.131L15.538 28Z"
-      fill="currentColor"
+      d="M10.4014 13.25L18.875 32L10.3852 50.75L2 32L10.4014 13.25Z"
+      fill="var(--theme-primary-05)"
+    />
+    <path
+      d="M53.5264 13.25L62 32L53.5102 50.75L45.125 32L53.5264 13.25Z"
+      fill="var(--theme-primary-05)"
+    />
+    <path
+      d="M32 45.125L50.75 53.5625L32 62L13.25 53.5625L32 45.125Z"
+      fill="var(--theme-primary-05)"
+    />
+    <path
+      d="M32 2L50.75 10.4375L32 18.875L13.25 10.4375L32 2Z"
+      fill="var(--theme-primary-05)"
     />
   </svg>
 );
