@@ -2,8 +2,10 @@ import pickle
 import tempfile
 from collections import defaultdict
 from collections.abc import Callable
-from collections.abc import Iterable
-from typing import cast
+from collections.abc import Generator
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Protocol
 
 from pydantic import BaseModel
@@ -226,7 +228,10 @@ class EmbedStream:
         self._tmpdir = tmpdir
 
     def stream(self) -> Iterator[IndexChunk]:
-        for batch_file in sorted(self._tmpdir.glob("batch_*.pkl")):
+        for batch_file in sorted(
+            self._tmpdir.glob("batch_*.pkl"),
+            key=lambda p: int(p.stem.removeprefix("batch_")),
+        ):
             with open(batch_file, "rb") as f:
                 batch: list[IndexChunk] = pickle.load(f)
             yield from batch
@@ -878,13 +883,15 @@ def index_doc_batch(
         enricher = adapter.prepare_enrichment(
             context=context,
             tenant_id=tenant_id,
-            chunks=cast(list[DocAwareChunk], chunks_with_embeddings),
+            chunks=chunks,
         )
 
-        metadata_aware_chunks = [
-            enricher.enrich_chunk(chunk, score)
-            for chunk, score in zip(chunks_with_embeddings, chunk_content_scores)
-        ]
+        index_batch_params = IndexBatchParams(
+            doc_id_to_previous_chunk_cnt=enricher.doc_id_to_previous_chunk_cnt,
+            doc_id_to_new_chunk_cnt=enricher.doc_id_to_new_chunk_cnt,
+            tenant_id=tenant_id,
+            large_chunks_enabled=chunker.enable_large_chunks,
+        )
 
         embedding_failed_doc_ids = {
             f.failed_document.document_id
@@ -899,7 +906,9 @@ def index_doc_batch(
             return metadata_aware_chunks
 
         for document_index in document_indices:
-
+            # A document will not be spread across different batches, so all the
+            # documents with chunks in this set, are fully represented by the chunks
+            # in this set
             def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
                 for chunk in embed_stream.stream():
                     yield enricher.enrich_chunk(chunk, 1.0)
