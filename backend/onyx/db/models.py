@@ -3992,7 +3992,11 @@ class User__UserGroup(Base):
 class PermissionGrant(Base):
     __tablename__ = "permission_grant"
 
-    __table_args__ = (UniqueConstraint("group_id", "permission"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "group_id", "permission", name="uq_permission_grant_group_permission"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     group_id: Mapped[int] = mapped_column(
@@ -4011,7 +4015,7 @@ class PermissionGrant(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     is_deleted: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
     group: Mapped["UserGroup"] = relationship(

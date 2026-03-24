@@ -23,8 +23,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 1. Add account_type column to user table (nullable for now,
-    #    a future migration will backfill and set NOT NULL)
+    # 1. Add account_type column to user table (nullable for now).
+    #    TODO(subash): backfill account_type for existing rows and add NOT NULL.
     op.add_column(
         "user",
         sa.Column(
@@ -88,7 +88,9 @@ def upgrade() -> None:
             ["user.id"],
             ondelete="SET NULL",
         ),
-        sa.UniqueConstraint("group_id", "permission"),
+        sa.UniqueConstraint(
+            "group_id", "permission", name="uq_permission_grant_group_permission"
+        ),
     )
 
     # 4. Index on user__user_group(user_id) — existing composite PK
