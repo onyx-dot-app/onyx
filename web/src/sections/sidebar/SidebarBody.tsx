@@ -4,7 +4,7 @@ import React from "react";
 import OverflowDiv from "@/refresh-components/OverflowDiv";
 
 export interface SidebarBodyProps {
-  actionButtons?: React.ReactNode;
+  pinnedContent?: React.ReactNode;
   children?: React.ReactNode;
   footer?: React.ReactNode;
   /**
@@ -15,21 +15,14 @@ export interface SidebarBodyProps {
 }
 
 export default function SidebarBody({
-  actionButtons,
+  pinnedContent,
   children,
   footer,
   scrollKey,
 }: SidebarBodyProps) {
   return (
     <div className="flex flex-col min-h-0 h-full gap-3">
-      <div className="flex flex-col gap-1.5 px-2">
-        {actionButtons &&
-          (Array.isArray(actionButtons)
-            ? actionButtons.map((button, index) => (
-                <div key={index}>{button}</div>
-              ))
-            : actionButtons)}
-      </div>
+      {pinnedContent && <div className="px-2">{pinnedContent}</div>}
       <OverflowDiv className="gap-3 px-2" scrollKey={scrollKey}>
         {children}
       </OverflowDiv>
