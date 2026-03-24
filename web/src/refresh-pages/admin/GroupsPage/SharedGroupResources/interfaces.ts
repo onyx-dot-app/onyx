@@ -10,3 +10,10 @@ export interface PopoverSection {
   label?: string;
   items: PopoverItem[];
 }
+
+export interface ResourcePopoverProps {
+  placeholder: string;
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+  sections: PopoverSection[];
+}

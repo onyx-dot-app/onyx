@@ -8,14 +8,8 @@ import Popover from "@/refresh-components/Popover";
 import Separator from "@/refresh-components/Separator";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
-import type { PopoverSection } from "./interfaces";
-
-interface ResourcePopoverProps {
-  placeholder: string;
-  searchValue: string;
-  onSearchChange: (value: string) => void;
-  sections: PopoverSection[];
-}
+import { cn } from "@/lib/utils";
+import type { ResourcePopoverProps } from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/interfaces";
 
 function ResourcePopover({
   placeholder,
@@ -89,11 +83,12 @@ function ResourcePopover({
                       {section.items.map((item) => (
                         <div
                           key={item.key}
-                          className={
+                          className={cn(
+                            "rounded-08 cursor-pointer",
                             item.disabled
-                              ? "rounded-08 bg-background-tint-02 cursor-pointer"
-                              : "rounded-08 cursor-pointer hover:bg-background-tint-02 transition-colors"
-                          }
+                              ? "bg-background-tint-02"
+                              : "hover:bg-background-tint-02 transition-colors"
+                          )}
                           onClick={() => {
                             item.onSelect();
                           }}

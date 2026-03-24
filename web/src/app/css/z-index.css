@@ -2,6 +2,8 @@
   /* Base layers */
   --z-base: 0;
   --z-content: 1;
+  /* Settings header must sit above sticky table headers (--z-sticky: 10) so
+     the page header scrolls over pinned columns without being obscured. */
   --z-settings-header: 11;
   --z-app-layout: 9;
   --z-sticky: 10;

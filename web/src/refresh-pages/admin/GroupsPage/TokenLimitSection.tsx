@@ -32,6 +32,16 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
   const nextKeyRef = useRef(limits.length);
   const keysRef = useRef<number[]>(limits.map((_, i) => i));
 
+  // Sync keys if the parent provides a different number of limits externally
+  // (e.g. loaded from server after initial mount).
+  if (keysRef.current.length < limits.length) {
+    while (keysRef.current.length < limits.length) {
+      keysRef.current.push(nextKeyRef.current++);
+    }
+  } else if (keysRef.current.length > limits.length) {
+    keysRef.current = keysRef.current.slice(0, limits.length);
+  }
+
   function addLimit() {
     const emptyIndex = limits.findIndex(
       (l) => l.tokenBudget === null && l.periodHours === null
@@ -107,7 +117,7 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
                   <InputNumber
                     value={limit.periodHours}
                     onChange={(v) => updateLimit(i, "periodHours", v)}
-                    min={0}
+                    min={1}
                     placeholder="24"
                   />
                 </div>

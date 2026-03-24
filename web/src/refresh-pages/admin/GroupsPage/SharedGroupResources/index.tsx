@@ -40,11 +40,7 @@ function SharedBadge() {
   );
 }
 
-interface SourceIconStackProps {
-  sources: { source: ValidSources }[];
-}
-
-function SourceIconStack({ sources }: SourceIconStackProps) {
+function SourceIconStack({ sources }: { sources: { source: ValidSources }[] }) {
   if (sources.length === 0) return null;
 
   const unique = Array.from(
@@ -52,7 +48,13 @@ function SourceIconStack({ sources }: SourceIconStackProps) {
   ).slice(0, 3);
 
   return (
-    <div className="flex items-center shrink-0 px-0.5">
+    <Section
+      flexDirection="row"
+      alignItems="center"
+      height="auto"
+      gap={0}
+      className="shrink-0 px-0.5"
+    >
       {unique.map((s, i) => {
         const Icon = getSourceMetadata(s.source).icon;
         return (
@@ -65,7 +67,7 @@ function SourceIconStack({ sources }: SourceIconStackProps) {
           </div>
         );
       })}
-    </div>
+    </Section>
   );
 }
 

@@ -67,46 +67,46 @@ async function updateAgentGroupSharing(
   const added = currentAgentIds.filter((id) => !initialSet.has(id));
   const removed = initialAgentIds.filter((id) => !currentSet.has(id));
 
-  // For each added agent, add this group to its group_ids
-  for (const agentId of added) {
-    // Fetch current agent to get existing group associations
-    const agentRes = await fetch(`/api/persona/${agentId}`);
-    if (!agentRes.ok) {
-      throw new Error(`Failed to fetch agent ${agentId}`);
-    }
-    const agent = await agentRes.json();
-    const existingGroupIds: number[] = (agent.groups ?? []) as number[];
-    if (!existingGroupIds.includes(groupId)) {
-      existingGroupIds.push(groupId);
-    }
-    const shareRes = await fetch(`/api/persona/${agentId}/share`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ group_ids: existingGroupIds }),
-    });
-    if (!shareRes.ok) {
-      throw new Error(`Failed to share agent ${agentId} with group`);
-    }
-  }
-
-  // For each removed agent, remove this group from its group_ids
-  for (const agentId of removed) {
-    const agentRes = await fetch(`/api/persona/${agentId}`);
-    if (!agentRes.ok) {
-      throw new Error(`Failed to fetch agent ${agentId}`);
-    }
-    const agent = await agentRes.json();
-    const existingGroupIds: number[] = (agent.groups ?? []) as number[];
-    const filtered = existingGroupIds.filter((id) => id !== groupId);
-    const shareRes = await fetch(`/api/persona/${agentId}/share`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ group_ids: filtered }),
-    });
-    if (!shareRes.ok) {
-      throw new Error(`Failed to update agent ${agentId} sharing`);
-    }
-  }
+  await Promise.all([
+    // For each added agent, add this group to its group_ids
+    ...added.map(async (agentId) => {
+      const agentRes = await fetch(`/api/persona/${agentId}`);
+      if (!agentRes.ok) {
+        throw new Error(`Failed to fetch agent ${agentId}`);
+      }
+      const agent = await agentRes.json();
+      const existingGroupIds: number[] = (agent.groups ?? []) as number[];
+      if (!existingGroupIds.includes(groupId)) {
+        existingGroupIds.push(groupId);
+      }
+      const shareRes = await fetch(`/api/persona/${agentId}/share`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_ids: existingGroupIds }),
+      });
+      if (!shareRes.ok) {
+        throw new Error(`Failed to share agent ${agentId} with group`);
+      }
+    }),
+    // For each removed agent, remove this group from its group_ids
+    ...removed.map(async (agentId) => {
+      const agentRes = await fetch(`/api/persona/${agentId}`);
+      if (!agentRes.ok) {
+        throw new Error(`Failed to fetch agent ${agentId}`);
+      }
+      const agent = await agentRes.json();
+      const existingGroupIds: number[] = (agent.groups ?? []) as number[];
+      const filtered = existingGroupIds.filter((id) => id !== groupId);
+      const shareRes = await fetch(`/api/persona/${agentId}/share`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_ids: filtered }),
+      });
+      if (!shareRes.ok) {
+        throw new Error(`Failed to update agent ${agentId} sharing`);
+      }
+    }),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
