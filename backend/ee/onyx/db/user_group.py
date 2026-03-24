@@ -41,8 +41,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-BUILT_IN_GROUP_NAMES = {"Admin", "Basic"}
-
 
 def _cleanup_user__user_group_relationships__no_commit(
     db_session: Session,
@@ -811,12 +809,6 @@ def rename_user_group(
     db_user_group = db_session.scalar(stmt)
     if db_user_group is None:
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
-
-    if db_user_group.name in BUILT_IN_GROUP_NAMES:
-        raise ValueError(f"Built-in group '{db_user_group.name}' cannot be renamed.")
-
-    if new_name in BUILT_IN_GROUP_NAMES:
-        raise ValueError(f"'{new_name}' is a reserved group name and cannot be used.")
 
     _check_user_group_is_modifiable(db_user_group)
 
