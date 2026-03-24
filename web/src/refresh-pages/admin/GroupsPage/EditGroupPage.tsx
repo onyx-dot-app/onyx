@@ -18,7 +18,11 @@ import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import type { UserGroup } from "@/lib/types";
-import type { ApiKeyDescriptor, TokenRateLimitDisplay } from "./interfaces";
+import type {
+  ApiKeyDescriptor,
+  MemberRow,
+  TokenRateLimitDisplay,
+} from "./interfaces";
 import { apiKeyToMemberRow, memberTableColumns, PAGE_SIZE } from "./shared";
 import {
   USER_GROUP_URL,
@@ -202,6 +206,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       // Save token rate limits (create/update/delete)
       await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
 
+      // Update refs so subsequent saves diff correctly
+      initialAgentIdsRef.current = selectedAgentIds;
+      initialDocSetIdsRef.current = selectedDocSetIds;
+
       mutate(USER_GROUP_URL);
       mutate(`/api/admin/token-rate-limits/user-group/${groupId}`);
       toast.success(`Group "${trimmed}" updated`);
@@ -327,10 +335,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   leftSearchIcon
                 />
                 <Table
-                  data={allRows}
+                  data={allRows as MemberRow[]}
                   columns={memberTableColumns}
                   getRowId={(row) => row.id ?? row.email}
-                  qualifier="avatar"
                   pageSize={PAGE_SIZE}
                   searchTerm={searchTerm}
                   selectionBehavior="multi-select"
