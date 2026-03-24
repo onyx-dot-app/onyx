@@ -7,7 +7,6 @@ from typing import List
 from typing import Tuple
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,6 +21,8 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.token_limit import _get_cutoff_time
 from onyx.server.query_and_chat.token_limit import _is_rate_limited
 from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_global
@@ -63,9 +64,9 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
 
             if _is_rate_limited(user_rate_limits, user_usage):
-                raise HTTPException(
-                    status_code=429,
-                    detail="Token budget exceeded for user. Try again later.",
+                raise OnyxError(
+                    OnyxErrorCode.RATE_LIMITED,
+                    "Token budget exceeded for user. Try again later.",
                 )
 
 
@@ -119,9 +120,9 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
                     break
 
             if not has_at_least_one_untriggered_limit:
-                raise HTTPException(
-                    status_code=429,
-                    detail="Token budget exceeded for user's groups. Try again later.",
+                raise OnyxError(
+                    OnyxErrorCode.RATE_LIMITED,
+                    "Token budget exceeded for user's groups. Try again later.",
                 )
 
 

@@ -3,7 +3,6 @@ from collections.abc import Awaitable
 from collections.abc import Callable
 
 from fastapi import FastAPI
-from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
 
@@ -12,6 +11,8 @@ from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -76,7 +77,9 @@ async def _get_tenant_id_from_request(
             )
 
             if tenant_id and not is_valid_schema_name(tenant_id):
-                raise HTTPException(status_code=400, detail="Invalid tenant ID format")
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR, "Invalid tenant ID format"
+                )
 
         # Check for anonymous user cookie
         anonymous_user_cookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME)
@@ -90,8 +93,8 @@ async def _get_tenant_id_from_request(
                 )
 
                 if not tenant_id or not is_valid_schema_name(tenant_id):
-                    raise HTTPException(
-                        status_code=400, detail="Invalid tenant ID format"
+                    raise OnyxError(
+                        OnyxErrorCode.VALIDATION_ERROR, "Invalid tenant ID format"
                     )
 
                 return tenant_id
@@ -111,7 +114,7 @@ async def _get_tenant_id_from_request(
 
     except Exception as e:
         logger.error(f"Unexpected error in _get_tenant_id_from_request: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Internal server error")
 
     finally:
         if tenant_id:
