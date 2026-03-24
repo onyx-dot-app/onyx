@@ -272,7 +272,7 @@ def make_oauth_provider(
     return OAuthClientProvider(
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
-            client_name=f"Onyx - {mcp_server.name}",
+            client_name=f"PrivateGPT - {mcp_server.name}",
             redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],

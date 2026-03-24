@@ -1,7 +1,7 @@
 import { css } from "lit";
 
 /**
- * Onyx Chat Widget - Component Styles
+ * PrivateGPT Chat Widget - Component Styles
  * All styling for the main widget component
  */
 export const widgetStyles = css`

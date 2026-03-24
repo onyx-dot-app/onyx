@@ -1,12 +1,12 @@
 # =============================================================================
-# ONYX DOCKER COMPOSE
+# PRIVATEGPT DOCKER COMPOSE
 # =============================================================================
-# This is the default configuration for Onyx. This file is fairly configurable,
+# This is the default configuration for PrivateGPT. This file is fairly configurable,
 # also see env.template for possible settings.
 #
 # PRODUCTION DEPLOYMENT CHECKLIST:
 # To convert this setup to a production deployment following best practices,
-# follow the checklist below. Note that there are other ways to secure the Onyx
+# follow the checklist below. Note that there are other ways to secure the PrivateGPT
 # deployment so these are not strictly necessary for all teams.
 #
 # 1. SECURITY HARDENING:
@@ -46,7 +46,7 @@ services:
         - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "alembic upgrade head &&
-      echo \"Starting Onyx Api Server\" &&
+      echo \"Starting PrivateGPT Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     # Check env.template and copy to .env for env vars
     env_file:
@@ -88,7 +88,7 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
-      # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
+      # PrivateGPT Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
       # Use --include-craft with install script, or manually set in .env file
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
       - OUTPUTS_TEMPLATE_PATH=${OUTPUTS_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs}
@@ -175,7 +175,7 @@ services:
       # API Server connection for Discord bot message processing
       - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
       - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
-      # Onyx Craft configuration (set up automatically on container startup)
+      # PrivateGPT Craft configuration (set up automatically on container startup)
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
       - OUTPUTS_TEMPLATE_PATH=${OUTPUTS_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs}
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
@@ -216,7 +216,7 @@ services:
         - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
         # Enterprise Edition only
         - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
-        # DO NOT TURN ON unless you have EXPLICIT PERMISSION from Onyx.
+        # DO NOT TURN ON unless you have EXPLICIT PERMISSION from PrivateGPT.
         - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
         - NODE_OPTIONS=${NODE_OPTIONS:-"--max-old-space-size=4096"}
     env_file:
@@ -228,7 +228,7 @@ services:
     environment:
       - INTERNAL_URL=${INTERNAL_URL:-http://api_server:8080}
 
-  # Uncomment the block below to enable the MCP server for Onyx.
+  # Uncomment the block below to enable the MCP server for PrivateGPT.
   # mcp_server:
   #   image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
   #   build:

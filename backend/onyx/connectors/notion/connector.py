@@ -192,7 +192,7 @@ class NotionConnector(LoadConnector, PollConnector):
                 logger.error(
                     f"Unable to access block with ID '{block_id}'. "
                     f"This is likely due to the block not being shared "
-                    f"with the Onyx integration. Exact exception:\n\n{e}"
+                    f"with the PrivateGPT integration. Exact exception:\n\n{e}"
                 )
             else:
                 logger.exception(
@@ -280,7 +280,7 @@ class NotionConnector(LoadConnector, PollConnector):
                 logger.error(
                     f"Unable to access database with ID '{database_id}'. "
                     f"This is likely due to the database not being shared "
-                    f"with the Onyx integration. Exact exception:\n{e}"
+                    f"with the PrivateGPT integration. Exact exception:\n{e}"
                 )
                 return {"results": [], "next_cursor": None}
             logger.exception(f"Error fetching database - {res.json()}")

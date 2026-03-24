@@ -47,13 +47,13 @@ _WEBAPP_HMR_FIXER_TEMPLATE = (_TEMPLATES_DIR / "webapp_hmr_fixer.js").read_text(
 
 def require_onyx_craft_enabled(user: User = Depends(current_user)) -> User:
     """
-    Dependency that checks if Onyx Craft is enabled for the user.
-    Raises HTTP 403 if Onyx Craft is disabled via feature flag.
+    Dependency that checks if PrivateGPT Craft is enabled for the user.
+    Raises HTTP 403 if PrivateGPT Craft is disabled via feature flag.
     """
     if not is_onyx_craft_enabled(user):
         raise HTTPException(
             status_code=403,
-            detail="Onyx Craft is not available",
+            detail="PrivateGPT Craft is not available",
         )
     return user
 

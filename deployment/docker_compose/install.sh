@@ -51,27 +51,27 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
-            echo "Onyx Installation Script"
+            echo "PrivateGPT Installation Script"
             echo ""
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --include-craft  Enable Onyx Craft (AI-powered web app building)"
-            echo "  --lite           Deploy Onyx Lite (no Vespa, Redis, or model servers)"
+            echo "  --include-craft  Enable PrivateGPT Craft (AI-powered web app building)"
+            echo "  --lite           Deploy PrivateGPT Lite (no Vespa, Redis, or model servers)"
             echo "  --local          Use existing config files instead of downloading from GitHub"
-            echo "  --shutdown       Stop (pause) Onyx containers"
-            echo "  --delete-data    Remove all Onyx data (containers, volumes, and files)"
+            echo "  --shutdown       Stop (pause) PrivateGPT containers"
+            echo "  --delete-data    Remove all PrivateGPT data (containers, volumes, and files)"
             echo "  --no-prompt      Run non-interactively with defaults (for CI/automation)"
             echo "  --dry-run        Show what would be done without making changes"
             echo "  --verbose        Show detailed output for debugging"
             echo "  --help, -h       Show this help message"
             echo ""
             echo "Examples:"
-            echo "  $0                    # Install Onyx"
-            echo "  $0 --lite             # Install Onyx Lite (minimal deployment)"
-            echo "  $0 --include-craft    # Install Onyx with Craft enabled"
-            echo "  $0 --shutdown         # Pause Onyx services"
-            echo "  $0 --delete-data      # Completely remove Onyx and all data"
+            echo "  $0                    # Install PrivateGPT"
+            echo "  $0 --lite             # Install PrivateGPT Lite (minimal deployment)"
+            echo "  $0 --include-craft    # Install PrivateGPT with Craft enabled"
+            echo "  $0 --shutdown         # Pause PrivateGPT services"
+            echo "  $0 --delete-data      # Completely remove PrivateGPT and all data"
             echo "  $0 --local            # Re-run using existing config files on disk"
             echo "  $0 --no-prompt        # Non-interactive install with defaults"
             exit 0
@@ -261,11 +261,11 @@ print_warning() {
 # Handle shutdown mode
 if [ "$SHUTDOWN_MODE" = true ]; then
     echo ""
-    echo -e "${BLUE}${BOLD}=== Shutting down Onyx ===${NC}"
+    echo -e "${BLUE}${BOLD}=== Shutting down PrivateGPT ===${NC}"
     echo ""
-    
+
     if [ -d "${INSTALL_ROOT}/deployment" ]; then
-        print_info "Stopping Onyx containers..."
+        print_info "Stopping PrivateGPT containers..."
 
         # Check if docker-compose.yml exists
         if [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
@@ -282,7 +282,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
             # Stop containers (without removing them)
             (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) stop)
             if [ $? -eq 0 ]; then
-                print_success "Onyx containers stopped (paused)"
+                print_success "PrivateGPT containers stopped (paused)"
             else
                 print_error "Failed to stop containers"
                 exit 1
@@ -291,21 +291,21 @@ if [ "$SHUTDOWN_MODE" = true ]; then
             print_warning "docker-compose.yml not found in ${INSTALL_ROOT}/deployment"
         fi
     else
-        print_warning "Onyx data directory not found. Nothing to shutdown."
+        print_warning "PrivateGPT data directory not found. Nothing to shutdown."
     fi
 
     echo ""
-    print_success "Onyx shutdown complete!"
+    print_success "PrivateGPT shutdown complete!"
     exit 0
 fi
 
 # Handle delete data mode
 if [ "$DELETE_DATA_MODE" = true ]; then
     echo ""
-    echo -e "${RED}${BOLD}=== WARNING: This will permanently delete all Onyx data ===${NC}"
+    echo -e "${RED}${BOLD}=== WARNING: This will permanently delete all PrivateGPT data ===${NC}"
     echo ""
     print_warning "This action will remove:"
-    echo "  • All Onyx containers and volumes"
+    echo "  • All PrivateGPT containers and volumes"
     echo "  • All downloaded files and configurations"
     echo "  • All user data and documents"
     echo ""
@@ -322,7 +322,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
         exit 1
     fi
 
-    print_info "Removing Onyx containers and volumes..."
+    print_info "Removing PrivateGPT containers and volumes..."
 
     if [ -d "${INSTALL_ROOT}/deployment" ]; then
         # Check if docker-compose.yml exists
@@ -340,7 +340,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
             # Stop and remove containers with volumes
             (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) down -v)
             if [ $? -eq 0 ]; then
-                print_success "Onyx containers and volumes removed"
+                print_success "PrivateGPT containers and volumes removed"
             else
                 print_error "Failed to remove containers and volumes"
             fi
@@ -356,7 +356,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     fi
 
     echo ""
-    print_success "All Onyx data has been permanently deleted!"
+    print_success "All PrivateGPT data has been permanently deleted!"
     exit 0
 fi
 
@@ -412,7 +412,7 @@ if ! command -v docker &> /dev/null; then
     if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
         print_info "Docker is required but not installed."
         if ! confirm_action "Docker Engine"; then
-            print_error "Docker is required to run Onyx."
+            print_error "Docker is required to run PrivateGPT."
             exit 1
         fi
         install_docker_linux
@@ -433,7 +433,7 @@ if command -v docker &> /dev/null \
 
     print_info "Docker Compose is required but not installed."
     if ! confirm_action "Docker Compose plugin"; then
-        print_error "Docker Compose is required to run Onyx."
+        print_error "Docker Compose is required to run PrivateGPT."
         exit 1
     fi
     COMPOSE_ARCH="$(uname -m)"
@@ -492,13 +492,13 @@ echo " \____/|_| |_|\__, /_/\_\ "
 echo "               __/ |      "
 echo "              |___/       "
 echo -e "${NC}"
-echo "Welcome to Onyx Installation Script"
-echo "===================================="
+echo "Welcome to PrivateGPT Installation Script"
+echo "=========================================="
 echo ""
 
 # User acknowledgment section
 echo -e "${YELLOW}${BOLD}This script will:${NC}"
-echo "1. Download deployment files for Onyx into a new '${INSTALL_ROOT}' directory"
+echo "1. Download deployment files for PrivateGPT into a new '${INSTALL_ROOT}' directory"
 echo "2. Check your system resources (Docker, memory, disk space)"
 echo "3. Guide you through deployment options (version, authentication)"
 echo ""
@@ -687,7 +687,7 @@ fi
 
 if [ "$RESOURCE_WARNING" = true ]; then
     echo ""
-    print_warning "Onyx recommends at least ${EXPECTED_DOCKER_RAM_GB}GB RAM and ${EXPECTED_DISK_GB}GB disk space for optimal performance in standard mode."
+    print_warning "PrivateGPT recommends at least ${EXPECTED_DOCKER_RAM_GB}GB RAM and ${EXPECTED_DISK_GB}GB disk space for optimal performance in standard mode."
     print_warning "Lite mode requires less resources (1-4GB RAM, 8-16GB disk depending on usage), but does not include a vector database."
     echo ""
     prompt_yn_or_default "Do you want to continue anyway? (Y/n): " "y"
@@ -714,7 +714,7 @@ NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deploym
 if [[ "$USE_LOCAL_FILES" = true ]]; then
     print_step "Verifying existing configuration files"
 else
-    print_step "Downloading Onyx configuration files"
+    print_step "Downloading PrivateGPT configuration files"
     print_info "This step downloads all necessary configuration files from GitHub..."
 fi
 
@@ -829,11 +829,11 @@ if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docke
         # Check if any containers are running
         RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) ps -q 2>/dev/null | wc -l)
         if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
-            print_error "Onyx services are currently running!"
+            print_error "PrivateGPT services are currently running!"
             echo ""
             print_info "To make configuration changes, you must first shut down the services."
             echo ""
-            print_info "Please run the following command to shut down Onyx:"
+            print_info "Please run the following command to shut down PrivateGPT:"
             echo -e "   ${BOLD}./install.sh --shutdown${NC}"
             echo ""
             print_info "Then run this script again to make your changes."
@@ -1018,9 +1018,9 @@ else
     if [ "$INCLUDE_CRAFT" = true ] || [[ "$VERSION" == craft-* ]]; then
         # Set ENABLE_CRAFT=true for runtime configuration (handles commented and uncommented lines)
         sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Onyx Craft enabled (ENABLE_CRAFT=true)"
+        print_success "PrivateGPT Craft enabled (ENABLE_CRAFT=true)"
     else
-        print_info "Onyx Craft disabled (use --include-craft to enable)"
+        print_info "PrivateGPT Craft disabled (use --include-craft to enable)"
     fi
 
     print_success ".env file created with your preferences"
@@ -1030,7 +1030,7 @@ else
     echo "  • Advanced authentication (OAuth, SAML, etc.)"
     echo "  • AI model configuration"
     echo "  • Domain settings (for production)"
-    echo "  • Onyx Craft (set ENABLE_CRAFT=true)"
+    echo "  • PrivateGPT Craft (set ENABLE_CRAFT=true)"
     echo ""
 fi
 
@@ -1147,7 +1147,7 @@ else
 fi
 
 # Start services
-print_step "Starting Onyx services"
+print_step "Starting PrivateGPT services"
 print_info "Launching containers..."
 echo ""
 if [ "$USE_LATEST" = true ]; then
@@ -1157,7 +1157,7 @@ else
     (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d)
 fi
 if [ $? -ne 0 ]; then
-    print_error "Failed to start Onyx services"
+    print_error "Failed to start PrivateGPT services"
     exit 1
 fi
 
@@ -1208,7 +1208,7 @@ if [ "$RESTART_ISSUES" = true ]; then
     echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs)"
 
     echo ""
-    print_info "If the issue persists, please contact: founders@onyx.app"
+    print_info "If the issue persists, please contact: founders@privategpt.app"
     echo "Include the output of the logs command in your message."
     exit 1
 fi
@@ -1219,7 +1219,7 @@ check_onyx_health() {
     local attempt=1
     local port=${HOST_PORT:-3000}
 
-    print_info "Checking Onyx service health..."
+    print_info "Checking PrivateGPT service health..."
     echo "Containers are healthy, waiting for database migrations and service initialization to finish."
     echo ""
 
@@ -1248,7 +1248,7 @@ check_onyx_health() {
         esac
 
         # Clear line and show progress with fixed spacing
-        printf "\r\033[KChecking Onyx service%s (%dm %ds elapsed)" "$dots" "$minutes" "$seconds"
+        printf "\r\033[KChecking PrivateGPT service%s (%dm %ds elapsed)" "$dots" "$minutes" "$seconds"
 
         sleep 1
         attempt=$((attempt + 1))
@@ -1267,18 +1267,18 @@ echo ""
 if check_onyx_health; then
     echo ""
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}   🎉 Onyx service is ready! 🎉${NC}"
+    echo -e "${GREEN}${BOLD}   🎉 PrivateGPT service is ready! 🎉${NC}"
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 else
     print_warning "Health check timed out after 10 minutes"
     print_info "Containers are running, but the web service may still be initializing (or something went wrong)"
     echo ""
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers are running ⚠️${NC}"
+    echo -e "${YELLOW}${BOLD}   ⚠️  PrivateGPT containers are running ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 fi
 echo ""
-print_info "Access Onyx at:"
+print_info "Access PrivateGPT at:"
 echo -e "   ${BOLD}http://localhost:${HOST_PORT}${NC}"
 echo ""
 print_info "If authentication is enabled, you can create your admin account here:"
@@ -1299,5 +1299,5 @@ fi
 echo ""
 print_info "Refer to the README in the ${INSTALL_ROOT} directory for more information."
 echo ""
-print_info "For help or issues, contact: founders@onyx.app"
+print_info "For help or issues, contact: founders@privategpt.app"
 echo ""

@@ -242,7 +242,7 @@ def update_persona_access(
         ).delete(synchronize_session="fetch")
 
         if group_ids:
-            raise NotImplementedError("Onyx MIT does not support group-based sharing")
+            raise NotImplementedError("PrivateGPT MIT does not support group-based sharing")
 
     # When sharing changes, user file ACLs need to be updated in the vector DB
     if needs_sync:

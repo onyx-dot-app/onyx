@@ -101,7 +101,7 @@ def decrypt_bytes_to_string(input_bytes: bytes, key: str | None = None) -> str:
 
 
 def test_encryption() -> None:
-    test_string = "Onyx is the BEST!"
+    test_string = "PrivateGPT is the BEST!"
     encrypted_bytes = encrypt_string_to_bytes(test_string)
     decrypted_string = decrypt_bytes_to_string(encrypted_bytes)
     if test_string != decrypted_string:

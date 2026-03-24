@@ -44,7 +44,7 @@ export interface Settings {
   // Default Assistant settings
   disable_default_assistant?: boolean;
 
-  // Onyx Craft (Build Mode) feature flag
+  // PrivateGPT Craft (Build Mode) feature flag
   onyx_craft_enabled?: boolean;
 
   // Whether EE features are unlocked (user has a valid enterprise license).

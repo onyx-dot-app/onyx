@@ -190,7 +190,7 @@ function BedrockModalInternals({
           <InputLayouts.Vertical
             name={FIELD_BEDROCK_AUTH_METHOD}
             title="Authentication Method"
-            subDescription="Choose how Onyx should authenticate with Bedrock."
+            subDescription="Choose how PrivateGPT should authenticate with Bedrock."
           >
             <InputSelect
               value={authMethod || AUTH_METHOD_ACCESS_KEY}
@@ -254,7 +254,7 @@ function BedrockModalInternals({
           <Card backgroundVariant="none" borderVariant="solid">
             <Content
               icon={SvgAlertCircle}
-              title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."
+              title="PrivateGPT will use the IAM role attached to the environment it’s running in to authenticate."
               variant="body"
               sizePreset="main-ui"
             />

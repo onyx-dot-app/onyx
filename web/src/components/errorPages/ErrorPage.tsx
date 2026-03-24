@@ -14,7 +14,7 @@ export default function Error() {
       </div>
 
       <Text as="p" text03>
-        It seems there was a problem loading your Onyx settings. This could be
+        It seems there was a problem loading your PrivateGPT settings. This could be
         due to a configuration issue or incomplete setup.
       </Text>
 

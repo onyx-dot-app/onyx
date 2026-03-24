@@ -23,7 +23,7 @@ async def search_indexed_documents(
     limit: int = 10,
 ) -> dict[str, Any]:
     """
-    Search the user's knowledge base indexed in Onyx.
+    Search the user's knowledge base indexed in PrivateGPT.
     Use this tool for information that is not public knowledge and specific to the user,
     their team, their work, or their organization/company.
 
@@ -49,7 +49,7 @@ async def search_indexed_documents(
     ```
     """
     logger.info(
-        f"Onyx MCP Server: document search: query='{query}', sources={source_types}, limit={limit}"
+        f"PrivateGPT MCP Server: document search: query='{query}', sources={source_types}, limit={limit}"
     )
 
     # Parse time_cutoff string to datetime if provided
@@ -59,7 +59,7 @@ async def search_indexed_documents(
             time_cutoff_dt = datetime.fromisoformat(time_cutoff.replace("Z", "+00:00"))
         except ValueError as e:
             logger.warning(
-                f"Onyx MCP Server: Invalid time_cutoff format '{time_cutoff}': {e}. Continuing without time filter."
+                f"PrivateGPT MCP Server: Invalid time_cutoff format '{time_cutoff}': {e}. Continuing without time filter."
             )
             # Continue with no time_cutoff instead of returning an error
             time_cutoff_dt = None
@@ -75,7 +75,7 @@ async def search_indexed_documents(
     except Exception as e:
         # Error fetching sources (network error, API failure, etc.)
         logger.error(
-            "Onyx MCP Server: Error checking indexed sources: %s",
+            "PrivateGPT MCP Server: Error checking indexed sources: %s",
             e,
             exc_info=True,
         )
@@ -87,14 +87,14 @@ async def search_indexed_documents(
         }
 
     if not sources:
-        logger.info("Onyx MCP Server: No indexed sources available for tenant")
+        logger.info("PrivateGPT MCP Server: No indexed sources available for tenant")
         return {
             "documents": [],
             "total_results": 0,
             "query": query,
             "message": (
                 "No document sources are indexed yet. Add connectors or upload data "
-                "through Onyx before calling onyx_search_documents."
+                "through PrivateGPT before calling search_indexed_documents."
             ),
         }
 
@@ -107,7 +107,7 @@ async def search_indexed_documents(
                 source_type_enums.append(DocumentSource(src.lower()))
             except ValueError:
                 logger.warning(
-                    f"Onyx MCP Server: Invalid source type '{src}' - will be ignored by server"
+                    f"PrivateGPT MCP Server: Invalid source type '{src}' - will be ignored by server"
                 )
 
     # Build filters dict only with non-None values
@@ -187,7 +187,7 @@ async def search_indexed_documents(
         documents = documents[:limit]
 
         logger.info(
-            f"Onyx MCP Server: Internal search returned {len(documents)} results"
+            f"PrivateGPT MCP Server: Internal search returned {len(documents)} results"
         )
         return {
             "documents": documents,
@@ -195,7 +195,7 @@ async def search_indexed_documents(
             "query": query,
         }
     except Exception as e:
-        logger.error(f"Onyx MCP Server: Document search error: {e}", exc_info=True)
+        logger.error(f"PrivateGPT MCP Server: Document search error: {e}", exc_info=True)
         return {
             "error": f"Document search failed: {str(e)}",
             "documents": [],
@@ -223,7 +223,7 @@ async def search_web(
     }
     ```
     """
-    logger.info(f"Onyx MCP Server: Web search: query='{query}', limit={limit}")
+    logger.info(f"PrivateGPT MCP Server: Web search: query='{query}', limit={limit}")
 
     access_token = require_access_token()
 
@@ -242,7 +242,7 @@ async def search_web(
             "query": query,
         }
     except Exception as e:
-        logger.error(f"Onyx MCP Server: Web search error: {e}", exc_info=True)
+        logger.error(f"PrivateGPT MCP Server: Web search error: {e}", exc_info=True)
         return {
             "error": f"Web search failed: {str(e)}",
             "results": [],
@@ -270,7 +270,7 @@ async def open_urls(
     }
     ```
     """
-    logger.info(f"Onyx MCP Server: Open URL: fetching {len(urls)} URLs")
+    logger.info(f"PrivateGPT MCP Server: Open URL: fetching {len(urls)} URLs")
 
     access_token = require_access_token()
 
@@ -287,7 +287,7 @@ async def open_urls(
             "results": results,
         }
     except Exception as e:
-        logger.error(f"Onyx MCP Server: URL fetch error: {e}", exc_info=True)
+        logger.error(f"PrivateGPT MCP Server: URL fetch error: {e}", exc_info=True)
         return {
             "error": f"URL fetch failed: {str(e)}",
             "results": [],

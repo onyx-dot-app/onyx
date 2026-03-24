@@ -43,13 +43,13 @@ def _check_bot_config_api_access() -> None:
     """Raise 403 if bot config cannot be managed via API.
 
     Bot config endpoints are disabled:
-    - On Cloud (managed by Onyx)
+    - On Cloud (managed by PrivateGPT)
     - When DISCORD_BOT_TOKEN env var is set (managed via env)
     """
     if AUTH_TYPE == AuthType.CLOUD:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Discord bot configuration is managed by Onyx on Cloud.",
+            detail="Discord bot configuration is managed by PrivateGPT on Cloud.",
         )
     if DISCORD_BOT_TOKEN:
         raise HTTPException(
@@ -137,7 +137,7 @@ def delete_service_api_key_endpoint(
     """Delete the Discord service API key.
 
     This endpoint allows manual deletion of the service API key used by the
-    Discord bot to authenticate with the Onyx API. The key is also automatically
+    Discord bot to authenticate with the PrivateGPT API. The key is also automatically
     deleted when:
     - Bot config is deleted (self-hosted)
     - All guild configs are deleted (Cloud)

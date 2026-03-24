@@ -44,7 +44,7 @@ const Page = () => {
           {NEXT_PUBLIC_CLOUD_ENABLED && (
             <span className="block mt-1 text-blue-600">
               If you continue to experience problems please reach out to the
-              Onyx team at{" "}
+              PrivateGPT team at{" "}
               <a href="mailto:support@onyx.app" className="text-blue-600">
                 support@onyx.app
               </a>

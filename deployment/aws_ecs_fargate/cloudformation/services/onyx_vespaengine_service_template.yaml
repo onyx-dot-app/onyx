@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: CloudFormation template for Onyx Vespa Engine TaskDefinition
+Description: CloudFormation template for PrivateGPT Vespa Engine TaskDefinition
 Parameters:
   Environment:
     Type: String
@@ -70,7 +70,7 @@ Resources:
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: !Sub Onyx SecurityGroup access to EFS mount and ${ServiceName}.
+      GroupDescription: !Sub PrivateGPT SecurityGroup access to EFS mount and ${ServiceName}.
       GroupName: !Sub ${Environment}-ecs-${ServiceName}
       VpcId: !Ref VpcID
       SecurityGroupIngress:

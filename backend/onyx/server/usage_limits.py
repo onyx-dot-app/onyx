@@ -28,7 +28,7 @@ from shared_configs.configs import USAGE_LIMITS_ENABLED
 
 logger = setup_logger()
 
-# Collect all Onyx-managed default API keys for comparison
+# Collect all PrivateGPT-managed default API keys for comparison
 _ONYX_MANAGED_API_KEYS: set[str] = set()
 for key in [
     OPENAI_DEFAULT_API_KEY,
@@ -41,7 +41,7 @@ for key in [
 
 
 def is_onyx_managed_api_key(api_key: str | None) -> bool:
-    """Check if the given API key is one of Onyx's managed default keys."""
+    """Check if the given API key is one of PrivateGPT's managed default keys."""
     return bool(api_key) and api_key in _ONYX_MANAGED_API_KEYS
 
 
@@ -174,9 +174,9 @@ def check_llm_cost_limit_for_provider(
     llm_provider_api_key: str | None,
 ) -> None:
     """
-    Check if the LLM cost limit would be exceeded for a provider using Onyx-managed keys.
+    Check if the LLM cost limit would be exceeded for a provider using PrivateGPT-managed keys.
 
-    Only enforces limits when the provider uses Onyx-managed API keys.
+    Only enforces limits when the provider uses PrivateGPT-managed API keys.
     Users with their own API keys are not subject to LLM cost limits.
 
     Args:
@@ -190,7 +190,7 @@ def check_llm_cost_limit_for_provider(
     if not is_usage_limits_enabled():
         return
 
-    # Only enforce limits for Onyx-managed API keys
+    # Only enforce limits for PrivateGPT-managed API keys
     if not is_onyx_managed_api_key(llm_provider_api_key):
         return
 

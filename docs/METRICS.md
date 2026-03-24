@@ -1,4 +1,4 @@
-# Onyx Prometheus Metrics Reference
+# PrivateGPT Prometheus Metrics Reference
 
 ## Adding New Metrics
 
@@ -91,7 +91,7 @@ Add your metric to the reference tables below in this file. Include the metric n
 
 After deploying, add panels to the relevant Grafana dashboard:
 
-1. Open Grafana and navigate to the Onyx dashboard (or create a new one)
+1. Open Grafana and navigate to the PrivateGPT dashboard (or create a new one)
 2. Add a new panel — choose the appropriate visualization:
    - **Counters** → use `rate()` in a time series panel (e.g. `rate(onyx_my_counter_total[5m])`)
    - **Histograms** → use `histogram_quantile()` for percentiles, or `_sum/_count` for averages

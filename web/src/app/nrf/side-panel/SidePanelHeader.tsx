@@ -32,7 +32,7 @@ export default function SidePanelHeader({
           prominence="tertiary"
           icon={SvgExternalLink}
           onClick={handleOpenInOnyx}
-          tooltip="Open in Onyx"
+          tooltip="Open in PrivateGPT"
         />
       </div>
     </header>

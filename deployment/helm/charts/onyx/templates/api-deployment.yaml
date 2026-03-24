@@ -68,7 +68,7 @@ spec:
             - "-c"
             - |
               alembic upgrade head &&
-              echo "Starting Onyx Api Server" &&
+              echo "Starting PrivateGPT Api Server" &&
               uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}
           ports:
             - name: api-server-port

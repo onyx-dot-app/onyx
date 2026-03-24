@@ -1,7 +1,7 @@
 # =============================================================================
-# ONYX LITE — MINIMAL DEPLOYMENT OVERLAY
+# PRIVATEGPT LITE — MINIMAL DEPLOYMENT OVERLAY
 # =============================================================================
-# Overlay to run Onyx in a minimal configuration: no vector database (Vespa),
+# Overlay to run PrivateGPT in a minimal configuration: no vector database (Vespa),
 # no Redis, no model servers, and no background workers. Only PostgreSQL is
 # required. In this mode, connectors and RAG search are disabled, but the core
 # chat experience (LLM conversations, tools, user file uploads, Projects,

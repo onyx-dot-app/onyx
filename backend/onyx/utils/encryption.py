@@ -13,7 +13,7 @@ logger = setup_logger()
 # IMPORTANT DO NOT DELETE, THIS IS USED BY fetch_versioned_implementation
 def _encrypt_string(input_str: str, key: str | None = None) -> bytes:
     if ENCRYPTION_KEY_SECRET:
-        logger.warning("MIT version of Onyx does not support encryption of secrets.")
+        logger.warning("MIT version of PrivateGPT does not support encryption of secrets.")
     elif key is not None:
         logger.debug("MIT encrypt called with explicit key — key ignored.")
     return input_str.encode()
@@ -22,7 +22,7 @@ def _encrypt_string(input_str: str, key: str | None = None) -> bytes:
 # IMPORTANT DO NOT DELETE, THIS IS USED BY fetch_versioned_implementation
 def _decrypt_bytes(input_bytes: bytes, key: str | None = None) -> str:
     if ENCRYPTION_KEY_SECRET:
-        logger.warning("MIT version of Onyx does not support decryption of secrets.")
+        logger.warning("MIT version of PrivateGPT does not support decryption of secrets.")
     elif key is not None:
         logger.debug("MIT decrypt called with explicit key — key ignored.")
     return input_bytes.decode()

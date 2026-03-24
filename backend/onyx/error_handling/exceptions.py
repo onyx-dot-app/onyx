@@ -1,4 +1,4 @@
-"""OnyxError — the single exception type for all Onyx business errors.
+"""OnyxError — the single exception type for all PrivateGPT business errors.
 
 Raise ``OnyxError`` instead of ``HTTPException`` in business code.  A global
 FastAPI exception handler (registered via ``register_onyx_exception_handlers``)

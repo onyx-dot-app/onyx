@@ -181,7 +181,7 @@ export default function RequestConnectorModal({
                   <Text mainUiBody text04 className="text-center">
                     Email your request to{" "}
                     <a
-                      href="mailto:hello@onyx.app?subject=Onyx Craft Connector Request"
+                      href="mailto:hello@onyx.app?subject=PrivateGPT Craft Connector Request"
                       className="text-blue-600 dark:text-blue-400 hover:underline"
                     >
                       hello@onyx.app
@@ -209,7 +209,7 @@ export default function RequestConnectorModal({
                       mainUiAction
                       className="text-text-light-05 dark:text-text-dark-05"
                     >
-                      Join Onyx Discord
+                      Join PrivateGPT Discord
                     </Text>
                   </a>
                 </div>

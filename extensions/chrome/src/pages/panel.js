@@ -15,7 +15,7 @@ import {
   let iframeLoadTimeout;
   let authRequired = false;
 
-  // Returns the origin of the Onyx app loaded in the iframe.
+  // Returns the origin of the PrivateGPT app loaded in the iframe.
   // We derive the origin from iframe.src so postMessage payloads
   // (including tab URLs) are only delivered to the expected page.
   // Throws if iframe.src is not a valid URL — this is intentional:
@@ -37,7 +37,7 @@ import {
         await chrome.storage.session.remove("pendingInput");
       }
     } catch (error) {
-      console.error("[Onyx Panel] Error checking pending input:", error);
+      console.error("[PrivateGPT Panel] Error checking pending input:", error);
     }
     return false;
   }
@@ -85,7 +85,7 @@ import {
   }
 
   function handleMessage(event) {
-    // Only trust messages from the Onyx app iframe.
+    // Only trust messages from the PrivateGPT app iframe.
     // Check both source identity and origin so that a cross-origin page
     // navigated to inside the iframe cannot send privileged extension
     // messages (e.g. TAB_READING_ENABLED) after iframe.src changes.
@@ -134,7 +134,7 @@ import {
         "",
       );
     } else {
-      console.warn("Onyx domain not found, using default");
+      console.warn("PrivateGPT domain not found, using default");
       const domain = await getOnyxDomain();
       setIframeSrc(domain + SIDE_PANEL_PATH, "");
     }

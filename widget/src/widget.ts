@@ -1,5 +1,5 @@
 /**
- * Onyx Chat Widget - Main Component
+ * PrivateGPT Chat Widget - Main Component
  * Orchestrates launcher/inline modes and manages widget lifecycle
  */
 
@@ -541,11 +541,11 @@ export class OnyxChatWidget extends LitElement {
         <div class="powered-by">
           Powered by
           <a
-            href="https://onyx.app"
+            href="https://privategpt.app"
             target="_blank"
             rel="noopener noreferrer"
             style="text-decoration: underline;"
-            >Onyx</a
+            >PrivateGPT</a
           >
         </div>
       </div>

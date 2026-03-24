@@ -223,7 +223,7 @@ def construct_tools(
                 except ValueError as e:
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")
                     raise ValueError(
-                        "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
+                        "Internet search tool requires a search provider API key, please contact your PrivateGPT admin to get it added!"
                     )
 
             # Handle Open URL Tool
@@ -240,7 +240,7 @@ def construct_tools(
                 except RuntimeError as e:
                     logger.error(f"Failed to initialize Open URL Tool: {e}")
                     raise ValueError(
-                        "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
+                        "Open URL tool requires a web content provider, please contact your PrivateGPT admin to get it configured!"
                     )
 
             # Handle Python/Code Interpreter Tool

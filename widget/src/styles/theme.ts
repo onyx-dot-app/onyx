@@ -2,7 +2,7 @@ import { css } from "lit";
 import { colors } from "./colors";
 
 /**
- * Onyx Design System - Theme
+ * PrivateGPT Design System - Theme
  * Typography, spacing, and layout tokens from Figma
  */
 export const theme = css`

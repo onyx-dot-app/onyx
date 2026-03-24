@@ -4,7 +4,7 @@ SCIM protocol schemas follow the wire format defined in:
   - Core Schema: https://datatracker.ietf.org/doc/html/rfc7643
   - Protocol:    https://datatracker.ietf.org/doc/html/rfc7644
 
-Admin API schemas are internal to Onyx and used for SCIM token management.
+Admin API schemas are internal to PrivateGPT and used for SCIM token management.
 """
 
 from dataclasses import dataclass
@@ -116,7 +116,7 @@ class ScimUserResource(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     schemas: list[str] = Field(default_factory=lambda: [SCIM_USER_SCHEMA])
-    id: str | None = None  # Onyx's internal user ID, set on responses
+    id: str | None = None  # PrivateGPT's internal user ID, set on responses
     externalId: str | None = None  # IdP's identifier for this user
     userName: str  # Typically the user's email address
     name: ScimName | None = None
@@ -135,7 +135,7 @@ class ScimGroupMember(BaseModel):
     """Group member reference (RFC 7643 §4.2).
 
     Represents a user within a SCIM group. The IdP sends these when adding
-    or removing users from groups. ``value`` is the Onyx user ID.
+    or removing users from groups. ``value`` is the PrivateGPT user ID.
     """
 
     value: str  # User ID of the group member
@@ -344,8 +344,8 @@ class ScimResourceType(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Admin API Schemas (Onyx-internal, for SCIM token management)
-# These are NOT part of the SCIM protocol. They power the Onyx admin UI
+# Admin API Schemas (PrivateGPT-internal, for SCIM token management)
+# These are NOT part of the SCIM protocol. They power the PrivateGPT admin UI
 # where admins create/revoke the bearer tokens that IdPs use to authenticate.
 # ---------------------------------------------------------------------------
 

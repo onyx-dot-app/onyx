@@ -47,7 +47,7 @@ const NameStep = React.memo(
       >
         <ContentAction
           icon={SvgUser}
-          title="What should Onyx call you?"
+          title="What should PrivateGPT call you?"
           description="We will display this name in the app."
           sizePreset="main-ui"
           variant="section"

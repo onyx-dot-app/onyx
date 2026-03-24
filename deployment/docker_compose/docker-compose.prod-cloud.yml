@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile.cloud
     command: >
       /bin/sh -c "alembic -n schema_private upgrade head &&
-      echo \"Starting Onyx Api Server\" &&
+      echo \"Starting PrivateGPT Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     depends_on:
       - relational_db
@@ -107,7 +107,7 @@ services:
         max-size: "50m"
         max-file: "6"
 
-  # Uncomment the block below to enable the MCP server for Onyx.
+  # Uncomment the block below to enable the MCP server for PrivateGPT.
   # mcp_server:
   #   image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
   #   build:

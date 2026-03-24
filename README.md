@@ -28,19 +28,19 @@
 </p>
 
 
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is a feature-rich, self-hostable Chat UI that works with any LLM. It is easy to deploy and can run in a completely airgapped environment.
+**[PrivateGPT](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is a feature-rich, self-hostable Chat UI that works with any LLM. It is easy to deploy and can run in a completely airgapped environment.
 
-Onyx comes loaded with advanced features like Agents, Web Search, RAG, MCP, Deep Research, Connectors to 40+ knowledge sources, and more.
+PrivateGPT comes loaded with advanced features like Agents, Web Search, RAG, MCP, Deep Research, Connectors to 40+ knowledge sources, and more.
 
 > [!TIP]
-> Run Onyx with one command (or see deployment section below):
+> Run PrivateGPT with one command (or see deployment section below):
 > ```
 > curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
 > ```
 
 ****
 
-![Onyx Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
+![PrivateGPT Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
 
 
 
@@ -55,14 +55,14 @@ Onyx comes loaded with advanced features like Agents, Web Search, RAG, MCP, Deep
 - **🎨 Image Generation:** Generate images based on user prompts.
 - **👥 Collaboration:** Chat sharing, feedback gathering, user management, usage analytics, and more.
 
-Onyx works with all LLMs (like OpenAI, Anthropic, Gemini, etc.) and self-hosted LLMs (like Ollama, vLLM, etc.)
+PrivateGPT works with all LLMs (like OpenAI, Anthropic, Gemini, etc.) and self-hosted LLMs (like Ollama, vLLM, etc.)
 
 To learn more about the features, check out our [documentation](https://docs.onyx.app/welcome?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)!
 
 
 
 ## 🚀 Deployment
-Onyx supports deployments in Docker, Kubernetes, Terraform, along with guides for major cloud providers.
+PrivateGPT supports deployments in Docker, Kubernetes, Terraform, along with guides for major cloud providers.
 
 See guides below:
 - [Docker](https://docs.onyx.app/deployment/local/docker?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme) or [Quickstart](https://docs.onyx.app/deployment/getting_started/quickstart?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme) (best for most users)
@@ -70,15 +70,15 @@ See guides below:
 - [Terraform](https://docs.onyx.app/deployment/local/terraform?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme) (best for teams already using Terraform)
 - Cloud specific guides (best if specifically using [AWS EKS](https://docs.onyx.app/deployment/cloud/aws/eks?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme), [Azure VMs](https://docs.onyx.app/deployment/cloud/azure?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme), etc.)
 
-> [!TIP]  
-> **To try Onyx for free without deploying, check out [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
+> [!TIP]
+> **To try PrivateGPT for free without deploying, check out [PrivateGPT Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
 
 
 
 ## 🔍 Other Notable Benefits
-Onyx is built for teams of all sizes, from individual users to the largest global enterprises.
+PrivateGPT is built for teams of all sizes, from individual users to the largest global enterprises.
 
-- **Enterprise Search**: far more than simple RAG, Onyx has custom indexing and retrieval that remains performant and accurate for scales of up to tens of millions of documents.
+- **Enterprise Search**: far more than simple RAG, PrivateGPT has custom indexing and retrieval that remains performant and accurate for scales of up to tens of millions of documents.
 - **Security**: SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
 - **Management UI**: different user roles such as basic, curator, and admin.
 - **Document Permissioning**: mirrors user access from external apps for RAG use cases.
@@ -91,10 +91,10 @@ To see ongoing and upcoming projects, check out our [roadmap](https://github.com
 
 
 ## 📚 Licensing
-There are two editions of Onyx:
+There are two editions of PrivateGPT:
 
-- Onyx Community Edition (CE) is available freely under the MIT license.
-- Onyx Enterprise Edition (EE) includes extra features that are primarily useful for larger organizations.
+- PrivateGPT Community Edition (CE) is available freely under the MIT license.
+- PrivateGPT Enterprise Edition (EE) includes extra features that are primarily useful for larger organizations.
 For feature details, check out [our website](https://www.onyx.app/pricing?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme).
 
 

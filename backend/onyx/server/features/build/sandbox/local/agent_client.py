@@ -52,7 +52,7 @@ ACP_PROTOCOL_VERSION = 1
 # Default client info
 DEFAULT_CLIENT_INFO = {
     "name": "onyx-sandbox",
-    "title": "Onyx Sandbox Agent Client",
+    "title": "PrivateGPT Sandbox Agent Client",
     "version": "1.0.0",
 }
 

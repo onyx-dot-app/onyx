@@ -1,6 +1,6 @@
 "use client";
 
-import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
+import { OnyxIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import {
   LOGO_FOLDED_SIZE_PX,
@@ -16,6 +16,24 @@ export interface LogoProps {
   folded?: boolean;
   size?: number;
   className?: string;
+}
+
+function PrivateGPTLogoType({
+  size = 120,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  const fontSize = size * 0.22;
+  return (
+    <span
+      className={cn("font-bold tracking-tight leading-none select-none", className)}
+      style={{ fontSize: `${fontSize}px` }}
+    >
+      PrivateGPT
+    </span>
+  );
 }
 
 export default function Logo({ folded, size, className }: LogoProps) {
@@ -75,7 +93,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
                 className={"line-clamp-1 truncate"}
                 nowrap
               >
-                Powered by Onyx
+                Powered by PrivateGPT
               </Text>
             )}
           </div>
@@ -100,6 +118,6 @@ export default function Logo({ folded, size, className }: LogoProps) {
   ) : folded ? (
     <OnyxIcon size={foldedSize} className={cn("flex-shrink-0", className)} />
   ) : (
-    <OnyxLogoTypeIcon size={unfoldedSize} className={className} />
+    <PrivateGPTLogoType size={unfoldedSize} className={className} />
   );
 }

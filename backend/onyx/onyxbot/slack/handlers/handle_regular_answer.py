@@ -404,7 +404,7 @@ def handle_regular_answer(
             client=client,
             channel=channel,
             receiver_ids=target_receiver_ids,
-            text="Hello! Onyx has some results for you!",
+            text="Hello! PrivateGPT has some results for you!",
             blocks=all_blocks,
             thread_ts=target_thread_ts,
             # don't unfurl, since otherwise we will have 5+ previews which makes the message very long

@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import { motion } from "motion/react";
 import { track, AnalyticsEvent } from "@/lib/analytics";
-import { OnyxLogoTypeIcon } from "@/components/icons/icons";
+
+
 import Text from "@/refresh-components/texts/Text";
 import BigButton from "@/app/craft/components/BigButton";
 
@@ -32,7 +33,7 @@ export default function BuildModeIntroContent({
         >
           <div className="grid grid-cols-[1fr_auto_1fr] items-end">
             <div className="flex justify-end">
-              <OnyxLogoTypeIcon size={385} className="text-white" />
+              <span className="font-bold tracking-tight text-white" style={{ fontSize: "85px" }}>PrivateGPT</span>
             </div>
             <div className="w-8"></div>
             <div className="flex justify-start">

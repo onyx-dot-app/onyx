@@ -1,5 +1,5 @@
-# Contributing to Onyx
-Hey there! We are so excited that you're interested in Onyx.
+# Contributing to PrivateGPT
+Hey there! We are so excited that you're interested in PrivateGPT.
 
 
 ## Contribution Opportunities
@@ -26,7 +26,7 @@ See you there!
 
 
 ## Release Process
-Onyx loosely follows the SemVer versioning standard.
+PrivateGPT loosely follows the SemVer versioning standard.
 Major changes are released with a "minor" version bump. Currently we use patch release versions to indicate small feature changes.
 A set of Docker containers will be pushed automatically to DockerHub with every tag.
 You can see the containers [here](https://hub.docker.com/search?q=onyx%2F).

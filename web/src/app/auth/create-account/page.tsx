@@ -14,12 +14,12 @@ export default function Page() {
           Account Not Found
         </h2>
         <p className="text-text-700 max-w-md text-center">
-          We couldn&apos;t find your account in our records. To access Onyx, you
+          We couldn&apos;t find your account in our records. To access PrivateGPT, you
           need to either:
         </p>
         <ul className="list-disc text-left text-text-600 w-full pl-6 mx-auto">
-          <li>Be invited to an existing Onyx team</li>
-          <li>Create a new Onyx team</li>
+          <li>Be invited to an existing PrivateGPT team</li>
+          <li>Create a new PrivateGPT team</li>
         </ul>
         <div className="flex justify-center">
           <Button

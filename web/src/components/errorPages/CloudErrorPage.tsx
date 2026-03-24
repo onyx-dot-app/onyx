@@ -9,7 +9,7 @@ export default function CloudError() {
       </Text>
 
       <Text as="p" text03>
-        Onyx is currently in a maintenance window. Please check back in a couple
+        PrivateGPT is currently in a maintenance window. Please check back in a couple
         of minutes.
       </Text>
 

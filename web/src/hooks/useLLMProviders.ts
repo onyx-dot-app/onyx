@@ -110,7 +110,7 @@ export function useAdminLLMProviders() {
  * Fetches the catalog of well-known (built-in) LLM providers.
  *
  * Hits `GET /api/admin/llm/built-in/options` which returns the static
- * list of provider descriptors that Onyx ships with out of the box
+ * list of provider descriptors that PrivateGPT ships with out of the box
  * (OpenAI, Anthropic, Vertex AI, Bedrock, Azure, Ollama, OpenRouter,
  * etc.). Each descriptor includes the provider's known models and the
  * recommended default model.

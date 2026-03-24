@@ -88,7 +88,7 @@ export interface ACPErrorEvent {
   message: string;
 }
 
-/** File write event (custom Onyx extension) */
+/** File write event (custom PrivateGPT extension) */
 export interface FileWriteEvent {
   path: string;
   size_bytes?: number;
@@ -312,7 +312,7 @@ export async function sendMessage(
 
 /**
  * Map message API packet types to BuildEvent types.
- * Uses direct ACP event names from the backend, plus custom Onyx packet types.
+ * Uses direct ACP event names from the backend, plus custom PrivateGPT packet types.
  */
 function mapMessagePacketToEventType(packetType: string): string | null {
   const mapping: Record<string, string> = {
@@ -325,7 +325,7 @@ function mapMessagePacketToEventType(packetType: string): string | null {
     current_mode_update: "current_mode_update",
     prompt_response: "prompt_response",
     error: "error",
-    // Custom Onyx packet types (extensions to ACP)
+    // Custom PrivateGPT packet types (extensions to ACP)
     artifact_created: "artifact",
     file_write: "file_write",
   };

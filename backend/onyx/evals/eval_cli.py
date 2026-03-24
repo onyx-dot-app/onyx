@@ -192,7 +192,7 @@ def main() -> None:
         "--braintrust-project",
         type=str,
         help="Braintrust project name",
-        default="Onyx",
+        default="PrivateGPT",
     )
 
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")

@@ -25,7 +25,7 @@ const hankenGrotesk = Hanken_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Onyx",
+  title: "PrivateGPT",
   description: "Question answering for your documents",
 };
 

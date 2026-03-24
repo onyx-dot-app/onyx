@@ -18,14 +18,14 @@ services:
           cpus: "${API_SERVER_CPU_LIMIT:-0}"
           memory: "${API_SERVER_MEM_LIMIT:-0}"
 
-  # Uncomment the block below to enable the MCP server for Onyx.
+  # Uncomment the block below to enable the MCP server for PrivateGPT.
   # mcp_server:
   #   ports:
   #     - "8090:8090"
 
   relational_db:
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   index:
     ports:

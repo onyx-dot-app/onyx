@@ -66,7 +66,7 @@ async function sendToOnyx(info, tab) {
       pageUrl: tab.url,
     });
   } catch (error) {
-    console.error("Error sending to Onyx:", error);
+    console.error("Error sending to PrivateGPT:", error);
   }
 }
 
@@ -84,7 +84,7 @@ async function toggleNewTabOverride() {
     chrome.notifications.create({
       type: "basic",
       iconUrl: "icon.png",
-      title: "Onyx New Tab",
+      title: "PrivateGPT New Tab",
       message: `New Tab Override ${newValue ? "enabled" : "disabled"}`,
     });
 
@@ -123,7 +123,7 @@ chrome.commands.onCommand.addListener(async (command) => {
         sendToOnyx({ selectionText: selectedText }, tab);
       }
     } catch (error) {
-      console.error("Error sending to Onyx:", error);
+      console.error("Error sending to PrivateGPT:", error);
     }
   } else if (command === ACTIONS.TOGGLE_NEW_TAB_OVERRIDE) {
     toggleNewTabOverride();
@@ -170,7 +170,7 @@ async function sendActiveTabUrlToPanel() {
       });
     }
   } catch (error) {
-    console.error("[Onyx SW] Error sending tab URL:", error);
+    console.error("[PrivateGPT SW] Error sending tab URL:", error);
   }
 }
 
@@ -232,14 +232,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             })
             .catch((error) => {
               console.error(
-                "[Onyx SW] Error opening side panel with text:",
+                "[PrivateGPT SW] Error opening side panel with text:",
                 error,
               );
             });
         },
       );
     } else {
-      console.error("[Onyx SW] Missing tabId or windowId");
+      console.error("[PrivateGPT SW] Missing tabId or windowId");
     }
     return true;
   }
@@ -274,7 +274,7 @@ chrome.windows.onRemoved.addListener((windowId) => {
 });
 
 chrome.omnibox.setDefaultSuggestion({
-  description: 'Search Onyx for "%s"',
+  description: 'Search PrivateGPT for "%s"',
 });
 
 chrome.omnibox.onInputEntered.addListener(async (text) => {
@@ -297,7 +297,7 @@ chrome.omnibox.onInputChanged.addListener((text, suggest) => {
     suggest([
       {
         content: text,
-        description: `Search Onyx for "<match>${text}</match>"`,
+        description: `Search PrivateGPT for "<match>${text}</match>"`,
       },
     ]);
   }
@@ -315,7 +315,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
       });
     }
   } catch (error) {
-    console.error("[Onyx SW] Error on tab activated:", error);
+    console.error("[PrivateGPT SW] Error on tab activated:", error);
   }
 });
 
@@ -335,7 +335,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       });
     }
   } catch (error) {
-    console.error("[Onyx SW] Error on tab updated:", error);
+    console.error("[PrivateGPT SW] Error on tab updated:", error);
   }
 });
 

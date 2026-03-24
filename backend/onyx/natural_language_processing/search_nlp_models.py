@@ -173,7 +173,7 @@ def _cleanup_thread_local(func: Callable) -> Callable:
 
 
 WARM_UP_STRINGS = [
-    "Onyx is amazing!",
+    "PrivateGPT is amazing!",
     "Check out our easy deployment guide at",
     "https://docs.onyx.app/deployment/getting_started/quickstart",
 ]

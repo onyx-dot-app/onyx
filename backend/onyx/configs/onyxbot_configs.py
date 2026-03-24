@@ -1,16 +1,16 @@
 import os
 
 #####
-# Onyx Slack Bot Configs
+# PrivateGPT Slack Bot Configs
 #####
 ONYX_BOT_NUM_RETRIES = int(os.environ.get("ONYX_BOT_NUM_RETRIES", "5"))
 # Number of docs to display in "Reference Documents"
 ONYX_BOT_NUM_DOCS_TO_DISPLAY = int(os.environ.get("ONYX_BOT_NUM_DOCS_TO_DISPLAY", "5"))
-# If the LLM fails to answer, Onyx can still show the "Reference Documents"
+# If the LLM fails to answer, PrivateGPT can still show the "Reference Documents"
 ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER = os.environ.get(
     "ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER", ""
 ).lower() not in ["false", ""]
-# When Onyx is considering a message, what emoji does it react with
+# When PrivateGPT is considering a message, what emoji does it react with
 ONYX_BOT_REACT_EMOJI = os.environ.get("ONYX_BOT_REACT_EMOJI") or "eyes"
 # When User needs more help, what should the emoji be
 ONYX_BOT_FOLLOWUP_EMOJI = os.environ.get("ONYX_BOT_FOLLOWUP_EMOJI") or "sos"

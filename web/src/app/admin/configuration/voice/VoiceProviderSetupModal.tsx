@@ -447,7 +447,7 @@ export default function VoiceProviderSetupModal({
                     >
                       Azure Portal (Keys and Endpoint)
                     </a>
-                    . Onyx extracts the speech region from this URL. Examples:
+                    . PrivateGPT extracts the speech region from this URL. Examples:
                     https://westus.api.cognitive.microsoft.com/ or
                     https://westus.tts.speech.microsoft.com/.
                   </>
@@ -484,7 +484,7 @@ export default function VoiceProviderSetupModal({
             {providerType === "openai" && mode === "tts" && (
               <Vertical
                 title="Default Model"
-                subDescription="This model will be used by Onyx by default for text-to-speech."
+                subDescription="This model will be used by PrivateGPT by default for text-to-speech."
                 nonInteractive
               >
                 <InputSelect value={ttsModel} onValueChange={setTtsModel}>

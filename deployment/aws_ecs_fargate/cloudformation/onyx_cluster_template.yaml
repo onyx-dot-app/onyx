@@ -132,27 +132,27 @@ Resources:
 
 Outputs:
   OutputEcsCluster:
-    Description: Onyx ECS Cluster
+    Description: PrivateGPT ECS Cluster
     Value: !Ref ECSCluster
     Export:
       Name: !Sub ${AWS::StackName}-ECSClusterName
   OutputECSTaskRole:
-    Description: Onyx ECS Task Role
+    Description: PrivateGPT ECS Task Role
     Value: !Ref ECSTaskRole
     Export:
       Name: !Sub ${AWS::StackName}-ECSTaskRole
   OutputECSTaskExecutionRole:
-    Description: Onyx ECS TaskExecutionRole
+    Description: PrivateGPT ECS TaskExecutionRole
     Value: !Ref ECSTaskExecutionRole
     Export:
       Name: !Sub ${AWS::StackName}-ECSTaskExecutionRole
   OutputOnyxNamespace:
-    Description: Onyx CloudMap namespace ID for ECS service discvoery.
+    Description: PrivateGPT CloudMap namespace ID for ECS service discvoery.
     Value: !Ref PrivateDnsNamespace
     Export:
       Name: !Sub ${AWS::StackName}-OnyxNamespace
   OutputOnyxNamespaceName:
-    Description: Onyx CloudMap namespace domain name for ECS service discvoery.
+    Description: PrivateGPT CloudMap namespace domain name for ECS service discvoery.
     Value: !Ref OnyxNamespace
     Export:
       Name: !Sub ${AWS::StackName}-OnyxNamespaceName

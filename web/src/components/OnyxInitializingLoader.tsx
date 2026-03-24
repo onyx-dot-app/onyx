@@ -11,7 +11,7 @@ export default function OnyxInitializingLoader() {
     <div className="mx-auto my-auto animate-pulse">
       <Logo folded size={96} className="mx-auto mb-3" />
       <p className="text-lg text-text font-semibold">
-        Initializing {settings?.enterpriseSettings?.application_name ?? "Onyx"}
+        Initializing {settings?.enterpriseSettings?.application_name ?? "PrivateGPT"}
       </p>
     </div>
   );

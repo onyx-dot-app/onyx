@@ -29,7 +29,7 @@ APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 # Certain services need to make HTTP requests to the API server, such as the MCP server and Discord bot
 API_SERVER_PROTOCOL = os.environ.get("API_SERVER_PROTOCOL", "http")
 API_SERVER_HOST = os.environ.get("API_SERVER_HOST", "127.0.0.1")
-# This override allows self-hosting the MCP server with Onyx Cloud backend.
+# This override allows self-hosting the MCP server with PrivateGPT Cloud backend.
 API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS = os.environ.get(
     "API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS"
 )
@@ -87,7 +87,7 @@ ONYX_QUERY_HISTORY_TYPE = QueryHistoryType(
 # Web Configs
 #####
 # WEB_DOMAIN is used to set the redirect_uri after login flows
-# NOTE: if you are having problems accessing the Onyx web UI locally (especially
+# NOTE: if you are having problems accessing the PrivateGPT web UI locally (especially
 # on Windows, try  setting this to `http://127.0.0.1:3000` instead and see if that
 # fixes it)
 WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
@@ -121,7 +121,7 @@ PASSWORD_REQUIRE_SPECIAL_CHAR = (
 
 # Encryption key secret is used to encrypt connector credentials, api keys, and other sensitive
 # information. This provides an extra layer of security on top of Postgres access controls
-# and is available in Onyx EE
+# and is available in PrivateGPT EE
 ENCRYPTION_KEY_SECRET = os.environ.get("ENCRYPTION_KEY_SECRET") or ""
 
 # Turn off mask if admin users should see full credentials for data connectors.
@@ -141,8 +141,8 @@ SESSION_EXPIRE_TIME_SECONDS = int(
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("REQUEST_TIMEOUT_SECONDS") or 60)
 
 # set `VALID_EMAIL_DOMAINS` to a comma seperated list of domains in order to
-# restrict access to Onyx to only users with emails from those domains.
-# E.g. `VALID_EMAIL_DOMAINS=example.com,example.org` will restrict Onyx
+# restrict access to PrivateGPT to only users with emails from those domains.
+# E.g. `VALID_EMAIL_DOMAINS=example.com,example.org` will restrict PrivateGPT
 # signups to users with either an @example.com or an @example.org email.
 # NOTE: maintaining `VALID_EMAIL_DOMAIN` to keep backwards compatibility
 _VALID_EMAIL_DOMAIN = os.environ.get("VALID_EMAIL_DOMAIN", "")
@@ -233,7 +233,7 @@ EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
 EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS]) or SENDGRID_API_KEY
 
-# If set, Onyx will listen to the `expires_at` returned by the identity
+# If set, PrivateGPT will listen to the `expires_at` returned by the identity
 # provider (e.g. Okta, Google, etc.) and force the user to re-authenticate
 # after this time has elapsed. Disabled since by default many auth providers
 # have very short expiry times (e.g. 1 hour) which provide a poor user experience
@@ -297,7 +297,7 @@ OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "englis
 # This is the "base" config for now, the idea is that at least for our dev
 # environments we always want to be dual indexing into both OpenSearch and Vespa
 # to stress test the new codepaths. Only enable this if there is some instance
-# of OpenSearch running for the relevant Onyx instance.
+# of OpenSearch running for the relevant PrivateGPT instance.
 # NOTE: Now enabled on by default, unless the env indicates otherwise.
 ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
     os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "true").lower() == "true"
@@ -854,7 +854,7 @@ CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
 # Miscellaneous
 #####
 JOB_TIMEOUT = 60 * 60 * 6  # 6 hours default
-# Logs Onyx only model interactions like prompts, responses, messages etc.
+# Logs PrivateGPT only model interactions like prompts, responses, messages etc.
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
@@ -879,7 +879,7 @@ DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 # Braintrust Configuration
 #####
 # Braintrust project name
-BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
+BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "PrivateGPT")
 # Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
 # Maximum concurrency for Braintrust evaluations
@@ -959,7 +959,7 @@ AUTO_LLM_UPDATE_INTERVAL_SECONDS = int(
 #####
 # NOTE: this should only be enabled if you have purchased an enterprise license.
 # if you're interested in an enterprise license, please reach out to us at
-# founders@onyx.app OR message Chris Weaver or Yuhong Sun in the Onyx
+# founders@onyx.app OR message Chris Weaver or Yuhong Sun in the PrivateGPT
 # Discord community https://discord.gg/4NA5SbzrWb
 ENTERPRISE_EDITION_ENABLED = (
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
@@ -1134,7 +1134,7 @@ VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
 
 #####
 # Default LLM API Keys (for cloud deployments)
-# These are Onyx-managed API keys provided to tenants by default
+# These are PrivateGPT-managed API keys provided to tenants by default
 #####
 OPENAI_DEFAULT_API_KEY = os.environ.get("OPENAI_DEFAULT_API_KEY")
 ANTHROPIC_DEFAULT_API_KEY = os.environ.get("ANTHROPIC_DEFAULT_API_KEY")

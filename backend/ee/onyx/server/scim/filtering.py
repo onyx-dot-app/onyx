@@ -2,7 +2,7 @@
 
 Identity providers (Okta, Azure AD, OneLogin, etc.) use filters to look up
 resources before deciding whether to create or update them. For example, when
-an admin assigns a user to the Onyx app, the IdP first checks whether that
+an admin assigns a user to the PrivateGPT app, the IdP first checks whether that
 user already exists::
 
     GET /scim/v2/Users?filter=userName eq "john@example.com"

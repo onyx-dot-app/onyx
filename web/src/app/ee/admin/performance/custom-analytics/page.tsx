@@ -14,7 +14,7 @@ function Main() {
         <div className="mt-4">
           <Callout type="danger" title="Custom Analytics is not enabled.">
             To set up custom analytics scripts, please work with the team who
-            setup Onyx in your team to set the{" "}
+            setup PrivateGPT in your team to set the{" "}
             <i>CUSTOM_ANALYTICS_SECRET_KEY</i> environment variable.
           </Callout>
         </div>
@@ -25,7 +25,7 @@ function Main() {
   return (
     <div>
       <Text className="mb-8">
-        This allows you to bring your own analytics tool to Onyx! Copy the Web
+        This allows you to bring your own analytics tool to PrivateGPT! Copy the Web
         snippet from your analytics provider into the box below, and we&apos;ll
         start sending usage events.
       </Text>

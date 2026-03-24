@@ -1,6 +1,6 @@
-# Onyx Desktop
+# PrivateGPT Desktop
 
-A lightweight macOS desktop application for [Onyx Cloud](https://cloud.onyx.app).
+A lightweight macOS desktop application for [PrivateGPT Cloud](https://cloud.onyx.app).
 
 Built with [Tauri](https://tauri.app) for minimal bundle size (~10MB vs Electron's 150MB+).
 
@@ -10,7 +10,7 @@ Built with [Tauri](https://tauri.app) for minimal bundle size (~10MB vs Electron
 - ⌨️ **Keyboard Shortcuts** - Quick navigation and actions
 - 🪟 **Native Feel** - macOS-style title bar with traffic lights
 - 💾 **Window State** - Remembers size/position between sessions
-- 🔗 **Multi-window** - Open multiple Onyx windows
+- 🔗 **Multi-window** - Open multiple PrivateGPT windows
 
 ## Keyboard Shortcuts
 
@@ -86,7 +86,7 @@ The built `.dmg` will be in `src-tauri/target/release/bundle/dmg/`.
 ## Project Structure
 
 ```
-onyx-desktop/
+privategpt-desktop/
 ├── package.json          # Node dependencies & scripts
 ├── src/
 │   └── index.html        # Fallback/loading page
@@ -120,7 +120,7 @@ npm run tauri icon path/to/your-icon.png
 
 ### Self-Hosted / Custom Server URL
 
-The app defaults to `https://cloud.onyx.app` but supports any Onyx instance.
+The app defaults to `https://cloud.onyx.app` but supports any PrivateGPT instance.
 
 **Config file location:**
 
@@ -136,8 +136,8 @@ The app defaults to `https://cloud.onyx.app` but supports any Onyx instance.
 
 ```json
 {
-  "server_url": "https://your-onyx-instance.company.com",
-  "window_title": "Onyx"
+  "server_url": "https://your-privategpt-instance.company.com",
+  "window_title": "PrivateGPT"
 }
 ```
 
@@ -162,7 +162,7 @@ Edit `src-tauri/tauri.conf.json`:
   "app": {
     "windows": [
       {
-        "url": "https://your-onyx-instance.com"
+        "url": "https://your-privategpt-instance.com"
       }
     ]
   }
@@ -185,7 +185,7 @@ Modify the window configuration in `src-tauri/tauri.conf.json`:
 
 ### "Unable to resolve host"
 
-Make sure you have an internet connection. The app loads content from `cloud.onyx.app`.
+Make sure you have an internet connection. The app loads content from the configured server.
 
 ### Build fails on M1/M2 Mac
 
@@ -199,7 +199,7 @@ rustup target add aarch64-apple-darwin
 For distributing outside the App Store, you'll need to:
 
 1. Get an Apple Developer certificate
-2. Sign the app: `codesign --deep --force --sign "Developer ID" target/release/bundle/macos/Onyx.app`
+2. Sign the app: `codesign --deep --force --sign "Developer ID" target/release/bundle/macos/PrivateGPT.app`
 3. Notarize with Apple
 
 ## License

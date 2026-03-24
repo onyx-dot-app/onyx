@@ -108,7 +108,7 @@ export default function UserGroupCreationForm({
                   </>
                 ) : (
                   <Text as="p" text03>
-                    Connectors are not available in Onyx Lite. Redeploy Onyx
+                    Connectors are not available in PrivateGPT Lite. Redeploy PrivateGPT
                     with DISABLE_VECTOR_DB=false to index knowledge via
                     connectors.
                   </Text>

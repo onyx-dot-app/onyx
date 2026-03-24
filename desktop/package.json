@@ -1,7 +1,7 @@
 {
   "name": "onyx-desktop",
   "version": "0.0.0-dev",
-  "description": "Lightweight desktop app for Onyx Cloud",
+  "description": "Lightweight desktop app for PrivateGPT",
   "scripts": {
     "dev": "tauri dev",
     "debug": "tauri dev -- -- --debug",

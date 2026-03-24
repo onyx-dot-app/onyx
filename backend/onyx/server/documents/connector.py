@@ -1972,7 +1972,7 @@ def submit_connector_request(
     # Send email notification (if email is configured)
     if EMAIL_CONFIGURED:
         try:
-            subject = "Onyx Craft Connector Request"
+            subject = "PrivateGPT Craft Connector Request"
             email_body_text = f"""A new connector request has been submitted:
 
 Connector Name: {connector_name}

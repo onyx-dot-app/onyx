@@ -102,7 +102,7 @@ Resources:
 
 Outputs:
   OutputOnyxEfsId:
-    Description: Onyx Filesystem Id
+    Description: PrivateGPT Filesystem Id
     Value: !Ref OnyxEfs
     Export:
       Name: !Sub ${AWS::StackName}-OnyxEfsId

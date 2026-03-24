@@ -1,5 +1,5 @@
 """
-Standardized error codes for the Onyx backend.
+Standardized error codes for the PrivateGPT backend.
 
 Usage:
     from onyx.error_handling.error_codes import OnyxErrorCode

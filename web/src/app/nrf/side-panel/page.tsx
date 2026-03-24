@@ -7,7 +7,7 @@ import { NRFPreferencesProvider } from "@/components/context/NRFPreferencesConte
  * NRF Side Panel Route - No Auth Required
  *
  * Side panel variant — no NRFChrome overlay needed since the side panel
- * has its own header (logo + "Open in Onyx" button) and doesn't show
+ * has its own header (logo + "Open in PrivateGPT" button) and doesn't show
  * the mode toggle or footer.
  */
 export default async function Page() {

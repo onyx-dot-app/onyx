@@ -1,4 +1,4 @@
-"""Prometheus metrics setup for the Onyx API server.
+"""Prometheus metrics setup for the PrivateGPT API server.
 
 Orchestrates HTTP request instrumentation via ``prometheus-fastapi-instrumentator``:
 - Request count, latency histograms, in-progress gauges
@@ -42,7 +42,7 @@ _LATENCY_BUCKETS = (
 
 
 def setup_prometheus_metrics(app: Starlette) -> None:
-    """Initialize HTTP request metrics for the Onyx API server.
+    """Initialize HTTP request metrics for the PrivateGPT API server.
 
     Must be called in ``get_application()`` BEFORE the app starts, because
     the instrumentator adds middleware via ``app.add_middleware()``.

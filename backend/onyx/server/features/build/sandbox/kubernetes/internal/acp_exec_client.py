@@ -60,7 +60,7 @@ ACP_PROTOCOL_VERSION = 1
 # Default client info
 DEFAULT_CLIENT_INFO = {
     "name": "onyx-sandbox-k8s-exec",
-    "title": "Onyx Sandbox Agent Client (K8s Exec)",
+    "title": "PrivateGPT Sandbox Agent Client (K8s Exec)",
     "version": "1.0.0",
 }
 

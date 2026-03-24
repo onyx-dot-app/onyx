@@ -373,7 +373,7 @@ export default function BuildConfigPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgPlug}
-          title="Configure Onyx Craft"
+          title="Configure PrivateGPT Craft"
           description="Select data sources and your default LLM"
           rightChildren={
             <div className="flex items-center gap-2">

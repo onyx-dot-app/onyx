@@ -65,9 +65,9 @@ reviews:
         single-tenant mode, avoid introducing unnecessary tenant-specific
         requirements or cloud-only control-plane dependencies.
 
-    - name: Onyx lite compatibility
+    - name: PrivateGPT lite compatibility
       description: >
-        Code changes must consider both regular Onyx deployments and Onyx lite
+        Code changes must consider both regular PrivateGPT deployments and PrivateGPT lite
         deployments. Lite deployments disable the vector DB, Redis, model
         servers, and background workers by default, use PostgreSQL-backed
         cache/auth/file storage, and rely on the API server to handle

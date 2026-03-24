@@ -1,7 +1,7 @@
 """SCIM bearer token authentication.
 
 SCIM endpoints are authenticated via bearer tokens that admins create in the
-Onyx UI. This module provides:
+PrivateGPT UI. This module provides:
 
   - ``verify_scim_token``: FastAPI dependency that extracts, hashes, and
     validates the token from the Authorization header.

@@ -125,7 +125,7 @@ export default function Page() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description="Connect Onyx to your Discord servers. Users can ask questions directly in Discord channels."
+        description="Connect PrivateGPT to your Discord servers. Users can ask questions directly in Discord channels."
       />
       <SettingsLayouts.Body>
         <DiscordBotContent />

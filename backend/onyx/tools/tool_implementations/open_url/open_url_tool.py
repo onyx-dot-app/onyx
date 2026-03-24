@@ -377,7 +377,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             user: User context for ACL filtering, anonymous users only see public docs.
             content_provider: Optional content provider. If not provided,
                 will use the default provider from the database or fall back
-                to the built-in Onyx web crawler.
+                to the built-in PrivateGPT web crawler.
         """
         super().__init__(emitter=emitter)
         self._id = tool_id
@@ -392,7 +392,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 raise RuntimeError(
                     "No web content provider available. "
                     "Please configure a content provider or ensure the "
-                    "built-in Onyx web crawler can be initialized."
+                    "built-in PrivateGPT web crawler can be initialized."
                 )
             self._provider = provider
 

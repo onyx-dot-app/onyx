@@ -47,11 +47,11 @@ def _build_provider_extra_headers(
             )
         }
 
-    # Passing these will put Onyx on the OpenRouter leaderboard
+    # Passing these will put PrivateGPT on the OpenRouter leaderboard
     elif provider == LlmProviderNames.OPENROUTER:
         return {
             "HTTP-Referer": "https://onyx.app",
-            "X-Title": "Onyx",
+            "X-Title": "PrivateGPT",
         }
 
     return {}

@@ -45,7 +45,7 @@ export default function UpgradePlanModal({
                     You've used all {limits?.limit ?? 25} messages for this
                     week. Your message limit will automatically reset at the
                     start of each week, allowing you to continue crafting with
-                    Onyx.
+                    PrivateGPT.
                   </>
                 ) : (
                   <>

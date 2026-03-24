@@ -22,10 +22,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-logger.info("Creating Onyx MCP Server...")
+logger.info("Creating PrivateGPT MCP Server...")
 
 mcp_server = FastMCP(
-    name="Onyx MCP Server",
+    name="PrivateGPT MCP Server",
     version="1.0.0",
     auth=OnyxTokenVerifier(),
 )
@@ -74,7 +74,7 @@ def create_mcp_fastapi_app() -> FastAPI:
             await shutdown_http_client()
 
     app = FastAPI(
-        title="Onyx MCP Server",
+        title="PrivateGPT MCP Server",
         description="HTTP POST transport with bearer auth delegated to API /me",
         version="1.0.0",
         lifespan=combined_lifespan,

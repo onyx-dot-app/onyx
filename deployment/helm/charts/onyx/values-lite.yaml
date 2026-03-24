@@ -1,7 +1,7 @@
 # =============================================================================
-# ONYX LITE — MINIMAL DEPLOYMENT VALUES
+# PRIVATEGPT LITE — MINIMAL DEPLOYMENT VALUES
 # =============================================================================
-# Minimal Onyx deployment: no vector database, no Redis, no model servers.
+# Minimal PrivateGPT deployment: no vector database, no Redis, no model servers.
 # Only PostgreSQL is required. Connectors and RAG search are disabled, but the
 # core chat experience (LLM conversations, tools, user file uploads, Projects,
 # Agent knowledge) still works.

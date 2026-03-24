@@ -240,7 +240,7 @@ def handle_message(
                             "has reached its user seat limit. Since this is your "
                             "first time interacting with the bot, a new account "
                             "could not be created for you. Please contact your "
-                            "Onyx administrator to add more seats."
+                            "PrivateGPT administrator to add more seats."
                         ),
                     )
                     return False
@@ -268,7 +268,7 @@ def handle_message(
                             "has reached its user seat limit. Your account is "
                             "currently deactivated and cannot be reactivated "
                             "until more seats are available. Please contact "
-                            "your Onyx administrator."
+                            "your PrivateGPT administrator."
                         ),
                     )
                     return False

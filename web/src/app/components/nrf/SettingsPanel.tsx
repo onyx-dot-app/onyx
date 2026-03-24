@@ -169,7 +169,7 @@ export const SettingsPanel = ({
               General
             </Text>
             <div className="flex flex-col gap-1 bg-background-tint-01 rounded-2xl px-4">
-              <SettingRow label="Use Onyx as new tab page">
+              <SettingRow label="Use PrivateGPT as new tab page">
                 <Switch
                   checked={useOnyxAsNewTab}
                   onCheckedChange={handleUseOnyxToggle}

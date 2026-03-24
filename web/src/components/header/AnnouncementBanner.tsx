@@ -80,7 +80,7 @@ export function AnnouncementBanner() {
               ) : notification.notif_type == "two_day_trial_ending" ? (
                 <p className="text-center">
                   Your trial is ending soon - submit your billing information to
-                  continue using Onyx.{" "}
+                  continue using PrivateGPT.{" "}
                   <Link
                     href={"/admin/billing" as Route}
                     className="ml-2 underline cursor-pointer"

@@ -260,7 +260,7 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
                   href="https://onyx.app"
                   target="_blank"
                 >
-                  Onyx
+                  PrivateGPT
                 </a>
               </Text>
               <Text text03 secondaryBody>

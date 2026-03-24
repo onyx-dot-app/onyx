@@ -3,11 +3,11 @@
 # Declare variables to be passed into your templates.
 
 global:
-  # Global version for all Onyx components (overrides .Chart.AppVersion)
+  # Global version for all PrivateGPT components (overrides .Chart.AppVersion)
   version: "latest"
-  # Global pull policy for all Onyx component images
+  # Global pull policy for all PrivateGPT component images
   pullPolicy: "IfNotPresent"
-  # Host for all Onyx components
+  # Host for all PrivateGPT components
   host: "0.0.0.0"
 
 postgresql:
@@ -751,7 +751,7 @@ celery_worker_user_file_processing:
   tolerations: []
   affinity: {}
 
-# Discord bot for Onyx
+# Discord bot for PrivateGPT
 # The bot offloads message processing to scalable API pods via HTTP requests.
 discordbot:
   enabled: false  # Disabled by default - requires bot token configuration
@@ -814,8 +814,8 @@ slackbot:
   tolerations: []
   affinity: {}
 
-# Onyx Model Context Protocol (MCP) Server
-# Allows LLMs to use Onyx like invoking tools or accessing resources
+# PrivateGPT Model Context Protocol (MCP) Server
+# Allows LLMs to use PrivateGPT like invoking tools or accessing resources
 mcpServer:
   enabled: false  # Disabled by default
   replicaCount: 1
@@ -1178,7 +1178,7 @@ auth:
     # in secretKeys to be used. Values will be base64 encoded in the k8s
     # cluster.
     # For the bundled OpenSearch chart, the admin password is consumed during
-    # initial cluster setup. Changing this value later will update Onyx's
+    # initial cluster setup. Changing this value later will update PrivateGPT's
     # client credentials, but will not rotate the OpenSearch admin password.
     # Set this before first install or use existingSecret to preserve the
     # current secret on upgrade.
@@ -1265,7 +1265,7 @@ configMap:
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
-  # OnyxBot SlackBot Configs
+  # PrivateGPTBot SlackBot Configs
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
   ONYX_BOT_RESPOND_EVERY_CHANNEL: ""

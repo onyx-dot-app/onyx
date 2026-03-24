@@ -1,4 +1,4 @@
-"""Authentication helpers for the Onyx MCP server."""
+"""Authentication helpers for the PrivateGPT MCP server."""
 
 from typing import Optional
 

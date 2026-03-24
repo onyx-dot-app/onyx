@@ -12,7 +12,7 @@ export interface LayoutProps {
  * Build Layout - Minimal wrapper that handles authentication and feature flag check
  *
  * Child routes (/craft and /craft/v1) handle their own UI structure.
- * Redirects to /app if Onyx Craft is disabled via feature flag.
+ * Redirects to /app if PrivateGPT Craft is disabled via feature flag.
  */
 export default async function Layout({ children }: LayoutProps) {
   noStore();
@@ -24,7 +24,7 @@ export default async function Layout({ children }: LayoutProps) {
     redirect(authResult.redirect as Route);
   }
 
-  // Check if Onyx Craft is enabled via feature flag
+  // Check if PrivateGPT Craft is enabled via feature flag
   // Only explicit true enables the feature; false or undefined = disabled
   const settings = await fetchSettingsSS();
   if (settings?.settings?.onyx_craft_enabled !== true) {

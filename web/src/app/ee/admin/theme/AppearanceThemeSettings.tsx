@@ -238,7 +238,7 @@ export const AppearanceThemeSettings = forwardRef<
               />
             </FormField.Control>
             <FormField.Description>
-              This name will show across the app and replace "Onyx" in the UI.
+              This name will show across the app and replace "PrivateGPT" in the UI.
             </FormField.Description>
             <FormField.Message
               messages={{ error: errors.application_name as string }}

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Onyx</title>
+    <title>PrivateGPT</title>
     <link
       href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"
@@ -360,7 +360,7 @@
                     >Root Domain</label
                   >
                   <div class="setting-description">
-                    The root URL for your Onyx instance
+                    The root URL for your PrivateGPT instance
                   </div>
                 </div>
               </div>
@@ -370,7 +370,7 @@
                   type="text"
                   id="onyxDomain"
                   class="input-field"
-                  placeholder="https://cloud.onyx.app"
+                  placeholder="https://cloud.privategpt.app"
                   autocomplete="off"
                   autocorrect="off"
                   autocapitalize="off"
@@ -393,7 +393,7 @@
       const { invoke } = window.__TAURI__.core;
 
       // Configuration
-      const DEFAULT_DOMAIN = "https://cloud.onyx.app";
+      const DEFAULT_DOMAIN = "https://cloud.privategpt.app";
       let currentServerUrl = "";
 
       // DOM elements

@@ -49,20 +49,20 @@ def validate_user_role_update(
     if current_role == UserRole.SLACK_USER:
         raise HTTPException(
             status_code=400,
-            detail="To change a Slack User's role, they must first login to Onyx via the web app.",
+            detail="To change a Slack User's role, they must first login to PrivateGPT via the web app.",
         )
 
     if current_role == UserRole.EXT_PERM_USER:
         # This shouldn't happen, but just in case
         raise HTTPException(
             status_code=400,
-            detail="To change an External Permissioned User's role, they must first login to Onyx via the web app.",
+            detail="To change an External Permissioned User's role, they must first login to PrivateGPT via the web app.",
         )
 
     if current_role == UserRole.LIMITED:
         raise HTTPException(
             status_code=400,
-            detail="To change a Limited User's role, they must first login to Onyx via the web app.",
+            detail="To change a Limited User's role, they must first login to PrivateGPT via the web app.",
         )
 
     if explicit_override:
@@ -91,7 +91,7 @@ def validate_user_role_update(
             status_code=400,
             detail=(
                 "A user cannot be set to a Slack User role. "
-                "This role is automatically assigned to users who only use Onyx via Slack."
+                "This role is automatically assigned to users who only use PrivateGPT via Slack."
             ),
         )
 

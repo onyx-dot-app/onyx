@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     steps after."""
 
     async with lifespan_base(app):
-        # seed the Onyx environment with LLMs, Assistants, etc. based on an optional
+        # seed the PrivateGPT environment with LLMs, Assistants, etc. based on an optional
         # environment variable. Used to automate deployment for multiple environments.
         seed_db()
 
@@ -160,7 +160,7 @@ def get_application() -> FastAPI:
         # Tenant management
         include_router_with_global_prefix_prepended(application, tenants_router)
 
-    # SCIM 2.0 — protocol endpoints (unauthenticated by Onyx session auth;
+    # SCIM 2.0 — protocol endpoints (unauthenticated by PrivateGPT session auth;
     # they use their own SCIM bearer token auth).
     # Not behind APP_API_PREFIX because IdPs expect /scim/v2/... directly.
     application.include_router(scim_router)

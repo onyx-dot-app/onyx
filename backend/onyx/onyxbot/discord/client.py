@@ -197,7 +197,7 @@ def main() -> None:
     from onyx.db.engine.sql_engine import SqlEngine
     from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 
-    logger.info("Starting Onyx Discord Bot...")
+    logger.info("Starting PrivateGPT Discord Bot...")
 
     # Initialize the database engine (required before any DB operations)
     SqlEngine.init_engine(pool_size=20, max_overflow=5)

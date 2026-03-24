@@ -1,9 +1,9 @@
-# Onyx CLI
+# PrivateGPT CLI
 
 [![Release CLI](https://github.com/onyx-dot-app/onyx/actions/workflows/release-cli.yml/badge.svg)](https://github.com/onyx-dot-app/onyx/actions/workflows/release-cli.yml)
 [![PyPI](https://img.shields.io/pypi/v/onyx-cli.svg)](https://pypi.org/project/onyx-cli/)
 
-A terminal interface for chatting with your [Onyx](https://github.com/onyx-dot-app/onyx) agent. Built with Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI framework.
+A terminal interface for chatting with your [PrivateGPT](https://github.com/onyx-dot-app/onyx) agent. Built with Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI framework.
 
 ## Installation
 
@@ -25,13 +25,13 @@ Run the interactive setup:
 onyx-cli configure
 ```
 
-This prompts for your Onyx server URL and API key, tests the connection, and saves config to `~/.config/onyx-cli/config.json`.
+This prompts for your PrivateGPT server URL and API key, tests the connection, and saves config to `~/.config/onyx-cli/config.json`.
 
 Environment variables override config file values:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ONYX_SERVER_URL` | No | Server base URL (default: `https://cloud.onyx.app`) |
+| `ONYX_SERVER_URL` | No | Server base URL (default: `https://cloud.privategpt.app`) |
 | `ONYX_API_KEY` | Yes | API key for authentication |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 
@@ -85,7 +85,7 @@ onyx-cli agents --json
 | `/configure` | Re-run connection setup |
 | `/connectors` | Open connectors in browser |
 | `/settings` | Open settings in browser |
-| `/quit` | Exit Onyx CLI |
+| `/quit` | Exit PrivateGPT CLI |
 
 ## Keyboard Shortcuts
 

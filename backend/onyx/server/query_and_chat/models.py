@@ -50,7 +50,7 @@ class TagResponse(BaseModel):
 
 
 class UpdateChatSessionThreadRequest(BaseModel):
-    # If not specified, use Onyx default persona
+    # If not specified, use PrivateGPT default persona
     chat_session_id: UUID
     new_alternate_model: str
 
@@ -61,7 +61,7 @@ class UpdateChatSessionTemperatureRequest(BaseModel):
 
 
 class ChatSessionCreationRequest(BaseModel):
-    # If not specified, use Onyx default persona
+    # If not specified, use PrivateGPT default persona
     persona_id: int = 0
     description: str | None = None
     project_id: int | None = None
@@ -80,7 +80,7 @@ class ChatFeedbackRequest(BaseModel):
         return self
 
 
-# NOTE: This model is used for the core flow of the Onyx application, any changes to it should be reviewed and approved by an
+# NOTE: This model is used for the core flow of the PrivateGPT application, any changes to it should be reviewed and approved by an
 # experienced team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 class SendMessageRequest(BaseModel):
     message: str

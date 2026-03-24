@@ -1,4 +1,4 @@
-"""Async HTTP client for communicating with Onyx API pods."""
+"""Async HTTP client for communicating with PrivateGPT API pods."""
 
 import aiohttp
 
@@ -17,10 +17,10 @@ logger = setup_logger()
 
 
 class OnyxAPIClient:
-    """Async HTTP client for sending chat requests to Onyx API pods.
+    """Async HTTP client for sending chat requests to PrivateGPT API pods.
 
     This client manages an aiohttp session for making non-blocking HTTP
-    requests to the Onyx API server. It handles authentication with per-tenant
+    requests to the PrivateGPT API server. It handles authentication with per-tenant
     API keys and multi-tenant routing.
 
     Usage:
@@ -48,7 +48,7 @@ class OnyxAPIClient:
             timeout: Request timeout in seconds.
         """
         # Helm chart uses API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS to set the base URL
-        # TODO: Ideally, this override is only used when someone is launching an Onyx service independently
+        # TODO: Ideally, this override is only used when someone is launching a PrivateGPT service independently
         self._base_url = build_api_server_url_for_http_requests(
             respect_env_override_if_set=True
         ).rstrip("/")
@@ -94,7 +94,7 @@ class OnyxAPIClient:
         api_key: str,
         persona_id: int | None = None,
     ) -> ChatFullResponse:
-        """Send a chat message to the Onyx API server and get a response.
+        """Send a chat message to the PrivateGPT API server and get a response.
 
         This method sends a non-streaming chat request to the API server. The response
         contains the complete answer with any citations and metadata.

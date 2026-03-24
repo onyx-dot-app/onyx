@@ -1781,7 +1781,7 @@ async def current_user_from_websocket(
 
 
 def get_default_admin_user_emails_() -> list[str]:
-    # No default seeding available for Onyx MIT
+    # No default seeding available for PrivateGPT MIT
     return []
 
 

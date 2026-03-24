@@ -4232,7 +4232,7 @@ class User__ExternalUserGroupId(Base):
     """Maps user info both internal and external to the name of the external group
     This maps the user to all of their external groups so that the external group name can be
     attached to the ACL list matching during query time. User level permissions can be handled by
-    directly adding the Onyx user to the doc ACL list"""
+    directly adding the PrivateGPT user to the doc ACL list"""
 
     __tablename__ = "user__external_user_group_id"
 
@@ -5094,7 +5094,7 @@ class ScimToken(Base):
 
 
 class ScimUserMapping(Base):
-    """Maps SCIM externalId from the IdP to an Onyx User."""
+    """Maps SCIM externalId from the IdP to a PrivateGPT User."""
 
     __tablename__ = "scim_user_mapping"
 
@@ -5126,7 +5126,7 @@ class ScimUserMapping(Base):
 
 
 class ScimGroupMapping(Base):
-    """Maps SCIM externalId from the IdP to an Onyx UserGroup."""
+    """Maps SCIM externalId from the IdP to a PrivateGPT UserGroup."""
 
     __tablename__ = "scim_group_mapping"
 

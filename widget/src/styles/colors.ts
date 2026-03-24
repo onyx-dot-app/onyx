@@ -9,7 +9,7 @@ export const colors = css`
     --alpha-grey-100-75: #000000bf;
     --alpha-grey-100-20: #00000033;
 
-    /* Onyx Brand Colors */
+    /* PrivateGPT Brand Colors */
     --onyx-ink-100: #000000;
     --onyx-ink-95: #1c1c1c;
 

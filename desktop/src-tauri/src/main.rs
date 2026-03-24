@@ -304,7 +304,7 @@ pub struct AppConfig {
 }
 
 fn default_window_title() -> String {
-    "Onyx".to_string()
+    "PrivateGPT".to_string()
 }
 
 fn default_show_menu_bar() -> bool {
@@ -485,7 +485,7 @@ fn trigger_new_window(app: &AppHandle) {
             &window_label,
             WebviewUrl::External(server_url.parse().unwrap()),
         )
-        .title("Onyx")
+        .title("PrivateGPT")
         .inner_size(1200.0, 800.0)
         .min_inner_size(800.0, 600.0)
         .transparent(true);
@@ -825,7 +825,7 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
                 .map_err(|e| format!("Invalid URL: {}", e))?,
         ),
     )
-    .title("Onyx")
+    .title("PrivateGPT")
     .inner_size(1200.0, 800.0)
     .min_inner_size(800.0, 600.0)
     .transparent(true);
@@ -1041,7 +1041,7 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
         true,
         Some("CmdOrCtrl+Comma"),
     )?;
-    let docs_item = MenuItem::with_id(app, "open_docs", "Onyx Documentation", true, None::<&str>)?;
+    let docs_item = MenuItem::with_id(app, "open_docs", "PrivateGPT Documentation", true, None::<&str>)?;
 
     if let Some(file_menu) = menu
         .items()?
@@ -1156,7 +1156,7 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
-    let open_app = MenuItem::with_id(app, TRAY_MENU_OPEN_APP_ID, "Open Onyx", true, None::<&str>)?;
+    let open_app = MenuItem::with_id(app, TRAY_MENU_OPEN_APP_ID, "Open PrivateGPT", true, None::<&str>)?;
     let open_chat = MenuItem::with_id(
         app,
         TRAY_MENU_OPEN_CHAT_ID,
@@ -1174,7 +1174,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     )?;
     // Keep it visible/pinned without letting users uncheck (avoids orphaning the tray)
     let _ = show_in_menu_bar.set_enabled(false);
-    let quit = PredefinedMenuItem::quit(app, Some("Quit Onyx"))?;
+    let quit = PredefinedMenuItem::quit(app, Some("Quit PrivateGPT"))?;
 
     MenuBuilder::new(app)
         .item(&open_app)
@@ -1206,7 +1206,7 @@ fn handle_tray_menu_event(app: &AppHandle, id: &str) {
 }
 
 fn setup_tray_icon(app: &AppHandle) -> tauri::Result<()> {
-    let mut builder = TrayIconBuilder::with_id(TRAY_ID).tooltip("Onyx");
+    let mut builder = TrayIconBuilder::with_id(TRAY_ID).tooltip("PrivateGPT");
 
     let tray_icon = Image::from_bytes(TRAY_ICON_BYTES)
         .ok()

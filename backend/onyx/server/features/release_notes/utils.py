@@ -76,7 +76,7 @@ def parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntry
                 ReleaseNoteEntry(
                     version=version,
                     date=date,
-                    title=f"Onyx {version} is available!",
+                    title=f"PrivateGPT {version} is available!",
                 )
             )
 

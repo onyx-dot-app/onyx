@@ -255,12 +255,12 @@ const MemoizedAppSidebarInner = memo(
       Notification[]
     >("/api/notifications", errorHandlingFetcher);
 
-    // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
+    // Check if PrivateGPT Craft is enabled via settings (backed by PostHog feature flag)
     // Only explicit true enables the feature; false or undefined = disabled
     const isOnyxCraftEnabled =
       combinedSettings?.settings?.onyx_craft_enabled === true;
 
-    // Find build_mode feature announcement notification (only if Onyx Craft is enabled)
+    // Find build_mode feature announcement notification (only if PrivateGPT Craft is enabled)
     const buildModeNotification = isOnyxCraftEnabled
       ? notifications?.find(
           (n) =>
