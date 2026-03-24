@@ -309,7 +309,13 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
         page_size = min(self.batch_size, _JSM_PAGE_SIZE)
 
         while True:
-            result = self._search_jql(jql, start_at=start_at, max_results=page_size)
+            try:
+                result = self._search_jql(jql, start_at=start_at, max_results=page_size)
+            except requests.exceptions.HTTPError as exc:
+                if exc.response is not None and exc.response.status_code == 429:
+                    logger.warning("Rate limited by Jira API, aborting pagination")
+                    break
+                raise
             issues = result.get("issues", [])
             total: int = result.get("total", 0)
 

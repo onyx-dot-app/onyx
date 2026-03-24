@@ -138,8 +138,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         if self.bucket_type == BlobType.S3:
             if credentials.get("endpoint_url"):
                 self.endpoint_url = credentials["endpoint_url"]
-            if credentials.get("s3_skip_ssl_verification"):
-                self.s3_skip_ssl_verification = credentials["s3_skip_ssl_verification"]
+            raw_ssl = credentials.get("s3_skip_ssl_verification")
+            if raw_ssl is not None:
+                self.s3_skip_ssl_verification = str(raw_ssl).lower() not in ("false", "0", "")
             if credentials.get("s3_ca_cert_path"):
                 self.s3_ca_cert_path = credentials["s3_ca_cert_path"]
 
