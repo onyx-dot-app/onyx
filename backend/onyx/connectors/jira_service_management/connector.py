@@ -140,11 +140,11 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
 
         if updated_after:
             conditions.append(
-                f"updated >= '{updated_after.strftime('%Y-%m-%d %H:%M')}'"
+                f"updated >= '{updated_after.strftime('%Y-%m-%d %H:%M')} UTC'"
             )
         if updated_before:
             conditions.append(
-                f"updated <= '{updated_before.strftime('%Y-%m-%d %H:%M')}'"
+                f"updated <= '{updated_before.strftime('%Y-%m-%d %H:%M')} UTC'"
             )
 
         return " AND ".join(conditions) + " ORDER BY updated ASC"
@@ -177,6 +177,9 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
     # ------------------------------------------------------------------
 
     def _build_document(self, issue: dict[str, Any]) -> Document | None:
+        if self._auth is None:
+            raise ConnectorMissingCredentialError("Jira Service Management")
+
         fields = issue.get("fields", {})
         issue_key = issue.get("key", "")
         if not issue_key:
@@ -366,6 +369,3 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
             raise ConnectorValidationError(
                 f"Could not connect to Jira Service Management: {exc}"
             ) from exc
-
-
-

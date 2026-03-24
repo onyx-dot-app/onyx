@@ -71,20 +71,22 @@ def format_sla_as_text(sla_data: dict[str, Any]) -> str:
 
     lines = ["SLA Status:"]
     for sla in values:
-        goal = sla.get("goal", {})
-        name = goal.get("name", "Unknown SLA")
-        completed = sla.get("completed", False)
-        breached = sla.get("breached", False)
-        time_remaining = sla.get("timeRemaining", {})
+        name = sla.get("name", "Unknown SLA")
+        ongoing: dict[str, Any] = sla.get("ongoingCycle") or {}
+        completed_cycles: list[Any] = sla.get("completedCycles") or []
+        breached = ongoing.get("breached", False) or any(
+            c.get("breached", False) for c in completed_cycles
+        )
+        completed = bool(completed_cycles) and not ongoing
+        time_remaining: dict[str, Any] = ongoing.get("remainingTime") or {}
 
         if completed:
             status = "Completed"
         elif breached:
             status = "BREACHED"
         else:
-            remaining = time_remaining.get("formattedValue", "unknown")
-            unit = time_remaining.get("unit", "")
-            status = f"{remaining} {unit} remaining"
+            remaining = time_remaining.get("friendly", "unknown")
+            status = f"{remaining} remaining"
 
         lines.append(f"  - {name}: {status}")
 
