@@ -383,7 +383,7 @@
   ) {
   @apply bg-background-tint-inverted-04;
   --interactive-foreground: var(--text-inverted-04);
-  --interactive-foreground-icon: var(--text-inverted-05);
+  --interactive-foreground-icon: var(--text-inverted-04);
 }
 .interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"][data-disabled] {
   @apply bg-background-neutral-04;
