@@ -45,19 +45,20 @@ def _build_issue_url(base_url: str, issue_key: str) -> str:
 
 
 def _extract_text_from_field(field: Any) -> str:
-    """Extract plain text from a Jira field (ADF or string)."""
+    """Recursively extract plain text from a Jira ADF field or string."""
     if field is None:
         return ""
     if isinstance(field, str):
         return field
     if isinstance(field, dict):
-        # Atlassian Document Format (ADF)
-        texts: list[str] = []
-        for block in field.get("content", []):
-            for inline in block.get("content", []):
-                if inline.get("type") == "text":
-                    texts.append(inline.get("text", ""))
-        return " ".join(texts)
+        if field.get("type") == "text":
+            return field.get("text", "")
+        return " ".join(
+            _extract_text_from_field(child)
+            for child in field.get("content", [])
+        )
+    if isinstance(field, list):
+        return " ".join(_extract_text_from_field(item) for item in field)
     return str(field)
 
 
@@ -99,7 +100,9 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
     ) -> None:
         self.jsm_base_url = jsm_base_url.rstrip("/")
         self.project_key = project_key
-        self.labels_to_skip: set[str] = set(labels_to_skip if labels_to_skip is not None else JSM_CONNECTOR_LABELS_TO_SKIP)
+        self.labels_to_skip: set[str] = set(
+            labels_to_skip if labels_to_skip is not None else JSM_CONNECTOR_LABELS_TO_SKIP
+        )
         self.batch_size = batch_size
         self._auth: HTTPBasicAuth | None = None
 
