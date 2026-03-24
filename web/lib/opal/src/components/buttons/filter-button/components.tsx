@@ -91,7 +91,7 @@ function FilterButton({
             interaction="hover"
             onClick={(e) => {
               e.stopPropagation();
-              onClear?.();
+              onClear();
             }}
           />
         </div>

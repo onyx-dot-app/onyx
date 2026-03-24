@@ -88,7 +88,9 @@ export const DisabledActive: Story = {
 export const StateComparison: Story = {
   render: () => (
     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-      <FilterButton icon={SvgUser}>Everyone</FilterButton>
+      <FilterButton icon={SvgUser} onClear={() => undefined}>
+        Everyone
+      </FilterButton>
       <FilterButton icon={SvgUser} active onClear={() => console.log("clear")}>
         By alice@example.com
       </FilterButton>
