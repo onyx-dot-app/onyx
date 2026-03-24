@@ -16,6 +16,7 @@ export default function AgentsPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         title="Agents"
+        description="Customize AI behavior and knowledge with agents. Manage agents in your organization."
         icon={SvgOnyxOctagon}
         rightChildren={
           <Link href="/app/agents/create?admin=true">
