@@ -315,6 +315,7 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
 
         start_at = 0
         page_size = min(self.batch_size, _JSM_PAGE_SIZE)
+        total = 0
 
         while True:
             try:
@@ -328,7 +329,7 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
                     ) from exc
                 raise
             issues = result.get("issues", [])
-            total: int = result.get("total", 0)
+            total = result.get("total", 0)
 
             logger.info(
                 f"JSM: fetched {len(issues)} issues (offset {start_at}/{total})"
