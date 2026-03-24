@@ -1,9 +1,13 @@
-import type { IconProps } from "@opal/types";
 import SvgOnyxLogo from "@opal/icons/onyx-logo";
 import SvgOnyxTyped from "@opal/icons/onyx-typed";
 import { cn } from "@opal/utils";
 
-const SvgOnyxLogoTyped = ({ size: height, className }: IconProps) => {
+interface OnyxLogoTypedProps {
+  size?: number;
+  className?: string;
+}
+
+const SvgOnyxLogoTyped = ({ size: height, className }: OnyxLogoTypedProps) => {
   // # NOTE(@raunakab):
   // This ratio is not some random, magical number; it is available on Figma.
   const HEIGHT_TO_GAP_RATIO = 5 / 16;

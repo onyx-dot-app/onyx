@@ -122,8 +122,8 @@ export { default as SvgNotificationBubble } from "@opal/icons/notification-bubbl
 export { default as SvgOllama } from "@opal/icons/ollama";
 export { default as SvgOnyxLogo } from "@opal/icons/onyx-logo";
 export { default as SvgOnyxLogoTyped } from "@opal/icons/onyx-logo-typed";
-export { default as SvgOnyxTyped } from "@opal/icons/onyx-typed";
 export { default as SvgOnyxOctagon } from "@opal/icons/onyx-octagon";
+export { default as SvgOnyxTyped } from "@opal/icons/onyx-typed";
 export { default as SvgOpenai } from "@opal/icons/openai";
 export { default as SvgOpenrouter } from "@opal/icons/openrouter";
 export { default as SvgOrganization } from "@opal/icons/organization";
