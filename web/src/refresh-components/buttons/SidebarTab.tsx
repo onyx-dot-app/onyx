@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { IconFunctionComponent, IconProps } from "@opal/types";
+import type { ButtonType, IconFunctionComponent, IconProps } from "@opal/types";
 import type { Route } from "next";
 import { Interactive } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
@@ -18,7 +18,7 @@ export interface SidebarTabProps {
   // Button properties:
   onClick?: React.MouseEventHandler<HTMLElement>;
   href?: string;
-  type?: "submit" | "button" | "reset";
+  type?: ButtonType;
   icon?: React.FunctionComponent<IconProps>;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;

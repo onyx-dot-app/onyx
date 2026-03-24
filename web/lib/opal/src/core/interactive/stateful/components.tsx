@@ -4,7 +4,7 @@ import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import { useDisabled } from "@opal/core/disabled/components";
-import type { WithoutStyles } from "@opal/types";
+import type { ButtonType, WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,7 +68,7 @@ interface InteractiveStatefulProps
    * element is treated as inherently interactive for cursor styling purposes
    * even without an explicit `onClick` or `href`.
    */
-  type?: "submit" | "button" | "reset";
+  type?: ButtonType;
 
   /**
    * URL to navigate to when clicked. Passed through Slot to the child.
