@@ -60,7 +60,7 @@ def get_service_desks(
     limit = 50
 
     while True:
-        resp = session.get(url, params={"start": start, "limit": limit})
+        resp = session.get(url, params={"start": start, "limit": limit}, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         values = data.get("values", [])
@@ -159,7 +159,7 @@ def extract_jsm_metadata(
             if isinstance(status_category, dict) and status_category.get("name"):
                 metadata["status_category"] = status_category["name"]
 
-    except Exception as e:
+    except (AttributeError, KeyError, TypeError) as e:
         logger.warning(f"Error extracting JSM metadata: {e}")
 
     return metadata
