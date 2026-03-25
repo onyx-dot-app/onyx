@@ -342,7 +342,7 @@ visible text in the DOM (e.g., `title`, `description`, `label`) should be typed 
 
 ```typescript
 import type { RichStr } from "@opal/types";
-import { resolveStr } from "@opal/components/text/resolveStr";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
 
 // ✅ Good — new components accept string | RichStr
 interface InfoCardProps {

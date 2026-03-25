@@ -2,7 +2,7 @@ import type { HTMLAttributes } from "react";
 
 import type { WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
-import { resolveChildren } from "@opal/components/text/resolveStr";
+import { resolveChildren } from "@opal/components/text/InlineMarkdown";
 
 // ---------------------------------------------------------------------------
 // Types
