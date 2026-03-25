@@ -315,6 +315,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       <Button
         onClick={handleSave}
         disabled={!groupName.trim() || isSubmitting || isSyncing}
+        tooltip={
+          isSyncing
+            ? "Document embeddings are being updated due to recent changes to this group."
+            : undefined
+        }
       >
         {isSubmitting ? "Saving..." : isSyncing ? "Syncing..." : "Save Changes"}
       </Button>

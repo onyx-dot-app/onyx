@@ -53,7 +53,7 @@ test.describe("Groups page — layout", () => {
   }) => {
     await groupsPage.goto();
 
-    await expect(groupsPage.page.getByText("Groups")).toBeVisible();
+    await expect(groupsPage.pageHeading).toBeVisible();
     await expect(groupsPage.listSearchInput).toBeVisible();
     await expect(groupsPage.newGroupButton).toBeVisible();
   });

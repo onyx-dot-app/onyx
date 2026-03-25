@@ -22,9 +22,7 @@ export class GroupsAdminPage {
 
   async goto() {
     await this.page.goto("/admin/groups");
-    await expect(this.page.getByText("Groups")).toBeVisible({
-      timeout: 15000,
-    });
+    await expect(this.newGroupButton).toBeVisible({ timeout: 15000 });
   }
 
   async gotoCreate() {
@@ -36,12 +34,18 @@ export class GroupsAdminPage {
 
   async gotoEdit(groupId: number) {
     await this.page.goto(`/admin/groups/${groupId}`);
-    await this.page.waitForLoadState("networkidle");
+    // Wait for the form to be ready — avoids networkidle hanging due to SWR polling.
+    await expect(this.groupNameInput).toBeVisible({ timeout: 15000 });
   }
 
   // ---------------------------------------------------------------------------
   // List page
   // ---------------------------------------------------------------------------
+
+  /** The Groups page heading container (unique to the list page). */
+  get pageHeading(): Locator {
+    return this.page.getByTestId("groups-page-heading");
+  }
 
   /** The search input on the list page. */
   get listSearchInput(): Locator {
@@ -70,7 +74,7 @@ export class GroupsAdminPage {
   async openGroup(name: string) {
     const card = this.getGroupCard(name);
     await card.getByRole("button", { name: "View group" }).click();
-    await this.page.waitForLoadState("networkidle");
+    await expect(this.groupNameInput).toBeVisible({ timeout: 15000 });
   }
 
   /** Search groups on the list page. */
