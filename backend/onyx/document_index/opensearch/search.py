@@ -936,7 +936,7 @@ class DocumentQuery:
             """
             # Logical OR operator on its elements.
             acl_visibility_filter: dict[
-                str, dict[str, list[TermQuery | TermsQuery]]
+                str, dict[str, list[TermQuery[bool] | TermsQuery[str]] | int]
             ] = {
                 "bool": {
                     "should": [{"term": {PUBLIC_FIELD_NAME: {"value": True}}}],
@@ -952,12 +952,8 @@ class DocumentQuery:
                 # because Lucene will optimize the filtering for large sets of
                 # terms. Small sets of terms are not expected to perform any
                 # differently than individual term clauses.
-                acl_subclause: TermsQuery = {
-                    "terms": {
-                        ACCESS_CONTROL_LIST_FIELD_NAME: [
-                            acl for acl in access_control_list
-                        ]
-                    }
+                acl_subclause: TermsQuery[str] = {
+                    "terms": {ACCESS_CONTROL_LIST_FIELD_NAME: list(access_control_list)}
                 }
                 acl_visibility_filter["bool"]["should"].append(acl_subclause)
             return acl_visibility_filter
@@ -1052,13 +1048,7 @@ class DocumentQuery:
             # Lucene will optimize the filtering for large sets of terms. Small
             # sets of terms are not expected to perform any differently than
             # individual term clauses.
-            return {
-                "terms": {
-                    DOCUMENT_SETS_FIELD_NAME: [
-                        document_set for document_set in document_sets
-                    ]
-                }
-            }
+            return {"terms": {DOCUMENT_SETS_FIELD_NAME: list(document_sets)}}
 
         def _get_user_project_filter(project_id: int) -> TermQuery[int]:
             return {"term": {USER_PROJECTS_FIELD_NAME: {"value": project_id}}}
@@ -1133,7 +1123,7 @@ class DocumentQuery:
             # Lucene will optimize the filtering for large sets of terms. Small
             # sets of terms are not expected to perform any differently than
             # individual term clauses.
-            return {"terms": {DOCUMENT_ID_FIELD_NAME: [doc_id for doc_id in doc_ids]}}
+            return {"terms": {DOCUMENT_ID_FIELD_NAME: list(doc_ids)}}
 
         def _get_hierarchy_node_filter(
             node_ids: list[int],
@@ -1163,13 +1153,7 @@ class DocumentQuery:
             # Lucene will optimize the filtering for large sets of terms. Small
             # sets of terms are not expected to perform any differently than
             # individual term clauses.
-            return {
-                "terms": {
-                    ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: [
-                        node_id for node_id in node_ids
-                    ]
-                }
-            }
+            return {"terms": {ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: list(node_ids)}}
 
         if document_id is not None and attached_document_ids is not None:
             raise ValueError(
