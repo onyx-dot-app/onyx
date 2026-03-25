@@ -54,9 +54,9 @@ from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY = 65_536
 
 
-T = TypeVar("T")
-TermsQuery: TypeAlias = dict[str, dict[str, list[T]]]
-TermQuery: TypeAlias = dict[str, dict[str, dict[str, T]]]
+_T = TypeVar("T")
+TermsQuery: TypeAlias = dict[str, dict[str, list[_T]]]
+TermQuery: TypeAlias = dict[str, dict[str, dict[str, _T]]]
 
 
 # TODO(andrei): Turn all magic dictionaries to pydantic models.
