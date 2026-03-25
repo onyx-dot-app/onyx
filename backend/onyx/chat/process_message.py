@@ -4,9 +4,11 @@ An overview can be found in the README.md file in this directory.
 """
 
 import io
+import queue
 import re
 import traceback
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from contextvars import Token
 from uuid import UUID
 
@@ -28,6 +30,7 @@ from onyx.chat.compression import calculate_total_history_tokens
 from onyx.chat.compression import compress_chat_history
 from onyx.chat.compression import find_summary_for_branch
 from onyx.chat.compression import get_compression_params
+from onyx.chat.emitter import Emitter
 from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import EmptyLLMResponseError
 from onyx.chat.llm_loop import run_llm_loop
@@ -59,6 +62,8 @@ from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
+from onyx.db.chat import reserve_multi_model_message_ids
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
@@ -77,16 +82,20 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.override_models import LLMOverride
 from onyx.llm.request_context import reset_llm_mock_response
 from onyx.llm.request_context import set_llm_mock_response
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import SEARCH_TOOL_ID
@@ -995,6 +1004,568 @@ def handle_stream_message_objects(
                 )
         except Exception:
             logger.exception("Error in setting processing status")
+
+
+def _build_model_display_name(override: LLMOverride) -> str:
+    """Build a human-readable display name from an LLM override."""
+    if override.display_name:
+        return override.display_name
+    if override.model_version:
+        return override.model_version
+    if override.model_provider:
+        return override.model_provider
+    return "unknown"
+
+
+# Sentinel placed on the merged queue when a model thread finishes.
+_MODEL_DONE = object()
+
+
+class _ModelIndexEmitter(Emitter):
+    """Emitter that tags packets with model_index and forwards directly to a shared queue.
+
+    Unlike the standard Emitter (which accumulates in a local bus), this puts
+    packets into the shared merged_queue in real-time as they're emitted. This
+    enables true parallel streaming — packets from multiple models interleave
+    on the wire instead of arriving in bursts after each model completes.
+    """
+
+    def __init__(self, model_idx: int, merged_queue: queue.Queue) -> None:
+        super().__init__(queue.Queue())  # bus exists for compat, unused
+        self._model_idx = model_idx
+        self._merged_queue = merged_queue
+
+    def emit(self, packet: Packet) -> None:
+        tagged_placement = Placement(
+            turn_index=packet.placement.turn_index if packet.placement else 0,
+            tab_index=packet.placement.tab_index if packet.placement else 0,
+            sub_turn_index=(
+                packet.placement.sub_turn_index if packet.placement else None
+            ),
+            model_index=self._model_idx,
+        )
+        tagged_packet = Packet(placement=tagged_placement, obj=packet.obj)
+        self._merged_queue.put((self._model_idx, tagged_packet))
+
+
+def run_multi_model_stream(
+    new_msg_req: SendMessageRequest,
+    user: User,
+    db_session: Session,
+    llm_overrides: list[LLMOverride],
+    litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
+    mcp_headers: dict[str, str] | None = None,
+) -> AnswerStream:
+    # TODO: The setup logic below (session resolution through tool construction)
+    # is duplicated from handle_stream_message_objects. Extract into a shared
+    # _ChatStreamContext dataclass + _prepare_chat_stream_context() factory so
+    # both paths call the same setup code. Tracked as follow-up refactor.
+    """Run 2-3 LLMs in parallel and yield their packets tagged with model_index.
+
+    Resource management:
+    - Each model thread gets its OWN db_session (SQLAlchemy sessions are not thread-safe)
+    - The caller's db_session is used only for setup (before threads launch) and
+      completion callbacks (after threads finish)
+    - ThreadPoolExecutor is bounded to len(overrides) workers
+    - All threads are joined in the finally block regardless of success/failure
+    - Queue-based merging avoids busy-waiting
+    """
+    n_models = len(llm_overrides)
+    if n_models < 2 or n_models > 3:
+        raise ValueError(f"Multi-model requires 2-3 overrides, got {n_models}")
+    if new_msg_req.deep_research:
+        raise ValueError("Multi-model is not supported with deep research")
+
+    tenant_id = get_current_tenant_id()
+    cache: CacheBackend | None = None
+    chat_session: ChatSession | None = None
+
+    user_id = user.id
+    if user.is_anonymous:
+        llm_user_identifier = "anonymous_user"
+    else:
+        llm_user_identifier = user.email or str(user_id)
+
+    try:
+        # ── Session setup (same as single-model path) ──────────────────
+        if not new_msg_req.chat_session_id:
+            if not new_msg_req.chat_session_info:
+                raise RuntimeError(
+                    "Must specify a chat session id or chat session info"
+                )
+            chat_session = create_chat_session_from_request(
+                chat_session_request=new_msg_req.chat_session_info,
+                user_id=user_id,
+                db_session=db_session,
+            )
+            yield CreateChatSessionID(chat_session_id=chat_session.id)
+        else:
+            chat_session = get_chat_session_by_id(
+                chat_session_id=new_msg_req.chat_session_id,
+                user_id=user_id,
+                db_session=db_session,
+            )
+
+        persona = chat_session.persona
+        message_text = new_msg_req.message
+
+        # ── Build N LLM instances and validate costs ───────────────────
+        llms: list[LLM] = []
+        model_display_names: list[str] = []
+        for override in llm_overrides:
+            llm = get_llm_for_persona(
+                persona=persona,
+                user=user,
+                llm_override=override,
+                additional_headers=litellm_additional_headers,
+            )
+            check_llm_cost_limit_for_provider(
+                db_session=db_session,
+                tenant_id=tenant_id,
+                llm_provider_api_key=llm.config.api_key,
+            )
+            llms.append(llm)
+            model_display_names.append(_build_model_display_name(override))
+
+        # Use first LLM for token counting (context window is checked per-model
+        # but token counting is model-agnostic enough for setup purposes)
+        token_counter = get_llm_token_counter(llms[0])
+
+        verify_user_files(
+            user_files=new_msg_req.file_descriptors,
+            user_id=user_id,
+            db_session=db_session,
+            project_id=chat_session.project_id,
+        )
+
+        # ── Chat history chain (shared across all models) ──────────────
+        chat_history = create_chat_history_chain(
+            chat_session_id=chat_session.id, db_session=db_session
+        )
+
+        root_message = get_or_create_root_message(
+            chat_session_id=chat_session.id, db_session=db_session
+        )
+
+        if new_msg_req.parent_message_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
+            parent_message = chat_history[-1] if chat_history else root_message
+        elif (
+            new_msg_req.parent_message_id is None
+            or new_msg_req.parent_message_id == root_message.id
+        ):
+            parent_message = root_message
+            chat_history = []
+        else:
+            parent_message = None
+            for i in range(len(chat_history) - 1, -1, -1):
+                if chat_history[i].id == new_msg_req.parent_message_id:
+                    parent_message = chat_history[i]
+                    chat_history = chat_history[: i + 1]
+                    break
+
+        if parent_message is None:
+            raise ValueError(
+                "The new message sent is not on the latest mainline of messages"
+            )
+
+        if parent_message.message_type == MessageType.USER:
+            user_message = parent_message
+        else:
+            user_message = create_new_chat_message(
+                chat_session_id=chat_session.id,
+                parent_message=parent_message,
+                message=message_text,
+                token_count=token_counter(message_text),
+                message_type=MessageType.USER,
+                files=new_msg_req.file_descriptors,
+                db_session=db_session,
+                commit=True,
+            )
+            chat_history.append(user_message)
+
+        available_files = _collect_available_file_ids(
+            chat_history=chat_history,
+            project_id=chat_session.project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+
+        summary_message = find_summary_for_branch(db_session, chat_history)
+        summarized_file_metadata: dict[str, FileToolMetadata] = {}
+        if summary_message and summary_message.last_summarized_message_id:
+            cutoff_id = summary_message.last_summarized_message_id
+            for msg in chat_history:
+                if msg.id > cutoff_id or not msg.files:
+                    continue
+                for fd in msg.files:
+                    file_id = fd.get("id")
+                    if not file_id:
+                        continue
+                    summarized_file_metadata[file_id] = FileToolMetadata(
+                        file_id=file_id,
+                        filename=fd.get("name") or "unknown",
+                        approx_char_count=0,
+                    )
+            chat_history = [m for m in chat_history if m.id > cutoff_id]
+
+        user_memory_context = get_memories(user, db_session)
+        custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
+
+        prompt_memory_context = (
+            user_memory_context
+            if user.use_memories
+            else user_memory_context.without_memories()
+        )
+
+        max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (
+            custom_agent_prompt or ""
+        )
+
+        reserved_token_count = calculate_reserved_tokens(
+            db_session=db_session,
+            persona_system_prompt=max_reserved_system_prompt_tokens_str,
+            token_counter=token_counter,
+            files=new_msg_req.file_descriptors,
+            user_memory_context=prompt_memory_context,
+        )
+
+        context_user_files = resolve_context_user_files(
+            persona=persona,
+            project_id=chat_session.project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+
+        # Use the smallest context window across all models for safety
+        min_context_window = min(llm.config.max_input_tokens for llm in llms)
+
+        extracted_context_files = extract_context_files(
+            user_files=context_user_files,
+            llm_max_context_window=min_context_window,
+            reserved_token_count=reserved_token_count,
+            db_session=db_session,
+        )
+
+        search_params = determine_search_params(
+            persona_id=persona.id,
+            project_id=chat_session.project_id,
+            extracted_context_files=extracted_context_files,
+        )
+
+        if persona.user_files:
+            existing = set(available_files.user_file_ids)
+            for uf in persona.user_files:
+                if uf.id not in existing:
+                    available_files.user_file_ids.append(uf.id)
+
+        all_tools = get_tools(db_session)
+        tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
+
+        search_tool_id = next(
+            (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
+            None,
+        )
+
+        forced_tool_id = new_msg_req.forced_tool_id
+        if (
+            search_params.search_usage == SearchToolUsage.DISABLED
+            and forced_tool_id is not None
+            and search_tool_id is not None
+            and forced_tool_id == search_tool_id
+        ):
+            forced_tool_id = None
+
+        files = load_all_chat_files(chat_history, db_session)
+        chat_files_for_tools = _convert_loaded_files_to_chat_files(files)
+
+        # ── Reserve N assistant message IDs ────────────────────────────
+        reserved_messages = reserve_multi_model_message_ids(
+            db_session=db_session,
+            chat_session_id=chat_session.id,
+            parent_message_id=user_message.id,
+            model_display_names=model_display_names,
+        )
+
+        yield MultiModelMessageResponseIDInfo(
+            user_message_id=user_message.id,
+            reserved_assistant_message_ids=[m.id for m in reserved_messages],
+            model_names=model_display_names,
+        )
+
+        has_file_reader_tool = any(
+            tool.in_code_tool_id == "file_reader" for tool in all_tools
+        )
+
+        chat_history_result = convert_chat_history(
+            chat_history=chat_history,
+            files=files,
+            context_image_files=extracted_context_files.image_files,
+            additional_context=new_msg_req.additional_context,
+            token_counter=token_counter,
+            tool_id_to_name_map=tool_id_to_name_map,
+        )
+        simple_chat_history = chat_history_result.simple_messages
+
+        all_injected_file_metadata: dict[str, FileToolMetadata] = (
+            chat_history_result.all_injected_file_metadata
+            if has_file_reader_tool
+            else {}
+        )
+        if summarized_file_metadata:
+            for fid, meta in summarized_file_metadata.items():
+                all_injected_file_metadata.setdefault(fid, meta)
+
+        if summary_message is not None:
+            summary_simple = ChatMessageSimple(
+                message=summary_message.message,
+                token_count=summary_message.token_count,
+                message_type=MessageType.ASSISTANT,
+            )
+            simple_chat_history.insert(0, summary_simple)
+
+        # ── Stop signal and processing status ──────────────────────────
+        cache = get_cache_backend()
+        reset_cancel_status(chat_session.id, cache)
+
+        def check_is_connected() -> bool:
+            return check_stop_signal(chat_session.id, cache)
+
+        set_processing_status(
+            chat_session_id=chat_session.id,
+            cache=cache,
+            value=True,
+        )
+
+        # Release the main session's read transaction before the long stream
+        db_session.commit()
+
+        # ── Parallel model execution ───────────────────────────────────
+        # Each model thread writes tagged packets to this shared queue.
+        # Sentinel _MODEL_DONE signals that a thread finished.
+        merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = (
+            queue.Queue()
+        )
+
+        # Track per-model state containers for completion callbacks
+        state_containers: list[ChatStateContainer] = [
+            ChatStateContainer() for _ in range(n_models)
+        ]
+        # Track which models completed successfully (for completion callbacks)
+        model_succeeded: list[bool] = [False] * n_models
+
+        user_identity = LLMUserIdentity(
+            user_id=llm_user_identifier,
+            session_id=str(chat_session.id),
+        )
+
+        def _run_model(model_idx: int) -> None:
+            """Run a single model in a worker thread.
+
+            Uses _ModelIndexEmitter so packets flow directly to merged_queue
+            in real-time (not batched after completion). This enables true
+            parallel streaming where both models' tokens interleave on the wire.
+
+            DB access: tools may need a session during execution (e.g., search
+            tool). Each thread creates its own session via context manager.
+            """
+            model_emitter = _ModelIndexEmitter(model_idx, merged_queue)
+            sc = state_containers[model_idx]
+            model_llm = llms[model_idx]
+
+            try:
+                # Each model thread gets its own DB session for tool execution.
+                # The session is scoped to the thread and closed when done.
+                with get_session_with_current_tenant() as thread_db_session:
+                    # Construct tools per-thread with thread-local DB session
+                    thread_tool_dict = construct_tools(
+                        persona=persona,
+                        db_session=thread_db_session,
+                        emitter=model_emitter,
+                        user=user,
+                        llm=model_llm,
+                        search_tool_config=SearchToolConfig(
+                            user_selected_filters=new_msg_req.internal_search_filters,
+                            project_id_filter=search_params.project_id_filter,
+                            persona_id_filter=search_params.persona_id_filter,
+                            bypass_acl=False,
+                            enable_slack_search=_should_enable_slack_search(
+                                persona, new_msg_req.internal_search_filters
+                            ),
+                        ),
+                        custom_tool_config=CustomToolConfig(
+                            chat_session_id=chat_session.id,
+                            message_id=user_message.id,
+                            additional_headers=custom_tool_additional_headers,
+                            mcp_headers=mcp_headers,
+                        ),
+                        file_reader_tool_config=FileReaderToolConfig(
+                            user_file_ids=available_files.user_file_ids,
+                            chat_file_ids=available_files.chat_file_ids,
+                        ),
+                        allowed_tool_ids=new_msg_req.allowed_tool_ids,
+                        search_usage_forcing_setting=search_params.search_usage,
+                    )
+                    model_tools: list[Tool] = []
+                    for tool_list in thread_tool_dict.values():
+                        model_tools.extend(tool_list)
+
+                    # Run the LLM loop — this blocks until the model finishes.
+                    # Packets flow to merged_queue in real-time via the emitter.
+                    run_llm_loop(
+                        emitter=model_emitter,
+                        state_container=sc,
+                        simple_chat_history=simple_chat_history,
+                        tools=model_tools,
+                        custom_agent_prompt=custom_agent_prompt,
+                        context_files=extracted_context_files,
+                        persona=persona,
+                        user_memory_context=user_memory_context,
+                        llm=model_llm,
+                        token_counter=get_llm_token_counter(model_llm),
+                        db_session=thread_db_session,
+                        forced_tool_id=forced_tool_id,
+                        user_identity=user_identity,
+                        chat_session_id=str(chat_session.id),
+                        chat_files=chat_files_for_tools,
+                        include_citations=new_msg_req.include_citations,
+                        all_injected_file_metadata=all_injected_file_metadata,
+                        inject_memories_in_prompt=user.use_memories,
+                    )
+
+                model_succeeded[model_idx] = True
+
+            except Exception as e:
+                merged_queue.put((model_idx, e))
+
+            finally:
+                merged_queue.put((model_idx, _MODEL_DONE))
+
+        # Launch model threads via ThreadPoolExecutor (bounded, context-propagating)
+        executor = ThreadPoolExecutor(
+            max_workers=n_models,
+            thread_name_prefix="multi-model",
+        )
+        futures = []
+        try:
+            for i in range(n_models):
+                futures.append(executor.submit(_run_model, i))
+
+            # ── Main thread: merge and yield packets ───────────────────
+            models_remaining = n_models
+            while models_remaining > 0:
+                try:
+                    model_idx, item = merged_queue.get(timeout=0.3)
+                except queue.Empty:
+                    # Check cancellation during idle periods
+                    if not check_is_connected():
+                        yield Packet(
+                            placement=Placement(turn_index=0),
+                            obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+                        )
+                        return
+                    continue
+
+                if item is _MODEL_DONE:
+                    models_remaining -= 1
+                    continue
+
+                if isinstance(item, Exception):
+                    # Yield error as a tagged StreamingError packet
+                    error_msg = str(item)
+                    stack_trace = "".join(
+                        traceback.format_exception(type(item), item, item.__traceback__)
+                    )
+                    # Redact API keys from error messages
+                    model_llm = llms[model_idx]
+                    if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
+                        error_msg = error_msg.replace(
+                            model_llm.config.api_key, "[REDACTED_API_KEY]"
+                        )
+                        stack_trace = stack_trace.replace(
+                            model_llm.config.api_key, "[REDACTED_API_KEY]"
+                        )
+
+                    yield StreamingError(
+                        error=error_msg,
+                        stack_trace=stack_trace,
+                        error_code="MODEL_ERROR",
+                        is_retryable=True,
+                        details={
+                            "model": model_llm.config.model_name,
+                            "provider": model_llm.config.model_provider,
+                            "model_index": model_idx,
+                        },
+                    )
+                    models_remaining -= 1
+                    continue
+
+                if isinstance(item, Packet):
+                    # Packet is already tagged with model_index by _ModelIndexEmitter
+                    yield item
+
+            # ── Completion: save each successful model's response ──────
+            # Run completion callbacks on the main thread using the main
+            # session. This is safe because all worker threads have exited
+            # by this point (merged_queue fully drained).
+            for i in range(n_models):
+                if not model_succeeded[i]:
+                    continue
+                try:
+                    llm_loop_completion_handle(
+                        state_container=state_containers[i],
+                        is_connected=check_is_connected,
+                        db_session=db_session,
+                        assistant_message=reserved_messages[i],
+                        llm=llms[i],
+                        reserved_tokens=reserved_token_count,
+                    )
+                except Exception:
+                    logger.exception(
+                        f"Failed completion for model {i} "
+                        f"({model_display_names[i]})"
+                    )
+
+            yield Packet(
+                placement=Placement(turn_index=0),
+                obj=OverallStop(type="stop", stop_reason="complete"),
+            )
+
+        finally:
+            # Ensure all threads are cleaned up regardless of how we exit
+            executor.shutdown(wait=True, cancel_futures=True)
+
+    except ValueError as e:
+        logger.exception("Failed to process multi-model chat message.")
+        yield StreamingError(
+            error=str(e),
+            error_code="VALIDATION_ERROR",
+            is_retryable=True,
+        )
+        db_session.rollback()
+        return
+
+    except Exception as e:
+        logger.exception(f"Failed multi-model chat: {e}")
+        stack_trace = traceback.format_exc()
+        yield StreamingError(
+            error=str(e),
+            stack_trace=stack_trace,
+            error_code="MULTI_MODEL_ERROR",
+            is_retryable=True,
+        )
+        db_session.rollback()
+
+    finally:
+        try:
+            if cache is not None and chat_session is not None:
+                set_processing_status(
+                    chat_session_id=chat_session.id,
+                    cache=cache,
+                    value=False,
+                )
+        except Exception:
+            logger.exception("Error clearing processing status")
 
 
 def llm_loop_completion_handle(

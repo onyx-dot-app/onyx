@@ -29,6 +29,7 @@ from onyx.chat.models import ChatFullResponse
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.process_message import gather_stream_full
 from onyx.chat.process_message import handle_stream_message_objects
+from onyx.chat.process_message import run_multi_model_stream
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -46,6 +47,7 @@ from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.chat import set_as_latest_chat_message
+from onyx.db.chat import set_preferred_response
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
@@ -81,6 +83,7 @@ from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
 from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import SetPreferredResponseRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
 from onyx.server.query_and_chat.session_loading import (
@@ -570,6 +573,38 @@ def handle_send_chat_message(
     if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
         chat_message_req.origin = MessageOrigin.API
 
+    # Multi-model streaming path: 2-3 LLMs in parallel (streaming only)
+    is_multi_model = (
+        chat_message_req.llm_overrides is not None
+        and len(chat_message_req.llm_overrides) > 1
+    )
+    if is_multi_model and chat_message_req.stream:
+
+        def multi_model_stream_generator() -> Generator[str, None, None]:
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    for obj in run_multi_model_stream(
+                        new_msg_req=chat_message_req,
+                        user=user,
+                        db_session=db_session,
+                        llm_overrides=chat_message_req.llm_overrides,  # type: ignore[arg-type]
+                        litellm_additional_headers=extract_headers(
+                            request.headers, LITELLM_PASS_THROUGH_HEADERS
+                        ),
+                        custom_tool_additional_headers=get_custom_tool_additional_request_headers(
+                            request.headers
+                        ),
+                        mcp_headers=chat_message_req.mcp_headers,
+                    ):
+                        yield get_json_line(obj.model_dump())
+            except Exception as e:
+                logger.exception("Error in multi-model streaming")
+                yield json.dumps({"error": str(e)})
+
+        return StreamingResponse(
+            multi_model_stream_generator(), media_type="text/event-stream"
+        )
+
     # Non-streaming path: consume all packets and return complete response
     if not chat_message_req.stream:
         with get_session_with_current_tenant() as db_session:
@@ -658,6 +693,26 @@ def set_message_as_latest(
         user_id=user_id,
         db_session=db_session,
     )
+
+
+@router.put("/set-preferred-response")
+def set_preferred_response_endpoint(
+    request_body: SetPreferredResponseRequest,
+    _user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Set the preferred assistant response for a multi-model turn."""
+    from onyx.error_handling.error_codes import OnyxErrorCode
+    from onyx.error_handling.exceptions import OnyxError
+
+    try:
+        set_preferred_response(
+            db_session=db_session,
+            user_message_id=request_body.user_message_id,
+            preferred_assistant_message_id=request_body.preferred_response_id,
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
 
 @router.post("/create-chat-message-feedback")

@@ -602,6 +602,79 @@ def reserve_message_id(
     return empty_message
 
 
+def reserve_multi_model_message_ids(
+    db_session: Session,
+    chat_session_id: UUID,
+    parent_message_id: int,
+    model_display_names: list[str],
+) -> list[ChatMessage]:
+    """Reserve N assistant message placeholders for multi-model parallel streaming.
+
+    All messages share the same parent (the user message). The parent's
+    latest_child_message_id points to the LAST reserved message so that the
+    default history-chain walker picks it up.
+    """
+    reserved: list[ChatMessage] = []
+    for display_name in model_display_names:
+        msg = ChatMessage(
+            chat_session_id=chat_session_id,
+            parent_message_id=parent_message_id,
+            latest_child_message_id=None,
+            message="Response was terminated prior to completion, try regenerating.",
+            token_count=15,
+            message_type=MessageType.ASSISTANT,
+            model_display_name=display_name,
+        )
+        db_session.add(msg)
+        reserved.append(msg)
+
+    # Flush to assign IDs without committing yet
+    db_session.flush()
+
+    # Point parent's latest_child to the last reserved message
+    parent = (
+        db_session.query(ChatMessage)
+        .filter(ChatMessage.id == parent_message_id)
+        .first()
+    )
+    if parent:
+        parent.latest_child_message_id = reserved[-1].id
+
+    db_session.commit()
+    return reserved
+
+
+def set_preferred_response(
+    db_session: Session,
+    user_message_id: int,
+    preferred_assistant_message_id: int,
+) -> None:
+    """Set the preferred assistant response for a multi-model user message.
+
+    Validates that the user message is a USER type and that the preferred
+    assistant message is a direct child of that user message.
+    """
+    user_msg = db_session.query(ChatMessage).get(user_message_id)
+    if user_msg is None:
+        raise ValueError(f"User message {user_message_id} not found")
+    if user_msg.message_type != MessageType.USER:
+        raise ValueError(f"Message {user_message_id} is not a user message")
+
+    assistant_msg = db_session.query(ChatMessage).get(preferred_assistant_message_id)
+    if assistant_msg is None:
+        raise ValueError(
+            f"Assistant message {preferred_assistant_message_id} not found"
+        )
+    if assistant_msg.parent_message_id != user_message_id:
+        raise ValueError(
+            f"Assistant message {preferred_assistant_message_id} is not a child "
+            f"of user message {user_message_id}"
+        )
+
+    user_msg.preferred_response_id = preferred_assistant_message_id
+    db_session.commit()
+
+
 def create_new_chat_message(
     chat_session_id: UUID,
     parent_message: ChatMessage,
@@ -824,6 +897,8 @@ def translate_db_message_to_chat_message_detail(
         error=chat_message.error,
         current_feedback=current_feedback,
         processing_duration_seconds=chat_message.processing_duration_seconds,
+        preferred_response_id=chat_message.preferred_response_id,
+        model_display_name=chat_message.model_display_name,
     )
 
     return chat_msg_detail
