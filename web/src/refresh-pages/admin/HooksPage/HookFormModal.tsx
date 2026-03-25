@@ -53,7 +53,7 @@ function buildInitialState(
     return {
       name: hook.name,
       endpoint_url: hook.endpoint_url ?? "",
-      api_key: hook.api_key_masked ?? "",
+      api_key: "",
       fail_strategy: hook.fail_strategy,
       timeout_seconds: String(hook.timeout_seconds),
     };
@@ -63,7 +63,7 @@ function buildInitialState(
     endpoint_url: "",
     api_key: "",
     fail_strategy: spec?.default_fail_strategy ?? "hard",
-    timeout_seconds: spec ? String(spec.default_timeout_seconds) : "5",
+    timeout_seconds: spec ? String(spec.default_timeout_seconds) : "30",
   };
 }
 
@@ -113,13 +113,19 @@ export default function HookFormModal({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  // Tracks whether the user explicitly cleared the API key field in edit mode.
+  // - false + empty field  → key unchanged (omitted from PATCH)
+  // - true  + empty field  → key cleared (api_key: null sent to backend)
+  // - false + non-empty    → new key provided (new value sent to backend)
+  const [apiKeyCleared, setApiKeyCleared] = useState(false);
 
   function handleOpenChange(next: boolean) {
     if (!next) {
+      if (isSubmitting) return;
       setTimeout(() => {
         setForm(buildInitialState(hook, spec));
-        setIsSubmitting(false);
         setIsConnected(false);
+        setApiKeyCleared(false);
       }, 200);
     }
     onOpenChange(next);
@@ -134,7 +140,8 @@ export default function HookFormModal({
     form.name.trim().length > 0 &&
     form.endpoint_url.trim().length > 0 &&
     !isNaN(timeoutNum) &&
-    timeoutNum > 0;
+    timeoutNum > 0 &&
+    (isEdit || form.api_key.trim().length > 0);
 
   const hasChanges =
     isEdit && hook
@@ -142,7 +149,8 @@ export default function HookFormModal({
         form.endpoint_url !== (hook.endpoint_url ?? "") ||
         form.fail_strategy !== hook.fail_strategy ||
         timeoutNum !== hook.timeout_seconds ||
-        form.api_key !== (hook.api_key_masked ?? "")
+        form.api_key.trim().length > 0 ||
+        apiKeyCleared
       : true;
 
   async function handleSubmit() {
@@ -160,9 +168,10 @@ export default function HookFormModal({
           req.fail_strategy = form.fail_strategy;
         if (timeoutNum !== hook.timeout_seconds)
           req.timeout_seconds = timeoutNum;
-        const maskedPlaceholder = hook.api_key_masked ?? "";
-        if (form.api_key !== maskedPlaceholder) {
-          req.api_key = form.api_key || null;
+        if (form.api_key.trim().length > 0) {
+          req.api_key = form.api_key;
+        } else if (apiKeyCleared) {
+          req.api_key = null;
         }
         if (Object.keys(req).length === 0) {
           setIsSubmitting(false);
@@ -171,10 +180,14 @@ export default function HookFormModal({
         }
         result = await updateHook(hook.id, req);
       } else {
-        const hookPoint = spec!.hook_point;
+        if (!spec) {
+          toast.error("No hook point specified.");
+          setIsSubmitting(false);
+          return;
+        }
         result = await createHook({
           name: form.name,
-          hook_point: hookPoint,
+          hook_point: spec.hook_point,
           endpoint_url: form.endpoint_url,
           ...(form.api_key ? { api_key: form.api_key } : {}),
           fail_strategy: form.fail_strategy,
@@ -276,7 +289,7 @@ export default function HookFormModal({
               <InputSelect.Content>
                 <InputSelect.Item value="soft">
                   Log Error and Continue
-                  {(spec?.default_fail_strategy ?? "hard") === "soft" && (
+                  {spec?.default_fail_strategy === "soft" && (
                     <>
                       {" "}
                       <span className="text-text-03">(Default)</span>
@@ -285,7 +298,7 @@ export default function HookFormModal({
                 </InputSelect.Item>
                 <InputSelect.Item value="hard">
                   Block Pipeline on Failure
-                  {(spec?.default_fail_strategy ?? "hard") === "hard" && (
+                  {spec?.default_fail_strategy === "hard" && (
                     <>
                       {" "}
                       <span className="text-text-03">(Default)</span>
@@ -337,10 +350,17 @@ export default function HookFormModal({
           >
             <PasswordInputTypeIn
               value={form.api_key}
-              onChange={(e) => set("api_key", e.target.value)}
+              onChange={(e) => {
+                set("api_key", e.target.value);
+                if (isEdit) {
+                  setApiKeyCleared(
+                    e.target.value === "" && !!hook?.api_key_masked
+                  );
+                }
+              }}
               placeholder={
-                isEdit && hook?.api_key_masked
-                  ? "Leave blank to keep current key"
+                isEdit
+                  ? hook?.api_key_masked ?? "Leave blank to keep current key"
                   : undefined
               }
               disabled={isSubmitting}
