@@ -83,7 +83,9 @@ When `children` is a string, inline markdown is parsed by default. Supported syn
 </Text>
 ```
 
-Markdown rendering uses `react-markdown` internally, restricted to inline elements only. Links open in a new tab and inherit the surrounding text color.
+Markdown rendering uses `react-markdown` internally, restricted to inline elements only. Links open in a new tab and inherit the surrounding text color. Inline code inherits the parent font size and switches to the monospace family.
+
+**Note:** This is inline-only markdown. Multi-paragraph content (`"Hello\n\nWorld"`) will collapse into a single run of text since paragraph wrappers are stripped. For block-level markdown, use `MinimalMarkdown` instead.
 
 ## Compatibility
 

@@ -24,7 +24,7 @@ const INLINE_COMPONENTS = {
     );
   },
   code: ({ children }: { children?: ReactNode }) => (
-    <code className="font-main-ui-mono bg-background-tint-02 rounded px-1 py-0.5">
+    <code className="[font-family:var(--font-dm-mono)] bg-background-tint-02 rounded px-1 py-0.5">
       {children}
     </code>
   ),
