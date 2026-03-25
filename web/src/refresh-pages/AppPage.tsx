@@ -465,7 +465,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const onChat = useCallback(
     (message: string) => {
-      resetInputBar();
       onSubmit({
         message,
         currentMessageFiles,
@@ -476,7 +475,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
     },
     [
-      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,
@@ -510,7 +508,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
-        resetInputBar();
         onSubmit({
           message,
           currentMessageFiles,
@@ -523,7 +520,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
 
       // For new sessions, let the query controller handle routing.
-      // resetInputBar is called inside onChat for chat-routed queries.
+      // resetInputBar is called inside useChatController.onSubmit for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
       // so the user can see and refine their search query.
       await submitQuery(message, onChat);
@@ -532,7 +529,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentChatSessionId,
       submitQuery,
       onChat,
-      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,
