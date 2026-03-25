@@ -3,6 +3,7 @@
 import {
   buildChatUrl,
   getAvailableContextTokens,
+  LLMOverride,
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
@@ -33,6 +34,7 @@ import {
   FileDescriptor,
   Message,
   MessageResponseIDInfo,
+  MultiModelMessageResponseIDInfo,
   RegenerationState,
   RetrievalType,
   StreamingError,
@@ -70,6 +72,7 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import useAgentPreferences from "@/hooks/useAgentPreferences";
+import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
@@ -94,6 +97,8 @@ export interface OnSubmitProps {
   regenerationRequest?: RegenerationRequest | null;
   // Additional context injected into the LLM call but not stored/shown in chat.
   additionalContext?: string;
+  // Multi-model chat: up to 3 models selected for parallel comparison.
+  selectedModels?: SelectedModel[];
 }
 
 interface RegenerationRequest {
@@ -370,7 +375,10 @@ export default function useChatController({
       modelOverride,
       regenerationRequest,
       additionalContext,
+      selectedModels,
     }: OnSubmitProps) => {
+      // Check if this is multi-model mode (2 or 3 models selected)
+      const isMultiModelMode = selectedModels && selectedModels.length >= 2;
       const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
         const params = new URLSearchParams(searchParams?.toString() || "");
@@ -601,6 +609,7 @@ export default function useChatController({
       // immediately reflects the user message
       let initialUserNode: Message;
       let initialAgentNode: Message;
+      let initialAssistantNodes: Message[] = [];
 
       if (regenerationRequest) {
         // For regeneration: keep the existing user message, only create new agent
@@ -623,12 +632,30 @@ export default function useChatController({
         );
         initialUserNode = result.initialUserNode;
         initialAgentNode = result.initialAgentNode;
+
+        // In multi-model mode, create N assistant nodes (one per selected model)
+        if (isMultiModelMode && selectedModels) {
+          for (let i = 0; i < selectedModels.length; i++) {
+            initialAssistantNodes.push(
+              buildEmptyMessage({
+                messageType: "assistant",
+                parentNodeId: initialUserNode.nodeId,
+                nodeIdOffset: i + 1,
+              })
+            );
+          }
+        }
       }
 
       // make messages appear + clear input bar
-      const messagesToUpsert = regenerationRequest
-        ? [initialAgentNode] // Only upsert the new agent for regeneration
-        : [initialUserNode, initialAgentNode]; // Upsert both for normal/edit flow
+      let messagesToUpsert: Message[];
+      if (regenerationRequest) {
+        messagesToUpsert = [initialAgentNode];
+      } else if (isMultiModelMode) {
+        messagesToUpsert = [initialUserNode, ...initialAssistantNodes];
+      } else {
+        messagesToUpsert = [initialUserNode, initialAgentNode];
+      }
       currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
@@ -661,6 +688,24 @@ export default function useChatController({
 
       let newUserMessageId: number | null = null;
       let newAgentMessageId: number | null = null;
+
+      // Multi-model mode state tracking (dynamically sized based on selected models)
+      const numModels = selectedModels?.length ?? 0;
+      let newAssistantMessageIds: (number | null)[] = isMultiModelMode
+        ? Array(numModels).fill(null)
+        : [];
+      let packetsPerModel: Packet[][] = isMultiModelMode
+        ? Array.from({ length: numModels }, () => [])
+        : [];
+      let modelDisplayNames: string[] = isMultiModelMode
+        ? selectedModels?.map((m) => m.displayName) ?? []
+        : [];
+      let documentsPerModel: OnyxDocument[][] = isMultiModelMode
+        ? Array.from({ length: numModels }, () => [])
+        : [];
+      let citationsPerModel: (CitationMap | null)[] = isMultiModelMode
+        ? Array(numModels).fill(null)
+        : [];
 
       try {
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
@@ -710,13 +755,15 @@ export default function useChatController({
             filterManager.timeRange,
             filterManager.selectedTags
           ),
-          modelProvider:
-            modelOverride?.name || llmManager.currentLlm.name || undefined,
-          modelVersion:
-            modelOverride?.modelName ||
-            llmManager.currentLlm.modelName ||
-            searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
-            undefined,
+          modelProvider: isMultiModelMode
+            ? undefined
+            : modelOverride?.name || llmManager.currentLlm.name || undefined,
+          modelVersion: isMultiModelMode
+            ? undefined
+            : modelOverride?.modelName ||
+              llmManager.currentLlm.modelName ||
+              searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
+              undefined,
           temperature: llmManager.temperature || undefined,
           deepResearch,
           enabledToolIds:
@@ -728,6 +775,12 @@ export default function useChatController({
           forcedToolId: effectiveForcedToolId,
           origin: messageOrigin,
           additionalContext,
+          llmOverrides: isMultiModelMode
+            ? selectedModels!.map((model) => ({
+                model_provider: model.name,
+                model_version: model.modelName,
+              }))
+            : undefined,
         });
 
         const delay = (ms: number) => {
@@ -780,6 +833,26 @@ export default function useChatController({
                 .reserved_assistant_message_id;
             }
 
+            // Multi-model: handle reserved IDs for N parallel model responses
+            if (
+              isMultiModelMode &&
+              Object.hasOwn(packet, "reserved_assistant_message_ids") &&
+              Array.isArray(
+                (packet as MultiModelMessageResponseIDInfo)
+                  .reserved_assistant_message_ids
+              )
+            ) {
+              const multiPacket = packet as MultiModelMessageResponseIDInfo;
+              newAssistantMessageIds =
+                multiPacket.reserved_assistant_message_ids;
+              newUserMessageId =
+                multiPacket.user_message_id ?? newUserMessageId;
+              // Capture backend model names for display on reload
+              if (multiPacket.model_names?.length) {
+                modelDisplayNames = multiPacket.model_names;
+              }
+            }
+
             if (Object.hasOwn(packet, "user_files")) {
               const userFiles = (packet as UserKnowledgeFilePacket).user_files;
               // Ensure files are unique by id
@@ -823,32 +896,73 @@ export default function useChatController({
                 updateCanContinue(true, frozenSessionId);
               }
             } else if (Object.hasOwn(packet, "obj")) {
-              packets.push(packet as Packet);
-              packetsVersion++;
+              const typedPacket = packet as Packet;
 
-              // Check if the packet contains document information
-              const packetObj = (packet as Packet).obj;
+              // In multi-model mode, route packets by model_index
+              if (isMultiModelMode) {
+                const modelIndex = typedPacket.placement?.model_index ?? 0;
+                if (
+                  modelIndex >= 0 &&
+                  modelIndex < packetsPerModel.length &&
+                  packetsPerModel[modelIndex]
+                ) {
+                  packetsPerModel[modelIndex] = [
+                    ...packetsPerModel[modelIndex]!,
+                    typedPacket,
+                  ];
 
-              if (packetObj.type === "citation_info") {
-                // Individual citation packet from backend streaming
-                const citationInfo = packetObj as {
-                  type: "citation_info";
-                  citation_number: number;
-                  document_id: string;
-                };
-                // Incrementally build citations map
-                citations = {
-                  ...(citations || {}),
-                  [citationInfo.citation_number]: citationInfo.document_id,
-                };
-              } else if (packetObj.type === "message_start") {
-                const messageStart = packetObj as MessageStart;
-                if (messageStart.final_documents) {
-                  documents = messageStart.final_documents;
-                  updateSelectedNodeForDocDisplay(
-                    frozenSessionId,
-                    initialAgentNode.nodeId
-                  );
+                  const packetObj = typedPacket.obj;
+
+                  if (packetObj.type === "citation_info") {
+                    const citationInfo = packetObj as {
+                      type: "citation_info";
+                      citation_number: number;
+                      document_id: string;
+                    };
+                    citationsPerModel[modelIndex] = {
+                      ...(citationsPerModel[modelIndex] || {}),
+                      [citationInfo.citation_number]: citationInfo.document_id,
+                    };
+                  } else if (packetObj.type === "message_start") {
+                    const messageStart = packetObj as MessageStart;
+                    if (messageStart.final_documents) {
+                      documentsPerModel[modelIndex] =
+                        messageStart.final_documents;
+                      if (modelIndex === 0 && initialAssistantNodes[0]) {
+                        updateSelectedNodeForDocDisplay(
+                          frozenSessionId,
+                          initialAssistantNodes[0].nodeId
+                        );
+                      }
+                    }
+                  }
+                }
+              } else {
+                // Single model mode
+                packets.push(typedPacket);
+                packetsVersion++;
+
+                const packetObj = typedPacket.obj;
+
+                if (packetObj.type === "citation_info") {
+                  const citationInfo = packetObj as {
+                    type: "citation_info";
+                    citation_number: number;
+                    document_id: string;
+                  };
+                  citations = {
+                    ...(citations || {}),
+                    [citationInfo.citation_number]: citationInfo.document_id,
+                  };
+                } else if (packetObj.type === "message_start") {
+                  const messageStart = packetObj as MessageStart;
+                  if (messageStart.final_documents) {
+                    documents = messageStart.final_documents;
+                    updateSelectedNodeForDocDisplay(
+                      frozenSessionId,
+                      initialAgentNode.nodeId
+                    );
+                  }
                 }
               }
             } else {
@@ -860,8 +974,48 @@ export default function useChatController({
             parentMessage =
               parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
 
-            currentMessageTreeLocal = upsertToCompleteMessageTree({
-              messages: [
+            // Build messages to upsert based on mode
+            let messagesToUpsertInLoop: Message[];
+
+            if (isMultiModelMode) {
+              // Multi-model mode: update user node + all N assistant nodes
+              const updatedUserNode = {
+                ...initialUserNode,
+                messageId: newUserMessageId ?? undefined,
+                files: files,
+              };
+
+              const updatedAssistantNodes = initialAssistantNodes.map(
+                (node, idx) => ({
+                  ...node,
+                  messageId: newAssistantMessageIds[idx] ?? undefined,
+                  message: "",
+                  type: "assistant" as const,
+                  retrievalType,
+                  query: query,
+                  documents: documentsPerModel[idx] || [],
+                  citations: citationsPerModel[idx] || {},
+                  files: [] as FileDescriptor[],
+                  toolCall: null,
+                  stackTrace: null,
+                  overridden_model: selectedModels?.[idx]?.displayName,
+                  modelDisplayName:
+                    modelDisplayNames[idx] ||
+                    selectedModels?.[idx]?.displayName ||
+                    null,
+                  stopReason: stopReason,
+                  packets: packetsPerModel[idx] || [],
+                  packetCount: packetsPerModel[idx]?.length || 0,
+                })
+              );
+
+              messagesToUpsertInLoop = [
+                updatedUserNode,
+                ...updatedAssistantNodes,
+              ];
+            } else {
+              // Single model mode (existing logic)
+              messagesToUpsertInLoop = [
                 {
                   ...initialUserNode,
                   messageId: newUserMessageId ?? undefined,
@@ -894,8 +1048,11 @@ export default function useChatController({
                         : undefined;
                     })(),
                 },
-              ],
-              // Pass the latest map state
+              ];
+            }
+
+            currentMessageTreeLocal = upsertToCompleteMessageTree({
+              messages: messagesToUpsertInLoop,
               completeMessageTreeOverride: currentMessageTreeLocal,
               chatSessionId: frozenSessionId!,
             });

@@ -8,7 +8,10 @@ import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
-import Spacer from "@/refresh-components/Spacer";
+import MultiModelResponseView, {
+  MultiModelResponse,
+} from "@/app/app/message/MultiModelResponseView";
+import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
 import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
   useCurrentMessageHistory,
@@ -16,6 +19,8 @@ import {
   useLoadingError,
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
+
+const MSG_MAX_W = "max-w-[720px] min-w-[400px]";
 
 export interface ChatUIProps {
   liveAgent: MinimalPersonaSnapshot;
@@ -37,6 +42,7 @@ export interface ChatUIProps {
       forceSearch?: boolean;
     };
     forceSearch?: boolean;
+    selectedModels?: SelectedModel[];
   }) => Promise<void>;
   deepResearchEnabled: boolean;
   currentMessageFiles: any[];
@@ -48,6 +54,9 @@ export interface ChatUIProps {
    * Used by DynamicBottomSpacer to position the push-up effect.
    */
   anchorNodeId?: number;
+
+  /** Currently selected models for multi-model comparison. */
+  selectedModels: SelectedModel[];
 }
 
 const ChatUI = React.memo(
@@ -62,6 +71,7 @@ const ChatUI = React.memo(
     currentMessageFiles,
     onResubmit,
     anchorNodeId,
+    selectedModels,
   }: ChatUIProps) => {
     // Get messages and error state from store
     const messages = useCurrentMessageHistory();
@@ -76,9 +86,11 @@ const ChatUI = React.memo(
     const onSubmitRef = useRef(onSubmit);
     const deepResearchEnabledRef = useRef(deepResearchEnabled);
     const currentMessageFilesRef = useRef(currentMessageFiles);
+    const selectedModelsRef = useRef(selectedModels);
     onSubmitRef.current = onSubmit;
     deepResearchEnabledRef.current = deepResearchEnabled;
     currentMessageFilesRef.current = currentMessageFiles;
+    selectedModelsRef.current = selectedModels;
 
     const createRegenerator = useCallback(
       (regenerationRequest: {
@@ -103,19 +115,72 @@ const ChatUI = React.memo(
 
     const handleEditWithMessageId = useCallback(
       (editedContent: string, msgId: number) => {
+        const models = selectedModelsRef.current;
         onSubmitRef.current({
           message: editedContent,
           messageIdToResend: msgId,
           currentMessageFiles: [],
           deepResearch: deepResearchEnabledRef.current,
+          selectedModels: models.length >= 2 ? models : undefined,
         });
       },
       []
     );
 
+    // Helper to check if a user message has multi-model responses
+    const getMultiModelResponses = useCallback(
+      (userMessage: Message): MultiModelResponse[] | null => {
+        if (!messageTree) return null;
+
+        const childrenNodeIds = userMessage.childrenNodeIds || [];
+        if (childrenNodeIds.length < 2) return null;
+
+        const childMessages = childrenNodeIds
+          .map((nodeId) => messageTree.get(nodeId))
+          .filter(
+            (msg): msg is Message =>
+              msg !== undefined && msg.type === "assistant"
+          );
+
+        if (childMessages.length < 2) return null;
+
+        // Distinguish multi-model from regenerations: multi-model messages
+        // have modelDisplayName or overridden_model set. Regenerations don't.
+        // During streaming, overridden_model is set. On reload, modelDisplayName is set.
+        const multiModelChildren = childMessages.filter(
+          (msg) => msg.modelDisplayName || msg.overridden_model
+        );
+        if (multiModelChildren.length < 2) return null;
+
+        const latestChildNodeId = userMessage.latestChildNodeId;
+
+        return childMessages.map((msg, idx) => {
+          // During streaming, overridden_model has the friendly display name.
+          // On reload from history, modelDisplayName has the DB-stored name.
+          const name = msg.overridden_model || msg.modelDisplayName || "Model";
+          return {
+            modelIndex: idx,
+            provider: "",
+            modelName: name,
+            displayName: name,
+            packets: msg.packets || [],
+            packetCount: msg.packetCount || msg.packets?.length || 0,
+            nodeId: msg.nodeId,
+            messageId: msg.messageId,
+            isHighlighted: msg.nodeId === latestChildNodeId,
+            currentFeedback: msg.currentFeedback,
+            isGenerating: msg.is_generating || false,
+          };
+        });
+      },
+      [messageTree]
+    );
+
     return (
       <>
-        <div className="flex flex-col w-full max-w-[var(--app-page-main-content-width)] h-full pt-4 pb-8 pr-1 gap-12">
+        {/* No max-width on container — individual messages control their own width.
+            Multi-model responses use full width while normal messages stay centered. */}
+        <div className="flex flex-col w-full h-full pt-4 pb-8 pr-1 gap-12">
           {messages.map((message, i) => {
             const messageReactComponentKey = `message-${message.nodeId}`;
             const parentMessage = message.parentNodeId
@@ -125,32 +190,63 @@ const ChatUI = React.memo(
               const nextMessage =
                 messages.length > i + 1 ? messages[i + 1] : null;
 
+              // Check for multi-model responses
+              const multiModelResponses = getMultiModelResponses(message);
+
               return (
                 <div
                   id={messageReactComponentKey}
                   key={messageReactComponentKey}
+                  className="flex flex-col gap-12 w-full"
                 >
-                  <HumanMessage
-                    disableSwitchingForStreaming={
-                      (nextMessage && nextMessage.is_generating) || false
-                    }
-                    stopGenerating={stopGenerating}
-                    content={message.message}
-                    files={message.files}
-                    messageId={message.messageId}
-                    nodeId={message.nodeId}
-                    onEdit={handleEditWithMessageId}
-                    otherMessagesCanSwitchTo={
-                      parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                    }
-                    onMessageSelection={onMessageSelection}
-                  />
+                  {/* Human message stays at normal chat width */}
+                  <div className={`w-full ${MSG_MAX_W} self-center`}>
+                    <HumanMessage
+                      disableSwitchingForStreaming={
+                        (nextMessage && nextMessage.is_generating) || false
+                      }
+                      stopGenerating={stopGenerating}
+                      content={message.message}
+                      files={message.files}
+                      messageId={message.messageId}
+                      nodeId={message.nodeId}
+                      onEdit={handleEditWithMessageId}
+                      otherMessagesCanSwitchTo={
+                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                      }
+                      onMessageSelection={onMessageSelection}
+                    />
+                  </div>
+
+                  {/* Multi-model response uses full width */}
+                  {multiModelResponses && (
+                    <MultiModelResponseView
+                      responses={multiModelResponses}
+                      chatState={{
+                        agent: liveAgent,
+                        docs: emptyDocs,
+                        citations: undefined,
+                        setPresentingDocument,
+                        overriddenModel: llmManager.currentLlm?.modelName,
+                      }}
+                      llmManager={llmManager}
+                      onRegenerate={createRegenerator}
+                      parentMessage={message}
+                      otherMessagesCanSwitchTo={
+                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                      }
+                      onMessageSelection={onMessageSelection}
+                    />
+                  )}
                 </div>
               );
             } else if (message.type === "assistant") {
               if ((error || loadError) && i === messages.length - 1) {
                 return (
-                  <div key={`error-${message.nodeId}`} className="p-4">
+                  <div
+                    key={`error-${message.nodeId}`}
+                    className={`p-4 w-full ${MSG_MAX_W} self-center`}
+                  >
                     <ErrorBanner
                       resubmit={onResubmit}
                       error={error || loadError || ""}
@@ -164,6 +260,16 @@ const ChatUI = React.memo(
               }
 
               const previousMessage = i !== 0 ? messages[i - 1] : null;
+
+              // Check if this assistant message is part of a multi-model response
+              // If so, skip rendering since it's already rendered in MultiModelResponseView
+              if (
+                previousMessage?.type === "user" &&
+                getMultiModelResponses(previousMessage)
+              ) {
+                return null;
+              }
+
               const chatStateData = {
                 agent: liveAgent,
                 docs: message.documents ?? emptyDocs,
@@ -177,6 +283,7 @@ const ChatUI = React.memo(
                 <div
                   id={`message-${message.nodeId}`}
                   key={messageReactComponentKey}
+                  className={`w-full ${MSG_MAX_W} self-center`}
                 >
                   <AgentMessage
                     rawPackets={message.packets}
@@ -206,7 +313,7 @@ const ChatUI = React.memo(
           {(((error !== null || loadError !== null) &&
             messages[messages.length - 1]?.type === "user") ||
             messages[messages.length - 1]?.type === "error") && (
-            <div className="p-4">
+            <div className={`p-4 w-full ${MSG_MAX_W} self-center`}>
               <ErrorBanner
                 resubmit={onResubmit}
                 error={error || loadError || ""}

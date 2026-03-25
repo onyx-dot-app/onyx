@@ -347,18 +347,19 @@ const ChatScrollContainer = React.memo(
       const contentMask = buildContentMask();
 
       return (
-        <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-1">
+        <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-y-hidden mb-1">
           <div
             key={sessionId}
             ref={scrollContainerRef}
             data-testid="chat-scroll-container"
             className={cn(
-              "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
+              "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-auto",
               hideScrollbar ? "no-scrollbar" : "default-scrollbar"
             )}
             onScroll={handleScroll}
             style={{
               scrollbarGutter: "stable both-edges",
+              overflowX: "auto",
               // Apply mask to fade content opacity at edges
               maskImage: contentMask,
               WebkitMaskImage: contentMask,
@@ -366,7 +367,7 @@ const ChatScrollContainer = React.memo(
           >
             <div
               ref={contentWrapperRef}
-              className="w-full flex-1 flex flex-col items-center px-4"
+              className="min-w-full flex-1 flex flex-col items-center px-4"
               data-scroll-ready={isScrollReady}
               style={{
                 visibility: isScrollReady ? "visible" : "hidden",

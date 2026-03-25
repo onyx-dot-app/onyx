@@ -459,6 +459,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     onResubmit={handleResubmitLastMessage}
                     deepResearchEnabled={deepResearchEnabled}
                     anchorNodeId={anchorNodeId}
+                    selectedModels={[]}
                   />
                 </ChatScrollContainer>
               </>

@@ -11,15 +11,22 @@ import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useState, useEffect } from "react";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
+import { cn } from "@/lib/utils";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
   isDefaultAgent: boolean;
+  /** Optional right-aligned element rendered on the same row as the greeting (e.g. model selector). */
+  rightChildren?: React.ReactNode;
+  /** When true, the greeting/logo content is hidden (but space is preserved). Used at max models. */
+  hideTitle?: boolean;
 }
 
 export default function WelcomeMessage({
   agent,
   isDefaultAgent,
+  rightChildren,
+  hideTitle,
 }: WelcomeMessageProps) {
   const settings = useSettingsContext();
   const enterpriseSettings = settings?.enterpriseSettings;
@@ -39,8 +46,10 @@ export default function WelcomeMessage({
 
   if (isDefaultAgent) {
     content = (
-      <div data-testid="onyx-logo" className="flex flex-row items-center gap-4">
-        <Logo folded size={32} />
+      <div data-testid="onyx-logo" className="flex flex-col items-start gap-2">
+        <div className="flex items-center justify-center size-9 p-0.5">
+          <Logo folded size={32} />
+        </div>
         <Text as="p" headingH2>
           {greeting}
         </Text>
@@ -48,17 +57,15 @@ export default function WelcomeMessage({
     );
   } else if (agent) {
     content = (
-      <>
-        <div
-          data-testid="agent-name-display"
-          className="flex flex-row items-center gap-3"
-        >
-          <AgentAvatar agent={agent} size={36} />
-          <Text as="p" headingH2>
-            {agent.name}
-          </Text>
-        </div>
-      </>
+      <div
+        data-testid="agent-name-display"
+        className="flex flex-col items-start gap-2"
+      >
+        <AgentAvatar agent={agent} size={36} />
+        <Text as="p" headingH2>
+          {agent.name}
+        </Text>
+      </div>
     );
   }
 
@@ -69,9 +76,24 @@ export default function WelcomeMessage({
   return (
     <FrostedDiv
       data-testid="chat-intro"
-      className="flex flex-col items-center justify-center gap-3 w-full max-w-[var(--app-page-main-content-width)]"
+      wrapperClassName="w-full"
+      className="flex flex-col items-center justify-center gap-3 w-full max-w-[var(--app-page-main-content-width)] mx-auto"
     >
-      {content}
+      {rightChildren ? (
+        <div className="flex items-end gap-2 w-full">
+          <div
+            className={cn(
+              "flex-1 min-w-0 min-h-[80px] px-2 py-1",
+              hideTitle && "invisible"
+            )}
+          >
+            {content}
+          </div>
+          <div className="shrink-0">{rightChildren}</div>
+        </div>
+      ) : (
+        content
+      )}
     </FrostedDiv>
   );
 }

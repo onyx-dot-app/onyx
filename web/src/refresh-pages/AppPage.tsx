@@ -15,6 +15,8 @@ import {
 } from "@/providers/SettingsProvider";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import ModelSelector from "@/refresh-components/popovers/ModelSelector";
+import useMultiModelChat from "@/hooks/useMultiModelChat";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
 import useTags from "@/hooks/useTags";
@@ -64,6 +66,7 @@ import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button } from "@opal/components";
 import Spacer from "@/refresh-components/Spacer";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
@@ -364,6 +367,30 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
   const isStreaming = currentChatState === "streaming";
 
+  const multiModel = useMultiModelChat(llmManager);
+
+  // Auto-fold sidebar when multi-model is active (needs full width)
+  const { folded: sidebarFolded, setFolded: setSidebarFolded } =
+    useAppSidebarContext();
+  const preMultiModelFoldedRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    if (
+      multiModel.isMultiModelActive &&
+      preMultiModelFoldedRef.current === null
+    ) {
+      preMultiModelFoldedRef.current = sidebarFolded;
+      setSidebarFolded(true);
+    } else if (
+      !multiModel.isMultiModelActive &&
+      preMultiModelFoldedRef.current !== null
+    ) {
+      setSidebarFolded(preMultiModelFoldedRef.current);
+      preMultiModelFoldedRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiModel.isMultiModelActive]);
+
   const {
     onSubmit,
     stopGenerating,
@@ -463,6 +490,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         message,
         currentMessageFiles,
         deepResearch: deepResearchEnabledForCurrentWorkflow,
+        selectedModels: multiModel.isMultiModelActive
+          ? multiModel.selectedModels
+          : undefined,
       });
       if (showOnboarding || !onboardingDismissed) {
         finishOnboarding();
@@ -473,6 +503,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,
+      multiModel.isMultiModelActive,
+      multiModel.selectedModels,
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
@@ -511,6 +543,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           message,
           currentMessageFiles,
           deepResearch: deepResearchEnabledForCurrentWorkflow,
+          selectedModels: multiModel.isMultiModelActive
+            ? multiModel.selectedModels
+            : undefined,
         });
         if (showOnboarding || !onboardingDismissed) {
           finishOnboarding();
@@ -535,6 +570,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
+      multiModel,
     ]
   );
 
@@ -675,7 +711,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
+                <div className="row-start-1 min-h-0 overflow-y-hidden flex flex-col items-center">
                   {/* ChatUI */}
                   <Fade
                     show={
@@ -704,6 +740,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         stopGenerating={stopGenerating}
                         onResubmit={handleResubmitLastMessage}
                         anchorNodeId={anchorNodeId}
+                        selectedModels={multiModel.selectedModels}
                       />
                     </ChatScrollContainer>
                   </Fade>
@@ -730,6 +767,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     <WelcomeMessage
                       agent={liveAgent}
                       isDefaultAgent={isDefaultAgent}
+                      hideTitle={multiModel.selectedModels.length >= 3}
+                      rightChildren={
+                        <ModelSelector
+                          llmManager={llmManager}
+                          selectedModels={multiModel.selectedModels}
+                          onAdd={multiModel.addModel}
+                          onRemove={multiModel.removeModel}
+                          onReplace={multiModel.replaceModel}
+                        />
+                      }
                     />
                     <Spacer rem={1.5} />
                   </Fade>
@@ -791,6 +838,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
+                      {appFocus.isChat() && (
+                        <ModelSelector
+                          llmManager={llmManager}
+                          selectedModels={multiModel.selectedModels}
+                          onAdd={multiModel.addModel}
+                          onRemove={multiModel.removeModel}
+                          onReplace={multiModel.replaceModel}
+                        />
+                      )}
                       <AppInputBar
                         ref={chatInputBarRef}
                         deepResearchEnabled={
