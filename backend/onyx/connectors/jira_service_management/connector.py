@@ -12,6 +12,7 @@ The connector accepts either:
 - A plain Jira base URL + project key via the jira_project field
 """
 
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -133,6 +134,8 @@ class JiraServiceManagementConnector(
     def _get_project_permissions(
         self, project_key: str, add_prefix: bool = False
     ) -> Any:
+        if self._jira_client is None:
+            raise ConnectorMissingCredentialError("Jira Service Management")
         cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
         if cache_key not in self._project_permissions_cache:
             self._project_permissions_cache[cache_key] = get_project_permissions(
@@ -244,7 +247,7 @@ class JiraServiceManagementConnector(
                 primary_owners=list(people) if people else None,
                 metadata=metadata,
             )
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError) as e:
             logger.error(f"Failed to process JSM issue {issue.key}: {e}")
             return None
 
@@ -253,7 +256,7 @@ class JiraServiceManagementConnector(
         start_dt: datetime | None,
         end_dt: datetime | None,
         start_at: int = 0,
-    ):
+    ) -> Generator[Any, None, None]:
         """Yield issues from the JSM project using JQL pagination."""
         if self._jira_client is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
