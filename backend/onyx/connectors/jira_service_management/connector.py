@@ -29,13 +29,16 @@ from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.jira.access import get_project_permissions
 from onyx.connectors.jira.utils import best_effort_basic_expert_info
 from onyx.connectors.jira.utils import best_effort_get_field_from_issue
 from onyx.connectors.jira.utils import build_jira_client
 from onyx.connectors.jira.utils import build_jira_url
+from onyx.connectors.jira.utils import extract_jira_project
 from onyx.connectors.jira.utils import extract_text_from_adf
 from onyx.connectors.jira.utils import get_comment_strs
 from onyx.connectors.jira_service_management.utils import build_jsm_session
+from onyx.connectors.jira_service_management.utils import discover_sla_field_ids
 from onyx.connectors.jira_service_management.utils import extract_jsm_metadata
 from onyx.connectors.jira_service_management.utils import get_service_desks
 from onyx.connectors.models import ConnectorCheckpoint
@@ -70,13 +73,10 @@ def _build_jql(project_key: str, start_dt: datetime | None, end_dt: datetime | N
     """Build a JQL query scoped to a single JSM project with optional time bounds."""
     parts = [f'project = "{project_key}"']
     if start_dt:
-        ts = start_dt.strftime("%Y-%m-%d %H:%M")
-        parts.append(f'updated >= "{ts}"')
+        parts.append(f'updated >= "{start_dt.strftime("%Y-%m-%d %H:%M")}"')
     if end_dt:
-        ts = end_dt.strftime("%Y-%m-%d %H:%M")
-        parts.append(f'updated <= "{ts}"')
-    parts.append("ORDER BY updated ASC")
-    return " AND ".join(parts[:-1]) + " ORDER BY updated ASC" if len(parts) > 1 else parts[0] + " ORDER BY updated ASC"
+        parts.append(f'updated <= "{end_dt.strftime("%Y-%m-%d %H:%M")}"')
+    return " AND ".join(parts) + " ORDER BY updated ASC"
 
 
 class JiraServiceManagementConnector(
@@ -101,6 +101,15 @@ class JiraServiceManagementConnector(
         comment_email_blacklist: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
+        # If jira_project looks like a full URL, extract base URL and project key from it
+        if "projects" in jira_project:
+            try:
+                extracted_base, extracted_key = extract_jira_project(jira_project)
+                jira_base_url = extracted_base
+                jira_project = extracted_key
+            except ValueError:
+                pass  # fall through to treat it as a plain project key
+
         self.jira_base_url = jira_base_url.rstrip("/")
         self.jira_project = jira_project.strip().upper()
         self.comment_email_blacklist: tuple[str, ...] = tuple(
@@ -109,14 +118,29 @@ class JiraServiceManagementConnector(
         self.batch_size = batch_size
         self._jira_client = None
         self._jsm_session = None
+        self._sla_field_ids: dict[str, str] = {}
         self._credentials: dict[str, Any] = {}
+        self._project_permissions_cache: dict[str, Any] = {}
 
     @override
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._credentials = credentials
         self._jira_client = build_jira_client(credentials, self.jira_base_url)
-        _, self._jsm_session, _ = build_jsm_session(credentials, self.jira_base_url)
+        self._jsm_session = build_jsm_session(credentials, self.jira_base_url)
+        self._sla_field_ids = discover_sla_field_ids(self._jsm_session, self.jira_base_url)
         return None
+
+    def _get_project_permissions(
+        self, project_key: str, add_prefix: bool = False
+    ) -> Any:
+        cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
+        if cache_key not in self._project_permissions_cache:
+            self._project_permissions_cache[cache_key] = get_project_permissions(
+                jira_client=self._jira_client,
+                jira_project=project_key,
+                add_prefix=add_prefix,
+            )
+        return self._project_permissions_cache[cache_key]
 
     @override
     def validate_connector_settings(self) -> None:
@@ -202,7 +226,7 @@ class JiraServiceManagementConnector(
                 metadata["updated"] = updated
 
             # JSM-specific fields
-            jsm_meta = extract_jsm_metadata(issue)
+            jsm_meta = extract_jsm_metadata(issue, self._sla_field_ids)
             metadata.update(jsm_meta)
 
             updated_at = _parse_jsm_date(
@@ -212,7 +236,7 @@ class JiraServiceManagementConnector(
             title_field = best_effort_get_field_from_issue(issue, "summary") or issue.key
 
             return Document(
-                id=f"jsm:{issue.key}",
+                id=page_url,
                 sections=[TextSection(link=page_url, text=ticket_content)],
                 source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
                 semantic_identifier=f"[{issue.key}] {title_field}",
@@ -283,13 +307,17 @@ class JiraServiceManagementConnector(
         for issue in self._fetch_issues(start_dt, end_dt):
             doc = self._process_issue(issue)
             if doc is not None:
+                doc.external_access = self._get_project_permissions(
+                    self.jira_project, add_prefix=True
+                )
                 batch.append(doc)
             else:
+                issue_url = build_jira_url(self.jira_base_url, issue.key)
                 batch.append(
                     ConnectorFailure(
                         failed_document=DocumentFailure(
-                            document_id=f"jsm:{issue.key}",
-                            document_link=build_jira_url(self.jira_base_url, issue.key),
+                            document_id=issue_url,
+                            document_link=issue_url,
                         ),
                         failure_message=f"Failed to process issue {issue.key}",
                     )
@@ -320,7 +348,15 @@ class JiraServiceManagementConnector(
 
         batch: list[SlimDocument] = []
         for issue in self._fetch_issues(start_dt, end_dt):
-            batch.append(SlimDocument(id=f"jsm:{issue.key}"))
+            doc_id = build_jira_url(self.jira_base_url, issue.key)
+            batch.append(
+                SlimDocument(
+                    id=doc_id,
+                    external_access=self._get_project_permissions(
+                        self.jira_project, add_prefix=False
+                    ),
+                )
+            )
             if callback:
                 callback.should_continue()
             if len(batch) >= self.batch_size:

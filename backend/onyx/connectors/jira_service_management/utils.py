@@ -1,52 +1,51 @@
 """Utility functions for the Jira Service Management connector."""
 
+import requests
+from requests.auth import HTTPBasicAuth
 from typing import Any
 
-import requests
-from jira import JIRA
-from requests.auth import HTTPBasicAuth
-
+from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 JSM_API_PATH = "rest/servicedeskapi"
 
+# Known name patterns for JSM SLA fields (case-insensitive substring match)
+_SLA_FIELD_PATTERNS = {
+    "sla_time_to_first_response": ["time to first response"],
+    "sla_time_to_resolution": ["time to resolution", "time to resolve"],
+}
 
-def build_jsm_session(credentials: dict[str, Any], jira_base: str) -> tuple[JIRA, requests.Session, dict[str, Any]]:
-    """Build a JIRA client and a requests session configured for JSM API calls.
 
-    Returns:
-        Tuple of (jira_client, requests_session, auth_headers)
+def build_jsm_session(credentials: dict[str, Any], jira_base: str) -> requests.Session:
+    """Build a requests.Session configured for JSM API calls.
+
+    Authentication mirrors the existing Jira connector:
+    - Cloud: email + API token (Basic auth)
+    - Server/Data Center: personal access token (Bearer)
     """
-    api_token = credentials["jira_api_token"]
+    api_token: str = credentials.get("jira_api_token", "")
+    if not api_token:
+        raise ConnectorMissingCredentialError("jira_api_token is required")
+
     session = requests.Session()
     is_cloud = "jira_user_email" in credentials
 
     if is_cloud:
         email = credentials["jira_user_email"]
-        jira_client = JIRA(
-            basic_auth=(email, api_token),
-            server=jira_base,
-            options={"rest_api_version": "3"},
-        )
         session.auth = HTTPBasicAuth(email, api_token)
     else:
-        jira_client = JIRA(
-            token_auth=api_token,
-            server=jira_base,
-            options={"rest_api_version": "2"},
-        )
         session.headers.update({"Authorization": f"Bearer {api_token}"})
 
     session.headers.update(
         {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "X-ExperimentalApi": "opt-in",  # Required for some JSM endpoints
+            "X-ExperimentalApi": "opt-in",
         }
     )
-    return jira_client, session, {}
+    return session
 
 
 def get_service_desks(
@@ -71,55 +70,86 @@ def get_service_desks(
     return service_desks
 
 
-def get_jsm_project_key(session: requests.Session, jira_base: str, service_desk_id: str) -> str | None:
-    """Get the Jira project key for a given service desk ID."""
-    url = f"{jira_base.rstrip('/')}/{JSM_API_PATH}/servicedesk/{service_desk_id}"
+def discover_sla_field_ids(
+    session: requests.Session, jira_base: str
+) -> dict[str, str]:
+    """Discover JSM SLA custom field IDs dynamically via the Jira fields API.
+
+    SLA custom field IDs (e.g. customfield_10020) are assigned per-instance
+    during project setup and are NOT universal. This function queries
+    GET /rest/api/2/field and matches against known SLA field name patterns.
+
+    Returns a dict mapping our label keys to their customfield_* keys.
+    e.g. {"sla_time_to_first_response": "customfield_10020", ...}
+    """
+    url = f"{jira_base.rstrip('/')}/rest/api/2/field"
     try:
-        resp = session.get(url)
+        resp = session.get(url, timeout=10)
         resp.raise_for_status()
-        return resp.json().get("projectKey")
+        fields = resp.json()
     except Exception as e:
-        logger.warning(f"Failed to get project key for service desk {service_desk_id}: {e}")
-        return None
+        logger.warning(f"Could not discover JSM SLA field IDs: {e}")
+        return {}
+
+    result: dict[str, str] = {}
+    for field in fields:
+        field_id = field.get("id", "")
+        field_name = (field.get("name") or "").lower()
+        if not field_id.startswith("customfield_"):
+            continue
+        for label, patterns in _SLA_FIELD_PATTERNS.items():
+            if label not in result and any(p in field_name for p in patterns):
+                result[label] = field_id
+
+    if result:
+        logger.debug(f"Discovered SLA field IDs: {result}")
+    else:
+        logger.warning(
+            "No SLA custom fields found via Jira fields API. "
+            "SLA metadata will not be extracted."
+        )
+    return result
 
 
-def extract_jsm_metadata(issue: Any) -> dict[str, str | list[str]]:
-    """Extract JSM-specific metadata from a Jira issue."""
+def extract_jsm_metadata(
+    issue: Any,
+    sla_field_ids: dict[str, str],
+) -> dict[str, str | list[str]]:
+    """Extract JSM-specific metadata from a Jira issue.
+
+    Args:
+        issue: A jira.resources.Issue object.
+        sla_field_ids: Mapping of label → customfield_* key, as returned
+                       by discover_sla_field_ids().
+    """
     metadata: dict[str, str | list[str]] = {}
 
     try:
         fields = issue.raw.get("fields", {})
 
-        # Request type (JSM-specific)
+        # Request type (JSM-specific issue type)
         request_type = fields.get("issuetype", {})
-        if isinstance(request_type, dict):
-            metadata["request_type"] = request_type.get("name", "")
+        if isinstance(request_type, dict) and request_type.get("name"):
+            metadata["request_type"] = request_type["name"]
 
-        # SLA fields — stored under customfield keys; try common ones
-        for field_key, label in [
-            ("customfield_10020", "sla_time_to_first_response"),
-            ("customfield_10030", "sla_time_to_resolution"),
-        ]:
+        # SLA fields — discovered dynamically to avoid hardcoded IDs
+        for label, field_key in sla_field_ids.items():
             sla_field = fields.get(field_key)
-            if sla_field and isinstance(sla_field, dict):
-                completed = sla_field.get("completedCycles", [])
-                ongoing = sla_field.get("ongoingCycle", {})
-                if completed:
-                    last = completed[-1]
-                    metadata[label] = (
-                        "breached" if last.get("breached") else "met"
-                    )
-                elif ongoing:
-                    metadata[label] = (
-                        "breached" if ongoing.get("breached") else "ongoing"
-                    )
+            if not sla_field or not isinstance(sla_field, dict):
+                continue
+            completed = sla_field.get("completedCycles", [])
+            ongoing = sla_field.get("ongoingCycle", {})
+            if completed:
+                metadata[label] = "breached" if completed[-1].get("breached") else "met"
+            elif ongoing:
+                metadata[label] = "breached" if ongoing.get("breached") else "ongoing"
 
-        # Customer request type
+        # Customer request type (portal-facing label)
         customer_request = fields.get("customfield_10010")
         if customer_request and isinstance(customer_request, dict):
             rt = customer_request.get("requestType", {})
-            if isinstance(rt, dict):
-                metadata["customer_request_type"] = rt.get("name", "")
+            if isinstance(rt, dict) and rt.get("name"):
+                metadata["customer_request_type"] = rt["name"]
 
         # Priority
         priority = fields.get("priority", {})
@@ -130,8 +160,8 @@ def extract_jsm_metadata(issue: Any) -> dict[str, str | list[str]]:
         status = fields.get("status", {})
         if isinstance(status, dict):
             status_category = status.get("statusCategory", {})
-            if isinstance(status_category, dict):
-                metadata["status_category"] = status_category.get("name", "")
+            if isinstance(status_category, dict) and status_category.get("name"):
+                metadata["status_category"] = status_category["name"]
 
     except Exception as e:
         logger.warning(f"Error extracting JSM metadata: {e}")
