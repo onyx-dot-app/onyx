@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
@@ -65,7 +66,7 @@ function GroupCard({ group }: GroupCardProps) {
               prominence="tertiary"
               tooltip="View group"
               aria-label="View group"
-              onClick={() => router.push(`/admin/groups/${group.id}`)}
+              onClick={() => router.push(`/admin/groups/${group.id}` as Route)}
             />
           </Section>
         }

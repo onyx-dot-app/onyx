@@ -13,6 +13,7 @@ interface OrientationLayoutProps {
   nonInteractive?: boolean;
   children?: React.ReactNode;
   title: string;
+  titleSuffix?: string;
   description?: string;
   optional?: boolean;
   sizePreset?: "main-content" | "main-ui";
@@ -50,6 +51,7 @@ function VerticalInputLayout({
   children,
   subDescription,
   title,
+  titleSuffix,
   description,
   optional,
   sizePreset = "main-content",
@@ -58,6 +60,7 @@ function VerticalInputLayout({
     <Section gap={0.25} alignItems="start">
       <Content
         title={title}
+        titleSuffix={titleSuffix}
         description={description}
         optional={optional}
         sizePreset={sizePreset}
@@ -125,6 +128,7 @@ function HorizontalInputLayout({
   children,
   center,
   title,
+  titleSuffix,
   description,
   optional,
   sizePreset = "main-content",
@@ -139,6 +143,7 @@ function HorizontalInputLayout({
         <div className="flex flex-col flex-1 min-w-0 self-stretch">
           <Content
             title={title}
+            titleSuffix={titleSuffix}
             description={description}
             optional={optional}
             sizePreset={sizePreset}
