@@ -23,14 +23,26 @@ _connector_collector = ConnectorHealthCollector()
 
 
 def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
-    """Create a factory that returns a fresh broker Redis client on each call.
+    """Create a factory that returns a cached broker Redis client.
 
-    Using a factory instead of a stored reference avoids holding a stale
-    connection if the broker reconnects or the channel is recycled.
+    Reuses a single connection across scrapes to avoid leaking connections.
+    Reconnects automatically if the cached connection becomes stale.
     """
+    _cached_client: list[Redis | None] = [None]
 
     def _get_broker_redis() -> Redis:
-        return celery_app.broker_connection().channel().client  # type: ignore
+        client = _cached_client[0]
+        if client is not None:
+            try:
+                client.ping()
+                return client
+            except Exception:
+                logger.debug("Cached Redis client stale, reconnecting")
+                _cached_client[0] = None
+
+        client = celery_app.broker_connection().channel().client  # type: ignore
+        _cached_client[0] = client
+        return client
 
     return _get_broker_redis
 
