@@ -19,7 +19,7 @@ export const markdownVariant: PreviewVariant = {
     if (MARKDOWN_MIMES.some((m) => mime.startsWith(m))) return true;
     return isMarkdownFile(name || "");
   },
-  width: "lg",
+  width: "full",
   height: "full",
   needsTextContent: true,
   codeBackground: false,

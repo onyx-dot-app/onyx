@@ -237,7 +237,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
       onOpenChange={agentViewerModal.toggle}
     >
       <Modal.Content
-        width="md-sm"
+        width="lg"
         height="lg"
         bottomSlot={<AgentChatInput agent={agent} onSubmit={handleStartChat} />}
       >
