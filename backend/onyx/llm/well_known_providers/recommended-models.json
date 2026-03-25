@@ -43,6 +43,22 @@
         }
       ]
     },
+    "minimax": {
+      "default_model": {
+        "name": "MiniMax-M2.5",
+        "display_name": "MiniMax M2.5"
+      },
+      "additional_visible_models": [
+        {
+          "name": "MiniMax-M2.5",
+          "display_name": "MiniMax M2.5"
+        },
+        {
+          "name": "MiniMax-M2.5-lightning",
+          "display_name": "MiniMax M2.5 Lightning"
+        }
+      ]
+    },
     "openrouter": {
       "default_model": "z-ai/glm-4.7",
       "additional_visible_models": [

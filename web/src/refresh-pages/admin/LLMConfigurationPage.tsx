@@ -45,6 +45,7 @@ import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import MiniMaxModal from "@/sections/modals/llmConfig/MiniMaxModal";
 import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
@@ -61,6 +62,7 @@ const PROVIDER_DISPLAY_ORDER: string[] = [
   "vertex_ai",
   "bedrock",
   "azure",
+  "minimax",
   "litellm_proxy",
   "ollama_chat",
   "openrouter",
@@ -126,6 +128,13 @@ const PROVIDER_MODAL_MAP: Record<
   ),
   lm_studio: (d, open, onOpenChange) => (
     <LMStudioForm
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  minimax: (d, open, onOpenChange) => (
+    <MiniMaxModal
       shouldMarkAsDefault={d}
       open={open}
       onOpenChange={onOpenChange}

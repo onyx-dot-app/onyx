@@ -26,6 +26,7 @@ const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
   [LLMProviderName.LM_STUDIO]: SvgLmStudio,
+  [LLMProviderName.MINIMAX]: SvgServer,
 
   // fallback
   [LLMProviderName.CUSTOM]: SvgServer,
@@ -42,6 +43,7 @@ const PROVIDER_PRODUCT_NAMES: Record<string, string> = {
   [LLMProviderName.OLLAMA_CHAT]: "Ollama",
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
+  [LLMProviderName.MINIMAX]: "MiniMax",
 
   // fallback
   [LLMProviderName.CUSTOM]: "Custom Models",
@@ -58,6 +60,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   [LLMProviderName.OLLAMA_CHAT]: "Ollama",
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
+  [LLMProviderName.MINIMAX]: "MiniMax",
 
   // fallback
   [LLMProviderName.CUSTOM]: "Other providers or self-hosted",
