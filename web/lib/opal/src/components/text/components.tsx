@@ -1,7 +1,6 @@
 import type { HTMLAttributes } from "react";
 
-import type { WithoutStyles } from "@opal/types";
-import { isRichStr } from "@opal/types";
+import type { RichStr, WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
 import InlineMarkdown from "@opal/components/text/InlineMarkdown";
 
@@ -58,6 +57,18 @@ interface TextProps
 
   /** Prevent text wrapping. */
   nowrap?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function isRichStr(value: unknown): value is RichStr {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as RichStr).__brand === "RichStr"
+  );
 }
 
 // ---------------------------------------------------------------------------

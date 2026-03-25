@@ -111,15 +111,6 @@ export function markdown(content: string): RichStr {
   return { __brand: "RichStr", raw: content };
 }
 
-/** Type guard for `RichStr`. */
-export function isRichStr(value: unknown): value is RichStr {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as RichStr).__brand === "RichStr"
-  );
-}
-
 /**
  * HTML button `type` attribute values.
  *
