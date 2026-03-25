@@ -83,6 +83,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,
   updateAgentFeaturedStatus,
@@ -99,16 +100,6 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
-}
-
-function isFutureDate(date: Date): boolean {
-  const normalizedDate = new Date(date);
-  normalizedDate.setHours(0, 0, 0, 0);
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  return normalizedDate.getTime() > today.getTime();
 }
 
 function FormWarningsEffect() {
@@ -715,7 +706,7 @@ export default function AgentEditorPage({
       .test(
         "knowledge-cutoff-date-not-in-future",
         "Knowledge cutoff date must be today or earlier.",
-        (value) => !value || !isFutureDate(value)
+        (value) => !value || !isDateInFuture(value)
       ),
     replace_base_system_prompt: Yup.boolean(),
     reminders: Yup.string().optional(),
@@ -1561,7 +1552,6 @@ export default function AgentEditorPage({
                                 <InputDatePickerField
                                   name="knowledge_cutoff_date"
                                   maxDate={new Date()}
-                                  maxDateErrorMessage="Please choose today or an earlier date."
                                 />
                               </InputLayouts.Horizontal>
                               <InputLayouts.Horizontal

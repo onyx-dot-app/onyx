@@ -2,11 +2,11 @@
 
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { toast } from "@/hooks/useToast";
+import { isAfterDate, normalizeDate } from "@/lib/dateUtils";
 import Calendar from "@/refresh-components/Calendar";
 import Popover from "@/refresh-components/Popover";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { SvgCalendar } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 
@@ -17,21 +17,10 @@ export interface InputDatePickerProps {
   startYear?: number;
   disabled?: boolean;
   maxDate?: Date;
-  maxDateErrorMessage?: string;
 }
 
 function extractYear(date: Date | null): number {
   return (date ?? new Date()).getFullYear();
-}
-
-function normalizeDate(date: Date): Date {
-  const normalizedDate = new Date(date);
-  normalizedDate.setHours(0, 0, 0, 0);
-  return normalizedDate;
-}
-
-function isAfterDate(date: Date, maxDate: Date): boolean {
-  return normalizeDate(date).getTime() > normalizeDate(maxDate).getTime();
 }
 
 function clampToMaxDate(date: Date, maxDate?: Date): Date {
@@ -49,14 +38,23 @@ export default function InputDatePicker({
   startYear = 1970,
   disabled = false,
   maxDate,
-  maxDateErrorMessage = "Please choose today or an earlier date.",
 }: InputDatePickerProps) {
   const validStartYear = Math.max(startYear, 1970);
-  const normalizedMaxDate = maxDate ? normalizeDate(maxDate) : undefined;
-  const currYear = extractYear(normalizedMaxDate ?? new Date());
-  const years = Array(currYear - validStartYear + 1)
-    .fill(currYear)
-    .map((currYear, index) => currYear - index);
+  const normalizedMaxDate = useMemo(
+    () => (maxDate ? normalizeDate(maxDate) : undefined),
+    [maxDate]
+  );
+  const currYear = Math.max(
+    validStartYear,
+    extractYear(normalizedMaxDate ?? new Date())
+  );
+  const years = useMemo(
+    () =>
+      Array(currYear - validStartYear + 1)
+        .fill(currYear)
+        .map((year, index) => year - index),
+    [currYear, validStartYear]
+  );
   const [open, setOpen] = useState(false);
   const [displayedMonth, setDisplayedMonth] = useState<Date>(
     clampToMaxDate(
@@ -65,16 +63,7 @@ export default function InputDatePicker({
     )
   );
 
-  function notifyInvalidDateSelection() {
-    toast.warning(maxDateErrorMessage);
-  }
-
   function handleDateSelection(date: Date) {
-    if (normalizedMaxDate && isAfterDate(date, normalizedMaxDate)) {
-      notifyInvalidDateSelection();
-      return;
-    }
-
     setSelectedDate(date);
     setDisplayedMonth(date);
     setOpen(false);
@@ -125,11 +114,6 @@ export default function InputDatePicker({
             onSelect={(date) => {
               if (date) {
                 handleDateSelection(date);
-              }
-            }}
-            onDayClick={(date) => {
-              if (normalizedMaxDate && isAfterDate(date, normalizedMaxDate)) {
-                notifyInvalidDateSelection();
               }
             }}
             month={displayedMonth}
