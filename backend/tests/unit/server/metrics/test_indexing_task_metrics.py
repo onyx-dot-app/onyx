@@ -17,12 +17,20 @@ from onyx.server.metrics.indexing_task_metrics import on_indexing_task_prerun
 
 @pytest.fixture(autouse=True)
 def reset_state() -> None:  # type: ignore
-    """Clear caches and state between tests."""
+    """Clear caches and state between tests.
+
+    Sets CURRENT_TENANT_ID_CONTEXTVAR to a realistic value so cache keys
+    are never keyed on an empty string.
+    """
+    from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("test_tenant")
     _connector_cache.clear()
     _indexing_start_times.clear()
     yield  # type: ignore
     _connector_cache.clear()
     _indexing_start_times.clear()
+    CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def _make_task(name: str) -> MagicMock:
@@ -56,7 +64,7 @@ class TestIndexingTaskPrerun:
 
     def test_emits_started_for_docfetching(self) -> None:
         # Pre-populate cache to avoid DB lookup (tenant-scoped key)
-        _connector_cache[("", 42)] = ConnectorInfo(
+        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
             source="google_drive", name="My Google Drive"
         )
 
@@ -83,7 +91,7 @@ class TestIndexingTaskPrerun:
         assert "task-1" in _indexing_start_times
 
     def test_emits_started_for_docprocessing(self) -> None:
-        _connector_cache[("", 10)] = ConnectorInfo(
+        _connector_cache[("test_tenant", 10)] = ConnectorInfo(
             source="slack", name="Slack Connector"
         )
 
@@ -94,7 +102,7 @@ class TestIndexingTaskPrerun:
         assert "task-2" in _indexing_start_times
 
     def test_cache_hit_avoids_db_call(self) -> None:
-        _connector_cache[("", 42)] = ConnectorInfo(
+        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
             source="confluence", name="Engineering Confluence"
         )
 
@@ -168,7 +176,7 @@ class TestIndexingTaskPostrun:
         # Should not raise
 
     def test_emits_completed_and_duration(self) -> None:
-        _connector_cache[("", 42)] = ConnectorInfo(
+        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
             source="google_drive", name="Marketing Drive"
         )
 
@@ -212,7 +220,9 @@ class TestIndexingTaskPostrun:
         assert after_duration > before_duration
 
     def test_failure_outcome(self) -> None:
-        _connector_cache[("", 42)] = ConnectorInfo(source="slack", name="Slack")
+        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
+            source="slack", name="Slack"
+        )
 
         task = _make_task("connector_doc_fetching_task")
         kwargs = {"cc_pair_id": 42, "tenant_id": "public"}
@@ -241,7 +251,9 @@ class TestIndexingTaskPostrun:
 
     def test_handles_postrun_without_prerun(self) -> None:
         """Postrun for an indexing task without a matching prerun should not crash."""
-        _connector_cache[("", 42)] = ConnectorInfo(source="slack", name="Slack")
+        _connector_cache[("test_tenant", 42)] = ConnectorInfo(
+            source="slack", name="Slack"
+        )
 
         task = _make_task("docprocessing_task")
         kwargs = {"cc_pair_id": 42, "tenant_id": "public"}

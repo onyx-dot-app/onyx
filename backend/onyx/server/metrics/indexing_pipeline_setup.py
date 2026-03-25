@@ -4,6 +4,7 @@ Called once by the monitoring celery worker after Redis and DB are ready.
 """
 
 from collections.abc import Callable
+from typing import Any
 
 from celery import Celery
 from prometheus_client.registry import REGISTRY
@@ -36,6 +37,9 @@ def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
     Reconnects automatically if the cached connection becomes stale.
     """
     _cached_client: list[Redis | None] = [None]
+    # Keep a reference to the Kombu Connection so we can close it on
+    # reconnect (the raw Redis client outlives the Kombu wrapper).
+    _cached_kombu_conn: list[Any] = [None]
 
     def _close_client(client: Redis) -> None:
         """Best-effort close of a Redis client."""
@@ -43,6 +47,16 @@ def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
             client.close()
         except Exception:
             logger.debug("Failed to close stale Redis client", exc_info=True)
+
+    def _close_kombu_conn() -> None:
+        """Best-effort close of the cached Kombu Connection."""
+        conn = _cached_kombu_conn[0]
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                logger.debug("Failed to close Kombu connection", exc_info=True)
+            _cached_kombu_conn[0] = None
 
     def _get_broker_redis() -> Redis:
         client = _cached_client[0]
@@ -54,6 +68,7 @@ def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
                 logger.debug("Cached Redis client stale, reconnecting")
                 _close_client(client)
                 _cached_client[0] = None
+                _close_kombu_conn()
 
         # Get a fresh Redis client from the broker connection.
         # We hold this client long-term (cached above) rather than using a
@@ -65,6 +80,7 @@ def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
         # client) but the type stubs don't declare it.
         new_client: Redis = conn.channel().client  # type: ignore[attr-defined]
         _cached_client[0] = new_client
+        _cached_kombu_conn[0] = conn
         return new_client
 
     return _get_broker_redis

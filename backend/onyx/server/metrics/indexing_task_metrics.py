@@ -21,6 +21,7 @@ Usage in a worker app module:
     )
 """
 
+import threading
 import time
 from dataclasses import dataclass
 
@@ -29,6 +30,7 @@ from prometheus_client import Counter
 from prometheus_client import Histogram
 
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.server.metrics.celery_task_metrics import _MAX_START_TIME_AGE_SECONDS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -87,13 +89,16 @@ INDEXING_TASK_DURATION = Histogram(
 # task_id → monotonic start time (for indexing tasks only)
 _indexing_start_times: dict[str, float] = {}
 
-# Entries older than this are evicted on each prerun to prevent unbounded
-# growth when tasks are killed (SIGTERM, OOM) and postrun never fires.
-_MAX_START_TIME_AGE_SECONDS = 3600  # 1 hour
+# Lock protecting _indexing_start_times — prerun, postrun, and eviction may
+# run concurrently on thread-pool workers.
+_indexing_start_times_lock = threading.Lock()
 
 
 def _evict_stale_start_times() -> None:
-    """Remove _indexing_start_times entries older than _MAX_START_TIME_AGE_SECONDS."""
+    """Remove _indexing_start_times entries older than _MAX_START_TIME_AGE_SECONDS.
+
+    Must be called while holding _indexing_start_times_lock.
+    """
     now = time.monotonic()
     stale_ids = [
         tid
@@ -166,8 +171,6 @@ def on_indexing_task_prerun(
         return
 
     try:
-        _evict_stale_start_times()
-
         cc_pair_id = kwargs.get("cc_pair_id")
         tenant_id = str(kwargs.get("tenant_id", "unknown"))
 
@@ -183,7 +186,9 @@ def on_indexing_task_prerun(
             cc_pair_id=str(cc_pair_id),
         ).inc()
 
-        _indexing_start_times[task_id] = time.monotonic()
+        with _indexing_start_times_lock:
+            _evict_stale_start_times()
+            _indexing_start_times[task_id] = time.monotonic()
     except Exception:
         logger.debug("Failed to record indexing task prerun metrics", exc_info=True)
 
@@ -223,7 +228,8 @@ def on_indexing_task_postrun(
             outcome=outcome,
         ).inc()
 
-        start = _indexing_start_times.pop(task_id, None)
+        with _indexing_start_times_lock:
+            start = _indexing_start_times.pop(task_id, None)
         if start is not None:
             INDEXING_TASK_DURATION.labels(
                 task_name=task_name,

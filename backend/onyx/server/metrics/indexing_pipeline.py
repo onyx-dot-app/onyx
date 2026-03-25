@@ -313,7 +313,7 @@ class ConnectorHealthCollector(_CachedCollector):
         ]
         docs_success_gauge = GaugeMetricFamily(
             "onyx_connector_docs_indexed",
-            "Total documents successfully indexed (from latest attempt) per connector",
+            "Total new documents indexed (90-day rolling sum) per connector",
             labels=per_connector_labels,
         )
         docs_error_gauge = GaugeMetricFamily(
@@ -453,11 +453,17 @@ class WorkerHealthCollector(_CachedCollector):
     metric (which would make ``absent()``-style alerts impossible).
     """
 
+    # Remove a worker from _known_workers after this many consecutive
+    # missed pings (at 60s TTL ≈ 10 minutes of being unreachable).
+    _MAX_CONSECUTIVE_MISSES = 10
+
     def __init__(self, cache_ttl: float = 60.0) -> None:
         super().__init__(cache_ttl)
         self._celery_app: Any | None = None
-        # Accumulated set of worker short-names ever seen via ping.
-        self._known_workers: set[str] = set()
+        # worker short-name → consecutive miss count.
+        # Workers start at 0 and reset to 0 each time they respond.
+        # Removed after _MAX_CONSECUTIVE_MISSES missed collects.
+        self._known_workers: dict[str, int] = {}
 
     def set_celery_app(self, app: Any) -> None:
         """Set the Celery app instance for inspect commands."""
@@ -491,9 +497,21 @@ class WorkerHealthCollector(_CachedCollector):
             else:
                 active_workers.add_metric([], 0)
 
-            # Remember every worker we've ever seen so we can emit 0
-            # when they stop responding.
-            self._known_workers.update(responding)
+            # Register newly-seen workers and reset miss count for
+            # workers that responded.
+            for short_name in responding:
+                self._known_workers[short_name] = 0
+
+            # Increment miss count for non-responding workers and evict
+            # those that have been missing too long.
+            stale = []
+            for short_name in list(self._known_workers):
+                if short_name not in responding:
+                    self._known_workers[short_name] += 1
+                    if self._known_workers[short_name] >= self._MAX_CONSECUTIVE_MISSES:
+                        stale.append(short_name)
+            for short_name in stale:
+                del self._known_workers[short_name]
 
             for short_name in sorted(self._known_workers):
                 worker_up.add_metric([short_name], 1 if short_name in responding else 0)

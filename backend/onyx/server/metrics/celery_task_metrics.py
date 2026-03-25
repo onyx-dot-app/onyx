@@ -16,6 +16,7 @@ Usage in a worker app module:
     # Call from the worker's existing signal handlers
 """
 
+import threading
 import time
 
 from celery import Task
@@ -70,8 +71,12 @@ TASK_REJECTED = Counter(
     ["task_name"],
 )
 
-# task_id → monotonic start time
-_task_start_times: dict[str, float] = {}
+# task_id → (monotonic start time, metric labels)
+_task_start_times: dict[str, tuple[float, dict[str, str]]] = {}
+
+# Lock protecting _task_start_times — prerun, postrun, and eviction may
+# run concurrently on thread-pool workers.
+_task_start_times_lock = threading.Lock()
 
 # Entries older than this are evicted on each prerun to prevent unbounded
 # growth when tasks are killed (SIGTERM, OOM) and postrun never fires.
@@ -79,15 +84,25 @@ _MAX_START_TIME_AGE_SECONDS = 3600  # 1 hour
 
 
 def _evict_stale_start_times() -> None:
-    """Remove _task_start_times entries older than _MAX_START_TIME_AGE_SECONDS."""
+    """Remove _task_start_times entries older than _MAX_START_TIME_AGE_SECONDS.
+
+    Must be called while holding _task_start_times_lock.
+    """
     now = time.monotonic()
     stale_ids = [
         tid
-        for tid, start in _task_start_times.items()
+        for tid, (start, _labels) in _task_start_times.items()
         if now - start > _MAX_START_TIME_AGE_SECONDS
     ]
     for tid in stale_ids:
-        _task_start_times.pop(tid, None)
+        entry = _task_start_times.pop(tid, None)
+        if entry is not None:
+            _labels = entry[1]
+            # Decrement active gauge for evicted tasks — these tasks were
+            # started but never completed (killed, OOM, etc.).
+            active_gauge = TASKS_ACTIVE.labels(**_labels)
+            if active_gauge._value.get() > 0:
+                active_gauge.dec()
 
 
 def _get_task_labels(task: Task) -> dict[str, str]:
@@ -112,11 +127,12 @@ def on_celery_task_prerun(
         return
 
     try:
-        _evict_stale_start_times()
         labels = _get_task_labels(task)
         TASK_STARTED.labels(**labels).inc()
         TASKS_ACTIVE.labels(**labels).inc()
-        _task_start_times[task_id] = time.monotonic()
+        with _task_start_times_lock:
+            _evict_stale_start_times()
+            _task_start_times[task_id] = (time.monotonic(), labels)
     except Exception:
         logger.debug("Failed to record celery task prerun metrics", exc_info=True)
 
@@ -141,9 +157,11 @@ def on_celery_task_postrun(
         if active_gauge._value.get() > 0:
             active_gauge.dec()
 
-        start = _task_start_times.pop(task_id, None)
-        if start is not None:
-            TASK_DURATION.labels(**labels).observe(time.monotonic() - start)
+        with _task_start_times_lock:
+            entry = _task_start_times.pop(task_id, None)
+        if entry is not None:
+            start_time, _stored_labels = entry
+            TASK_DURATION.labels(**labels).observe(time.monotonic() - start_time)
     except Exception:
         logger.debug("Failed to record celery task postrun metrics", exc_info=True)
 
