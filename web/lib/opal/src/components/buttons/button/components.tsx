@@ -1,5 +1,9 @@
 import "@opal/components/tooltip.css";
-import { Interactive, type InteractiveStatelessProps } from "@opal/core";
+import {
+  Disabled,
+  Interactive,
+  type InteractiveStatelessProps,
+} from "@opal/core";
 import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
@@ -32,9 +36,6 @@ type ButtonProps = InteractiveStatelessProps &
      */
     size?: ContainerSizeVariants;
 
-    /** HTML button type. When provided, Container renders a `<button>` element. */
-    type?: "submit" | "button" | "reset";
-
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
@@ -43,6 +44,9 @@ type ButtonProps = InteractiveStatelessProps &
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
+
+    /** Wraps the button in a Disabled context. `false` overrides parent contexts. */
+    disabled?: boolean;
   };
 
 // ---------------------------------------------------------------------------
@@ -59,6 +63,7 @@ function Button({
   tooltip,
   tooltipSide = "top",
   responsiveHideText = false,
+  disabled,
   ...interactiveProps
 }: ButtonProps) {
   const isLarge = size === "lg";
@@ -76,7 +81,7 @@ function Button({
   ) : null;
 
   const button = (
-    <Interactive.Stateless {...interactiveProps}>
+    <Interactive.Stateless type={type} {...interactiveProps}>
       <Interactive.Container
         type={type}
         border={interactiveProps.prominence === "secondary"}
@@ -102,9 +107,7 @@ function Button({
     </Interactive.Stateless>
   );
 
-  if (!tooltip) return button;
-
-  return (
+  const result = tooltip ? (
     <TooltipPrimitive.Root>
       <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
@@ -117,7 +120,15 @@ function Button({
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>
+  ) : (
+    button
   );
+
+  if (disabled != null) {
+    return <Disabled disabled={disabled}>{result}</Disabled>;
+  }
+
+  return result;
 }
 
 export { Button, type ButtonProps };

@@ -8,7 +8,7 @@ Stateful interactive surface primitive for elements that maintain a value state 
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `variant` | `"select-light" \| "select-heavy" \| "sidebar"` | `"select-heavy"` | Color variant |
+| `variant` | `"select-light" \| "select-heavy" \| "select-tinted" \| "select-filter" \| "sidebar"` | `"select-heavy"` | Color variant |
 | `state` | `"empty" \| "filled" \| "selected"` | `"empty"` | Current value state |
 | `interaction` | `"rest" \| "hover" \| "active"` | `"rest"` | JS-controlled interaction override |
 | `group` | `string` | — | Tailwind group class for `group-hover:*` |

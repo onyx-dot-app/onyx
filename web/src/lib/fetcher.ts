@@ -19,6 +19,29 @@ const DEFAULT_AUTH_ERROR_MSG =
 
 const DEFAULT_ERROR_MSG = "An error occurred while fetching the data.";
 
+/**
+ * SWR `onErrorRetry` callback that suppresses automatic retries for
+ * authentication errors (401/403). Pass this to any SWR hook whose endpoint
+ * requires auth so that unauthenticated pages don't spam the backend.
+ */
+export const skipRetryOnAuthError: NonNullable<
+  import("swr").SWRConfiguration["onErrorRetry"]
+> = (error, _key, _config, revalidate, { retryCount }) => {
+  if (
+    error instanceof FetchError &&
+    (error.status === 401 || error.status === 403)
+  )
+    return;
+  // For non-auth errors, retry with exponential backoff
+  if (
+    _config.errorRetryCount !== undefined &&
+    retryCount >= _config.errorRetryCount
+  )
+    return;
+  const delay = Math.min(2000 * 2 ** retryCount, 30000);
+  setTimeout(() => revalidate({ retryCount }), delay);
+};
+
 export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
   const res = await fetch(url);
 

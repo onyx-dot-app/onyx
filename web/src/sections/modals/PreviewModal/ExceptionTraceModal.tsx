@@ -17,7 +17,7 @@ export default function ExceptionTraceModal({
 }: ExceptionTraceModalProps) {
   return (
     <Modal open onOpenChange={onOutsideClick}>
-      <Modal.Content width="lg" height="full">
+      <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgAlertTriangle}
           title="Full Exception Trace"

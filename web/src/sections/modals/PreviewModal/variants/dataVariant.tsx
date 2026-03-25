@@ -22,7 +22,7 @@ function formatContent(language: string, content: string): string {
 export const dataVariant: PreviewVariant = {
   matches: (name, mime) =>
     !!getDataLanguage(name || "") || !!getLanguageByMime(mime),
-  width: "md",
+  width: "xl",
   height: "lg",
   needsTextContent: true,
   codeBackground: true,

@@ -11,7 +11,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import Tabs from "@/refresh-components/Tabs";
-import FilterButton from "@/refresh-components/buttons/FilterButton";
+import { FilterButton } from "@opal/components";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Button } from "@opal/components";
@@ -465,9 +465,8 @@ export default function AgentsNavigationPage() {
             >
               <Popover.Trigger asChild>
                 <FilterButton
-                  leftIcon={SvgUser}
+                  icon={SvgUser}
                   active={selectedCreatorIds.size > 0}
-                  transient={creatorFilterOpen}
                   onClear={() => setSelectedCreatorIds(new Set())}
                 >
                   {creatorFilterButtonText}
@@ -537,8 +536,7 @@ export default function AgentsNavigationPage() {
             >
               <Popover.Trigger asChild>
                 <FilterButton
-                  leftIcon={SvgActions}
-                  transient={actionsFilterOpen}
+                  icon={SvgActions}
                   active={
                     selectedActionIds.size > 0 || selectedMcpServerIds.size > 0
                   }

@@ -15,7 +15,7 @@ class QueryProcessingPayload(BaseModel):
         description="Email of the user submitting the query, or null if unauthenticated."
     )
     chat_session_id: str = Field(
-        description="UUID of the chat session. Always present — the session is guaranteed to exist by the time this hook fires."
+        description="UUID of the chat session, formatted as a hyphenated lowercase string (e.g. '550e8400-e29b-41d4-a716-446655440000'). Always present — the session is guaranteed to exist by the time this hook fires."
     )
 
 
@@ -25,7 +25,7 @@ class QueryProcessingResponse(BaseModel):
         default=None,
         description=(
             "The query to use in the pipeline. "
-            "Null, empty string, or absent = reject the query."
+            "Null, empty string, whitespace-only, or absent = reject the query."
         ),
     )
     rejection_message: str | None = Field(
@@ -65,6 +65,8 @@ class QueryProcessingSpec(HookPointSpec):
         "The query will be blocked and the user will see an error message."
     )
     default_fail_strategy = HookFailStrategy.HARD
+    # TODO(Bo-Onyx): update later
+    docs_url = "https://docs.google.com/document/d/1pGhB8Wcnhhj8rS4baEJL6CX05yFhuIDNk1gbBRiWu94/edit?tab=t.g2r1a1699u87"
 
     payload_model = QueryProcessingPayload
     response_model = QueryProcessingResponse

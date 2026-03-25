@@ -199,31 +199,29 @@ def build_vespa_filters(
         ]
     _append(filter_parts, _build_or_filters(METADATA_LIST, tag_attributes))
 
-    # Knowledge scope: explicit knowledge attachments (document_sets,
-    # user_file_ids) restrict what an assistant can see.  When none are
-    # set, the assistant can see everything.
+    # Knowledge scope: explicit knowledge attachments restrict what an
+    # assistant can see.  When none are set, the assistant can see
+    # everything.
     #
-    # project_id / persona_id are additive: they make overflowing user
-    # files findable in Vespa but must NOT trigger the restriction on
-    # their own (an agent with no explicit knowledge should search
-    # everything).
+    # persona_id_filter is a primary trigger — a persona with user files IS
+    # explicit knowledge, so it can start a knowledge scope on its own.
+    #
+    # project_id_filter is additive — it widens the scope to also cover
+    # overflowing project files but never restricts on its own (a chat
+    # inside a project should still search team knowledge).
     knowledge_scope_parts: list[str] = []
 
     _append(
         knowledge_scope_parts, _build_or_filters(DOCUMENT_SETS, filters.document_set)
     )
+    _append(knowledge_scope_parts, _build_persona_filter(filters.persona_id_filter))
 
-    user_file_ids_str = (
-        [str(uuid) for uuid in filters.user_file_ids] if filters.user_file_ids else None
-    )
-    _append(knowledge_scope_parts, _build_or_filters(DOCUMENT_ID, user_file_ids_str))
-
-    # Only include project/persona scopes when an explicit knowledge
-    # restriction is already in effect — they widen the scope to also
-    # cover overflowing user files but never restrict on their own.
+    # project_id_filter only widens an existing scope.
     if knowledge_scope_parts:
-        _append(knowledge_scope_parts, _build_user_project_filter(filters.project_id))
-        _append(knowledge_scope_parts, _build_persona_filter(filters.persona_id))
+        _append(
+            knowledge_scope_parts,
+            _build_user_project_filter(filters.project_id_filter),
+        )
 
     if len(knowledge_scope_parts) > 1:
         filter_parts.append("(" + " or ".join(knowledge_scope_parts) + ")")
