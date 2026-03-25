@@ -185,11 +185,7 @@ export default function UserAvatarPopover({
         <div id="onyx-user-dropdown">
           <SidebarTab
             icon={() => (
-              <div
-                className={cn(
-                  "w-[16px] flex flex-col justify-center items-center"
-                )}
-              >
+              <div className="w-[16px] flex flex-col justify-center items-center">
                 <UserAvatar user={user} size={18} />
               </div>
             )}
