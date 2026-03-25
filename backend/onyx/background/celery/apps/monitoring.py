@@ -54,8 +54,14 @@ def on_celeryd_init(sender: Any = None, conf: Any = None, **kwargs: Any) -> None
     app_base.on_celeryd_init(sender, conf, **kwargs)
 
 
+# Set by on_worker_init so on_worker_ready knows whether to start the server.
+_prometheus_collectors_ok: bool = False
+
+
 @worker_init.connect
 def on_worker_init(sender: Any, **kwargs: Any) -> None:
+    global _prometheus_collectors_ok
+
     logger.info("worker_init signal received.")
     logger.info(f"Multiprocessing start method: {multiprocessing.get_start_method()}")
 
@@ -65,6 +71,8 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
 
+    _prometheus_collectors_ok = _setup_prometheus_collectors(sender)
+
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:
         return
@@ -72,8 +80,37 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     app_base.on_secondary_worker_init(sender, **kwargs)
 
 
+def _setup_prometheus_collectors(sender: Any) -> bool:
+    """Register Prometheus collectors that need Redis/DB access.
+
+    Passes the Celery app so the queue depth collector can obtain a fresh
+    broker Redis client on each scrape (rather than holding a stale reference).
+
+    Returns True if registration succeeded, False otherwise.
+    """
+    try:
+        from onyx.server.metrics.indexing_pipeline_setup import (
+            setup_indexing_pipeline_metrics,
+        )
+
+        setup_indexing_pipeline_metrics(sender.app)
+        logger.info("Prometheus indexing pipeline collectors registered")
+        return True
+    except Exception:
+        logger.exception("Failed to register Prometheus indexing pipeline collectors")
+        return False
+
+
 @worker_ready.connect
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
+    if _prometheus_collectors_ok:
+        from onyx.server.metrics.metrics_server import start_metrics_server
+
+        start_metrics_server("monitoring")
+    else:
+        logger.warning(
+            "Skipping Prometheus metrics server — collector registration failed"
+        )
     app_base.on_worker_ready(sender, **kwargs)
 
 

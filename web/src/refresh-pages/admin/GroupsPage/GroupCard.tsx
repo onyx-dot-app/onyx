@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
@@ -21,6 +22,7 @@ interface GroupCardProps {
 }
 
 function GroupCard({ group }: GroupCardProps) {
+  const router = useRouter();
   const { mutate } = useSWRConfig();
   const builtIn = isBuiltInGroup(group);
   const isAdmin = group.name === "Admin";
@@ -39,7 +41,7 @@ function GroupCard({ group }: GroupCardProps) {
   }
 
   return (
-    <Card padding={0.5}>
+    <Card padding={0.5} data-card>
       <ContentAction
         icon={isAdmin ? SvgUserManage : SvgUsers}
         title={group.name}
@@ -53,13 +55,17 @@ function GroupCard({ group }: GroupCardProps) {
           <Section flexDirection="row" alignItems="start" gap={0}>
             <div className="py-1">
               <Text mainUiBody text03>
-                {formatMemberCount(group.users.length)}
+                {formatMemberCount(
+                  group.users.filter((u) => u.is_active).length
+                )}
               </Text>
             </div>
             <Button
               icon={SvgChevronRight}
               prominence="tertiary"
               tooltip="View group"
+              aria-label="View group"
+              onClick={() => router.push(`/admin/groups/${group.id}`)}
             />
           </Section>
         }

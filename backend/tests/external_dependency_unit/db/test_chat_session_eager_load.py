@@ -43,5 +43,8 @@ def test_eager_load_persona_loads_relationships(db_session: Session) -> None:
         persona_unloaded = tmp.unloaded
         assert "tools" not in persona_unloaded
         assert "user_files" not in persona_unloaded
+        assert "document_sets" not in persona_unloaded
+        assert "attached_documents" not in persona_unloaded
+        assert "hierarchy_nodes" not in persona_unloaded
     finally:
         db_session.rollback()

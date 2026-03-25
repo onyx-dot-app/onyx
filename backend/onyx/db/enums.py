@@ -1,4 +1,31 @@
+from __future__ import annotations
+
 from enum import Enum as PyEnum
+from typing import ClassVar
+
+
+class AccountType(str, PyEnum):
+    """
+    What kind of account this is — determines whether the user
+    enters the group-based permission system.
+
+    STANDARD + SERVICE_ACCOUNT → participate in group system
+    BOT, EXT_PERM_USER, ANONYMOUS → fixed behavior
+    """
+
+    STANDARD = "standard"
+    BOT = "bot"
+    EXT_PERM_USER = "ext_perm_user"
+    SERVICE_ACCOUNT = "service_account"
+    ANONYMOUS = "anonymous"
+
+
+class GrantSource(str, PyEnum):
+    """How a permission grant was created."""
+
+    USER = "user"
+    SCIM = "scim"
+    SYSTEM = "system"
 
 
 class IndexingStatus(str, PyEnum):
@@ -314,3 +341,54 @@ class HookPoint(str, PyEnum):
 class HookFailStrategy(str, PyEnum):
     HARD = "hard"  # exception propagates, pipeline aborts
     SOFT = "soft"  # log error, return original input, pipeline continues
+
+
+class Permission(str, PyEnum):
+    """
+    Permission tokens for group-based authorization.
+    19 tokens total. full_admin_panel_access is an override —
+    if present, any permission check passes.
+    """
+
+    # Basic (auto-granted to every new group)
+    BASIC_ACCESS = "basic"
+
+    # Read tokens — implied only, never granted directly
+    READ_CONNECTORS = "read:connectors"
+    READ_DOCUMENT_SETS = "read:document_sets"
+    READ_AGENTS = "read:agents"
+    READ_USERS = "read:users"
+
+    # Add / Manage pairs
+    ADD_AGENTS = "add:agents"
+    MANAGE_AGENTS = "manage:agents"
+    MANAGE_DOCUMENT_SETS = "manage:document_sets"
+    ADD_CONNECTORS = "add:connectors"
+    MANAGE_CONNECTORS = "manage:connectors"
+    MANAGE_LLMS = "manage:llms"
+
+    # Toggle tokens
+    READ_AGENT_ANALYTICS = "read:agent_analytics"
+    MANAGE_ACTIONS = "manage:actions"
+    READ_QUERY_HISTORY = "read:query_history"
+    MANAGE_USER_GROUPS = "manage:user_groups"
+    CREATE_USER_API_KEYS = "create:user_api_keys"
+    CREATE_SERVICE_ACCOUNT_API_KEYS = "create:service_account_api_keys"
+    CREATE_SLACK_DISCORD_BOTS = "create:slack_discord_bots"
+
+    # Override — any permission check passes
+    FULL_ADMIN_PANEL_ACCESS = "admin"
+
+    # Permissions that are implied by other grants and must never be stored
+    # directly in the permission_grant table.
+    IMPLIED: ClassVar[frozenset[Permission]]
+
+
+Permission.IMPLIED = frozenset(
+    {
+        Permission.READ_CONNECTORS,
+        Permission.READ_DOCUMENT_SETS,
+        Permission.READ_AGENTS,
+        Permission.READ_USERS,
+    }
+)

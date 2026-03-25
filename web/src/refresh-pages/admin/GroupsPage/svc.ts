@@ -40,6 +40,27 @@ async function createGroup(
   return group.id;
 }
 
+async function updateGroup(
+  groupId: number,
+  userIds: string[],
+  ccPairIds: number[]
+): Promise<void> {
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_ids: userIds,
+      cc_pair_ids: ccPairIds,
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(
+      detail?.detail ?? `Failed to update group: ${res.statusText}`
+    );
+  }
+}
+
 async function deleteGroup(groupId: number): Promise<void> {
   const res = await fetch(`${USER_GROUP_URL}/${groupId}`, {
     method: "DELETE",
@@ -262,6 +283,7 @@ export {
   USER_GROUP_URL,
   renameGroup,
   createGroup,
+  updateGroup,
   deleteGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,

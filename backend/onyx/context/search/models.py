@@ -401,3 +401,16 @@ class SavedSearchDocWithContent(SavedSearchDoc):
     section in addition to the match_highlights."""
 
     content: str
+
+
+class PersonaSearchInfo(BaseModel):
+    """Snapshot of persona data needed by the search pipeline.
+
+    Extracted from the ORM Persona before the DB session is released so that
+    SearchTool and search_pipeline never lazy-load relationships post-commit.
+    """
+
+    document_set_names: list[str]
+    search_start_date: datetime | None
+    attached_document_ids: list[str]
+    hierarchy_node_ids: list[int]

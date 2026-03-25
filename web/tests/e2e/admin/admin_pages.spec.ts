@@ -84,7 +84,7 @@ const ADMIN_PAGES: AdminPageSnapshot[] = [
   {
     name: "User Management - Groups",
     path: "groups",
-    pageTitle: "Manage User Groups",
+    pageTitle: "Groups",
   },
   {
     name: "Appearance & Theming",
