@@ -885,8 +885,16 @@ class NotionConnector(LoadConnector, PollConnector):
                 if not db_name:
                     db_name = f"Database {db_id}"
 
-                # Get the database's grandparent for the hierarchy
-                parent_raw_id = self._get_parent_raw_id(ds.get("database_parent"))
+                # Get the database's parent for the hierarchy
+                try:
+                    db_page = self._fetch_database_as_page(db_id)
+                    parent_raw_id = self._get_parent_raw_id(db_page.parent)
+                except Exception:
+                    logger.warning(
+                        f"Could not fetch parent for database '{db_id}', "
+                        f"defaulting to workspace root."
+                    )
+                    parent_raw_id = self.workspace_id
 
                 db_url = ds.get("url") or f"https://notion.so/{db_id.replace('-', '')}"
 
