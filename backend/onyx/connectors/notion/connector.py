@@ -379,7 +379,7 @@ class NotionConnector(LoadConnector, PollConnector):
         elif parent_type == "data_source_id":
             ds_id = parent.get("data_source_id")
             if ds_id:
-                return self._data_source_to_database_map.get(ds_id, ds_id)
+                return self._data_source_to_database_map.get(ds_id, self.workspace_id)
         elif parent_type in ["page_id", "database_id"]:
             return parent.get(parent_type)
 
@@ -883,15 +883,17 @@ class NotionConnector(LoadConnector, PollConnector):
                     db_page = self._fetch_database_as_page(db_id)
                     db_name = db_page.database_name or f"Database {db_id}"
                     parent_raw_id = self._get_parent_raw_id(db_page.parent)
-                except requests.exceptions.HTTPError:
+                    db_url = (
+                        db_page.url or f"https://notion.so/{db_id.replace('-', '')}"
+                    )
+                except requests.exceptions.HTTPError as e:
                     logger.warning(
                         f"Could not fetch database '{db_id}', "
-                        f"defaulting to workspace root."
+                        f"defaulting to workspace root. Error: {e}"
                     )
                     db_name = f"Database {db_id}"
                     parent_raw_id = self.workspace_id
-
-                db_url = ds.get("url") or f"https://notion.so/{db_id.replace('-', '')}"
+                    db_url = f"https://notion.so/{db_id.replace('-', '')}"
 
                 # _maybe_yield_hierarchy_node deduplicates by raw_node_id,
                 # so multiple data sources under one database produce one node.
