@@ -972,3 +972,74 @@ def get_index_attempt_errors_for_cc_pair(
         stmt = stmt.offset(page * page_size).limit(page_size)
 
     return list(db_session.scalars(stmt).all())
+
+
+# ── Metrics query helpers ──────────────────────────────────────────────
+
+
+def get_active_index_attempts_for_metrics(
+    db_session: Session,
+) -> list[tuple]:
+    """Return non-terminal index attempts grouped by status, source, and connector.
+
+    Each row is (status, source, cc_pair_id, cc_pair_name, count).
+    """
+    from onyx.db.models import Connector
+
+    terminal_statuses = [s for s in IndexingStatus if s.is_terminal()]
+    return (
+        db_session.query(
+            IndexAttempt.status,
+            Connector.source,
+            ConnectorCredentialPair.id,
+            ConnectorCredentialPair.name,
+            func.count(),
+        )
+        .join(
+            ConnectorCredentialPair,
+            IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
+        )
+        .join(
+            Connector,
+            ConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .filter(IndexAttempt.status.notin_(terminal_statuses))
+        .group_by(
+            IndexAttempt.status,
+            Connector.source,
+            ConnectorCredentialPair.id,
+            ConnectorCredentialPair.name,
+        )
+        .all()
+    )
+
+
+def get_failed_attempt_counts_by_cc_pair(
+    db_session: Session,
+) -> dict[int, int]:
+    """Return {cc_pair_id: failed_attempt_count} for all connectors."""
+    rows = (
+        db_session.query(
+            IndexAttempt.connector_credential_pair_id,
+            func.count(),
+        )
+        .filter(IndexAttempt.status == IndexingStatus.FAILED)
+        .group_by(IndexAttempt.connector_credential_pair_id)
+        .all()
+    )
+    return {cc_id: count for cc_id, count in rows}
+
+
+def get_docs_indexed_by_cc_pair(
+    db_session: Session,
+) -> dict[int, int]:
+    """Return {cc_pair_id: total_new_docs_indexed} across all attempts."""
+    rows = (
+        db_session.query(
+            IndexAttempt.connector_credential_pair_id,
+            func.sum(func.coalesce(IndexAttempt.new_docs_indexed, 0)),
+        )
+        .group_by(IndexAttempt.connector_credential_pair_id)
+        .all()
+    )
+    return {cc_id: int(total or 0) for cc_id, total in rows}

@@ -20,7 +20,6 @@ from typing import Any
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 from redis import Redis
-from sqlalchemy import func
 
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
@@ -206,9 +205,7 @@ class IndexAttemptCollector(_CachedCollector):
 
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
         from onyx.db.engine.tenant_utils import get_all_tenant_ids
-        from onyx.db.models import Connector
-        from onyx.db.models import ConnectorCredentialPair
-        from onyx.db.models import IndexAttempt
+        from onyx.db.index_attempt import get_active_index_attempts_for_metrics
         from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
         attempts_gauge = GaugeMetricFamily(
@@ -233,32 +230,7 @@ class IndexAttemptCollector(_CachedCollector):
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tid)
             try:
                 with get_session_with_current_tenant() as session:
-                    rows = (
-                        session.query(
-                            IndexAttempt.status,
-                            Connector.source,
-                            ConnectorCredentialPair.id,
-                            ConnectorCredentialPair.name,
-                            func.count(),
-                        )
-                        .join(
-                            ConnectorCredentialPair,
-                            IndexAttempt.connector_credential_pair_id
-                            == ConnectorCredentialPair.id,
-                        )
-                        .join(
-                            Connector,
-                            ConnectorCredentialPair.connector_id == Connector.id,
-                        )
-                        .filter(IndexAttempt.status.notin_(self._terminal_statuses))
-                        .group_by(
-                            IndexAttempt.status,
-                            Connector.source,
-                            ConnectorCredentialPair.id,
-                            ConnectorCredentialPair.name,
-                        )
-                        .all()
-                    )
+                    rows = get_active_index_attempts_for_metrics(session)
 
                     for status, source, cc_id, cc_name, count in rows:
                         name_val = cc_name or f"cc_pair_{cc_id}"
@@ -293,10 +265,13 @@ class ConnectorHealthCollector(_CachedCollector):
         if not self._configured:
             return []
 
+        from onyx.db.connector_credential_pair import (
+            get_connector_health_for_metrics,
+        )
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
         from onyx.db.engine.tenant_utils import get_all_tenant_ids
-        from onyx.db.models import Connector
-        from onyx.db.models import ConnectorCredentialPair
+        from onyx.db.index_attempt import get_docs_indexed_by_cc_pair
+        from onyx.db.index_attempt import get_failed_attempt_counts_by_cc_pair
         from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
         staleness_gauge = GaugeMetricFamily(
@@ -352,54 +327,10 @@ class ConnectorHealthCollector(_CachedCollector):
                 continue
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tid)
             try:
-                from onyx.db.enums import IndexingStatus
-                from onyx.db.models import IndexAttempt
-
                 with get_session_with_current_tenant() as session:
-                    pairs = (
-                        session.query(
-                            ConnectorCredentialPair.id,
-                            ConnectorCredentialPair.status,
-                            ConnectorCredentialPair.in_repeated_error_state,
-                            ConnectorCredentialPair.last_successful_index_time,
-                            ConnectorCredentialPair.name,
-                            Connector.source,
-                        )
-                        .join(
-                            Connector,
-                            ConnectorCredentialPair.connector_id == Connector.id,
-                        )
-                        .all()
-                    )
-
-                    # Count failed index attempts per connector
-                    error_rows = (
-                        session.query(
-                            IndexAttempt.connector_credential_pair_id,
-                            func.count(),
-                        )
-                        .filter(
-                            IndexAttempt.status == IndexingStatus.FAILED,
-                        )
-                        .group_by(IndexAttempt.connector_credential_pair_id)
-                        .all()
-                    )
-                    error_counts_by_cc: dict[int, int] = {
-                        cc_id: count for cc_id, count in error_rows
-                    }
-
-                    # Sum total docs indexed from index attempts
-                    docs_rows = (
-                        session.query(
-                            IndexAttempt.connector_credential_pair_id,
-                            func.sum(func.coalesce(IndexAttempt.new_docs_indexed, 0)),
-                        )
-                        .group_by(IndexAttempt.connector_credential_pair_id)
-                        .all()
-                    )
-                    docs_by_cc: dict[int, int] = {
-                        cc_id: int(total or 0) for cc_id, total in docs_rows
-                    }
+                    pairs = get_connector_health_for_metrics(session)
+                    error_counts_by_cc = get_failed_attempt_counts_by_cc_pair(session)
+                    docs_by_cc = get_docs_indexed_by_cc_pair(session)
 
                     status_counts: dict[str, int] = {}
                     error_count = 0
