@@ -286,7 +286,7 @@ class NotionConnector(LoadConnector, PollConnector):
 
         db_data = res.json()
         data_sources = db_data.get("data_sources", [])
-        return [(ds["id"], ds.get("name", "")) for ds in data_sources]
+        return [(ds["id"], ds.get("name", "")) for ds in data_sources if ds.get("id")]
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_data_source(
