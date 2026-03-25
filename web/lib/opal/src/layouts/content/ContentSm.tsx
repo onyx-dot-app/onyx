@@ -1,6 +1,10 @@
 "use client";
 
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import {
+  resolveStr,
+  toPlainString,
+} from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -30,7 +34,7 @@ interface ContentSmProps {
   icon?: IconFunctionComponent;
 
   /** Main title text (read-only — editing is not supported). */
-  title: string;
+  title: string | RichStr;
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentSmSizePreset;
@@ -118,9 +122,9 @@ function ContentSm({
       <span
         className={cn("opal-content-sm-title", config.titleFont)}
         style={{ height: config.lineHeight }}
-        title={title}
+        title={toPlainString(title)}
       >
-        {title}
+        {resolveStr(title)}
       </span>
     </div>
   );

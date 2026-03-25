@@ -1,4 +1,5 @@
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -9,10 +10,10 @@ interface IllustrationContentProps {
   illustration?: IconFunctionComponent;
 
   /** Main title text, center-aligned. Uses `font-main-content-emphasis`. */
-  title: string;
+  title: string | RichStr;
 
   /** Optional description below the title, center-aligned. Uses `font-secondary-body`. */
-  description?: string;
+  description?: string | RichStr;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,9 +69,13 @@ function IllustrationContent({
         />
       )}
       <div className="flex flex-col items-center text-center">
-        <p className="font-main-content-emphasis text-text-04">{title}</p>
+        <p className="font-main-content-emphasis text-text-04">
+          {resolveStr(title)}
+        </p>
         {description && (
-          <p className="font-secondary-body text-text-03">{description}</p>
+          <p className="font-secondary-body text-text-03">
+            {resolveStr(description)}
+          </p>
         )}
       </div>
     </div>

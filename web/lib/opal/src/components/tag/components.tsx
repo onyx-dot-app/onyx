@@ -1,6 +1,7 @@
 import "@opal/components/tag/styles.css";
 
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -16,7 +17,7 @@ interface TagProps {
   icon?: IconFunctionComponent;
 
   /** Tag label text. */
-  title: string;
+  title: string | RichStr;
 
   /** Color variant. Default: `"gray"`. */
   color?: TagColor;
@@ -58,7 +59,7 @@ function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
           config.text
         )}
       >
-        {title}
+        {resolveStr(title)}
       </span>
     </div>
   );

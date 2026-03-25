@@ -4,7 +4,12 @@ import {
   Interactive,
   type InteractiveStatelessProps,
 } from "@opal/core";
-import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
+import type {
+  ContainerSizeVariants,
+  ExtremaSizeVariants,
+  RichStr,
+} from "@opal/types";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -18,13 +23,13 @@ import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 type ButtonContentProps =
   | {
       icon?: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
       rightIcon?: IconFunctionComponent;
       responsiveHideText?: never;
     }
   | {
       icon: IconFunctionComponent;
-      children?: string;
+      children?: string | RichStr;
       rightIcon?: IconFunctionComponent;
       responsiveHideText?: boolean;
     };
@@ -76,7 +81,7 @@ function Button({
         responsiveHideText && "hidden md:inline"
       )}
     >
-      {children}
+      {resolveStr(children)}
     </span>
   ) : null;
 

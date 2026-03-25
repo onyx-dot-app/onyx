@@ -4,7 +4,12 @@ import {
   type InteractiveStatefulProps,
   type InteractiveStatefulInteraction,
 } from "@opal/core";
-import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
+import type {
+  ContainerSizeVariants,
+  ExtremaSizeVariants,
+  RichStr,
+} from "@opal/types";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
@@ -28,17 +33,17 @@ type OpenButtonContentProps =
   | {
       foldable: true;
       icon: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
     }
   | {
       foldable?: false;
       icon?: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
     }
   | {
       foldable?: false;
       icon: IconFunctionComponent;
-      children?: string;
+      children?: string | RichStr;
     };
 
 type OpenButtonVariant = "select-light" | "select-heavy" | "select-tinted";
@@ -107,7 +112,7 @@ function OpenButton({
         isLarge ? "font-main-ui-body" : "font-secondary-body"
       )}
     >
-      {children}
+      {resolveStr(children)}
     </span>
   ) : null;
 
@@ -177,7 +182,7 @@ function OpenButton({
           side={tooltipSide}
           sideOffset={4}
         >
-          {resolvedTooltip}
+          {resolveStr(resolvedTooltip)}
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>
