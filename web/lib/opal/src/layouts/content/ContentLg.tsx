@@ -4,10 +4,8 @@ import { Button } from "@opal/components/buttons/button/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import {
-  resolveStr,
-  toPlainString,
-} from "@opal/components/text/InlineMarkdown";
+import { Text, type TextFont } from "@opal/components/text/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
 
@@ -24,8 +22,8 @@ interface ContentLgPresetConfig {
   iconContainerPadding: string;
   /** Gap between icon container and content (CSS value). */
   gap: string;
-  /** Tailwind font class for the title. */
-  titleFont: string;
+  /** Font preset for the title. */
+  titleFont: TextFont;
   /** Title line-height — also used as icon container min-height (CSS value). */
   lineHeight: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
@@ -69,7 +67,7 @@ const CONTENT_LG_PRESETS: Record<ContentLgSizePreset, ContentLgPresetConfig> = {
     iconSize: "2rem",
     iconContainerPadding: "p-0.5",
     gap: "0.25rem",
-    titleFont: "font-heading-h2",
+    titleFont: "heading-h2",
     lineHeight: "2.25rem",
     editButtonSize: "md",
     editButtonPadding: "p-1",
@@ -78,7 +76,7 @@ const CONTENT_LG_PRESETS: Record<ContentLgSizePreset, ContentLgPresetConfig> = {
     iconSize: "1.25rem",
     iconContainerPadding: "p-1",
     gap: "0rem",
-    titleFont: "font-heading-h3-muted",
+    titleFont: "heading-h3-muted",
     lineHeight: "1.75rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0.5",
@@ -142,14 +140,17 @@ function ContentLg({
           {editing ? (
             <div className="opal-content-lg-input-sizer">
               <span
-                className={cn("opal-content-lg-input-mirror", config.titleFont)}
+                className={cn(
+                  "opal-content-lg-input-mirror",
+                  `font-${config.titleFont}`
+                )}
               >
                 {editValue || "\u00A0"}
               </span>
               <input
                 className={cn(
                   "opal-content-lg-input",
-                  config.titleFont,
+                  `font-${config.titleFont}`,
                   "text-text-04"
                 )}
                 value={editValue}
@@ -172,15 +173,15 @@ function ContentLg({
             <span
               className={cn(
                 "opal-content-lg-title",
-                config.titleFont,
-                "text-text-04",
                 editable && "cursor-pointer"
               )}
               onClick={editable ? startEditing : undefined}
               style={{ height: config.lineHeight }}
               title={toPlainString(title)}
             >
-              {resolveStr(title)}
+              <Text font={config.titleFont} color="text-04">
+                {title}
+              </Text>
             </span>
           )}
 
@@ -204,8 +205,10 @@ function ContentLg({
         </div>
 
         {description && (
-          <div className="opal-content-lg-description font-secondary-body text-text-03">
-            {resolveStr(description)}
+          <div className="opal-content-lg-description">
+            <Text font="secondary-body" color="text-03">
+              {description}
+            </Text>
           </div>
         )}
       </div>

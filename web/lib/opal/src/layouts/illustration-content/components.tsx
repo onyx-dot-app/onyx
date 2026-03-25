@@ -1,5 +1,5 @@
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components/text/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,13 +69,13 @@ function IllustrationContent({
         />
       )}
       <div className="flex flex-col items-center text-center">
-        <p className="font-main-content-emphasis text-text-04">
-          {resolveStr(title)}
-        </p>
+        <Text font="main-content-emphasis" color="text-04" as="p">
+          {title}
+        </Text>
         {description && (
-          <p className="font-secondary-body text-text-03">
-            {resolveStr(description)}
-          </p>
+          <Text font="secondary-body" color="text-03" as="p">
+            {description}
+          </Text>
         )}
       </div>
     </div>

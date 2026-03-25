@@ -5,10 +5,8 @@ import { Disabled } from "@opal/core";
 import { SvgArrowRight, SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import { containerSizeVariants } from "@opal/shared";
 import type { RichStr, WithoutStyles } from "@opal/types";
-import {
-  resolveStr,
-  toPlainString,
-} from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components/text/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import {
@@ -391,7 +389,11 @@ function PaginationCount({
         {rangeStart}~{rangeEnd}
         <span className={textClasses(size, "muted")}>of</span>
         {totalItems}
-        {units && <span className="ml-1">{resolveStr(units)}</span>}
+        {units && (
+          <span className="ml-1">
+            <Text>{units}</Text>
+          </span>
+        )}
       </span>
 
       {/* Buttons: < [page] > */}

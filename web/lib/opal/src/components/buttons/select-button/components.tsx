@@ -9,7 +9,7 @@ import type {
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
-import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components/text/components";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -84,13 +84,8 @@ function SelectButton({
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <span
-      className={cn(
-        "opal-select-button-label",
-        isLarge ? "font-main-ui-body" : "font-secondary-body"
-      )}
-    >
-      {resolveStr(children)}
+    <span className="opal-select-button-label">
+      <Text font={isLarge ? "main-ui-body" : "secondary-body"}>{children}</Text>
     </span>
   ) : null;
 
@@ -142,7 +137,7 @@ function SelectButton({
           side={tooltipSide}
           sideOffset={4}
         >
-          {resolveStr(resolvedTooltip)}
+          <Text>{resolvedTooltip}</Text>
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

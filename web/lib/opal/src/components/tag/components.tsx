@@ -1,7 +1,7 @@
 import "@opal/components/tag/styles.css";
 
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components/text/components";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -52,14 +52,10 @@ function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
           <Icon className={cn("opal-auxiliary-tag-icon", config.text)} />
         </div>
       )}
-      <span
-        className={cn(
-          "opal-auxiliary-tag-title px-[2px]",
-          size === "md" ? "font-secondary-body" : "font-figure-small-value",
-          config.text
-        )}
-      >
-        {resolveStr(title)}
+      <span className={cn("opal-auxiliary-tag-title px-[2px]", config.text)}>
+        <Text font={size === "md" ? "secondary-body" : "figure-small-value"}>
+          {title}
+        </Text>
       </span>
     </div>
   );

@@ -9,11 +9,10 @@ import type {
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
-import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components/text/components";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 
 // ---------------------------------------------------------------------------
@@ -74,15 +73,17 @@ function Button({
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <span
-      className={cn(
-        "whitespace-nowrap",
-        isLarge ? "font-main-ui-body " : "font-secondary-body",
-        responsiveHideText && "hidden md:inline"
-      )}
-    >
-      {resolveStr(children)}
-    </span>
+    responsiveHideText ? (
+      <span className="hidden md:inline whitespace-nowrap">
+        <Text font={isLarge ? "main-ui-body" : "secondary-body"}>
+          {children}
+        </Text>
+      </span>
+    ) : (
+      <Text font={isLarge ? "main-ui-body" : "secondary-body"} nowrap>
+        {children}
+      </Text>
+    )
   ) : null;
 
   const button = (

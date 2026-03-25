@@ -9,7 +9,7 @@ import type {
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
-import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components/text/components";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
@@ -106,14 +106,9 @@ function OpenButton({
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <span
-      className={cn(
-        "whitespace-nowrap",
-        isLarge ? "font-main-ui-body" : "font-secondary-body"
-      )}
-    >
-      {resolveStr(children)}
-    </span>
+    <Text font={isLarge ? "main-ui-body" : "secondary-body"} nowrap>
+      {children}
+    </Text>
   ) : null;
 
   const button = (
@@ -182,7 +177,7 @@ function OpenButton({
           side={tooltipSide}
           sideOffset={4}
         >
-          {resolveStr(resolvedTooltip)}
+          <Text>{resolvedTooltip}</Text>
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

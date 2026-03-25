@@ -5,7 +5,7 @@ import {
 } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components/text/components";
 import { SvgX } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
@@ -69,9 +69,9 @@ function FilterButton({
         <Interactive.Container type="button">
           <div className="interactive-foreground flex flex-row items-center gap-1">
             {iconWrapper(Icon, "lg", true)}
-            <span className="whitespace-nowrap font-main-ui-action">
-              {resolveStr(children)}
-            </span>
+            <Text font="main-ui-action" nowrap>
+              {children}
+            </Text>
             <div style={{ visibility: active ? "hidden" : "visible" }}>
               {iconWrapper(ChevronIcon, "lg", true)}
             </div>
