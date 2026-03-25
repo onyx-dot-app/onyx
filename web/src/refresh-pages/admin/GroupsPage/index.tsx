@@ -27,7 +27,7 @@ function GroupsPage() {
   } = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher);
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root width="sm">
       {/* This is the sticky header for the groups page. It is used to display
        * the groups page title and search input when scrolling down.
        */}
