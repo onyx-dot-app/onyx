@@ -43,6 +43,7 @@ from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
+from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
@@ -900,6 +901,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             search_hits = self._client.search(
                 body=query_body,
                 search_pipeline_id=None,
+                search_type=OpenSearchSearchType.ID_RETRIEVAL,
             )
             inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
                 _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
@@ -948,6 +950,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
             search_pipeline_id=normalization_pipeline_name,
+            search_type=OpenSearchSearchType.HYBRID,
         )
 
         # Good place for a breakpoint to inspect the search hits if you have
@@ -989,6 +992,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
             search_pipeline_id=None,
+            search_type=OpenSearchSearchType.KEYWORD,
         )
 
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
@@ -1028,6 +1032,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
             search_pipeline_id=None,
+            search_type=OpenSearchSearchType.SEMANTIC,
         )
 
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
@@ -1059,6 +1064,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
             search_pipeline_id=None,
+            search_type=OpenSearchSearchType.RANDOM,
         )
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
             _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
