@@ -12,21 +12,25 @@ scrape_configs:
   # Port matches the API Server launch config in .vscode/launch.json
   - job_name: 'onyx-api-server'
     scrape_interval: 5s
+    metrics_path: /metrics
     static_configs:
       - targets: ['host.docker.internal:8080']
 
   # Onyx celery workers — each exposes /metrics on a dedicated port
   - job_name: 'onyx-monitoring-worker'
     scrape_interval: 5s
+    metrics_path: /metrics
     static_configs:
       - targets: ['host.docker.internal:9096']
 
   - job_name: 'onyx-docfetching-worker'
     scrape_interval: 5s
+    metrics_path: /metrics
     static_configs:
       - targets: ['host.docker.internal:9092']
 
   - job_name: 'onyx-docprocessing-worker'
     scrape_interval: 5s
+    metrics_path: /metrics
     static_configs:
       - targets: ['host.docker.internal:9093']
