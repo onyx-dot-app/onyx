@@ -63,6 +63,13 @@ class NotionPage(BaseModel):
     )
 
 
+class NotionDataSource(BaseModel):
+    """Represents a Notion Data Source within a database."""
+
+    id: str
+    name: str = ""
+
+
 class NotionBlock(BaseModel):
     """Represents a Notion Block object"""
 
@@ -260,11 +267,8 @@ class NotionConnector(LoadConnector, PollConnector):
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_data_sources_for_database(
         self, database_id: str
-    ) -> list[tuple[str, str]]:
-        """Fetch the list of data sources for a database.
-
-        Returns list of (data_source_id, data_source_name) tuples.
-        """
+    ) -> list[NotionDataSource]:
+        """Fetch the list of data sources for a database."""
         logger.debug(f"Fetching data sources for database '{database_id}'")
         res = rl_requests.get(
             f"https://api.notion.com/v1/databases/{database_id}",
@@ -286,7 +290,11 @@ class NotionConnector(LoadConnector, PollConnector):
 
         db_data = res.json()
         data_sources = db_data.get("data_sources", [])
-        return [(ds["id"], ds.get("name", "")) for ds in data_sources if ds.get("id")]
+        return [
+            NotionDataSource(id=ds["id"], name=ds.get("name", ""))
+            for ds in data_sources
+            if ds.get("id")
+        ]
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_data_source(
@@ -535,11 +543,11 @@ class NotionConnector(LoadConnector, PollConnector):
                 f"Database '{database_id}' returned zero data sources — "
                 f"no pages will be indexed from this database."
             )
-        for ds_id, _ds_name in data_sources:
-            self._data_source_to_database_map[ds_id] = database_id
+        for ds in data_sources:
+            self._data_source_to_database_map[ds.id] = database_id
             cursor = None
             while True:
-                data = self._fetch_data_source(ds_id, cursor)
+                data = self._fetch_data_source(ds.id, cursor)
 
                 for result in data["results"]:
                     obj_id = result["id"]
@@ -550,29 +558,31 @@ class NotionConnector(LoadConnector, PollConnector):
                             NotionBlock(id=obj_id, text=text, prefix="\n")
                         )
 
-                    if self.recursive_index_enabled:
-                        if obj_type == "page":
-                            logger.debug(
-                                f"Found page with ID '{obj_id}' in database '{database_id}'"
+                    if not self.recursive_index_enabled:
+                        continue
+
+                    if obj_type == "page":
+                        logger.debug(
+                            f"Found page with ID '{obj_id}' in database '{database_id}'"
+                        )
+                        result_pages.append(result["id"])
+                    elif obj_type == "database":
+                        logger.debug(
+                            f"Found database with ID '{obj_id}' in database '{database_id}'"
+                        )
+                        nested_db_title = result.get("title", [])
+                        nested_db_name = None
+                        if nested_db_title and len(nested_db_title) > 0:
+                            nested_db_name = (
+                                nested_db_title[0].get("text", {}).get("content")
                             )
-                            result_pages.append(result["id"])
-                        elif obj_type == "database":
-                            logger.debug(
-                                f"Found database with ID '{obj_id}' in database '{database_id}'"
-                            )
-                            nested_db_title = result.get("title", [])
-                            nested_db_name = None
-                            if nested_db_title and len(nested_db_title) > 0:
-                                nested_db_name = (
-                                    nested_db_title[0].get("text", {}).get("content")
-                                )
-                            nested_output = self._read_pages_from_database(
-                                obj_id,
-                                database_parent_raw_id=database_id,
-                                database_name=nested_db_name,
-                            )
-                            result_pages.extend(nested_output.child_page_ids)
-                            hierarchy_nodes.extend(nested_output.hierarchy_nodes)
+                        nested_output = self._read_pages_from_database(
+                            obj_id,
+                            database_parent_raw_id=database_id,
+                            database_name=nested_db_name,
+                        )
+                        result_pages.extend(nested_output.child_page_ids)
+                        hierarchy_nodes.extend(nested_output.hierarchy_nodes)
 
                 if data["next_cursor"] is None:
                     break
