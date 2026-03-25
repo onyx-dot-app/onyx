@@ -794,14 +794,14 @@ wheels = [
 
 [[package]]
 name = "celery-types"
-version = "0.19.0"
+version = "0.24.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/05/a6/9923b3cb1902613d0aeeb561249f20ef0a58d6e173eed11149f7214ba693/celery-types-0.19.0.tar.gz", hash = "sha256:d4e2d4271b2ec46fec08a0f12a25388bba391f26897485bcacfa3c5287cc236f", size = 24945, upload-time = "2023-08-06T22:52:29.158Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/25/2276a1f00f8ab9fc88128c939333933a24db7df1d75aa57ecc27b7dd3a22/celery_types-0.24.0.tar.gz", hash = "sha256:c93fbcd0b04a9e9c2f55d5540aca4aa1ea4cc06a870c0c8dee5062fdd59663fe", size = 33148, upload-time = "2025-12-23T17:16:30.847Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/7b/c91fabc3c67ce28634d079b70ec0e7a2e7469c8435e690d14bff1709432e/celery_types-0.19.0-py3-none-any.whl", hash = "sha256:3d3b54fa115aba1798c341d01cb156d5ccbfbebdae0a57dfa9b4b6a726271d80", size = 38129, upload-time = "2023-08-06T22:52:30.871Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/7e/3252cba5f5c9a65a3f52a69734d8e51e023db8981022b503e8183cf0225e/celery_types-0.24.0-py3-none-any.whl", hash = "sha256:a21e04681e68719a208335e556a79909da4be9c5e0d6d2fd0dd4c5615954b3fd", size = 60473, upload-time = "2025-12-23T17:16:29.89Z" },
 ]
 
 [[package]]
@@ -4388,7 +4388,7 @@ requires-dist = [
     { name = "braintrust", marker = "extra == 'backend'", specifier = "==0.3.9" },
     { name = "brotli", specifier = ">=1.2.0" },
     { name = "celery", marker = "extra == 'backend'", specifier = "==5.5.1" },
-    { name = "celery-types", marker = "extra == 'dev'", specifier = "==0.19.0" },
+    { name = "celery-types", marker = "extra == 'dev'", specifier = "==0.24.0" },
     { name = "chardet", marker = "extra == 'backend'", specifier = "==5.2.0" },
     { name = "chonkie", marker = "extra == 'backend'", specifier = "==1.0.10" },
     { name = "claude-agent-sdk", specifier = ">=0.1.19" },
