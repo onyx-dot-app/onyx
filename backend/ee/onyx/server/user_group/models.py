@@ -22,6 +22,7 @@ class UserGroup(BaseModel):
     personas: list[PersonaSnapshot]
     is_up_to_date: bool
     is_up_for_deletion: bool
+    is_default: bool
 
     @classmethod
     def from_model(cls, user_group_model: UserGroupModel) -> "UserGroup":
@@ -74,18 +75,21 @@ class UserGroup(BaseModel):
             ],
             is_up_to_date=user_group_model.is_up_to_date,
             is_up_for_deletion=user_group_model.is_up_for_deletion,
+            is_default=user_group_model.is_default,
         )
 
 
 class MinimalUserGroupSnapshot(BaseModel):
     id: int
     name: str
+    is_default: bool
 
     @classmethod
     def from_model(cls, user_group_model: UserGroupModel) -> "MinimalUserGroupSnapshot":
         return cls(
             id=user_group_model.id,
             name=user_group_model.name,
+            is_default=user_group_model.is_default,
         )
 
 

@@ -43,12 +43,16 @@ router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 
 @router.get("/admin/user-group")
 def list_user_groups(
+    include_default: bool = False,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
     if user.role == UserRole.ADMIN:
         user_groups = fetch_user_groups(
-            db_session, only_up_to_date=False, eager_load_for_snapshot=True
+            db_session,
+            only_up_to_date=False,
+            eager_load_for_snapshot=True,
+            include_default=include_default,
         )
     else:
         user_groups = fetch_user_groups_for_user(
@@ -56,21 +60,28 @@ def list_user_groups(
             user_id=user.id,
             only_curator_groups=user.role == UserRole.CURATOR,
             eager_load_for_snapshot=True,
+            include_default=include_default,
         )
     return [UserGroup.from_model(user_group) for user_group in user_groups]
 
 
 @router.get("/user-groups/minimal")
 def list_minimal_user_groups(
+    include_default: bool = False,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserGroupSnapshot]:
     if user.role == UserRole.ADMIN:
-        user_groups = fetch_user_groups(db_session, only_up_to_date=False)
+        user_groups = fetch_user_groups(
+            db_session,
+            only_up_to_date=False,
+            include_default=include_default,
+        )
     else:
         user_groups = fetch_user_groups_for_user(
             db_session=db_session,
             user_id=user.id,
+            include_default=include_default,
         )
     return [
         MinimalUserGroupSnapshot.from_model(user_group) for user_group in user_groups
@@ -100,6 +111,9 @@ def rename_user_group_endpoint(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
+    group = fetch_user_group(db_session, rename_request.id)
+    if group and group.is_default:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Cannot rename a default system group.")
     try:
         return UserGroup.from_model(
             rename_user_group(
@@ -185,6 +199,9 @@ def delete_user_group(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    group = fetch_user_group(db_session, user_group_id)
+    if group and group.is_default:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Cannot delete a default system group.")
     try:
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:

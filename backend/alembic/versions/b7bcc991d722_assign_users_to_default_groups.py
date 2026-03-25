@@ -1,0 +1,65 @@
+"""assign_users_to_default_groups
+
+Revision ID: b7bcc991d722
+Revises: 03d085c5c38d
+Create Date: 2026-03-25 16:30:39.529301
+
+"""
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision = "b7bcc991d722"
+down_revision = "03d085c5c38d"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    conn = op.get_bind()
+
+    # Look up default group IDs
+    admin_row = conn.execute(
+        sa.text(
+            "SELECT id FROM user_group " "WHERE name = 'Admin' AND is_default = true"
+        )
+    ).fetchone()
+
+    basic_row = conn.execute(
+        sa.text(
+            "SELECT id FROM user_group " "WHERE name = 'Basic' AND is_default = true"
+        )
+    ).fetchone()
+
+    # Users with role=admin → Admin group
+    if admin_row is not None:
+        conn.execute(
+            sa.text(
+                "INSERT INTO user__user_group (user_group_id, user_id) "
+                'SELECT :gid, id FROM "user" '
+                "WHERE role = 'admin' "
+                "ON CONFLICT (user_group_id, user_id) DO NOTHING"
+            ),
+            {"gid": admin_row[0]},
+        )
+
+    # STANDARD users (non-admin) and SERVICE_ACCOUNT users (role=basic) → Basic group
+    if basic_row is not None:
+        conn.execute(
+            sa.text(
+                "INSERT INTO user__user_group (user_group_id, user_id) "
+                'SELECT :gid, id FROM "user" '
+                "WHERE (account_type = 'standard' AND role != 'admin') "
+                "OR (account_type = 'service_account' AND role = 'basic') "
+                "ON CONFLICT (user_group_id, user_id) DO NOTHING"
+            ),
+            {"gid": basic_row[0]},
+        )
+
+
+def downgrade() -> None:
+    # Group memberships are left in place — removing them risks
+    # deleting memberships that existed before this migration.
+    pass

@@ -479,6 +479,7 @@ export interface UserGroup {
   personas: Persona[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
+  is_default: boolean;
 }
 
 export enum ValidSources {
