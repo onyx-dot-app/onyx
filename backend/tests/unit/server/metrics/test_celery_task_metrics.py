@@ -1,5 +1,6 @@
 """Tests for generic Celery task lifecycle Prometheus metrics."""
 
+from collections.abc import Iterator
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,10 +15,10 @@ from onyx.server.metrics.celery_task_metrics import TASKS_ACTIVE
 
 
 @pytest.fixture(autouse=True)
-def reset_metrics() -> None:  # type: ignore
+def reset_metrics() -> Iterator[None]:
     """Clear metric state between tests."""
     _task_start_times.clear()
-    yield  # type: ignore
+    yield
     _task_start_times.clear()
 
 

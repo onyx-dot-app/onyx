@@ -1,5 +1,6 @@
 """Tests for per-connector indexing task Prometheus metrics."""
 
+from collections.abc import Iterator
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -16,7 +17,7 @@ from onyx.server.metrics.indexing_task_metrics import on_indexing_task_prerun
 
 
 @pytest.fixture(autouse=True)
-def reset_state() -> None:  # type: ignore
+def reset_state() -> Iterator[None]:
     """Clear caches and state between tests.
 
     Sets CURRENT_TENANT_ID_CONTEXTVAR to a realistic value so cache keys
@@ -27,7 +28,7 @@ def reset_state() -> None:  # type: ignore
     token = CURRENT_TENANT_ID_CONTEXTVAR.set("test_tenant")
     _connector_cache.clear()
     _indexing_start_times.clear()
-    yield  # type: ignore
+    yield
     _connector_cache.clear()
     _indexing_start_times.clear()
     CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
