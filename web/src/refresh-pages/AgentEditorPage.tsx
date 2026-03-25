@@ -664,6 +664,7 @@ export default function AgentEditorPage({
     is_public: existingAgent?.is_public ?? false,
     label_ids: existingAgent?.labels?.map((l) => l.id) ?? [],
     is_featured: existingAgent?.is_featured ?? false,
+    is_visible: existingAgent?.is_visible ?? true,
   };
 
   const validationSchema = Yup.object().shape({
@@ -807,6 +808,7 @@ export default function AgentEditorPage({
         search_start_date: values.knowledge_cutoff_date || null,
         label_ids: values.label_ids,
         is_featured: values.is_featured,
+        is_visible: values.is_visible,
         // display_priority: ...,
 
         user_file_ids: values.enable_knowledge ? values.user_file_ids : [],
