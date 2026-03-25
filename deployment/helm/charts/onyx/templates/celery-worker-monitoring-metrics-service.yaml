@@ -1,0 +1,24 @@
+{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_monitoring.replicaCount) 0) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.fullname" . }}-celery-worker-monitoring-metrics
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.celery_worker_monitoring.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    metrics: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9096
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    {{- with .Values.celery_worker_monitoring.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
