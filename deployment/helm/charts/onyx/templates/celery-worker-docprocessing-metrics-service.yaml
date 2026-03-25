@@ -1,3 +1,5 @@
+{{- /* Metrics port must match the default in metrics_server.py (_DEFAULT_PORTS).
+       Do NOT use PROMETHEUS_METRICS_PORT env var in Helm — each worker needs its own port. */ -}}
 {{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_docprocessing.replicaCount) 0) }}
 apiVersion: v1
 kind: Service
