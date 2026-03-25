@@ -53,7 +53,7 @@ interface TextProps
   color?: TextColor;
 
   /** HTML tag to render. Default: `"span"`. */
-  as?: "p" | "span" | "li";
+  as?: "p" | "span" | "li" | "h1" | "h2" | "h3";
 
   /** Prevent text wrapping. */
   nowrap?: boolean;

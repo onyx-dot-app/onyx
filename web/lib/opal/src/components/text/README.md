@@ -10,7 +10,7 @@ A styled text component with string-enum props for font preset and color selecti
 |---|---|---|---|
 | `font` | `TextFont` | `"main-ui-body"` | Font preset (size, weight, line-height) |
 | `color` | `TextColor` | `"text-04"` | Text color |
-| `as` | `"p" \| "span" \| "li"` | `"span"` | HTML tag to render |
+| `as` | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"` | `"span"` | HTML tag to render |
 | `nowrap` | `boolean` | `false` | Prevent text wrapping |
 | `preventMarkdown` | `boolean` | `false` | Disable inline markdown parsing (markdown is on by default for string children) |
 
