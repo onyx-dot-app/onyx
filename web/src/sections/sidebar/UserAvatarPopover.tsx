@@ -24,6 +24,7 @@ import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import { cn } from "@opal/utils";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
@@ -183,7 +184,15 @@ export default function UserAvatarPopover({
       <Popover.Trigger asChild>
         <div id="onyx-user-dropdown">
           <SidebarTab
-            icon={(props) => <UserAvatar user={user!} size={16} {...props} />}
+            icon={() => (
+              <div
+                className={cn(
+                  "w-[16px] flex flex-col justify-center items-center"
+                )}
+              >
+                <UserAvatar user={user!} size={22} />
+              </div>
+            )}
             rightChildren={
               hasNotifications ? (
                 <Section padding={0.5}>
