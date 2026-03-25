@@ -1,0 +1,32 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Onyx API server — exposes /metrics via prometheus-fastapi-instrumentator
+  # Port 8090 = VSCode dev / dev1 worktree. Use 8080 for standard docker-compose stack.
+  - job_name: 'onyx-api-server'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['host.docker.internal:8090']
+
+  # Onyx celery workers — each exposes /metrics on a dedicated port
+  - job_name: 'onyx-monitoring-worker'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['host.docker.internal:9096']
+
+  - job_name: 'onyx-docfetching-worker'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['host.docker.internal:9092']
+
+  - job_name: 'onyx-docprocessing-worker'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['host.docker.internal:9093']
