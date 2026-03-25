@@ -118,17 +118,16 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       settings.deep_research_enabled = true;
     }
 
-    const webVersion = getWebVersion();
-
     const combinedSettings: CombinedSettings = {
       settings,
       enterpriseSettings,
       customAnalyticsScript,
-      webVersion,
+      webVersion: settings.version ?? getWebVersion(),
       webDomain: HOST_URL,
       // Server-side default; the real value is computed client-side in
       // SettingsProvider where connector data is available via useCCPairs.
       isSearchModeAvailable: settings.search_ui_enabled !== false,
+      settingsLoading: false,
     };
 
     return combinedSettings;

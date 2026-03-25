@@ -58,7 +58,7 @@ def _run_single_search(
         chunk_search_request=chunk_search_request,
         document_index=document_index,
         user=user,
-        persona=None,  # No persona for direct search
+        persona_search_info=None,
         db_session=db_session,
     )
 

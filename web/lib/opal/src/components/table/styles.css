@@ -25,8 +25,7 @@
 /* ---- TableHead ---- */
 
 .table-head {
-  @apply relative sticky top-0 z-20;
-  background: var(--table-header-bg, transparent);
+  @apply relative;
 }
 .table-head[data-size="lg"] {
   @apply px-2 py-1;
@@ -130,8 +129,7 @@ table[data-variant="cards"] .tbl-row:has(:focus-visible) > td {
 /* ---- QualifierContainer ---- */
 
 .tbl-qualifier[data-type="head"] {
-  @apply w-px whitespace-nowrap py-1 sticky top-0 z-20;
-  background: var(--table-header-bg, transparent);
+  @apply w-px whitespace-nowrap py-1;
 }
 .tbl-qualifier[data-type="head"][data-size="md"] {
   @apply py-0.5;
@@ -147,11 +145,10 @@ table[data-variant="cards"] .tbl-row:has(:focus-visible) > td {
 /* ---- ActionsContainer ---- */
 
 .tbl-actions {
-  @apply sticky right-0 w-px whitespace-nowrap px-1;
+  @apply w-px whitespace-nowrap px-1;
 }
 .tbl-actions[data-type="head"] {
-  @apply z-30 sticky top-0 px-2 py-1;
-  background: var(--table-header-bg, transparent);
+  @apply px-2 py-1;
 }
 
 /* ---- Footer ---- */

@@ -57,9 +57,11 @@ function DragOverlayRowInner<TData>({
                 <QualifierContainer key={cell.id} type="cell">
                   <TableQualifier
                     content={qualifierColumn.content}
-                    initials={qualifierColumn.getInitials?.(row.original)}
-                    icon={qualifierColumn.getIcon?.(row.original)}
+                    icon={qualifierColumn.getContent?.(row.original)}
                     imageSrc={qualifierColumn.getImageSrc?.(row.original)}
+                    imageAlt={qualifierColumn.getImageAlt?.(row.original)}
+                    background={qualifierColumn.background}
+                    iconSize={qualifierColumn.iconSize}
                     selectable={isSelectable}
                     selected={isSelectable && row.getIsSelected()}
                   />

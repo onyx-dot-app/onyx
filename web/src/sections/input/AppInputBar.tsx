@@ -20,6 +20,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
+import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { cn, isImageFile } from "@/lib/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
@@ -300,20 +301,10 @@ const AppInputBar = React.memo(
     }, [showFiles, currentMessageFiles]);
 
     function handlePaste(event: React.ClipboardEvent) {
-      const items = event.clipboardData?.items;
-      if (items) {
-        const pastedFiles = [];
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          if (item && item.kind === "file") {
-            const file = item.getAsFile();
-            if (file) pastedFiles.push(file);
-          }
-        }
-        if (pastedFiles.length > 0) {
-          event.preventDefault();
-          handleFileUpload(pastedFiles);
-        }
+      const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
+      if (pastedFiles.length > 0) {
+        event.preventDefault();
+        handleFileUpload(pastedFiles);
       }
     }
 

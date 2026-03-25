@@ -1,10 +1,8 @@
 "use client";
 
-import { cn } from "@opal/utils";
 import { Button, Pagination, SelectButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { TableSize } from "@opal/components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 import type { ReactNode } from "react";
 
@@ -45,9 +43,6 @@ interface FooterSelectionModeProps {
   onPageChange: (page: number) => void;
   /** Unit label for count pagination. @default "items" */
   units?: string;
-  /** Controls overall footer sizing. `"lg"` (default) or `"md"`. */
-  size?: TableSize;
-  className?: string;
 }
 
 /**
@@ -73,7 +68,6 @@ interface FooterSummaryModeProps {
   leftExtra?: ReactNode;
   /** Unit label for the summary text, e.g. "users". */
   units?: string;
-  className?: string;
 }
 
 /**
@@ -110,11 +104,7 @@ export default function Footer(props: FooterProps) {
   const isSmall = resolvedSize === "md";
   return (
     <div
-      className={cn(
-        "table-footer",
-        "flex w-full items-center justify-between border-t border-border-01",
-        props.className
-      )}
+      className="table-footer flex w-full items-center justify-between border-t border-border-01"
       data-size={resolvedSize}
     >
       {/* Left side */}

@@ -7,6 +7,7 @@ row selection, drag-and-drop reordering, and server-side mode.
 
 ```tsx
 import { Table, createTableColumns } from "@opal/components";
+import { SvgUser } from "@opal/icons";
 
 interface User {
   id: string;
@@ -18,11 +19,10 @@ interface User {
 const tc = createTableColumns<User>();
 
 const columns = [
-  tc.qualifier({ content: "avatar-user", getInitials: (r) => r.name?.[0] ?? "?" }),
+  tc.qualifier({ content: "icon", getContent: () => SvgUser }),
   tc.column("email", {
     header: "Name",
     weight: 22,
-    minWidth: 140,
     cell: (email, row) => <span>{row.name ?? email}</span>,
   }),
   tc.column("status", {
@@ -40,7 +40,7 @@ function UsersTable({ users }: { users: User[] }) {
       columns={columns}
       getRowId={(r) => r.id}
       pageSize={10}
-      footer={{ mode: "summary" }}
+      footer={{}}
     />
   );
 }
@@ -55,7 +55,7 @@ function UsersTable({ users }: { users: User[] }) {
 | `getRowId` | `(row: TData) => string` | required | Unique row identifier |
 | `pageSize` | `number` | `10` | Rows per page (`Infinity` disables pagination) |
 | `size` | `"md" \| "lg"` | `"lg"` | Density variant |
-| `footer` | `DataTableFooterConfig` | — | Footer mode (`"selection"` or `"summary"`) |
+| `footer` | `DataTableFooterConfig` | — | Footer configuration (mode is derived from `selectionBehavior`) |
 | `initialSorting` | `SortingState` | — | Initial sort state |
 | `initialColumnVisibility` | `VisibilityState` | — | Initial column visibility |
 | `draggable` | `DataTableDraggableConfig` | — | Enable drag-and-drop reordering |
@@ -63,7 +63,6 @@ function UsersTable({ users }: { users: User[] }) {
 | `onRowClick` | `(row: TData) => void` | — | Row click handler |
 | `searchTerm` | `string` | — | Global text filter |
 | `height` | `number \| string` | — | Max scrollable height |
-| `headerBackground` | `string` | — | Sticky header background |
 | `serverSide` | `ServerSideConfig` | — | Server-side pagination/sorting/filtering |
 | `emptyState` | `ReactNode` | — | Empty state content |
 
@@ -76,7 +75,8 @@ function UsersTable({ users }: { users: User[] }) {
 - `tc.displayColumn(opts)` — non-accessor custom column
 - `tc.actions(opts)` — trailing actions column with visibility/sorting popovers
 
-## Footer Modes
+## Footer
 
-- **`"selection"`** — shows selection count, optional view/clear buttons, count pagination
-- **`"summary"`** — shows "Showing X~Y of Z", list pagination, optional extra element
+The footer mode is derived automatically from `selectionBehavior`:
+- **Selection footer** (when `selectionBehavior` is `"single-select"` or `"multi-select"`) — shows selection count, optional view/clear buttons, count pagination
+- **Summary footer** (when `selectionBehavior` is `"no-select"` or omitted) — shows "Showing X\~Y of Z", list pagination, optional extra element

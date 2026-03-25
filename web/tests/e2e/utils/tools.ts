@@ -37,3 +37,40 @@ export async function isActionTogglePresent(page: Page): Promise<boolean> {
   const el = await page.$(TOOL_IDS.actionToggle);
   return !!el;
 }
+
+/**
+ * Click the disable/enable (slash) button on a tool line item.
+ * The button is hidden until hover; we hover first, then force-click
+ * using aria-label which matches the button's current state.
+ */
+export async function toggleToolDisabled(
+  page: Page,
+  toolSelector: string
+): Promise<void> {
+  const toolOption = page.locator(toolSelector);
+  await toolOption.hover();
+  const slashButton = toolOption.locator(
+    'button[aria-label="Disable"], button[aria-label="Enable"]'
+  );
+  await slashButton.first().click({ force: true });
+}
+
+/**
+ * Open the source management secondary view for the internal search tool.
+ * Assumes the ActionsPopover is already open.
+ */
+export async function openSourceManagement(page: Page): Promise<void> {
+  const searchOption = page.locator(TOOL_IDS.searchOption);
+  await searchOption
+    .locator('button[aria-label="Configure Connectors"]')
+    .click();
+  // Wait for the source list Back button (indicates secondary view is open)
+  await page.locator('button[aria-label="Back"]').waitFor({ timeout: 5000 });
+}
+
+/**
+ * Get a source toggle Switch in the source management view by display name.
+ */
+export function getSourceToggle(page: Page, sourceName: string) {
+  return page.locator(`[aria-label="Toggle ${sourceName}"]`);
+}

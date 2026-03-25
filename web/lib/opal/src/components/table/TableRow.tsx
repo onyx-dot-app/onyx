@@ -2,7 +2,6 @@
 
 import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { TableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -12,7 +11,7 @@ import { SvgHandle } from "@opal/icons";
 // Types
 // ---------------------------------------------------------------------------
 
-interface TableRowProps
+export interface TableRowProps
   extends WithoutStyles<React.HTMLAttributes<HTMLTableRowElement>> {
   ref?: React.Ref<HTMLTableRowElement>;
   selected?: boolean;
@@ -22,8 +21,6 @@ interface TableRowProps
   sortableId?: string;
   /** Show drag handle overlay. Defaults to true when sortableId is set. */
   showDragHandle?: boolean;
-  /** Size variant for the drag handle */
-  size?: TableSize;
 }
 
 // ---------------------------------------------------------------------------
@@ -33,15 +30,13 @@ interface TableRowProps
 function SortableTableRow({
   sortableId,
   showDragHandle = true,
-  size,
   selected,
   disabled,
   ref: _externalRef,
   children,
   ...props
 }: TableRowProps) {
-  const contextSize = useTableSize();
-  const resolvedSize = size ?? contextSize;
+  const resolvedSize = useTableSize();
 
   const {
     attributes,
@@ -105,10 +100,9 @@ function SortableTableRow({
 // Main component
 // ---------------------------------------------------------------------------
 
-function TableRow({
+export default function TableRow({
   sortableId,
   showDragHandle,
-  size,
   selected,
   disabled,
   ref,
@@ -119,7 +113,6 @@ function TableRow({
       <SortableTableRow
         sortableId={sortableId}
         showDragHandle={showDragHandle}
-        size={size}
         selected={selected}
         disabled={disabled}
         ref={ref}
@@ -138,6 +131,3 @@ function TableRow({
     />
   );
 }
-
-export default TableRow;
-export type { TableRowProps };

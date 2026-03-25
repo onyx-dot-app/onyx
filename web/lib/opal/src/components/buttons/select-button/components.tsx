@@ -1,5 +1,4 @@
 import "@opal/components/buttons/select-button/styles.css";
-import "@opal/components/tooltip.css";
 import {
   Interactive,
   useDisabled,
@@ -49,9 +48,6 @@ type SelectButtonProps = InteractiveStatefulProps &
      * Size preset — controls gap, text size, and Container height/rounding.
      */
     size?: ContainerSizeVariants;
-
-    /** HTML button type. Container renders a `<button>` element. */
-    type?: "submit" | "button" | "reset";
 
     /** Tooltip text shown on hover. */
     tooltip?: string;

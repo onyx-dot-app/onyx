@@ -7,6 +7,7 @@ import {
   SvgOrganization,
   SvgShare,
   SvgTag,
+  SvgUser,
   SvgUsers,
   SvgX,
 } from "@opal/icons";
@@ -18,7 +19,6 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboB
 import * as InputLayouts from "@/layouts/input-layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { SvgUser } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import useShareableUsers from "@/hooks/useShareableUsers";

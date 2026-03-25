@@ -30,7 +30,7 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
-import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
+import { SvgEdit, SvgInfo, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
@@ -87,10 +87,19 @@ function Main() {
         </CreateButton>
       ) : (
         <div className="flex flex-col gap-2 rounded-lg bg-background-tint-02 p-4">
-          <Text as="p" text04>
-            This feature requires an active paid subscription.
-          </Text>
-          <Button href="/admin/billing">Upgrade Plan</Button>
+          <div className="flex items-center gap-1.5">
+            <Text as="p" text04>
+              Upgrade to a paid plan to create API keys.
+            </Text>
+            <Button
+              variant="none"
+              prominence="tertiary"
+              size="2xs"
+              icon={SvgInfo}
+              tooltip="API keys enable programmatic access to Onyx for service accounts and integrations. Trial accounts do not include API key access — purchase a paid subscription to unlock this feature."
+            />
+          </div>
+          <Button href="/admin/billing">Upgrade to Paid Plan</Button>
         </div>
       )}
     </div>

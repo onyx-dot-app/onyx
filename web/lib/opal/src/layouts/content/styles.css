@@ -224,7 +224,16 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md {
-  @apply flex flex-row items-start;
+  @apply flex flex-col items-start;
+}
+
+.opal-content-md-header {
+  @apply flex flex-row items-center w-full;
+}
+
+.opal-content-md-header[data-editing] {
+  @apply rounded-08;
+  box-shadow: inset 0 0 0 1px var(--border-02);
 }
 
 /* ---------------------------------------------------------------------------
@@ -235,15 +244,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* ---------------------------------------------------------------------------
-   Body column
-   --------------------------------------------------------------------------- */
-
-.opal-content-md-body {
-  @apply flex flex-1 flex-col items-start;
-  min-width: 0.0625rem;
 }
 
 /* ---------------------------------------------------------------------------
@@ -267,6 +267,7 @@
 .opal-content-md-input-sizer {
   display: inline-grid;
   align-items: stretch;
+  width: 100%;
 }
 
 .opal-content-md-input-sizer > * {

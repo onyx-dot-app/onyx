@@ -159,6 +159,7 @@ export default function LiteLLMProxyModal({
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -190,7 +191,11 @@ export default function LiteLLMProxyModal({
         default_model_name: "",
       } as LiteLLMProxyModalValues)
     : {
-        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        ...buildDefaultInitialValues(
+          existingLlmProvider,
+          modelConfigurations,
+          defaultModelName
+        ),
         api_key: existingLlmProvider?.api_key ?? "",
         api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
       };

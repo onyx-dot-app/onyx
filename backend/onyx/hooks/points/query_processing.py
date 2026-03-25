@@ -1,8 +1,37 @@
-from typing import Any
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
 
 from onyx.db.enums import HookFailStrategy
 from onyx.db.enums import HookPoint
 from onyx.hooks.points.base import HookPointSpec
+
+
+class QueryProcessingPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(description="The raw query string exactly as the user typed it.")
+    user_email: str | None = Field(
+        description="Email of the user submitting the query, or null if unauthenticated."
+    )
+    chat_session_id: str = Field(
+        description="UUID of the chat session, formatted as a hyphenated lowercase string (e.g. '550e8400-e29b-41d4-a716-446655440000'). Always present — the session is guaranteed to exist by the time this hook fires."
+    )
+
+
+class QueryProcessingResponse(BaseModel):
+    # Intentionally permissive — customer endpoints may return extra fields.
+    query: str | None = Field(
+        default=None,
+        description=(
+            "The query to use in the pipeline. "
+            "Null, empty string, whitespace-only, or absent = reject the query."
+        ),
+    )
+    rejection_message: str | None = Field(
+        default=None,
+        description="Message shown to the user when the query is rejected. Falls back to a generic message if not provided.",
+    )
 
 
 class QueryProcessingSpec(HookPointSpec):
@@ -36,48 +65,8 @@ class QueryProcessingSpec(HookPointSpec):
         "The query will be blocked and the user will see an error message."
     )
     default_fail_strategy = HookFailStrategy.HARD
+    # TODO(Bo-Onyx): update later
+    docs_url = "https://docs.google.com/document/d/1pGhB8Wcnhhj8rS4baEJL6CX05yFhuIDNk1gbBRiWu94/edit?tab=t.g2r1a1699u87"
 
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The raw query string exactly as the user typed it.",
-                },
-                "user_email": {
-                    "type": ["string", "null"],
-                    "description": "Email of the user submitting the query, or null if unauthenticated.",
-                },
-                "chat_session_id": {
-                    "type": "string",
-                    "description": "UUID of the chat session. Always present — the session is guaranteed to exist by the time this hook fires.",
-                },
-            },
-            "required": ["query", "user_email", "chat_session_id"],
-            "additionalProperties": False,
-        }
-
-    @property
-    def output_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": ["string", "null"],
-                    "description": (
-                        "The (optionally modified) query to use. "
-                        "Set to null to reject the query."
-                    ),
-                },
-                "rejection_message": {
-                    "type": ["string", "null"],
-                    "description": (
-                        "Message shown to the user when query is null. "
-                        "Falls back to a generic message if not provided."
-                    ),
-                },
-            },
-            "required": ["query"],
-        }
+    payload_model = QueryProcessingPayload
+    response_model = QueryProcessingResponse

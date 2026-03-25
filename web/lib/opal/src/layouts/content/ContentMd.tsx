@@ -32,6 +32,8 @@ interface ContentMdPresetConfig {
   optionalFont: string;
   /** Aux icon size = lineHeight − 2 × p-0.5. */
   auxIconSize: string;
+  /** Left indent for the description so it aligns with the title (past the icon). */
+  descriptionIndent: string;
 }
 
 interface ContentMdProps {
@@ -52,6 +54,9 @@ interface ContentMdProps {
 
   /** When `true`, renders "(Optional)" beside the title. */
   optional?: boolean;
+
+  /** Custom muted suffix rendered beside the title. */
+  titleSuffix?: string;
 
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: ContentMdAuxIcon;
@@ -85,6 +90,7 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     editButtonPadding: "p-0",
     optionalFont: "font-main-content-muted",
     auxIconSize: "1.25rem",
+    descriptionIndent: "1.625rem",
   },
   "main-ui": {
     iconSize: "1rem",
@@ -97,6 +103,7 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     editButtonPadding: "p-0",
     optionalFont: "font-main-ui-muted",
     auxIconSize: "1rem",
+    descriptionIndent: "1.375rem",
   },
   secondary: {
     iconSize: "0.75rem",
@@ -109,6 +116,7 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     editButtonPadding: "p-0",
     optionalFont: "font-secondary-action",
     auxIconSize: "0.75rem",
+    descriptionIndent: "1.125rem",
   },
 };
 
@@ -133,6 +141,7 @@ function ContentMd({
   editable,
   onTitleChange,
   optional,
+  titleSuffix,
   auxIcon,
   tag,
   sizePreset = "main-ui",
@@ -163,22 +172,25 @@ function ContentMd({
       data-interactive={withInteractive || undefined}
       style={{ gap: config.gap }}
     >
-      {Icon && (
-        <div
-          className={cn(
-            "opal-content-md-icon-container shrink-0",
-            config.iconContainerPadding
-          )}
-          style={{ minHeight: config.lineHeight }}
-        >
-          <Icon
-            className={cn("opal-content-md-icon", config.iconColorClass)}
-            style={{ width: config.iconSize, height: config.iconSize }}
-          />
-        </div>
-      )}
+      <div
+        className="opal-content-md-header"
+        data-editing={editing || undefined}
+      >
+        {Icon && (
+          <div
+            className={cn(
+              "opal-content-md-icon-container shrink-0",
+              config.iconContainerPadding
+            )}
+            style={{ minHeight: config.lineHeight }}
+          >
+            <Icon
+              className={cn("opal-content-md-icon", config.iconColorClass)}
+              style={{ width: config.iconSize, height: config.iconSize }}
+            />
+          </div>
+        )}
 
-      <div className="opal-content-md-body">
         <div className="opal-content-md-title-row">
           {editing ? (
             <div className="opal-content-md-input-sizer">
@@ -226,12 +238,12 @@ function ContentMd({
             </span>
           )}
 
-          {optional && (
+          {(optional || titleSuffix) && (
             <span
               className={cn(config.optionalFont, "text-text-03 shrink-0")}
               style={{ height: config.lineHeight }}
             >
-              (Optional)
+              {titleSuffix ?? "(Optional)"}
             </span>
           )}
 
@@ -274,13 +286,16 @@ function ContentMd({
             </div>
           )}
         </div>
-
-        {description && (
-          <div className="opal-content-md-description font-secondary-body text-text-03">
-            {description}
-          </div>
-        )}
       </div>
+
+      {description && (
+        <div
+          className="opal-content-md-description font-secondary-body text-text-03"
+          style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
+        >
+          {description}
+        </div>
+      )}
     </div>
   );
 }

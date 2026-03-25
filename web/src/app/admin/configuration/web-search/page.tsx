@@ -1372,7 +1372,7 @@ export default function Page() {
           } logo`,
           fallback:
             selectedContentProviderType === "onyx_web_crawler" ? (
-              <SvgOnyxLogo size={24} className="text-text-05" />
+              <SvgOnyxLogo size={24} />
             ) : undefined,
           size: 24,
           containerSize: 28,

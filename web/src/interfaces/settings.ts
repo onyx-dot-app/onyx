@@ -62,6 +62,12 @@ export interface Settings {
   // When false, connectors, RAG search, document sets, and related features
   // are unavailable.
   vector_db_enabled?: boolean;
+
+  // True when hooks are available: single-tenant deployment with HOOK_ENABLED=true.
+  hooks_enabled?: boolean;
+
+  // Application version from the ONYX_VERSION env var on the server.
+  version?: string | null;
 }
 
 export enum NotificationType {
@@ -136,4 +142,5 @@ export interface CombinedSettings {
    * exist) so consumers get a single, accurate boolean.
    */
   isSearchModeAvailable: boolean;
+  settingsLoading: boolean;
 }

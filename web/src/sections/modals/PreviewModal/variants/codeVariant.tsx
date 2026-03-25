@@ -10,7 +10,7 @@ import {
 
 export const codeVariant: PreviewVariant = {
   matches: (name) => !!getCodeLanguage(name || ""),
-  width: "md",
+  width: "xl",
   height: "lg",
   needsTextContent: true,
   codeBackground: true,

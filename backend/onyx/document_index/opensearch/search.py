@@ -3,7 +3,6 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Any
-from uuid import UUID
 
 from onyx.configs.app_configs import DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S
 from onyx.configs.app_configs import OPENSEARCH_EXPLAIN_ENABLED
@@ -219,9 +218,8 @@ class DocumentQuery:
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
-            user_file_ids=index_filters.user_file_ids or [],
-            project_id=index_filters.project_id,
-            persona_id=index_filters.persona_id,
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=min_chunk_index,
             max_chunk_index=max_chunk_index,
@@ -286,9 +284,8 @@ class DocumentQuery:
             source_types=[],
             tags=[],
             document_sets=[],
-            user_file_ids=[],
-            project_id=None,
-            persona_id=None,
+            project_id_filter=None,
+            persona_id_filter=None,
             time_cutoff=None,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -359,9 +356,8 @@ class DocumentQuery:
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
-            user_file_ids=index_filters.user_file_ids or [],
-            project_id=index_filters.project_id,
-            persona_id=index_filters.persona_id,
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -455,9 +451,8 @@ class DocumentQuery:
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
-            user_file_ids=index_filters.user_file_ids or [],
-            project_id=index_filters.project_id,
-            persona_id=index_filters.persona_id,
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -538,9 +533,8 @@ class DocumentQuery:
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
-            user_file_ids=index_filters.user_file_ids or [],
-            project_id=index_filters.project_id,
-            persona_id=index_filters.persona_id,
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -600,9 +594,8 @@ class DocumentQuery:
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
-            user_file_ids=index_filters.user_file_ids or [],
-            project_id=index_filters.project_id,
-            persona_id=index_filters.persona_id,
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -833,9 +826,8 @@ class DocumentQuery:
         source_types: list[DocumentSource],
         tags: list[Tag],
         document_sets: list[str],
-        user_file_ids: list[UUID],
-        project_id: int | None,
-        persona_id: int | None,
+        project_id_filter: int | None,
+        persona_id_filter: int | None,
         time_cutoff: datetime | None,
         min_chunk_index: int | None,
         max_chunk_index: int | None,
@@ -866,12 +858,12 @@ class DocumentQuery:
                 list corresponding to a tag will be retrieved.
             document_sets: If supplied, only documents with at least one
                 document set ID from this list will be retrieved.
-            user_file_ids: If supplied, only document IDs in this list will be
-                retrieved.
-            project_id: If not None, only documents with this project ID in user
-                projects will be retrieved.
-            persona_id: If not None, only documents whose personas array
-                contains this persona ID will be retrieved.
+            project_id_filter: If not None, only documents with this project ID
+                in user projects will be retrieved. Additive — only applied
+                when a knowledge scope already exists.
+            persona_id_filter: If not None, only documents whose personas array
+                contains this persona ID will be retrieved. Primary — creates
+                a knowledge scope on its own.
             time_cutoff: Time cutoff for the documents to retrieve. If not None,
                 Documents which were last updated before this date will not be
                 returned. For documents which do not have a value for their last
@@ -888,10 +880,6 @@ class DocumentQuery:
                 NOTE: See DocumentChunk.max_chunk_size.
             document_id: The document ID to retrieve. If None, no filter will be
                 applied for this. Defaults to None.
-                WARNING: This filters on the same property as user_file_ids.
-                Although it would never make sense to supply both, note that if
-                user_file_ids is supplied and does not contain document_id, no
-                matches will be retrieved.
             attached_document_ids: Document IDs explicitly attached to the
                 assistant. If provided along with hierarchy_node_ids, documents
                 matching EITHER criteria will be retrieved (OR logic).
@@ -951,15 +939,6 @@ class DocumentQuery:
                     {"term": {DOCUMENT_SETS_FIELD_NAME: {"value": document_set}}}
                 )
             return document_set_filter
-
-        def _get_user_file_id_filter(user_file_ids: list[UUID]) -> dict[str, Any]:
-            # Logical OR operator on its elements.
-            user_file_id_filter: dict[str, Any] = {"bool": {"should": []}}
-            for user_file_id in user_file_ids:
-                user_file_id_filter["bool"]["should"].append(
-                    {"term": {DOCUMENT_ID_FIELD_NAME: {"value": str(user_file_id)}}}
-                )
-            return user_file_id_filter
 
         def _get_user_project_filter(project_id: int) -> dict[str, Any]:
             # Logical OR operator on its elements.
@@ -1061,14 +1040,17 @@ class DocumentQuery:
         # assistant can see. When none are set the assistant searches
         # everything.
         #
-        # project_id / persona_id are additive: they make overflowing user files
-        # findable but must NOT trigger the restriction on their own (an agent
-        # with no explicit knowledge should search everything).
+        # persona_id_filter is a primary trigger — a persona with user files IS
+        # explicit knowledge, so it can start a knowledge scope on its own.
+        #
+        # project_id_filter is additive — it widens the scope to also cover
+        # overflowing project files but never restricts on its own (a chat
+        # inside a project should still search team knowledge).
         has_knowledge_scope = (
             attached_document_ids
             or hierarchy_node_ids
-            or user_file_ids
             or document_sets
+            or persona_id_filter is not None
         )
 
         if has_knowledge_scope:
@@ -1083,23 +1065,17 @@ class DocumentQuery:
                 knowledge_filter["bool"]["should"].append(
                     _get_hierarchy_node_filter(hierarchy_node_ids)
                 )
-            if user_file_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_user_file_id_filter(user_file_ids)
-                )
             if document_sets:
                 knowledge_filter["bool"]["should"].append(
                     _get_document_set_filter(document_sets)
                 )
-            # Additive: widen scope to also cover overflowing user files, but
-            # only when an explicit restriction is already in effect.
-            if project_id is not None:
+            if persona_id_filter is not None:
                 knowledge_filter["bool"]["should"].append(
-                    _get_user_project_filter(project_id)
+                    _get_persona_filter(persona_id_filter)
                 )
-            if persona_id is not None:
+            if project_id_filter is not None:
                 knowledge_filter["bool"]["should"].append(
-                    _get_persona_filter(persona_id)
+                    _get_user_project_filter(project_id_filter)
                 )
             filter_clauses.append(knowledge_filter)
 
@@ -1117,8 +1093,6 @@ class DocumentQuery:
             )
 
         if document_id is not None:
-            # WARNING: If user_file_ids has elements and if none of them are
-            # document_id, no matches will be retrieved.
             filter_clauses.append(
                 {"term": {DOCUMENT_ID_FIELD_NAME: {"value": document_id}}}
             )

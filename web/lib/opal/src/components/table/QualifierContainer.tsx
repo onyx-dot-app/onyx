@@ -1,10 +1,10 @@
+"use client";
+
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { TableSize } from "@opal/components/table/TableSizeContext";
 
 interface QualifierContainerProps {
   type: "head" | "cell";
   children?: React.ReactNode;
-  size?: TableSize;
   /** Pass-through click handler (e.g. stopPropagation on body cells). */
   onClick?: (e: React.MouseEvent) => void;
 }
@@ -12,11 +12,9 @@ interface QualifierContainerProps {
 export default function QualifierContainer({
   type,
   children,
-  size,
   onClick,
 }: QualifierContainerProps) {
-  const contextSize = useTableSize();
-  const resolvedSize = size ?? contextSize;
+  const resolvedSize = useTableSize();
 
   const Tag = type === "head" ? "th" : "td";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { IconFunctionComponent, IconProps } from "@opal/types";
+import type { ButtonType, IconFunctionComponent } from "@opal/types";
 import type { Route } from "next";
 import { Interactive } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
@@ -18,7 +18,8 @@ export interface SidebarTabProps {
   // Button properties:
   onClick?: React.MouseEventHandler<HTMLElement>;
   href?: string;
-  icon?: React.FunctionComponent<IconProps>;
+  type?: ButtonType;
+  icon?: IconFunctionComponent;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;
 }
@@ -31,6 +32,7 @@ export default function SidebarTab({
 
   onClick,
   href,
+  type,
   icon,
   rightChildren,
   children,
@@ -58,12 +60,14 @@ export default function SidebarTab({
         variant="sidebar"
         state={selected ? "selected" : "empty"}
         onClick={onClick}
+        type="button"
         group="group/SidebarTab"
       >
         <Interactive.Container
           roundingVariant="compact"
           heightVariant="lg"
           widthVariant="full"
+          type={type}
         >
           {href && (
             <Link

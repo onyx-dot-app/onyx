@@ -3,19 +3,13 @@
 import React from "react";
 import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { TableSize } from "@opal/components/table/TableSizeContext";
-import { SvgUser } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import type { QualifierContentType } from "@opal/components/table/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
-import Text from "@/refresh-components/texts/Text";
 
 interface TableQualifierProps {
-  className?: string;
   /** Content type displayed in the qualifier */
   content: QualifierContentType;
-  /** Size variant */
-  size?: TableSize;
   /** Disables interaction */
   disabled?: boolean;
   /** Whether to show a selection checkbox overlay */
@@ -24,54 +18,35 @@ interface TableQualifierProps {
   selected?: boolean;
   /** Called when the checkbox is toggled */
   onSelectChange?: (selected: boolean) => void;
-  /** Icon component to render (for "icon" content type) */
+  /** Icon component to render (for "icon" content). */
   icon?: IconFunctionComponent;
-  /** Image source URL (for "image" content type) */
+  /** Image source URL (for "image" content). */
   imageSrc?: string;
-  /** Image alt text */
+  /** Image alt text (for "image" content). */
   imageAlt?: string;
-  /** User initials (for "avatar-user" content type) */
-  initials?: string;
+  /** Show a tinted background container behind the content. */
+  background?: boolean;
+  /** Icon size preset. `"lg"` = 28/24, `"md"` = 20/16. @default "md" */
+  iconSize?: "lg" | "md";
 }
 
-const iconSizes = {
-  lg: 16,
-  md: 14,
+const iconSizesMap = {
+  lg: { lg: 28, md: 24 },
+  md: { lg: 20, md: 16 },
 } as const;
 
-function getQualifierStyles(selected: boolean, disabled: boolean) {
+function getOverlayStyles(selected: boolean, disabled: boolean) {
   if (disabled) {
-    return {
-      container: "bg-background-neutral-03",
-      icon: "stroke-text-02",
-      overlay: selected ? "flex bg-action-link-00" : "hidden",
-      overlayImage: selected ? "flex bg-mask-01 backdrop-blur-02" : "hidden",
-    };
+    return selected ? "flex bg-action-link-00" : "hidden";
   }
-
   if (selected) {
-    return {
-      container: "bg-action-link-00",
-      icon: "stroke-text-03",
-      overlay: "flex bg-action-link-00",
-      overlayImage: "flex bg-mask-01 backdrop-blur-02",
-    };
+    return "flex bg-action-link-00";
   }
-
-  return {
-    container: "bg-background-tint-01",
-    icon: "stroke-text-03",
-    overlay:
-      "flex opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 bg-background-tint-01",
-    overlayImage:
-      "flex opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 bg-mask-01 group-hover/row:backdrop-blur-02 group-focus-within/row:backdrop-blur-02",
-  };
+  return "flex opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 bg-background-tint-01";
 }
 
 function TableQualifier({
-  className,
   content,
-  size,
   disabled = false,
   selectable = false,
   selected = false,
@@ -79,100 +54,68 @@ function TableQualifier({
   icon: Icon,
   imageSrc,
   imageAlt = "",
-  initials,
+  background = false,
+  iconSize: iconSizePreset = "md",
 }: TableQualifierProps) {
-  const contextSize = useTableSize();
-  const resolvedSize = size ?? contextSize;
-  const isRound = content === "avatar-icon" || content === "avatar-user";
-  const iconSize = iconSizes[resolvedSize];
-  const styles = getQualifierStyles(selected, disabled);
+  const resolvedSize = useTableSize();
+  const iconSize = iconSizesMap[iconSizePreset][resolvedSize];
+  const overlayStyles = getOverlayStyles(selected, disabled);
 
   function renderContent() {
     switch (content) {
       case "icon":
-        return Icon ? <Icon size={iconSize} className={styles.icon} /> : null;
-
-      case "simple":
-        return null;
+        return Icon ? <Icon size={iconSize} /> : null;
 
       case "image":
         return imageSrc ? (
           <img
             src={imageSrc}
             alt={imageAlt}
-            className={cn(
-              "h-full w-full object-cover",
-              isRound ? "rounded-full" : "rounded-08"
-            )}
+            className="h-full w-full rounded-08 object-cover"
           />
         ) : null;
 
-      case "avatar-icon":
-        return <SvgUser size={iconSize} className={styles.icon} />;
-
-      case "avatar-user":
-        return (
-          <div
-            className={cn(
-              "flex items-center justify-center rounded-full bg-background-neutral-inverted-00",
-              resolvedSize === "lg" ? "h-7 w-7" : "h-6 w-6"
-            )}
-          >
-            <Text
-              inverted
-              secondaryAction
-              text05
-              className="select-none uppercase"
-            >
-              {initials}
-            </Text>
-          </div>
-        );
-
+      case "simple":
       default:
         return null;
     }
   }
+
+  const inner = renderContent();
+  const showBackground = background && content !== "simple";
 
   return (
     <div
       className={cn(
         "group relative inline-flex shrink-0 items-center justify-center",
         resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
-        disabled ? "cursor-not-allowed" : "cursor-default",
-        className
+        disabled ? "cursor-not-allowed" : "cursor-default"
       )}
     >
-      {/* Inner qualifier container — no background for "simple" */}
-      {content !== "simple" && (
+      {showBackground ? (
         <div
           className={cn(
-            "flex items-center justify-center overflow-hidden transition-colors",
+            "flex items-center justify-center overflow-hidden rounded-08 transition-colors",
             resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
-            isRound ? "rounded-full" : "rounded-08",
-            styles.container,
-            content === "image" && disabled && !selected && "opacity-50"
+            disabled
+              ? "bg-background-neutral-03"
+              : selected
+                ? "bg-action-link-00"
+                : "bg-background-tint-01"
           )}
         >
-          {renderContent()}
+          {inner}
         </div>
+      ) : (
+        inner
       )}
 
       {/* Selection overlay */}
       {selectable && (
         <div
           className={cn(
-            "absolute inset-0 items-center justify-center",
-            content === "simple"
-              ? "flex"
-              : isRound
-                ? "rounded-full"
-                : "rounded-08",
-            content === "simple"
-              ? "flex"
-              : content === "image"
-                ? styles.overlayImage
-                : styles.overlay
+            "absolute inset-0 items-center justify-center rounded-08",
+            content === "simple" ? "flex" : overlayStyles
           )}
         >
           <Checkbox

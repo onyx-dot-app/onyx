@@ -189,3 +189,30 @@ def mt_cloud_identify(
         attribute="identify_user",
         fallback=noop_fallback,
     )(distinct_id, properties)
+
+
+def mt_cloud_alias(
+    distinct_id: str,
+    anonymous_id: str,
+) -> None:
+    """Link an anonymous distinct_id to an identified user (Cloud only)."""
+    if not MULTI_TENANT:
+        return
+
+    fetch_versioned_implementation_with_fallback(
+        module="onyx.utils.posthog_client",
+        attribute="alias_user",
+        fallback=noop_fallback,
+    )(distinct_id, anonymous_id)
+
+
+def mt_cloud_get_anon_id(request: Any) -> str | None:
+    """Extract the anonymous distinct_id from the app PostHog cookie (Cloud only)."""
+    if not MULTI_TENANT or not request:
+        return None
+
+    return fetch_versioned_implementation_with_fallback(
+        module="onyx.utils.posthog_client",
+        attribute="get_anon_id_from_request",
+        fallback=noop_fallback,
+    )(request)

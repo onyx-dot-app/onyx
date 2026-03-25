@@ -80,15 +80,45 @@ def capture_and_sync_with_alternate_posthog(
         logger.error(f"Error identifying cloud posthog user: {e}")
 
 
+def alias_user(distinct_id: str, anonymous_id: str) -> None:
+    """Link an anonymous distinct_id to an identified user, merging person profiles.
+
+    No-ops when the IDs match (e.g. returning users whose PostHog cookie
+    already contains their identified user ID).
+    """
+    if not posthog or anonymous_id == distinct_id:
+        return
+
+    try:
+        posthog.alias(previous_id=anonymous_id, distinct_id=distinct_id)
+        posthog.flush()
+    except Exception as e:
+        logger.error(f"Error aliasing PostHog user: {e}")
+
+
+def get_anon_id_from_request(request: Any) -> str | None:
+    """Extract the anonymous distinct_id from the app PostHog cookie on a request."""
+    if not POSTHOG_API_KEY:
+        return None
+
+    cookie_name = f"ph_{POSTHOG_API_KEY}_posthog"
+    if (cookie_value := request.cookies.get(cookie_name)) and (
+        parsed := parse_posthog_cookie(cookie_value)
+    ):
+        return parsed.get("distinct_id")
+
+    return None
+
+
 def get_marketing_posthog_cookie_name() -> str | None:
     if not MARKETING_POSTHOG_API_KEY:
         return None
     return f"onyx_custom_ph_{MARKETING_POSTHOG_API_KEY}_posthog"
 
 
-def parse_marketing_cookie(cookie_value: str) -> dict[str, Any] | None:
+def parse_posthog_cookie(cookie_value: str) -> dict[str, Any] | None:
     """
-    Parse the URL-encoded JSON marketing cookie.
+    Parse a URL-encoded JSON PostHog cookie
 
     Expected format (URL-encoded):
     {"distinct_id":"...", "featureFlags":{"landing_page_variant":"..."}, ...}
@@ -102,7 +132,7 @@ def parse_marketing_cookie(cookie_value: str) -> dict[str, Any] | None:
         cookie_data = json.loads(decoded_cookie)
 
         distinct_id = cookie_data.get("distinct_id")
-        if not distinct_id:
+        if not distinct_id or not isinstance(distinct_id, str):
             return None
 
         return cookie_data

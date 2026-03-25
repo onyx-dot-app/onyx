@@ -840,6 +840,17 @@ export const connectorConfigs: Record<
           "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified.",
       },
       {
+        type: "checkbox",
+        label: "Treat sharing links as public?",
+        description:
+          "When enabled, documents with a sharing link (anonymous or organization-wide) " +
+          "are treated as public (visible to all Onyx users). " +
+          "When disabled, only users and groups with explicit role assignments can see the document.",
+        name: "treat_sharing_link_as_public",
+        optional: true,
+        default: false,
+      },
+      {
         type: "text",
         query: "Microsoft Authority Host:",
         label: "Authority Host",
@@ -1941,6 +1952,7 @@ export interface SalesforceConfig {
 export interface SharepointConfig {
   sites?: string[];
   include_site_pages?: boolean;
+  treat_sharing_link_as_public?: boolean;
   include_site_documents?: boolean;
   authority_host?: string;
   graph_api_host?: string;

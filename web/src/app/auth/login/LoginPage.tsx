@@ -1,6 +1,6 @@
 "use client";
 
-import { AuthTypeMetadata } from "@/lib/userSS";
+import { AuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import LoginText from "@/app/auth/login/LoginText";
 import SignInButton from "@/app/auth/login/SignInButton";
 import EmailPasswordForm from "./EmailPasswordForm";

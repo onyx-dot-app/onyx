@@ -182,7 +182,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
                 onClose={() => setIsEditing(false)}
               />
             ) : (
-              <Truncated>{project.name}</Truncated>
+              <Truncated text03>{project.name}</Truncated>
             )}
           </SidebarTab>
         </Popover.Anchor>

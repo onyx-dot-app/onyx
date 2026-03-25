@@ -315,6 +315,7 @@ export default function BedrockModal({
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -351,7 +352,11 @@ export default function BedrockModal({
         },
       } as BedrockModalValues)
     : {
-        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        ...buildDefaultInitialValues(
+          existingLlmProvider,
+          modelConfigurations,
+          defaultModelName
+        ),
         custom_config: {
           AWS_REGION_NAME:
             (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ??

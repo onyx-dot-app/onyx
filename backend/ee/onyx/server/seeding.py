@@ -178,7 +178,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     system_prompt=persona.system_prompt,
                     task_prompt=persona.task_prompt,
                     datetime_aware=persona.datetime_aware,
-                    featured=persona.featured,
+                    is_featured=persona.is_featured,
                     commit=False,
                 )
             db_session.commit()

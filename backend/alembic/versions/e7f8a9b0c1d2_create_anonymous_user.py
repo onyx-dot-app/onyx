@@ -36,6 +36,56 @@ TABLES_WITH_USER_ID = [
 ]
 
 
+def _dedupe_null_notifications(connection: sa.Connection) -> None:
+    # Multiple NULL-owned notifications can exist because the unique index treats
+    # NULL user_id values as distinct. Before migrating them to the anonymous
+    # user, collapse duplicates and remove rows that would conflict with an
+    # already-existing anonymous notification.
+    result = connection.execute(
+        sa.text(
+            """
+            WITH ranked_null_notifications AS (
+                SELECT
+                    id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY notif_type, COALESCE(additional_data, '{}'::jsonb)
+                        ORDER BY first_shown DESC, last_shown DESC, id DESC
+                    ) AS row_num
+                FROM notification
+                WHERE user_id IS NULL
+            )
+            DELETE FROM notification
+            WHERE id IN (
+                SELECT id
+                FROM ranked_null_notifications
+                WHERE row_num > 1
+            )
+            """
+        )
+    )
+    if result.rowcount > 0:
+        print(f"Deleted {result.rowcount} duplicate NULL-owned notifications")
+
+    result = connection.execute(
+        sa.text(
+            """
+            DELETE FROM notification AS null_owned
+            USING notification AS anonymous_owned
+            WHERE null_owned.user_id IS NULL
+              AND anonymous_owned.user_id = :user_id
+              AND null_owned.notif_type = anonymous_owned.notif_type
+              AND COALESCE(null_owned.additional_data, '{}'::jsonb) =
+                  COALESCE(anonymous_owned.additional_data, '{}'::jsonb)
+            """
+        ),
+        {"user_id": ANONYMOUS_USER_UUID},
+    )
+    if result.rowcount > 0:
+        print(
+            f"Deleted {result.rowcount} NULL-owned notifications that conflict with existing anonymous-owned notifications"
+        )
+
+
 def upgrade() -> None:
     """
     Create the anonymous user for anonymous access feature.
@@ -65,7 +115,12 @@ def upgrade() -> None:
 
     # Migrate any remaining user_id=NULL records to anonymous user
     for table in TABLES_WITH_USER_ID:
-        try:
+        # Dedup notifications outside the savepoint so deletions persist
+        # even if the subsequent UPDATE rolls back
+        if table == "notification":
+            _dedupe_null_notifications(connection)
+
+        with connection.begin_nested():
             # Exclude public credential (id=0) which must remain user_id=NULL
             # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
             # Exclude builtin personas (builtin_persona=True) which must remain user_id=NULL
@@ -80,6 +135,7 @@ def upgrade() -> None:
                 condition = "user_id IS NULL AND is_public = false"
             else:
                 condition = "user_id IS NULL"
+
             result = connection.execute(
                 sa.text(
                     f"""
@@ -92,19 +148,19 @@ def upgrade() -> None:
             )
             if result.rowcount > 0:
                 print(f"Updated {result.rowcount} rows in {table} to anonymous user")
-        except Exception as e:
-            print(f"Skipping {table}: {e}")
 
 
 def downgrade() -> None:
     """
     Set anonymous user's records back to NULL and delete the anonymous user.
+
+    Note: Duplicate NULL-owned notifications removed during upgrade are not restored.
     """
     connection = op.get_bind()
 
     # Set records back to NULL
     for table in TABLES_WITH_USER_ID:
-        try:
+        with connection.begin_nested():
             connection.execute(
                 sa.text(
                     f"""
@@ -115,8 +171,6 @@ def downgrade() -> None:
                 ),
                 {"user_id": ANONYMOUS_USER_UUID},
             )
-        except Exception:
-            pass
 
     # Delete the anonymous user
     connection.execute(

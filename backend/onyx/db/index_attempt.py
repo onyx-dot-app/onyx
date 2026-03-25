@@ -2,6 +2,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import NamedTuple
+from typing import TYPE_CHECKING
 from typing import TypeVarTuple
 
 from sqlalchemy import and_
@@ -27,6 +29,9 @@ from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+
+if TYPE_CHECKING:
+    from onyx.configs.constants import DocumentSource
 
 # from sqlalchemy.sql.selectable import Select
 
@@ -583,6 +588,67 @@ def get_latest_index_attempt_for_cc_pair_id(
     return db_session.execute(stmt).scalar_one_or_none()
 
 
+def get_latest_successful_index_attempt_for_cc_pair_id(
+    db_session: Session,
+    connector_credential_pair_id: int,
+    secondary_index: bool = False,
+) -> IndexAttempt | None:
+    """Returns the most recent successful index attempt for the given cc pair,
+    filtered to the current (or future) search settings.
+    Uses MAX(id) semantics to match get_latest_index_attempts_by_status."""
+    status = IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
+    stmt = (
+        select(IndexAttempt)
+        .where(
+            IndexAttempt.connector_credential_pair_id == connector_credential_pair_id,
+            IndexAttempt.status.in_(
+                [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
+            ),
+        )
+        .join(SearchSettings)
+        .where(SearchSettings.status == status)
+        .order_by(desc(IndexAttempt.id))
+        .limit(1)
+    )
+    return db_session.execute(stmt).scalar_one_or_none()
+
+
+def get_latest_successful_index_attempts_parallel(
+    secondary_index: bool = False,
+) -> Sequence[IndexAttempt]:
+    """Batch version: returns the latest successful index attempt per cc pair.
+    Covers both SUCCESS and COMPLETED_WITH_ERRORS (matching is_successful())."""
+    model_status = (
+        IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
+    )
+    with get_session_with_current_tenant() as db_session:
+        latest_ids = (
+            select(
+                IndexAttempt.connector_credential_pair_id,
+                func.max(IndexAttempt.id).label("max_id"),
+            )
+            .join(SearchSettings, IndexAttempt.search_settings_id == SearchSettings.id)
+            .where(
+                SearchSettings.status == model_status,
+                IndexAttempt.status.in_(
+                    [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
+                ),
+            )
+            .group_by(IndexAttempt.connector_credential_pair_id)
+            .subquery()
+        )
+
+        stmt = select(IndexAttempt).join(
+            latest_ids,
+            (
+                IndexAttempt.connector_credential_pair_id
+                == latest_ids.c.connector_credential_pair_id
+            )
+            & (IndexAttempt.id == latest_ids.c.max_id),
+        )
+        return db_session.execute(stmt).scalars().all()
+
+
 def count_index_attempts_for_cc_pair(
     db_session: Session,
     cc_pair_id: int,
@@ -911,3 +977,106 @@ def get_index_attempt_errors_for_cc_pair(
         stmt = stmt.offset(page * page_size).limit(page_size)
 
     return list(db_session.scalars(stmt).all())
+
+
+# ── Metrics query helpers ──────────────────────────────────────────────
+
+
+class ActiveIndexAttemptMetric(NamedTuple):
+    """Row returned by get_active_index_attempts_for_metrics."""
+
+    status: IndexingStatus
+    source: "DocumentSource"
+    cc_pair_id: int
+    cc_pair_name: str | None
+    attempt_count: int
+
+
+def get_active_index_attempts_for_metrics(
+    db_session: Session,
+) -> list[ActiveIndexAttemptMetric]:
+    """Return non-terminal index attempts grouped by status, source, and connector.
+
+    Each row is (status, source, cc_pair_id, cc_pair_name, attempt_count).
+    """
+    from onyx.db.models import Connector
+
+    terminal_statuses = [s for s in IndexingStatus if s.is_terminal()]
+    rows = (
+        db_session.query(
+            IndexAttempt.status,
+            Connector.source,
+            ConnectorCredentialPair.id,
+            ConnectorCredentialPair.name,
+            func.count(),
+        )
+        .join(
+            ConnectorCredentialPair,
+            IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
+        )
+        .join(
+            Connector,
+            ConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .filter(IndexAttempt.status.notin_(terminal_statuses))
+        .group_by(
+            IndexAttempt.status,
+            Connector.source,
+            ConnectorCredentialPair.id,
+            ConnectorCredentialPair.name,
+        )
+        .all()
+    )
+    return [ActiveIndexAttemptMetric(*row) for row in rows]
+
+
+def get_failed_attempt_counts_by_cc_pair(
+    db_session: Session,
+    since: datetime | None = None,
+) -> dict[int, int]:
+    """Return {cc_pair_id: failed_attempt_count} for all connectors.
+
+    When ``since`` is provided, only attempts created after that timestamp
+    are counted. Defaults to the last 90 days to avoid unbounded historical
+    aggregation.
+    """
+    if since is None:
+        since = datetime.now(timezone.utc) - timedelta(days=90)
+
+    rows = (
+        db_session.query(
+            IndexAttempt.connector_credential_pair_id,
+            func.count(),
+        )
+        .filter(IndexAttempt.status == IndexingStatus.FAILED)
+        .filter(IndexAttempt.time_created >= since)
+        .group_by(IndexAttempt.connector_credential_pair_id)
+        .all()
+    )
+    return {cc_id: count for cc_id, count in rows}
+
+
+def get_docs_indexed_by_cc_pair(
+    db_session: Session,
+    since: datetime | None = None,
+) -> dict[int, int]:
+    """Return {cc_pair_id: total_new_docs_indexed} across successful attempts.
+
+    Only counts attempts with status SUCCESS to avoid inflating counts with
+    partial results from failed attempts. When ``since`` is provided, only
+    attempts created after that timestamp are included.
+    """
+    if since is None:
+        since = datetime.now(timezone.utc) - timedelta(days=90)
+
+    query = (
+        db_session.query(
+            IndexAttempt.connector_credential_pair_id,
+            func.sum(func.coalesce(IndexAttempt.new_docs_indexed, 0)),
+        )
+        .filter(IndexAttempt.status == IndexingStatus.SUCCESS)
+        .filter(IndexAttempt.time_created >= since)
+        .group_by(IndexAttempt.connector_credential_pair_id)
+    )
+    rows = query.all()
+    return {cc_id: int(total or 0) for cc_id, total in rows}

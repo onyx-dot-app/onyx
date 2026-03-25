@@ -148,12 +148,14 @@ interface ExistingProviderCardProps {
   provider: LLMProviderView;
   isDefault: boolean;
   isLastProvider: boolean;
+  defaultModelName?: string;
 }
 
 function ExistingProviderCard({
   provider,
   isDefault,
   isLastProvider,
+  defaultModelName,
 }: ExistingProviderCardProps) {
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
@@ -230,7 +232,12 @@ function ExistingProviderCard({
               </Section>
             }
           />
-          {getModalForExistingProvider(provider, isOpen, setIsOpen)}
+          {getModalForExistingProvider(
+            provider,
+            isOpen,
+            setIsOpen,
+            defaultModelName
+          )}
         </Card>
       </Hoverable.Root>
     </>
@@ -446,6 +453,11 @@ export default function LLMConfigurationPage() {
                     provider={provider}
                     isDefault={defaultText?.provider_id === provider.id}
                     isLastProvider={sortedProviders.length === 1}
+                    defaultModelName={
+                      defaultText?.provider_id === provider.id
+                        ? defaultText.model_name
+                        : undefined
+                    }
                   />
                 ))}
               </div>

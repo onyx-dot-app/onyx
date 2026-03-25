@@ -9,7 +9,7 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import FilterButton from "@/refresh-components/buttons/FilterButton";
+import { FilterButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -167,7 +167,7 @@ export default function UserFilters({
         <Popover.Trigger asChild>
           <FilterButton
             aria-label="Filter by role"
-            leftIcon={SvgUsers}
+            icon={SvgUsers}
             active={hasRoleFilter}
             onClear={() => onRolesChange([])}
           >
@@ -215,7 +215,7 @@ export default function UserFilters({
         <Popover.Trigger asChild>
           <FilterButton
             aria-label="Filter by group"
-            leftIcon={SvgUsers}
+            icon={SvgUsers}
             active={hasGroupFilter}
             onClear={() => onGroupsChange([])}
           >
@@ -270,7 +270,7 @@ export default function UserFilters({
         <Popover.Trigger asChild>
           <FilterButton
             aria-label="Filter by status"
-            leftIcon={SvgUsers}
+            icon={SvgUsers}
             active={hasStatusFilter}
             onClear={() => onStatusesChange([])}
           >

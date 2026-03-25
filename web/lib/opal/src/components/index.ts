@@ -1,3 +1,5 @@
+import "@opal/components/tooltip.css";
+
 /* Shared types */
 export type TooltipSide = "top" | "bottom" | "left" | "right";
 
@@ -19,11 +21,25 @@ export {
   type OpenButtonProps,
 } from "@opal/components/buttons/open-button/components";
 
+/* FilterButton */
+export {
+  FilterButton,
+  type FilterButtonProps,
+} from "@opal/components/buttons/filter-button/components";
+
 /* LineItemButton */
 export {
   LineItemButton,
   type LineItemButtonProps,
 } from "@opal/components/buttons/line-item-button/components";
+
+/* Text */
+export {
+  Text,
+  type TextProps,
+  type TextFont,
+  type TextColor,
+} from "@opal/components/text/components";
 
 /* Tag */
 export {
