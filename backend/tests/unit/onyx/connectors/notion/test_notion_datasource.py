@@ -7,7 +7,10 @@ data_source_id -> database_id parent resolution.
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+from requests.exceptions import HTTPError
+
 from onyx.connectors.notion.connector import NotionConnector
+from onyx.connectors.notion.connector import NotionDataSource
 from onyx.connectors.notion.connector import NotionPage
 
 
@@ -22,7 +25,9 @@ def _mock_response(json_data: dict, status_code: int = 200) -> MagicMock:
     resp.json.return_value = json_data
     resp.status_code = status_code
     if status_code >= 400:
-        resp.raise_for_status.side_effect = Exception(f"HTTP {status_code}")
+        resp.raise_for_status.side_effect = HTTPError(
+            f"HTTP {status_code}", response=resp
+        )
     else:
         resp.raise_for_status.return_value = None
     return resp
@@ -46,7 +51,10 @@ class TestFetchDataSourcesForDatabase:
         ):
             result = connector._fetch_data_sources_for_database("db-1")
 
-        assert result == [("ds-1", "Source A"), ("ds-2", "Source B")]
+        assert result == [
+            NotionDataSource(id="ds-1", name="Source A"),
+            NotionDataSource(id="ds-2", name="Source B"),
+        ]
 
     def test_single_source_database(self) -> None:
         connector = _make_connector()
@@ -62,7 +70,7 @@ class TestFetchDataSourcesForDatabase:
         ):
             result = connector._fetch_data_sources_for_database("db-1")
 
-        assert result == [("ds-1", "Only Source")]
+        assert result == [NotionDataSource(id="ds-1", name="Only Source")]
 
     def test_404_returns_empty(self) -> None:
         connector = _make_connector()
@@ -124,8 +132,9 @@ class TestGetParentRawId:
 
     def test_data_source_id_without_mapping_falls_back(self) -> None:
         connector = _make_connector()
+        connector.workspace_id = "ws-1"
         parent = {"type": "data_source_id", "data_source_id": "ds-unknown"}
-        assert connector._get_parent_raw_id(parent) == "ds-unknown"
+        assert connector._get_parent_raw_id(parent) == "ws-1"
 
     def test_workspace_parent(self) -> None:
         connector = _make_connector()
@@ -137,6 +146,22 @@ class TestGetParentRawId:
         connector = _make_connector()
         parent = {"type": "page_id", "page_id": "page-1"}
         assert connector._get_parent_raw_id(parent) == "page-1"
+
+    def test_block_id_parent_with_mapping(self) -> None:
+        connector = _make_connector()
+        connector.workspace_id = "ws-1"
+        connector._child_page_parent_map["inline-page-1"] = "containing-page-1"
+        parent = {"type": "block_id"}
+        assert (
+            connector._get_parent_raw_id(parent, page_id="inline-page-1")
+            == "containing-page-1"
+        )
+
+    def test_block_id_parent_without_mapping_falls_back(self) -> None:
+        connector = _make_connector()
+        connector.workspace_id = "ws-1"
+        parent = {"type": "block_id"}
+        assert connector._get_parent_raw_id(parent, page_id="unknown-page") == "ws-1"
 
     def test_none_parent_defaults_to_workspace(self) -> None:
         connector = _make_connector()
@@ -153,7 +178,10 @@ class TestReadPagesFromDatabaseMultiSource:
             patch.object(
                 connector,
                 "_fetch_data_sources_for_database",
-                return_value=[("ds-1", "Source A"), ("ds-2", "Source B")],
+                return_value=[
+                    NotionDataSource(id="ds-1", name="Source A"),
+                    NotionDataSource(id="ds-2", name="Source B"),
+                ],
             ),
             patch.object(
                 connector,
@@ -172,6 +200,8 @@ class TestReadPagesFromDatabaseMultiSource:
 
         assert result.blocks == []
         assert result.child_page_ids == []
+        assert len(result.hierarchy_nodes) == 1
+        assert result.hierarchy_nodes[0].raw_node_id == "db-1"
 
     def test_collects_pages_from_all_sources(self) -> None:
         connector = _make_connector()
@@ -191,7 +221,10 @@ class TestReadPagesFromDatabaseMultiSource:
             patch.object(
                 connector,
                 "_fetch_data_sources_for_database",
-                return_value=[("ds-1", "Source A"), ("ds-2", "Source B")],
+                return_value=[
+                    NotionDataSource(id="ds-1", name="Source A"),
+                    NotionDataSource(id="ds-2", name="Source B"),
+                ],
             ),
             patch.object(
                 connector,
@@ -203,6 +236,40 @@ class TestReadPagesFromDatabaseMultiSource:
 
         assert "page-from-ds1" in result.child_page_ids
         assert "page-from-ds2" in result.child_page_ids
+
+    def test_pagination_across_pages(self) -> None:
+        connector = _make_connector()
+        connector.workspace_id = "ws-1"
+        connector.recursive_index_enabled = True
+
+        page1 = {
+            "results": [{"object": "page", "id": "page-1", "properties": {}}],
+            "next_cursor": "cursor-abc",
+        }
+        page2 = {
+            "results": [{"object": "page", "id": "page-2", "properties": {}}],
+            "next_cursor": None,
+        }
+
+        with (
+            patch.object(
+                connector,
+                "_fetch_data_sources_for_database",
+                return_value=[NotionDataSource(id="ds-1", name="Source A")],
+            ),
+            patch.object(
+                connector,
+                "_fetch_data_source",
+                side_effect=[page1, page2],
+            ) as mock_fetch_ds,
+        ):
+            result = connector._read_pages_from_database("db-1")
+
+        assert mock_fetch_ds.call_count == 2
+        mock_fetch_ds.assert_any_call("ds-1", None)
+        mock_fetch_ds.assert_any_call("ds-1", "cursor-abc")
+        assert "page-1" in result.child_page_ids
+        assert "page-2" in result.child_page_ids
 
 
 class TestInTrashField:
