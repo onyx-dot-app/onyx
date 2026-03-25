@@ -50,8 +50,6 @@ for (const theme of THEMES) {
           ).toBeVisible({ timeout: 10000 });
         } catch (error) {
           console.error(`Failed to find admin-page-title for "${href}"`);
-          // Dump the page HTML for debugging CI failures
-          console.error(await page.content());
           throw error;
         }
 
