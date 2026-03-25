@@ -2,7 +2,8 @@
 
 **Import:** `import { Text, type TextProps, type TextFont, type TextColor } from "@opal/components";`
 
-A styled text component with string-enum props for font preset and color selection, with inline markdown rendering enabled by default for string children.
+A styled text component with string-enum props for font preset and color selection. Supports
+inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as children to enable.
 
 ## Props
 
@@ -12,7 +13,6 @@ A styled text component with string-enum props for font preset and color selecti
 | `color` | `TextColor` | `"text-04"` | Text color |
 | `as` | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"` | `"span"` | HTML tag to render |
 | `nowrap` | `boolean` | `false` | Prevent text wrapping |
-| `preventMarkdown` | `boolean` | `false` | Disable inline markdown parsing (markdown is on by default for string children) |
 
 ### `TextFont`
 
@@ -52,7 +52,7 @@ import { Text } from "@opal/components";
 </Text>
 
 // Heading
-<Text font="heading-h2" color="text-05">
+<Text font="heading-h2" color="text-05" as="h2">
   Page Title
 </Text>
 
@@ -67,26 +67,56 @@ import { Text } from "@opal/components";
 </Text>
 ```
 
-## Inline Markdown
+## Inline Markdown via `RichStr`
 
-When `children` is a string, inline markdown is parsed by default. Supported syntax: `**bold**`, `*italic*`, `` `code` ``, `[link](url)`, `~~strikethrough~~`.
+Inline markdown is opt-in via the `markdown()` function, which returns a `RichStr`. When `Text`
+receives a `RichStr` as children, it parses the inner string as inline markdown. Plain strings
+and JSX children are rendered as-is — no parsing, no surprises.
 
 ```tsx
-// Markdown is on by default for string children
+import { Text } from "@opal/components";
+import { markdown } from "@opal/types";
+
+// Inline markdown — bold, italic, links, code, strikethrough
 <Text font="main-ui-body" color="text-05">
-  {"*Hello*, **world**! Visit [Onyx](https://onyx.app) and run `onyx start`."}
+  {markdown("*Hello*, **world**! Visit [Onyx](https://onyx.app) and run `onyx start`.")}
 </Text>
 
-// Opt out for user-generated content that shouldn't be parsed
-<Text font="main-ui-body" color="text-03" preventMarkdown>
-  {userProvidedString}
+// Plain string — no markdown parsing
+<Text font="main-ui-body" color="text-03">
+  This *stays* as-is, no formatting applied.
 </Text>
 ```
 
-Markdown rendering uses `react-markdown` internally, restricted to inline elements only. Links open in a new tab and inherit the surrounding text color. Inline code inherits the parent font size and switches to the monospace family.
+Supported syntax: `**bold**`, `*italic*`, `` `code` ``, `[link](url)`, `~~strikethrough~~`.
 
-**Note:** This is inline-only markdown. Multi-paragraph content (`"Hello\n\nWorld"`) will collapse into a single run of text since paragraph wrappers are stripped. For block-level markdown, use `MinimalMarkdown` instead.
+Markdown rendering uses `react-markdown` internally, restricted to inline elements only.
+`http(s)` links open in a new tab; `mailto:` and `tel:` links open natively. Inline code
+inherits the parent font size and switches to the monospace family.
+
+**Note:** This is inline-only markdown. Multi-paragraph content (`"Hello\n\nWorld"`) will
+collapse into a single run of text since paragraph wrappers are stripped. For block-level
+markdown, use `MinimalMarkdown` instead.
+
+### Using `RichStr` in component props
+
+Components that want to support optional markdown in their text props should accept
+`string | RichStr`:
+
+```tsx
+import type { RichStr } from "@opal/types";
+
+interface MyComponentProps {
+  title: string | RichStr;
+  description?: string | RichStr;
+}
+```
+
+This avoids API coloring — no `markdown` boolean needs to be threaded through intermediate
+components. The decision to use markdown lives at the call site.
 
 ## Compatibility
 
-`@/refresh-components/texts/Text` is an independent legacy component that implements the same font/color presets via a boolean-flag API. It is **not** a wrapper around this component. New code should import directly from `@opal/components`.
+`@/refresh-components/texts/Text` is an independent legacy component that implements the same
+font/color presets via a boolean-flag API. It is **not** a wrapper around this component. New
+code should import directly from `@opal/components`.

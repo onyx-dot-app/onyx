@@ -1,6 +1,7 @@
 import type { HTMLAttributes } from "react";
 
 import type { WithoutStyles } from "@opal/types";
+import { isRichStr } from "@opal/types";
 import { cn } from "@opal/utils";
 import InlineMarkdown from "@opal/components/text/InlineMarkdown";
 
@@ -57,9 +58,6 @@ interface TextProps
 
   /** Prevent text wrapping. */
   nowrap?: boolean;
-
-  /** Disable inline markdown parsing. Default: `false`. */
-  preventMarkdown?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +111,6 @@ function Text({
   color = "text-04",
   as: Tag = "span",
   nowrap,
-  preventMarkdown,
   children,
   ...rest
 }: TextProps) {
@@ -125,8 +122,8 @@ function Text({
 
   return (
     <Tag {...rest} className={resolvedClassName}>
-      {!preventMarkdown && typeof children === "string" ? (
-        <InlineMarkdown content={children} />
+      {isRichStr(children) ? (
+        <InlineMarkdown content={children.raw} />
       ) : (
         children
       )}

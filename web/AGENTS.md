@@ -284,8 +284,8 @@ If you need help with this step, reach out to `raunak@onyx.app`.
 **Use the Opal `Text` component for all text rendering. Avoid "naked" text nodes.**
 
 **Reason:** The `Text` component is fully compliant with the stylings provided in Figma. It uses
-string-enum props (`font` and `color`) for font preset and color selection, and supports inline
-markdown rendering by default.
+string-enum props (`font` and `color`) for font preset and color selection. Inline markdown is
+opt-in via the `markdown()` function from `@opal/types`.
 
 ```typescript
 // ✅ Good — Opal Text with string-enum props
@@ -299,15 +299,24 @@ function UserCard({ name }: { name: string }) {
   )
 }
 
-// ✅ Good — inline markdown (enabled by default for string children)
+// ✅ Good — inline markdown via markdown()
+import { markdown } from "@opal/types";
+
 <Text font="main-ui-body" color="text-05">
-  {"*Hello*, **world**! Visit [Onyx](https://onyx.app) and run `onyx start`."}
+  {markdown("*Hello*, **world**! Visit [Onyx](https://onyx.app) and run `onyx start`.")}
 </Text>
 
-// ✅ Good — opt out of markdown when rendering user-generated content
-<Text font="main-ui-body" color="text-03" preventMarkdown>
+// ✅ Good — plain strings are never parsed as markdown
+<Text font="main-ui-body" color="text-03">
   {userProvidedString}
 </Text>
+
+// ✅ Good — component props that support optional markdown use `string | RichStr`
+import type { RichStr } from "@opal/types";
+
+interface MyCardProps {
+  title: string | RichStr;
+}
 
 // ❌ Bad — legacy boolean-flag API (still works but deprecated)
 import Text from "@/refresh-components/texts/Text";
@@ -325,7 +334,6 @@ Key props:
 - `color`: `TextColor` — text color (e.g., `"text-03"`, `"text-inverted-05"`)
 - `as`: `"p" | "span" | "li" | "h1" | "h2" | "h3"` — HTML tag (default: `"span"`)
 - `nowrap`: `boolean` — prevent text wrapping
-- `preventMarkdown`: `boolean` — disable inline markdown parsing
 
 ## 4. Component Usage
 
