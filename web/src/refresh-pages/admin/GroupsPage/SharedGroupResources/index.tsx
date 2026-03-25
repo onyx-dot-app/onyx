@@ -54,14 +54,14 @@ function SourceIconStack({ sources }: { sources: { source: ValidSources }[] }) {
       width="auto"
       height="auto"
       gap={0}
-      className="shrink-0 px-0.5"
+      className="shrink-0 p-0.5"
     >
       {unique.map((s, i) => {
         const Icon = getSourceMetadata(s.source).icon;
         return (
           <div
             key={s.source}
-            className="flex items-center justify-center size-4 rounded-04 bg-background-tint-00 border border-border-01 overflow-hidden"
+            className="flex items-center justify-center size-4 rounded-04 bg-background-tint-00 border border-border-01 overflow-hidden [&_img]:!size-4 [&_img]:!m-0 [&_svg]:size-4"
             style={{ zIndex: unique.length - i, marginLeft: i > 0 ? -6 : 0 }}
           >
             <Icon />

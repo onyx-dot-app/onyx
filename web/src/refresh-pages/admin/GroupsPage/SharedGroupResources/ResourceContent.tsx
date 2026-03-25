@@ -52,8 +52,8 @@ function ResourceContent({
             />
           </div>
         )}
-        {infoContent}
       </div>
+      {infoContent}
       <IconButton small icon={SvgX} onClick={onRemove} className="shrink-0" />
     </div>
   );
