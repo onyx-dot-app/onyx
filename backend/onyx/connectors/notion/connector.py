@@ -883,7 +883,7 @@ class NotionConnector(LoadConnector, PollConnector):
                     db_page = self._fetch_database_as_page(db_id)
                     db_name = db_page.database_name or f"Database {db_id}"
                     parent_raw_id = self._get_parent_raw_id(db_page.parent)
-                except Exception:
+                except requests.exceptions.HTTPError:
                     logger.warning(
                         f"Could not fetch database '{db_id}', "
                         f"defaulting to workspace root."
