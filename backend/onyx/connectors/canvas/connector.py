@@ -23,10 +23,6 @@ class CanvasPage(BaseModel):
     updated_at: str
     course_id: int
 
-    @property
-    def id(self) -> int:
-        return self.page_id
-
 
 class CanvasAssignment(BaseModel):
     id: int
