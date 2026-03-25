@@ -2,7 +2,7 @@
 
 **Import:** `import { Text, type TextProps, type TextFont, type TextColor } from "@opal/components";`
 
-A styled text component with string-enum props for font preset and color selection, plus opt-in inline markdown rendering.
+A styled text component with string-enum props for font preset and color selection, with inline markdown rendering enabled by default for string children.
 
 ## Props
 
@@ -13,7 +13,7 @@ A styled text component with string-enum props for font preset and color selecti
 | `inverted` | `boolean` | `false` | Use inverted color palette |
 | `as` | `"p" \| "span" \| "li"` | `"span"` | HTML tag to render |
 | `nowrap` | `boolean` | `false` | Prevent text wrapping |
-| `markdown` | `boolean` | `false` | Parse children as inline markdown |
+| `preventMarkdown` | `boolean` | `false` | Disable inline markdown parsing (markdown is on by default for string children) |
 
 ### `TextFont`
 
@@ -72,11 +72,17 @@ import { Text } from "@opal/components";
 
 ## Inline Markdown
 
-When `markdown` is true and `children` is a string, the text is parsed as inline markdown. Supported syntax: `**bold**`, `*italic*`, `` `code` ``, `[link](url)`, `~~strikethrough~~`.
+When `children` is a string, inline markdown is parsed by default. Supported syntax: `**bold**`, `*italic*`, `` `code` ``, `[link](url)`, `~~strikethrough~~`.
 
 ```tsx
-<Text font="main-ui-body" color="text-05" markdown>
+// Markdown is on by default for string children
+<Text font="main-ui-body" color="text-05">
   {"*Hello*, **world**! Visit [Onyx](https://onyx.app) and run `onyx start`."}
+</Text>
+
+// Opt out for user-generated content that shouldn't be parsed
+<Text font="main-ui-body" color="text-03" preventMarkdown>
+  {userProvidedString}
 </Text>
 ```
 

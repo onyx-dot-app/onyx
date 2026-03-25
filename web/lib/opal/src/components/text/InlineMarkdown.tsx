@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@opal/utils";
@@ -38,12 +37,10 @@ export default function InlineMarkdown({
   content,
   className,
 }: InlineMarkdownProps) {
-  const components = useMemo(() => INLINE_COMPONENTS, []);
-
   return (
     <ReactMarkdown
       className={className}
-      components={components}
+      components={INLINE_COMPONENTS}
       allowedElements={ALLOWED_ELEMENTS}
       unwrapDisallowed
       remarkPlugins={[remarkGfm]}
