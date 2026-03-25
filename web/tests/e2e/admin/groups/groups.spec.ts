@@ -48,6 +48,25 @@ async function withApiContext(
 // ---------------------------------------------------------------------------
 
 test.describe("Groups page — layout", () => {
+  let adminGroupId: number;
+  let basicGroupId: number;
+
+  test.beforeAll(async ({ browser }) => {
+    await withApiContext(browser, async (api) => {
+      adminGroupId = await api.createUserGroup("Admin");
+      basicGroupId = await api.createUserGroup("Basic");
+      await api.waitForGroupSync(adminGroupId);
+      await api.waitForGroupSync(basicGroupId);
+    });
+  });
+
+  test.afterAll(async ({ browser }) => {
+    await withApiContext(browser, async (api) => {
+      await softCleanup(() => api.deleteUserGroup(adminGroupId));
+      await softCleanup(() => api.deleteUserGroup(basicGroupId));
+    });
+  });
+
   test("renders page title, search, and new group button", async ({
     groupsPage,
   }) => {

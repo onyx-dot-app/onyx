@@ -468,6 +468,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   title="Delete This Group"
                   description="Members will lose access to any resources shared with this group."
                   center
+                  nonInteractive
                 >
                   <Button
                     variant="danger"
