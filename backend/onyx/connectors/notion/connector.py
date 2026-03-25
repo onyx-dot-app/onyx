@@ -873,27 +873,22 @@ class NotionConnector(LoadConnector, PollConnector):
                     continue
 
                 # Populate the mapping so _get_parent_raw_id can resolve later
-                self._data_source_to_database_map[ds["id"]] = db_id
+                ds_id = ds.get("id")
+                if not ds_id:
+                    continue
+                self._data_source_to_database_map[ds_id] = db_id
 
-                # Use the data source title as the database name
-                title_arr = ds.get("title", [])
-                db_name = None
-                if title_arr:
-                    db_name = " ".join(
-                        t.get("plain_text", "") for t in title_arr
-                    ).strip()
-                if not db_name:
-                    db_name = f"Database {db_id}"
-
-                # Get the database's parent for the hierarchy
+                # Fetch the database to get its actual name and parent
                 try:
                     db_page = self._fetch_database_as_page(db_id)
+                    db_name = db_page.database_name or f"Database {db_id}"
                     parent_raw_id = self._get_parent_raw_id(db_page.parent)
                 except Exception:
                     logger.warning(
-                        f"Could not fetch parent for database '{db_id}', "
+                        f"Could not fetch database '{db_id}', "
                         f"defaulting to workspace root."
                     )
+                    db_name = f"Database {db_id}"
                     parent_raw_id = self.workspace_id
 
                 db_url = ds.get("url") or f"https://notion.so/{db_id.replace('-', '')}"
