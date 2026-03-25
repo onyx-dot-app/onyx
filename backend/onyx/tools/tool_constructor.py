@@ -125,7 +125,12 @@ def construct_tools(
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs.
 
-    Will simply skip tools that are not allowed/available."""
+    Will simply skip tools that are not allowed/available.
+
+    Callers must supply a persona with ``tools``, ``document_sets``,
+    ``attached_documents``, and ``hierarchy_nodes`` already eager-loaded
+    (e.g. via ``eager_load_persona=True`` or ``eager_load_for_tools=True``)
+    to avoid lazy SQL queries after the session may have been flushed."""
     tool_dict: dict[int, list[Tool]] = {}
 
     # Log which tools are attached to the persona for debugging
