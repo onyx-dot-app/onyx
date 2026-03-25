@@ -272,7 +272,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     client_kwargs["region_name"] = credentials.get("region", "us-east-1")
                     client_kwargs["config"] = Config(
                         signature_version="s3v4",
-                        addressing_style="path"
+                        s3={"addressing_style": "path"},
                     )
                 if self.s3_skip_ssl_verification:
                     client_kwargs["verify"] = False
