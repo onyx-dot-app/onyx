@@ -9,6 +9,7 @@ a configurable TTL (default 30s). This means metrics may be up to TTL seconds
 stale, which is fine for monitoring dashboards.
 """
 
+import threading
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -70,24 +71,29 @@ class _CachedCollector(Collector):
 
     def __init__(self, cache_ttl: float = _DEFAULT_CACHE_TTL) -> None:
         self._cache_ttl = cache_ttl
-        self._cached_result: list[GaugeMetricFamily] = []
+        self._cached_result: list[GaugeMetricFamily] | None = None
         self._last_collect_time: float = 0.0
+        self._lock = threading.Lock()
 
     def collect(self) -> list[GaugeMetricFamily]:
-        now = time.monotonic()
-        if now - self._last_collect_time < self._cache_ttl and self._cached_result:
-            return self._cached_result
+        with self._lock:
+            now = time.monotonic()
+            if (
+                now - self._last_collect_time < self._cache_ttl
+                and self._cached_result is not None
+            ):
+                return self._cached_result
 
-        try:
-            result = self._collect_fresh()
-            self._cached_result = result
-            self._last_collect_time = now
-            return result
-        except Exception:
-            logger.exception(f"Error in {type(self).__name__}.collect()")
-            # Return stale cache on error rather than nothing — avoids
-            # metrics disappearing during transient failures.
-            return self._cached_result
+            try:
+                result = self._collect_fresh()
+                self._cached_result = result
+                self._last_collect_time = now
+                return result
+            except Exception:
+                logger.exception(f"Error in {type(self).__name__}.collect()")
+                # Return stale cache on error rather than nothing — avoids
+                # metrics disappearing during transient failures.
+                return self._cached_result if self._cached_result is not None else []
 
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
         raise NotImplementedError
@@ -146,9 +152,13 @@ class IndexAttemptCollector(_CachedCollector):
     def __init__(self, cache_ttl: float = _DEFAULT_CACHE_TTL) -> None:
         super().__init__(cache_ttl)
         self._configured: bool = False
+        self._terminal_statuses: list = []
 
     def configure(self) -> None:
         """Call once DB engine is initialized."""
+        from onyx.db.enums import IndexingStatus
+
+        self._terminal_statuses = [s for s in IndexingStatus if s.is_terminal()]
         self._configured = True
 
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
@@ -157,13 +167,10 @@ class IndexAttemptCollector(_CachedCollector):
 
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
         from onyx.db.engine.tenant_utils import get_all_tenant_ids
-        from onyx.db.enums import IndexingStatus
         from onyx.db.models import Connector
         from onyx.db.models import ConnectorCredentialPair
         from onyx.db.models import IndexAttempt
         from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
-        terminal_statuses = [s for s in IndexingStatus if s.is_terminal()]
 
         attempts_gauge = GaugeMetricFamily(
             "onyx_index_attempts_active",
@@ -174,6 +181,8 @@ class IndexAttemptCollector(_CachedCollector):
         tenant_ids = get_all_tenant_ids()
 
         for tid in tenant_ids:
+            # Defensive guard — get_all_tenant_ids() should never yield None,
+            # but we guard here for API stability in case the contract changes.
             if tid is None:
                 continue
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tid)
@@ -194,7 +203,7 @@ class IndexAttemptCollector(_CachedCollector):
                             Connector,
                             ConnectorCredentialPair.connector_id == Connector.id,
                         )
-                        .filter(IndexAttempt.status.notin_(terminal_statuses))
+                        .filter(IndexAttempt.status.notin_(self._terminal_statuses))
                         .group_by(IndexAttempt.status, Connector.source)
                         .all()
                     )
@@ -261,6 +270,8 @@ class ConnectorHealthCollector(_CachedCollector):
         tenant_ids = get_all_tenant_ids()
 
         for tid in tenant_ids:
+            # Defensive guard — get_all_tenant_ids() should never yield None,
+            # but we guard here for API stability in case the contract changes.
             if tid is None:
                 continue
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tid)

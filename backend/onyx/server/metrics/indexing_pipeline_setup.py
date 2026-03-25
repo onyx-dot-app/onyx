@@ -16,7 +16,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Module-level singletons so collectors survive the lifetime of the worker
+# Module-level singletons — these are lightweight objects (no connections or DB
+# state) until configure() / set_redis_factory() is called. Keeping them at
+# module level ensures they survive the lifetime of the worker process and are
+# only registered with the Prometheus registry once.
 _queue_collector = QueueDepthCollector()
 _attempt_collector = IndexAttemptCollector()
 _connector_collector = ConnectorHealthCollector()
@@ -48,12 +51,17 @@ def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
                 _close_client(client)
                 _cached_client[0] = None
 
-        # Use connection_or_acquire as context manager so the underlying
-        # Celery connection is properly returned to the pool / closed on error.
-        with celery_app.connection_or_acquire() as conn:
-            client = conn.channel().client  # type: ignore
-        _cached_client[0] = client
-        return client
+        # Get a fresh Redis client from the broker connection.
+        # We hold this client long-term (cached above) rather than using a
+        # context manager, because we need it to persist across scrapes.
+        # The caching logic above ensures we only ever hold one connection,
+        # and we close it explicitly on reconnect.
+        conn = celery_app.broker_connection()
+        # kombu's Channel exposes .client at runtime (the underlying Redis
+        # client) but the type stubs don't declare it.
+        new_client: Redis = conn.channel().client  # type: ignore[attr-defined]
+        _cached_client[0] = new_client
+        return new_client
 
     return _get_broker_redis
 
@@ -73,4 +81,4 @@ def setup_indexing_pipeline_metrics(celery_app: Celery) -> None:
         try:
             REGISTRY.register(collector)
         except ValueError:
-            pass  # already registered (e.g. during tests or hot reload)
+            logger.debug("Collector already registered: %s", type(collector).__name__)
