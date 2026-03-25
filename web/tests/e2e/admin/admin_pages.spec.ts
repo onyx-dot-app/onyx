@@ -39,7 +39,7 @@ for (const theme of THEMES) {
     ).toBeGreaterThan(0);
 
     for (const href of adminHrefs) {
-      const slug = href.replace("/admin/", "").replace(/\//g, "-");
+      const slug = href.replace(/^\/admin\//, "").replace(/\//g, "--");
 
       await test.step(
         slug,
