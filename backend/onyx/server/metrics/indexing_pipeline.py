@@ -164,7 +164,14 @@ class QueueDepthCollector(_CachedCollector):
         redis_client: Redis, queue_name: str, now: float
     ) -> float | None:
         """Peek at the oldest (tail) message in a Redis list queue
-        and extract its timestamp to compute age."""
+        and extract its timestamp to compute age.
+
+        Note: If the Celery message contains neither ``properties.timestamp``
+        nor ``headers.timestamp``, no age metric is emitted for this queue.
+        This can happen with custom task producers or non-standard Celery
+        protocol versions. The metric will simply be absent rather than
+        inaccurate, which is the safest behavior for alerting.
+        """
         try:
             raw: bytes | str | None = redis_client.lindex(queue_name, -1)  # type: ignore[assignment]
             if raw is None:
@@ -175,8 +182,12 @@ class QueueDepthCollector(_CachedCollector):
             ts = props.get("timestamp")
             if ts is not None:
                 return now - float(ts)
-            # Fallback: check headers for eta or expires
+            # Fallback: some Celery configurations place the timestamp in
+            # headers instead of properties.
             headers = msg.get("headers", {})
+            ts = headers.get("timestamp")
+            if ts is not None:
+                return now - float(ts)
             if "eta" in headers and headers["eta"] is not None:
                 return None  # ETA tasks are intentionally delayed
         except Exception:
@@ -294,12 +305,6 @@ class ConnectorHealthCollector(_CachedCollector):
             "Total number of connectors in repeated error state",
             labels=["tenant_id"],
         )
-        docs_gauge = GaugeMetricFamily(
-            "onyx_connector_total_docs_indexed",
-            "Total documents indexed by this connector",
-            labels=["tenant_id", "source", "cc_pair_id", "connector_name"],
-        )
-
         per_connector_labels = [
             "tenant_id",
             "source",
@@ -307,12 +312,12 @@ class ConnectorHealthCollector(_CachedCollector):
             "connector_name",
         ]
         docs_success_gauge = GaugeMetricFamily(
-            "onyx_connector_docs_indexed_total",
+            "onyx_connector_docs_indexed",
             "Total documents successfully indexed (from latest attempt) per connector",
             labels=per_connector_labels,
         )
         docs_error_gauge = GaugeMetricFamily(
-            "onyx_connector_error_count_total",
+            "onyx_connector_error_count",
             "Total number of failed index attempts per connector",
             labels=per_connector_labels,
         )
@@ -359,11 +364,6 @@ class ConnectorHealthCollector(_CachedCollector):
                         if in_error:
                             error_count += 1
 
-                        docs_gauge.add_metric(
-                            label_vals,
-                            docs_by_cc.get(cc_id, 0),
-                        )
-
                         docs_success_gauge.add_metric(
                             label_vals,
                             docs_by_cc.get(cc_id, 0),
@@ -389,7 +389,6 @@ class ConnectorHealthCollector(_CachedCollector):
             error_state_gauge,
             by_status_gauge,
             error_total_gauge,
-            docs_gauge,
             docs_success_gauge,
             docs_error_gauge,
         ]
@@ -448,11 +447,17 @@ class WorkerHealthCollector(_CachedCollector):
 
     Uses a longer cache TTL (60s) since inspect.ping() is a broadcast
     command that takes a couple seconds to complete.
+
+    Maintains a set of known worker short-names so that when a worker
+    stops responding, we emit ``up=0`` instead of silently dropping the
+    metric (which would make ``absent()``-style alerts impossible).
     """
 
     def __init__(self, cache_ttl: float = 60.0) -> None:
         super().__init__(cache_ttl)
         self._celery_app: Any | None = None
+        # Accumulated set of worker short-names ever seen via ping.
+        self._known_workers: set[str] = set()
 
     def set_celery_app(self, app: Any) -> None:
         """Set the Celery app instance for inspect commands."""
@@ -475,14 +480,23 @@ class WorkerHealthCollector(_CachedCollector):
         try:
             inspector = self._celery_app.control.inspect(timeout=3.0)
             ping_result = inspector.ping()
+
+            responding: set[str] = set()
             if ping_result:
                 active_workers.add_metric([], len(ping_result))
                 for worker_name in ping_result:
                     # Strip hostname suffix for cleaner labels
                     short_name = worker_name.split("@")[0]
-                    worker_up.add_metric([short_name], 1)
+                    responding.add(short_name)
             else:
                 active_workers.add_metric([], 0)
+
+            # Remember every worker we've ever seen so we can emit 0
+            # when they stop responding.
+            self._known_workers.update(responding)
+
+            for short_name in sorted(self._known_workers):
+                worker_up.add_metric([short_name], 1 if short_name in responding else 0)
         except Exception:
             logger.debug("Failed to collect worker health metrics", exc_info=True)
 

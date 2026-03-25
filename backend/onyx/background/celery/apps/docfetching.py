@@ -63,8 +63,11 @@ def on_task_postrun(
 
 
 @signals.task_retry.connect
-def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:
-    on_celery_task_retry(kwargs.get("task_id"), sender)
+def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
+    # task_retry signal doesn't pass task_id in kwargs; get it from
+    # the sender (the task instance) via sender.request.id.
+    task_id = getattr(getattr(sender, "request", None), "id", None)
+    on_celery_task_retry(task_id, sender)
 
 
 @signals.task_revoked.connect

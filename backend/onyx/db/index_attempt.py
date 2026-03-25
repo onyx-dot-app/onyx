@@ -2,6 +2,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import NamedTuple
+from typing import TYPE_CHECKING
 from typing import TypeVarTuple
 
 from sqlalchemy import and_
@@ -27,6 +29,9 @@ from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+
+if TYPE_CHECKING:
+    from onyx.configs.constants import DocumentSource
 
 # from sqlalchemy.sql.selectable import Select
 
@@ -977,17 +982,27 @@ def get_index_attempt_errors_for_cc_pair(
 # ── Metrics query helpers ──────────────────────────────────────────────
 
 
+class ActiveIndexAttemptMetric(NamedTuple):
+    """Row returned by get_active_index_attempts_for_metrics."""
+
+    status: IndexingStatus
+    source: "DocumentSource"
+    cc_pair_id: int
+    cc_pair_name: str | None
+    attempt_count: int
+
+
 def get_active_index_attempts_for_metrics(
     db_session: Session,
-) -> list[tuple]:
+) -> list[ActiveIndexAttemptMetric]:
     """Return non-terminal index attempts grouped by status, source, and connector.
 
-    Each row is (status, source, cc_pair_id, cc_pair_name, count).
+    Each row is (status, source, cc_pair_id, cc_pair_name, attempt_count).
     """
     from onyx.db.models import Connector
 
     terminal_statuses = [s for s in IndexingStatus if s.is_terminal()]
-    return (
+    rows = (
         db_session.query(
             IndexAttempt.status,
             Connector.source,
@@ -1012,18 +1027,29 @@ def get_active_index_attempts_for_metrics(
         )
         .all()
     )
+    return [ActiveIndexAttemptMetric(*row) for row in rows]
 
 
 def get_failed_attempt_counts_by_cc_pair(
     db_session: Session,
+    since: datetime | None = None,
 ) -> dict[int, int]:
-    """Return {cc_pair_id: failed_attempt_count} for all connectors."""
+    """Return {cc_pair_id: failed_attempt_count} for all connectors.
+
+    When ``since`` is provided, only attempts created after that timestamp
+    are counted. Defaults to the last 90 days to avoid unbounded historical
+    aggregation.
+    """
+    if since is None:
+        since = datetime.now(timezone.utc) - timedelta(days=90)
+
     rows = (
         db_session.query(
             IndexAttempt.connector_credential_pair_id,
             func.count(),
         )
         .filter(IndexAttempt.status == IndexingStatus.FAILED)
+        .filter(IndexAttempt.time_created >= since)
         .group_by(IndexAttempt.connector_credential_pair_id)
         .all()
     )
@@ -1032,14 +1058,25 @@ def get_failed_attempt_counts_by_cc_pair(
 
 def get_docs_indexed_by_cc_pair(
     db_session: Session,
+    since: datetime | None = None,
 ) -> dict[int, int]:
-    """Return {cc_pair_id: total_new_docs_indexed} across all attempts."""
-    rows = (
+    """Return {cc_pair_id: total_new_docs_indexed} across successful attempts.
+
+    Only counts attempts with status SUCCESS to avoid inflating counts with
+    partial results from failed attempts. When ``since`` is provided, only
+    attempts created after that timestamp are included.
+    """
+    if since is None:
+        since = datetime.now(timezone.utc) - timedelta(days=90)
+
+    query = (
         db_session.query(
             IndexAttempt.connector_credential_pair_id,
             func.sum(func.coalesce(IndexAttempt.new_docs_indexed, 0)),
         )
+        .filter(IndexAttempt.status == IndexingStatus.SUCCESS)
+        .filter(IndexAttempt.time_created >= since)
         .group_by(IndexAttempt.connector_credential_pair_id)
-        .all()
     )
+    rows = query.all()
     return {cc_id: int(total or 0) for cc_id, total in rows}

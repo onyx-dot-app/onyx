@@ -30,6 +30,7 @@ from prometheus_client import Histogram
 
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -44,8 +45,10 @@ class ConnectorInfo:
 
 _UNKNOWN_CONNECTOR = ConnectorInfo(source="unknown", name="unknown")
 
-# cc_pair_id → ConnectorInfo (populated on first encounter)
-_connector_cache: dict[int, ConnectorInfo] = {}
+# (tenant_id, cc_pair_id) → ConnectorInfo (populated on first encounter).
+# Keyed by tenant to avoid cross-tenant cache poisoning in multi-tenant
+# deployments where different tenants can share the same cc_pair_id value.
+_connector_cache: dict[tuple[str, int], ConnectorInfo] = {}
 
 # Only enrich these task types with per-connector labels
 _INDEXING_TASK_NAMES: frozenset[str] = frozenset(
@@ -108,7 +111,9 @@ def _resolve_connector(cc_pair_id: int) -> ConnectorInfo:
     On any failure, returns _UNKNOWN_CONNECTOR without caching, so that
     subsequent calls can retry the lookup once the DB is available.
     """
-    cached = _connector_cache.get(cc_pair_id)
+    tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get("") or ""
+    cache_key = (tenant_id, cc_pair_id)
+    cached = _connector_cache.get(cache_key)
     if cached is not None:
         return cached
 
@@ -133,7 +138,7 @@ def _resolve_connector(cc_pair_id: int) -> ConnectorInfo:
                 source=cc_pair.connector.source.value,
                 name=cc_pair.name,
             )
-            _connector_cache[cc_pair_id] = info
+            _connector_cache[cache_key] = info
             return info
     except Exception:
         logger.debug(

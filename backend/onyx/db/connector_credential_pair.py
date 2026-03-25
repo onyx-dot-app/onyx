@@ -762,9 +762,9 @@ def get_connector_health_for_metrics(
         int,
         ConnectorCredentialPairStatus,
         bool,
-        "datetime | None",
-        str | None,
-        "DocumentSource",
+        datetime | None,
+        str,
+        DocumentSource,
     ]
 ]:
     """Return connector health data for Prometheus metrics.

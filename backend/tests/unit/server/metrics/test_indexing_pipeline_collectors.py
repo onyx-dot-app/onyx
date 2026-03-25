@@ -277,16 +277,15 @@ class TestConnectorHealthCollector:
 
         families = collector.collect()
 
-        assert len(families) == 7
+        assert len(families) == 6
         names = {f.name for f in families}
         assert names == {
             "onyx_connector_last_success_age_seconds",
             "onyx_connector_in_error_state",
             "onyx_connectors_by_status",
             "onyx_connectors_in_error_total",
-            "onyx_connector_total_docs_indexed",
-            "onyx_connector_docs_indexed_total",
-            "onyx_connector_error_count_total",
+            "onyx_connector_docs_indexed",
+            "onyx_connector_error_count",
         }
 
         staleness = next(
@@ -299,13 +298,6 @@ class TestConnectorHealthCollector:
             f for f in families if f.name == "onyx_connector_in_error_state"
         )
         assert error_state.samples[0].value == 1.0
-
-        docs = next(
-            f for f in families if f.name == "onyx_connector_total_docs_indexed"
-        )
-        # Docs come from index_attempt query (mocked as empty), so 0
-        assert docs.samples[0].value == 0
-        assert docs.samples[0].labels["connector_name"] == "My GDrive Connector"
 
         by_status = next(f for f in families if f.name == "onyx_connectors_by_status")
         assert by_status.samples[0].labels == {
