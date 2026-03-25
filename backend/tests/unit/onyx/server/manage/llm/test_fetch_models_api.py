@@ -927,11 +927,6 @@ class TestGetBifrostAvailableModels:
                     "name": "DeepSeek R1",
                     "context_length": 64000,
                 },
-                {
-                    "id": "text-embedding-3-small",
-                    "name": "Text Embedding 3 Small",
-                    "context_length": 8192,
-                },
             ]
         }
 

@@ -40,9 +40,20 @@ class ModelMetadata(TypedDict):
 # Non-LLM model patterns to filter out (image gen, embeddings, etc.)
 NON_LLM_PATTERNS = frozenset({"embed", "stable-", "titan-image", "titan-embed"})
 
-# Known vision-capable model families for providers where the source API
-# does not expose this metadata directly.
-VISION_MODEL_FAMILIES = frozenset(
+# Known Bedrock vision-capable models (for fallback when base model not in region)
+BEDROCK_VISION_MODELS = frozenset(
+    {
+        "anthropic.claude-3",
+        "anthropic.claude-4",
+        "amazon.nova-pro",
+        "amazon.nova-lite",
+        "amazon.nova-premier",
+    }
+)
+
+# Known Bifrost/OpenAI-compatible vision-capable model families where the
+# source API does not expose this metadata directly.
+BIFROST_VISION_MODEL_FAMILIES = frozenset(
     {
         "anthropic/claude-3",
         "anthropic/claude-4",
@@ -88,9 +99,14 @@ def infer_vision_support(model_id: str) -> bool:
     Used for providers like Bedrock and Bifrost where vision support may
     need to be inferred from vendor/model naming conventions.
     """
-    normalized_model_id = model_id.lower().replace(".", "/")
+    model_id_lower = model_id.lower()
+    if any(vision_model in model_id_lower for vision_model in BEDROCK_VISION_MODELS):
+        return True
+
+    normalized_model_id = model_id_lower.replace(".", "/")
     return any(
-        vision_model in normalized_model_id for vision_model in VISION_MODEL_FAMILIES
+        vision_model in normalized_model_id
+        for vision_model in BIFROST_VISION_MODEL_FAMILIES
     )
 
 
