@@ -13,6 +13,7 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 | `color` | `TextColor` | `"text-04"` | Text color |
 | `as` | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"` | `"span"` | HTML tag to render |
 | `nowrap` | `boolean` | `false` | Prevent text wrapping |
+| `children` | `string \| RichStr` | — | Plain string or `markdown()` for inline markdown |
 
 ### `TextFont`
 
@@ -71,7 +72,8 @@ import { Text } from "@opal/components";
 
 Inline markdown is opt-in via the `markdown()` function, which returns a `RichStr`. When `Text`
 receives a `RichStr` as children, it parses the inner string as inline markdown. Plain strings
-and JSX children are rendered as-is — no parsing, no surprises.
+are rendered as-is — no parsing, no surprises. `Text` does not accept arbitrary JSX as children;
+use `string | RichStr` only.
 
 ```tsx
 import { Text } from "@opal/components";
