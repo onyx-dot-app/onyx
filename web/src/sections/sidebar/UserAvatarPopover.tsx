@@ -24,7 +24,6 @@ import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
-import { cn } from "@opal/utils";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
