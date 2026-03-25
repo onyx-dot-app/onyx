@@ -38,7 +38,8 @@ def write_chunks_to_vector_db_with_backoff(
     goes document by document to isolate the failure(s).
 
     IMPORTANT: must pass in whole documents at a time not individual chunks, since the
-    vector DB interface assumes that all chunks for a single document are present.
+    vector DB interface assumes that all chunks for a single document are present. The
+    chunks must also be in contiguous batches
     """
     # first try to write the chunks to the vector db
     try:
