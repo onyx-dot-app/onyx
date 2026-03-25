@@ -74,12 +74,3 @@ export function resolveStr(value: string | RichStr): ReactNode {
 export function toPlainString(value: string | RichStr): string {
   return isRichStr(value) ? value.raw : value;
 }
-
-/** Resolves a `ReactNode` that may contain a `RichStr`. */
-export function resolveChildren(children: ReactNode): ReactNode {
-  return isRichStr(children) ? (
-    <InlineMarkdown content={children.raw} />
-  ) : (
-    children
-  );
-}

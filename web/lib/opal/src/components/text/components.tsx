@@ -1,8 +1,8 @@
 import type { HTMLAttributes } from "react";
 
-import type { WithoutStyles } from "@opal/types";
+import type { RichStr, WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
-import { resolveChildren } from "@opal/components/text/InlineMarkdown";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,7 +45,9 @@ type TextColor =
   | "text-dark-05";
 
 interface TextProps
-  extends WithoutStyles<Omit<HTMLAttributes<HTMLElement>, "color">> {
+  extends WithoutStyles<
+    Omit<HTMLAttributes<HTMLElement>, "color" | "children">
+  > {
   /** Font preset. Default: `"main-ui-body"`. */
   font?: TextFont;
 
@@ -57,6 +59,9 @@ interface TextProps
 
   /** Prevent text wrapping. */
   nowrap?: boolean;
+
+  /** Plain string or `markdown()` for inline markdown. */
+  children?: string | RichStr;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +126,7 @@ function Text({
 
   return (
     <Tag {...rest} className={resolvedClassName}>
-      {resolveChildren(children)}
+      {children && resolveStr(children)}
     </Tag>
   );
 }
