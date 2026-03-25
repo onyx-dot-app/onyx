@@ -861,7 +861,7 @@ regex==2025.11.3
     #   dateparser
     #   nltk
     #   tiktoken
-requests==2.32.5
+requests==2.33.0
     # via
     #   atlassian-python-api
     #   braintrust
