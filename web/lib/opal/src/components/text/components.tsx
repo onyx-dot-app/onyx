@@ -33,6 +33,11 @@ type TextColor =
   | "text-03"
   | "text-04"
   | "text-05"
+  | "text-inverted-01"
+  | "text-inverted-02"
+  | "text-inverted-03"
+  | "text-inverted-04"
+  | "text-inverted-05"
   | "text-light-03"
   | "text-light-05"
   | "text-dark-03"
@@ -44,9 +49,6 @@ interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "color"> {
 
   /** Color variant. Default: `"text-04"`. */
   color?: TextColor;
-
-  /** Use inverted color palette. Default: `false`. */
-  inverted?: boolean;
 
   /** HTML tag to render. Default: `"span"`. */
   as?: "p" | "span" | "li";
@@ -89,18 +91,11 @@ const COLOR_CONFIG: Record<TextColor, string> = {
   "text-03": "text-text-03",
   "text-04": "text-text-04",
   "text-05": "text-text-05",
-  "text-light-03": "text-text-light-03",
-  "text-light-05": "text-text-light-05",
-  "text-dark-03": "text-text-dark-03",
-  "text-dark-05": "text-text-dark-05",
-};
-
-const INVERTED_COLOR_CONFIG: Record<TextColor, string> = {
-  "text-01": "text-text-inverted-01",
-  "text-02": "text-text-inverted-02",
-  "text-03": "text-text-inverted-03",
-  "text-04": "text-text-inverted-04",
-  "text-05": "text-text-inverted-05",
+  "text-inverted-01": "text-text-inverted-01",
+  "text-inverted-02": "text-text-inverted-02",
+  "text-inverted-03": "text-text-inverted-03",
+  "text-inverted-04": "text-text-inverted-04",
+  "text-inverted-05": "text-text-inverted-05",
   "text-light-03": "text-text-light-03",
   "text-light-05": "text-text-light-05",
   "text-dark-03": "text-text-dark-03",
@@ -114,7 +109,6 @@ const INVERTED_COLOR_CONFIG: Record<TextColor, string> = {
 function Text({
   font = "main-ui-body",
   color = "text-04",
-  inverted = false,
   as: Tag = "span",
   nowrap,
   preventMarkdown,
@@ -124,7 +118,7 @@ function Text({
 }: TextProps) {
   const resolvedClassName = cn(
     FONT_CONFIG[font],
-    inverted ? INVERTED_COLOR_CONFIG[color] : COLOR_CONFIG[color],
+    COLOR_CONFIG[color],
     nowrap && "whitespace-nowrap",
     className
   );

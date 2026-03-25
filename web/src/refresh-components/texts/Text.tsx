@@ -85,6 +85,23 @@ const COLOR_MAP: [keyof TextProps, TextColor][] = [
   ["textDark05", "text-dark-05"],
 ];
 
+const INVERTED_COLOR_MAP: Record<TextColor, TextColor> = {
+  "text-01": "text-inverted-01",
+  "text-02": "text-inverted-02",
+  "text-03": "text-inverted-03",
+  "text-04": "text-inverted-04",
+  "text-05": "text-inverted-05",
+  "text-light-03": "text-light-03",
+  "text-light-05": "text-light-05",
+  "text-dark-03": "text-dark-03",
+  "text-dark-05": "text-dark-05",
+  "text-inverted-01": "text-inverted-01",
+  "text-inverted-02": "text-inverted-02",
+  "text-inverted-03": "text-inverted-03",
+  "text-inverted-04": "text-inverted-04",
+  "text-inverted-05": "text-inverted-05",
+};
+
 export default function Text({
   nowrap,
   headingH1,
@@ -152,15 +169,15 @@ export default function Text({
 
   const font: TextFont =
     FONT_MAP.find(([key]) => props[key])?.[1] ?? "main-ui-body";
-  const color: TextColor =
+  const baseColor: TextColor =
     COLOR_MAP.find(([key]) => props[key])?.[1] ?? "text-05";
+  const color: TextColor = inverted ? INVERTED_COLOR_MAP[baseColor] : baseColor;
 
   return (
     <OpalText
       {...rest}
       font={font}
       color={color}
-      inverted={inverted}
       as={as}
       nowrap={nowrap}
       preventMarkdown

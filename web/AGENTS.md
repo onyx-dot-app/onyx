@@ -322,8 +322,7 @@ import Text from "@/refresh-components/texts/Text";
 
 Key props:
 - `font`: `TextFont` — font preset (e.g., `"main-ui-body"`, `"heading-h2"`, `"secondary-action"`)
-- `color`: `TextColor` — text color (e.g., `"text-03"`, `"text-05"`)
-- `inverted`: `boolean` — use inverted color palette for dark backgrounds
+- `color`: `TextColor` — text color (e.g., `"text-03"`, `"text-inverted-05"`)
 - `as`: `"p" | "span" | "li"` — HTML tag (default: `"span"`)
 - `preventMarkdown`: `boolean` — disable inline markdown parsing
 

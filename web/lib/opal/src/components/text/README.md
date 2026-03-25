@@ -10,7 +10,6 @@ A styled text component with string-enum props for font preset and color selecti
 |---|---|---|---|
 | `font` | `TextFont` | `"main-ui-body"` | Font preset (size, weight, line-height) |
 | `color` | `TextColor` | `"text-04"` | Text color |
-| `inverted` | `boolean` | `false` | Use inverted color palette |
 | `as` | `"p" \| "span" \| "li"` | `"span"` | HTML tag to render |
 | `nowrap` | `boolean` | `false` | Prevent text wrapping |
 | `preventMarkdown` | `boolean` | `false` | Disable inline markdown parsing (markdown is on by default for string children) |
@@ -40,9 +39,7 @@ A styled text component with string-enum props for font preset and color selecti
 
 ### `TextColor`
 
-`"text-01" | "text-02" | "text-03" | "text-04" | "text-05" | "text-light-03" | "text-light-05" | "text-dark-03" | "text-dark-05"`
-
-When `inverted` is true, colors map to their `text-inverted-*` counterparts (except `text-light-*` and `text-dark-*` which remain unchanged).
+`"text-01" | "text-02" | "text-03" | "text-04" | "text-05" | "text-inverted-01" | "text-inverted-02" | "text-inverted-03" | "text-inverted-04" | "text-inverted-05" | "text-light-03" | "text-light-05" | "text-dark-03" | "text-dark-05"`
 
 ## Usage Examples
 
@@ -60,7 +57,7 @@ import { Text } from "@opal/components";
 </Text>
 
 // Inverted (for dark backgrounds)
-<Text font="main-ui-body" color="text-05" inverted>
+<Text font="main-ui-body" color="text-inverted-05">
   Light text on dark
 </Text>
 
