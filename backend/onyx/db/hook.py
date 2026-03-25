@@ -75,6 +75,7 @@ def create_hook__no_commit(
     fail_strategy: HookFailStrategy,
     timeout_seconds: float,
     is_active: bool = False,
+    is_reachable: bool | None = None,
     creator_id: UUID | None = None,
 ) -> Hook:
     """Create a new hook for the given hook point.
@@ -100,6 +101,7 @@ def create_hook__no_commit(
         fail_strategy=fail_strategy,
         timeout_seconds=timeout_seconds,
         is_active=is_active,
+        is_reachable=is_reachable,
         creator_id=creator_id,
     )
     # Use a savepoint so that a failed insert only rolls back this operation,

@@ -62,6 +62,9 @@ def _hook_to_response(hook: Hook, creator_email: str | None = None) -> HookRespo
         name=hook.name,
         hook_point=hook.hook_point,
         endpoint_url=hook.endpoint_url,
+        api_key_masked=(
+            hook.api_key.get_value(apply_mask=True) if hook.api_key else None
+        ),
         fail_strategy=hook.fail_strategy,
         timeout_seconds=hook.timeout_seconds,
         is_active=hook.is_active,
@@ -220,8 +223,8 @@ def create_hook(
     db_session: Session = Depends(get_session),
 ) -> HookResponse:
     """Create a new hook. The endpoint is validated before persisting — creation fails if
-    the endpoint cannot be reached or the api_key is invalid. Hooks are created inactive;
-    use POST /{hook_id}/activate once ready to receive traffic."""
+    the endpoint cannot be reached or the api_key is invalid. Hooks are created active.
+    """
     spec = get_hook_point_spec(req.hook_point)
     api_key = req.api_key.get_secret_value() if req.api_key else None
     validation = _validate_endpoint(
@@ -240,9 +243,10 @@ def create_hook(
         api_key=api_key,
         fail_strategy=req.fail_strategy or spec.default_fail_strategy,
         timeout_seconds=req.timeout_seconds or spec.default_timeout_seconds,
+        is_active=True,
+        is_reachable=True,
         creator_id=user.id,
     )
-    hook.is_reachable = True
     db_session.commit()
     return _hook_to_response(hook, creator_email=user.email)
 
