@@ -85,6 +85,8 @@ def format_sla_as_text(sla_data: dict[str, Any]) -> str:
             status = "BREACHED"
         elif completed:
             status = "Completed"
+        elif not ongoing:
+            status = "Not started"
         else:
             remaining = time_remaining.get("friendly", "unknown")
             status = f"{remaining} remaining"

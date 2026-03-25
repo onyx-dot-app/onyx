@@ -55,7 +55,7 @@ def _extract_text_from_field(field: Any) -> str:
             return field.get("text", "")
         return " ".join(
             _extract_text_from_field(child)
-            for child in field.get("content", [])
+            for child in (field.get("content") or [])
         )
     if isinstance(field, list):
         return " ".join(_extract_text_from_field(item) for item in field)
@@ -283,7 +283,7 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
         if updated_str:
             try:
                 doc_updated_at = datetime.fromisoformat(
-                    updated_str.replace("Z", "+00:00")
+                    updated_str.replace("Z", "+00:00").replace("+0000", "+00:00")
                 )
             except ValueError:
                 pass
