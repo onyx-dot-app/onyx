@@ -478,7 +478,7 @@ def _convert_driveitem_to_document_with_permissions(
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
     access_token: str | None = None,
-    treat_org_link_as_public: bool = True,
+    treat_sharing_link_as_public: bool = False,
 ) -> Document | ConnectorFailure | None:
 
     if not driveitem.name or not driveitem.id:
@@ -611,7 +611,7 @@ def _convert_driveitem_to_document_with_permissions(
             drive_item=sdk_item,
             drive_name=drive_name,
             add_prefix=True,
-            treat_org_link_as_public=treat_org_link_as_public,
+            treat_sharing_link_as_public=treat_sharing_link_as_public,
         )
     else:
         external_access = ExternalAccess.empty()
@@ -646,7 +646,7 @@ def _convert_sitepage_to_document(
     graph_client: GraphClient,
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
-    treat_org_link_as_public: bool = True,
+    treat_sharing_link_as_public: bool = False,
 ) -> Document:
     """Convert a SharePoint site page to a Document object."""
     # Extract text content from the site page
@@ -776,7 +776,7 @@ def _convert_sitepage_to_document(
             graph_client=graph_client,
             site_page=site_page,
             add_prefix=True,
-            treat_org_link_as_public=treat_org_link_as_public,
+            treat_sharing_link_as_public=treat_sharing_link_as_public,
         )
     else:
         external_access = ExternalAccess.empty()
@@ -807,7 +807,7 @@ def _convert_driveitem_to_slim_document(
     ctx: ClientContext,
     graph_client: GraphClient,
     parent_hierarchy_raw_node_id: str | None = None,
-    treat_org_link_as_public: bool = True,
+    treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
     if driveitem.id is None:
         raise ValueError("DriveItem ID is required")
@@ -818,7 +818,7 @@ def _convert_driveitem_to_slim_document(
         graph_client=graph_client,
         drive_item=sdk_item,
         drive_name=drive_name,
-        treat_org_link_as_public=treat_org_link_as_public,
+        treat_sharing_link_as_public=treat_sharing_link_as_public,
     )
 
     return SlimDocument(
@@ -833,7 +833,7 @@ def _convert_sitepage_to_slim_document(
     ctx: ClientContext | None,
     graph_client: GraphClient,
     parent_hierarchy_raw_node_id: str | None = None,
-    treat_org_link_as_public: bool = True,
+    treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
     """Convert a SharePoint site page to a SlimDocument object."""
     if site_page.get("id") is None:
@@ -843,7 +843,7 @@ def _convert_sitepage_to_slim_document(
         ctx=ctx,
         graph_client=graph_client,
         site_page=site_page,
-        treat_org_link_as_public=treat_org_link_as_public,
+        treat_sharing_link_as_public=treat_sharing_link_as_public,
     )
     id = site_page.get("id")
     if id is None:
@@ -865,14 +865,14 @@ class SharepointConnector(
         sites: list[str] = [],
         include_site_pages: bool = True,
         include_site_documents: bool = True,
-        treat_org_link_as_public: bool = True,
+        treat_sharing_link_as_public: bool = False,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         sharepoint_domain_suffix: str = DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
     ) -> None:
         self.batch_size = batch_size
         self.sites = list(sites)
-        self.treat_org_link_as_public = treat_org_link_as_public
+        self.treat_sharing_link_as_public = treat_sharing_link_as_public
         self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(
             sites
         )
@@ -1757,7 +1757,7 @@ class SharepointConnector(
                                 ctx,
                                 self.graph_client,
                                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
-                                treat_org_link_as_public=self.treat_org_link_as_public,
+                                treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                             )
                         )
                     except Exception as e:
@@ -1781,7 +1781,7 @@ class SharepointConnector(
                             ctx,
                             self.graph_client,
                             parent_hierarchy_raw_node_id=site_descriptor.url,
-                            treat_org_link_as_public=self.treat_org_link_as_public,
+                            treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                         )
                     )
                     if len(doc_batch) >= SLIM_BATCH_SIZE:
@@ -2330,7 +2330,7 @@ class SharepointConnector(
                         parent_hierarchy_raw_node_id=parent_hierarchy_url,
                         graph_api_base=self.graph_api_base,
                         access_token=access_token,
-                        treat_org_link_as_public=self.treat_org_link_as_public,
+                        treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                     )
 
                     if isinstance(doc_or_failure, Document):
@@ -2411,7 +2411,7 @@ class SharepointConnector(
                         include_permissions=include_permissions,
                         # Site pages have the site as their parent
                         parent_hierarchy_raw_node_id=site_descriptor.url,
-                        treat_org_link_as_public=self.treat_org_link_as_public,
+                        treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                     )
                 )
             logger.info(

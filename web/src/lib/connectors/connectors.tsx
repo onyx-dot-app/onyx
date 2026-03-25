@@ -841,12 +841,12 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        label: "Treat org-wide sharing links as public?",
+        label: "Treat sharing links as public?",
         description:
-          "When enabled, documents with an organization-wide sharing link " +
+          "When enabled, documents with a sharing link (anonymous or organization-wide) " +
           "are treated as public (visible to all Onyx users). " +
-          "Disable this if you want stricter access control based on role assignments only.",
-        name: "treat_org_link_as_public",
+          "When disabled, only users and groups with explicit role assignments can see the document.",
+        name: "treat_sharing_link_as_public",
         optional: true,
         default: false,
       },
@@ -1952,7 +1952,7 @@ export interface SalesforceConfig {
 export interface SharepointConfig {
   sites?: string[];
   include_site_pages?: boolean;
-  treat_org_link_as_public?: boolean;
+  treat_sharing_link_as_public?: boolean;
   include_site_documents?: boolean;
   authority_host?: string;
   graph_api_host?: string;
