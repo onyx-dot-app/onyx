@@ -41,25 +41,29 @@ for (const theme of THEMES) {
     for (const href of adminHrefs) {
       const slug = href.replace("/admin/", "").replace(/\//g, "-");
 
-      await test.step(slug, async () => {
-        await page.goto(href);
+      await test.step(
+        slug,
+        async () => {
+          await page.goto(href);
 
-        try {
-          await expect(
-            page.locator('[aria-label="admin-page-title"]')
-          ).toBeVisible({ timeout: 10000 });
-        } catch (error) {
-          console.error(`Failed to find admin-page-title for "${href}"`);
-          throw error;
-        }
+          try {
+            await expect(
+              page.locator('[aria-label="admin-page-title"]')
+            ).toBeVisible({ timeout: 10000 });
+          } catch (error) {
+            console.error(`Failed to find admin-page-title for "${href}"`);
+            throw error;
+          }
 
-        await page.waitForLoadState("networkidle");
+          await page.waitForLoadState("networkidle");
 
-        await expectScreenshot(page, {
-          name: `admin-${theme}-${slug}`,
-          mask: ['[data-testid="admin-date-range-selector-button"]'],
-        });
-      });
+          await expectScreenshot(page, {
+            name: `admin-${theme}-${slug}`,
+            mask: ['[data-testid="admin-date-range-selector-button"]'],
+          });
+        },
+        { box: true }
+      );
     }
   });
 }
