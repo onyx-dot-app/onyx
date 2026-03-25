@@ -452,10 +452,9 @@ class RedisHealthCollector(_CachedCollector):
 class WorkerHeartbeatMonitor:
     """Monitors Celery worker health via the event stream.
 
-    Uses a single persistent connection to receive ``worker-heartbeat``,
-    ``worker-online``, and ``worker-offline`` events — no broadcast
-    commands, no connection leak. Runs in a daemon thread started once
-    during worker setup.
+    Subscribes to ``worker-heartbeat``, ``worker-online``, and
+    ``worker-offline`` events via a single persistent connection.
+    Runs in a daemon thread started once during worker setup.
     """
 
     # Consider a worker down if no heartbeat received for this long.
@@ -547,8 +546,7 @@ class WorkerHealthCollector(_CachedCollector):
     """Collects Celery worker health from the heartbeat monitor.
 
     Reads worker status from ``WorkerHeartbeatMonitor`` which listens
-    to the Celery event stream via a single persistent connection —
-    no ``inspect.ping()`` broadcast, no connection leak.
+    to the Celery event stream via a single persistent connection.
     """
 
     def __init__(self, cache_ttl: float = 30.0) -> None:

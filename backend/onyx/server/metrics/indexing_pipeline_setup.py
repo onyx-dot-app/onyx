@@ -100,7 +100,7 @@ def setup_indexing_pipeline_metrics(celery_app: Celery) -> None:
     _redis_health_collector.set_redis_factory(redis_factory)
 
     # Start the heartbeat monitor daemon thread — uses a single persistent
-    # connection to receive worker-heartbeat events (no inspect.ping() leak).
+    # connection to receive worker-heartbeat events.
     # Module-level singleton prevents duplicate threads on re-entry.
     global _heartbeat_monitor
     if _heartbeat_monitor is None:
