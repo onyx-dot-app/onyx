@@ -55,6 +55,9 @@ interface ContentMdProps {
   /** When `true`, renders "(Optional)" beside the title. */
   optional?: boolean;
 
+  /** Custom muted suffix rendered beside the title. */
+  titleSuffix?: string;
+
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: ContentMdAuxIcon;
 
@@ -138,6 +141,7 @@ function ContentMd({
   editable,
   onTitleChange,
   optional,
+  titleSuffix,
   auxIcon,
   tag,
   sizePreset = "main-ui",
@@ -234,12 +238,12 @@ function ContentMd({
             </span>
           )}
 
-          {optional && (
+          {(optional || titleSuffix) && (
             <span
               className={cn(config.optionalFont, "text-text-03 shrink-0")}
               style={{ height: config.lineHeight }}
             >
-              (Optional)
+              {titleSuffix ?? "(Optional)"}
             </span>
           )}
 
