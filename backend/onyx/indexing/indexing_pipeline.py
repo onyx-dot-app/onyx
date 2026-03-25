@@ -787,7 +787,7 @@ def index_doc_batch(
                 vector_db_write_failures,
             ) = write_chunks_to_vector_db_with_backoff(
                 document_index=document_index,
-                chunk_creator=chunk_iterable_creator,
+                make_chunks=chunk_iterable_creator,
                 index_batch_params=IndexBatchParams(
                     doc_id_to_previous_chunk_cnt=enricher.doc_id_to_previous_chunk_cnt,
                     doc_id_to_new_chunk_cnt=enricher.doc_id_to_new_chunk_cnt,
@@ -819,7 +819,7 @@ def index_doc_batch(
                     f"Updatable IDs: {updatable_ids}, "
                     f"Returned IDs: {all_returned_doc_ids}. "
                     "This should never happen."
-                    f"This occured for document index {document_index.__class__.__name__}"
+                    f"This occurred for document index {document_index.__class__.__name__}"
                 )
             # We treat the first document index we got as the primary one used
             # for reporting the state of indexing.
