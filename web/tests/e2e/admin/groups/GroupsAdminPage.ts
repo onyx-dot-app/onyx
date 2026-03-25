@@ -147,7 +147,7 @@ export class GroupsAdminPage {
 
   /** The "Add" button to enter add-members mode. */
   get addMembersButton(): Locator {
-    return this.page.getByRole("button", { name: "Add" });
+    return this.page.getByRole("button", { name: "Add", exact: true });
   }
 
   /** The "Done" button to exit add-members mode. */
