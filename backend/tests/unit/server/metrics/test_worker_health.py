@@ -13,8 +13,8 @@ class TestWorkerHeartbeatMonitor:
         monitor._on_heartbeat({"hostname": "primary@host1"})
 
         status = monitor.get_worker_status()
-        assert "primary" in status
-        assert status["primary"] is True
+        assert "primary@host1" in status
+        assert status["primary@host1"] is True
 
     def test_multiple_workers(self) -> None:
         monitor = WorkerHeartbeatMonitor(MagicMock())
@@ -32,31 +32,41 @@ class TestWorkerHeartbeatMonitor:
         monitor._on_offline({"hostname": "primary@host1"})
 
         status = monitor.get_worker_status()
-        assert "primary" not in status
+        assert "primary@host1" not in status
 
     def test_stale_heartbeat_marks_worker_down(self) -> None:
         monitor = WorkerHeartbeatMonitor(MagicMock())
-        # Inject a stale timestamp directly
         with monitor._lock:
             monitor._worker_last_seen["primary@host1"] = (
                 time.monotonic() - monitor._HEARTBEAT_TIMEOUT_SECONDS - 10
             )
 
         status = monitor.get_worker_status()
-        assert status["primary"] is False
+        assert status["primary@host1"] is False
+
+    def test_very_stale_worker_is_pruned(self) -> None:
+        """Workers dead for 2x the timeout are pruned from the dict."""
+        monitor = WorkerHeartbeatMonitor(MagicMock())
+        with monitor._lock:
+            monitor._worker_last_seen["gone@host1"] = (
+                time.monotonic() - monitor._HEARTBEAT_TIMEOUT_SECONDS * 2 - 10
+            )
+
+        status = monitor.get_worker_status()
+        assert "gone@host1" not in status
+        # Also verify it's actually removed from the internal dict
+        assert "gone@host1" not in monitor._worker_last_seen
 
     def test_heartbeat_refreshes_stale_worker(self) -> None:
         monitor = WorkerHeartbeatMonitor(MagicMock())
-        # Start with stale
         with monitor._lock:
             monitor._worker_last_seen["primary@host1"] = (
                 time.monotonic() - monitor._HEARTBEAT_TIMEOUT_SECONDS - 10
             )
-        assert monitor.get_worker_status()["primary"] is False
+        assert monitor.get_worker_status()["primary@host1"] is False
 
-        # Fresh heartbeat
         monitor._on_heartbeat({"hostname": "primary@host1"})
-        assert monitor.get_worker_status()["primary"] is True
+        assert monitor.get_worker_status()["primary@host1"] is True
 
     def test_ignores_empty_hostname(self) -> None:
         monitor = WorkerHeartbeatMonitor(MagicMock())
@@ -66,18 +76,29 @@ class TestWorkerHeartbeatMonitor:
 
         assert monitor.get_worker_status() == {}
 
-    def test_strips_hostname_suffix(self) -> None:
+    def test_returns_full_hostname_as_key(self) -> None:
         monitor = WorkerHeartbeatMonitor(MagicMock())
         monitor._on_heartbeat({"hostname": "docprocessing@my-long-host.local"})
 
         status = monitor.get_worker_status()
-        assert "docprocessing" in status
-        assert "docprocessing@my-long-host.local" not in status
+        assert "docprocessing@my-long-host.local" in status
+
+    def test_start_is_idempotent(self) -> None:
+        monitor = WorkerHeartbeatMonitor(MagicMock())
+        # Mock the thread so we don't actually start one
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+        monitor._thread = mock_thread
+        monitor._running = True
+
+        # Second start should be a no-op
+        monitor.start()
+        # Thread constructor should not have been called again
+        assert monitor._thread is mock_thread
 
     def test_thread_safety(self) -> None:
         """get_worker_status should not raise even if heartbeats arrive concurrently."""
         monitor = WorkerHeartbeatMonitor(MagicMock())
-        # Simulate concurrent access — just verify no deadlock/error
         monitor._on_heartbeat({"hostname": "primary@host1"})
         status = monitor.get_worker_status()
         monitor._on_heartbeat({"hostname": "primary@host1"})
@@ -109,13 +130,15 @@ class TestWorkerHealthCollector:
         up = families[1]
         assert up.name == "onyx_celery_worker_up"
         assert len(up.samples) == 3
+        # Labels use short names (before @)
+        labels = {s.labels["worker"] for s in up.samples}
+        assert labels == {"primary", "docfetching", "monitoring"}
         for sample in up.samples:
             assert sample.value == 1
 
     def test_reports_dead_worker(self) -> None:
         monitor = WorkerHeartbeatMonitor(MagicMock())
         monitor._on_heartbeat({"hostname": "primary@host1"})
-        # Make monitoring stale
         with monitor._lock:
             monitor._worker_last_seen["monitoring@host1"] = (
                 time.monotonic() - monitor._HEARTBEAT_TIMEOUT_SECONDS - 10
@@ -126,7 +149,7 @@ class TestWorkerHealthCollector:
 
         families = collector.collect()
         active = families[0]
-        assert active.samples[0].value == 1  # only primary is alive
+        assert active.samples[0].value == 1
 
         up = families[1]
         samples_by_name = {s.labels["worker"]: s.value for s in up.samples}

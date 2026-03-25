@@ -466,12 +466,18 @@ class WorkerHeartbeatMonitor:
         self._worker_last_seen: dict[str, float] = {}
         self._lock = threading.Lock()
         self._running = False
+        self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        """Start the background event listener thread."""
+        """Start the background event listener thread.
+
+        Safe to call multiple times — only starts one thread.
+        """
+        if self._thread is not None and self._thread.is_alive():
+            return
         self._running = True
-        thread = threading.Thread(target=self._listen, daemon=True)
-        thread.start()
+        self._thread = threading.Thread(target=self._listen, daemon=True)
+        self._thread.start()
         logger.info("WorkerHeartbeatMonitor started")
 
     def stop(self) -> None:
@@ -499,30 +505,41 @@ class WorkerHeartbeatMonitor:
                     )
                     time.sleep(5.0)
 
-    def _on_heartbeat(self, event: dict) -> None:
+    def _on_heartbeat(self, event: dict[str, Any]) -> None:
         hostname = event.get("hostname")
         if hostname:
             with self._lock:
                 self._worker_last_seen[hostname] = time.monotonic()
 
-    def _on_offline(self, event: dict) -> None:
+    def _on_offline(self, event: dict[str, Any]) -> None:
         hostname = event.get("hostname")
         if hostname:
             with self._lock:
                 self._worker_last_seen.pop(hostname, None)
 
     def get_worker_status(self) -> dict[str, bool]:
-        """Return {short_name: is_alive} for all known workers.
+        """Return {hostname: is_alive} for all known workers.
 
         Thread-safe. Called by WorkerHealthCollector on each scrape.
+        Also prunes workers that have been dead longer than 2x the
+        heartbeat timeout to prevent unbounded growth.
         """
         now = time.monotonic()
+        prune_threshold = self._HEARTBEAT_TIMEOUT_SECONDS * 2
         with self._lock:
+            # Prune workers that have been gone for 2x the timeout
+            stale = [
+                h
+                for h, ts in self._worker_last_seen.items()
+                if (now - ts) > prune_threshold
+            ]
+            for h in stale:
+                del self._worker_last_seen[h]
+
             result: dict[str, bool] = {}
             for hostname, last_seen in self._worker_last_seen.items():
-                short_name = hostname.split("@")[0]
                 alive = (now - last_seen) < self._HEARTBEAT_TIMEOUT_SECONDS
-                result[short_name] = alive
+                result[hostname] = alive
             return result
 
 
@@ -561,8 +578,11 @@ class WorkerHealthCollector(_CachedCollector):
             alive_count = sum(1 for alive in status.values() if alive)
             active_workers.add_metric([], alive_count)
 
-            for short_name in sorted(status):
-                worker_up.add_metric([short_name], 1 if status[short_name] else 0)
+            for hostname in sorted(status):
+                # Use short name (before @) for single-host deployments,
+                # full hostname when multiple hosts share a worker type.
+                label = hostname.split("@")[0]
+                worker_up.add_metric([label], 1 if status[hostname] else 0)
         except Exception:
             logger.debug("Failed to collect worker health metrics", exc_info=True)
 

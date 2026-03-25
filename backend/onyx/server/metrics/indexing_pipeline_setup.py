@@ -29,6 +29,7 @@ _attempt_collector = IndexAttemptCollector()
 _connector_collector = ConnectorHealthCollector()
 _redis_health_collector = RedisHealthCollector()
 _worker_health_collector = WorkerHealthCollector()
+_heartbeat_monitor: WorkerHeartbeatMonitor | None = None
 
 
 def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
@@ -100,9 +101,12 @@ def setup_indexing_pipeline_metrics(celery_app: Celery) -> None:
 
     # Start the heartbeat monitor daemon thread — uses a single persistent
     # connection to receive worker-heartbeat events (no inspect.ping() leak).
-    monitor = WorkerHeartbeatMonitor(celery_app)
-    monitor.start()
-    _worker_health_collector.set_monitor(monitor)
+    # Module-level singleton prevents duplicate threads on re-entry.
+    global _heartbeat_monitor
+    if _heartbeat_monitor is None:
+        _heartbeat_monitor = WorkerHeartbeatMonitor(celery_app)
+        _heartbeat_monitor.start()
+    _worker_health_collector.set_monitor(_heartbeat_monitor)
 
     _attempt_collector.configure()
     _connector_collector.configure()
