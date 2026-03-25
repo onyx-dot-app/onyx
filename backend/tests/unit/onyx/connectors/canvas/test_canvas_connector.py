@@ -70,10 +70,10 @@ class TestErrorCodeForStatus:
 
         assert result == OnyxErrorCode.BAD_GATEWAY
 
-    def test_unknown_4xx_maps_to_connector_validation_failed(self) -> None:
+    def test_unknown_4xx_maps_to_bad_gateway(self) -> None:
         result = _error_code_for_status(418)
 
-        assert result == OnyxErrorCode.CONNECTOR_VALIDATION_FAILED
+        assert result == OnyxErrorCode.BAD_GATEWAY
 
 
 # ---------------------------------------------------------------------------

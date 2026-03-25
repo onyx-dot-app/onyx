@@ -37,14 +37,12 @@ def _error_code_for_status(status_code: int) -> OnyxErrorCode:
     """Map an HTTP status code to the appropriate OnyxErrorCode.
 
     Expects a >= 400 status code. Known codes (401, 403, 404, 429) are
-    mapped to specific error codes; 5xx maps to BAD_GATEWAY; anything
-    else falls back to CONNECTOR_VALIDATION_FAILED.
+    mapped to specific error codes; all other codes (unrecognised 4xx
+    and 5xx) map to BAD_GATEWAY as unexpected upstream errors.
     """
     if status_code in _STATUS_TO_ERROR_CODE:
         return _STATUS_TO_ERROR_CODE[status_code]
-    if status_code >= 500:
-        return OnyxErrorCode.BAD_GATEWAY
-    return OnyxErrorCode.CONNECTOR_VALIDATION_FAILED
+    return OnyxErrorCode.BAD_GATEWAY
 
 
 class CanvasApiClient:
