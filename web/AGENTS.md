@@ -335,6 +335,39 @@ Key props:
 - `as`: `"p" | "span" | "li" | "h1" | "h2" | "h3"` — HTML tag (default: `"span"`)
 - `nowrap`: `boolean` — prevent text wrapping
 
+**`RichStr` convention:** When creating new components, any string prop that will be rendered as
+visible text in the DOM (e.g., `title`, `description`, `label`) should be typed as
+`string | RichStr` instead of plain `string`. This gives callers opt-in markdown support via
+`markdown()` without requiring any additional props or API surface on the component.
+
+```typescript
+import type { RichStr } from "@opal/types";
+import { resolveStr } from "@opal/components/text/resolveStr";
+
+// ✅ Good — new components accept string | RichStr
+interface InfoCardProps {
+  title: string | RichStr;
+  description?: string | RichStr;
+}
+
+function InfoCard({ title, description }: InfoCardProps) {
+  return (
+    <div>
+      <Text font="main-ui-action">{resolveStr(title)}</Text>
+      {description && (
+        <Text font="secondary-body" color="text-03">{resolveStr(description)}</Text>
+      )}
+    </div>
+  );
+}
+
+// ❌ Bad — plain string props block markdown support for callers
+interface InfoCardProps {
+  title: string;
+  description?: string;
+}
+```
+
 ## 4. Component Usage
 
 **Heavily avoid raw HTML input components. Always use components from the `web/src/refresh-components` or `web/lib/opal/src` directory.**
