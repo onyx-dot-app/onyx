@@ -1424,11 +1424,26 @@ def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
     cleaned_api_base = api_base.strip().rstrip("/")
     url = f"{cleaned_api_base}/v1/models"
 
+    return _get_openai_compatible_models_response(
+        url=url,
+        source_name="LiteLLM proxy",
+        api_key=api_key,
+    )
+
+
+def _get_openai_compatible_models_response(
+    url: str,
+    source_name: str,
+    api_key: str | None = None,
+) -> dict:
+    """Fetch model metadata from an OpenAI-compatible `/models` endpoint."""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": "https://onyx.app",
         "X-Title": "Onyx",
     }
+    if not api_key:
+        headers.pop("Authorization")
 
     try:
         response = httpx.get(url, headers=headers, timeout=10.0)
@@ -1438,22 +1453,37 @@ def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
         if e.response.status_code == 401:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
-                "Authentication failed: invalid or missing API key for LiteLLM proxy.",
+                f"Authentication failed: invalid or missing API key for {source_name}.",
             )
         elif e.response.status_code == 404:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
-                f"LiteLLM models endpoint not found at {url}. Please verify the API base URL.",
+                f"{source_name} models endpoint not found at {url}. Please verify the API base URL.",
             )
         else:
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,
-                f"Failed to fetch LiteLLM models: {e}",
+                f"Failed to fetch {source_name} models: {e}",
             )
-    except Exception as e:
+    except httpx.RequestError as e:
+        logger.warning(
+            "Failed to fetch models from OpenAI-compatible endpoint",
+            extra={"source": source_name, "url": url, "error": str(e)},
+            exc_info=True,
+        )
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            f"Failed to fetch LiteLLM models: {e}",
+            f"Failed to fetch {source_name} models: {e}",
+        )
+    except ValueError as e:
+        logger.warning(
+            "Received invalid model response from OpenAI-compatible endpoint",
+            extra={"source": source_name, "url": url, "error": str(e)},
+            exc_info=True,
+        )
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch {source_name} models: {e}",
         )
 
 
@@ -1493,7 +1523,7 @@ def get_bifrost_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=False,
+                    supports_image_input=infer_vision_support(model_id),
                 )
             )
         except Exception as e:
@@ -1539,35 +1569,8 @@ def _get_bifrost_models_response(api_base: str, api_key: str | None = None) -> d
     else:
         url = f"{cleaned_api_base}/v1/models"
 
-    headers: dict[str, str] = {
-        "HTTP-Referer": "https://onyx.app",
-        "X-Title": "Onyx",
-    }
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    try:
-        response = httpx.get(url, headers=headers, timeout=10.0)
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 401:
-            raise OnyxError(
-                OnyxErrorCode.VALIDATION_ERROR,
-                "Authentication failed: invalid or missing API key for Bifrost.",
-            )
-        elif e.response.status_code == 404:
-            raise OnyxError(
-                OnyxErrorCode.VALIDATION_ERROR,
-                f"Bifrost models endpoint not found at {url}. Please verify the API base URL.",
-            )
-        else:
-            raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY,
-                f"Failed to fetch Bifrost models: {e}",
-            )
-    except Exception as e:
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"Failed to fetch Bifrost models: {e}",
-        )
+    return _get_openai_compatible_models_response(
+        url=url,
+        source_name="Bifrost",
+        api_key=api_key,
+    )

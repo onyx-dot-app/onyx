@@ -40,14 +40,22 @@ class ModelMetadata(TypedDict):
 # Non-LLM model patterns to filter out (image gen, embeddings, etc.)
 NON_LLM_PATTERNS = frozenset({"embed", "stable-", "titan-image", "titan-embed"})
 
-# Known Bedrock vision-capable models (for fallback when base model not in region)
-BEDROCK_VISION_MODELS = frozenset(
+# Known vision-capable model families for providers where the source API
+# does not expose this metadata directly.
+VISION_MODEL_FAMILIES = frozenset(
     {
-        "anthropic.claude-3",
-        "anthropic.claude-4",
-        "amazon.nova-pro",
-        "amazon.nova-lite",
-        "amazon.nova-premier",
+        "anthropic/claude-3",
+        "anthropic/claude-4",
+        "amazon/nova-pro",
+        "amazon/nova-lite",
+        "amazon/nova-premier",
+        "openai/gpt-4o",
+        "openai/gpt-4.1",
+        "google/gemini",
+        "meta-llama/llama-3.2",
+        "mistral/pixtral",
+        "qwen/qwen2.5-vl",
+        "qwen/qwen-vl",
     }
 )
 
@@ -77,11 +85,13 @@ def is_valid_bedrock_model(
 def infer_vision_support(model_id: str) -> bool:
     """Infer vision support from model ID when base model metadata unavailable.
 
-    Used for cross-region inference profiles when the base model isn't
-    available in the user's region.
+    Used for providers like Bedrock and Bifrost where vision support may
+    need to be inferred from vendor/model naming conventions.
     """
-    model_id_lower = model_id.lower()
-    return any(vision_model in model_id_lower for vision_model in BEDROCK_VISION_MODELS)
+    normalized_model_id = model_id.lower().replace(".", "/")
+    return any(
+        vision_model in normalized_model_id for vision_model in VISION_MODEL_FAMILIES
+    )
 
 
 def generate_bedrock_display_name(model_id: str) -> str:

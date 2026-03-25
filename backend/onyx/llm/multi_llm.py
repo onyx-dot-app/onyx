@@ -299,6 +299,7 @@ class LitellmLLM(LLM):
             if self._api_base is not None:
                 base = self._api_base.rstrip("/")
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
+                model_kwargs["api_base"] = self._api_base
 
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
@@ -499,10 +500,11 @@ class LitellmLLM(LLM):
         if structured_response_format:
             optional_kwargs["response_format"] = structured_response_format
 
-        if not (is_claude_model or is_ollama or is_mistral):
+        if not (is_claude_model or is_ollama or is_mistral) or is_bifrost:
             # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
             # However, this param breaks Anthropic and Mistral models,
-            # so it must be conditionally included.
+            # so it must be conditionally included unless the request is
+            # routed through Bifrost's OpenAI-compatible endpoint.
             # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
             # See also, https://github.com/ollama/ollama/issues/11171
             optional_kwargs["allowed_openai_params"] = ["tool_choice"]

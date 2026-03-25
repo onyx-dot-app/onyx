@@ -12,6 +12,8 @@ import httpx
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.llm.models import BifrostFinalModelResponse
+from onyx.server.manage.llm.models import BifrostModelsRequest
 from onyx.server.manage.llm.models import LitellmFinalModelResponse
 from onyx.server.manage.llm.models import LitellmModelsRequest
 from onyx.server.manage.llm.models import LMStudioFinalModelResponse
@@ -850,13 +852,15 @@ class TestGetLitellmAvailableModels:
         mock_session = MagicMock()
 
         with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
-            mock_get.side_effect = Exception("Connection refused")
+            mock_get.side_effect = httpx.ConnectError(
+                "Connection refused", request=MagicMock()
+            )
 
             request = LitellmModelsRequest(
                 api_base="http://localhost:4000",
                 api_key="test-key",
             )
-            with pytest.raises(OnyxError, match="Failed to fetch LiteLLM models"):
+            with pytest.raises(OnyxError, match="Failed to fetch LiteLLM proxy models"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
 
     def test_401_raises_authentication_error(self) -> None:
@@ -898,3 +902,118 @@ class TestGetLitellmAvailableModels:
             )
             with pytest.raises(OnyxError, match="endpoint not found"):
                 get_litellm_available_models(request, MagicMock(), mock_session)
+
+
+class TestGetBifrostAvailableModels:
+    """Tests for the Bifrost model fetch endpoint."""
+
+    @pytest.fixture
+    def mock_bifrost_response(self) -> dict:
+        """Mock response from Bifrost /v1/models endpoint."""
+        return {
+            "data": [
+                {
+                    "id": "anthropic/claude-3-5-sonnet",
+                    "name": "Claude 3.5 Sonnet",
+                    "context_length": 200000,
+                },
+                {
+                    "id": "openai/gpt-4o",
+                    "name": "GPT-4o",
+                    "context_length": 128000,
+                },
+                {
+                    "id": "deepseek/deepseek-r1",
+                    "name": "DeepSeek R1",
+                    "context_length": 64000,
+                },
+                {
+                    "id": "text-embedding-3-small",
+                    "name": "Text Embedding 3 Small",
+                    "context_length": 8192,
+                },
+            ]
+        }
+
+    def test_returns_model_list(self, mock_bifrost_response: dict) -> None:
+        """Test that endpoint returns properly formatted non-embedding models."""
+        from onyx.server.manage.llm.api import get_bifrost_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_bifrost_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = BifrostModelsRequest(api_base="https://bifrost.example.com")
+            results = get_bifrost_available_models(request, MagicMock(), mock_session)
+
+            assert len(results) == 3
+            assert all(isinstance(r, BifrostFinalModelResponse) for r in results)
+            assert [r.name for r in results] == sorted(
+                [r.name for r in results], key=str.lower
+            )
+
+    def test_infers_vision_support(self, mock_bifrost_response: dict) -> None:
+        """Test that vision support is inferred from provider/model IDs."""
+        from onyx.server.manage.llm.api import get_bifrost_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_bifrost_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = BifrostModelsRequest(api_base="https://bifrost.example.com")
+            results = get_bifrost_available_models(request, MagicMock(), mock_session)
+
+            claude = next(r for r in results if r.name == "anthropic/claude-3-5-sonnet")
+            gpt4o = next(r for r in results if r.name == "openai/gpt-4o")
+            deepseek = next(r for r in results if r.name == "deepseek/deepseek-r1")
+
+            assert claude.supports_image_input is True
+            assert gpt4o.supports_image_input is True
+            assert deepseek.supports_image_input is False
+
+    def test_existing_v1_suffix_is_not_duplicated(self) -> None:
+        """Test that an existing /v1 suffix still hits a single /v1/models endpoint."""
+        from onyx.server.manage.llm.api import get_bifrost_available_models
+
+        mock_session = MagicMock()
+        response = {"data": [{"id": "openai/gpt-4o", "name": "GPT-4o"}]}
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = BifrostModelsRequest(api_base="https://bifrost.example.com/v1")
+            get_bifrost_available_models(request, MagicMock(), mock_session)
+
+            called_url = mock_get.call_args[0][0]
+            assert called_url == "https://bifrost.example.com/v1/models"
+
+    def test_request_failure_is_logged_and_wrapped(self) -> None:
+        """Test that request-layer failures are logged before raising OnyxError."""
+        from onyx.server.manage.llm.api import get_bifrost_available_models
+
+        mock_session = MagicMock()
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.logger.warning") as mock_warning,
+        ):
+            mock_get.side_effect = httpx.ConnectError(
+                "Connection refused", request=MagicMock()
+            )
+
+            request = BifrostModelsRequest(api_base="https://bifrost.example.com")
+            with pytest.raises(OnyxError, match="Failed to fetch Bifrost models"):
+                get_bifrost_available_models(request, MagicMock(), mock_session)
+
+            mock_warning.assert_called_once()
