@@ -32,6 +32,12 @@ export interface FrostedDivProps extends React.HTMLAttributes<HTMLDivElement> {
    * Additional classes for the frost overlay element itself
    */
   overlayClassName?: string;
+
+  /**
+   * Additional classes for the outermost wrapper div (the `relative` container).
+   * Useful for width propagation (e.g. `w-full`).
+   */
+  wrapperClassName?: string;
 }
 
 /**
@@ -60,13 +66,14 @@ export default function FrostedDiv({
   backdropBlur = "6px",
   borderRadius = "1rem",
   overlayClassName,
+  wrapperClassName,
   className,
   style,
   children,
   ...props
 }: FrostedDivProps) {
   return (
-    <div className="relative">
+    <div className={cn("relative", wrapperClassName)}>
       {/* Frost effect overlay - positioned behind content with bloom extending outward */}
       <div
         className={cn("absolute pointer-events-none", overlayClassName)}
