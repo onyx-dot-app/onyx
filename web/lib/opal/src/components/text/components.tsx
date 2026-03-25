@@ -1,8 +1,8 @@
 import type { HTMLAttributes } from "react";
 
-import type { RichStr, WithoutStyles } from "@opal/types";
+import type { WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
-import InlineMarkdown from "@opal/components/text/InlineMarkdown";
+import { resolveChildren } from "@opal/components/text/resolveStr";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,18 +57,6 @@ interface TextProps
 
   /** Prevent text wrapping. */
   nowrap?: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function isRichStr(value: unknown): value is RichStr {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as RichStr).__brand === "RichStr"
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,11 +121,7 @@ function Text({
 
   return (
     <Tag {...rest} className={resolvedClassName}>
-      {isRichStr(children) ? (
-        <InlineMarkdown content={children.raw} />
-      ) : (
-        children
-      )}
+      {resolveChildren(children)}
     </Tag>
   );
 }
