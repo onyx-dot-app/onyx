@@ -1,5 +1,6 @@
 import type { HTMLAttributes } from "react";
 
+import type { WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
 import InlineMarkdown from "@opal/components/text/InlineMarkdown";
 
@@ -43,7 +44,8 @@ type TextColor =
   | "text-dark-03"
   | "text-dark-05";
 
-interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "color"> {
+interface TextProps
+  extends WithoutStyles<Omit<HTMLAttributes<HTMLElement>, "color">> {
   /** Font preset. Default: `"main-ui-body"`. */
   font?: TextFont;
 
@@ -113,14 +115,12 @@ function Text({
   nowrap,
   preventMarkdown,
   children,
-  className,
   ...rest
 }: TextProps) {
   const resolvedClassName = cn(
     FONT_CONFIG[font],
     COLOR_CONFIG[color],
-    nowrap && "whitespace-nowrap",
-    className
+    nowrap && "whitespace-nowrap"
   );
 
   return (

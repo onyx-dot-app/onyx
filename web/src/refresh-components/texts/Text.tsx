@@ -1,17 +1,60 @@
 import type { HTMLAttributes } from "react";
 
-import {
-  Text as OpalText,
-  type TextFont,
-  type TextColor,
-} from "@opal/components";
+import { cn } from "@/lib/utils";
 
-// ---------------------------------------------------------------------------
-// Compatibility wrapper
-//
-// Maps the legacy boolean-flag API to the new Opal Text string-enum API.
-// New code should import Text from "@opal/components" directly.
-// ---------------------------------------------------------------------------
+const fonts = {
+  // Heading
+  headingH1: "font-heading-h1",
+  headingH2: "font-heading-h2",
+  headingH3: "font-heading-h3",
+  headingH3Muted: "font-heading-h3-muted",
+
+  // Main Content
+  mainContentBody: "font-main-content-body",
+  mainContentMuted: "font-main-content-muted",
+  mainContentEmphasis: "font-main-content-emphasis",
+  mainContentMono: "font-main-content-mono",
+
+  // Main UI
+  mainUiBody: "font-main-ui-body",
+  mainUiMuted: "font-main-ui-muted",
+  mainUiAction: "font-main-ui-action",
+  mainUiMono: "font-main-ui-mono",
+
+  // Secondary
+  secondaryBody: "font-secondary-body",
+  secondaryAction: "font-secondary-action",
+  secondaryMono: "font-secondary-mono",
+
+  // Figure
+  figureSmallLabel: "font-figure-small-label",
+  figureSmallValue: "font-figure-small-value",
+  figureKeystroke: "font-figure-keystroke",
+};
+
+const colors = {
+  text05: "text-text-05",
+  text04: "text-text-04",
+  text03: "text-text-03",
+  text02: "text-text-02",
+  text01: "text-text-01",
+  textLight03: "text-text-light-03",
+  textLight05: "text-text-light-05",
+  textDark03: "text-text-dark-03",
+  textDark05: "text-text-dark-05",
+
+  inverted: {
+    text05: "text-text-inverted-05",
+    text04: "text-text-inverted-04",
+    text03: "text-text-inverted-03",
+    text02: "text-text-inverted-02",
+    text01: "text-text-inverted-01",
+    textLight03: "text-text-light-03",
+    textLight05: "text-text-light-05",
+    textDark03: "text-text-dark-03",
+    textDark05: "text-text-dark-05",
+  },
+};
 
 export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   nowrap?: boolean;
@@ -52,56 +95,6 @@ export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   as?: "p" | "span" | "li";
 }
 
-const FONT_MAP: [keyof TextProps, TextFont][] = [
-  ["headingH1", "heading-h1"],
-  ["headingH2", "heading-h2"],
-  ["headingH3", "heading-h3"],
-  ["headingH3Muted", "heading-h3-muted"],
-  ["mainContentBody", "main-content-body"],
-  ["mainContentMuted", "main-content-muted"],
-  ["mainContentEmphasis", "main-content-emphasis"],
-  ["mainContentMono", "main-content-mono"],
-  ["mainUiBody", "main-ui-body"],
-  ["mainUiMuted", "main-ui-muted"],
-  ["mainUiAction", "main-ui-action"],
-  ["mainUiMono", "main-ui-mono"],
-  ["secondaryBody", "secondary-body"],
-  ["secondaryAction", "secondary-action"],
-  ["secondaryMono", "secondary-mono"],
-  ["figureSmallLabel", "figure-small-label"],
-  ["figureSmallValue", "figure-small-value"],
-  ["figureKeystroke", "figure-keystroke"],
-];
-
-const COLOR_MAP: [keyof TextProps, TextColor][] = [
-  ["text01", "text-01"],
-  ["text02", "text-02"],
-  ["text03", "text-03"],
-  ["text04", "text-04"],
-  ["text05", "text-05"],
-  ["textLight03", "text-light-03"],
-  ["textLight05", "text-light-05"],
-  ["textDark03", "text-dark-03"],
-  ["textDark05", "text-dark-05"],
-];
-
-const INVERTED_COLOR_MAP: Record<TextColor, TextColor> = {
-  "text-01": "text-inverted-01",
-  "text-02": "text-inverted-02",
-  "text-03": "text-inverted-03",
-  "text-04": "text-inverted-04",
-  "text-05": "text-inverted-05",
-  "text-light-03": "text-light-03",
-  "text-light-05": "text-light-05",
-  "text-dark-03": "text-dark-03",
-  "text-dark-05": "text-dark-05",
-  "text-inverted-01": "text-inverted-01",
-  "text-inverted-02": "text-inverted-02",
-  "text-inverted-03": "text-inverted-03",
-  "text-inverted-04": "text-inverted-04",
-  "text-inverted-05": "text-inverted-05",
-};
-
 export default function Text({
   nowrap,
   headingH1,
@@ -137,53 +130,77 @@ export default function Text({
   as,
   ...rest
 }: TextProps) {
-  const props: Record<string, boolean | undefined> = {
-    headingH1,
-    headingH2,
-    headingH3,
-    headingH3Muted,
-    mainContentBody,
-    mainContentMuted,
-    mainContentEmphasis,
-    mainContentMono,
-    mainUiBody,
-    mainUiMuted,
-    mainUiAction,
-    mainUiMono,
-    secondaryBody,
-    secondaryAction,
-    secondaryMono,
-    figureSmallLabel,
-    figureSmallValue,
-    figureKeystroke,
-    text01,
-    text02,
-    text03,
-    text04,
-    text05,
-    textLight03,
-    textLight05,
-    textDark03,
-    textDark05,
-  };
+  const font = headingH1
+    ? "headingH1"
+    : headingH2
+      ? "headingH2"
+      : headingH3
+        ? "headingH3"
+        : headingH3Muted
+          ? "headingH3Muted"
+          : mainContentBody
+            ? "mainContentBody"
+            : mainContentMuted
+              ? "mainContentMuted"
+              : mainContentEmphasis
+                ? "mainContentEmphasis"
+                : mainContentMono
+                  ? "mainContentMono"
+                  : mainUiBody
+                    ? "mainUiBody"
+                    : mainUiMuted
+                      ? "mainUiMuted"
+                      : mainUiAction
+                        ? "mainUiAction"
+                        : mainUiMono
+                          ? "mainUiMono"
+                          : secondaryBody
+                            ? "secondaryBody"
+                            : secondaryAction
+                              ? "secondaryAction"
+                              : secondaryMono
+                                ? "secondaryMono"
+                                : figureSmallLabel
+                                  ? "figureSmallLabel"
+                                  : figureSmallValue
+                                    ? "figureSmallValue"
+                                    : figureKeystroke
+                                      ? "figureKeystroke"
+                                      : "mainUiBody";
 
-  const font: TextFont =
-    FONT_MAP.find(([key]) => props[key])?.[1] ?? "main-ui-body";
-  const baseColor: TextColor =
-    COLOR_MAP.find(([key]) => props[key])?.[1] ?? "text-05";
-  const color: TextColor = inverted ? INVERTED_COLOR_MAP[baseColor] : baseColor;
+  const color = text01
+    ? "text01"
+    : text02
+      ? "text02"
+      : text03
+        ? "text03"
+        : text04
+          ? "text04"
+          : text05
+            ? "text05"
+            : textLight03
+              ? "textLight03"
+              : textLight05
+                ? "textLight05"
+                : textDark03
+                  ? "textDark03"
+                  : textDark05
+                    ? "textDark05"
+                    : "text05";
+
+  const Tag = as ?? "span";
 
   return (
-    <OpalText
+    <Tag
       {...rest}
-      font={font}
-      color={color}
-      as={as}
-      nowrap={nowrap}
-      preventMarkdown
-      className={className}
+      className={cn(
+        fonts[font],
+        inverted ? colors.inverted[color] : colors[color],
+        nowrap && "whitespace-nowrap",
+        className
+      )}
     >
       {children}
-    </OpalText>
+    </Tag>
   );
 }
