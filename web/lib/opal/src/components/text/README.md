@@ -9,7 +9,7 @@ A styled text component with string-enum props for font preset and color selecti
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `font` | `TextFont` | `"main-ui-body"` | Font preset (size, weight, line-height) |
-| `color` | `TextColor` | `"text-05"` | Text color |
+| `color` | `TextColor` | `"text-04"` | Text color |
 | `inverted` | `boolean` | `false` | Use inverted color palette |
 | `as` | `"p" \| "span" \| "li"` | `"span"` | HTML tag to render |
 | `nowrap` | `boolean` | `false` | Prevent text wrapping |

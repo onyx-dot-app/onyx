@@ -42,7 +42,7 @@ interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "color"> {
   /** Font preset. Default: `"main-ui-body"`. */
   font?: TextFont;
 
-  /** Color variant. Default: `"text-05"`. */
+  /** Color variant. Default: `"text-04"`. */
   color?: TextColor;
 
   /** Use inverted color palette. Default: `false`. */
@@ -113,7 +113,7 @@ const INVERTED_COLOR_CONFIG: Record<TextColor, string> = {
 
 function Text({
   font = "main-ui-body",
-  color = "text-05",
+  color = "text-04",
   inverted = false,
   as: Tag = "span",
   nowrap,
