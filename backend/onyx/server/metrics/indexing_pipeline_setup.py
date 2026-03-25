@@ -30,6 +30,13 @@ def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
     """
     _cached_client: list[Redis | None] = [None]
 
+    def _close_client(client: Redis) -> None:
+        """Best-effort close of a Redis client."""
+        try:
+            client.close()
+        except Exception:
+            logger.debug("Failed to close stale Redis client", exc_info=True)
+
     def _get_broker_redis() -> Redis:
         client = _cached_client[0]
         if client is not None:
@@ -38,9 +45,13 @@ def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
                 return client
             except Exception:
                 logger.debug("Cached Redis client stale, reconnecting")
+                _close_client(client)
                 _cached_client[0] = None
 
-        client = celery_app.broker_connection().channel().client  # type: ignore
+        # Use connection_or_acquire as context manager so the underlying
+        # Celery connection is properly returned to the pool / closed on error.
+        with celery_app.connection_or_acquire() as conn:
+            client = conn.channel().client  # type: ignore
         _cached_client[0] = client
         return client
 
