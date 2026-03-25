@@ -104,6 +104,12 @@ class TestBuildItemRelativePath:
     def test_none_parent(self) -> None:
         assert _build_item_relative_path(None, "report.docx") == "report.docx"
 
+    def test_percent_encoded_folder(self) -> None:
+        assert (
+            _build_item_relative_path("/drives/abc/root:/My%20Documents", "report.docx")
+            == "My Documents/report.docx"
+        )
+
     def test_no_root_marker(self) -> None:
         assert _build_item_relative_path("/drives/abc", "report.docx") == "report.docx"
 
@@ -195,3 +201,15 @@ class TestIsDriveitemExcluded:
     def test_whitespace_patterns_ignored(self, whitespace_pattern: str) -> None:
         connector = SharepointConnector(excluded_paths=[whitespace_pattern])
         assert connector.excluded_paths == []
+
+    def test_whitespace_padded_patterns_are_trimmed(self) -> None:
+        connector = SharepointConnector(excluded_paths=["  *.tmp  ", " Archive/* "])
+        assert connector.excluded_paths == ["*.tmp", "Archive/*"]
+
+        item = DriveItemData(
+            id="1",
+            name="file.tmp",
+            web_url="https://example.com/file.tmp",
+            parent_reference_path="/drives/abc/root:/Docs",
+        )
+        assert connector._is_driveitem_excluded(item)

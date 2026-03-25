@@ -117,7 +117,7 @@ def _build_item_relative_path(parent_reference_path: str | None, item_name: str)
     => "Eng/API/report.docx"
     """
     if parent_reference_path and "root:/" in parent_reference_path:
-        folder = parent_reference_path.split("root:/", 1)[1]
+        folder = unquote(parent_reference_path.split("root:/", 1)[1])
         if folder:
             return f"{folder}/{item_name}"
     return item_name
@@ -913,8 +913,8 @@ class SharepointConnector(
     ) -> None:
         self.batch_size = batch_size
         self.sites = list(sites)
-        self.excluded_sites = [p for p in excluded_sites if p.strip()]
-        self.excluded_paths = [p for p in excluded_paths if p.strip()]
+        self.excluded_sites = [s for p in excluded_sites if (s := p.strip())]
+        self.excluded_paths = [s for p in excluded_paths if (s := p.strip())]
         self.treat_sharing_link_as_public = treat_sharing_link_as_public
         self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(
             sites
