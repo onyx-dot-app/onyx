@@ -106,11 +106,6 @@ export interface RichStr {
   readonly raw: string;
 }
 
-/** Wraps a string for inline markdown parsing by `Text` and other Opal components. */
-export function markdown(content: string): RichStr {
-  return { __brand: "RichStr", raw: content };
-}
-
 /**
  * HTML button `type` attribute values.
  *

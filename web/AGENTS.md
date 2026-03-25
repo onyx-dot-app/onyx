@@ -300,7 +300,7 @@ function UserCard({ name }: { name: string }) {
 }
 
 // ✅ Good — inline markdown via markdown()
-import { markdown } from "@opal/types";
+import { markdown } from "@opal/utils";
 
 <Text font="main-ui-body" color="text-05">
   {markdown("*Hello*, **world**! Visit [Onyx](https://onyx.app) and run `onyx start`.")}

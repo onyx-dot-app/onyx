@@ -75,7 +75,7 @@ and JSX children are rendered as-is — no parsing, no surprises.
 
 ```tsx
 import { Text } from "@opal/components";
-import { markdown } from "@opal/types";
+import { markdown } from "@opal/utils";
 
 // Inline markdown — bold, italic, links, code, strikethrough
 <Text font="main-ui-body" color="text-05">
