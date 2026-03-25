@@ -295,7 +295,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       // If we already have messages (chat session started), always use chat mode
       // (matches AppPage behavior where existing sessions bypass classification)
       if (hasMessages) {
-        resetInputBar();
         onSubmit({
           message: submittedMessage,
           currentMessageFiles: currentMessageFiles,
@@ -307,7 +306,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       // Build an onChat closure that captures additionalContext for this submission
       const onChat = (chatMessage: string) => {
-        resetInputBar();
         onSubmit({
           message: chatMessage,
           currentMessageFiles: currentMessageFiles,
@@ -326,7 +324,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       onSubmit,
       currentMessageFiles,
       deepResearchEnabled,
-      resetInputBar,
       submitQuery,
       tabReadingEnabled,
       currentTabUrl,
