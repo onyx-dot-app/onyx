@@ -166,7 +166,7 @@ class QueueDepthCollector(_CachedCollector):
         """Peek at the oldest (tail) message in a Redis list queue
         and extract its timestamp to compute age."""
         try:
-            raw = redis_client.lindex(queue_name, -1)
+            raw: bytes | str | None = redis_client.lindex(queue_name, -1)  # type: ignore[assignment]
             if raw is None:
                 return None
             msg = json.loads(raw)
@@ -430,12 +430,12 @@ class RedisHealthCollector(_CachedCollector):
         )
 
         try:
-            mem_info = redis_client.info("memory")
+            mem_info: dict = redis_client.info("memory")  # type: ignore[assignment]
             memory_used.add_metric([], mem_info.get("used_memory", 0))
             memory_peak.add_metric([], mem_info.get("used_memory_peak", 0))
             memory_frag.add_metric([], mem_info.get("mem_fragmentation_ratio", 0))
 
-            client_info = redis_client.info("clients")
+            client_info: dict = redis_client.info("clients")  # type: ignore[assignment]
             connected_clients.add_metric([], client_info.get("connected_clients", 0))
         except Exception:
             logger.debug("Failed to collect Redis health metrics", exc_info=True)
