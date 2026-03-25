@@ -45,6 +45,7 @@ import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
 import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
@@ -65,6 +66,7 @@ const PROVIDER_DISPLAY_ORDER: string[] = [
   "ollama_chat",
   "openrouter",
   "lm_studio",
+  "bifrost",
 ];
 
 const PROVIDER_MODAL_MAP: Record<
@@ -133,6 +135,13 @@ const PROVIDER_MODAL_MAP: Record<
   ),
   litellm_proxy: (d, open, onOpenChange) => (
     <LiteLLMProxyModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  bifrost: (d, open, onOpenChange) => (
+    <BifrostModal
       shouldMarkAsDefault={d}
       open={open}
       onOpenChange={onOpenChange}

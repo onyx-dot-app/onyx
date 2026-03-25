@@ -23,6 +23,7 @@ import {
   BedrockModelResponse,
   LMStudioModelResponse,
   LiteLLMProxyModelResponse,
+  BifrostModelResponse,
   ModelConfiguration,
   LLMProviderName,
   BedrockFetchParams,
@@ -30,6 +31,7 @@ import {
   LMStudioFetchParams,
   OpenRouterFetchParams,
   LiteLLMProxyFetchParams,
+  BifrostFetchParams,
 } from "@/interfaces/llm";
 import { SvgAws, SvgOpenrouter } from "@opal/icons";
 
@@ -41,6 +43,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "ollama_chat",
   "lm_studio",
   "litellm_proxy",
+  "bifrost",
   "vertex_ai",
 ]);
 
@@ -78,6 +81,7 @@ export const getProviderIcon = (
     bedrock_converse: SvgAws,
     openrouter: SvgOpenrouter,
     litellm_proxy: LiteLLMIcon,
+    bifrost: CPUIcon,
     vertex_ai: GeminiIcon,
   };
 
@@ -344,6 +348,61 @@ export const fetchLMStudioModels = async (
 };
 
 /**
+ * Fetches Bifrost models directly without any form state dependencies.
+ * Uses snake_case params to match API structure.
+ */
+export const fetchBifrostModels = async (
+  params: BifrostFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const apiBase = params.api_base;
+  if (!apiBase) {
+    return { models: [], error: "API Base is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/bifrost/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_base: apiBase,
+        api_key: params.api_key,
+        provider_name: params.provider_name,
+      }),
+      signal: params.signal,
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: BifrostModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: true,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+      supports_reasoning: false,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
  * Fetches LiteLLM Proxy models directly without any form state dependencies.
  * Uses snake_case params to match API structure.
  */
@@ -456,6 +515,13 @@ export const fetchModels = async (
         provider_name: formValues.name,
         signal,
       });
+    case LLMProviderName.BIFROST:
+      return fetchBifrostModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_name: formValues.name,
+        signal,
+      });
     default:
       return { models: [], error: `Unknown provider: ${providerName}` };
   }
@@ -469,6 +535,7 @@ export function canProviderFetchModels(providerName?: string) {
     case LLMProviderName.LM_STUDIO:
     case LLMProviderName.OPENROUTER:
     case LLMProviderName.LITELLM_PROXY:
+    case LLMProviderName.BIFROST:
       return true;
     default:
       return false;
