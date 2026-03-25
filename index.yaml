@@ -13,7 +13,7 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
-    created: "2026-03-25T19:01:30.626898408Z"
+    created: "2026-03-25T19:25:18.021771304Z"
     dependencies:
     - alias: postgresql
       condition: postgresql.enabled
@@ -46,7 +46,7 @@ entries:
       repository: https://onyx-dot-app.github.io/python-sandbox/
       version: 0.3.1
     description: A Helm chart for Kubernetes
-    digest: 446127356e23e64aaf01b1b56c7911e0814664b5abbc327146859efce3c4ee55
+    digest: 9ae2027fab1a8837429f137575f4dc0b9c8d8b5e16bba1d8cefc3285ac3cdde5
     home: https://www.onyx.app/
     name: onyx
     sources:
@@ -2534,4 +2534,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-03-25T19:01:30.608894384Z"
+generated: "2026-03-25T19:25:18.002956092Z"
