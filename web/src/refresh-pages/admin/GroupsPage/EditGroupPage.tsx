@@ -407,10 +407,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 {isAddingMembers ? (
                   <Table
                     key="add-members"
-                    data={allRows}
+                    data={allRows as MemberRow[]}
                     columns={addModeColumns}
                     getRowId={(row) => row.id ?? row.email}
-                    qualifier="avatar"
                     pageSize={PAGE_SIZE}
                     searchTerm={searchTerm}
                     selectionBehavior="multi-select"
@@ -430,7 +429,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     data={memberRows}
                     columns={memberColumns}
                     getRowId={(row) => row.id ?? row.email}
-                    qualifier="avatar"
                     pageSize={PAGE_SIZE}
                     searchTerm={searchTerm}
                     footer={{}}
