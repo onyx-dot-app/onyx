@@ -456,7 +456,7 @@ class OnyxConfluence:
                         return attr(*args, **kwargs)
 
                 except HTTPError as e:
-                    delay_until = _handle_http_error(e, attempt)
+                    delay_until = _handle_http_error(e, attempt, MAX_RETRIES)
                     logger.warning(
                         f"HTTPError in confluence call. Retrying in {delay_until} seconds..."
                     )
