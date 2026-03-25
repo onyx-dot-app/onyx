@@ -185,6 +185,7 @@ class CanvasApiClient:
         """Build a full Canvas API URL from an endpoint path.
 
         Assumes endpoint is non-empty (e.g. ``"courses"``, ``"announcements"``).
+        Only called on a first request, endpoint must be set for first request.
         Leading slashes are stripped to avoid double-slash in the result.
         self.base_url is already normalized with no trailing slash.
         """
