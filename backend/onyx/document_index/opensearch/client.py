@@ -256,7 +256,6 @@ class OpenSearchClient(AbstractContextManager):
         """
         return self._client.ping()
 
-    @log_function_time(print_only=True, debug_only=True)
     def close(self) -> None:
         """Closes the client.
 
