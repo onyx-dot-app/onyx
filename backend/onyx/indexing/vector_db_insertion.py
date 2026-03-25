@@ -92,7 +92,7 @@ def write_chunks_to_vector_db_with_backoff(
                 ConnectorFailure(
                     failed_document=DocumentFailure(
                         document_id=doc_id,
-                        document_link=(first_chunk.get_link()),
+                        document_link=first_chunk.get_link(),
                     ),
                     failure_message=str(e),
                     exception=e,
