@@ -64,7 +64,8 @@ function GroupCard({ group }: GroupCardProps) {
               icon={SvgChevronRight}
               prominence="tertiary"
               tooltip="View group"
-              onClick={() => router.push(`/admin/groups2/${group.id}`)}
+              aria-label="View group"
+              onClick={() => router.push(`/admin/groups/${group.id}`)}
             />
           </Section>
         }

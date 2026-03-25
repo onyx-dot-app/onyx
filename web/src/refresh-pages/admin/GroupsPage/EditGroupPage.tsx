@@ -260,7 +260,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       mutate(USER_GROUP_URL);
       mutate(`/api/admin/token-rate-limits/user-group/${groupId}`);
       toast.success(`Group "${trimmed}" updated`);
-      router.push("/admin/groups2");
+      router.push("/admin/groups");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to update group");
     } finally {
@@ -275,7 +275,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       await deleteGroup(groupId);
       mutate(USER_GROUP_URL);
       toast.success(`Group "${group?.name}" deleted`);
-      router.push("/admin/groups2");
+      router.push("/admin/groups");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to delete group");
     } finally {
@@ -308,13 +308,18 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     <Section flexDirection="row" gap={0.5} width="auto" height="auto">
       <Button
         prominence="tertiary"
-        onClick={() => router.push("/admin/groups2")}
+        onClick={() => router.push("/admin/groups")}
       >
         Cancel
       </Button>
       <Button
         onClick={handleSave}
         disabled={!groupName.trim() || isSubmitting || isSyncing}
+        tooltip={
+          isSyncing
+            ? "Document embeddings are being updated due to recent changes to this group."
+            : undefined
+        }
       >
         {isSubmitting ? "Saving..." : isSyncing ? "Syncing..." : "Save Changes"}
       </Button>
@@ -463,6 +468,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   title="Delete This Group"
                   description="Members will lose access to any resources shared with this group."
                   center
+                  nonInteractive
                 >
                   <Button
                     variant="danger"

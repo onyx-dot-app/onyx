@@ -23,11 +23,7 @@ function ResourcePopover({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Popover.Trigger
-        onClick={(e) => {
-          e.preventDefault();
-        }}
-      >
+      <Popover.Anchor>
         <InputTypeIn
           placeholder={placeholder}
           value={searchValue}
@@ -37,7 +33,7 @@ function ResourcePopover({
           }}
           onFocus={() => setOpen(true)}
         />
-      </Popover.Trigger>
+      </Popover.Anchor>
       <Popover.Content
         width="trigger"
         align="start"

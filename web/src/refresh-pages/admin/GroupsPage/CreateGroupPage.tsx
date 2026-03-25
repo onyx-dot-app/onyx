@@ -17,7 +17,12 @@ import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
-import { createGroup } from "./svc";
+import {
+  createGroup,
+  updateAgentGroupSharing,
+  updateDocSetGroupSharing,
+  saveTokenLimits,
+} from "./svc";
 import { apiKeyToMemberRow, memberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
 import TokenLimitSection from "./TokenLimitSection";
@@ -62,9 +67,16 @@ function CreateGroupPage() {
 
     setIsSubmitting(true);
     try {
-      await createGroup(trimmed, selectedUserIds, selectedCcPairIds);
+      const groupId = await createGroup(
+        trimmed,
+        selectedUserIds,
+        selectedCcPairIds
+      );
+      await updateAgentGroupSharing(groupId, [], selectedAgentIds);
+      await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
+      await saveTokenLimits(groupId, tokenLimits, []);
       toast.success(`Group "${trimmed}" created`);
-      router.push("/admin/groups2");
+      router.push("/admin/groups");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to create group");
     } finally {
@@ -76,7 +88,7 @@ function CreateGroupPage() {
     <Section flexDirection="row" gap={0.5} width="auto" height="auto">
       <Button
         prominence="tertiary"
-        onClick={() => router.push("/admin/groups2")}
+        onClick={() => router.push("/admin/groups")}
       >
         Cancel
       </Button>
