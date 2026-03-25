@@ -40,6 +40,8 @@ from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import ENABLE_ADMIN_DEBUG_ENDPOINTS
+from onyx.configs.app_configs import ENABLE_DEEP_PROFILING
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
@@ -132,6 +134,10 @@ from onyx.server.metrics.postgres_connection_pool import (
     setup_postgres_connection_pool_metrics,
 )
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
+from onyx.server.metrics.redis_connection_pool import (
+    setup_redis_connection_pool_metrics,
+)
+from onyx.server.metrics.threadpool import setup_threadpool_metrics
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
@@ -341,6 +347,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         },
     )
 
+    # --- Observability (always-on, cheap) ---
+    setup_redis_connection_pool_metrics()
+    setup_threadpool_metrics()
+
+    from onyx.server.metrics.event_loop_lag import start_event_loop_lag_probe
+
+    start_event_loop_lag_probe()
+
+    if ENABLE_ADMIN_DEBUG_ENDPOINTS:
+        from onyx.server.metrics.admin_debug import set_start_time
+
+        set_start_time()
+
+    # --- Deep profiling (opt-in, ~10-20% alloc overhead) ---
+    if ENABLE_DEEP_PROFILING:
+        from onyx.server.metrics.deep_profiling import start_deep_profiling
+
+        start_deep_profiling()
+
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"
     )
@@ -393,6 +418,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         from onyx.background.periodic_poller import stop_periodic_poller
 
         stop_periodic_poller()
+
+    from onyx.server.metrics.event_loop_lag import stop_event_loop_lag_probe
+
+    await stop_event_loop_lag_probe()
+
+    if ENABLE_DEEP_PROFILING:
+        from onyx.server.metrics.deep_profiling import stop_deep_profiling
+
+        await stop_deep_profiling()
 
     SqlEngine.reset_engine()
 
@@ -652,6 +686,17 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    if ENABLE_ADMIN_DEBUG_ENDPOINTS:
+        from onyx.server.metrics.admin_debug import router as debug_router
+
+        include_router_with_global_prefix_prepended(application, debug_router)
+
+    # Memory delta middleware builds its route map at registration time,
+    # so it must be added after all routers (including conditional ones).
+    from onyx.server.metrics.memory_delta import add_memory_delta_middleware
+
+    add_memory_delta_middleware(application)
+
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)
 
