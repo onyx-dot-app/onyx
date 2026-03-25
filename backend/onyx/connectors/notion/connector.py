@@ -274,7 +274,7 @@ class NotionConnector(LoadConnector, PollConnector):
         try:
             res.raise_for_status()
         except Exception as e:
-            if res.status_code == 404:
+            if res.status_code in (403, 404):
                 logger.error(
                     f"Unable to access database with ID '{database_id}'. "
                     f"This is likely due to the database not being shared "
@@ -305,7 +305,7 @@ class NotionConnector(LoadConnector, PollConnector):
         try:
             res.raise_for_status()
         except Exception as e:
-            if res.status_code == 404:
+            if res.status_code in (403, 404):
                 logger.error(
                     f"Unable to access data source with ID '{data_source_id}'. "
                     f"This is likely due to it not being shared "
