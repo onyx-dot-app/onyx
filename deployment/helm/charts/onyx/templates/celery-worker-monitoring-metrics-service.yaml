@@ -5,20 +5,20 @@ metadata:
   name: {{ include "onyx.fullname" . }}-celery-worker-monitoring-metrics
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
-    {{- with .Values.celery_worker_monitoring.deploymentLabels }}
-    {{- toYaml . | nindent 4 }}
+    {{- if .Values.celery_worker_monitoring.deploymentLabels }}
+    {{- toYaml .Values.celery_worker_monitoring.deploymentLabels | nindent 4 }}
     {{- end }}
     metrics: "true"
 spec:
   type: ClusterIP
   ports:
-    - name: metrics
-      port: 9096
+    - port: 9096
       targetPort: metrics
       protocol: TCP
+      name: metrics
   selector:
     {{- include "onyx.selectorLabels" . | nindent 4 }}
-    {{- with .Values.celery_worker_monitoring.deploymentLabels }}
-    {{- toYaml . | nindent 4 }}
+    {{- if .Values.celery_worker_monitoring.deploymentLabels }}
+    {{- toYaml .Values.celery_worker_monitoring.deploymentLabels | nindent 4 }}
     {{- end }}
 {{- end }}
