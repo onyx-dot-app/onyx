@@ -975,13 +975,13 @@ class DocumentQuery:
             Returns:
                 A filter for the source types.
             """
-            if len(source_types) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many source types: {len(source_types)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
             if not source_types:
                 raise ValueError(
                     "source_types cannot be empty if trying to create a source type filter."
+                )
+            if len(source_types) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many source types: {len(source_types)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
                 )
             # Use terms instead of a list of term within a should clause because
             # Lucene will optimize the filtering for large sets of terms. Small
@@ -1012,13 +1012,13 @@ class DocumentQuery:
             Returns:
                 A filter for the tags.
             """
-            if len(tags) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many tags: {len(tags)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
             if not tags:
                 raise ValueError(
                     "tags cannot be empty if trying to create a tag filter."
+                )
+            if len(tags) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many tags: {len(tags)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
                 )
             # Kind of an abstraction leak, see
             # convert_metadata_dict_to_list_of_strings for why metadata list
@@ -1049,13 +1049,13 @@ class DocumentQuery:
             Returns:
                 A filter for the document sets.
             """
-            if len(document_sets) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many document sets: {len(document_sets)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
             if not document_sets:
                 raise ValueError(
                     "document_sets cannot be empty if trying to create a document set filter."
+                )
+            if len(document_sets) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many document sets: {len(document_sets)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
                 )
             # Use terms instead of a list of term within a should clause because
             # Lucene will optimize the filtering for large sets of terms. Small
@@ -1129,13 +1129,13 @@ class DocumentQuery:
             Returns:
                 A filter for the document IDs.
             """
-            if len(doc_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many document IDs: {len(doc_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
             if not doc_ids:
                 raise ValueError(
                     "doc_ids cannot be empty if trying to create a document ID filter."
+                )
+            if len(doc_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many document IDs: {len(doc_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
                 )
             # Use terms instead of a list of term within a should clause because
             # Lucene will optimize the filtering for large sets of terms. Small
@@ -1164,13 +1164,13 @@ class DocumentQuery:
             Returns:
                 A filter for the hierarchy node IDs.
             """
-            if len(node_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many hierarchy node IDs: {len(node_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
             if not node_ids:
                 raise ValueError(
                     "node_ids cannot be empty if trying to create a hierarchy node ID filter."
+                )
+            if len(node_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many hierarchy node IDs: {len(node_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
                 )
             # Use terms instead of a list of term within a should clause because
             # Lucene will optimize the filtering for large sets of terms. Small
