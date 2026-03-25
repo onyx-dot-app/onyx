@@ -110,7 +110,7 @@ def _mock_response(
     resp = MagicMock()
     resp.status_code = status_code
     resp.reason = "OK" if status_code < 300 else "Error"
-    resp.json.return_value = json_data if json_data else []
+    resp.json.return_value = json_data if json_data is not None else []
     resp.headers = {"Link": link_header}
     return resp
 
