@@ -896,7 +896,7 @@ class NotionConnector(LoadConnector, PollConnector):
                     db_url = (
                         db_page.url or f"https://notion.so/{db_id.replace('-', '')}"
                     )
-                except requests.exceptions.HTTPError as e:
+                except requests.exceptions.RequestException as e:
                     logger.warning(
                         f"Could not fetch database '{db_id}', "
                         f"defaulting to workspace root. Error: {e}"
