@@ -1,14 +1,17 @@
 """Generic Celery task lifecycle Prometheus metrics.
 
 Provides signal handlers that track task started/completed/failed counts,
-active task gauge, and task duration histograms. These fire for ALL tasks
-on the worker — no per-connector enrichment (see indexing_task_metrics.py
-for that).
+active task gauge, task duration histograms, and retry/reject/revoke counts.
+These fire for ALL tasks on the worker — no per-connector enrichment
+(see indexing_task_metrics.py for that).
 
 Usage in a worker app module:
     from onyx.server.metrics.celery_task_metrics import (
         on_celery_task_prerun,
         on_celery_task_postrun,
+        on_celery_task_retry,
+        on_celery_task_revoked,
+        on_celery_task_rejected,
     )
     # Call from the worker's existing signal handlers
 """
@@ -47,6 +50,24 @@ TASKS_ACTIVE = Gauge(
     "onyx_celery_tasks_active",
     "Currently executing Celery tasks",
     ["task_name", "queue"],
+)
+
+TASK_RETRIED = Counter(
+    "onyx_celery_task_retried_total",
+    "Total Celery tasks retried",
+    ["task_name", "queue"],
+)
+
+TASK_REVOKED = Counter(
+    "onyx_celery_task_revoked_total",
+    "Total Celery tasks revoked (cancelled)",
+    ["task_name"],
+)
+
+TASK_REJECTED = Counter(
+    "onyx_celery_task_rejected_total",
+    "Total Celery tasks rejected by worker",
+    ["task_name"],
 )
 
 # task_id → monotonic start time
@@ -103,3 +124,44 @@ def on_celery_task_postrun(
             TASK_DURATION.labels(**labels).observe(time.monotonic() - start)
     except Exception:
         logger.debug("Failed to record celery task postrun metrics", exc_info=True)
+
+
+def on_celery_task_retry(
+    _task_id: str | None,
+    task: Task | None,
+) -> None:
+    """Record task retry. Call from the worker's task_retry signal handler."""
+    if task is None:
+        return
+    try:
+        labels = _get_task_labels(task)
+        TASK_RETRIED.labels(**labels).inc()
+    except Exception:
+        logger.debug("Failed to record celery task retry metrics", exc_info=True)
+
+
+def on_celery_task_revoked(
+    _task_id: str | None,
+    task_name: str | None = None,
+) -> None:
+    """Record task revocation. The revoked signal doesn't provide a Task
+    instance, only the task name via sender."""
+    if task_name is None:
+        return
+    try:
+        TASK_REVOKED.labels(task_name=task_name).inc()
+    except Exception:
+        logger.debug("Failed to record celery task revoked metrics", exc_info=True)
+
+
+def on_celery_task_rejected(
+    _task_id: str | None,
+    task_name: str | None = None,
+) -> None:
+    """Record task rejection."""
+    if task_name is None:
+        return
+    try:
+        TASK_REJECTED.labels(task_name=task_name).inc()
+    except Exception:
+        logger.debug("Failed to record celery task rejected metrics", exc_info=True)

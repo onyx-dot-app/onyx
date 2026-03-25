@@ -9,11 +9,13 @@ a configurable TTL (default 30s). This means metrics may be up to TTL seconds
 stale, which is fine for monitoring dashboards.
 """
 
+import json
 import threading
 import time
 from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
@@ -133,17 +135,54 @@ class QueueDepthCollector(_CachedCollector):
             "Number of prefetched (unacked) tasks for queue",
             labels=["queue"],
         )
+        queue_age = GaugeMetricFamily(
+            "onyx_queue_oldest_task_age_seconds",
+            "Age of the oldest task in the queue (seconds since enqueue)",
+            labels=["queue"],
+        )
+
+        now = time.time()
 
         for queue_name, label in _QUEUE_LABEL_MAP.items():
             length = celery_get_queue_length(queue_name, redis_client)
             depth.add_metric([label], length)
+
+            # Peek at the oldest message to get its age
+            if length > 0:
+                age = self._get_oldest_message_age(redis_client, queue_name, now)
+                if age is not None:
+                    queue_age.add_metric([label], age)
 
         for queue_name in _UNACKED_QUEUES:
             label = _QUEUE_LABEL_MAP[queue_name]
             task_ids = celery_get_unacked_task_ids(queue_name, redis_client)
             unacked.add_metric([label], len(task_ids))
 
-        return [depth, unacked]
+        return [depth, unacked, queue_age]
+
+    @staticmethod
+    def _get_oldest_message_age(
+        redis_client: Redis, queue_name: str, now: float
+    ) -> float | None:
+        """Peek at the oldest (tail) message in a Redis list queue
+        and extract its timestamp to compute age."""
+        try:
+            raw = redis_client.lindex(queue_name, -1)
+            if raw is None:
+                return None
+            msg = json.loads(raw)
+            # Celery v2 protocol: timestamp in properties
+            props = msg.get("properties", {})
+            ts = props.get("timestamp")
+            if ts is not None:
+                return now - float(ts)
+            # Fallback: check headers for eta or expires
+            headers = msg.get("headers", {})
+            if "eta" in headers and headers["eta"] is not None:
+                return None  # ETA tasks are intentionally delayed
+        except Exception:
+            pass
+        return None
 
 
 class IndexAttemptCollector(_CachedCollector):
@@ -175,7 +214,13 @@ class IndexAttemptCollector(_CachedCollector):
         attempts_gauge = GaugeMetricFamily(
             "onyx_index_attempts_active",
             "Number of non-terminal index attempts",
-            labels=["status", "source", "tenant_id"],
+            labels=[
+                "status",
+                "source",
+                "tenant_id",
+                "connector_name",
+                "cc_pair_id",
+            ],
         )
 
         tenant_ids = get_all_tenant_ids()
@@ -192,6 +237,8 @@ class IndexAttemptCollector(_CachedCollector):
                         session.query(
                             IndexAttempt.status,
                             Connector.source,
+                            ConnectorCredentialPair.id,
+                            ConnectorCredentialPair.name,
                             func.count(),
                         )
                         .join(
@@ -204,13 +251,25 @@ class IndexAttemptCollector(_CachedCollector):
                             ConnectorCredentialPair.connector_id == Connector.id,
                         )
                         .filter(IndexAttempt.status.notin_(self._terminal_statuses))
-                        .group_by(IndexAttempt.status, Connector.source)
+                        .group_by(
+                            IndexAttempt.status,
+                            Connector.source,
+                            ConnectorCredentialPair.id,
+                            ConnectorCredentialPair.name,
+                        )
                         .all()
                     )
 
-                    for status, source, count in rows:
+                    for status, source, cc_id, cc_name, count in rows:
+                        name_val = cc_name or f"cc_pair_{cc_id}"
                         attempts_gauge.add_metric(
-                            [status.value, source.value, tid],
+                            [
+                                status.value,
+                                source.value,
+                                tid,
+                                name_val,
+                                str(cc_id),
+                            ],
                             count,
                         )
             finally:
@@ -243,12 +302,12 @@ class ConnectorHealthCollector(_CachedCollector):
         staleness_gauge = GaugeMetricFamily(
             "onyx_connector_last_success_age_seconds",
             "Seconds since last successful index for this connector",
-            labels=["tenant_id", "source", "cc_pair_id"],
+            labels=["tenant_id", "source", "cc_pair_id", "connector_name"],
         )
         error_state_gauge = GaugeMetricFamily(
             "onyx_connector_in_error_state",
             "Whether the connector is in a repeated error state (1=yes, 0=no)",
-            labels=["tenant_id", "source", "cc_pair_id"],
+            labels=["tenant_id", "source", "cc_pair_id", "connector_name"],
         )
         by_status_gauge = GaugeMetricFamily(
             "onyx_connectors_by_status",
@@ -263,7 +322,24 @@ class ConnectorHealthCollector(_CachedCollector):
         docs_gauge = GaugeMetricFamily(
             "onyx_connector_total_docs_indexed",
             "Total documents indexed by this connector",
-            labels=["tenant_id", "source", "cc_pair_id"],
+            labels=["tenant_id", "source", "cc_pair_id", "connector_name"],
+        )
+
+        per_connector_labels = [
+            "tenant_id",
+            "source",
+            "cc_pair_id",
+            "connector_name",
+        ]
+        docs_success_gauge = GaugeMetricFamily(
+            "onyx_connector_docs_indexed_total",
+            "Total documents successfully indexed (from latest attempt) per connector",
+            labels=per_connector_labels,
+        )
+        docs_error_gauge = GaugeMetricFamily(
+            "onyx_connector_error_count_total",
+            "Total number of failed index attempts per connector",
+            labels=per_connector_labels,
         )
 
         now = datetime.now(tz=timezone.utc)
@@ -276,6 +352,9 @@ class ConnectorHealthCollector(_CachedCollector):
                 continue
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tid)
             try:
+                from onyx.db.enums import IndexingStatus
+                from onyx.db.models import IndexAttempt
+
                 with get_session_with_current_tenant() as session:
                     pairs = (
                         session.query(
@@ -283,7 +362,7 @@ class ConnectorHealthCollector(_CachedCollector):
                             ConnectorCredentialPair.status,
                             ConnectorCredentialPair.in_repeated_error_state,
                             ConnectorCredentialPair.last_successful_index_time,
-                            ConnectorCredentialPair.total_docs_indexed,
+                            ConnectorCredentialPair.name,
                             Connector.source,
                         )
                         .join(
@@ -293,6 +372,35 @@ class ConnectorHealthCollector(_CachedCollector):
                         .all()
                     )
 
+                    # Count failed index attempts per connector
+                    error_rows = (
+                        session.query(
+                            IndexAttempt.connector_credential_pair_id,
+                            func.count(),
+                        )
+                        .filter(
+                            IndexAttempt.status == IndexingStatus.FAILED,
+                        )
+                        .group_by(IndexAttempt.connector_credential_pair_id)
+                        .all()
+                    )
+                    error_counts_by_cc: dict[int, int] = {
+                        cc_id: count for cc_id, count in error_rows
+                    }
+
+                    # Sum total docs indexed from index attempts
+                    docs_rows = (
+                        session.query(
+                            IndexAttempt.connector_credential_pair_id,
+                            func.sum(func.coalesce(IndexAttempt.new_docs_indexed, 0)),
+                        )
+                        .group_by(IndexAttempt.connector_credential_pair_id)
+                        .all()
+                    )
+                    docs_by_cc: dict[int, int] = {
+                        cc_id: int(total or 0) for cc_id, total in docs_rows
+                    }
+
                     status_counts: dict[str, int] = {}
                     error_count = 0
 
@@ -301,28 +409,38 @@ class ConnectorHealthCollector(_CachedCollector):
                         status,
                         in_error,
                         last_success,
-                        total_docs,
+                        cc_name,
                         source,
                     ) in pairs:
                         cc_id_str = str(cc_id)
                         source_val = source.value
+                        name_val = cc_name or f"cc_pair_{cc_id}"
+                        label_vals = [tid, source_val, cc_id_str, name_val]
 
                         if last_success is not None:
                             age = (now - last_success).total_seconds()
-                            staleness_gauge.add_metric(
-                                [tid, source_val, cc_id_str], age
-                            )
+                            staleness_gauge.add_metric(label_vals, age)
 
                         error_state_gauge.add_metric(
-                            [tid, source_val, cc_id_str],
+                            label_vals,
                             1.0 if in_error else 0.0,
                         )
                         if in_error:
                             error_count += 1
 
                         docs_gauge.add_metric(
-                            [tid, source_val, cc_id_str],
-                            total_docs or 0,
+                            label_vals,
+                            docs_by_cc.get(cc_id, 0),
+                        )
+
+                        docs_success_gauge.add_metric(
+                            label_vals,
+                            docs_by_cc.get(cc_id, 0),
+                        )
+
+                        docs_error_gauge.add_metric(
+                            label_vals,
+                            error_counts_by_cc.get(cc_id, 0),
                         )
 
                         status_val = status.value
@@ -341,4 +459,100 @@ class ConnectorHealthCollector(_CachedCollector):
             by_status_gauge,
             error_total_gauge,
             docs_gauge,
+            docs_success_gauge,
+            docs_error_gauge,
         ]
+
+
+class RedisHealthCollector(_CachedCollector):
+    """Collects Redis server health metrics (memory, clients, etc.)."""
+
+    def __init__(self, cache_ttl: float = _DEFAULT_CACHE_TTL) -> None:
+        super().__init__(cache_ttl)
+        self._get_redis: Callable[[], Redis] | None = None
+
+    def set_redis_factory(self, factory: Callable[[], Redis]) -> None:
+        """Set a callable that returns a broker Redis client on demand."""
+        self._get_redis = factory
+
+    def _collect_fresh(self) -> list[GaugeMetricFamily]:
+        if self._get_redis is None:
+            return []
+
+        redis_client = self._get_redis()
+
+        memory_used = GaugeMetricFamily(
+            "onyx_redis_memory_used_bytes",
+            "Redis used memory in bytes",
+        )
+        memory_peak = GaugeMetricFamily(
+            "onyx_redis_memory_peak_bytes",
+            "Redis peak used memory in bytes",
+        )
+        memory_frag = GaugeMetricFamily(
+            "onyx_redis_memory_fragmentation_ratio",
+            "Redis memory fragmentation ratio (>1.5 indicates fragmentation)",
+        )
+        connected_clients = GaugeMetricFamily(
+            "onyx_redis_connected_clients",
+            "Number of connected Redis clients",
+        )
+
+        try:
+            mem_info = redis_client.info("memory")
+            memory_used.add_metric([], mem_info.get("used_memory", 0))
+            memory_peak.add_metric([], mem_info.get("used_memory_peak", 0))
+            memory_frag.add_metric([], mem_info.get("mem_fragmentation_ratio", 0))
+
+            client_info = redis_client.info("clients")
+            connected_clients.add_metric([], client_info.get("connected_clients", 0))
+        except Exception:
+            logger.debug("Failed to collect Redis health metrics", exc_info=True)
+
+        return [memory_used, memory_peak, memory_frag, connected_clients]
+
+
+class WorkerHealthCollector(_CachedCollector):
+    """Collects Celery worker count and process count via inspect ping.
+
+    Uses a longer cache TTL (60s) since inspect.ping() is a broadcast
+    command that takes a couple seconds to complete.
+    """
+
+    def __init__(self, cache_ttl: float = 60.0) -> None:
+        super().__init__(cache_ttl)
+        self._celery_app: Any | None = None
+
+    def set_celery_app(self, app: Any) -> None:
+        """Set the Celery app instance for inspect commands."""
+        self._celery_app = app
+
+    def _collect_fresh(self) -> list[GaugeMetricFamily]:
+        if self._celery_app is None:
+            return []
+
+        active_workers = GaugeMetricFamily(
+            "onyx_celery_active_worker_count",
+            "Number of active Celery workers responding to ping",
+        )
+        worker_up = GaugeMetricFamily(
+            "onyx_celery_worker_up",
+            "Whether a specific Celery worker is alive (1=up, 0=down)",
+            labels=["worker"],
+        )
+
+        try:
+            inspector = self._celery_app.control.inspect(timeout=3.0)
+            ping_result = inspector.ping()
+            if ping_result:
+                active_workers.add_metric([], len(ping_result))
+                for worker_name in ping_result:
+                    # Strip hostname suffix for cleaner labels
+                    short_name = worker_name.split("@")[0]
+                    worker_up.add_metric([short_name], 1)
+            else:
+                active_workers.add_metric([], 0)
+        except Exception:
+            logger.debug("Failed to collect worker health metrics", exc_info=True)
+
+        return [active_workers, worker_up]

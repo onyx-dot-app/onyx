@@ -39,9 +39,10 @@ class TestQueueDepthCollector:
         ):
             families = collector.collect()
 
-        assert len(families) == 2
+        assert len(families) == 3
         depth_family = families[0]
         unacked_family = families[1]
+        age_family = families[2]
 
         assert depth_family.name == "onyx_queue_depth"
         assert len(depth_family.samples) > 0
@@ -52,6 +53,8 @@ class TestQueueDepthCollector:
         unacked_labels = {s.labels["queue"] for s in unacked_family.samples}
         assert "docfetching" in unacked_labels
         assert "docprocessing" in unacked_labels
+
+        assert age_family.name == "onyx_queue_oldest_task_age_seconds"
         for sample in unacked_family.samples:
             assert sample.value == 2
 
@@ -134,7 +137,7 @@ class TestQueueDepthCollector:
         ):
             good_result = collector.collect()
 
-        assert len(good_result) == 2
+        assert len(good_result) == 3
         assert good_result[0].samples[0].value == 10
 
         # Second call fails — should return stale cache, not empty
@@ -174,7 +177,13 @@ class TestIndexAttemptCollector:
 
         from onyx.db.enums import IndexingStatus
 
-        mock_row = (IndexingStatus.IN_PROGRESS, MagicMock(value="web"), 2)
+        mock_row = (
+            IndexingStatus.IN_PROGRESS,
+            MagicMock(value="web"),
+            81,
+            "Table Tennis Blade Guide",
+            2,
+        )
         mock_session.query.return_value.join.return_value.join.return_value.filter.return_value.group_by.return_value.all.return_value = [
             mock_row
         ]
@@ -188,6 +197,8 @@ class TestIndexAttemptCollector:
             "status": "in_progress",
             "source": "web",
             "tenant_id": "public",
+            "connector_name": "Table Tennis Blade Guide",
+            "cc_pair_id": "81",
         }
         assert sample.value == 2
 
@@ -248,19 +259,25 @@ class TestConnectorHealthCollector:
 
         mock_status = MagicMock(value="ACTIVE")
         mock_source = MagicMock(value="google_drive")
+        # Row: (id, status, in_error, last_success, name, source)
         mock_row = (
             42,
             mock_status,
             True,  # in_repeated_error_state
             last_success,
-            1500,
+            "My GDrive Connector",
             mock_source,
         )
         mock_session.query.return_value.join.return_value.all.return_value = [mock_row]
 
+        # Mock the index attempt queries (error counts + docs counts)
+        mock_session.query.return_value.filter.return_value.group_by.return_value.all.return_value = (
+            []
+        )
+
         families = collector.collect()
 
-        assert len(families) == 5
+        assert len(families) == 7
         names = {f.name for f in families}
         assert names == {
             "onyx_connector_last_success_age_seconds",
@@ -268,6 +285,8 @@ class TestConnectorHealthCollector:
             "onyx_connectors_by_status",
             "onyx_connectors_in_error_total",
             "onyx_connector_total_docs_indexed",
+            "onyx_connector_docs_indexed_total",
+            "onyx_connector_error_count_total",
         }
 
         staleness = next(
@@ -284,7 +303,9 @@ class TestConnectorHealthCollector:
         docs = next(
             f for f in families if f.name == "onyx_connector_total_docs_indexed"
         )
-        assert docs.samples[0].value == 1500
+        # Docs come from index_attempt query (mocked as empty), so 0
+        assert docs.samples[0].value == 0
+        assert docs.samples[0].labels["connector_name"] == "My GDrive Connector"
 
         by_status = next(f for f in families if f.name == "onyx_connectors_by_status")
         assert by_status.samples[0].labels == {

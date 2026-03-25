@@ -63,6 +63,29 @@ def on_task_postrun(
     on_indexing_task_postrun(task_id, task, kwargs, state)
 
 
+@signals.task_retry.connect
+def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:
+    from onyx.server.metrics.celery_task_metrics import on_celery_task_retry
+
+    on_celery_task_retry(kwargs.get("task_id"), sender)
+
+
+@signals.task_revoked.connect
+def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
+    from onyx.server.metrics.celery_task_metrics import on_celery_task_revoked
+
+    task_name = sender.name if hasattr(sender, "name") else str(sender)
+    on_celery_task_revoked(kwargs.get("task_id"), task_name)
+
+
+@signals.task_rejected.connect
+def on_task_rejected(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
+    from onyx.server.metrics.celery_task_metrics import on_celery_task_rejected
+
+    task_name = sender.name if hasattr(sender, "name") else str(sender)
+    on_celery_task_rejected(None, task_name)
+
+
 @celeryd_init.connect
 def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
     app_base.on_celeryd_init(sender, conf, **kwargs)

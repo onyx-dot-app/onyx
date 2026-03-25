@@ -12,6 +12,8 @@ from redis import Redis
 from onyx.server.metrics.indexing_pipeline import ConnectorHealthCollector
 from onyx.server.metrics.indexing_pipeline import IndexAttemptCollector
 from onyx.server.metrics.indexing_pipeline import QueueDepthCollector
+from onyx.server.metrics.indexing_pipeline import RedisHealthCollector
+from onyx.server.metrics.indexing_pipeline import WorkerHealthCollector
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -23,6 +25,8 @@ logger = setup_logger()
 _queue_collector = QueueDepthCollector()
 _attempt_collector = IndexAttemptCollector()
 _connector_collector = ConnectorHealthCollector()
+_redis_health_collector = RedisHealthCollector()
+_worker_health_collector = WorkerHealthCollector()
 
 
 def _make_broker_redis_factory(celery_app: Celery) -> Callable[[], Redis]:
@@ -73,11 +77,20 @@ def setup_indexing_pipeline_metrics(celery_app: Celery) -> None:
         celery_app: The Celery application instance. Used to obtain a fresh
             broker Redis client on each scrape for queue depth metrics.
     """
-    _queue_collector.set_redis_factory(_make_broker_redis_factory(celery_app))
+    redis_factory = _make_broker_redis_factory(celery_app)
+    _queue_collector.set_redis_factory(redis_factory)
+    _redis_health_collector.set_redis_factory(redis_factory)
+    _worker_health_collector.set_celery_app(celery_app)
     _attempt_collector.configure()
     _connector_collector.configure()
 
-    for collector in (_queue_collector, _attempt_collector, _connector_collector):
+    for collector in (
+        _queue_collector,
+        _attempt_collector,
+        _connector_collector,
+        _redis_health_collector,
+        _worker_health_collector,
+    ):
         try:
             REGISTRY.register(collector)
         except ValueError:
