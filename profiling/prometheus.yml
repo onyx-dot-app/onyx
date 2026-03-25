@@ -9,11 +9,11 @@ scrape_configs:
       - targets: ['localhost:9090']
 
   # Onyx API server — exposes /metrics via prometheus-fastapi-instrumentator
-  # Port 8090 = VSCode dev / dev1 worktree. Use 8080 for standard docker-compose stack.
+  # Port matches the API Server launch config in .vscode/launch.json
   - job_name: 'onyx-api-server'
     scrape_interval: 5s
     static_configs:
-      - targets: ['host.docker.internal:8090']
+      - targets: ['host.docker.internal:8080']
 
   # Onyx celery workers — each exposes /metrics on a dedicated port
   - job_name: 'onyx-monitoring-worker'
