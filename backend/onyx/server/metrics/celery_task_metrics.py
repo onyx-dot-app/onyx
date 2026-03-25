@@ -73,6 +73,22 @@ TASK_REJECTED = Counter(
 # task_id → monotonic start time
 _task_start_times: dict[str, float] = {}
 
+# Entries older than this are evicted on each prerun to prevent unbounded
+# growth when tasks are killed (SIGTERM, OOM) and postrun never fires.
+_MAX_START_TIME_AGE_SECONDS = 3600  # 1 hour
+
+
+def _evict_stale_start_times() -> None:
+    """Remove _task_start_times entries older than _MAX_START_TIME_AGE_SECONDS."""
+    now = time.monotonic()
+    stale_ids = [
+        tid
+        for tid, start in _task_start_times.items()
+        if now - start > _MAX_START_TIME_AGE_SECONDS
+    ]
+    for tid in stale_ids:
+        _task_start_times.pop(tid, None)
+
 
 def _get_task_labels(task: Task) -> dict[str, str]:
     """Extract task_name and queue labels from a Celery Task instance."""
@@ -96,6 +112,7 @@ def on_celery_task_prerun(
         return
 
     try:
+        _evict_stale_start_times()
         labels = _get_task_labels(task)
         TASK_STARTED.labels(**labels).inc()
         TASKS_ACTIVE.labels(**labels).inc()
@@ -117,7 +134,12 @@ def on_celery_task_postrun(
         labels = _get_task_labels(task)
         outcome = "success" if state == "SUCCESS" else "failure"
         TASK_COMPLETED.labels(**labels, outcome=outcome).inc()
-        TASKS_ACTIVE.labels(**labels).dec()
+
+        # Guard against going below 0 if postrun fires without a matching
+        # prerun (e.g. after a worker restart or stale entry eviction).
+        active_gauge = TASKS_ACTIVE.labels(**labels)
+        if active_gauge._value.get() > 0:
+            active_gauge.dec()
 
         start = _task_start_times.pop(task_id, None)
         if start is not None:

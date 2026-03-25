@@ -68,7 +68,6 @@ class TestIndexingTaskPrerun:
             source="google_drive",
             tenant_id="tenant-1",
             cc_pair_id="42",
-            connector_name="My Google Drive",
         )._value.get()
 
         on_indexing_task_prerun("task-1", task, kwargs)
@@ -78,7 +77,6 @@ class TestIndexingTaskPrerun:
             source="google_drive",
             tenant_id="tenant-1",
             cc_pair_id="42",
-            connector_name="My Google Drive",
         )._value.get()
 
         assert after == before + 1
@@ -183,7 +181,6 @@ class TestIndexingTaskPostrun:
             source="google_drive",
             tenant_id="public",
             cc_pair_id="42",
-            connector_name="Marketing Drive",
             outcome="success",
         )._value.get()
 
@@ -200,7 +197,6 @@ class TestIndexingTaskPostrun:
             source="google_drive",
             tenant_id="public",
             cc_pair_id="42",
-            connector_name="Marketing Drive",
             outcome="success",
         )._value.get()
 
@@ -226,7 +222,6 @@ class TestIndexingTaskPostrun:
             source="slack",
             tenant_id="public",
             cc_pair_id="42",
-            connector_name="Slack",
             outcome="failure",
         )._value.get()
 
@@ -237,7 +232,6 @@ class TestIndexingTaskPostrun:
             source="slack",
             tenant_id="public",
             cc_pair_id="42",
-            connector_name="Slack",
             outcome="failure",
         )._value.get()
 
@@ -252,3 +246,57 @@ class TestIndexingTaskPostrun:
 
         # No prerun — should still emit completed counter, just skip duration
         on_indexing_task_postrun("task-1", task, kwargs, "SUCCESS")
+
+
+class TestResolveConnector:
+    def test_failed_lookup_not_cached(self) -> None:
+        """When DB lookup returns None, result should NOT be cached."""
+        with (
+            patch("onyx.db.engine.sql_engine.get_session_with_current_tenant"),
+            patch(
+                "onyx.db.connector_credential_pair"
+                ".get_connector_credential_pair_from_id",
+                return_value=None,
+            ),
+        ):
+            from onyx.server.metrics.indexing_task_metrics import _resolve_connector
+
+            result = _resolve_connector(999)
+            assert result.source == "unknown"
+            # Should NOT be cached so subsequent calls can retry
+            assert 999 not in _connector_cache
+
+    def test_exception_not_cached(self) -> None:
+        """When DB lookup raises, result should NOT be cached."""
+        with (
+            patch(
+                "onyx.db.engine.sql_engine.get_session_with_current_tenant",
+                side_effect=Exception("DB down"),
+            ),
+        ):
+            from onyx.server.metrics.indexing_task_metrics import _resolve_connector
+
+            result = _resolve_connector(888)
+            assert result.source == "unknown"
+            assert 888 not in _connector_cache
+
+    def test_successful_lookup_is_cached(self) -> None:
+        """When DB lookup succeeds, result should be cached."""
+        mock_cc_pair = MagicMock()
+        mock_cc_pair.name = "My Drive"
+        mock_cc_pair.connector.source.value = "google_drive"
+
+        with (
+            patch("onyx.db.engine.sql_engine.get_session_with_current_tenant"),
+            patch(
+                "onyx.db.connector_credential_pair"
+                ".get_connector_credential_pair_from_id",
+                return_value=mock_cc_pair,
+            ),
+        ):
+            from onyx.server.metrics.indexing_task_metrics import _resolve_connector
+
+            result = _resolve_connector(777)
+            assert result.source == "google_drive"
+            assert result.name == "My Drive"
+            assert 777 in _connector_cache

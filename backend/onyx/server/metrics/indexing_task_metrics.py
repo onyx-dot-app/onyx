@@ -2,7 +2,13 @@
 
 Enriches the two primary indexing tasks (docfetching_proxy_task and
 docprocessing_task) with connector-level labels: source, tenant_id,
-cc_pair_id, and connector_name.
+and cc_pair_id.
+
+Note: connector_name is intentionally excluded from push-based per-task
+counters because it is a user-defined free-form string that can create
+unbounded cardinality. The pull-based collectors on the monitoring worker
+(see indexing_pipeline.py) include connector_name since they have bounded
+cardinality (one series per connector, not per task execution).
 
 Uses an in-memory cache for cc_pair_id → (source, name) lookups.
 Connectors never change source type, and names change rarely, so the
@@ -49,10 +55,11 @@ _INDEXING_TASK_NAMES: frozenset[str] = frozenset(
     }
 )
 
+# connector_name is intentionally excluded — see module docstring.
 INDEXING_TASK_STARTED = Counter(
     "onyx_indexing_task_started_total",
     "Indexing tasks started per connector",
-    ["task_name", "source", "tenant_id", "cc_pair_id", "connector_name"],
+    ["task_name", "source", "tenant_id", "cc_pair_id"],
 )
 
 INDEXING_TASK_COMPLETED = Counter(
@@ -63,7 +70,6 @@ INDEXING_TASK_COMPLETED = Counter(
         "source",
         "tenant_id",
         "cc_pair_id",
-        "connector_name",
         "outcome",
     ],
 )
@@ -78,12 +84,29 @@ INDEXING_TASK_DURATION = Histogram(
 # task_id → monotonic start time (for indexing tasks only)
 _indexing_start_times: dict[str, float] = {}
 
+# Entries older than this are evicted on each prerun to prevent unbounded
+# growth when tasks are killed (SIGTERM, OOM) and postrun never fires.
+_MAX_START_TIME_AGE_SECONDS = 3600  # 1 hour
+
+
+def _evict_stale_start_times() -> None:
+    """Remove _indexing_start_times entries older than _MAX_START_TIME_AGE_SECONDS."""
+    now = time.monotonic()
+    stale_ids = [
+        tid
+        for tid, start in _indexing_start_times.items()
+        if now - start > _MAX_START_TIME_AGE_SECONDS
+    ]
+    for tid in stale_ids:
+        _indexing_start_times.pop(tid, None)
+
 
 def _resolve_connector(cc_pair_id: int) -> ConnectorInfo:
     """Resolve cc_pair_id to ConnectorInfo, using cache when possible.
 
     On cache miss, does a single DB query with eager connector load.
-    On any failure, returns _UNKNOWN_CONNECTOR.
+    On any failure, returns _UNKNOWN_CONNECTOR without caching, so that
+    subsequent calls can retry the lookup once the DB is available.
     """
     cached = _connector_cache.get(cc_pair_id)
     if cached is not None:
@@ -102,21 +125,22 @@ def _resolve_connector(cc_pair_id: int) -> ConnectorInfo:
                 eager_load_connector=True,
             )
             if cc_pair is None:
-                info = _UNKNOWN_CONNECTOR
-            else:
-                info = ConnectorInfo(
-                    source=cc_pair.connector.source.value,
-                    name=cc_pair.name,
-                )
+                # DB lookup succeeded but cc_pair doesn't exist — don't cache,
+                # it may appear later (race with connector creation).
+                return _UNKNOWN_CONNECTOR
+
+            info = ConnectorInfo(
+                source=cc_pair.connector.source.value,
+                name=cc_pair.name,
+            )
+            _connector_cache[cc_pair_id] = info
+            return info
     except Exception:
         logger.debug(
             f"Failed to resolve connector info for cc_pair_id={cc_pair_id}",
             exc_info=True,
         )
-        info = _UNKNOWN_CONNECTOR
-
-    _connector_cache[cc_pair_id] = info
-    return info
+        return _UNKNOWN_CONNECTOR
 
 
 def on_indexing_task_prerun(
@@ -137,6 +161,8 @@ def on_indexing_task_prerun(
         return
 
     try:
+        _evict_stale_start_times()
+
         cc_pair_id = kwargs.get("cc_pair_id")
         tenant_id = str(kwargs.get("tenant_id", "unknown"))
 
@@ -150,7 +176,6 @@ def on_indexing_task_prerun(
             source=info.source,
             tenant_id=tenant_id,
             cc_pair_id=str(cc_pair_id),
-            connector_name=info.name,
         ).inc()
 
         _indexing_start_times[task_id] = time.monotonic()
@@ -190,7 +215,6 @@ def on_indexing_task_postrun(
             source=info.source,
             tenant_id=tenant_id,
             cc_pair_id=str(cc_pair_id),
-            connector_name=info.name,
             outcome=outcome,
         ).inc()
 

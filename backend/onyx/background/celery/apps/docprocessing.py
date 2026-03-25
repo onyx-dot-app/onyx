@@ -14,6 +14,14 @@ from celery.signals import worker_shutdown
 import onyx.background.celery.apps.app_base as app_base
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
+from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
+from onyx.server.metrics.celery_task_metrics import on_celery_task_rejected
+from onyx.server.metrics.celery_task_metrics import on_celery_task_retry
+from onyx.server.metrics.celery_task_metrics import on_celery_task_revoked
+from onyx.server.metrics.indexing_task_metrics import on_indexing_task_postrun
+from onyx.server.metrics.indexing_task_metrics import on_indexing_task_prerun
+from onyx.server.metrics.metrics_server import start_metrics_server
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -35,10 +43,6 @@ def on_task_prerun(
     **kwds: Any,
 ) -> None:
     app_base.on_task_prerun(sender, task_id, task, args, kwargs, **kwds)
-
-    from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
-    from onyx.server.metrics.indexing_task_metrics import on_indexing_task_prerun
-
     on_celery_task_prerun(task_id, task)
     on_indexing_task_prerun(task_id, task, kwargs)
 
@@ -55,33 +59,23 @@ def on_task_postrun(
     **kwds: Any,
 ) -> None:
     app_base.on_task_postrun(sender, task_id, task, args, kwargs, retval, state, **kwds)
-
-    from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
-    from onyx.server.metrics.indexing_task_metrics import on_indexing_task_postrun
-
     on_celery_task_postrun(task_id, task, state)
     on_indexing_task_postrun(task_id, task, kwargs, state)
 
 
 @signals.task_retry.connect
 def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:
-    from onyx.server.metrics.celery_task_metrics import on_celery_task_retry
-
     on_celery_task_retry(kwargs.get("task_id"), sender)
 
 
 @signals.task_revoked.connect
 def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
-    from onyx.server.metrics.celery_task_metrics import on_celery_task_revoked
-
     task_name = sender.name if hasattr(sender, "name") else str(sender)
     on_celery_task_revoked(kwargs.get("task_id"), task_name)
 
 
 @signals.task_rejected.connect
 def on_task_rejected(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
-    from onyx.server.metrics.celery_task_metrics import on_celery_task_rejected
-
     task_name = sender.name if hasattr(sender, "name") else str(sender)
     on_celery_task_rejected(None, task_name)
 
@@ -117,8 +111,6 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
 @worker_ready.connect
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
-    from onyx.server.metrics.metrics_server import start_metrics_server
-
     start_metrics_server("docprocessing")
     app_base.on_worker_ready(sender, **kwargs)
 
@@ -128,6 +120,12 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
     app_base.on_worker_shutdown(sender, **kwargs)
 
 
+# Note: worker_process_init only fires in prefork pool mode. Docprocessing uses
+# worker_pool="threads" (see configs/docprocessing.py), so this handler is
+# effectively a no-op in normal operation. It remains as a safety net in case
+# the pool type is ever changed to prefork. Prometheus metrics are safe in
+# thread-pool mode since all threads share the same process memory and can
+# update the same Counter/Gauge/Histogram objects directly.
 @worker_process_init.connect
 def init_worker(**kwargs: Any) -> None:  # noqa: ARG001
     SqlEngine.reset_engine()
