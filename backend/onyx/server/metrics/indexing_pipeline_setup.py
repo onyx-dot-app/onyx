@@ -15,6 +15,7 @@ from onyx.server.metrics.indexing_pipeline import IndexAttemptCollector
 from onyx.server.metrics.indexing_pipeline import QueueDepthCollector
 from onyx.server.metrics.indexing_pipeline import RedisHealthCollector
 from onyx.server.metrics.indexing_pipeline import WorkerHealthCollector
+from onyx.server.metrics.indexing_pipeline import WorkerHeartbeatMonitor
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -96,7 +97,13 @@ def setup_indexing_pipeline_metrics(celery_app: Celery) -> None:
     redis_factory = _make_broker_redis_factory(celery_app)
     _queue_collector.set_redis_factory(redis_factory)
     _redis_health_collector.set_redis_factory(redis_factory)
-    _worker_health_collector.set_celery_app(celery_app)
+
+    # Start the heartbeat monitor daemon thread — uses a single persistent
+    # connection to receive worker-heartbeat events (no inspect.ping() leak).
+    monitor = WorkerHeartbeatMonitor(celery_app)
+    monitor.start()
+    _worker_health_collector.set_monitor(monitor)
+
     _attempt_collector.configure()
     _connector_collector.configure()
 
