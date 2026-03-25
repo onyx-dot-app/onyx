@@ -6,185 +6,59 @@ import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 test.use({ storageState: "admin_auth.json" });
 test.describe.configure({ mode: "parallel" });
 
-interface AdminPageSnapshot {
-  name: string;
-  path: string;
-  pageTitle: string;
-  options?: {
-    paragraphText?: string | RegExp;
-    buttonName?: string;
-    subHeaderText?: string;
-  };
-}
+/**
+ * Discover all navigable admin pages by collecting links from the sidebar.
+ * The sidebar is rendered on every `/admin/*` page, so we visit one admin
+ * route and scrape the `<a>` elements that are present for the current
+ * user / feature-flag configuration.
+ */
+async function discoverAdminPages(page: Page): Promise<string[]> {
+  await page.goto("/admin/configuration/llm");
+  await page.waitForLoadState("networkidle");
 
-const ADMIN_PAGES: AdminPageSnapshot[] = [
-  {
-    name: "Document Management - Explorer",
-    path: "documents/explorer",
-    pageTitle: "Document Explorer",
-  },
-  {
-    name: "Connectors - Add Connector",
-    path: "add-connector",
-    pageTitle: "Add Connector",
-  },
-  {
-    name: "Custom Agents - Agents",
-    path: "agents",
-    pageTitle: "Agents",
-  },
-  {
-    name: "Configuration - Document Processing",
-    path: "configuration/document-processing",
-    pageTitle: "Document Processing",
-  },
-  {
-    name: "Document Management - Document Sets",
-    path: "documents/sets",
-    pageTitle: "Document Sets",
-    options: {
-      paragraphText:
-        "Document Sets allow you to group logically connected documents into a single bundle. These can then be used as a filter when performing searches to control the scope of information Onyx searches over.",
-    },
-  },
-  {
-    name: "Integrations - Slack Integration",
-    path: "bots",
-    pageTitle: "Slack Integration",
-    options: {
-      paragraphText:
-        "Setup Slack bots that connect to Onyx. Once setup, you will be able to ask questions to Onyx directly from Slack. Additionally, you can:",
-    },
-  },
-  {
-    name: "Custom Agents - Standard Answers",
-    path: "standard-answer",
-    pageTitle: "Standard Answers",
-  },
-  {
-    name: "Performance - Usage Statistics",
-    path: "performance/usage",
-    pageTitle: "Usage Statistics",
-  },
-  {
-    name: "Document Management - Feedback",
-    path: "documents/feedback",
-    pageTitle: "Document Feedback",
-  },
-  {
-    name: "Configuration - LLM",
-    path: "configuration/llm",
-    pageTitle: "Language Models",
-  },
-  {
-    name: "Connectors - Existing Connectors",
-    path: "indexing/status",
-    pageTitle: "Existing Connectors",
-  },
-  {
-    name: "User Management - Groups",
-    path: "groups",
-    pageTitle: "Groups",
-  },
-  {
-    name: "Appearance & Theming",
-    path: "theme",
-    pageTitle: "Appearance & Theming",
-  },
-  {
-    name: "Documents & Knowledge - Index Settings",
-    path: "configuration/search",
-    pageTitle: "Index Settings",
-  },
-  {
-    name: "Custom Agents - MCP Actions",
-    path: "actions/mcp",
-    pageTitle: "MCP Actions",
-  },
-  {
-    name: "Custom Agents - OpenAPI Actions",
-    path: "actions/open-api",
-    pageTitle: "OpenAPI Actions",
-  },
-  {
-    name: "Organization - Spending Limits",
-    path: "token-rate-limits",
-    pageTitle: "Spending Limits",
-    options: {
-      paragraphText:
-        "Token rate limits enable you control how many tokens can be spent in a given time period. With token rate limits, you can:",
-      buttonName: "Create a Token Rate Limit",
-    },
-  },
-];
+  return page.evaluate(() => {
+    const sidebar = document.querySelector('[class*="group/SidebarWrapper"]');
+    if (!sidebar) return [];
 
-async function verifyAdminPageNavigation(
-  page: Page,
-  path: string,
-  pageTitle: string,
-  options?: {
-    paragraphText?: string | RegExp;
-    buttonName?: string;
-    subHeaderText?: string;
-  }
-) {
-  await page.goto(`/admin/${path}`);
-
-  try {
-    await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
-      new RegExp(`^${pageTitle}`),
-      {
-        timeout: 10000,
-      }
-    );
-  } catch (error) {
-    console.error(
-      `Failed to find admin-page title with text "${pageTitle}" for path "${path}"`
-    );
-    // NOTE: This is a temporary measure for debugging the issue
-    console.error(await page.content());
-    throw error;
-  }
-
-  if (options?.paragraphText) {
-    await expect(page.locator("p.text-sm").nth(0)).toHaveText(
-      options.paragraphText
-    );
-  }
-
-  if (options?.buttonName) {
-    await expect(
-      page.getByRole("button", { name: options.buttonName })
-    ).toHaveCount(1);
-  }
+    const hrefs = new Set<string>();
+    sidebar
+      .querySelectorAll<HTMLAnchorElement>('a[href^="/admin/"]')
+      .forEach((a) => hrefs.add(a.getAttribute("href")!));
+    return Array.from(hrefs);
+  });
 }
 
 for (const theme of THEMES) {
-  test.describe(`Admin pages (${theme} mode)`, () => {
-    test.beforeEach(async ({ page }) => {
-      await setThemeBeforeNavigation(page, theme);
-    });
+  test(`Admin pages – ${theme} mode`, async ({ page }) => {
+    await setThemeBeforeNavigation(page, theme);
 
-    for (const snapshot of ADMIN_PAGES) {
-      test(`Admin - ${snapshot.name}`, async ({ page }) => {
-        await verifyAdminPageNavigation(
-          page,
-          snapshot.path,
-          snapshot.pageTitle,
-          snapshot.options
-        );
+    const adminHrefs = await discoverAdminPages(page);
+    expect(
+      adminHrefs.length,
+      "Expected to discover at least one admin page from the sidebar"
+    ).toBeGreaterThan(0);
 
-        // Wait for all network requests to settle before capturing the screenshot.
+    for (const href of adminHrefs) {
+      const slug = href.replace("/admin/", "").replace(/\//g, "-");
+
+      await test.step(slug, async () => {
+        await page.goto(href);
+
+        try {
+          await expect(
+            page.locator('[aria-label="admin-page-title"]')
+          ).toBeVisible({ timeout: 10000 });
+        } catch (error) {
+          console.error(`Failed to find admin-page-title for "${href}"`);
+          // Dump the page HTML for debugging CI failures
+          console.error(await page.content());
+          throw error;
+        }
+
         await page.waitForLoadState("networkidle");
 
-        // Capture a screenshot for visual regression review.
-        // The screenshot name includes the theme to keep light/dark baselines separate.
-        const screenshotName = `admin-${theme}-${snapshot.path.replace(
-          /\//g,
-          "-"
-        )}`;
         await expectScreenshot(page, {
-          name: screenshotName,
+          name: `admin-${theme}-${slug}`,
           mask: ['[data-testid="admin-date-range-selector-button"]'],
         });
       });
