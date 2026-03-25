@@ -27,7 +27,7 @@ export async function scheduleDeletionJobForConnector(
 export async function deleteCCPair(
   connectorId: number,
   credentialId: number,
-  onCompletion: () => void
+  onCompletion?: () => void
 ) {
   const deletionScheduleError = await scheduleDeletionJobForConnector(
     connectorId,
@@ -37,7 +37,7 @@ export async function deleteCCPair(
     throw new Error(deletionScheduleError);
   }
   toast.success("Scheduled deletion of connector!");
-  onCompletion();
+  onCompletion?.();
 }
 
 export function isCurrentlyDeleting(

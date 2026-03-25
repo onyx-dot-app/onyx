@@ -167,9 +167,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     if (isSchedulingConnectorDeletionRef.current) return;
     isSchedulingConnectorDeletionRef.current = true;
 
-    deleteCCPair(ccPair.connector.id, ccPair.credential.id, () =>
-      mutate(buildCCPairInfoUrl(ccPair.id))
-    ).catch((error) => {
+    deleteCCPair(ccPair.connector.id, ccPair.credential.id).catch((error) => {
       toast.error(
         "Failed to schedule deletion of connector - " + error.message
       );
