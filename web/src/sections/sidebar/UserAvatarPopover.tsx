@@ -190,7 +190,7 @@ export default function UserAvatarPopover({
                   "w-[16px] flex flex-col justify-center items-center"
                 )}
               >
-                <UserAvatar user={user!} size={22} />
+                <UserAvatar user={user} size={18} />
               </div>
             )}
             rightChildren={
