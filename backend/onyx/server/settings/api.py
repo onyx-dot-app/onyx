@@ -17,6 +17,7 @@ from onyx.db.models import User
 from onyx.db.notification import dismiss_all_notifications
 from onyx.db.notification import get_notifications
 from onyx.db.notification import update_notification_last_shown
+from onyx.hooks.utils import HOOKS_AVAILABLE
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.build.utils import is_onyx_craft_enabled
@@ -80,6 +81,7 @@ def fetch_settings(
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
         vector_db_enabled=not DISABLE_VECTOR_DB,
+        hooks_enabled=HOOKS_AVAILABLE,
         version=onyx_version,
     )
 

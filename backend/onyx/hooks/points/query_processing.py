@@ -65,6 +65,8 @@ class QueryProcessingSpec(HookPointSpec):
         "The query will be blocked and the user will see an error message."
     )
     default_fail_strategy = HookFailStrategy.HARD
+    # TODO(Bo-Onyx): update later
+    docs_url = "https://docs.google.com/document/d/1pGhB8Wcnhhj8rS4baEJL6CX05yFhuIDNk1gbBRiWu94/edit?tab=t.g2r1a1699u87"
 
     payload_model = QueryProcessingPayload
     response_model = QueryProcessingResponse
