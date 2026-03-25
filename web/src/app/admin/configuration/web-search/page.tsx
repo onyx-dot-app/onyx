@@ -4,29 +4,17 @@ import Image from "next/image";
 import { useMemo, useState, useReducer } from "react";
 import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
+import { Select } from "@/refresh-components/cards";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Content } from "@opal/layouts";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { cn } from "@/lib/utils";
-import {
-  SvgArrowExchange,
-  SvgArrowRightCircle,
-  SvgCheckSquare,
-  SvgEdit,
-  SvgGlobe,
-  SvgOnyxLogo,
-  SvgX,
-} from "@opal/icons";
+import { SvgGlobe, SvgOnyxLogo } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
-
-const route = ADMIN_ROUTES.WEB_SEARCH;
 import {
   SEARCH_PROVIDERS_URL,
   SEARCH_PROVIDER_DETAILS,
@@ -58,6 +46,8 @@ import {
 } from "@/app/admin/configuration/web-search/WebProviderModalReducer";
 import { connectProviderFlow } from "@/app/admin/configuration/web-search/connectProviderFlow";
 
+const route = ADMIN_ROUTES.WEB_SEARCH;
+
 interface WebSearchProviderView {
   id: number;
   name: string;
@@ -76,30 +66,6 @@ interface WebContentProviderView {
   has_api_key: boolean;
 }
 
-interface HoverIconButtonProps extends React.ComponentProps<typeof Button> {
-  isHovered: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  children: React.ReactNode;
-}
-
-function HoverIconButton({
-  isHovered,
-  onMouseEnter,
-  onMouseLeave,
-  children,
-  ...buttonProps
-}: HoverIconButtonProps) {
-  return (
-    <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      {/* TODO(@raunakab): migrate to opal Button once HoverIconButtonProps typing is resolved */}
-      <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
-        {children}
-      </Button>
-    </div>
-  );
-}
-
 export default function Page() {
   const [searchModal, dispatchSearchModal] = useReducer(
     WebProviderModalReducer,
@@ -113,8 +79,6 @@ export default function Page() {
   const [contentActivationError, setContentActivationError] = useState<
     string | null
   >(null);
-  const [hoveredButtonKey, setHoveredButtonKey] = useState<string | null>(null);
-
   const {
     data: searchProvidersData,
     error: searchProvidersError,
@@ -894,149 +858,68 @@ export default function Page() {
                     provider
                   );
                   const isActive = provider?.is_active ?? false;
-                  const isHighlighted = isActive;
                   const providerId = provider?.id;
                   const canOpenModal =
                     isBuiltInSearchProviderType(providerType);
 
-                  const buttonState = (() => {
-                    if (!provider || !isConfigured) {
-                      return {
-                        label: "Connect",
-                        disabled: false,
-                        icon: "arrow" as const,
-                        onClick: canOpenModal
+                  const status: "disconnected" | "connected" | "selected" =
+                    !isConfigured
+                      ? "disconnected"
+                      : isActive
+                        ? "selected"
+                        : "connected";
+
+                  return (
+                    <Select
+                      key={`${key}-${providerType}`}
+                      icon={() =>
+                        logoSrc ? (
+                          <Image
+                            src={logoSrc}
+                            alt={`${label} logo`}
+                            width={16}
+                            height={16}
+                          />
+                        ) : (
+                          <SvgGlobe size={16} />
+                        )
+                      }
+                      title={label}
+                      description={subtitle}
+                      status={status}
+                      onConnect={
+                        canOpenModal
                           ? () => {
                               openSearchModal(providerType, provider);
                               setActivationError(null);
                             }
-                          : undefined,
-                      };
-                    }
-
-                    if (isActive) {
-                      return {
-                        label: "Current Default",
-                        disabled: false,
-                        icon: "check" as const,
-                        onClick: providerId
+                          : undefined
+                      }
+                      onSelect={
+                        providerId
+                          ? () => {
+                              void handleActivateSearchProvider(providerId);
+                            }
+                          : undefined
+                      }
+                      onDeselect={
+                        providerId
                           ? () => {
                               void handleDeactivateSearchProvider(providerId);
                             }
-                          : undefined,
-                      };
-                    }
-
-                    return {
-                      label: "Set as Default",
-                      disabled: false,
-                      icon: "arrow-circle" as const,
-                      onClick: providerId
-                        ? () => {
-                            void handleActivateSearchProvider(providerId);
-                          }
-                        : undefined,
-                    };
-                  })();
-
-                  const buttonKey = `search-${key}-${providerType}`;
-                  const isButtonHovered = hoveredButtonKey === buttonKey;
-                  const isCardClickable =
-                    buttonState.icon === "arrow" &&
-                    typeof buttonState.onClick === "function" &&
-                    !buttonState.disabled;
-
-                  const handleCardClick = () => {
-                    if (isCardClickable) {
-                      buttonState.onClick?.();
-                    }
-                  };
-
-                  return (
-                    <div
-                      key={`${key}-${providerType}`}
-                      onClick={isCardClickable ? handleCardClick : undefined}
-                      className={cn(
-                        "flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00",
-                        isHighlighted
-                          ? "border-action-link-05"
-                          : "border-border-01",
-                        isCardClickable &&
-                          "cursor-pointer hover:bg-background-tint-01 transition-colors"
-                      )}
-                    >
-                      <div className="flex flex-1 items-start gap-1 px-2 py-1">
-                        {renderLogo({
-                          logoSrc,
-                          alt: `${label} logo`,
-                          size: 16,
-                          isHighlighted,
-                        })}
-                        <Content
-                          title={label}
-                          description={subtitle}
-                          sizePreset="main-ui"
-                          variant="section"
-                        />
-                      </div>
-                      <div className="flex items-center justify-end gap-2">
-                        {isConfigured && (
-                          <OpalButton
-                            icon={SvgEdit}
-                            tooltip="Edit"
-                            prominence="tertiary"
-                            size="sm"
-                            onClick={() => {
-                              if (!canOpenModal) return;
+                          : undefined
+                      }
+                      onEdit={
+                        isConfigured && canOpenModal
+                          ? () => {
                               openSearchModal(
                                 providerType as WebSearchProviderType,
                                 provider
                               );
-                            }}
-                            aria-label={`Edit ${label}`}
-                          />
-                        )}
-                        {buttonState.icon === "check" ? (
-                          <HoverIconButton
-                            isHovered={isButtonHovered}
-                            onMouseEnter={() => setHoveredButtonKey(buttonKey)}
-                            onMouseLeave={() => setHoveredButtonKey(null)}
-                            action={true}
-                            tertiary
-                            disabled={buttonState.disabled}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              buttonState.onClick?.();
-                            }}
-                          >
-                            {buttonState.label}
-                          </HoverIconButton>
-                        ) : (
-                          <Disabled
-                            disabled={
-                              buttonState.disabled || !buttonState.onClick
                             }
-                          >
-                            <OpalButton
-                              prominence="tertiary"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                buttonState.onClick?.();
-                              }}
-                              rightIcon={
-                                buttonState.icon === "arrow"
-                                  ? SvgArrowExchange
-                                  : buttonState.icon === "arrow-circle"
-                                    ? SvgArrowRightCircle
-                                    : undefined
-                              }
-                            >
-                              {buttonState.label}
-                            </OpalButton>
-                          </Disabled>
-                        )}
-                      </div>
-                    </div>
+                          : undefined
+                      }
+                    />
                   );
                 }
               )}
@@ -1076,161 +959,68 @@ export default function Page() {
                 const isCurrentCrawler =
                   provider.provider_type === currentContentProviderType;
 
-                const buttonState = (() => {
-                  if (!isConfigured) {
-                    return {
-                      label: "Connect",
-                      icon: "arrow" as const,
-                      disabled: false,
-                      onClick: () => {
-                        openContentModal(provider.provider_type, provider);
-                        setContentActivationError(null);
-                      },
-                    };
-                  }
+                const status: "disconnected" | "connected" | "selected" =
+                  !isConfigured
+                    ? "disconnected"
+                    : isCurrentCrawler
+                      ? "selected"
+                      : "connected";
 
-                  if (isCurrentCrawler) {
-                    return {
-                      label: "Current Crawler",
-                      icon: "check" as const,
-                      disabled: false,
-                      onClick: () => {
-                        void handleDeactivateContentProvider(
-                          providerId,
-                          provider.provider_type
-                        );
-                      },
-                    };
-                  }
+                const canActivate =
+                  providerId > 0 ||
+                  provider.provider_type === "onyx_web_crawler" ||
+                  isConfigured;
 
-                  const canActivate =
-                    providerId > 0 ||
-                    provider.provider_type === "onyx_web_crawler" ||
-                    isConfigured;
-
-                  return {
-                    label: "Set as Default",
-                    icon: "arrow-circle" as const,
-                    disabled: !canActivate,
-                    onClick: canActivate
-                      ? () => {
-                          void handleActivateContentProvider(provider);
-                        }
-                      : undefined,
-                  };
-                })();
-
-                const contentButtonKey = `content-${provider.provider_type}-${provider.id}`;
-                const isContentButtonHovered =
-                  hoveredButtonKey === contentButtonKey;
-                const isContentCardClickable =
-                  buttonState.icon === "arrow" &&
-                  typeof buttonState.onClick === "function" &&
-                  !buttonState.disabled;
-
-                const handleContentCardClick = () => {
-                  if (isContentCardClickable) {
-                    buttonState.onClick?.();
-                  }
-                };
+                const contentLogoSrc =
+                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.logoSrc;
 
                 return (
-                  <div
+                  <Select
                     key={`${provider.provider_type}-${provider.id}`}
-                    onClick={
-                      isContentCardClickable
-                        ? handleContentCardClick
+                    icon={() =>
+                      contentLogoSrc ? (
+                        <Image
+                          src={contentLogoSrc}
+                          alt={`${label} logo`}
+                          width={16}
+                          height={16}
+                        />
+                      ) : provider.provider_type === "onyx_web_crawler" ? (
+                        <SvgOnyxLogo size={16} />
+                      ) : (
+                        <SvgGlobe size={16} />
+                      )
+                    }
+                    title={label}
+                    description={subtitle}
+                    status={status}
+                    selectedLabel="Current Crawler"
+                    onConnect={() => {
+                      openContentModal(provider.provider_type, provider);
+                      setContentActivationError(null);
+                    }}
+                    onSelect={
+                      canActivate
+                        ? () => {
+                            void handleActivateContentProvider(provider);
+                          }
                         : undefined
                     }
-                    className={cn(
-                      "flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00",
-                      isCurrentCrawler
-                        ? "border-action-link-05"
-                        : "border-border-01",
-                      isContentCardClickable &&
-                        "cursor-pointer hover:bg-background-tint-01 transition-colors"
-                    )}
-                  >
-                    <div className="flex flex-1 items-start gap-1 px-2 py-1">
-                      {renderLogo({
-                        logoSrc:
-                          CONTENT_PROVIDER_DETAILS[provider.provider_type]
-                            ?.logoSrc,
-                        alt: `${label} logo`,
-                        fallback:
-                          provider.provider_type === "onyx_web_crawler" ? (
-                            <SvgOnyxLogo size={16} />
-                          ) : undefined,
-                        size: 16,
-                        isHighlighted: isCurrentCrawler,
-                      })}
-                      <Content
-                        title={label}
-                        description={subtitle}
-                        sizePreset="main-ui"
-                        variant="section"
-                      />
-                    </div>
-                    <div className="flex items-center justify-end gap-2">
-                      {provider.provider_type !== "onyx_web_crawler" &&
-                        isConfigured && (
-                          <OpalButton
-                            icon={SvgEdit}
-                            tooltip="Edit"
-                            prominence="tertiary"
-                            size="sm"
-                            onClick={() => {
-                              openContentModal(
-                                provider.provider_type,
-                                provider
-                              );
-                            }}
-                            aria-label={`Edit ${label}`}
-                          />
-                        )}
-                      {buttonState.icon === "check" ? (
-                        <HoverIconButton
-                          isHovered={isContentButtonHovered}
-                          onMouseEnter={() =>
-                            setHoveredButtonKey(contentButtonKey)
+                    onDeselect={() => {
+                      void handleDeactivateContentProvider(
+                        providerId,
+                        provider.provider_type
+                      );
+                    }}
+                    onEdit={
+                      provider.provider_type !== "onyx_web_crawler" &&
+                      isConfigured
+                        ? () => {
+                            openContentModal(provider.provider_type, provider);
                           }
-                          onMouseLeave={() => setHoveredButtonKey(null)}
-                          action={true}
-                          tertiary
-                          disabled={buttonState.disabled}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            buttonState.onClick?.();
-                          }}
-                        >
-                          {buttonState.label}
-                        </HoverIconButton>
-                      ) : (
-                        <Disabled
-                          disabled={
-                            buttonState.disabled || !buttonState.onClick
-                          }
-                        >
-                          <OpalButton
-                            prominence="tertiary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              buttonState.onClick?.();
-                            }}
-                            rightIcon={
-                              buttonState.icon === "arrow"
-                                ? SvgArrowExchange
-                                : buttonState.icon === "arrow-circle"
-                                  ? SvgArrowRightCircle
-                                  : undefined
-                            }
-                          >
-                            {buttonState.label}
-                          </OpalButton>
-                        </Disabled>
-                      )}
-                    </div>
-                  </div>
+                        : undefined
+                    }
+                  />
                 );
               })}
             </div>
