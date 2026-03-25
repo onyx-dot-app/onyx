@@ -39,7 +39,7 @@ from onyx.connectors.jira.utils import extract_jira_project
 from onyx.connectors.jira.utils import extract_text_from_adf
 from onyx.connectors.jira.utils import get_comment_strs
 from onyx.connectors.jira_service_management.utils import build_jsm_session
-from onyx.connectors.jira_service_management.utils import discover_sla_field_ids
+from onyx.connectors.jira_service_management.utils import discover_jsm_custom_field_ids
 from onyx.connectors.jira_service_management.utils import extract_jsm_metadata
 from onyx.connectors.jira_service_management.utils import get_service_desks
 from onyx.connectors.models import ConnectorCheckpoint
@@ -123,14 +123,15 @@ class JiraServiceManagementConnector(
         self.batch_size = batch_size
         self._jira_client = None
         self._jsm_session = None
-        self._sla_field_ids: dict[str, str] = {}
+        self._custom_field_ids: dict[str, str] = {}
         self._project_permissions_cache: dict[str, Any] = {}
 
     @override
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(credentials, self.jira_base_url)
         self._jsm_session = build_jsm_session(credentials, self.jira_base_url)
-        self._sla_field_ids = discover_sla_field_ids(self._jsm_session, self.jira_base_url)
+        self._custom_field_ids = discover_jsm_custom_field_ids(self._jsm_session, self.jira_base_url)
+        self._project_permissions_cache = {}
         return None
 
     @override
@@ -248,7 +249,7 @@ class JiraServiceManagementConnector(
                 metadata["updated"] = updated
 
             # JSM-specific fields
-            jsm_meta = extract_jsm_metadata(issue, self._sla_field_ids)
+            jsm_meta = extract_jsm_metadata(issue, self._custom_field_ids)
             metadata.update(jsm_meta)
 
             updated_at = _parse_jsm_date(

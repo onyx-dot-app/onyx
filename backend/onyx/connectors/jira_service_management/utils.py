@@ -32,7 +32,7 @@ def build_jsm_session(credentials: dict[str, Any], jira_base: str) -> requests.S
         raise ConnectorMissingCredentialError("jira_api_token is required")
 
     session = requests.Session()
-    is_cloud = "jira_user_email" in credentials
+    is_cloud = bool(credentials.get("jira_user_email"))
 
     if is_cloud:
         email = credentials["jira_user_email"]
@@ -72,7 +72,7 @@ def get_service_desks(
     return service_desks
 
 
-def discover_sla_field_ids(
+def discover_jsm_custom_field_ids(
     session: requests.Session, jira_base: str
 ) -> dict[str, str]:
     """Discover JSM custom field IDs dynamically via the Jira fields API.
@@ -115,27 +115,22 @@ def discover_sla_field_ids(
 
 def extract_jsm_metadata(
     issue: Any,
-    sla_field_ids: dict[str, str],
+    custom_field_ids: dict[str, str],
 ) -> dict[str, str | list[str]]:
     """Extract JSM-specific metadata from a Jira issue.
 
     Args:
         issue: A jira.resources.Issue object.
-        sla_field_ids: Mapping of label → customfield_* key, as returned
-                       by discover_sla_field_ids().
+        custom_field_ids: Mapping of label → customfield_* key, as returned
+                          by discover_jsm_custom_field_ids().
     """
     metadata: dict[str, str | list[str]] = {}
 
     try:
         fields = issue.raw.get("fields", {})
 
-        # Request type (JSM-specific issue type)
-        request_type = fields.get("issuetype", {})
-        if isinstance(request_type, dict) and request_type.get("name"):
-            metadata["request_type"] = request_type["name"]
-
-        # SLA fields — discovered dynamically to avoid hardcoded IDs
-        for label, field_key in sla_field_ids.items():
+        # JSM custom fields — discovered dynamically to avoid hardcoded IDs
+        for label, field_key in custom_field_ids.items():
             field_value = fields.get(field_key)
             if not field_value or not isinstance(field_value, dict):
                 continue
