@@ -78,7 +78,15 @@ def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
 
 @signals.task_rejected.connect
 def on_task_rejected(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
-    task_name = getattr(sender, "name", None) or str(sender)
+    # task_rejected sends the Consumer as sender, not the task instance.
+    # The task name must be extracted from the Celery message headers.
+    message = kwargs.get("message")
+    task_name: str | None = None
+    if message is not None:
+        headers = getattr(message, "headers", None) or {}
+        task_name = headers.get("task")
+    if task_name is None:
+        task_name = "unknown"
     on_celery_task_rejected(None, task_name)
 
 

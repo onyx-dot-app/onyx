@@ -52,6 +52,10 @@ _UNKNOWN_CONNECTOR = ConnectorInfo(source="unknown", name="unknown")
 # deployments where different tenants can share the same cc_pair_id value.
 _connector_cache: dict[tuple[str, int], ConnectorInfo] = {}
 
+# Lock protecting _connector_cache — multiple thread-pool workers may
+# resolve connectors concurrently.
+_connector_cache_lock = threading.Lock()
+
 # Only enrich these task types with per-connector labels
 _INDEXING_TASK_NAMES: frozenset[str] = frozenset(
     {
@@ -115,12 +119,20 @@ def _resolve_connector(cc_pair_id: int) -> ConnectorInfo:
     On cache miss, does a single DB query with eager connector load.
     On any failure, returns _UNKNOWN_CONNECTOR without caching, so that
     subsequent calls can retry the lookup once the DB is available.
+
+    Note on tenant_id source: we read CURRENT_TENANT_ID_CONTEXTVAR for the
+    cache key. The Celery tenant-aware middleware sets this contextvar before
+    task execution, and it always matches kwargs["tenant_id"] (which is set
+    at task dispatch time). They are guaranteed to agree for a given task
+    execution context.
     """
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get("") or ""
     cache_key = (tenant_id, cc_pair_id)
-    cached = _connector_cache.get(cache_key)
-    if cached is not None:
-        return cached
+
+    with _connector_cache_lock:
+        cached = _connector_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
     try:
         from onyx.db.connector_credential_pair import (
@@ -143,7 +155,8 @@ def _resolve_connector(cc_pair_id: int) -> ConnectorInfo:
                 source=cc_pair.connector.source.value,
                 name=cc_pair.name,
             )
-            _connector_cache[cache_key] = info
+            with _connector_cache_lock:
+                _connector_cache[cache_key] = info
             return info
     except Exception:
         logger.debug(

@@ -177,6 +177,11 @@ class QueueDepthCollector(_CachedCollector):
             if raw is None:
                 return None
             msg = json.loads(raw)
+            # Check for ETA tasks first — they are intentionally delayed,
+            # so reporting their queue age would be misleading.
+            headers = msg.get("headers", {})
+            if headers.get("eta") is not None:
+                return None
             # Celery v2 protocol: timestamp in properties
             props = msg.get("properties", {})
             ts = props.get("timestamp")
@@ -184,12 +189,9 @@ class QueueDepthCollector(_CachedCollector):
                 return now - float(ts)
             # Fallback: some Celery configurations place the timestamp in
             # headers instead of properties.
-            headers = msg.get("headers", {})
             ts = headers.get("timestamp")
             if ts is not None:
                 return now - float(ts)
-            if "eta" in headers and headers["eta"] is not None:
-                return None  # ETA tasks are intentionally delayed
         except Exception:
             pass
         return None
@@ -354,6 +356,9 @@ class ConnectorHealthCollector(_CachedCollector):
                         label_vals = [tid, source_val, cc_id_str, name_val]
 
                         if last_success is not None:
+                            # Both `now` and `last_success` are timezone-aware
+                            # (the DB column uses DateTime(timezone=True)),
+                            # so subtraction is safe.
                             age = (now - last_success).total_seconds()
                             staleness_gauge.add_metric(label_vals, age)
 
@@ -432,7 +437,9 @@ class RedisHealthCollector(_CachedCollector):
             mem_info: dict = redis_client.info("memory")  # type: ignore[assignment]
             memory_used.add_metric([], mem_info.get("used_memory", 0))
             memory_peak.add_metric([], mem_info.get("used_memory_peak", 0))
-            memory_frag.add_metric([], mem_info.get("mem_fragmentation_ratio", 0))
+            frag = mem_info.get("mem_fragmentation_ratio")
+            if frag is not None:
+                memory_frag.add_metric([], frag)
 
             client_info: dict = redis_client.info("clients")  # type: ignore[assignment]
             connected_clients.add_metric([], client_info.get("connected_clients", 0))
