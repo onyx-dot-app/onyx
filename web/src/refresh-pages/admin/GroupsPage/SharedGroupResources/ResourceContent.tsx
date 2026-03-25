@@ -28,25 +28,29 @@ function ResourceContent({
 }: ResourceContentProps) {
   return (
     <div className="flex flex-1 gap-0.5 items-start p-1.5 rounded-08 bg-background-tint-01 min-w-[240px] max-w-[302px]">
-      <div className="flex flex-1 gap-1 p-0.5 items-start min-w-0">
+      <div className="flex flex-1 gap-1 p-0.5 items-center min-w-0">
         {leftContent ? (
           <>
             {leftContent}
+            <div className="flex-1 min-w-0">
+              <Content
+                title={title}
+                description={description}
+                sizePreset="main-ui"
+                variant="section"
+              />
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 min-w-0">
             <Content
+              icon={icon}
               title={title}
               description={description}
               sizePreset="main-ui"
               variant="section"
             />
-          </>
-        ) : (
-          <Content
-            icon={icon}
-            title={title}
-            description={description}
-            sizePreset="main-ui"
-            variant="section"
-          />
+          </div>
         )}
         {infoContent}
       </div>

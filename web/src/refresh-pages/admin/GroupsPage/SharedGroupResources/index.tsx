@@ -14,6 +14,7 @@ import { useConnectorStatus } from "@/lib/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";
 import { getSourceMetadata } from "@/lib/sources";
+import type { ValidSources } from "@/lib/types";
 import ResourceContent from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/ResourceContent";
 import ResourcePopover from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/ResourcePopover";
 import type { PopoverSection } from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/interfaces";
@@ -36,6 +37,38 @@ function SharedBadge() {
     <Text as="span" secondaryBody text03>
       Shared
     </Text>
+  );
+}
+
+function SourceIconStack({ sources }: { sources: { source: ValidSources }[] }) {
+  if (sources.length === 0) return null;
+
+  const unique = Array.from(
+    new Map(sources.map((s) => [s.source, s])).values()
+  ).slice(0, 3);
+
+  return (
+    <Section
+      flexDirection="row"
+      alignItems="center"
+      width="auto"
+      height="auto"
+      gap={0}
+      className="shrink-0 px-0.5"
+    >
+      {unique.map((s, i) => {
+        const Icon = getSourceMetadata(s.source).icon;
+        return (
+          <div
+            key={s.source}
+            className="flex items-center justify-center size-4 rounded-04 bg-background-tint-00 border border-border-01 overflow-hidden"
+            style={{ zIndex: unique.length - i, marginLeft: i > 0 ? -6 : 0 }}
+          >
+            <Icon />
+          </div>
+        );
+      })}
+    </Section>
   );
 }
 
@@ -285,6 +318,9 @@ function SharedGroupResources({
                       icon={SvgFiles}
                       title={ds.name}
                       description="Document Set"
+                      infoContent={
+                        <SourceIconStack sources={ds.cc_pair_summaries} />
+                      }
                       onRemove={() => removeDocSet(ds.id)}
                     />
                   ))}
