@@ -20,7 +20,7 @@ _CUSTOM_FIELD_PATTERNS = {
 }
 
 
-def build_jsm_session(credentials: dict[str, Any], jira_base: str) -> requests.Session:
+def build_jsm_session(credentials: dict[str, Any]) -> requests.Session:
     """Build a requests.Session configured for JSM API calls.
 
     Authentication mirrors the existing Jira connector:

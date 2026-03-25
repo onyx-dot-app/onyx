@@ -17,6 +17,8 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
+import requests
+from jira import JIRA
 from jira.exceptions import JIRAError
 from typing_extensions import override
 
@@ -121,15 +123,15 @@ class JiraServiceManagementConnector(
             comment_email_blacklist or []
         )
         self.batch_size = batch_size
-        self._jira_client = None
-        self._jsm_session = None
+        self._jira_client: JIRA | None = None
+        self._jsm_session: requests.Session | None = None
         self._custom_field_ids: dict[str, str] = {}
         self._project_permissions_cache: dict[str, Any] = {}
 
     @override
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(credentials, self.jira_base_url)
-        self._jsm_session = build_jsm_session(credentials, self.jira_base_url)
+        self._jsm_session = build_jsm_session(credentials)
         self._custom_field_ids = discover_jsm_custom_field_ids(self._jsm_session, self.jira_base_url)
         self._project_permissions_cache = {}
         return None
@@ -381,7 +383,9 @@ class JiraServiceManagementConnector(
                 )
             )
             if callback:
-                callback.should_continue()
+                if callback.should_stop():
+                    return
+                callback.progress("retrieve_all_slim_docs_perm_sync", 1)
             if len(batch) >= self.batch_size:
                 yield batch
                 batch = []
