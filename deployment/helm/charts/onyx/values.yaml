@@ -103,7 +103,7 @@ opensearch:
     - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
       valueFrom:
         secretKeyRef:
-          name: onyx-opensearch  # Must match auth.opensearch.secretName.
+          name: onyx-opensearch  # Must match auth.opensearch.secretName or auth.opensearch.existingSecret if defined.
           key: opensearch_admin_password  # Must match auth.opensearch.secretKeys value.
 
   resources:
@@ -282,7 +282,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "1"
+      onyx.app/nginx-config-version: "2"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:

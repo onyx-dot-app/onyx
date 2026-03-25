@@ -229,7 +229,7 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
     <SidebarWrapper>
       <SidebarBody
         scrollKey="admin-sidebar"
-        actionButtons={
+        pinnedContent={
           <div className="flex flex-col w-full">
             <SidebarTab
               icon={({ className }) => <SvgX className={className} size={16} />}

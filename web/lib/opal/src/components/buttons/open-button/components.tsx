@@ -1,5 +1,3 @@
-import "@opal/components/buttons/open-button/styles.css";
-import "@opal/components/tooltip.css";
 import {
   Interactive,
   useDisabled,
@@ -9,24 +7,11 @@ import {
 import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
-import type { IconFunctionComponent, IconProps } from "@opal/types";
-import { SvgChevronDownSmall } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
-
-// ---------------------------------------------------------------------------
-// Chevron (stable identity — never causes React to remount the SVG)
-// ---------------------------------------------------------------------------
-
-function ChevronIcon({ className, ...props }: IconProps) {
-  return (
-    <SvgChevronDownSmall
-      className={cn(className, "opal-open-button-chevron")}
-      {...props}
-    />
-  );
-}
+import { ChevronIcon } from "@opal/components/buttons/chevron";
 
 // ---------------------------------------------------------------------------
 // Types

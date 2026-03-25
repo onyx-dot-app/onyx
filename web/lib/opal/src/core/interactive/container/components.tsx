@@ -3,7 +3,7 @@ import type { Route } from "next";
 import "@opal/core/interactive/shared.css";
 import React from "react";
 import { cn } from "@opal/utils";
-import type { WithoutStyles } from "@opal/types";
+import type { ButtonType, WithoutStyles } from "@opal/types";
 import {
   containerSizeVariants,
   type ContainerSizeVariants,
@@ -52,7 +52,7 @@ interface InteractiveContainerProps
    *
    * Mutually exclusive with `href`.
    */
-  type?: "submit" | "button" | "reset";
+  type?: ButtonType;
 
   /**
    * When `true`, applies a 1px border using the theme's border color.

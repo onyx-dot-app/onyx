@@ -192,6 +192,7 @@ export default function LMStudioForm({
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -225,7 +226,11 @@ export default function LMStudioForm({
         },
       } as LMStudioFormValues)
     : {
-        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        ...buildDefaultInitialValues(
+          existingLlmProvider,
+          modelConfigurations,
+          defaultModelName
+        ),
         api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
         custom_config: {
           LM_STUDIO_API_KEY:

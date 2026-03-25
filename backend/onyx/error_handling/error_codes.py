@@ -44,6 +44,7 @@ class OnyxErrorCode(Enum):
     VALIDATION_ERROR = ("VALIDATION_ERROR", 400)
     INVALID_INPUT = ("INVALID_INPUT", 400)
     MISSING_REQUIRED_FIELD = ("MISSING_REQUIRED_FIELD", 400)
+    QUERY_REJECTED = ("QUERY_REJECTED", 400)
 
     # ------------------------------------------------------------------
     # Not Found (404)

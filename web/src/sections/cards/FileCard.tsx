@@ -175,7 +175,7 @@ export function FileCard({
     >
       <div className="min-w-0 max-w-[12rem]">
         <Interactive.Container border heightVariant="fit">
-          <div className="[&_.opal-content-md-body]:min-w-0 [&_.opal-content-md-title]:break-all">
+          <div className="[&_.opal-content-md-title-row]:min-w-0 [&_.opal-content-md-title]:break-all">
             <AttachmentItemLayout
               icon={isProcessing ? SimpleLoader : SvgFileText}
               title={file.name}
