@@ -1,4 +1,5 @@
 import { JSX } from "react";
+import { BifrostIcon } from "@/components/icons/BifrostIcon";
 import {
   AnthropicIcon,
   AmazonIcon,
@@ -81,7 +82,7 @@ export const getProviderIcon = (
     bedrock_converse: SvgAws,
     openrouter: SvgOpenrouter,
     litellm_proxy: LiteLLMIcon,
-    bifrost: CPUIcon,
+    bifrost: BifrostIcon,
     vertex_ai: GeminiIcon,
   };
 
@@ -267,8 +268,11 @@ export const fetchOpenRouterModels = async (
       try {
         const errorData = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
-      } catch {
-        // ignore JSON parsing errors
+      } catch (jsonError) {
+        console.warn(
+          "Failed to parse Bifrost model fetch error response",
+          jsonError
+        );
       }
       return { models: [], error: errorMessage };
     }

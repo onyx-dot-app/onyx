@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
@@ -26,7 +27,6 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
-  APIKeyField,
   ModelsField,
   DisplayNameField,
   ModelsAccessField,
@@ -37,8 +37,8 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
 
-const BIFROST_PROVIDER_NAME = "bifrost";
-const DEFAULT_API_BASE = "https://bifrost.onyx.app";
+const BIFROST_PROVIDER_NAME = LLMProviderName.BIFROST;
+const DEFAULT_API_BASE = "";
 
 interface BifrostModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -89,6 +89,7 @@ function BifrostModalInternals({
   useEffect(() => {
     if (existingLlmProvider && !isFetchDisabled) {
       handleFetchModels().catch((err) => {
+        console.error("Failed to fetch Bifrost models:", err);
         toast.error(
           err instanceof Error ? err.message : "Failed to fetch models"
         );
@@ -99,7 +100,7 @@ function BifrostModalInternals({
 
   return (
     <LLMConfigurationModalWrapper
-      providerEndpoint={BIFROST_PROVIDER_NAME}
+      providerEndpoint={LLMProviderName.BIFROST}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
       isFormValid={formikProps.isValid}
@@ -111,16 +112,38 @@ function BifrostModalInternals({
         <InputLayouts.Vertical
           name="api_base"
           title="API Base URL"
-          subDescription="The base URL for your Bifrost gateway."
+          subDescription="Paste your Bifrost gateway endpoint URL (including API version)."
         >
           <InputTypeInField
             name="api_base"
-            placeholder="https://your-bifrost-gateway.com"
+            placeholder="https://your-bifrost-gateway.com/v1"
           />
         </InputLayouts.Vertical>
       </FieldWrapper>
 
-      <APIKeyField providerName="Bifrost" optional={true} />
+      <FieldWrapper>
+        <InputLayouts.Vertical
+          name="api_key"
+          title="API Key"
+          optional={true}
+          subDescription={
+            <>
+              Paste your API key from{" "}
+              <a
+                href="https://docs.getbifrost.ai/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-link"
+              >
+                Bifrost
+              </a>{" "}
+              to access your models.
+            </>
+          }
+        >
+          <PasswordInputTypeInField name="api_key" placeholder="API Key" />
+        </InputLayouts.Vertical>
+      </FieldWrapper>
 
       {!isOnboarding && (
         <>

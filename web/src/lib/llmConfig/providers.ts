@@ -1,4 +1,5 @@
 import type { IconFunctionComponent } from "@opal/types";
+import { BifrostIcon } from "@/components/icons/BifrostIcon";
 import {
   SvgCpu,
   SvgOpenai,
@@ -26,7 +27,7 @@ const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
   [LLMProviderName.LM_STUDIO]: SvgLmStudio,
-  [LLMProviderName.BIFROST]: SvgServer,
+  [LLMProviderName.BIFROST]: BifrostIcon,
 
   // fallback
   [LLMProviderName.CUSTOM]: SvgServer,

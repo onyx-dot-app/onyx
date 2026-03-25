@@ -7,6 +7,7 @@
 import React from "react";
 import { render } from "@tests/setup/test-utils";
 import { GithubIcon, GitbookIcon, ConfluenceIcon } from "./icons";
+import { BifrostIcon } from "./BifrostIcon";
 
 describe("Logo Icons", () => {
   test("renders with alt text", () => {
@@ -50,5 +51,14 @@ describe("Logo Icons", () => {
     expect(() => {
       render(<GithubIcon size={100} className="custom-class" />);
     }).not.toThrow();
+  });
+
+  test("renders both Bifrost light and dark variants", () => {
+    const { container } = render(<BifrostIcon size={32} className="custom" />);
+    const icons = container.querySelectorAll("svg");
+
+    expect(icons).toHaveLength(2);
+    expect(icons[0]).toHaveClass("dark:hidden");
+    expect(icons[1]).toHaveClass("hidden", "dark:block");
   });
 });
