@@ -124,7 +124,6 @@ class CanvasApiClient:
                 # Shape 2: {"error": "Invalid access token"}
                 elif isinstance(error_field, str):
                     error = error_field
-<<<<<<< HEAD
                 # Shape 3: {"errors": [{"message": "..."}]}
                 # Used for validation errors.  Only use as fallback if
                 # we didn't already find a more specific message above.
