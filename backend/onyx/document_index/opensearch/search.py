@@ -917,7 +917,7 @@ class DocumentQuery:
 
         def _get_acl_visibility_filter(
             access_control_list: list[str],
-        ) -> dict[str, dict[str, list[TermQuery[bool] | TermsQuery[str]]]]:
+        ) -> dict[str, dict[str, list[TermQuery[bool] | TermsQuery[str]] | int]]:
             """Returns a filter for the access control list.
 
             Since this returns an isolated bool should clause, it can be cached
@@ -935,9 +935,7 @@ class DocumentQuery:
                 A filter for the access control list.
             """
             # Logical OR operator on its elements.
-            acl_visibility_filter: dict[
-                str, dict[str, list[TermQuery[bool] | TermsQuery[str]] | int]
-            ] = {
+            acl_visibility_filter: dict[str, dict[str, Any]] = {
                 "bool": {
                     "should": [{"term": {PUBLIC_FIELD_NAME: {"value": True}}}],
                     "minimum_should_match": 1,
