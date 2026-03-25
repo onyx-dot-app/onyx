@@ -60,3 +60,10 @@ class TestStartMetricsServer:
         mock_start.side_effect = OSError("Address already in use")
         port = start_metrics_server("monitoring")
         assert port is None
+
+    @patch("onyx.server.metrics.metrics_server.start_http_server")
+    @patch.dict("os.environ", {"PROMETHEUS_METRICS_PORT": "not_a_number"})
+    def test_invalid_port_env_var_returns_none(self, mock_start: MagicMock) -> None:
+        port = start_metrics_server("monitoring")
+        assert port is None
+        mock_start.assert_not_called()

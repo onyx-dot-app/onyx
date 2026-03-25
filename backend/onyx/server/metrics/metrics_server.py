@@ -10,6 +10,7 @@ Usage:
 """
 
 import os
+import threading
 
 from prometheus_client import start_http_server
 
@@ -26,6 +27,7 @@ _DEFAULT_PORTS: dict[str, int] = {
 }
 
 _server_started = False
+_server_lock = threading.Lock()
 
 
 def start_metrics_server(worker_type: str) -> int | None:
@@ -42,34 +44,44 @@ def start_metrics_server(worker_type: str) -> int | None:
     """
     global _server_started
 
-    if _server_started:
-        logger.debug(f"Metrics server already started for {worker_type}")
-        return None
+    with _server_lock:
+        if _server_started:
+            logger.debug(f"Metrics server already started for {worker_type}")
+            return None
 
-    enabled = os.environ.get("PROMETHEUS_METRICS_ENABLED", "true").lower()
-    if enabled in ("false", "0", "no"):
-        logger.info(f"Prometheus metrics server disabled for {worker_type}")
-        return None
+        enabled = os.environ.get("PROMETHEUS_METRICS_ENABLED", "true").lower()
+        if enabled in ("false", "0", "no"):
+            logger.info(f"Prometheus metrics server disabled for {worker_type}")
+            return None
 
-    port_str = os.environ.get("PROMETHEUS_METRICS_PORT")
-    if port_str:
-        port = int(port_str)
-    elif worker_type in _DEFAULT_PORTS:
-        port = _DEFAULT_PORTS[worker_type]
-    else:
-        logger.info(
-            f"No default metrics port for worker type '{worker_type}' "
-            "and PROMETHEUS_METRICS_PORT not set. Skipping metrics server."
-        )
-        return None
+        port_str = os.environ.get("PROMETHEUS_METRICS_PORT")
+        if port_str:
+            try:
+                port = int(port_str)
+            except ValueError:
+                logger.warning(
+                    f"Invalid PROMETHEUS_METRICS_PORT '{port_str}' for {worker_type}, "
+                    "must be a numeric port. Skipping metrics server."
+                )
+                return None
+        elif worker_type in _DEFAULT_PORTS:
+            port = _DEFAULT_PORTS[worker_type]
+        else:
+            logger.info(
+                f"No default metrics port for worker type '{worker_type}' "
+                "and PROMETHEUS_METRICS_PORT not set. Skipping metrics server."
+            )
+            return None
 
-    try:
-        start_http_server(port)
-        _server_started = True
-        logger.info(f"Prometheus metrics server started on :{port} for {worker_type}")
-        return port
-    except OSError as e:
-        logger.warning(
-            f"Failed to start metrics server on :{port} for {worker_type}: {e}"
-        )
-        return None
+        try:
+            start_http_server(port)
+            _server_started = True
+            logger.info(
+                f"Prometheus metrics server started on :{port} for {worker_type}"
+            )
+            return port
+        except OSError as e:
+            logger.warning(
+                f"Failed to start metrics server on :{port} for {worker_type}: {e}"
+            )
+            return None
