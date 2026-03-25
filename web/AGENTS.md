@@ -281,37 +281,51 @@ If you need help with this step, reach out to `raunak@onyx.app`.
 
 ## 3. Text Rendering
 
-**Prefer using the `refresh-components/texts/Text` component for all text rendering. Avoid "naked" text nodes.**
+**Use the Opal `Text` component for all text rendering. Avoid "naked" text nodes.**
 
-**Reason:** The `Text` component is fully compliant with the stylings provided in Figma. It provides easy utilities to specify the text-colour and font-size in the form of flags. Super duper easy.
+**Reason:** The `Text` component is fully compliant with the stylings provided in Figma. It uses
+string-enum props (`font` and `color`) for font preset and color selection, and supports inline
+markdown rendering by default.
 
 ```typescript
-// ✅ Good
-import { Text } from '@/refresh-components/texts/Text'
+// ✅ Good — Opal Text with string-enum props
+import { Text } from "@opal/components";
 
 function UserCard({ name }: { name: string }) {
   return (
-    <Text
-      {/* The `text03` flag makes the text it renders to be coloured the 3rd-scale grey */}
-      text03
-      {/* The `mainAction` flag makes the text it renders to be "main-action" font + line-height + weightage, as described in the Figma */}
-      mainAction
-    >
+    <Text font="main-ui-action" color="text-03">
       {name}
     </Text>
   )
 }
 
-// ❌ Bad
-function UserCard({ name }: { name: string }) {
-  return (
-    <div>
-      <h2>{name}</h2>
-      <p>User details</p>
-    </div>
-  )
-}
+// ✅ Good — inline markdown (enabled by default for string children)
+<Text font="main-ui-body" color="text-05">
+  {"*Hello*, **world**! Visit [Onyx](https://onyx.app) and run `onyx start`."}
+</Text>
+
+// ✅ Good — opt out of markdown when rendering user-generated content
+<Text font="main-ui-body" color="text-03" preventMarkdown>
+  {userProvidedString}
+</Text>
+
+// ❌ Bad — legacy boolean-flag API (still works but deprecated)
+import Text from "@/refresh-components/texts/Text";
+<Text text03 mainUiAction>{name}</Text>
+
+// ❌ Bad — naked text nodes
+<div>
+  <h2>{name}</h2>
+  <p>User details</p>
+</div>
 ```
+
+Key props:
+- `font`: `TextFont` — font preset (e.g., `"main-ui-body"`, `"heading-h2"`, `"secondary-action"`)
+- `color`: `TextColor` — text color (e.g., `"text-03"`, `"text-05"`)
+- `inverted`: `boolean` — use inverted color palette for dark backgrounds
+- `as`: `"p" | "span" | "li"` — HTML tag (default: `"span"`)
+- `preventMarkdown`: `boolean` — disable inline markdown parsing
 
 ## 4. Component Usage
 
