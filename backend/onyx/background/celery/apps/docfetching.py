@@ -72,13 +72,13 @@ def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: AR
 
 @signals.task_revoked.connect
 def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
-    task_name = sender.name if hasattr(sender, "name") else str(sender)
+    task_name = getattr(sender, "name", None) or str(sender)
     on_celery_task_revoked(kwargs.get("task_id"), task_name)
 
 
 @signals.task_rejected.connect
 def on_task_rejected(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
-    task_name = sender.name if hasattr(sender, "name") else str(sender)
+    task_name = getattr(sender, "name", None) or str(sender)
     on_celery_task_rejected(None, task_name)
 
 

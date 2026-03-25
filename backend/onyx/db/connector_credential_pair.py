@@ -757,16 +757,7 @@ def resync_cc_pair(
 
 def get_connector_health_for_metrics(
     db_session: Session,
-) -> list[
-    tuple[
-        int,
-        ConnectorCredentialPairStatus,
-        bool,
-        datetime | None,
-        str,
-        DocumentSource,
-    ]
-]:
+) -> list:  # Returns list of Row tuples
     """Return connector health data for Prometheus metrics.
 
     Each row is (cc_pair_id, status, in_repeated_error_state,
