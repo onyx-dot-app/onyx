@@ -12,12 +12,12 @@ const INLINE_COMPONENTS = {
     if (!href || !SAFE_PROTOCOL.test(href)) {
       return <>{children}</>;
     }
+    const isHttp = /^https?:/i.test(href);
     return (
       <a
         href={href}
         className="underline underline-offset-2"
-        target="_blank"
-        rel="noopener noreferrer"
+        {...(isHttp ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       >
         {children}
       </a>

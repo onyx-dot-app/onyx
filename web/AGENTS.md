@@ -324,6 +324,7 @@ Key props:
 - `font`: `TextFont` — font preset (e.g., `"main-ui-body"`, `"heading-h2"`, `"secondary-action"`)
 - `color`: `TextColor` — text color (e.g., `"text-03"`, `"text-inverted-05"`)
 - `as`: `"p" | "span" | "li" | "h1" | "h2" | "h3"` — HTML tag (default: `"span"`)
+- `nowrap`: `boolean` — prevent text wrapping
 - `preventMarkdown`: `boolean` — disable inline markdown parsing
 
 ## 4. Component Usage
