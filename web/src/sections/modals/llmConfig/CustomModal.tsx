@@ -212,9 +212,10 @@ export default function CustomModal({
   const initialValues = {
     ...buildDefaultInitialValues(
       existingLlmProvider,
-      undefined,
+      existingLlmProvider?.model_configurations,
       defaultModelName
     ),
+    api_base: existingLlmProvider?.api_base ?? "",
     ...(isOnboarding ? buildOnboardingInitialValues() : {}),
     provider: existingLlmProvider?.provider ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map(
@@ -352,6 +353,19 @@ export default function CustomModal({
                     name="provider"
                     placeholder="Provider Name"
                     variant={existingLlmProvider ? "disabled" : undefined}
+                  />
+                </InputLayouts.Vertical>
+              </FieldWrapper>
+
+              <FieldWrapper>
+                <InputLayouts.Vertical
+                  name="api_base"
+                  title="API Base URL"
+                  subDescription="Custom endpoint for OpenAI-compatible providers (e.g. LiteLLM, vLLM, Ollama remote)."
+                >
+                  <InputTypeInField
+                    name="api_base"
+                    placeholder="https://your-custom-api.com/v1"
                   />
                 </InputLayouts.Vertical>
               </FieldWrapper>
