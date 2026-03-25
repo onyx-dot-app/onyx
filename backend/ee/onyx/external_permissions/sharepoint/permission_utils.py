@@ -250,16 +250,23 @@ def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
         raise e
 
 
-def _is_public_item(drive_item: DriveItem) -> bool:
+def _is_public_item(
+    drive_item: DriveItem,
+    treat_org_link_as_public: bool = True,
+) -> bool:
     is_public = False
     try:
         permissions = sleep_and_retry(
             drive_item.permissions.get_all(page_loaded=lambda _: None), "is_public_item"
         )
         for permission in permissions:
-            if permission.link and (
-                permission.link.scope == "anonymous"
-                or permission.link.scope == "organization"
+            if (
+                permission.link
+                and treat_org_link_as_public
+                and (
+                    permission.link.scope == "anonymous"
+                    or permission.link.scope == "organization"
+                )
             ):
                 is_public = True
                 break
@@ -504,6 +511,7 @@ def get_external_access_from_sharepoint(
     drive_item: DriveItem | None,
     site_page: dict[str, Any] | None,
     add_prefix: bool = False,
+    treat_org_link_as_public: bool = True,
 ) -> ExternalAccess:
     """
     Get external access information from SharePoint.
@@ -563,8 +571,7 @@ def get_external_access_from_sharepoint(
                     )
 
     if drive_item and drive_name:
-        # Here we check if the item have have any public links, if so we return early
-        is_public = _is_public_item(drive_item)
+        is_public = _is_public_item(drive_item, treat_org_link_as_public)
         if is_public:
             logger.info(f"Item {drive_item.id} is public")
             return ExternalAccess(
