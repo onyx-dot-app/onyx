@@ -323,7 +323,7 @@ import Text from "@/refresh-components/texts/Text";
 Key props:
 - `font`: `TextFont` — font preset (e.g., `"main-ui-body"`, `"heading-h2"`, `"secondary-action"`)
 - `color`: `TextColor` — text color (e.g., `"text-03"`, `"text-inverted-05"`)
-- `as`: `"p" | "span" | "li"` — HTML tag (default: `"span"`)
+- `as`: `"p" | "span" | "li" | "h1" | "h2" | "h3"` — HTML tag (default: `"span"`)
 - `preventMarkdown`: `boolean` — disable inline markdown parsing
 
 ## 4. Component Usage
