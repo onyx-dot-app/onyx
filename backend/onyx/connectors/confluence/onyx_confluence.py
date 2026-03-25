@@ -123,7 +123,7 @@ class OnyxConfluence:
 
         self.shared_base_kwargs: dict[str, str | int | bool] = {
             "api_version": "cloud" if is_cloud else "latest",
-            "backoff_and_retry": True,
+            "backoff_and_retry": False,
             "cloud": is_cloud,
         }
         if timeout:
@@ -456,7 +456,7 @@ class OnyxConfluence:
                         return attr(*args, **kwargs)
 
                 except HTTPError as e:
-                    delay_until = _handle_http_error(e, attempt)
+                    delay_until = _handle_http_error(e, attempt, MAX_RETRIES)
                     logger.warning(
                         f"HTTPError in confluence call. Retrying in {delay_until} seconds..."
                     )

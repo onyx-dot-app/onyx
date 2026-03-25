@@ -363,7 +363,7 @@ def handle_confluence_rate_limit(confluence_call: F) -> F:
                 # and applying our own retries in a more specific set of circumstances
                 return confluence_call(*args, **kwargs)
             except requests.HTTPError as e:
-                delay_until = _handle_http_error(e, attempt)
+                delay_until = _handle_http_error(e, attempt, MAX_RETRIES)
                 logger.warning(
                     f"HTTPError in confluence call. Retrying in {delay_until} seconds..."
                 )
@@ -384,7 +384,7 @@ def handle_confluence_rate_limit(confluence_call: F) -> F:
     return cast(F, wrapped_call)
 
 
-def _handle_http_error(e: requests.HTTPError, attempt: int) -> int:
+def _handle_http_error(e: requests.HTTPError, attempt: int, max_retries: int) -> int:
     MIN_DELAY = 2
     MAX_DELAY = 60
     STARTING_DELAY = 5
@@ -407,6 +407,17 @@ def _handle_http_error(e: requests.HTTPError, attempt: int) -> int:
             return FORBIDDEN_RETRY_DELAY
 
         raise e
+
+    if e.response.status_code >= 500:
+        if attempt >= max_retries - 1:
+            raise e
+
+        delay = min(STARTING_DELAY * (BACKOFF**attempt), MAX_DELAY)
+        logger.warning(
+            f"Server error {e.response.status_code}. "
+            f"Retrying in {delay} seconds (attempt {attempt + 1})..."
+        )
+        return math.ceil(time.monotonic() + delay)
 
     if (
         e.response.status_code != 429

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SvgPlusCircle, SvgUsers } from "@opal/icons";
 import { Button } from "@opal/components";
@@ -16,6 +17,7 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 
 function GroupsPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
@@ -25,11 +27,14 @@ function GroupsPage() {
   } = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher);
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root width="sm">
       {/* This is the sticky header for the groups page. It is used to display
        * the groups page title and search input when scrolling down.
        */}
-      <div className="sticky top-0 z-settings-header bg-background-tint-01">
+      <div
+        className="sticky top-0 z-settings-header bg-background-tint-01"
+        data-testid="groups-page-heading"
+      >
         <SettingsLayouts.Header icon={SvgUsers} title="Groups" separator />
 
         <Section flexDirection="row" padding={1}>
@@ -40,7 +45,12 @@ function GroupsPage() {
             leftSearchIcon
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          <Button icon={SvgPlusCircle}>New Group</Button>
+          <Button
+            icon={SvgPlusCircle}
+            onClick={() => router.push("/admin/groups/create")}
+          >
+            New Group
+          </Button>
         </Section>
       </div>
 

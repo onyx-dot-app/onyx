@@ -28,7 +28,12 @@ export default function Layout({ children }: LayoutProps) {
         <SettingsLayouts.Header icon={SvgSliders} title="Settings" separator />
 
         <SettingsLayouts.Body>
-          <Section flexDirection="row" alignItems="start" gap={1.5}>
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="start"
+            gap={1.5}
+          >
             {/* Left: Tab Navigation */}
             <div
               data-testid="settings-left-tab-navigation"

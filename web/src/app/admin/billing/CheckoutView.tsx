@@ -230,7 +230,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           >
             <InputNumber
               value={seats}
-              onChange={setSeats}
+              onChange={(v) => setSeats(v ?? minRequiredSeats)}
               min={minRequiredSeats}
               defaultValue={minRequiredSeats}
               showReset

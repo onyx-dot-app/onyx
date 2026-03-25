@@ -197,6 +197,7 @@ export default function CustomModal({
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  defaultModelName,
   onboardingState,
   onboardingActions,
 }: LLMProviderFormProps) {
@@ -209,7 +210,11 @@ export default function CustomModal({
   const onClose = () => onOpenChange?.(false);
 
   const initialValues = {
-    ...buildDefaultInitialValues(existingLlmProvider),
+    ...buildDefaultInitialValues(
+      existingLlmProvider,
+      undefined,
+      defaultModelName
+    ),
     ...(isOnboarding ? buildOnboardingInitialValues() : {}),
     provider: existingLlmProvider?.provider ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map(

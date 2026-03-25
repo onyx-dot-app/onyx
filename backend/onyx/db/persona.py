@@ -50,8 +50,18 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 logger = setup_logger()
 
 
-def get_default_behavior_persona(db_session: Session) -> Persona | None:
+def get_default_behavior_persona(
+    db_session: Session,
+    eager_load_for_tools: bool = False,
+) -> Persona | None:
     stmt = select(Persona).where(Persona.id == DEFAULT_PERSONA_ID)
+    if eager_load_for_tools:
+        stmt = stmt.options(
+            selectinload(Persona.tools),
+            selectinload(Persona.document_sets),
+            selectinload(Persona.attached_documents),
+            selectinload(Persona.hierarchy_nodes),
+        )
     return db_session.scalars(stmt).first()
 
 

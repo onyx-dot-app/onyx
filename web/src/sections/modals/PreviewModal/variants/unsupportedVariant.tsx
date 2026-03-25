@@ -5,7 +5,7 @@ import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 
 export const unsupportedVariant: PreviewVariant = {
   matches: () => true,
-  width: "md",
+  width: "xl",
   height: "full",
   needsTextContent: false,
   codeBackground: false,

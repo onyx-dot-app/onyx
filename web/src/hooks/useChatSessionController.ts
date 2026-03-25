@@ -61,6 +61,11 @@ interface UseChatSessionControllerProps {
   }) => Promise<void>;
 }
 
+export type SessionFetchError = {
+  type: "not_found" | "access_denied" | "unknown";
+  detail: string;
+} | null;
+
 export default function useChatSessionController({
   existingChatSessionId,
   searchParams,
@@ -80,6 +85,8 @@ export default function useChatSessionController({
   const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
     useState<number>(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [sessionFetchError, setSessionFetchError] =
+    useState<SessionFetchError>(null);
   // Store actions
   const updateSessionAndMessageTree = useChatSessionStore(
     (state) => state.updateSessionAndMessageTree
@@ -151,6 +158,8 @@ export default function useChatSessionController({
     }
 
     async function initialSessionFetch() {
+      setSessionFetchError(null);
+
       if (existingChatSessionId === null) {
         // Clear the current session in the store to show intro messages
         setCurrentSession(null);
@@ -178,9 +187,42 @@ export default function useChatSessionController({
       setCurrentSession(existingChatSessionId);
       setIsFetchingChatMessages(existingChatSessionId, true);
 
-      const response = await fetch(
-        `/api/chat/get-chat-session/${existingChatSessionId}`
-      );
+      let response: Response;
+      try {
+        response = await fetch(
+          `/api/chat/get-chat-session/${existingChatSessionId}`
+        );
+      } catch (error) {
+        setIsFetchingChatMessages(existingChatSessionId, false);
+        console.error("Failed to fetch chat session", {
+          chatSessionId: existingChatSessionId,
+          error,
+        });
+        setSessionFetchError({
+          type: "unknown",
+          detail: "Failed to load chat session. Please check your connection.",
+        });
+        return;
+      }
+
+      if (!response.ok) {
+        setIsFetchingChatMessages(existingChatSessionId, false);
+        let detail = "An unexpected error occurred.";
+        try {
+          const errorBody = await response.json();
+          detail = errorBody.detail || detail;
+        } catch {
+          // ignore parse errors
+        }
+        const type =
+          response.status === 404
+            ? "not_found"
+            : response.status === 403
+              ? "access_denied"
+              : "unknown";
+        setSessionFetchError({ type, detail });
+        return;
+      }
 
       const session = await response.json();
       const chatSession = session as BackendChatSession;
@@ -356,5 +398,6 @@ export default function useChatSessionController({
     currentSessionFileTokenCount,
     onMessageSelection,
     projectFiles,
+    sessionFetchError,
   };
 }
