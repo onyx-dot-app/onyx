@@ -44,7 +44,7 @@ function GroupsPage() {
           />
           <Button
             icon={SvgPlusCircle}
-            onClick={() => router.push("/admin/groups/create")}
+            onClick={() => router.push("/admin/groups2/create")}
           >
             New Group
           </Button>

@@ -146,6 +146,10 @@ export interface DataTableProps<TData> {
   initialSorting?: SortingState;
   /** Initial column visibility state. */
   initialColumnVisibility?: VisibilityState;
+  /** Initial row selection state. Keys are row IDs (from `getRowId`), values are `true`. */
+  initialRowSelection?: Record<string, boolean>;
+  /** When true AND `initialRowSelection` is non-empty, start in view-selected mode. @default false */
+  initialViewSelected?: boolean;
   /** Enable drag-and-drop row reordering. */
   draggable?: DataTableDraggableConfig;
   /** Footer configuration. */

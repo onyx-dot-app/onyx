@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
@@ -21,6 +22,7 @@ interface GroupCardProps {
 }
 
 function GroupCard({ group }: GroupCardProps) {
+  const router = useRouter();
   const { mutate } = useSWRConfig();
   const builtIn = isBuiltInGroup(group);
   const isAdmin = group.name === "Admin";
@@ -60,6 +62,7 @@ function GroupCard({ group }: GroupCardProps) {
               icon={SvgChevronRight}
               prominence="tertiary"
               tooltip="View group"
+              onClick={() => router.push(`/admin/groups2/${group.id}`)}
             />
           </Section>
         }
