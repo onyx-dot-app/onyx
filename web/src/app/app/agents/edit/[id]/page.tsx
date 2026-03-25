@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { use } from "react";
 import { useAgent } from "@/hooks/useAgents";
 import AgentEditorPage from "@/refresh-pages/AgentEditorPage";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import * as AppLayouts from "@/layouts/app-layouts";
 
 export interface PageProps {
@@ -11,7 +12,6 @@ export interface PageProps {
 }
 
 export default function Page(props: PageProps) {
-  const router = useRouter();
   const { id } = use(props.params);
   const agentId = parseInt(id);
 
@@ -20,22 +20,19 @@ export default function Page(props: PageProps) {
     isNaN(agentId) ? null : agentId
   );
 
-  // Handle invalid ID (NaN)
-  useEffect(() => {
-    if (isNaN(agentId)) {
-      router.push("/app");
-    }
-  }, [agentId, router]);
+  if (isLoading) return <SimpleLoader />;
 
-  // Redirect to home if agent not found after loading completes
-  useEffect(() => {
-    if (!isLoading && !agent) {
-      router.push("/app");
-    }
-  }, [isLoading, agent, router]);
-
-  // Show nothing while redirecting or loading
-  if (isLoading || !agent) return null;
+  if (isNaN(agentId) || !agent) {
+    return (
+      <ResourceErrorPage
+        errorType="not_found"
+        title="Agent not found"
+        description="This agent doesn't exist or has been deleted."
+        backHref="/app"
+        backLabel="Start a new chat"
+      />
+    );
+  }
 
   return (
     <AppLayouts.Root>

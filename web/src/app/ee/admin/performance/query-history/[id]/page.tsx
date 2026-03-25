@@ -11,7 +11,7 @@ import BackButton from "@/refresh-components/buttons/BackButton";
 import { FeedbackBadge } from "../FeedbackBadge";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
-import { ErrorCallout } from "@/components/ErrorCallout";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
 import { ThreeDotsLoader } from "@/components/Loading";
 import CardSection from "@/components/admin/CardSection";
 
@@ -81,9 +81,12 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
 
   if (!chatSessionSnapshot || error) {
     return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch chat session - ${error}`}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load chat session"
+        description={error ? String(error) : undefined}
+        backHref="/admin/performance/query-history"
+        backLabel="Back to query history"
       />
     );
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { ErrorCallout } from "@/components/ErrorCallout";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SlackChannelConfigsTable from "./SlackChannelConfigsTable";
 import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
@@ -31,22 +31,24 @@ function SlackBotEditContent({ botId }: { botId: string }) {
 
   if (slackBotError || !slackBot) {
     return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Bot ${botId}: ${getErrorMsg(
-          slackBotError
-        )}`}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load Slack bot"
+        description={getErrorMsg(slackBotError)}
+        backHref="/admin/bots"
+        backLabel="Back to Slack bots"
       />
     );
   }
 
   if (slackChannelConfigsError || !slackChannelConfigs) {
     return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Bot ${botId}: ${getErrorMsg(
-          slackChannelConfigsError
-        )}`}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load channel configs"
+        description={getErrorMsg(slackChannelConfigsError)}
+        backHref="/admin/bots"
+        backLabel="Back to Slack bots"
       />
     );
   }

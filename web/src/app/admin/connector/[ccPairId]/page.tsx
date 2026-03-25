@@ -1,7 +1,7 @@
 "use client";
 
 import BackButton from "@/refresh-components/buttons/BackButton";
-import { ErrorCallout } from "@/components/ErrorCallout";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
@@ -344,13 +344,16 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {
     return (
-      <ErrorCallout
-        errorTitle={`Failed to fetch info on Connector with ID ${ccPairId}`}
-        errorMsg={
+      <ResourceErrorPage
+        errorType="not_found"
+        title="Connector not found"
+        description={
           ccPairError?.info?.detail ||
           ccPairError?.toString() ||
-          "Unknown error"
+          `Connector with ID ${ccPairId} could not be found.`
         }
+        backHref="/admin/indexing/status"
+        backLabel="Back to connectors"
       />
     );
   }

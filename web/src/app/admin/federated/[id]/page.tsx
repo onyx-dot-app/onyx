@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { notFound } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { useFederatedConnector } from "./useFederatedConnector";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 export default function EditFederatedConnectorPage(props: {
   params: Promise<{ id: string }>;
@@ -19,35 +20,17 @@ export default function EditFederatedConnectorPage(props: {
     useFederatedConnector(params?.id ?? "");
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center w-full h-full">
-        <div className="mt-12 w-full max-w-4xl mx-auto">
-          <div className="flex flex-col items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-4" />
-            <div className="text-center">
-              <p className="text-lg font-medium text-gray-700 mb-2">
-                Loading connector configuration...
-              </p>
-              <p className="text-sm text-gray-500">
-                Retrieving connector details and credential schema
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <SimpleLoader />;
   }
 
   if (error) {
     return (
-      <div className="flex justify-center w-full h-full">
-        <div className="mt-12 w-full max-w-4xl mx-auto">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
-            <p className="text-gray-600">{error}</p>
-          </div>
-        </div>
-      </div>
+      <ResourceErrorPage
+        errorType="fetch_error"
+        description={error}
+        backHref="/admin/federated"
+        backLabel="Back to federated connectors"
+      />
     );
   }
 

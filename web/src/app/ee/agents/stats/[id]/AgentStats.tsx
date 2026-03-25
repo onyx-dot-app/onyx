@@ -11,6 +11,7 @@ import { useAgents } from "@/hooks/useAgents";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
 
 type AgentDailyUsageEntry = {
   date: string;
@@ -117,9 +118,13 @@ export function AgentStats({ agentId }: { agentId: number }) {
     );
   } else if (error) {
     content = (
-      <div className="h-80 text-red-600 font-bold flex flex-col">
-        <p className="m-auto">{error}</p>
-      </div>
+      <ResourceErrorPage
+        errorType={
+          error.includes("permission") ? "access_denied" : "fetch_error"
+        }
+        description={error}
+        backHref="/app"
+      />
     );
   } else if (!agentStats?.daily_stats?.length) {
     content = (
