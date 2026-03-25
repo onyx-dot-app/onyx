@@ -173,6 +173,8 @@ export default function VoiceConfigurationPage() {
     setModalMode(mode);
     setSelectedModelId(modelId ?? null);
     setModalOpen(true);
+    setSTTActivationError(null);
+    setTTSActivationError(null);
   };
 
   const handleSetDefault = async (
