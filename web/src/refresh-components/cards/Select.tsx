@@ -37,7 +37,6 @@ export interface SelectProps
   onDeselect?: () => void;
   onEdit?: () => void;
   onDisconnect?: () => void;
-  disconnectDisabled?: boolean;
 
   // Labels (customizable)
   connectLabel?: string;
@@ -63,7 +62,6 @@ export default function Select({
   onDeselect,
   onEdit,
   onDisconnect,
-  disconnectDisabled,
   connectLabel = "Connect",
   selectLabel = "Set as Default",
   selectedLabel = "Current Default",
@@ -156,14 +154,10 @@ export default function Select({
               </Disabled>
               <div className="flex px-1 gap-1">
                 {onDisconnect && (
-                  <Disabled disabled={disabled || disconnectDisabled}>
+                  <Disabled disabled={disabled}>
                     <Button
                       icon={SvgUnplug}
-                      tooltip={
-                        disconnectDisabled
-                          ? "Deselect before disconnecting"
-                          : "Disconnect"
-                      }
+                      tooltip="Disconnect"
                       prominence="tertiary"
                       size="sm"
                       onClick={noProp(onDisconnect)}
@@ -202,14 +196,10 @@ export default function Select({
               </Disabled>
               <div className="flex px-1 gap-1">
                 {onDisconnect && (
-                  <Disabled disabled={disabled || disconnectDisabled}>
+                  <Disabled disabled={disabled}>
                     <Button
                       icon={SvgUnplug}
-                      tooltip={
-                        disconnectDisabled
-                          ? "Deselect before disconnecting"
-                          : "Disconnect"
-                      }
+                      tooltip="Disconnect"
                       prominence="tertiary"
                       size="sm"
                       onClick={noProp(onDisconnect)}

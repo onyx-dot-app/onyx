@@ -98,14 +98,13 @@ test.describe("Web Search Provider Disconnect", () => {
       const braveCard = findProviderCard(page, "Brave");
       await braveCard.waitFor({ state: "visible", timeout: 10000 });
 
-      // Brave is connected but not active — disconnect should be enabled
       const disconnectButton = braveCard.getByRole("button", {
         name: "Disconnect Brave",
       });
       await expect(disconnectButton).toBeVisible();
       await expect(disconnectButton).toBeEnabled();
 
-      // Mock the DELETE to succeed and update the search providers list
+      // Mock the DELETE to succeed
       await page.route(
         "**/api/admin/web-search/search-providers/2",
         async (route) => {
@@ -133,26 +132,24 @@ test.describe("Web Search Provider Disconnect", () => {
 
       await disconnectButton.click();
 
-      // Verify confirmation modal
       const confirmDialog = page.getByRole("dialog");
       await expect(confirmDialog).toBeVisible({ timeout: 5000 });
       await expect(confirmDialog).toContainText("Disconnect Brave");
 
-      // Confirm disconnect
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
       await confirmButton.click();
 
-      // Verify the card reverts to disconnected state
       await expect(
         braveCard.getByRole("button", { name: "Connect" })
       ).toBeVisible({ timeout: 10000 });
     });
 
-    test("should show disabled disconnect button for active search provider", async ({
+    test("should show replacement dropdown when disconnecting active search provider with alternatives", async ({
       page,
     }) => {
+      // Exa is active, Brave is also configured
       const searchProviders = [
         { ...FAKE_SEARCH_PROVIDERS.exa },
         { ...FAKE_SEARCH_PROVIDERS.brave },
@@ -165,18 +162,65 @@ test.describe("Web Search Provider Disconnect", () => {
       const exaCard = findProviderCard(page, "Exa");
       await exaCard.waitFor({ state: "visible", timeout: 10000 });
 
-      // Exa is active — disconnect should be disabled
       const disconnectButton = exaCard.getByRole("button", {
         name: "Disconnect Exa",
       });
       await expect(disconnectButton).toBeVisible();
-      await expect(disconnectButton).toBeDisabled();
+      await expect(disconnectButton).toBeEnabled();
+
+      await disconnectButton.click();
+
+      const confirmDialog = page.getByRole("dialog");
+      await expect(confirmDialog).toBeVisible({ timeout: 5000 });
+      await expect(confirmDialog).toContainText("Disconnect Exa");
+
+      // Should show replacement dropdown
+      await expect(
+        confirmDialog.getByText("Choose a replacement")
+      ).toBeVisible();
+
+      // Disconnect button should be disabled until replacement is selected
+      const confirmButton = confirmDialog.getByRole("button", {
+        name: "Disconnect",
+      });
+      await expect(confirmButton).toBeDisabled();
+    });
+
+    test("should show warning when disconnecting active search provider with no alternatives", async ({
+      page,
+    }) => {
+      // Only Exa configured and active
+      await mockWebSearchApis(page, [{ ...FAKE_SEARCH_PROVIDERS.exa }], []);
+
+      await page.goto(WEB_SEARCH_URL);
+      await page.waitForSelector("text=Search Engine", { timeout: 20000 });
+
+      const exaCard = findProviderCard(page, "Exa");
+      await exaCard.waitFor({ state: "visible", timeout: 10000 });
+
+      const disconnectButton = exaCard.getByRole("button", {
+        name: "Disconnect Exa",
+      });
+      await disconnectButton.click();
+
+      const confirmDialog = page.getByRole("dialog");
+      await expect(confirmDialog).toBeVisible({ timeout: 5000 });
+
+      // Should warn about disabling web search
+      await expect(
+        confirmDialog.getByText("until you configure another provider")
+      ).toBeVisible();
+
+      // Disconnect button should still be enabled
+      const confirmButton = confirmDialog.getByRole("button", {
+        name: "Disconnect",
+      });
+      await expect(confirmButton).toBeEnabled();
     });
 
     test("should not show disconnect button for unconfigured search provider", async ({
       page,
     }) => {
-      // Only Exa is configured — Brave, Serper, etc. are unconfigured
       await mockWebSearchApis(page, [{ ...FAKE_SEARCH_PROVIDERS.exa }], []);
 
       await page.goto(WEB_SEARCH_URL);
@@ -198,21 +242,14 @@ test.describe("Web Search Provider Disconnect", () => {
     }) => {
       // Firecrawl connected but not active, Exa is active
       const contentProviders = [
-        {
-          ...FAKE_CONTENT_PROVIDERS.firecrawl,
-          is_active: false,
-        },
-        {
-          ...FAKE_CONTENT_PROVIDERS.exa,
-          is_active: true,
-        },
+        { ...FAKE_CONTENT_PROVIDERS.firecrawl, is_active: false },
+        { ...FAKE_CONTENT_PROVIDERS.exa, is_active: true },
       ];
       await mockWebSearchApis(page, [], contentProviders);
 
       await page.goto(WEB_SEARCH_URL);
       await page.waitForSelector("text=Web Crawler", { timeout: 20000 });
 
-      // Firecrawl is only in the content section — no ambiguity
       const firecrawlCard = findProviderCard(page, "Firecrawl");
       await firecrawlCard.waitFor({ state: "visible", timeout: 10000 });
 
@@ -234,12 +271,7 @@ test.describe("Web Search Provider Disconnect", () => {
                 if (route.request().method() === "GET") {
                   await route.fulfill({
                     status: 200,
-                    json: [
-                      {
-                        ...FAKE_CONTENT_PROVIDERS.exa,
-                        is_active: true,
-                      },
-                    ],
+                    json: [{ ...FAKE_CONTENT_PROVIDERS.exa, is_active: true }],
                   });
                 } else {
                   await route.continue();
@@ -255,26 +287,24 @@ test.describe("Web Search Provider Disconnect", () => {
 
       await disconnectButton.click();
 
-      // Verify confirmation modal
       const confirmDialog = page.getByRole("dialog");
       await expect(confirmDialog).toBeVisible({ timeout: 5000 });
       await expect(confirmDialog).toContainText("Disconnect Firecrawl");
 
-      // Confirm disconnect
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
       await confirmButton.click();
 
-      // Verify the card reverts to disconnected state
       await expect(
         firecrawlCard.getByRole("button", { name: "Connect" })
       ).toBeVisible({ timeout: 10000 });
     });
 
-    test("should show disabled disconnect button for active content provider", async ({
+    test("should show replacement dropdown when disconnecting active content provider with alternatives", async ({
       page,
     }) => {
+      // Firecrawl is active, Exa is also configured
       const contentProviders = [
         { ...FAKE_CONTENT_PROVIDERS.firecrawl },
         { ...FAKE_CONTENT_PROVIDERS.exa },
@@ -284,21 +314,32 @@ test.describe("Web Search Provider Disconnect", () => {
       await page.goto(WEB_SEARCH_URL);
       await page.waitForSelector("text=Web Crawler", { timeout: 20000 });
 
-      // Firecrawl is active — find it in the crawler section
       const firecrawlCard = findProviderCard(page, "Firecrawl");
       await firecrawlCard.waitFor({ state: "visible", timeout: 10000 });
 
       const disconnectButton = firecrawlCard.getByRole("button", {
         name: "Disconnect Firecrawl",
       });
-      await expect(disconnectButton).toBeVisible();
-      await expect(disconnectButton).toBeDisabled();
+      await disconnectButton.click();
+
+      const confirmDialog = page.getByRole("dialog");
+      await expect(confirmDialog).toBeVisible({ timeout: 5000 });
+
+      // Should show replacement dropdown
+      await expect(
+        confirmDialog.getByText("Choose a replacement")
+      ).toBeVisible();
+
+      // Disconnect should be disabled until replacement is selected
+      const confirmButton = confirmDialog.getByRole("button", {
+        name: "Disconnect",
+      });
+      await expect(confirmButton).toBeDisabled();
     });
 
     test("should not show disconnect for Onyx Web Crawler (built-in)", async ({
       page,
     }) => {
-      // No content providers configured — only the virtual onyx_web_crawler shows
       await mockWebSearchApis(page, [], []);
 
       await page.goto(WEB_SEARCH_URL);

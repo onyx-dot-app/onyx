@@ -18,6 +18,7 @@ import { Button as OpalButton } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   SEARCH_PROVIDERS_URL,
   SEARCH_PROVIDER_DETAILS,
@@ -69,17 +70,139 @@ interface WebContentProviderView {
   has_api_key: boolean;
 }
 
+interface DisconnectTargetState {
+  id: number;
+  label: string;
+  category: "search" | "content";
+  providerType: string;
+}
+
+function WebSearchDisconnectModal({
+  disconnectTarget,
+  searchProviders,
+  contentProviders,
+  replacementProviderId,
+  onReplacementChange,
+  onClose,
+  onDisconnect,
+}: {
+  disconnectTarget: DisconnectTargetState;
+  searchProviders: WebSearchProviderView[];
+  contentProviders: WebContentProviderView[];
+  replacementProviderId: string | null;
+  onReplacementChange: (id: string | null) => void;
+  onClose: () => void;
+  onDisconnect: () => void;
+}) {
+  const isSearch = disconnectTarget.category === "search";
+
+  // Determine if the target is currently the active/selected provider
+  const isActive = isSearch
+    ? searchProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
+      false
+    : contentProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
+      false;
+
+  // Find other configured providers as replacements
+  const replacementOptions = isSearch
+    ? searchProviders.filter(
+        (p) => p.id !== disconnectTarget.id && p.id > 0 && p.has_api_key
+      )
+    : contentProviders.filter(
+        (p) =>
+          p.id !== disconnectTarget.id &&
+          p.provider_type !== "onyx_web_crawler" &&
+          p.id > 0 &&
+          p.has_api_key
+      );
+
+  const needsReplacement = isActive;
+  const hasReplacements = replacementOptions.length > 0;
+
+  const getLabel = (p: { name: string; provider_type: string }) => {
+    if (isSearch) {
+      const details =
+        SEARCH_PROVIDER_DETAILS[p.provider_type as WebSearchProviderType];
+      return details?.label ?? p.name ?? p.provider_type;
+    }
+    const details = CONTENT_PROVIDER_DETAILS[p.provider_type];
+    return details?.label ?? p.name ?? p.provider_type;
+  };
+
+  const categoryLabel = isSearch ? "search engine" : "web crawler";
+
+  return (
+    <ConfirmationModalLayout
+      icon={SvgUnplug}
+      title={`Disconnect ${disconnectTarget.label}`}
+      description="This will remove the stored credentials for this provider."
+      onClose={onClose}
+      submit={
+        <OpalButton
+          variant="danger"
+          onClick={onDisconnect}
+          disabled={
+            needsReplacement && hasReplacements && !replacementProviderId
+          }
+        >
+          Disconnect
+        </OpalButton>
+      }
+    >
+      {needsReplacement ? (
+        hasReplacements ? (
+          <div className="flex flex-col gap-2">
+            <Text as="p" text03>
+              <b>{disconnectTarget.label}</b> is currently the active{" "}
+              {categoryLabel}. Choose a replacement:
+            </Text>
+            <InputSelect
+              value={replacementProviderId ?? undefined}
+              onValueChange={(v) => onReplacementChange(v)}
+            >
+              <InputSelect.Trigger placeholder="Select a replacement provider" />
+              <InputSelect.Content>
+                {replacementOptions.map((p) => (
+                  <InputSelect.Item key={p.id} value={String(p.id)}>
+                    {getLabel(p)}
+                  </InputSelect.Item>
+                ))}
+              </InputSelect.Content>
+            </InputSelect>
+          </div>
+        ) : (
+          <Text as="p" text03>
+            <b>{disconnectTarget.label}</b> is currently the active{" "}
+            {categoryLabel}. Disconnecting will disable{" "}
+            {isSearch ? "web search" : "web crawling"} until you configure
+            another provider.
+          </Text>
+        )
+      ) : (
+        <div className="flex flex-col gap-1">
+          <Text as="p" text03>
+            Web search will no longer be routed through{" "}
+            <b>{disconnectTarget.label}</b>.
+          </Text>
+          <Text as="p" text03>
+            Search history will be preserved.
+          </Text>
+        </div>
+      )}
+    </ConfirmationModalLayout>
+  );
+}
+
 export default function Page() {
   const [searchModal, dispatchSearchModal] = useReducer(
     WebProviderModalReducer,
     initialWebProviderModalState
   );
-  const [disconnectTarget, setDisconnectTarget] = useState<{
-    id: number;
-    label: string;
-    category: "search" | "content";
-    providerType: string;
-  } | null>(null);
+  const [disconnectTarget, setDisconnectTarget] =
+    useState<DisconnectTargetState | null>(null);
+  const [replacementProviderId, setReplacementProviderId] = useState<
+    string | null
+  >(null);
   const [contentModal, dispatchContentModal] = useReducer(
     WebProviderModalReducer,
     initialWebProviderModalState
@@ -811,6 +934,27 @@ export default function Page() {
     const { id, category } = disconnectTarget;
 
     try {
+      // If a replacement was selected, activate it first
+      if (replacementProviderId) {
+        const repId = Number(replacementProviderId);
+        const activateEndpoint =
+          category === "search"
+            ? `/api/admin/web-search/search-providers/${repId}/activate`
+            : `/api/admin/web-search/content-providers/${repId}/activate`;
+        const activateResp = await fetch(activateEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!activateResp.ok) {
+          const errorBody = await activateResp.json().catch(() => ({}));
+          throw new Error(
+            typeof errorBody?.detail === "string"
+              ? errorBody.detail
+              : "Failed to activate replacement provider."
+          );
+        }
+      }
+
       const response = await fetch(
         `/api/admin/web-search/${category}-providers/${id}`,
         { method: "DELETE" }
@@ -842,6 +986,7 @@ export default function Page() {
       }
     } finally {
       setDisconnectTarget(null);
+      setReplacementProviderId(null);
     }
   };
 
@@ -978,7 +1123,6 @@ export default function Page() {
                               })
                           : undefined
                       }
-                      disconnectDisabled={isActive}
                     />
                   );
                 }
@@ -1093,7 +1237,6 @@ export default function Page() {
                             })
                         : undefined
                     }
-                    disconnectDisabled={isCurrentCrawler}
                   />
                 );
               })}
@@ -1103,28 +1246,18 @@ export default function Page() {
       </SettingsLayouts.Root>
 
       {disconnectTarget && (
-        <ConfirmationModalLayout
-          icon={SvgUnplug}
-          title={`Disconnect ${disconnectTarget.label}`}
-          description="This will remove the stored credentials for this provider."
-          onClose={() => setDisconnectTarget(null)}
-          submit={
-            <OpalButton
-              variant="danger"
-              onClick={() => void handleDisconnectProvider()}
-            >
-              Disconnect
-            </OpalButton>
-          }
-        >
-          <Text as="p" text03>
-            Web search will no longer be routed through{" "}
-            <b>{disconnectTarget.label}</b>.
-          </Text>
-          <Text as="p" text03>
-            Search history will be preserved.
-          </Text>
-        </ConfirmationModalLayout>
+        <WebSearchDisconnectModal
+          disconnectTarget={disconnectTarget}
+          searchProviders={searchProviders}
+          contentProviders={combinedContentProviders}
+          replacementProviderId={replacementProviderId}
+          onReplacementChange={setReplacementProviderId}
+          onClose={() => {
+            setDisconnectTarget(null);
+            setReplacementProviderId(null);
+          }}
+          onDisconnect={() => void handleDisconnectProvider()}
+        />
       )}
 
       <WebProviderSetupModal

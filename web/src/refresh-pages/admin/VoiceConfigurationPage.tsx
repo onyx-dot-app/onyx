@@ -29,6 +29,7 @@ import { SvgMicrophone, SvgUnplug } from "@opal/icons";
 import { Button as OpalButton } from "@opal/components";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import VoiceProviderSetupModal from "@/app/admin/configuration/voice/VoiceProviderSetupModal";
 
 interface ModelDetails {
@@ -133,9 +134,131 @@ function getProviderIcon(
 
 type ProviderMode = "stt" | "tts";
 
+const ALL_MODELS: ModelDetails[] = [
+  ...STT_MODELS,
+  ...TTS_PROVIDER_GROUPS.flatMap((g) => g.models),
+];
+
 const route = ADMIN_ROUTES.VOICE;
 const pageDescription =
   "Configure speech-to-text and text-to-speech providers for voice input and spoken responses.";
+
+interface VoiceDisconnectModalProps {
+  disconnectTarget: {
+    providerId: number;
+    label: string;
+    providerType: string;
+    mode: ProviderMode;
+  };
+  providers: VoiceProviderView[];
+  replacementProviderId: string | null;
+  onReplacementChange: (id: string | null) => void;
+  onClose: () => void;
+  onDisconnect: () => void;
+}
+
+function VoiceDisconnectModal({
+  disconnectTarget,
+  providers,
+  replacementProviderId,
+  onReplacementChange,
+  onClose,
+  onDisconnect,
+}: VoiceDisconnectModalProps) {
+  const targetProvider = providers.find(
+    (p) => p.id === disconnectTarget.providerId
+  );
+  const isActive =
+    disconnectTarget.mode === "stt"
+      ? targetProvider?.is_default_stt ?? false
+      : targetProvider?.is_default_tts ?? false;
+
+  // Find other configured providers that could serve as replacements
+  const replacementOptions = providers.filter(
+    (p) => p.id !== disconnectTarget.providerId && p.has_api_key
+  );
+
+  // Build labels from the model catalog for each replacement
+  const getReplacementLabel = (provider: VoiceProviderView): string => {
+    const models = ALL_MODELS.filter(
+      (m) => m.providerType === provider.provider_type
+    );
+    const firstModel = models[0];
+    if (firstModel) return firstModel.label;
+    return provider.name || provider.provider_type;
+  };
+
+  const needsReplacement = isActive;
+  const hasReplacements = replacementOptions.length > 0;
+
+  return (
+    <ConfirmationModalLayout
+      icon={SvgUnplug}
+      title={`Disconnect ${disconnectTarget.label}`}
+      description="This will remove the stored credentials. All voice models from this provider will be disconnected."
+      onClose={onClose}
+      submit={
+        <OpalButton
+          variant="danger"
+          onClick={onDisconnect}
+          disabled={
+            needsReplacement && hasReplacements && !replacementProviderId
+          }
+        >
+          Disconnect
+        </OpalButton>
+      }
+    >
+      {needsReplacement ? (
+        hasReplacements ? (
+          <div className="flex flex-col gap-2">
+            <Text as="p" text03>
+              <b>{disconnectTarget.label}</b> is currently the default{" "}
+              {disconnectTarget.mode === "stt"
+                ? "speech-to-text"
+                : "text-to-speech"}{" "}
+              provider. Choose a replacement:
+            </Text>
+            <InputSelect
+              value={replacementProviderId ?? undefined}
+              onValueChange={(v) => onReplacementChange(v)}
+            >
+              <InputSelect.Trigger placeholder="Select a replacement provider" />
+              <InputSelect.Content>
+                {replacementOptions.map((p) => (
+                  <InputSelect.Item
+                    key={p.id}
+                    value={String(p.id)}
+                    icon={getProviderIcon(p.provider_type)}
+                  >
+                    {getReplacementLabel(p)}
+                  </InputSelect.Item>
+                ))}
+              </InputSelect.Content>
+            </InputSelect>
+          </div>
+        ) : (
+          <Text as="p" text03>
+            <b>{disconnectTarget.label}</b> is currently the default{" "}
+            {disconnectTarget.mode === "stt"
+              ? "speech-to-text"
+              : "text-to-speech"}{" "}
+            provider. Disconnecting will disable{" "}
+            {disconnectTarget.mode === "stt"
+              ? "speech-to-text"
+              : "text-to-speech"}{" "}
+            until you configure another provider.
+          </Text>
+        )
+      ) : (
+        <Text as="p" text03>
+          <b>{disconnectTarget.label}</b> models will no longer be available for
+          voice.
+        </Text>
+      )}
+    </ConfirmationModalLayout>
+  );
+}
 
 export default function VoiceConfigurationPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -156,6 +279,9 @@ export default function VoiceConfigurationPage() {
     providerType: string;
     mode: ProviderMode;
   } | null>(null);
+  const [replacementProviderId, setReplacementProviderId] = useState<
+    string | null
+  >(null);
 
   const { providers, error, isLoading, refresh: mutate } = useVoiceProviders();
 
@@ -254,6 +380,23 @@ export default function VoiceConfigurationPage() {
         ? setSTTActivationError
         : setTTSActivationError;
     try {
+      // If a replacement was selected, activate it first
+      if (replacementProviderId) {
+        const repId = Number(replacementProviderId);
+        const activateResp = await activateVoiceProvider(
+          repId,
+          disconnectTarget.mode
+        );
+        if (!activateResp.ok) {
+          const errorBody = await activateResp.json().catch(() => ({}));
+          throw new Error(
+            typeof errorBody?.detail === "string"
+              ? errorBody.detail
+              : "Failed to activate replacement provider."
+          );
+        }
+      }
+
       const response = await deleteVoiceProvider(disconnectTarget.providerId);
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
@@ -272,6 +415,7 @@ export default function VoiceConfigurationPage() {
       setError(message);
     } finally {
       setDisconnectTarget(null);
+      setReplacementProviderId(null);
     }
   };
 
@@ -308,9 +452,6 @@ export default function VoiceConfigurationPage() {
     const provider = providersByType.get(model.providerType);
     const status = getModelStatus(model, mode);
     const Icon = getProviderIcon(model.providerType);
-    const isProviderActiveForMode =
-      provider !== undefined &&
-      (mode === "stt" ? provider.is_default_stt : provider.is_default_tts);
 
     return (
       <Select
@@ -341,7 +482,6 @@ export default function VoiceConfigurationPage() {
                 })
             : undefined
         }
-        disconnectDisabled={isProviderActiveForMode}
       />
     );
   };
@@ -466,25 +606,17 @@ export default function VoiceConfigurationPage() {
       </SettingsLayouts.Body>
 
       {disconnectTarget && (
-        <ConfirmationModalLayout
-          icon={SvgUnplug}
-          title={`Disconnect ${disconnectTarget.label}`}
-          description="This will remove the stored credentials. All voice models from this provider will be disconnected."
-          onClose={() => setDisconnectTarget(null)}
-          submit={
-            <OpalButton
-              variant="danger"
-              onClick={() => void handleDisconnect()}
-            >
-              Disconnect
-            </OpalButton>
-          }
-        >
-          <Text as="p" text03>
-            <b>{disconnectTarget.label}</b> models will no longer be used for
-            speech-to-text or text-to-speech.
-          </Text>
-        </ConfirmationModalLayout>
+        <VoiceDisconnectModal
+          disconnectTarget={disconnectTarget}
+          providers={providers}
+          replacementProviderId={replacementProviderId}
+          onReplacementChange={setReplacementProviderId}
+          onClose={() => {
+            setDisconnectTarget(null);
+            setReplacementProviderId(null);
+          }}
+          onDisconnect={() => void handleDisconnect()}
+        />
       )}
 
       {modalOpen && selectedProvider && (

@@ -22,8 +22,11 @@ import {
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Button } from "@opal/components";
 import { SvgUnplug } from "@opal/icons";
+
+const ALL_IMAGE_PROVIDERS = IMAGE_PROVIDER_GROUPS.flatMap((g) => g.providers);
 
 export default function ImageGenerationContent() {
   const {
@@ -53,6 +56,9 @@ export default function ImageGenerationContent() {
     useState<ImageGenerationConfigView | null>(null);
   const [disconnectProvider, setDisconnectProvider] =
     useState<ImageProvider | null>(null);
+  const [replacementProviderId, setReplacementProviderId] = useState<
+    string | null
+  >(null);
 
   const connectedProviderIds = useMemo(() => {
     return new Set(configs.map((c) => c.image_provider_id));
@@ -124,6 +130,11 @@ export default function ImageGenerationContent() {
   const handleDisconnect = async () => {
     if (!disconnectProvider) return;
     try {
+      // If a replacement was selected, activate it first
+      if (replacementProviderId) {
+        await setDefaultImageGenerationConfig(replacementProviderId);
+      }
+
       await deleteImageGenerationConfig(disconnectProvider.image_provider_id);
       toast.success(`${disconnectProvider.title} disconnected`);
       refetchConfigs();
@@ -135,6 +146,7 @@ export default function ImageGenerationContent() {
       );
     } finally {
       setDisconnectProvider(null);
+      setReplacementProviderId(null);
     }
   };
 
@@ -152,6 +164,22 @@ export default function ImageGenerationContent() {
       </div>
     );
   }
+
+  // Compute replacement options when disconnecting an active provider
+  const isDisconnectingDefault =
+    disconnectProvider &&
+    defaultConfig?.image_provider_id === disconnectProvider.image_provider_id;
+
+  const replacementOptions = disconnectProvider
+    ? ALL_IMAGE_PROVIDERS.filter(
+        (p) =>
+          p.image_provider_id !== disconnectProvider.image_provider_id &&
+          connectedProviderIds.has(p.image_provider_id)
+      )
+    : [];
+
+  const needsReplacement = !!isDisconnectingDefault;
+  const hasReplacements = replacementOptions.length > 0;
 
   return (
     <>
@@ -203,7 +231,6 @@ export default function ImageGenerationContent() {
                       ? () => setDisconnectProvider(provider)
                       : undefined
                   }
-                  disconnectDisabled={getStatus(provider) === "selected"}
                 />
               ))}
             </div>
@@ -216,20 +243,64 @@ export default function ImageGenerationContent() {
           icon={SvgUnplug}
           title={`Disconnect ${disconnectProvider.title}`}
           description="This will remove the stored credentials for this provider."
-          onClose={() => setDisconnectProvider(null)}
+          onClose={() => {
+            setDisconnectProvider(null);
+            setReplacementProviderId(null);
+          }}
           submit={
-            <Button variant="danger" onClick={() => void handleDisconnect()}>
+            <Button
+              variant="danger"
+              onClick={() => void handleDisconnect()}
+              disabled={
+                needsReplacement && hasReplacements && !replacementProviderId
+              }
+            >
               Disconnect
             </Button>
           }
         >
-          <Text as="p" text03>
-            <b>{disconnectProvider.title}</b> models will no longer be used to
-            generate images.
-          </Text>
-          <Text as="p" text03>
-            Session history will be preserved.
-          </Text>
+          {needsReplacement ? (
+            hasReplacements ? (
+              <div className="flex flex-col gap-2">
+                <Text as="p" text03>
+                  <b>{disconnectProvider.title}</b> is currently the default
+                  image generation model. Choose a replacement:
+                </Text>
+                <InputSelect
+                  value={replacementProviderId ?? undefined}
+                  onValueChange={(v) => setReplacementProviderId(v)}
+                >
+                  <InputSelect.Trigger placeholder="Select a replacement model" />
+                  <InputSelect.Content>
+                    {replacementOptions.map((p) => (
+                      <InputSelect.Item
+                        key={p.image_provider_id}
+                        value={p.image_provider_id}
+                      >
+                        {p.title}
+                      </InputSelect.Item>
+                    ))}
+                  </InputSelect.Content>
+                </InputSelect>
+              </div>
+            ) : (
+              <Text as="p" text03>
+                <b>{disconnectProvider.title}</b> is currently the default image
+                generation model. Disconnecting will disable image generation
+                until you configure another model.
+              </Text>
+            )
+          ) : (
+            <div className="flex flex-col gap-1">
+              <Text as="p" text03>
+                <b>{disconnectProvider.title}</b> models will no longer be used
+                to generate images.
+              </Text>
+              <Text as="p" text03>
+                Session history will be preserved.
+              </Text>
+            </div>
+          )}
         </ConfirmationModalLayout>
       )}
 
