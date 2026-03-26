@@ -144,12 +144,12 @@ class JiraServiceManagementConnector(
     def validate_checkpoint_json(self, checkpoint_json: str) -> JsmConnectorCheckpoint:
         return JsmConnectorCheckpoint.model_validate_json(checkpoint_json)
 
-    @override
-    def load_from_checkpoint(
+    def _iter_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: JsmConnectorCheckpoint,
+        with_perm_sync: bool,
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
         start_dt = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
         end_dt = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
@@ -160,6 +160,10 @@ class JiraServiceManagementConnector(
         for issue in self._fetch_issues(start_dt, end_dt, start_at=current_offset):
             doc = self._process_issue(issue)
             if doc is not None:
+                if with_perm_sync:
+                    doc.external_access = self._get_project_permissions(
+                        self.jira_project, add_prefix=True
+                    )
                 batch.append(doc)
             else:
                 issue_url = build_jira_url(self.jira_base_url, issue.key)
@@ -179,6 +183,15 @@ class JiraServiceManagementConnector(
                 batch = []
 
         yield batch, JsmConnectorCheckpoint(has_more=False, offset=current_offset)
+
+    @override
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: JsmConnectorCheckpoint,
+    ) -> CheckpointOutput[JsmConnectorCheckpoint]:
+        return self._iter_checkpoint(start, end, checkpoint, with_perm_sync=False)
 
     def _get_project_permissions(
         self, project_key: str, add_prefix: bool = False
@@ -352,37 +365,7 @@ class JiraServiceManagementConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: JsmConnectorCheckpoint,
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
-        start_dt = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
-        end_dt = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
-
-        current_offset = checkpoint.offset
-        batch: list[Document | ConnectorFailure] = []
-
-        for issue in self._fetch_issues(start_dt, end_dt, start_at=current_offset):
-            doc = self._process_issue(issue)
-            if doc is not None:
-                doc.external_access = self._get_project_permissions(
-                    self.jira_project, add_prefix=True
-                )
-                batch.append(doc)
-            else:
-                issue_url = build_jira_url(self.jira_base_url, issue.key)
-                batch.append(
-                    ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=issue_url,
-                            document_link=issue_url,
-                        ),
-                        failure_message=f"Failed to process issue {issue.key}",
-                    )
-                )
-            current_offset += 1
-
-            if len(batch) >= self.batch_size:
-                yield batch, JsmConnectorCheckpoint(has_more=True, offset=current_offset)
-                batch = []
-
-        yield batch, JsmConnectorCheckpoint(has_more=False, offset=current_offset)
+        return self._iter_checkpoint(start, end, checkpoint, with_perm_sync=True)
 
     # -------------------------------------------------------------------------
     # SlimConnectorWithPermSync
