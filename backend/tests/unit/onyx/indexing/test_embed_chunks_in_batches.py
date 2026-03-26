@@ -11,6 +11,7 @@ Tests cover:
 """
 
 import pickle
+from pathlib import Path
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -19,7 +20,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import DocumentSource
 from onyx.connectors.models import TextSection
-from onyx.indexing.indexing_pipeline import embed_chunks_in_batches
+from onyx.indexing.indexing_pipeline import _embed_chunks_to_disk
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import IndexChunk
@@ -127,24 +128,27 @@ class TestEmbedChunksInBatches:
         "onyx.indexing.indexing_pipeline.embed_chunks_with_failure_handling",
     )
     @patch("onyx.indexing.indexing_pipeline.MAX_CHUNKS_PER_DOC_BATCH", 100)
-    def test_single_batch_no_failures(self, mock_embed: MagicMock) -> None:
+    def test_single_batch_no_failures(
+        self, mock_embed: MagicMock, tmp_path: Path
+    ) -> None:
         """All chunks fit in one batch and embed successfully."""
         mock_embed.side_effect = _mock_embed_success
 
         chunks = [_make_chunk("doc1", i) for i in range(3)]
-        result = embed_chunks_in_batches(
+        result = _embed_chunks_to_disk(
             chunks=chunks,
             embedder=MagicMock(),
             tenant_id="test",
             request_id=None,
+            tmpdir=tmp_path,
         )
 
         assert len(result.successful_chunk_ids) == 3
         assert len(result.connector_failures) == 0
-        assert result.embedding_path.exists()
+        assert tmp_path.exists()
 
         # Verify pickle contents
-        batch_files = list(result.embedding_path.glob("batch_*.pkl"))
+        batch_files = list(tmp_path.glob("batch_*.pkl"))
         assert len(batch_files) == 1
         with open(batch_files[0], "rb") as f:
             stored = pickle.load(f)
@@ -154,29 +158,34 @@ class TestEmbedChunksInBatches:
         "onyx.indexing.indexing_pipeline.embed_chunks_with_failure_handling",
     )
     @patch("onyx.indexing.indexing_pipeline.MAX_CHUNKS_PER_DOC_BATCH", 3)
-    def test_multiple_batches_no_failures(self, mock_embed: MagicMock) -> None:
+    def test_multiple_batches_no_failures(
+        self, mock_embed: MagicMock, tmp_path: Path
+    ) -> None:
         """Chunks are split across multiple batches, all succeed."""
         mock_embed.side_effect = _mock_embed_success
 
         chunks = [_make_chunk("doc1", i) for i in range(7)]
-        result = embed_chunks_in_batches(
+        result = _embed_chunks_to_disk(
             chunks=chunks,
             embedder=MagicMock(),
             tenant_id="test",
             request_id=None,
+            tmpdir=tmp_path,
         )
 
         assert len(result.successful_chunk_ids) == 7
         assert len(result.connector_failures) == 0
 
-        batch_files = list(result.embedding_path.glob("batch_*.pkl"))
+        batch_files = list(tmp_path.glob("batch_*.pkl"))
         assert len(batch_files) == 3  # 3 + 3 + 1
 
     @patch(
         "onyx.indexing.indexing_pipeline.embed_chunks_with_failure_handling",
     )
     @patch("onyx.indexing.indexing_pipeline.MAX_CHUNKS_PER_DOC_BATCH", 100)
-    def test_single_batch_with_failure(self, mock_embed: MagicMock) -> None:
+    def test_single_batch_with_failure(
+        self, mock_embed: MagicMock, tmp_path: Path
+    ) -> None:
         """One doc fails embedding, its chunks are excluded from results."""
         mock_embed.side_effect = _mock_embed_fail_doc("doc2")
 
@@ -185,11 +194,12 @@ class TestEmbedChunksInBatches:
             _make_chunk("doc2", 1),
             _make_chunk("doc1", 2),
         ]
-        result = embed_chunks_in_batches(
+        result = _embed_chunks_to_disk(
             chunks=chunks,
             embedder=MagicMock(),
             tenant_id="test",
             request_id=None,
+            tmpdir=tmp_path,
         )
 
         assert len(result.connector_failures) == 1
@@ -202,12 +212,10 @@ class TestEmbedChunksInBatches:
     )
     @patch("onyx.indexing.indexing_pipeline.MAX_CHUNKS_PER_DOC_BATCH", 3)
     def test_cross_batch_failure_scrubs_earlier_batch(
-        self, mock_embed: MagicMock
+        self, mock_embed: MagicMock, tmp_path: Path
     ) -> None:
         """Doc A spans batches 0 and 1.  It succeeds in batch 0 but fails in
         batch 1.  Its chunks should be scrubbed from batch 0's pickle file."""
-        # Batch 0: [docA-0, docA-1, docA-2] -> all succeed
-        # Batch 1: [docA-3, docB-0, docB-1] -> docA fails
         call_count = 0
 
         def _embed(
@@ -230,11 +238,12 @@ class TestEmbedChunksInBatches:
             _make_chunk("docB", 0),
             _make_chunk("docB", 1),
         ]
-        result = embed_chunks_in_batches(
+        result = _embed_chunks_to_disk(
             chunks=chunks,
             embedder=MagicMock(),
             tenant_id="test",
             request_id=None,
+            tmpdir=tmp_path,
         )
 
         # docA should be fully excluded from results
@@ -245,7 +254,7 @@ class TestEmbedChunksInBatches:
 
         # Verify batch 0 pickle was scrubbed of docA chunks
         all_stored: list[IndexChunk] = []
-        for batch_file in sorted(result.embedding_path.glob("batch_*.pkl")):
+        for batch_file in sorted(tmp_path.glob("batch_*.pkl")):
             with open(batch_file, "rb") as f:
                 all_stored.extend(pickle.load(f))
         stored_doc_ids = {c.source_document.id for c in all_stored}
@@ -256,7 +265,9 @@ class TestEmbedChunksInBatches:
         "onyx.indexing.indexing_pipeline.embed_chunks_with_failure_handling",
     )
     @patch("onyx.indexing.indexing_pipeline.MAX_CHUNKS_PER_DOC_BATCH", 3)
-    def test_later_batch_skips_already_failed_doc(self, mock_embed: MagicMock) -> None:
+    def test_later_batch_skips_already_failed_doc(
+        self, mock_embed: MagicMock, tmp_path: Path
+    ) -> None:
         """If docA fails in batch 0, its chunks in batch 1 are skipped
         entirely (never sent to the embedder)."""
         embedded_doc_ids: list[str] = []
@@ -278,11 +289,12 @@ class TestEmbedChunksInBatches:
             _make_chunk("docB", 0),
             _make_chunk("docB", 1),
         ]
-        embed_chunks_in_batches(
+        _embed_chunks_to_disk(
             chunks=chunks,
             embedder=MagicMock(),
             tenant_id="test",
             request_id=None,
+            tmpdir=tmp_path,
         )
 
         # docA should only appear in batch 0, not batch 1
@@ -294,13 +306,11 @@ class TestEmbedChunksInBatches:
     )
     @patch("onyx.indexing.indexing_pipeline.MAX_CHUNKS_PER_DOC_BATCH", 3)
     def test_failed_doc_skipped_in_later_batch_while_other_doc_succeeds(
-        self, mock_embed: MagicMock
+        self, mock_embed: MagicMock, tmp_path: Path
     ) -> None:
         """doc1 spans batches 0 and 1, doc2 only in batch 1.  Batch 0 fails
         doc1.  In batch 1, doc1 chunks should be skipped but doc2 chunks
         should still be embedded successfully."""
-        # Batch 0: [doc1-0, doc1-1, doc1-2] -> doc1 fails
-        # Batch 1: [doc1-3, doc2-0, doc2-1] -> doc1 skipped, doc2 succeeds
         embedded_chunks: list[list[str]] = []
 
         def _embed(
@@ -319,11 +329,12 @@ class TestEmbedChunksInBatches:
             _make_chunk("doc2", 0),
             _make_chunk("doc2", 1),
         ]
-        result = embed_chunks_in_batches(
+        result = _embed_chunks_to_disk(
             chunks=chunks,
             embedder=MagicMock(),
             tenant_id="test",
             request_id=None,
+            tmpdir=tmp_path,
         )
 
         # doc1 should be fully excluded, doc2 fully included
@@ -339,7 +350,7 @@ class TestEmbedChunksInBatches:
 
         # Verify on-disk state has no doc1 chunks
         all_stored: list[IndexChunk] = []
-        for batch_file in sorted(result.embedding_path.glob("batch_*.pkl")):
+        for batch_file in sorted(tmp_path.glob("batch_*.pkl")):
             with open(batch_file, "rb") as f:
                 all_stored.extend(pickle.load(f))
         assert all(c.source_document.id == "doc2" for c in all_stored)
@@ -347,15 +358,16 @@ class TestEmbedChunksInBatches:
     @patch(
         "onyx.indexing.indexing_pipeline.embed_chunks_with_failure_handling",
     )
-    def test_empty_input(self, mock_embed: MagicMock) -> None:
+    def test_empty_input(self, mock_embed: MagicMock, tmp_path: Path) -> None:
         """Empty chunk list produces empty results."""
         mock_embed.side_effect = _mock_embed_success
 
-        result = embed_chunks_in_batches(
+        result = _embed_chunks_to_disk(
             chunks=[],
             embedder=MagicMock(),
             tenant_id="test",
             request_id=None,
+            tmpdir=tmp_path,
         )
 
         assert len(result.successful_chunk_ids) == 0
@@ -366,7 +378,7 @@ class TestEmbedChunksInBatches:
         "onyx.indexing.indexing_pipeline.embed_chunks_with_failure_handling",
     )
     @patch("onyx.indexing.indexing_pipeline.MAX_CHUNKS_PER_DOC_BATCH", 100)
-    def test_all_chunks_fail(self, mock_embed: MagicMock) -> None:
+    def test_all_chunks_fail(self, mock_embed: MagicMock, tmp_path: Path) -> None:
         """When all documents fail, results have no successful chunks."""
 
         def _fail_all(
@@ -378,11 +390,12 @@ class TestEmbedChunksInBatches:
         mock_embed.side_effect = _fail_all
 
         chunks = [_make_chunk("doc1", 0), _make_chunk("doc2", 1)]
-        result = embed_chunks_in_batches(
+        result = _embed_chunks_to_disk(
             chunks=chunks,
             embedder=MagicMock(),
             tenant_id="test",
             request_id=None,
+            tmpdir=tmp_path,
         )
 
         assert len(result.successful_chunk_ids) == 0
