@@ -8,8 +8,10 @@ import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
 import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text } from "@opal/components";
-import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import {
+  resolveStr,
+  toPlainString,
+} from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useRef, useState } from "react";
 
@@ -25,13 +27,13 @@ interface ContentMdPresetConfig {
   iconSize: string;
   iconContainerPadding: string;
   iconColorClass: string;
-  titleFont: "main-content-emphasis" | "main-ui-action" | "secondary-action";
+  titleFont: string;
   lineHeight: string;
   gap: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
   editButtonSize: ContainerSizeVariants;
   editButtonPadding: string;
-  optionalFont: "main-content-muted" | "main-ui-muted" | "secondary-action";
+  optionalFont: string;
   /** Aux icon size = lineHeight − 2 × p-0.5. */
   auxIconSize: string;
   /** Left indent for the description so it aligns with the title (past the icon). */
@@ -85,12 +87,12 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconSize: "1rem",
     iconContainerPadding: "p-1",
     iconColorClass: "text-text-04",
-    titleFont: "main-content-emphasis",
+    titleFont: "font-main-content-emphasis",
     lineHeight: "1.5rem",
     gap: "0.125rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0",
-    optionalFont: "main-content-muted",
+    optionalFont: "font-main-content-muted",
     auxIconSize: "1.25rem",
     descriptionIndent: "1.625rem",
   },
@@ -98,12 +100,12 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconSize: "1rem",
     iconContainerPadding: "p-0.5",
     iconColorClass: "text-text-03",
-    titleFont: "main-ui-action",
+    titleFont: "font-main-ui-action",
     lineHeight: "1.25rem",
     gap: "0.25rem",
     editButtonSize: "xs",
     editButtonPadding: "p-0",
-    optionalFont: "main-ui-muted",
+    optionalFont: "font-main-ui-muted",
     auxIconSize: "1rem",
     descriptionIndent: "1.375rem",
   },
@@ -111,12 +113,12 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconSize: "0.75rem",
     iconContainerPadding: "p-0.5",
     iconColorClass: "text-text-04",
-    titleFont: "secondary-action",
+    titleFont: "font-secondary-action",
     lineHeight: "1rem",
     gap: "0.125rem",
     editButtonSize: "2xs",
     editButtonPadding: "p-0",
-    optionalFont: "secondary-action",
+    optionalFont: "font-secondary-action",
     auxIconSize: "0.75rem",
     descriptionIndent: "1.125rem",
   },
@@ -197,10 +199,7 @@ function ContentMd({
           {editing ? (
             <div className="opal-content-md-input-sizer">
               <span
-                className={cn(
-                  "opal-content-md-input-mirror",
-                  `font-${config.titleFont}`
-                )}
+                className={cn("opal-content-md-input-mirror", config.titleFont)}
               >
                 {editValue || "\u00A0"}
               </span>
@@ -208,7 +207,7 @@ function ContentMd({
                 ref={inputRef}
                 className={cn(
                   "opal-content-md-input",
-                  `font-${config.titleFont}`,
+                  config.titleFont,
                   "text-text-04"
                 )}
                 value={editValue}
@@ -229,24 +228,27 @@ function ContentMd({
             </div>
           ) : (
             <span
-              className={cn(editable && "cursor-pointer")}
+              className={cn(
+                "opal-content-md-title",
+                config.titleFont,
+                "text-text-04",
+                editable && "cursor-pointer"
+              )}
+              title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
+              style={{ height: config.lineHeight }}
             >
-              <Text
-                font={config.titleFont}
-                color="inherit"
-                maxLines={1}
-                title={toPlainString(title)}
-              >
-                {title}
-              </Text>
+              {resolveStr(title)}
             </span>
           )}
 
           {(optional || titleSuffix) && (
-            <Text font={config.optionalFont} color="text-03">
+            <span
+              className={cn(config.optionalFont, "text-text-03 shrink-0")}
+              style={{ height: config.lineHeight }}
+            >
               {titleSuffix ?? "(Optional)"}
-            </Text>
+            </span>
           )}
 
           {auxIcon &&
@@ -292,12 +294,10 @@ function ContentMd({
 
       {description && toPlainString(description) && (
         <div
-          className="opal-content-md-description"
+          className="opal-content-md-description font-secondary-body text-text-03"
           style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
         >
-          <Text font="secondary-body" color="text-03" as="p">
-            {description}
-          </Text>
+          {resolveStr(description)}
         </div>
       )}
     </div>

@@ -13,7 +13,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-xl {
-  @apply flex flex-col items-start text-text-04;
+  @apply flex flex-col items-start;
 }
 
 /* ---------------------------------------------------------------------------
@@ -64,7 +64,10 @@
 }
 
 .opal-content-xl-title {
-  @apply text-left;
+  @apply text-left overflow-hidden text-text-04;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
   padding: 0 0.125rem;
   min-width: 0.0625rem;
 }
@@ -124,7 +127,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-lg {
-  @apply flex flex-row items-start text-text-04;
+  @apply flex flex-row items-start;
 }
 
 /* ---------------------------------------------------------------------------
@@ -160,7 +163,10 @@
 }
 
 .opal-content-lg-title {
-  @apply text-left;
+  @apply text-left overflow-hidden text-text-04;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
   padding: 0 0.125rem;
   min-width: 0.0625rem;
 }
@@ -218,7 +224,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md {
-  @apply flex flex-col items-start text-text-04;
+  @apply flex flex-col items-start;
 }
 
 .opal-content-md-header {
@@ -250,7 +256,10 @@
 }
 
 .opal-content-md-title {
-  @apply text-left;
+  @apply text-left overflow-hidden text-text-04;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
   padding: 0 0.125rem;
   min-width: 0.0625rem;
 }
@@ -366,15 +375,20 @@
    Title
    --------------------------------------------------------------------------- */
 
-.opal-content-sm {
-  @apply text-text-04;
+.opal-content-sm-title {
+  @apply text-left overflow-hidden text-text-04 truncate;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
 }
 
-.opal-content-sm[data-prominence="muted"] {
+.opal-content-sm[data-prominence="muted"] .opal-content-sm-title {
   @apply text-text-03;
 }
 
-.opal-content-sm[data-prominence="muted-2x"] {
+.opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-title {
   @apply text-text-02;
 }
 
@@ -387,7 +401,7 @@
    controlled by the ancestor Interactive variant.
    =========================================================================== */
 
-.opal-content-xl[data-interactive] {
+.opal-content-xl[data-interactive] .opal-content-xl-title {
   color: var(--interactive-foreground);
 }
 
@@ -395,7 +409,7 @@
   color: var(--interactive-foreground-icon);
 }
 
-.opal-content-lg[data-interactive] {
+.opal-content-lg[data-interactive] .opal-content-lg-title {
   color: var(--interactive-foreground);
 }
 
@@ -403,7 +417,7 @@
   color: var(--interactive-foreground-icon);
 }
 
-.opal-content-md[data-interactive] {
+.opal-content-md[data-interactive] .opal-content-md-title {
   color: var(--interactive-foreground);
 }
 
@@ -411,7 +425,7 @@
   color: var(--interactive-foreground-icon);
 }
 
-.opal-content-sm[data-interactive] {
+.opal-content-sm[data-interactive] .opal-content-sm-title {
   color: var(--interactive-foreground);
 }
 
