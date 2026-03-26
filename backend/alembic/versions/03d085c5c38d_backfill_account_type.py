@@ -16,11 +16,11 @@ down_revision = "977e834c1427"
 branch_labels = None
 depends_on = None
 
-_STANDARD = "standard"
-_BOT = "bot"
-_EXT_PERM_USER = "ext_perm_user"
-_SERVICE_ACCOUNT = "service_account"
-_ANONYMOUS = "anonymous"
+_STANDARD = "STANDARD"
+_BOT = "BOT"
+_EXT_PERM_USER = "EXT_PERM_USER"
+_SERVICE_ACCOUNT = "SERVICE_ACCOUNT"
+_ANONYMOUS = "ANONYMOUS"
 
 # Well-known anonymous user UUID
 ANONYMOUS_USER_ID = "00000000-0000-0000-0000-000000000002"
