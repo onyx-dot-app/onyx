@@ -5,7 +5,7 @@ import { toast } from "@/hooks/useToast";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { Button } from "@opal/components";
 import { Callout } from "@/components/ui/callout";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 import { useContext, useState } from "react";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Spacer from "@/refresh-components/Spacer";
@@ -54,17 +54,20 @@ export function CustomAnalyticsUpdateForm() {
       >
         <div className="mb-4">
           <Label>Script</Label>
-          <Text className="mb-3">
+          <Text as="p">
             Specify the Javascript that should run on page load in order to
             initialize your custom tracking/analytics.
           </Text>
-          <Text className="mb-2">
+          <Spacer rem={0.75} />
+          {/* TODO(@raunakab): migrate to @opal/components Text */}
+          <p className="text-sm">
             Do not include the{" "}
             <span className="font-mono">&lt;script&gt;&lt;/script&gt;</span>{" "}
             tags. If you upload a script below but you are not recieving any
             events in your analytics platform, try removing all extra whitespace
             before each line of JavaScript.
-          </Text>
+          </p>
+          <Spacer rem={0.5} />
           <InputTextArea
             value={newCustomAnalyticsScript}
             onChange={(event) =>

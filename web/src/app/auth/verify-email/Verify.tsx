@@ -2,7 +2,8 @@
 
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
+import Spacer from "@/refresh-components/Spacer";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
 import { User } from "@/lib/types";
 import Logo from "@/refresh-components/Logo";
@@ -65,17 +66,22 @@ export default function Verify({ user }: VerifyProps) {
       <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <Logo folded size={64} className="mx-auto w-fit animate-pulse" />
         {!error ? (
-          <Text className="mt-2">Verifying your email...</Text>
+          <>
+            <Spacer rem={0.5} />
+            <Text as="p">Verifying your email...</Text>
+          </>
         ) : (
           <div>
-            <Text className="mt-2">{error}</Text>
+            <Spacer rem={0.5} />
+            <Text as="p">{error}</Text>
 
             {user && (
               <div className="text-center">
                 <RequestNewVerificationEmail email={user.email}>
-                  <Text className="mt-2 text-link">
+                  {/* TODO(@raunakab): migrate to @opal/components Text */}
+                  <p className="text-sm mt-2 text-link">
                     Get new verification email
-                  </Text>
+                  </p>
                 </RequestNewVerificationEmail>
               </div>
             )}

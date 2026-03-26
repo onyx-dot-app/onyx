@@ -12,8 +12,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
+import Spacer from "@/refresh-components/Spacer";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import { Disabled } from "@opal/core";
@@ -98,9 +99,8 @@ function GenerateReportInput({
   return (
     <div className="mb-8">
       <Title className="mb-2">Generate Usage Reports</Title>
-      <Text className="mb-8">
-        Generate usage statistics for users in the workspace.
-      </Text>
+      <Text as="p">Generate usage statistics for users in the workspace.</Text>
+      <Spacer rem={2} />
       <div className="grid gap-2 mb-3">
         <Popover>
           <Popover.Trigger asChild>
@@ -430,12 +430,15 @@ export default function UsageReports() {
                 </svg>
               </div>
               <div className="flex-1">
-                <Text className="text-amber-800 dark:text-amber-200 font-medium mb-1">
-                  Report Generation In Progress
-                </Text>
-                <Text className="text-amber-700 dark:text-amber-300 text-sm">
-                  {timeoutMessage}
-                </Text>
+                <span className="text-amber-800">
+                  <Text as="p" font="main-ui-action">
+                    Report Generation In Progress
+                  </Text>
+                </span>
+                <Spacer rem={0.25} />
+                <span className="text-amber-700">
+                  <Text as="p">{timeoutMessage}</Text>
+                </span>
               </div>
             </div>
           </div>

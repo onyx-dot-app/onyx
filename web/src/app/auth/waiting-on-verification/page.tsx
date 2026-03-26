@@ -6,7 +6,7 @@ import {
 import { redirect } from "next/navigation";
 
 import { User } from "@/lib/types";
-import Text from "@/components/ui/text";
+import Text from "@/components/ui/text"; // TODO(@raunakab): migrate to @opal/components Text
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
 import Logo from "@/refresh-components/Logo";
 

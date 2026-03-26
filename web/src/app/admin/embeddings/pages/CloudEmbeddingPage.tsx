@@ -1,6 +1,8 @@
 "use client";
 
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
+import { markdown } from "@opal/utils";
+import Spacer from "@/refresh-components/Spacer";
 import Title from "@/components/ui/title";
 import {
   CloudEmbeddingProvider,
@@ -99,10 +101,12 @@ export default function CloudEmbeddingPage({
       <Title className="mt-8">
         Here are some cloud-based models to choose from.
       </Title>
-      <Text className="mb-4">
-        These models require API keys and run in the clouds of the respective
-        providers.
+      <Text as="p">
+        {
+          "These models require API keys and run in the clouds of the respective providers."
+        }
       </Text>
+      <Spacer rem={1} />
 
       <div className="gap-4 mt-2 pb-10 flex content-start flex-wrap">
         {providers.map((provider) => (
@@ -156,18 +160,11 @@ export default function CloudEmbeddingPage({
           </div>
         ))}
 
-        <Text className="mt-6">
-          Alternatively, you can use a self-hosted model using the LiteLLM
-          proxy. This allows you to leverage various LLM providers through a
-          unified interface that you control.{" "}
-          <a
-            href="https://docs.litellm.ai/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500 hover:underline"
-          >
-            Learn more about LiteLLM
-          </a>
+        <Spacer rem={1.5} />
+        <Text as="p">
+          {markdown(
+            "Alternatively, you can use a self-hosted model using the LiteLLM proxy. This allows you to leverage various LLM providers through a unified interface that you control. [Learn more about LiteLLM](https://docs.litellm.ai/)"
+          )}
         </Text>
 
         <div key={LITELLM_CLOUD_PROVIDER.provider_type} className="mt-4 w-full">
@@ -214,20 +211,25 @@ export default function CloudEmbeddingPage({
             {!liteLLMProvider && (
               <CardSection className="mt-2 w-full max-w-4xl bg-background-50 border border-background-200">
                 <div className="p-4">
-                  <Text className="text-lg font-semibold mb-2">
-                    API URL Required
+                  <Text as="p" font="heading-h3">
+                    {"API URL Required"}
                   </Text>
-                  <Text className="text-sm text-text-600 mb-4">
-                    Before you can add models, you need to provide an API URL
-                    for your LiteLLM proxy. Click the &quot;Provide API
-                    URL&quot; button above to set up your LiteLLM configuration.
+                  <Spacer rem={0.5} />
+                  <Text as="p">
+                    {
+                      'Before you can add models, you need to provide an API URL for your LiteLLM proxy. Click the "Provide API URL" button above to set up your LiteLLM configuration.'
+                    }
                   </Text>
+                  <Spacer rem={1} />
                   <div className="flex items-center">
                     <FiInfo className="text-blue-500 mr-2" size={18} />
-                    <Text className="text-sm text-blue-500">
-                      Once configured, you&apos;ll be able to add and manage
-                      your LiteLLM models here.
-                    </Text>
+                    <span className="text-blue-500">
+                      <Text as="p">
+                        {
+                          "Once configured, you'll be able to add and manage your LiteLLM models here."
+                        }
+                      </Text>
+                    </span>
                   </div>
                 </div>
               </CardSection>
@@ -281,9 +283,11 @@ export default function CloudEmbeddingPage({
           </div>
         </div>
 
-        <Text className="mt-6">
-          You can also use Azure OpenAI models for embeddings. Azure requires
-          separate configuration for each model.
+        <Spacer rem={1.5} />
+        <Text as="p">
+          {
+            "You can also use Azure OpenAI models for embeddings. Azure requires separate configuration for each model."
+          }
         </Text>
 
         <div key={AZURE_CLOUD_PROVIDER.provider_type} className="mt-4 w-full">
@@ -319,18 +323,22 @@ export default function CloudEmbeddingPage({
               </button>
               <div className="mt-2 w-full max-w-4xl">
                 <CardSection className="p-4 border border-background-200 rounded-lg shadow-sm">
-                  <Text className="text-base font-medium mb-2">
-                    Configure Azure OpenAI for Embeddings
+                  <Text as="p" font="main-ui-action">
+                    {"Configure Azure OpenAI for Embeddings"}
                   </Text>
-                  <Text className="text-sm text-text-600 mb-3">
-                    Click &quot;Configure Azure OpenAI&quot; to set up Azure
-                    OpenAI for embeddings.
+                  <Spacer rem={0.5} />
+                  <Text as="p">
+                    {
+                      'Click "Configure Azure OpenAI" to set up Azure OpenAI for embeddings.'
+                    }
                   </Text>
-                  <div className="flex items-center text-sm text-text-700">
+                  <Spacer rem={0.75} />
+                  <div className="flex items-center">
                     <FiInfo className="text-neutral-400 mr-2" size={16} />
-                    <Text>
-                      You&apos;ll need: API version, base URL, API key, model
-                      name, and deployment name.
+                    <Text as="p">
+                      {
+                        "You'll need: API version, base URL, API key, model name, and deployment name."
+                      }
                     </Text>
                   </div>
                 </CardSection>
@@ -339,9 +347,10 @@ export default function CloudEmbeddingPage({
           ) : (
             <>
               <div className="mb-6 w-full">
-                <Text className="text-lg font-semibold mb-3">
-                  Current Azure Configuration
+                <Text as="p" font="heading-h3">
+                  {"Current Azure Configuration"}
                 </Text>
+                <Spacer rem={0.75} />
 
                 {azureProviderDetails ? (
                   <CardSection className="bg-white shadow-sm border border-background-200 rounded-lg">

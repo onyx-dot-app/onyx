@@ -3,7 +3,9 @@ import React, { useState, useEffect } from "react";
 import { resetPassword } from "../forgot-password/utils";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import Title from "@/components/ui/title";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
+import { markdown } from "@opal/utils";
+import Spacer from "@/refresh-components/Spacer";
 import Link from "next/link";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
@@ -109,12 +111,11 @@ const ResetPasswordPage: React.FC = () => {
             </Form>
           )}
         </Formik>
+        <Spacer rem={1} />
         <div className="flex">
-          <Text className="mt-4 mx-auto">
-            <Link href="/auth/login" className="text-link font-medium">
-              Back to Login
-            </Link>
-          </Text>
+          <span className="mx-auto">
+            <Text as="p">{markdown("[Back to Login](/auth/login)")}</Text>
+          </span>
         </div>
       </div>
     </AuthFlowContainer>
