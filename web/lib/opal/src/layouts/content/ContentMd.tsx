@@ -236,7 +236,11 @@ function ContentMd({
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
             >
-              <Text font={config.titleFont} color="inherit">
+              <Text
+                font={config.titleFont}
+                color="inherit"
+                lineHeight={parseFloat(config.lineHeight)}
+              >
                 {title}
               </Text>
             </span>
@@ -244,7 +248,11 @@ function ContentMd({
 
           {(optional || titleSuffix) && (
             <span className="shrink-0">
-              <Text font={config.optionalFont} color="text-03">
+              <Text
+                font={config.optionalFont}
+                color="text-03"
+                lineHeight={parseFloat(config.lineHeight)}
+              >
                 {titleSuffix ?? "(Optional)"}
               </Text>
             </span>

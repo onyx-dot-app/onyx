@@ -118,7 +118,11 @@ function ContentSm({
       )}
 
       <span className="opal-content-sm-title" title={toPlainString(title)}>
-        <Text font={config.titleFont} color="inherit">
+        <Text
+          font={config.titleFont}
+          color="inherit"
+          lineHeight={parseFloat(config.lineHeight)}
+        >
           {title}
         </Text>
       </span>

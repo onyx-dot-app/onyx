@@ -61,6 +61,9 @@ interface TextProps
   /** Prevent text wrapping. */
   nowrap?: boolean;
 
+  /** Line height in rems. Overrides the font preset's line-height. */
+  lineHeight?: number;
+
   /** Plain string or `markdown()` for inline markdown. */
   children?: string | RichStr;
 }
@@ -117,6 +120,7 @@ function Text({
   color = "text-04",
   as: Tag = "span",
   nowrap,
+  lineHeight,
   children,
   ...rest
 }: TextProps) {
@@ -126,8 +130,12 @@ function Text({
     nowrap && "whitespace-nowrap"
   );
 
+  const style = lineHeight
+    ? { lineHeight: `${lineHeight}rem`, height: `${lineHeight}rem` }
+    : undefined;
+
   return (
-    <Tag {...rest} className={resolvedClassName}>
+    <Tag {...rest} className={resolvedClassName} style={style}>
       {children && resolveStr(children)}
     </Tag>
   );

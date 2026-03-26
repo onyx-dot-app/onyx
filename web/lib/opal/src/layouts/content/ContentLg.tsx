@@ -178,7 +178,11 @@ function ContentLg({
               onClick={editable ? startEditing : undefined}
               title={toPlainString(title)}
             >
-              <Text font={config.titleFont} color="inherit">
+              <Text
+                font={config.titleFont}
+                color="inherit"
+                lineHeight={parseFloat(config.lineHeight)}
+              >
                 {title}
               </Text>
             </span>
