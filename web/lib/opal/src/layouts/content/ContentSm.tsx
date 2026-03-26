@@ -1,10 +1,8 @@
 "use client";
 
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import {
-  resolveStr,
-  toPlainString,
-} from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -20,8 +18,8 @@ interface ContentSmPresetConfig {
   iconSize: string;
   /** Tailwind padding class for the icon container. */
   iconContainerPadding: string;
-  /** Tailwind font class for the title. */
-  titleFont: string;
+  /** Font preset for the title (passed to Text). */
+  titleFont: "main-content-body" | "main-ui-action" | "secondary-action";
   /** Title line-height — also used as icon container min-height (CSS value). */
   lineHeight: string;
   /** Gap between icon container and title (CSS value). */
@@ -60,21 +58,21 @@ const CONTENT_SM_PRESETS: Record<ContentSmSizePreset, ContentSmPresetConfig> = {
   "main-content": {
     iconSize: "1rem",
     iconContainerPadding: "p-1",
-    titleFont: "font-main-content-body",
+    titleFont: "main-content-body",
     lineHeight: "1.5rem",
     gap: "0.125rem",
   },
   "main-ui": {
     iconSize: "1rem",
     iconContainerPadding: "p-0.5",
-    titleFont: "font-main-ui-action",
+    titleFont: "main-ui-action",
     lineHeight: "1.25rem",
     gap: "0.25rem",
   },
   secondary: {
     iconSize: "0.75rem",
     iconContainerPadding: "p-0.5",
-    titleFont: "font-secondary-action",
+    titleFont: "secondary-action",
     lineHeight: "1rem",
     gap: "0.125rem",
   },
@@ -119,13 +117,14 @@ function ContentSm({
         </div>
       )}
 
-      <span
-        className={cn("opal-content-sm-title", config.titleFont)}
-        style={{ height: config.lineHeight }}
+      <Text
+        font={config.titleFont}
+        color="inherit"
+        maxLines={1}
         title={toPlainString(title)}
       >
-        {resolveStr(title)}
-      </span>
+        {title}
+      </Text>
     </div>
   );
 }

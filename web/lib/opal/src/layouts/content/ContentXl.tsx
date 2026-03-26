@@ -4,10 +4,8 @@ import { Button } from "@opal/components/buttons/button/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import {
-  resolveStr,
-  toPlainString,
-} from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
 
@@ -30,8 +28,8 @@ interface ContentXlPresetConfig {
   moreIcon2Size: string;
   /** Tailwind padding class for the more-icon-2 container. */
   moreIcon2ContainerPadding: string;
-  /** Tailwind font class for the title. */
-  titleFont: string;
+  /** Font preset for the title (passed to Text). */
+  titleFont: "heading-h2" | "heading-h3";
   /** Title line-height — also used as icon container min-height (CSS value). */
   lineHeight: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
@@ -84,7 +82,7 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     moreIcon1ContainerPadding: "p-0.5",
     moreIcon2Size: "2rem",
     moreIcon2ContainerPadding: "p-0.5",
-    titleFont: "font-heading-h2",
+    titleFont: "heading-h2",
     lineHeight: "2.25rem",
     editButtonSize: "md",
     editButtonPadding: "p-1",
@@ -96,7 +94,7 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     moreIcon1ContainerPadding: "p-0.5",
     moreIcon2Size: "1.5rem",
     moreIcon2ContainerPadding: "p-0.5",
-    titleFont: "font-heading-h3",
+    titleFont: "heading-h3",
     lineHeight: "1.75rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0.5",
@@ -199,14 +197,17 @@ function ContentXl({
           {editing ? (
             <div className="opal-content-xl-input-sizer">
               <span
-                className={cn("opal-content-xl-input-mirror", config.titleFont)}
+                className={cn(
+                  "opal-content-xl-input-mirror",
+                  `font-${config.titleFont}`
+                )}
               >
                 {editValue || "\u00A0"}
               </span>
               <input
                 className={cn(
                   "opal-content-xl-input",
-                  config.titleFont,
+                  `font-${config.titleFont}`,
                   "text-text-04"
                 )}
                 value={editValue}
@@ -227,17 +228,17 @@ function ContentXl({
             </div>
           ) : (
             <span
-              className={cn(
-                "opal-content-xl-title",
-                config.titleFont,
-                "text-text-04",
-                editable && "cursor-pointer"
-              )}
+              className={cn(editable && "cursor-pointer")}
               onClick={editable ? startEditing : undefined}
-              style={{ height: config.lineHeight }}
-              title={toPlainString(title)}
             >
-              {resolveStr(title)}
+              <Text
+                font={config.titleFont}
+                color="inherit"
+                maxLines={1}
+                title={toPlainString(title)}
+              >
+                {title}
+              </Text>
             </span>
           )}
 
@@ -261,8 +262,10 @@ function ContentXl({
         </div>
 
         {description && toPlainString(description) && (
-          <div className="opal-content-xl-description font-secondary-body text-text-03">
-            {resolveStr(description)}
+          <div className="opal-content-xl-description">
+            <Text font="secondary-body" color="text-03" as="p">
+              {description}
+            </Text>
           </div>
         )}
       </div>

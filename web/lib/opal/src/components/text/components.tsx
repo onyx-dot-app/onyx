@@ -61,6 +61,9 @@ interface TextProps
   /** Prevent text wrapping. */
   nowrap?: boolean;
 
+  /** Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+` uses `-webkit-line-clamp`. */
+  maxLines?: number;
+
   /** Plain string or `markdown()` for inline markdown. */
   children?: string | RichStr;
 }
@@ -117,17 +120,29 @@ function Text({
   color = "text-04",
   as: Tag = "span",
   nowrap,
+  maxLines,
   children,
   ...rest
 }: TextProps) {
   const resolvedClassName = cn(
     FONT_CONFIG[font],
     COLOR_CONFIG[color],
-    nowrap && "whitespace-nowrap"
+    nowrap && "whitespace-nowrap",
+    maxLines === 1 && "truncate",
+    maxLines && maxLines > 1 && "overflow-hidden"
   );
 
+  const style =
+    maxLines && maxLines > 1
+      ? ({
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: maxLines,
+        } as React.CSSProperties)
+      : undefined;
+
   return (
-    <Tag {...rest} className={resolvedClassName}>
+    <Tag {...rest} className={resolvedClassName} style={style}>
       {children && resolveStr(children)}
     </Tag>
   );
