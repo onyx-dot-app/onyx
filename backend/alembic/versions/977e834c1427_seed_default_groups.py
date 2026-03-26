@@ -1,7 +1,7 @@
 """seed_default_groups
 
 Revision ID: 977e834c1427
-Revises: 25a5501dc766
+Revises: a3f8b2c1d4e5
 Create Date: 2026-03-25 14:59:41.313091
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "977e834c1427"
-down_revision = "25a5501dc766"
+down_revision = "a3f8b2c1d4e5"
 branch_labels = None
 depends_on = None
 
