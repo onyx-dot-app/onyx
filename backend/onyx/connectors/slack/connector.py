@@ -548,7 +548,7 @@ def _get_all_doc_ids(
             client=client,
             channel=channel,
             callback=callback,
-            oldest=str(start) if start is not None else None,
+            oldest=str(start) if start else None,  # 0.0 -> None intentionally
             latest=str(end) if end is not None else None,
         )
 
