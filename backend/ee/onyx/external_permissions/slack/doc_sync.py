@@ -183,7 +183,7 @@ def slack_doc_sync(
 
     slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
     slack_connector.set_credentials_provider(provider)
-    indexing_start_ts: float | None = (
+    indexing_start_ts: SecondsSinceUnixEpoch | None = (
         cc_pair.connector.indexing_start.timestamp()
         if cc_pair.connector.indexing_start is not None
         else None
