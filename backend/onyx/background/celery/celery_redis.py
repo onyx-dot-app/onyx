@@ -23,7 +23,7 @@ def celery_get_broker_client(app: Celery) -> Generator[Redis, None, None]:
     The connection is returned to the pool when the context exits.
     """
     with app.connection_or_acquire() as conn:  # type: ignore[attr-defined]
-        yield conn.channel().client  # type: ignore[union-attr]
+        yield conn.channel().client
 
 
 def celery_get_unacked_length(r: Redis) -> int:
