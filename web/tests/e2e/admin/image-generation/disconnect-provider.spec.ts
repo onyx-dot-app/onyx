@@ -159,7 +159,7 @@ test.describe("Image Generation Provider Disconnect", () => {
     await expect(confirmButton).toBeEnabled();
   });
 
-  test("should show warning when disconnecting default provider with no alternatives", async ({
+  test("should show connect message when disconnecting default provider with no alternatives", async ({
     page,
   }) => {
     // Only the default config — no other providers configured
@@ -181,12 +181,12 @@ test.describe("Image Generation Provider Disconnect", () => {
     const confirmDialog = page.getByRole("dialog");
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
 
-    // Should warn that image gen will be disabled
+    // Should show message about connecting another provider
     await expect(
-      confirmDialog.getByText("until you configure another model")
+      confirmDialog.getByText("Connect another provider")
     ).toBeVisible();
 
-    // Disconnect button should still be enabled
+    // Disconnect button should be enabled
     const confirmButton = confirmDialog.getByRole("button", {
       name: "Disconnect",
     });

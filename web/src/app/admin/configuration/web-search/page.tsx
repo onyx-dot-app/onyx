@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useReducer } from "react";
 import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import { Select } from "@/refresh-components/cards";
+import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Content } from "@opal/layouts";
 import useSWR from "swr";
@@ -13,7 +14,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import { SvgGlobe, SvgOnyxLogo, SvgUnplug } from "@opal/icons";
+import { SvgGlobe, SvgOnyxLogo, SvgSlash, SvgUnplug } from "@opal/icons";
 import { Button as OpalButton } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
@@ -49,6 +50,8 @@ import {
   MASKED_API_KEY_PLACEHOLDER,
 } from "@/app/admin/configuration/web-search/WebProviderModalReducer";
 import { connectProviderFlow } from "@/app/admin/configuration/web-search/connectProviderFlow";
+
+const NO_DEFAULT_VALUE = "__none__";
 
 const route = ADMIN_ROUTES.WEB_SEARCH;
 
@@ -119,14 +122,6 @@ function WebSearchDisconnectModal({
   const needsReplacement = isActive;
   const hasReplacements = replacementOptions.length > 0;
 
-  // Auto-select first replacement when modal opens
-  useEffect(() => {
-    if (needsReplacement && hasReplacements && !replacementProviderId) {
-      const first = replacementOptions[0];
-      if (first) onReplacementChange(String(first.id));
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const getLabel = (p: { name: string; provider_type: string }) => {
     if (isSearch) {
       const details =
@@ -138,6 +133,16 @@ function WebSearchDisconnectModal({
   };
 
   const categoryLabel = isSearch ? "search engine" : "web crawler";
+  const featureLabel = isSearch ? "web search" : "web crawling";
+  const disableLabel = isSearch ? "Disable Web Search" : "Disable Web Crawling";
+
+  // Auto-select first replacement when modal opens
+  useEffect(() => {
+    if (needsReplacement && hasReplacements && !replacementProviderId) {
+      const first = replacementOptions[0];
+      if (first) onReplacementChange(String(first.id));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <ConfirmationModalLayout
@@ -159,38 +164,50 @@ function WebSearchDisconnectModal({
     >
       {needsReplacement ? (
         hasReplacements ? (
-          <div className="flex flex-col gap-2">
+          <Section alignItems="start">
             <Text as="p" text03>
               <b>{disconnectTarget.label}</b> is currently the active{" "}
               {categoryLabel}. Choose a replacement:
             </Text>
-            <Text as="p" secondaryBody text03>
-              Set New Default
-            </Text>
-            <InputSelect
-              value={replacementProviderId ?? undefined}
-              onValueChange={(v) => onReplacementChange(v)}
-            >
-              <InputSelect.Trigger placeholder="Select a replacement provider" />
-              <InputSelect.Content>
-                {replacementOptions.map((p) => (
-                  <InputSelect.Item key={p.id} value={String(p.id)}>
-                    {getLabel(p)}
+            <Section alignItems="start" gap={0.25}>
+              <Text as="p" secondaryBody text03>
+                Set New Default
+              </Text>
+              <InputSelect
+                value={replacementProviderId ?? undefined}
+                onValueChange={(v) => onReplacementChange(v)}
+              >
+                <InputSelect.Trigger placeholder="Select a replacement provider" />
+                <InputSelect.Content>
+                  {replacementOptions.map((p) => (
+                    <InputSelect.Item key={p.id} value={String(p.id)}>
+                      {getLabel(p)}
+                    </InputSelect.Item>
+                  ))}
+                  <InputSelect.Separator />
+                  <InputSelect.Item value={NO_DEFAULT_VALUE} icon={SvgSlash}>
+                    <span>
+                      <b>No Default</b>
+                      <span className="text-text-03"> ({disableLabel})</span>
+                    </span>
                   </InputSelect.Item>
-                ))}
-              </InputSelect.Content>
-            </InputSelect>
-          </div>
+                </InputSelect.Content>
+              </InputSelect>
+            </Section>
+          </Section>
         ) : (
-          <Text as="p" text03>
-            <b>{disconnectTarget.label}</b> is currently the active{" "}
-            {categoryLabel}. Disconnecting will disable{" "}
-            {isSearch ? "web search" : "web crawling"} until you configure
-            another provider.
-          </Text>
+          <>
+            <Text as="p" text03>
+              <b>{disconnectTarget.label}</b> is currently the active{" "}
+              {categoryLabel}.
+            </Text>
+            <Text as="p" text03>
+              Connect another provider to continue using {featureLabel}.
+            </Text>
+          </>
         )
       ) : (
-        <div className="flex flex-col gap-1">
+        <>
           <Text as="p" text03>
             Web search will no longer be routed through{" "}
             <b>{disconnectTarget.label}</b>.
@@ -198,7 +215,7 @@ function WebSearchDisconnectModal({
           <Text as="p" text03>
             Search history will be preserved.
           </Text>
-        </div>
+        </>
       )}
     </ConfirmationModalLayout>
   );
@@ -945,8 +962,8 @@ export default function Page() {
     const { id, category } = disconnectTarget;
 
     try {
-      // If a replacement was selected, activate it first
-      if (replacementProviderId) {
+      // If a replacement was selected (not "No Default"), activate it first
+      if (replacementProviderId && replacementProviderId !== NO_DEFAULT_VALUE) {
         const repId = Number(replacementProviderId);
         const activateEndpoint =
           category === "search"

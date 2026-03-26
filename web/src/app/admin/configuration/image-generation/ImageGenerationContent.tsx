@@ -25,9 +25,9 @@ import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Button } from "@opal/components";
-import { SvgUnplug } from "@opal/icons";
+import { SvgSlash, SvgUnplug } from "@opal/icons";
 
-const ALL_IMAGE_PROVIDERS = IMAGE_PROVIDER_GROUPS.flatMap((g) => g.providers);
+const NO_DEFAULT_VALUE = "__none__";
 
 export default function ImageGenerationContent() {
   const {
@@ -131,8 +131,8 @@ export default function ImageGenerationContent() {
   const handleDisconnect = async () => {
     if (!disconnectProvider) return;
     try {
-      // If a replacement was selected, activate it first
-      if (replacementProviderId) {
+      // If a replacement was selected (not "No Default"), activate it first
+      if (replacementProviderId && replacementProviderId !== NO_DEFAULT_VALUE) {
         await setDefaultImageGenerationConfig(replacementProviderId);
       }
 
@@ -171,22 +171,28 @@ export default function ImageGenerationContent() {
     disconnectProvider &&
     defaultConfig?.image_provider_id === disconnectProvider.image_provider_id;
 
-  const replacementOptions = disconnectProvider
-    ? ALL_IMAGE_PROVIDERS.filter(
+  // Group connected replacement models by provider (excluding the model being disconnected)
+  const replacementGroups = useMemo(() => {
+    if (!disconnectProvider) return [];
+    return IMAGE_PROVIDER_GROUPS.map((group) => ({
+      ...group,
+      providers: group.providers.filter(
         (p) =>
           p.image_provider_id !== disconnectProvider.image_provider_id &&
           connectedProviderIds.has(p.image_provider_id)
-      )
-    : [];
+      ),
+    })).filter((g) => g.providers.length > 0);
+  }, [disconnectProvider, connectedProviderIds]);
 
   const needsReplacement = !!isDisconnectingDefault;
-  const hasReplacements = replacementOptions.length > 0;
+  const hasReplacements = replacementGroups.length > 0;
 
   // Auto-select first replacement when modal opens
   useEffect(() => {
-    if (needsReplacement && hasReplacements && !replacementProviderId) {
-      const first = replacementOptions[0];
-      if (first) setReplacementProviderId(first.image_provider_id);
+    if (needsReplacement && !replacementProviderId && hasReplacements) {
+      const firstGroup = replacementGroups[0];
+      const firstModel = firstGroup?.providers[0];
+      if (firstModel) setReplacementProviderId(firstModel.image_provider_id);
     }
   }, [disconnectProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -285,14 +291,38 @@ export default function ImageGenerationContent() {
                   >
                     <InputSelect.Trigger placeholder="Select a replacement model" />
                     <InputSelect.Content>
-                      {replacementOptions.map((p) => (
-                        <InputSelect.Item
-                          key={p.image_provider_id}
-                          value={p.image_provider_id}
-                        >
-                          {p.title}
-                        </InputSelect.Item>
+                      {replacementGroups.map((group) => (
+                        <InputSelect.Group key={group.name}>
+                          <InputSelect.Label>{group.name}</InputSelect.Label>
+                          {group.providers.map((p) => (
+                            <InputSelect.Item
+                              key={p.image_provider_id}
+                              value={p.image_provider_id}
+                              icon={() => (
+                                <ProviderIcon
+                                  provider={p.provider_name}
+                                  size={16}
+                                />
+                              )}
+                            >
+                              {p.title}
+                            </InputSelect.Item>
+                          ))}
+                        </InputSelect.Group>
                       ))}
+                      <InputSelect.Separator />
+                      <InputSelect.Item
+                        value={NO_DEFAULT_VALUE}
+                        icon={SvgSlash}
+                      >
+                        <span>
+                          <b>No Default</b>
+                          <span className="text-text-03">
+                            {" "}
+                            (Disable Image Generation)
+                          </span>
+                        </span>
+                      </InputSelect.Item>
                     </InputSelect.Content>
                   </InputSelect>
                 </Section>
@@ -304,13 +334,12 @@ export default function ImageGenerationContent() {
                   image generation model.
                 </Text>
                 <Text as="p" text03>
-                  Disconnecting will disable image generation until you
-                  configure another model.
+                  Connect another provider to continue using image generation.
                 </Text>
               </>
             )
           ) : (
-            <div className="flex flex-col gap-1">
+            <>
               <Text as="p" text03>
                 <b>{disconnectProvider.title}</b> models will no longer be used
                 to generate images.
@@ -318,7 +347,7 @@ export default function ImageGenerationContent() {
               <Text as="p" text03>
                 Session history will be preserved.
               </Text>
-            </div>
+            </>
           )}
         </ConfirmationModalLayout>
       )}

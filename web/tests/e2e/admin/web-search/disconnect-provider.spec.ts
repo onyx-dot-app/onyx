@@ -186,7 +186,7 @@ test.describe("Web Search Provider Disconnect", () => {
       await expect(confirmButton).toBeEnabled();
     });
 
-    test("should show warning when disconnecting active search provider with no alternatives", async ({
+    test("should show connect message when disconnecting active search provider with no alternatives", async ({
       page,
     }) => {
       // Only Exa configured and active
@@ -206,12 +206,12 @@ test.describe("Web Search Provider Disconnect", () => {
       const confirmDialog = page.getByRole("dialog");
       await expect(confirmDialog).toBeVisible({ timeout: 5000 });
 
-      // Should warn about disabling web search
+      // Should show message about connecting another provider
       await expect(
-        confirmDialog.getByText("until you configure another provider")
+        confirmDialog.getByText("Connect another provider")
       ).toBeVisible();
 
-      // Disconnect button should still be enabled
+      // Disconnect button should be enabled
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });

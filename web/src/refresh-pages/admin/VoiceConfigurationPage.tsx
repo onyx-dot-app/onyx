@@ -25,9 +25,10 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { toast } from "@/hooks/useToast";
 import { Callout } from "@/components/ui/callout";
 import { Content } from "@opal/layouts";
-import { SvgMicrophone, SvgUnplug } from "@opal/icons";
+import { SvgMicrophone, SvgSlash, SvgUnplug } from "@opal/icons";
 import { Button as OpalButton } from "@opal/components";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import VoiceProviderSetupModal from "@/app/admin/configuration/voice/VoiceProviderSetupModal";
@@ -134,10 +135,20 @@ function getProviderIcon(
 
 type ProviderMode = "stt" | "tts";
 
-const ALL_MODELS: ModelDetails[] = [
-  ...STT_MODELS,
-  ...TTS_PROVIDER_GROUPS.flatMap((g) => g.models),
-];
+function getProviderLabel(providerType: string): string {
+  switch (providerType) {
+    case "openai":
+      return "OpenAI";
+    case "azure":
+      return "Azure";
+    case "elevenlabs":
+      return "ElevenLabs";
+    default:
+      return providerType;
+  }
+}
+
+const NO_DEFAULT_VALUE = "__none__";
 
 const route = ADMIN_ROUTES.VOICE;
 const pageDescription =
@@ -146,9 +157,8 @@ const pageDescription =
 interface VoiceDisconnectModalProps {
   disconnectTarget: {
     providerId: number;
-    label: string;
+    providerLabel: string;
     providerType: string;
-    mode: ProviderMode;
   };
   providers: VoiceProviderView[];
   replacementProviderId: string | null;
@@ -169,24 +179,13 @@ function VoiceDisconnectModal({
     (p) => p.id === disconnectTarget.providerId
   );
   const isActive =
-    disconnectTarget.mode === "stt"
-      ? targetProvider?.is_default_stt ?? false
-      : targetProvider?.is_default_tts ?? false;
+    (targetProvider?.is_default_stt ?? false) ||
+    (targetProvider?.is_default_tts ?? false);
 
   // Find other configured providers that could serve as replacements
   const replacementOptions = providers.filter(
     (p) => p.id !== disconnectTarget.providerId && p.has_api_key
   );
-
-  // Build labels from the model catalog for each replacement
-  const getReplacementLabel = (provider: VoiceProviderView): string => {
-    const models = ALL_MODELS.filter(
-      (m) => m.providerType === provider.provider_type
-    );
-    const firstModel = models[0];
-    if (firstModel) return firstModel.label;
-    return provider.name || provider.provider_type;
-  };
 
   const needsReplacement = isActive;
   const hasReplacements = replacementOptions.length > 0;
@@ -202,8 +201,8 @@ function VoiceDisconnectModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
-      title={`Disconnect ${disconnectTarget.label}`}
-      description="This will remove the stored credentials. All voice models from this provider will be disconnected."
+      title={`Disconnect ${disconnectTarget.providerLabel}`}
+      description="Voice models"
       onClose={onClose}
       submit={
         <OpalButton
@@ -219,53 +218,64 @@ function VoiceDisconnectModal({
     >
       {needsReplacement ? (
         hasReplacements ? (
-          <div className="flex flex-col gap-2">
+          <Section alignItems="start">
             <Text as="p" text03>
-              <b>{disconnectTarget.label}</b> is currently the default{" "}
-              {disconnectTarget.mode === "stt"
-                ? "speech-to-text"
-                : "text-to-speech"}{" "}
-              provider. Choose a replacement:
+              <b>{disconnectTarget.providerLabel}</b> models will no longer be
+              used for speech-to-text or text-to-speech, and it will no longer
+              be your default. Choose a replacement:
             </Text>
-            <Text as="p" secondaryBody text03>
-              Set New Default
-            </Text>
-            <InputSelect
-              value={replacementProviderId ?? undefined}
-              onValueChange={(v) => onReplacementChange(v)}
-            >
-              <InputSelect.Trigger placeholder="Select a replacement provider" />
-              <InputSelect.Content>
-                {replacementOptions.map((p) => (
-                  <InputSelect.Item
-                    key={p.id}
-                    value={String(p.id)}
-                    icon={getProviderIcon(p.provider_type)}
-                  >
-                    {getReplacementLabel(p)}
+            <Section alignItems="start" gap={0.25}>
+              <Text as="p" text04>
+                Set New Default
+              </Text>
+              <InputSelect
+                value={replacementProviderId ?? undefined}
+                onValueChange={(v) => onReplacementChange(v)}
+              >
+                <InputSelect.Trigger placeholder="Select a replacement provider" />
+                <InputSelect.Content>
+                  {replacementOptions.map((p) => (
+                    <InputSelect.Item
+                      key={p.id}
+                      value={String(p.id)}
+                      icon={getProviderIcon(p.provider_type)}
+                    >
+                      {getProviderLabel(p.provider_type)}
+                    </InputSelect.Item>
+                  ))}
+                  <InputSelect.Separator />
+                  <InputSelect.Item value={NO_DEFAULT_VALUE} icon={SvgSlash}>
+                    <span>
+                      <b>No Default</b>
+                      <span className="text-text-03"> (Disable Voice)</span>
+                    </span>
                   </InputSelect.Item>
-                ))}
-              </InputSelect.Content>
-            </InputSelect>
-          </div>
+                </InputSelect.Content>
+              </InputSelect>
+            </Section>
+          </Section>
         ) : (
-          <Text as="p" text03>
-            <b>{disconnectTarget.label}</b> is currently the default{" "}
-            {disconnectTarget.mode === "stt"
-              ? "speech-to-text"
-              : "text-to-speech"}{" "}
-            provider. Disconnecting will disable{" "}
-            {disconnectTarget.mode === "stt"
-              ? "speech-to-text"
-              : "text-to-speech"}{" "}
-            until you configure another provider.
-          </Text>
+          <>
+            <Text as="p" text03>
+              <b>{disconnectTarget.providerLabel}</b> models will no longer be
+              used for speech-to-text or text-to-speech, and it will no longer
+              be your default.
+            </Text>
+            <Text as="p" text03>
+              Connect another provider to continue using voice.
+            </Text>
+          </>
         )
       ) : (
-        <Text as="p" text03>
-          <b>{disconnectTarget.label}</b> models will no longer be available for
-          voice.
-        </Text>
+        <>
+          <Text as="p" text03>
+            <b>{disconnectTarget.providerLabel}</b> models will no longer be
+            available for voice.
+          </Text>
+          <Text as="p" text03>
+            Session history will be preserved.
+          </Text>
+        </>
       )}
     </ConfirmationModalLayout>
   );
@@ -286,9 +296,8 @@ export default function VoiceConfigurationPage() {
   );
   const [disconnectTarget, setDisconnectTarget] = useState<{
     providerId: number;
-    label: string;
+    providerLabel: string;
     providerType: string;
-    mode: ProviderMode;
   } | null>(null);
   const [replacementProviderId, setReplacementProviderId] = useState<
     string | null
@@ -386,25 +395,38 @@ export default function VoiceConfigurationPage() {
 
   const handleDisconnect = async () => {
     if (!disconnectTarget) return;
-    const setError =
-      disconnectTarget.mode === "stt"
-        ? setSTTActivationError
-        : setTTSActivationError;
     try {
-      // If a replacement was selected, activate it first
-      if (replacementProviderId) {
+      const targetProvider = providers.find(
+        (p) => p.id === disconnectTarget.providerId
+      );
+
+      // If a replacement was selected (not "No Default"), activate it for each
+      // mode the disconnected provider was default for
+      if (replacementProviderId && replacementProviderId !== NO_DEFAULT_VALUE) {
         const repId = Number(replacementProviderId);
-        const activateResp = await activateVoiceProvider(
-          repId,
-          disconnectTarget.mode
-        );
-        if (!activateResp.ok) {
-          const errorBody = await activateResp.json().catch(() => ({}));
-          throw new Error(
-            typeof errorBody?.detail === "string"
-              ? errorBody.detail
-              : "Failed to activate replacement provider."
-          );
+
+        if (targetProvider?.is_default_stt) {
+          const resp = await activateVoiceProvider(repId, "stt");
+          if (!resp.ok) {
+            const errorBody = await resp.json().catch(() => ({}));
+            throw new Error(
+              typeof errorBody?.detail === "string"
+                ? errorBody.detail
+                : "Failed to activate replacement STT provider."
+            );
+          }
+        }
+
+        if (targetProvider?.is_default_tts) {
+          const resp = await activateVoiceProvider(repId, "tts");
+          if (!resp.ok) {
+            const errorBody = await resp.json().catch(() => ({}));
+            throw new Error(
+              typeof errorBody?.detail === "string"
+                ? errorBody.detail
+                : "Failed to activate replacement TTS provider."
+            );
+          }
         }
       }
 
@@ -418,12 +440,12 @@ export default function VoiceConfigurationPage() {
         );
       }
       await mutate();
-      toast.success(`${disconnectTarget.label} disconnected`);
+      toast.success(`${disconnectTarget.providerLabel} disconnected`);
     } catch (err) {
       console.error("Failed to disconnect voice provider:", err);
-      const message =
-        err instanceof Error ? err.message : "Unexpected error occurred.";
-      setError(message);
+      toast.error(
+        err instanceof Error ? err.message : "Unexpected error occurred."
+      );
     } finally {
       setDisconnectTarget(null);
       setReplacementProviderId(null);
@@ -487,9 +509,8 @@ export default function VoiceConfigurationPage() {
             ? () =>
                 setDisconnectTarget({
                   providerId: provider.id,
-                  label: model.label,
+                  providerLabel: getProviderLabel(model.providerType),
                   providerType: model.providerType,
-                  mode,
                 })
             : undefined
         }
