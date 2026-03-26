@@ -188,7 +188,9 @@ test.describe("Voice Provider Disconnect", () => {
     await expect(confirmDialog).toContainText("Disconnect OpenAI");
 
     // Should show replacement text and dropdown
-    await expect(confirmDialog.getByText("Choose a replacement")).toBeVisible();
+    await expect(
+      confirmDialog.getByText("Session history will be preserved")
+    ).toBeVisible();
 
     // Disconnect button should be enabled because first replacement is auto-selected
     const confirmButton = confirmDialog.getByRole("button", {
@@ -236,7 +238,9 @@ test.describe("Voice Provider Disconnect", () => {
     ).toBeVisible();
 
     // Should show replacement dropdown
-    await expect(confirmDialog.getByText("Choose a replacement")).toBeVisible();
+    await expect(
+      confirmDialog.getByText("Session history will be preserved")
+    ).toBeVisible();
 
     const confirmButton = confirmDialog.getByRole("button", {
       name: "Disconnect",

@@ -193,7 +193,7 @@ test.describe("Web Search Provider Disconnect", () => {
 
       // Should show replacement dropdown
       await expect(
-        confirmDialog.getByText("Choose a replacement")
+        confirmDialog.getByText("Search history will be preserved")
       ).toBeVisible();
 
       // Disconnect button should be enabled because first replacement is auto-selected
@@ -360,7 +360,7 @@ test.describe("Web Search Provider Disconnect", () => {
 
       // Should show replacement dropdown
       await expect(
-        confirmDialog.getByText("Choose a replacement")
+        confirmDialog.getByText("Search history will be preserved")
       ).toBeVisible();
 
       // Disconnect should be enabled because first replacement is auto-selected

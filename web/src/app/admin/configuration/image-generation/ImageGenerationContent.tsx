@@ -279,7 +279,7 @@ export default function ImageGenerationContent() {
               <Section alignItems="start">
                 <Text as="p" text03>
                   <b>{disconnectProvider.title}</b> is currently the default
-                  image generation model. Choose a replacement:
+                  image generation model. Session history will be preserved.
                 </Text>
                 <Section alignItems="start" gap={0.25}>
                   <Text as="p" text04>

@@ -167,7 +167,9 @@ test.describe("Image Generation Provider Disconnect", () => {
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
 
     // Should show replacement dropdown since there's an alternative
-    await expect(confirmDialog.getByText("Choose a replacement")).toBeVisible();
+    await expect(
+      confirmDialog.getByText("Session history will be preserved")
+    ).toBeVisible();
 
     // Disconnect button should be enabled because first replacement is auto-selected
     const confirmButton = confirmDialog.getByRole("button", {

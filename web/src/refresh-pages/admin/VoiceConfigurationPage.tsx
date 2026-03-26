@@ -222,7 +222,7 @@ function VoiceDisconnectModal({
             <Text as="p" text03>
               <b>{disconnectTarget.providerLabel}</b> models will no longer be
               used for speech-to-text or text-to-speech, and it will no longer
-              be your default. Choose a replacement:
+              be your default. Session history will be preserved.
             </Text>
             <Section alignItems="start" gap={0.25}>
               <Text as="p" text04>

@@ -167,7 +167,7 @@ function WebSearchDisconnectModal({
           <Section alignItems="start">
             <Text as="p" text03>
               <b>{disconnectTarget.label}</b> is currently the active{" "}
-              {categoryLabel}. Choose a replacement:
+              {categoryLabel}. Search history will be preserved.
             </Text>
             <Section alignItems="start" gap={0.25}>
               <Text as="p" secondaryBody text03>
