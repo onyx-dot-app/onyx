@@ -4,11 +4,11 @@ import {
   getCurrentUserSS,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-
 import { User } from "@/lib/types";
-import Text from "@/components/ui/text"; // TODO(@raunakab): migrate to @opal/components Text
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
 import Logo from "@/refresh-components/Logo";
+import { Text } from "@opal/components";
+import { markdown } from "@opal/utils";
 
 export default async function Page() {
   // catch cases where the backend is completely unreachable here
@@ -35,22 +35,21 @@ export default async function Page() {
 
   return (
     <main>
-      <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 gap-4">
         <Logo folded size={64} className="mx-auto w-fit" />
-        <div className="flex">
-          <Text className="text-center font-medium text-lg mt-6 w-108">
-            Hey <i>{currentUser.email}</i> - it looks like you haven&apos;t
-            verified your email yet.
-            <br />
-            Check your inbox for an email from us to get started!
-            <br />
-            <br />
-            If you don&apos;t see anything, click{" "}
-            <RequestNewVerificationEmail email={currentUser.email}>
-              here
-            </RequestNewVerificationEmail>{" "}
-            to request a new email.
+        <div className="flex flex-col gap-2">
+          <Text as="span">
+            {markdown(
+              `Hey, *${currentUser.email}*, it looks like you haven't verified your email yet.\nCheck your inbox for an email from us to get started!`
+            )}
           </Text>
+          <div className="flex flex-row items-center gap-1">
+            <Text as="span">If you don't see anything, click</Text>
+            <RequestNewVerificationEmail email={currentUser.email}>
+              <Text as="span">here</Text>
+            </RequestNewVerificationEmail>
+            <Text as="span">to request a new email.</Text>
+          </div>
         </div>
       </div>
     </main>

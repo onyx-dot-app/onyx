@@ -1,3 +1,5 @@
+"use client";
+
 import "@opal/core/animations/styles.css";
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { cn } from "@opal/utils";
