@@ -54,8 +54,7 @@ class TestWorkerHeartbeatMonitor:
 
         status = monitor.get_worker_status()
         assert "gone@host1" not in status
-        # Also verify it's actually removed from the internal dict
-        assert "gone@host1" not in monitor._worker_last_seen
+        assert monitor.get_worker_status() == {}
 
     def test_heartbeat_refreshes_stale_worker(self) -> None:
         monitor = WorkerHeartbeatMonitor(MagicMock())
@@ -163,5 +162,9 @@ class TestWorkerHealthCollector:
         collector.set_monitor(monitor)
 
         families = collector.collect()
+        assert len(families) == 2
         active = families[0]
         assert active.samples[0].value == 0
+        up = families[1]
+        assert up.name == "onyx_celery_worker_up"
+        assert len(up.samples) == 0

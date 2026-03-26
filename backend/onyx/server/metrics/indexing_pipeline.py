@@ -505,6 +505,11 @@ class WorkerHeartbeatMonitor:
                         exc_info=True,
                     )
                     time.sleep(5.0)
+            else:
+                # capture() returned normally (timeout with no events); reconnect
+                if self._running:
+                    logger.debug("Heartbeat capture timed out, reconnecting")
+                    time.sleep(5.0)
 
     def _on_heartbeat(self, event: dict[str, Any]) -> None:
         hostname = event.get("hostname")
