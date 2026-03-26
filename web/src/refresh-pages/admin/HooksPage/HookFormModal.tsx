@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SvgCheckCircle, SvgHookNodes, SvgLoader } from "@opal/icons";
+import {
+  SvgCheckCircle,
+  SvgHookNodes,
+  SvgLoader,
+  SvgRevert,
+} from "@opal/icons";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -12,7 +17,13 @@ import { FormField } from "@/refresh-components/form/FormField";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
-import { createHook, updateHook } from "@/refresh-pages/admin/HooksPage/svc";
+import {
+  createHook,
+  updateHook,
+  HookAuthError,
+  HookTimeoutError,
+  HookConnectError,
+} from "@/refresh-pages/admin/HooksPage/svc";
 import type {
   HookFailStrategy,
   HookFormState,
@@ -64,6 +75,8 @@ function buildInitialState(
 const SOFT_DESCRIPTION =
   "If the endpoint returns an error, Onyx logs it and continues the pipeline as normal, ignoring the hook result.";
 
+const MAX_TIMEOUT_SECONDS = 600;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -86,6 +99,20 @@ export default function HookFormModal({
   // - true  + empty field  → key cleared (api_key: null sent to backend)
   // - false + non-empty    → new key provided (new value sent to backend)
   const [apiKeyCleared, setApiKeyCleared] = useState(false);
+  const [touched, setTouched] = useState({
+    name: false,
+    endpoint_url: false,
+    api_key: false,
+  });
+  const [apiKeyServerError, setApiKeyServerError] = useState(false);
+  const [endpointServerError, setEndpointServerError] = useState<string | null>(
+    null
+  );
+  const [timeoutServerError, setTimeoutServerError] = useState(false);
+
+  function touch(key: keyof typeof touched) {
+    setTouched((prev) => ({ ...prev, [key]: true }));
+  }
 
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -94,6 +121,10 @@ export default function HookFormModal({
         setForm(buildInitialState(hook, spec));
         setIsConnected(false);
         setApiKeyCleared(false);
+        setTouched({ name: false, endpoint_url: false, api_key: false });
+        setApiKeyServerError(false);
+        setEndpointServerError(null);
+        setTimeoutServerError(false);
       }, 200);
     }
     onOpenChange(next);
@@ -104,12 +135,35 @@ export default function HookFormModal({
   }
 
   const timeoutNum = parseFloat(form.timeout_seconds);
+  const isTimeoutValid =
+    !isNaN(timeoutNum) && timeoutNum > 0 && timeoutNum <= MAX_TIMEOUT_SECONDS;
   const isValid =
     form.name.trim().length > 0 &&
     form.endpoint_url.trim().length > 0 &&
-    !isNaN(timeoutNum) &&
-    timeoutNum > 0 &&
+    isTimeoutValid &&
     (isEdit || form.api_key.trim().length > 0);
+
+  const nameError = touched.name && !form.name.trim();
+  const endpointEmptyError = touched.endpoint_url && !form.endpoint_url.trim();
+  const endpointFieldError = endpointEmptyError
+    ? "Endpoint URL cannot be empty."
+    : endpointServerError ?? undefined;
+  const apiKeyEmptyError = !isEdit && touched.api_key && !form.api_key.trim();
+  const apiKeyFieldError = apiKeyEmptyError
+    ? "API key cannot be empty."
+    : apiKeyServerError
+      ? "Invalid API key."
+      : undefined;
+
+  function handleTimeoutBlur() {
+    if (!isTimeoutValid) {
+      const fallback = hook?.timeout_seconds ?? spec?.default_timeout_seconds;
+      if (fallback !== undefined) {
+        set("timeout_seconds", String(fallback));
+        if (timeoutServerError) setTimeoutServerError(false);
+      }
+    }
+  }
 
   const hasChanges =
     isEdit && hook
@@ -171,7 +225,17 @@ export default function HookFormModal({
       setIsSubmitting(false);
       handleOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong.");
+      if (err instanceof HookAuthError) {
+        setApiKeyServerError(true);
+      } else if (err instanceof HookTimeoutError) {
+        setTimeoutServerError(true);
+      } else if (err instanceof HookConnectError) {
+        setEndpointServerError("Could not connect to endpoint.");
+      } else {
+        toast.error(
+          err instanceof Error ? err.message : "Something went wrong."
+        );
+      }
       setIsSubmitting(false);
     }
   }
@@ -219,7 +283,7 @@ export default function HookFormModal({
                 <div className="flex items-center gap-1">
                   <SvgHookNodes
                     style={{ width: "1rem", height: "1rem" }}
-                    className="text-text-03 shrink-0 p-0.5"
+                    className="text-text-03 shrink-0"
                   />
                   <Text font="secondary-body" color="text-03">
                     Hook Point
@@ -230,27 +294,35 @@ export default function HookFormModal({
                     href={docsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-secondary-body text-text-03 underline"
+                    className="underline"
                   >
-                    Documentation
+                    <Text font="secondary-body" color="text-03">
+                      Documentation
+                    </Text>
                   </a>
                 )}
               </Section>
             }
           />
 
-          <FormField className="w-full">
+          <FormField className="w-full" state={nameError ? "error" : "idle"}>
             <FormField.Label>Display Name</FormField.Label>
             <FormField.Control>
               <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
                 <InputTypeIn
                   value={form.name}
                   onChange={(e) => set("name", e.target.value)}
+                  onBlur={() => touch("name")}
                   placeholder="Name your extension at this hook point"
-                  variant={isSubmitting ? "disabled" : undefined}
+                  variant={
+                    isSubmitting ? "disabled" : nameError ? "error" : undefined
+                  }
                 />
               </div>
             </FormField.Control>
+            <FormField.Message
+              messages={{ error: "Display name cannot be empty." }}
+            />
           </FormField>
 
           <FormField className="w-full">
@@ -270,7 +342,7 @@ export default function HookFormModal({
                     {spec?.default_fail_strategy === "soft" && (
                       <>
                         {" "}
-                        <span className="text-text-03">(Default)</span>
+                        <Text color="text-03">(Default)</Text>
                       </>
                     )}
                   </InputSelect.Item>
@@ -279,7 +351,7 @@ export default function HookFormModal({
                     {spec?.default_fail_strategy === "hard" && (
                       <>
                         {" "}
-                        <span className="text-text-03">(Default)</span>
+                        <Text color="text-03">(Default)</Text>
                       </>
                     )}
                   </InputSelect.Item>
@@ -291,75 +363,151 @@ export default function HookFormModal({
             </FormField.Description>
           </FormField>
 
-          <FormField className="w-full">
+          <FormField
+            className="w-full"
+            state={timeoutServerError ? "error" : "idle"}
+          >
             <FormField.Label>
-              Timeout <span className="text-text-03">(seconds)</span>
+              Timeout{" "}
+              <Text font="main-ui-action" color="text-03">
+                (seconds)
+              </Text>
             </FormField.Label>
             <FormField.Control>
-              <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono w-full">
+              <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono [&_input]:![appearance:textfield] [&_input::-webkit-outer-spin-button]:!appearance-none [&_input::-webkit-inner-spin-button]:!appearance-none w-full">
                 <InputTypeIn
                   type="number"
                   value={form.timeout_seconds}
-                  onChange={(e) => set("timeout_seconds", e.target.value)}
+                  onChange={(e) => {
+                    set("timeout_seconds", e.target.value);
+                    if (timeoutServerError) setTimeoutServerError(false);
+                  }}
+                  onBlur={handleTimeoutBlur}
                   placeholder={
                     spec ? String(spec.default_timeout_seconds) : undefined
                   }
-                  variant={isSubmitting ? "disabled" : undefined}
+                  variant={
+                    isSubmitting
+                      ? "disabled"
+                      : timeoutServerError
+                        ? "error"
+                        : undefined
+                  }
+                  showClearButton={false}
+                  rightSection={
+                    spec?.default_timeout_seconds !== undefined &&
+                    form.timeout_seconds !==
+                      String(spec.default_timeout_seconds) ? (
+                      <Button
+                        prominence="tertiary"
+                        size="xs"
+                        icon={SvgRevert}
+                        tooltip="Revert to Default"
+                        onClick={() =>
+                          set(
+                            "timeout_seconds",
+                            String(spec.default_timeout_seconds)
+                          )
+                        }
+                        disabled={isSubmitting}
+                      />
+                    ) : undefined
+                  }
                 />
               </div>
             </FormField.Control>
-            <FormField.Description>
-              Maximum time Onyx will wait for the endpoint to respond before
-              applying the fail strategy.
-            </FormField.Description>
+            {!timeoutServerError && (
+              <FormField.Description>
+                Maximum time Onyx will wait for the endpoint to respond before
+                applying the fail strategy. Must be greater than 0 and at most{" "}
+                {MAX_TIMEOUT_SECONDS} seconds.
+              </FormField.Description>
+            )}
+            <FormField.Message
+              messages={{
+                error: "Connection timed out. Try increasing the timeout.",
+              }}
+            />
           </FormField>
 
-          <FormField className="w-full">
+          <FormField
+            className="w-full"
+            state={endpointFieldError ? "error" : "idle"}
+          >
             <FormField.Label>External API Endpoint URL</FormField.Label>
             <FormField.Control>
               <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
                 <InputTypeIn
                   value={form.endpoint_url}
-                  onChange={(e) => set("endpoint_url", e.target.value)}
+                  onChange={(e) => {
+                    set("endpoint_url", e.target.value);
+                    if (endpointServerError) setEndpointServerError(null);
+                  }}
+                  onBlur={() => touch("endpoint_url")}
                   placeholder="https://your-api-endpoint.com"
-                  variant={isSubmitting ? "disabled" : undefined}
+                  variant={
+                    isSubmitting
+                      ? "disabled"
+                      : endpointFieldError
+                        ? "error"
+                        : undefined
+                  }
                 />
               </div>
             </FormField.Control>
-            <FormField.Description>
-              Only connect to servers you trust. You are responsible for actions
-              taken and data shared with this connection.
-            </FormField.Description>
+            {!endpointFieldError && (
+              <FormField.Description>
+                Only connect to servers you trust. You are responsible for
+                actions taken and data shared with this connection.
+              </FormField.Description>
+            )}
+            <FormField.Message messages={{ error: endpointFieldError }} />
           </FormField>
 
-          <FormField className="w-full">
+          <FormField
+            className="w-full"
+            state={apiKeyFieldError ? "error" : "idle"}
+          >
             <FormField.Label>API Key</FormField.Label>
             <FormField.Control>
               <PasswordInputTypeIn
                 value={form.api_key}
                 onChange={(e) => {
                   set("api_key", e.target.value);
+                  if (apiKeyServerError) setApiKeyServerError(false);
                   if (isEdit) {
                     setApiKeyCleared(
                       e.target.value === "" && !!hook?.api_key_masked
                     );
                   }
                 }}
+                onBlur={() => touch("api_key")}
                 placeholder={
                   isEdit
                     ? hook?.api_key_masked ?? "Leave blank to keep current key"
                     : undefined
                 }
                 disabled={isSubmitting}
+                error={!!apiKeyFieldError}
               />
             </FormField.Control>
-            <FormField.Description>
-              Onyx will use this key to authenticate with your API endpoint.
-            </FormField.Description>
+            {!apiKeyFieldError && (
+              <FormField.Description>
+                Onyx will use this key to authenticate with your API endpoint.
+              </FormField.Description>
+            )}
+            <FormField.Message messages={{ error: apiKeyFieldError }} />
           </FormField>
 
           {!isEdit && (isSubmitting || isConnected) && (
-            <div className="flex flex-row items-center gap-1 px-0.5 w-full">
+            <Section
+              flexDirection="row"
+              alignItems="center"
+              justifyContent="start"
+              height="fit"
+              gap={1}
+              className="px-0.5"
+            >
               <div className="p-0.5 shrink-0">
                 {isConnected ? (
                   <SvgCheckCircle
@@ -373,7 +521,7 @@ export default function HookFormModal({
               <Text font="secondary-body" color="text-03">
                 {isConnected ? "Connection valid." : "Verifying connection…"}
               </Text>
-            </div>
+            </Section>
           )}
         </Modal.Body>
 
