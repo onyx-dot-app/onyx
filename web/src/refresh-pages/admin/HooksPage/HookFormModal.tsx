@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgCheckCircle, SvgHookNodes, SvgLoader } from "@opal/icons";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
@@ -12,7 +12,6 @@ import { FormField } from "@/refresh-components/form/FormField";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
-import { cn } from "@/lib/utils";
 import { createHook, updateHook } from "@/refresh-pages/admin/HooksPage/svc";
 import type {
   HookFailStrategy,
@@ -222,9 +221,9 @@ export default function HookFormModal({
                     style={{ width: "1rem", height: "1rem" }}
                     className="text-text-03 shrink-0 p-0.5"
                   />
-                  <span className="font-secondary-body text-text-03">
+                  <Text font="secondary-body" color="text-03">
                     Hook Point
-                  </span>
+                  </Text>
                 </div>
                 {docsUrl && (
                   <a
@@ -371,14 +370,9 @@ export default function HookFormModal({
                   <SvgLoader size={16} className="animate-spin text-text-03" />
                 )}
               </div>
-              <span
-                className={cn(
-                  "font-secondary-body",
-                  isConnected ? "text-status-success-05" : "text-text-03"
-                )}
-              >
+              <Text font="secondary-body" color="text-03">
                 {isConnected ? "Connection valid." : "Verifying connection…"}
-              </span>
+              </Text>
             </div>
           )}
         </Modal.Body>
