@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Generator
+from typing import Any
 
 from jira import JIRA, JIRAError
 
@@ -32,15 +32,12 @@ from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorMissingCredentialError,
     Document,
-    Section,
+    TextSection,
 )
 
 logger = logging.getLogger(__name__)
 
-# JSM issue types we want to index
 JSM_ISSUE_TYPES = ("Service Request", "Incident", "Problem", "Change", "Service Task")
-
-# Jira date format
 JIRA_DATE_FMT = "%Y-%m-%d %H:%M"
 
 
@@ -51,28 +48,21 @@ def _build_jsm_jql(
 ) -> str:
     issue_type_filter = ", ".join(f'"{t}"' for t in JSM_ISSUE_TYPES)
     jql = f'project = "{project_key}" AND issuetype in ({issue_type_filter})'
-
     if start is not None:
         start_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(JIRA_DATE_FMT)
         jql += f' AND updated >= "{start_str}"'
-
     if end is not None:
         end_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(JIRA_DATE_FMT)
         jql += f' AND updated <= "{end_str}"'
-
     jql += " ORDER BY updated ASC"
     return jql
 
 
 def _issue_to_document(issue: Any, jira_base_url: str) -> Document:
-    """Convert a jira.Issue object into an Onyx Document."""
     fields = issue.fields
-
-    # ----- text content -----
     summary = fields.summary or ""
     description = fields.description or ""
 
-    # Include comments
     comment_texts: list[str] = []
     try:
         for comment in fields.comment.comments:
@@ -83,19 +73,12 @@ def _issue_to_document(issue: Any, jira_base_url: str) -> Document:
         pass
 
     full_text = "\n\n".join(filter(None, [summary, description] + comment_texts))
-
-    # ----- metadata -----
     issue_url = f"{jira_base_url.rstrip('/')}/browse/{issue.key}"
     status = getattr(fields.status, "name", "Unknown")
     priority = getattr(fields.priority, "name", None) if fields.priority else None
     issue_type = getattr(fields.issuetype, "name", "Unknown")
-
-    assignee_name = (
-        fields.assignee.displayName if fields.assignee else None
-    )
-    reporter_name = (
-        fields.reporter.displayName if fields.reporter else None
-    )
+    assignee_name = fields.assignee.displayName if fields.assignee else None
+    reporter_name = fields.reporter.displayName if fields.reporter else None
 
     experts: list[BasicExpertInfo] = []
     if assignee_name:
@@ -111,7 +94,6 @@ def _issue_to_document(issue: Any, jira_base_url: str) -> Document:
     if priority:
         metadata["priority"] = priority
 
-    # Parse updated time
     updated_at: datetime | None = None
     try:
         updated_at = datetime.strptime(
@@ -122,7 +104,7 @@ def _issue_to_document(issue: Any, jira_base_url: str) -> Document:
 
     return Document(
         id=f"jsm:{issue.key}",
-        sections=[Section(link=issue_url, text=full_text)],
+        sections=[TextSection(link=issue_url, text=full_text)],
         source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
         semantic_identifier=f"{issue.key}: {summary}",
         doc_updated_at=updated_at,
@@ -134,14 +116,14 @@ def _issue_to_document(issue: Any, jira_base_url: str) -> Document:
 
 class JiraServiceManagementConnector(CheckpointConnector, CredentialedConnector):
     """
-    Connector that indexes JSM tickets from a single Jira Service Management project.
+    Indexes JSM tickets from a single Jira Service Management project.
 
-    Config args (set in Admin UI):
-        jira_base_url  : e.g. https://yourcompany.atlassian.net
-        project_key    : JSM project key, e.g. "IT" or "HELPDESK"
+    Config args:
+        jira_base_url : e.g. https://yourcompany.atlassian.net
+        project_key   : JSM project key, e.g. "IT" or "HELPDESK"
 
-    Credentials (stored as connector credential):
-        jira_user_email : your Atlassian email
+    Credentials:
+        jira_user_email : Atlassian email
         jira_api_token  : Atlassian API token
     """
 
@@ -156,10 +138,6 @@ class JiraServiceManagementConnector(CheckpointConnector, CredentialedConnector)
         self.batch_size = batch_size
         self._jira_client: JIRA | None = None
 
-    # ------------------------------------------------------------------
-    # CredentialedConnector
-    # ------------------------------------------------------------------
-
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         email = credentials.get("jira_user_email")
         token = credentials.get("jira_api_token")
@@ -171,24 +149,13 @@ class JiraServiceManagementConnector(CheckpointConnector, CredentialedConnector)
         )
         return None
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     @property
     def _client(self) -> JIRA:
         if self._jira_client is None:
             raise ConnectorMissingCredentialError("JiraServiceManagement")
         return self._jira_client
 
-    def _fetch_batch(
-        self,
-        jql: str,
-        start_at: int,
-    ) -> tuple[list[Document], bool]:
-        """
-        Fetch one page of issues. Returns (documents, has_more).
-        """
+    def _fetch_batch(self, jql: str, start_at: int) -> tuple[list[Document], bool]:
         try:
             issues = self._client.search_issues(
                 jql,
@@ -210,34 +177,22 @@ class JiraServiceManagementConnector(CheckpointConnector, CredentialedConnector)
         has_more = (start_at + len(issues)) < issues.total
         return docs, has_more
 
-    # ------------------------------------------------------------------
-    # CheckpointConnector
-    # ------------------------------------------------------------------
-
     def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: ConnectorCheckpoint,
     ) -> CheckpointOutput:
-        """
-        Incrementally fetch JSM issues updated between *start* and *end*.
-        The checkpoint stores the current pagination offset.
-        """
         jql = _build_jsm_jql(self.project_key, start=start, end=end)
         start_at: int = checkpoint.get("start_at", 0) if checkpoint else 0
 
         while True:
             docs, has_more = self._fetch_batch(jql, start_at)
-
             if docs:
                 yield docs
-
             start_at += len(docs)
-
             if not has_more:
                 break
-
             yield ConnectorCheckpoint({"start_at": start_at})
 
     def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
