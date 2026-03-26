@@ -174,16 +174,36 @@ export default function BillingPage() {
 
     const handleBillingReturn = async () => {
       if (!NEXT_PUBLIC_CLOUD_ENABLED) {
-        try {
-          // After checkout, exchange session_id for license; after portal, re-sync license
-          await claimLicense(sessionId ?? undefined);
-          refreshLicense();
-          // Refresh the page to update settings (including ee_features_enabled)
-          router.refresh();
-          // Navigate to billing details now that the license is active
+        // Retry up to 3 times with 2s backoff. The license may not be available
+        // immediately if the Stripe webhook hasn't finished processing yet
+        // (redirect and webhook fire nearly simultaneously).
+        let lastError: Error | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            // After checkout, exchange session_id for license; after portal, re-sync license
+            await claimLicense(sessionId ?? undefined);
+            refreshLicense();
+            // Refresh the page to update settings (including ee_features_enabled)
+            router.refresh();
+            // Navigate to billing details now that the license is active
+            changeView("details");
+            lastError = null;
+            break;
+          } catch (err) {
+            lastError = err instanceof Error ? err : new Error("Unknown error");
+            if (attempt < 2) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+          }
+        }
+        if (lastError) {
+          console.error(
+            "Failed to sync license after billing return:",
+            lastError
+          );
+          // Navigate to details regardless — the user just paid and shouldn't
+          // be stranded on the plans view. They can refresh to pick up the license.
           changeView("details");
-        } catch (error) {
-          console.error("Failed to sync license after billing return:", error);
         }
       }
       refreshBilling();
