@@ -39,7 +39,7 @@ def upgrade() -> None:
             sa.text(
                 "INSERT INTO user__user_group (user_group_id, user_id) "
                 'SELECT :gid, id FROM "user" '
-                "WHERE role = 'admin' "
+                "WHERE role = 'ADMIN' "
                 "ON CONFLICT (user_group_id, user_id) DO NOTHING"
             ),
             {"gid": admin_row[0]},
@@ -51,8 +51,8 @@ def upgrade() -> None:
             sa.text(
                 "INSERT INTO user__user_group (user_group_id, user_id) "
                 'SELECT :gid, id FROM "user" '
-                "WHERE (account_type = 'STANDARD' AND role != 'admin') "
-                "OR (account_type = 'SERVICE_ACCOUNT' AND role = 'basic') "
+                "WHERE (account_type = 'STANDARD' AND role != 'ADMIN') "
+                "OR (account_type = 'SERVICE_ACCOUNT' AND role = 'BASIC') "
                 "ON CONFLICT (user_group_id, user_id) DO NOTHING"
             ),
             {"gid": basic_row[0]},

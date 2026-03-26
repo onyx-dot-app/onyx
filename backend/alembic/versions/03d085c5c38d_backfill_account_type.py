@@ -60,7 +60,7 @@ def upgrade() -> None:
     conn.execute(
         sa.text(
             'UPDATE "user" SET account_type = :acct_type '
-            "WHERE role = 'slack_user' AND account_type IS NULL"
+            "WHERE role = 'SLACK_USER' AND account_type IS NULL"
         ),
         {"acct_type": _BOT},
     )
@@ -69,7 +69,7 @@ def upgrade() -> None:
     conn.execute(
         sa.text(
             'UPDATE "user" SET account_type = :acct_type '
-            "WHERE role = 'ext_perm_user' AND account_type IS NULL"
+            "WHERE role = 'EXT_PERM_USER' AND account_type IS NULL"
         ),
         {"acct_type": _EXT_PERM_USER},
     )
