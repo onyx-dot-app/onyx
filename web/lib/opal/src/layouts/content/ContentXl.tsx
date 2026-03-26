@@ -233,7 +233,6 @@ function ContentXl({
                 editable && "cursor-pointer"
               )}
               onClick={editable ? startEditing : undefined}
-              style={{ height: config.lineHeight }}
               title={toPlainString(title)}
             >
               <Text font={config.titleFont} color="inherit">
