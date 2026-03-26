@@ -1,7 +1,7 @@
 import "@opal/components/tag/styles.css";
 
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text } from "@opal/components/text/components";
+import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------

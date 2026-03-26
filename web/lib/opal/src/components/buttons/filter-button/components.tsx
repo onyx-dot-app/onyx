@@ -5,7 +5,7 @@ import {
 } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text } from "@opal/components/text/components";
+import { Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";

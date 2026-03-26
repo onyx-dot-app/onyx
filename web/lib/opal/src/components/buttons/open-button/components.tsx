@@ -9,7 +9,7 @@ import type {
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
-import { Text } from "@opal/components/text/components";
+import { Text } from "@opal/components";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";

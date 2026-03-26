@@ -5,7 +5,7 @@ import { Disabled } from "@opal/core";
 import { SvgArrowRight, SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import { containerSizeVariants } from "@opal/shared";
 import type { RichStr, WithoutStyles } from "@opal/types";
-import { Text } from "@opal/components/text/components";
+import { Text } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
