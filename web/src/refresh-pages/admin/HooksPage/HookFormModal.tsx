@@ -8,12 +8,15 @@ import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import Text from "@/refresh-components/texts/Text";
+import { FormField } from "@/refresh-components/form/FormField";
+import { Section } from "@/layouts/general-layouts";
+import { ContentAction } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { createHook, updateHook } from "@/refresh-pages/admin/HooksPage/svc";
 import type {
   HookFailStrategy,
+  HookFormState,
   HookPointMeta,
   HookResponse,
   HookUpdateRequest,
@@ -37,18 +40,10 @@ interface HookFormModalProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-interface FormState {
-  name: string;
-  endpoint_url: string;
-  api_key: string;
-  fail_strategy: HookFailStrategy;
-  timeout_seconds: string;
-}
-
 function buildInitialState(
   hook: HookResponse | undefined,
   spec: HookPointMeta | undefined
-): FormState {
+): HookFormState {
   if (hook) {
     return {
       name: hook.name,
@@ -71,32 +66,6 @@ const SOFT_DESCRIPTION =
   "If the endpoint returns an error, Onyx logs it and continues the pipeline as normal, ignoring the hook result.";
 
 // ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-interface FieldProps {
-  label: React.ReactNode;
-  description?: string;
-  children: React.ReactNode;
-}
-
-function Field({ label, description, children }: FieldProps) {
-  return (
-    <div className="flex flex-col gap-1 w-full">
-      <span className="font-main-ui-action text-text-04 px-[0.125rem]">
-        {label}
-      </span>
-      {children}
-      {description && (
-        <Text secondaryBody text03>
-          {description}
-        </Text>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -108,7 +77,7 @@ export default function HookFormModal({
   onSuccess,
 }: HookFormModalProps) {
   const isEdit = !!hook;
-  const [form, setForm] = useState<FormState>(() =>
+  const [form, setForm] = useState<HookFormState>(() =>
     buildInitialState(hook, spec)
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,7 +100,7 @@ export default function HookFormModal({
     onOpenChange(next);
   }
 
-  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+  function set<K extends keyof HookFormState>(key: K, value: HookFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -234,138 +203,161 @@ export default function HookFormModal({
 
         <Modal.Body>
           {/* Hook point section header */}
-          <div className="flex flex-row items-start justify-between gap-1 w-full">
-            <div className="flex flex-col flex-1 min-w-0">
-              <span className="font-main-ui-action text-text-04 px-[0.125rem]">
-                {hookPointDisplayName}
-              </span>
-              {hookPointDescription && (
-                <span className="font-secondary-body text-text-03 px-[0.125rem]">
-                  {hookPointDescription}
-                </span>
-              )}
-            </div>
-            <div className="flex flex-col items-end shrink-0 gap-1">
-              <div className="flex items-center gap-1">
-                <SvgHookNodes
-                  style={{ width: "1rem", height: "1rem" }}
-                  className="text-text-03 shrink-0 p-0.5"
-                />
-                <span className="font-secondary-body text-text-03">
-                  Hook Point
-                </span>
-              </div>
-              {docsUrl && (
-                <a
-                  href={docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-secondary-body text-text-03 underline"
-                >
-                  Documentation
-                </a>
-              )}
-            </div>
-          </div>
-
-          <Field label="Display Name">
-            <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
-              <InputTypeIn
-                value={form.name}
-                onChange={(e) => set("name", e.target.value)}
-                placeholder="Name your extension at this hook point"
-                variant={isSubmitting ? "disabled" : undefined}
-              />
-            </div>
-          </Field>
-
-          <Field label="Fail Strategy" description={failStrategyDescription}>
-            <InputSelect
-              value={form.fail_strategy}
-              onValueChange={(v) => set("fail_strategy", v as HookFailStrategy)}
-              disabled={isSubmitting}
-            >
-              <InputSelect.Trigger placeholder="Select strategy" />
-              <InputSelect.Content>
-                <InputSelect.Item value="soft">
-                  Log Error and Continue
-                  {spec?.default_fail_strategy === "soft" && (
-                    <>
-                      {" "}
-                      <span className="text-text-03">(Default)</span>
-                    </>
-                  )}
-                </InputSelect.Item>
-                <InputSelect.Item value="hard">
-                  Block Pipeline on Failure
-                  {spec?.default_fail_strategy === "hard" && (
-                    <>
-                      {" "}
-                      <span className="text-text-03">(Default)</span>
-                    </>
-                  )}
-                </InputSelect.Item>
-              </InputSelect.Content>
-            </InputSelect>
-          </Field>
-
-          <Field
-            label={
-              <>
-                Timeout <span className="text-text-03">(seconds)</span>
-              </>
+          <ContentAction
+            sizePreset="main-ui"
+            variant="section"
+            paddingVariant="fit"
+            title={hookPointDisplayName}
+            description={hookPointDescription}
+            rightChildren={
+              <Section
+                flexDirection="column"
+                alignItems="end"
+                width="fit"
+                height="fit"
+                gap={0.25}
+              >
+                <div className="flex items-center gap-1">
+                  <SvgHookNodes
+                    style={{ width: "1rem", height: "1rem" }}
+                    className="text-text-03 shrink-0 p-0.5"
+                  />
+                  <span className="font-secondary-body text-text-03">
+                    Hook Point
+                  </span>
+                </div>
+                {docsUrl && (
+                  <a
+                    href={docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-secondary-body text-text-03 underline"
+                  >
+                    Documentation
+                  </a>
+                )}
+              </Section>
             }
-            description="Maximum time Onyx will wait for the endpoint to respond before applying the fail strategy."
-          >
-            <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono w-full">
-              <InputTypeIn
-                type="number"
-                value={form.timeout_seconds}
-                onChange={(e) => set("timeout_seconds", e.target.value)}
+          />
+
+          <FormField className="w-full">
+            <FormField.Label>Display Name</FormField.Label>
+            <FormField.Control>
+              <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
+                <InputTypeIn
+                  value={form.name}
+                  onChange={(e) => set("name", e.target.value)}
+                  placeholder="Name your extension at this hook point"
+                  variant={isSubmitting ? "disabled" : undefined}
+                />
+              </div>
+            </FormField.Control>
+          </FormField>
+
+          <FormField className="w-full">
+            <FormField.Label>Fail Strategy</FormField.Label>
+            <FormField.Control>
+              <InputSelect
+                value={form.fail_strategy}
+                onValueChange={(v) =>
+                  set("fail_strategy", v as HookFailStrategy)
+                }
+                disabled={isSubmitting}
+              >
+                <InputSelect.Trigger placeholder="Select strategy" />
+                <InputSelect.Content>
+                  <InputSelect.Item value="soft">
+                    Log Error and Continue
+                    {spec?.default_fail_strategy === "soft" && (
+                      <>
+                        {" "}
+                        <span className="text-text-03">(Default)</span>
+                      </>
+                    )}
+                  </InputSelect.Item>
+                  <InputSelect.Item value="hard">
+                    Block Pipeline on Failure
+                    {spec?.default_fail_strategy === "hard" && (
+                      <>
+                        {" "}
+                        <span className="text-text-03">(Default)</span>
+                      </>
+                    )}
+                  </InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            </FormField.Control>
+            <FormField.Description>
+              {failStrategyDescription}
+            </FormField.Description>
+          </FormField>
+
+          <FormField className="w-full">
+            <FormField.Label>
+              Timeout <span className="text-text-03">(seconds)</span>
+            </FormField.Label>
+            <FormField.Control>
+              <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono w-full">
+                <InputTypeIn
+                  type="number"
+                  value={form.timeout_seconds}
+                  onChange={(e) => set("timeout_seconds", e.target.value)}
+                  placeholder={
+                    spec ? String(spec.default_timeout_seconds) : undefined
+                  }
+                  variant={isSubmitting ? "disabled" : undefined}
+                />
+              </div>
+            </FormField.Control>
+            <FormField.Description>
+              Maximum time Onyx will wait for the endpoint to respond before
+              applying the fail strategy.
+            </FormField.Description>
+          </FormField>
+
+          <FormField className="w-full">
+            <FormField.Label>External API Endpoint URL</FormField.Label>
+            <FormField.Control>
+              <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
+                <InputTypeIn
+                  value={form.endpoint_url}
+                  onChange={(e) => set("endpoint_url", e.target.value)}
+                  placeholder="https://your-api-endpoint.com"
+                  variant={isSubmitting ? "disabled" : undefined}
+                />
+              </div>
+            </FormField.Control>
+            <FormField.Description>
+              Only connect to servers you trust. You are responsible for actions
+              taken and data shared with this connection.
+            </FormField.Description>
+          </FormField>
+
+          <FormField className="w-full">
+            <FormField.Label>API Key</FormField.Label>
+            <FormField.Control>
+              <PasswordInputTypeIn
+                value={form.api_key}
+                onChange={(e) => {
+                  set("api_key", e.target.value);
+                  if (isEdit) {
+                    setApiKeyCleared(
+                      e.target.value === "" && !!hook?.api_key_masked
+                    );
+                  }
+                }}
                 placeholder={
-                  spec ? String(spec.default_timeout_seconds) : undefined
+                  isEdit
+                    ? hook?.api_key_masked ?? "Leave blank to keep current key"
+                    : undefined
                 }
-                variant={isSubmitting ? "disabled" : undefined}
+                disabled={isSubmitting}
               />
-            </div>
-          </Field>
-
-          <Field
-            label="External API Endpoint URL"
-            description="Only connect to servers you trust. You are responsible for actions taken and data shared with this connection."
-          >
-            <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
-              <InputTypeIn
-                value={form.endpoint_url}
-                onChange={(e) => set("endpoint_url", e.target.value)}
-                placeholder="https://your-api-endpoint.com"
-                variant={isSubmitting ? "disabled" : undefined}
-              />
-            </div>
-          </Field>
-
-          <Field
-            label="API Key"
-            description="Onyx will use this key to authenticate with your API endpoint."
-          >
-            <PasswordInputTypeIn
-              value={form.api_key}
-              onChange={(e) => {
-                set("api_key", e.target.value);
-                if (isEdit) {
-                  setApiKeyCleared(
-                    e.target.value === "" && !!hook?.api_key_masked
-                  );
-                }
-              }}
-              placeholder={
-                isEdit
-                  ? hook?.api_key_masked ?? "Leave blank to keep current key"
-                  : undefined
-              }
-              disabled={isSubmitting}
-            />
-          </Field>
+            </FormField.Control>
+            <FormField.Description>
+              Onyx will use this key to authenticate with your API endpoint.
+            </FormField.Description>
+          </FormField>
 
           {!isEdit && (isSubmitting || isConnected) && (
             <div className="flex flex-row items-center gap-1 px-0.5 w-full">
