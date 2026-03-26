@@ -165,18 +165,56 @@ def _upsert_documents_in_db(
         )
 
 
+def _get_failed_doc_ids(failures: list[ConnectorFailure]) -> set[str]:
+    """Extract document IDs from a list of connector failures."""
+    return {f.failed_document.document_id for f in failures if f.failed_document}
+
+
+def _spill_chunks_to_disk(
+    chunks: list[IndexChunk],
+    batch_file: Path,
+) -> None:
+    """Pickle embedded chunks to disk and free memory."""
+    with open(batch_file, "wb") as f:
+        pickle.dump(chunks, f)
+
+
+def _scrub_failed_docs_from_disk(
+    tmpdir: Path,
+    failed_doc_ids: set[str],
+) -> None:
+    """Re-read each batch file and remove chunks belonging to failed docs.
+
+    When a document fails embedding in batch N, earlier batches may already
+    contain successfully embedded chunks for that document.  This pass
+    ensures those are removed so the output is all-or-nothing per document.
+    """
+    for batch_file in sorted(
+        tmpdir.glob("batch_*.pkl"),
+        key=lambda p: int(p.stem.removeprefix("batch_")),
+    ):
+        with open(batch_file, "rb") as f:
+            batch_chunks: list[IndexChunk] = pickle.load(f)
+        cleaned = [
+            c for c in batch_chunks if c.source_document.id not in failed_doc_ids
+        ]
+        if len(cleaned) != len(batch_chunks):
+            with open(batch_file, "wb") as f:
+                pickle.dump(cleaned, f)
+
+
 def embed_chunks_in_batches(
     chunks: list[DocAwareChunk],
     embedder: IndexingEmbedder,
     tenant_id: str,
     request_id: str | None,
 ) -> ChunkEmbeddingResult:
-    """Embeds chunks in batches of MAX_CHUNKS_PER_DOC_BATCH, spilling each batch to disk.
+    """Embeds chunks in batches of MAX_CHUNKS_PER_DOC_BATCH, spilling each
+    batch to disk.
 
-    For each batch:
-      1. Embed the chunks via embed_chunks_with_failure_handling
-      2. Pickle the resulting IndexChunks to a temp file
-      3. Clear the batch from memory
+    If a document fails embedding in any batch, its chunks are excluded from
+    all batches (including earlier ones already written to disk) so that the
+    output is all-or-nothing per document.
 
     Returns:
       - Path to the temp directory containing one pickle file per batch
@@ -185,10 +223,21 @@ def embed_chunks_in_batches(
     tmpdir = Path(tempfile.mkdtemp(prefix="onyx_embeddings_"))
     successful_chunk_ids: list[tuple[int, str]] = []
     all_embedding_failures: list[ConnectorFailure] = []
+    # Track failed doc IDs across all batches so that a failure in batch N
+    # causes chunks for that doc to be skipped in batch N+1 and stripped
+    # from earlier batches.
+    all_failed_doc_ids: set[str] = set()
 
     for batch_idx, chunk_batch in enumerate(
         batch_generator(chunks, MAX_CHUNKS_PER_DOC_BATCH)
     ):
+        # Skip chunks belonging to documents that failed in earlier batches.
+        chunk_batch = [
+            c for c in chunk_batch if c.source_document.id not in all_failed_doc_ids
+        ]
+        if not chunk_batch:
+            continue
+
         logger.debug(f"Embedding batch {batch_idx}: {len(chunk_batch)} chunks")
 
         chunks_with_embeddings, embedding_failures = embed_chunks_with_failure_handling(
@@ -198,26 +247,30 @@ def embed_chunks_in_batches(
             request_id=request_id,
         )
         all_embedding_failures.extend(embedding_failures)
+        all_failed_doc_ids.update(_get_failed_doc_ids(embedding_failures))
 
-        # Track which chunks succeeded by excluding failed doc IDs
-        failed_doc_ids = {
-            f.failed_document.document_id
-            for f in embedding_failures
-            if f.failed_document
-        }
+        # Only keep successfully embedded chunks for non-failed docs.
+        chunks_with_embeddings = [
+            c
+            for c in chunks_with_embeddings
+            if c.source_document.id not in all_failed_doc_ids
+        ]
+
         successful_chunk_ids.extend(
-            (c.chunk_id, c.source_document.id)
-            for c in chunk_batch
-            if c.source_document.id not in failed_doc_ids
+            (c.chunk_id, c.source_document.id) for c in chunks_with_embeddings
         )
 
-        # Spill embeddings to disk
-        batch_file = tmpdir / f"batch_{batch_idx}.pkl"
-        with open(batch_file, "wb") as f:
-            pickle.dump(chunks_with_embeddings, f)
-
-        # Free memory
+        _spill_chunks_to_disk(chunks_with_embeddings, tmpdir / f"batch_{batch_idx}.pkl")
         del chunks_with_embeddings
+
+    # Scrub earlier batches for docs that failed in later batches.
+    if all_failed_doc_ids:
+        _scrub_failed_docs_from_disk(tmpdir, all_failed_doc_ids)
+        successful_chunk_ids = [
+            (chunk_id, doc_id)
+            for chunk_id, doc_id in successful_chunk_ids
+            if doc_id not in all_failed_doc_ids
+        ]
 
     return ChunkEmbeddingResult(
         embedding_path=tmpdir,
