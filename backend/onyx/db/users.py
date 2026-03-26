@@ -19,15 +19,21 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
 from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
+from onyx.db.enums import AccountType
+from onyx.db.enums import Permission
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__User
+from onyx.db.models import PermissionGrant
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import SamlAccount
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+
+logger = setup_logger()
 
 
 def validate_user_role_update(
@@ -298,6 +304,7 @@ def _generate_slack_user(email: str) -> User:
         email=email,
         hashed_password=hashed_pass,
         role=UserRole.SLACK_USER,
+        account_type=AccountType.BOT,
     )
 
 
@@ -344,6 +351,7 @@ def _generate_ext_permissioned_user(email: str) -> User:
         email=email,
         hashed_password=hashed_pass,
         role=UserRole.EXT_PERM_USER,
+        account_type=AccountType.EXT_PERM_USER,
     )
 
 
@@ -373,6 +381,82 @@ def batch_add_ext_perm_user_if_not_exists(
     # Fetch all users again to ensure we have the most up-to-date list
     all_users, _ = _get_users_by_emails(db_session, lower_emails)
     return all_users
+
+
+def assign_user_to_default_groups__no_commit(
+    db_session: Session,
+    user: User,
+    is_admin: bool = False,
+) -> None:
+    """Assign a newly created user to the appropriate default group.
+
+    Does NOT commit — callers must commit the session themselves so that
+    group assignment can be part of the same transaction as user creation.
+
+    Args:
+        is_admin: If True, assign to Admin default group; otherwise Basic.
+            Callers determine this from their own context (e.g. user_count,
+            admin email list, explicit choice). Defaults to False (Basic).
+    """
+    if user.account_type in (
+        AccountType.BOT,
+        AccountType.EXT_PERM_USER,
+        AccountType.ANONYMOUS,
+    ):
+        return
+
+    target_permission = (
+        Permission.FULL_ADMIN_PANEL_ACCESS if is_admin else Permission.BASIC_ACCESS
+    )
+
+    # Find the default group with the matching permission
+    default_group = (
+        db_session.query(UserGroup)
+        .join(PermissionGrant, PermissionGrant.group_id == UserGroup.id)
+        .filter(
+            UserGroup.is_default.is_(True),
+            PermissionGrant.permission == target_permission,
+            PermissionGrant.is_deleted.is_(False),
+        )
+        .first()
+    )
+
+    if default_group is None:
+        logger.warning(
+            f"No default group found with permission={target_permission.value} "
+            f"for user {user.email}"
+        )
+        return
+
+    # Check if the user is already in the group
+    existing = (
+        db_session.query(User__UserGroup)
+        .filter(
+            User__UserGroup.user_id == user.id,
+            User__UserGroup.user_group_id == default_group.id,
+        )
+        .first()
+    )
+    if existing is not None:
+        return
+
+    savepoint = db_session.begin_nested()
+    try:
+        db_session.add(
+            User__UserGroup(
+                user_id=user.id,
+                user_group_id=default_group.id,
+            )
+        )
+        db_session.flush()
+    except IntegrityError:
+        # Race condition: another transaction inserted this membership
+        # between our SELECT and INSERT. The savepoint isolates the failure
+        # so the outer transaction (user creation) stays intact.
+        savepoint.rollback()
+        return
+
+    logger.info(f"Assigned user {user.email} to default group '{default_group.name}'")
 
 
 def delete_user_from_db(

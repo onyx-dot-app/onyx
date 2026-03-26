@@ -120,11 +120,13 @@ from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import AccountType
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import log_onyx_error
@@ -694,6 +696,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         "email": account_email,
                         "hashed_password": self.password_helper.hash(password),
                         "is_verified": is_verified_by_default,
+                        "account_type": AccountType.STANDARD,
                     }
 
                     user = await self.user_db.create(user_dict)
@@ -748,9 +751,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     {
                         "is_verified": is_verified_by_default,
                         "role": UserRole.BASIC,
+                        "account_type": AccountType.STANDARD,
                         **({"is_active": True} if not user.is_active else {}),
                     },
                 )
+
+                # Assign upgraded user to the Basic default group.
+                # Let exceptions propagate — user without a group has no permissions.
+                with get_session_with_current_tenant() as sync_db:
+                    sync_user = sync_db.query(User).filter(User.id == user.id).first()
+                    if sync_user:
+                        assign_user_to_default_groups__no_commit(sync_db, sync_user)
+                        sync_db.commit()
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
@@ -889,6 +901,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 event=MilestoneRecordType.USER_SIGNED_UP,
                 properties=properties,
             )
+
+        # Assign user to the appropriate default group (Admin or Basic).
+        # Use the user_count already fetched above to determine admin status
+        # instead of reading user.role — keeps group assignment role-independent.
+        # Let exceptions propagate — a user without a group has no permissions,
+        # so it's better to surface the error than silently create a broken user.
+        is_admin = user_count == 1 or user.email in get_default_admin_user_emails()
+        with get_session_with_current_tenant() as db_session:
+            assign_user_to_default_groups__no_commit(
+                db_session, user, is_admin=is_admin
+            )
+            db_session.commit()
 
         logger.debug(f"User {user.id} has registered.")
         optional_telemetry(
@@ -1554,6 +1578,7 @@ def get_anonymous_user() -> User:
         is_verified=True,
         is_superuser=False,
         role=UserRole.LIMITED,
+        account_type=AccountType.ANONYMOUS,
         use_memories=False,
         enable_memory_tool=False,
     )

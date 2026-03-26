@@ -11,13 +11,18 @@ from onyx.auth.api_key import ApiKeyDescriptor
 from onyx.auth.api_key import build_displayable_api_key
 from onyx.auth.api_key import generate_api_key
 from onyx.auth.api_key import hash_api_key
+from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
+from onyx.db.enums import AccountType
 from onyx.db.models import ApiKey
 from onyx.db.models import User
 from onyx.server.api_key.models import APIKeyArgs
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 
 def get_api_key_email_pattern() -> str:
@@ -87,6 +92,7 @@ def insert_api_key(
         is_superuser=False,
         is_verified=True,
         role=api_key_args.role,
+        account_type=AccountType.SERVICE_ACCOUNT,
     )
     db_session.add(api_key_user_row)
 
@@ -99,7 +105,19 @@ def insert_api_key(
     )
     db_session.add(api_key_row)
 
+    # Assign the API key virtual user to the appropriate default group
+    # before commit so everything is atomic.
+    # Late import to avoid circular dependency (api_key <- users <- api_key).
+    from onyx.db.users import assign_user_to_default_groups__no_commit
+
+    assign_user_to_default_groups__no_commit(
+        db_session,
+        api_key_user_row,
+        is_admin=(api_key_args.role == UserRole.ADMIN),
+    )
+
     db_session.commit()
+
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
         api_key_role=api_key_user_row.role,
