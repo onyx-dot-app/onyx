@@ -786,7 +786,6 @@ function ChatPreferencesForm() {
                 toast.error("Failed to update system prompt");
               }
             }}
-            enableReinitialize
           >
             {({ dirty, isSubmitting, submitForm }) => (
               <Form>
@@ -816,7 +815,7 @@ function ChatPreferencesForm() {
                       sizePreset="main-ui"
                       icon={SvgAlertCircle}
                       title="Modify with caution."
-                      description="System prompt affect all chats, agent, and projects. Significant changes may degrade response quality."
+                      description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
                     />
                   </OpalCard>
                 </Modal.Body>
