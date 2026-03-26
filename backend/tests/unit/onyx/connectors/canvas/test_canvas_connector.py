@@ -7,8 +7,6 @@ from unittest.mock import patch
 import pytest
 
 from onyx.connectors.canvas.client import CanvasApiClient
-from onyx.connectors.canvas.client import _error_code_for_status
-from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 
@@ -33,47 +31,6 @@ def _mock_response(
     resp.headers = {"Link": link_header}
     return resp
 
-
-# ---------------------------------------------------------------------------
-# _error_code_for_status tests
-# ---------------------------------------------------------------------------
-
-
-class TestErrorCodeForStatus:
-    def test_401_maps_to_credential_expired(self) -> None:
-        result = _error_code_for_status(401)
-
-        assert result == OnyxErrorCode.CREDENTIAL_EXPIRED
-
-    def test_403_maps_to_insufficient_permissions(self) -> None:
-        result = _error_code_for_status(403)
-
-        assert result == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-
-    def test_404_maps_to_bad_gateway(self) -> None:
-        result = _error_code_for_status(404)
-
-        assert result == OnyxErrorCode.BAD_GATEWAY
-
-    def test_429_maps_to_rate_limited(self) -> None:
-        result = _error_code_for_status(429)
-
-        assert result == OnyxErrorCode.RATE_LIMITED
-
-    def test_500_maps_to_bad_gateway(self) -> None:
-        result = _error_code_for_status(500)
-
-        assert result == OnyxErrorCode.BAD_GATEWAY
-
-    def test_503_maps_to_bad_gateway(self) -> None:
-        result = _error_code_for_status(503)
-
-        assert result == OnyxErrorCode.BAD_GATEWAY
-
-    def test_unknown_4xx_maps_to_bad_gateway(self) -> None:
-        result = _error_code_for_status(418)
-
-        assert result == OnyxErrorCode.BAD_GATEWAY
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +190,32 @@ class TestGet:
             client.get("courses")
 
         assert exc_info.value.status_code == 403
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_raises_on_404(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(404, {})
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        assert exc_info.value.status_code == 404
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_raises_on_429(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(429, {})
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            client.get("courses")
+
+        assert exc_info.value.status_code == 429
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_skips_params_when_using_full_url(self, mock_requests: MagicMock) -> None:
