@@ -76,7 +76,7 @@ export const TokenRateLimitTable = ({
           </>
         )}
         {!hideHeading && <Spacer rem={2} />}
-        <Text as="p">{"No token rate limits set!"}</Text>
+        <Text as="p">No token rate limits set!</Text>
         {!hideHeading && <Spacer rem={2} />}
       </div>
     );
@@ -197,7 +197,7 @@ export const GenericTokenRateLimitTable = ({
   }
 
   if (!isLoading && error) {
-    return <Text as="p">{"Failed to load token rate limits"}</Text>;
+    return <Text as="p">Failed to load token rate limits</Text>;
   }
 
   let processedData = data;

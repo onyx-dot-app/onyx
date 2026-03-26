@@ -212,7 +212,7 @@ export default function CloudEmbeddingPage({
               <CardSection className="mt-2 w-full max-w-4xl bg-background-50 border border-background-200">
                 <div className="p-4">
                   <Text as="p" font="heading-h3">
-                    {"API URL Required"}
+                    API URL Required
                   </Text>
                   <Spacer rem={0.5} />
                   <Text as="p">
@@ -324,7 +324,7 @@ export default function CloudEmbeddingPage({
               <div className="mt-2 w-full max-w-4xl">
                 <CardSection className="p-4 border border-background-200 rounded-lg shadow-sm">
                   <Text as="p" font="main-ui-action">
-                    {"Configure Azure OpenAI for Embeddings"}
+                    Configure Azure OpenAI for Embeddings
                   </Text>
                   <Spacer rem={0.5} />
                   <Text as="p">
@@ -348,7 +348,7 @@ export default function CloudEmbeddingPage({
             <>
               <div className="mb-6 w-full">
                 <Text as="p" font="heading-h3">
-                  {"Current Azure Configuration"}
+                  Current Azure Configuration
                 </Text>
                 <Spacer rem={0.75} />
 

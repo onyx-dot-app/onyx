@@ -108,7 +108,7 @@ function Main() {
                   <div className="space-y-4">
                     <div>
                       <Text as="p" font="main-ui-action">
-                        {"Multipass Indexing"}
+                        Multipass Indexing
                       </Text>
                       <Text as="p">
                         {searchSettings.multipass_indexing
@@ -119,7 +119,7 @@ function Main() {
 
                     <div>
                       <Text as="p" font="main-ui-action">
-                        {"Contextual RAG"}
+                        Contextual RAG
                       </Text>
                       <Text as="p">
                         {searchSettings.enable_contextual_rag

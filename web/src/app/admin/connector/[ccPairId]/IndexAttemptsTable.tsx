@@ -153,9 +153,7 @@ export function IndexAttemptsTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  {indexAttempt.status === "success" && (
-                    <Text as="p">{"-"}</Text>
-                  )}
+                  {indexAttempt.status === "success" && <Text as="p">-</Text>}
 
                   {indexAttempt.status === "failed" &&
                     indexAttempt.error_msg && (
