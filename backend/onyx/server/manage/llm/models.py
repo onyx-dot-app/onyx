@@ -449,3 +449,17 @@ class LitellmModelDetails(BaseModel):
 class LitellmFinalModelResponse(BaseModel):
     provider_name: str  # Provider name (e.g. "openai")
     model_name: str  # Model ID (e.g. "gpt-4o")
+
+
+# Bifrost dynamic models fetch
+class BifrostModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class BifrostFinalModelResponse(BaseModel):
+    name: str  # Model ID in provider/model format (e.g. "anthropic/claude-sonnet-4-6")
+    display_name: str  # Human-readable name from Bifrost API
+    max_input_tokens: int | None
+    supports_image_input: bool

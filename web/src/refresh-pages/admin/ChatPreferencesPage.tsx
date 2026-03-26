@@ -1,5 +1,6 @@
 "use client";
 
+import { markdown } from "@opal/utils";
 import React, { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Formik, Form, useFormikContext } from "formik";
@@ -23,6 +24,7 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
+  SvgAlertCircle,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
@@ -43,9 +45,8 @@ import {
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import { Button } from "@opal/components";
+import { Button, Text, Card as OpalCard } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -304,7 +305,6 @@ function ChatPreferencesForm() {
 
   // System prompt modal state
   const [systemPromptModalOpen, setSystemPromptModalOpen] = useState(false);
-  const [systemPromptValue, setSystemPromptValue] = useState("");
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
@@ -398,14 +398,7 @@ function ChatPreferencesForm() {
             <Button
               prominence="tertiary"
               icon={SvgAddLines}
-              onClick={() => {
-                setSystemPromptValue(
-                  defaultAgentConfig?.system_prompt ??
-                    defaultAgentConfig?.default_system_prompt ??
-                    ""
-                );
-                setSystemPromptModalOpen(true);
-              }}
+              onClick={() => setSystemPromptModalOpen(true)}
             >
               Modify Prompt
             </Button>
@@ -768,55 +761,82 @@ function ChatPreferencesForm() {
         onOpenChange={setSystemPromptModalOpen}
       >
         <Modal.Content width="xl" height="fit">
-          <Modal.Header
-            icon={SvgAddLines}
-            title="System Prompt"
-            description="This base prompt is prepended to all chats, agents, and projects."
-            onClose={() => setSystemPromptModalOpen(false)}
-          />
-          <Modal.Body>
-            <InputTextArea
-              value={systemPromptValue}
-              onChange={(e) => setSystemPromptValue(e.target.value)}
-              placeholder="Enter your system prompt..."
-              rows={8}
-              maxRows={20}
-              autoResize
-            />
-          </Modal.Body>
-          <Modal.Footer>
-            <Button
-              prominence="secondary"
-              onClick={() => setSystemPromptModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              prominence="primary"
-              onClick={async () => {
-                try {
-                  const response = await fetch("/api/admin/default-assistant", {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      system_prompt: systemPromptValue,
-                    }),
-                  });
-                  if (!response.ok) {
-                    const errorMsg = (await response.json()).detail;
-                    throw new Error(errorMsg);
-                  }
-                  await mutateDefaultAgent();
-                  setSystemPromptModalOpen(false);
-                  toast.success("System prompt updated");
-                } catch {
-                  toast.error("Failed to update system prompt");
+          <Formik
+            initialValues={{
+              system_prompt:
+                defaultAgentConfig?.system_prompt ??
+                defaultAgentConfig?.default_system_prompt ??
+                "",
+            }}
+            onSubmit={async ({ system_prompt }) => {
+              try {
+                const response = await fetch("/api/admin/default-assistant", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ system_prompt }),
+                });
+                if (!response.ok) {
+                  const errorMsg = (await response.json()).detail;
+                  throw new Error(errorMsg);
                 }
-              }}
-            >
-              Save
-            </Button>
-          </Modal.Footer>
+                await mutateDefaultAgent();
+                setSystemPromptModalOpen(false);
+                toast.success("System prompt updated");
+              } catch {
+                toast.error("Failed to update system prompt");
+              }
+            }}
+          >
+            {({ dirty, isSubmitting, submitForm }) => (
+              <Form>
+                <Modal.Header
+                  icon={SvgAddLines}
+                  title="System Prompt"
+                  description="This base prompt is prepended to all chats, agents, and projects."
+                  onClose={() => setSystemPromptModalOpen(false)}
+                />
+                <Modal.Body>
+                  <Section gap={0.25} alignItems="start">
+                    <InputTextAreaField
+                      name="system_prompt"
+                      placeholder="Enter your system prompt..."
+                      rows={8}
+                      maxRows={20}
+                      autoResize
+                    />
+                    <Text font="secondary-body" color="text-03">
+                      {markdown(
+                        "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used."
+                      )}
+                    </Text>
+                  </Section>
+                  <OpalCard backgroundVariant="none" borderVariant="solid">
+                    <Content
+                      sizePreset="main-ui"
+                      icon={SvgAlertCircle}
+                      title="Modify with caution."
+                      description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
+                    />
+                  </OpalCard>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button
+                    prominence="secondary"
+                    onClick={() => setSystemPromptModalOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    prominence="primary"
+                    onClick={submitForm}
+                    disabled={!dirty || isSubmitting}
+                  >
+                    Save
+                  </Button>
+                </Modal.Footer>
+              </Form>
+            )}
+          </Formik>
         </Modal.Content>
       </Modal>
     </>

@@ -1,5 +1,7 @@
 "use client";
 
+import type { RichStr } from "@opal/types";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
 import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
@@ -12,9 +14,9 @@ interface OrientationLayoutProps {
   disabled?: boolean;
   nonInteractive?: boolean;
   children?: React.ReactNode;
-  title: string;
+  title: string | RichStr;
   titleSuffix?: string;
-  description?: string;
+  description?: string | RichStr;
   optional?: boolean;
   sizePreset?: "main-content" | "main-ui";
 }
@@ -42,7 +44,7 @@ interface OrientationLayoutProps {
  * ```
  */
 export interface VerticalLayoutProps extends OrientationLayoutProps {
-  subDescription?: React.ReactNode;
+  subDescription?: string | RichStr;
 }
 function VerticalInputLayout({
   name,
@@ -70,7 +72,7 @@ function VerticalInputLayout({
       {name && <ErrorLayout name={name} />}
       {subDescription && (
         <Text secondaryBody text03>
-          {subDescription}
+          {resolveStr(subDescription)}
         </Text>
       )}
     </Section>

@@ -4,7 +4,8 @@ import {
   type InteractiveStatefulProps,
 } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import { Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
@@ -16,12 +17,12 @@ import { Button } from "@opal/components/buttons/button/components";
 // ---------------------------------------------------------------------------
 
 interface FilterButtonProps
-  extends Omit<InteractiveStatefulProps, "variant" | "state"> {
+  extends Omit<InteractiveStatefulProps, "variant" | "state" | "children"> {
   /** Left icon — always visible. */
   icon: IconFunctionComponent;
 
   /** Label text between icon and trailing indicator. */
-  children: string;
+  children: string | RichStr;
 
   /** Whether the filter has an active selection. @default false */
   active?: boolean;
@@ -68,9 +69,9 @@ function FilterButton({
         <Interactive.Container type="button">
           <div className="interactive-foreground flex flex-row items-center gap-1">
             {iconWrapper(Icon, "lg", true)}
-            <span className="whitespace-nowrap font-main-ui-action">
+            <Text font="main-ui-action" color="inherit" nowrap>
               {children}
-            </span>
+            </Text>
             <div style={{ visibility: active ? "hidden" : "visible" }}>
               {iconWrapper(ChevronIcon, "lg", true)}
             </div>

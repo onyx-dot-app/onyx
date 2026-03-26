@@ -29,6 +29,14 @@ export interface HookResponse {
   updated_at: string;
 }
 
+export interface HookFormState {
+  name: string;
+  endpoint_url: string;
+  api_key: string;
+  fail_strategy: HookFailStrategy;
+  timeout_seconds: string;
+}
+
 export interface HookCreateRequest {
   name: string;
   hook_point: HookPoint;

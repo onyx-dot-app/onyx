@@ -2651,6 +2651,15 @@ class ChatMessage(Base):
         nullable=True,
     )
 
+    # For multi-model turns: the user message points to which assistant response
+    # was selected as the preferred one to continue the conversation with.
+    preferred_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # The display name of the model that generated this assistant message
+    model_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # What does this message contain
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
@@ -2715,6 +2724,12 @@ class ChatMessage(Base):
     latest_child_message: Mapped["ChatMessage | None"] = relationship(
         "ChatMessage",
         foreign_keys=[latest_child_message_id],
+        remote_side="ChatMessage.id",
+    )
+
+    preferred_response: Mapped["ChatMessage | None"] = relationship(
+        "ChatMessage",
+        foreign_keys=[preferred_response_id],
         remote_side="ChatMessage.id",
     )
 
@@ -3119,8 +3134,6 @@ class VoiceProvider(Base):
     # STT and TTS can use different providers - only one provider per type
     is_default_stt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_default_tts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
-    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

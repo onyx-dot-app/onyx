@@ -10,7 +10,7 @@ import type { RichStr } from "@opal/types";
 
 const SAFE_PROTOCOL = /^https?:|^mailto:|^tel:/i;
 
-const ALLOWED_ELEMENTS = ["p", "a", "strong", "em", "code", "del"];
+const ALLOWED_ELEMENTS = ["p", "br", "a", "strong", "em", "code", "del"];
 
 const INLINE_COMPONENTS = {
   p: ({ children }: { children?: ReactNode }) => <>{children}</>,
@@ -41,6 +41,11 @@ interface InlineMarkdownProps {
 }
 
 export default function InlineMarkdown({ content }: InlineMarkdownProps) {
+  // Convert \n to CommonMark hard line breaks (two trailing spaces + newline).
+  // react-markdown renders these as <br />, which inherits the parent's
+  // line-height for font-appropriate spacing.
+  const normalized = content.replace(/\n/g, "  \n");
+
   return (
     <ReactMarkdown
       components={INLINE_COMPONENTS}
@@ -48,7 +53,7 @@ export default function InlineMarkdown({ content }: InlineMarkdownProps) {
       unwrapDisallowed
       remarkPlugins={[remarkGfm]}
     >
-      {content}
+      {normalized}
     </ReactMarkdown>
   );
 }
