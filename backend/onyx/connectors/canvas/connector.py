@@ -36,11 +36,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _html_to_text(html: str | None) -> str:
-    """Strip HTML tags and return plain text."""
-    if not html:
-        return ""
-    return parse_html_page_basic(html)
 
 
 class CanvasCourse(BaseModel):
@@ -334,8 +329,8 @@ class CanvasConnector(
 
         link = f"{self.canvas_base_url}/courses/{page.course_id}/pages/{page.url}"
 
-        text_parts = [page.title, link]
-        body_text = _html_to_text(page.body)
+        text_parts = [page.title]
+        body_text = parse_html_page_basic(page.body) if page.body else ""
         if body_text:
             text_parts.append(body_text)
 
@@ -359,8 +354,8 @@ class CanvasConnector(
     ) -> Document:
         """Convert a Canvas assignment to a Document."""
 
-        text_parts = [assignment.name, assignment.html_url]
-        desc_text = _html_to_text(assignment.description)
+        text_parts = [assignment.name]
+        desc_text = parse_html_page_basic(assignment.description) if assignment.description else ""
         if desc_text:
             text_parts.append(desc_text)
         if assignment.due_at:
@@ -391,8 +386,8 @@ class CanvasConnector(
     ) -> Document:
         """Convert a Canvas announcement to a Document."""
 
-        text_parts = [announcement.title, announcement.html_url]
-        msg_text = _html_to_text(announcement.message)
+        text_parts = [announcement.title]
+        msg_text = parse_html_page_basic(announcement.message) if announcement.message else ""
         if msg_text:
             text_parts.append(msg_text)
 
