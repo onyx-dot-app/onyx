@@ -24,6 +24,7 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
+  SvgAlertCircle,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
@@ -44,7 +45,7 @@ import {
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import { Button } from "@opal/components";
+import { Button, Text, Card as OpalCard } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
@@ -796,13 +797,7 @@ function ChatPreferencesForm() {
                   onClose={() => setSystemPromptModalOpen(false)}
                 />
                 <Modal.Body>
-                  <InputLayouts.Vertical
-                    title="Prompt"
-                    subDescription={markdown(
-                      "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used."
-                    )}
-                    nonInteractive
-                  >
+                  <Section gap={0.25} alignItems="start">
                     <InputTextAreaField
                       name="system_prompt"
                       placeholder="Enter your system prompt..."
@@ -810,7 +805,20 @@ function ChatPreferencesForm() {
                       maxRows={20}
                       autoResize
                     />
-                  </InputLayouts.Vertical>
+                    <Text font="secondary-body" color="text-03">
+                      {markdown(
+                        "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used."
+                      )}
+                    </Text>
+                  </Section>
+                  <OpalCard backgroundVariant="none" borderVariant="solid">
+                    <Content
+                      sizePreset="main-ui"
+                      icon={SvgAlertCircle}
+                      title="Modify with caution."
+                      description="System prompt affect all chats, agent, and projects. Significant changes may degrade response quality."
+                    />
+                  </OpalCard>
                 </Modal.Body>
                 <Modal.Footer>
                   <Button
