@@ -17,12 +17,16 @@ import {
 } from "@/lib/billing";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useUser } from "@/providers/UserProvider";
+import Message from "@/refresh-components/messages/Message";
 
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
 import BillingDetailsView from "./BillingDetailsView";
 import LicenseActivationCard from "./LicenseActivationCard";
 import "./billing.css";
+
+// sessionStorage key: value is a unix-ms expiry timestamp
+const BILLING_ACTIVATING_KEY = "billing_license_activating_until";
 
 // ----------------------------------------------------------------------------
 // Types
@@ -105,6 +109,14 @@ export default function BillingPage() {
   const [transitionType, setTransitionType] = useState<
     "expand" | "collapse" | "fade"
   >("fade");
+  const [isActivating, setIsActivating] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const raw = sessionStorage.getItem(BILLING_ACTIVATING_KEY);
+    if (!raw) return false;
+    if (Number(raw) > Date.now()) return true;
+    sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
+    return false;
+  });
 
   const {
     data: billingData,
@@ -206,8 +218,13 @@ export default function BillingPage() {
             "Failed to sync license after billing return:",
             lastError
           );
-          // Navigate to details regardless — the user just paid and shouldn't
-          // be stranded on the plans view. They can refresh to pick up the license.
+          // Show an activating banner and keep retrying in the background.
+          // The user just paid — they must not be stranded on the plans view.
+          sessionStorage.setItem(
+            BILLING_ACTIVATING_KEY,
+            String(Date.now() + 120_000)
+          );
+          setIsActivating(true);
           changeView("details");
         }
       }
@@ -219,6 +236,40 @@ export default function BillingPage() {
       cancelled = true;
     };
   }, [searchParams, router, refreshBilling, refreshLicense]);
+
+  // Poll every 15s while activating, up to 2 minutes, to detect when the license arrives.
+  useEffect(() => {
+    if (!isActivating) return;
+
+    let requestInFlight = false;
+
+    const intervalId = setInterval(async () => {
+      if (requestInFlight) return;
+      const raw = sessionStorage.getItem(BILLING_ACTIVATING_KEY);
+      if (!raw || Number(raw) <= Date.now()) {
+        // Expired — stop waiting
+        sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
+        setIsActivating(false);
+        return;
+      }
+      requestInFlight = true;
+      try {
+        await claimLicense(undefined);
+        sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
+        setIsActivating(false);
+        refreshLicense();
+        refreshBilling();
+        router.refresh();
+        changeView("details");
+      } catch {
+        // License not ready yet — keep polling
+      } finally {
+        requestInFlight = false;
+      }
+    }, 15_000);
+
+    return () => clearInterval(intervalId);
+  }, [isActivating]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefresh = async () => {
     await Promise.all([
@@ -415,6 +466,22 @@ export default function BillingPage() {
       />
       <SettingsLayouts.Body>
         <div className="flex flex-col items-center gap-6">
+          {isActivating && (
+            <Message
+              static
+              warning
+              large
+              text="Your license is still activating"
+              description="Your license is being processed. This page will update automatically once confirmed."
+              icon
+              close
+              onClose={() => {
+                sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
+                setIsActivating(false);
+              }}
+              className="w-full"
+            />
+          )}
           {renderContent()}
           {renderFooter()}
         </div>

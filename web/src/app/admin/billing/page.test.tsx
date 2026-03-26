@@ -69,6 +69,31 @@ jest.mock("./LicenseActivationCard", () => ({
   default: () => <div data-testid="license-activation-card" />,
 }));
 
+jest.mock("@/refresh-components/messages/Message", () => ({
+  __esModule: true,
+  default: ({
+    text,
+    description,
+    onClose,
+  }: {
+    text: string;
+    description?: string;
+    onClose?: () => void;
+  }) => (
+    <div data-testid="activating-banner">
+      <span data-testid="activating-banner-text">{text}</span>
+      {description && (
+        <span data-testid="activating-banner-description">{description}</span>
+      )}
+      {onClose && (
+        <button data-testid="activating-banner-close" onClick={onClose}>
+          Close
+        </button>
+      )}
+    </div>
+  ),
+}));
+
 jest.mock("@/lib/billing", () => ({
   useBillingInformation: jest.fn(),
   useLicense: jest.fn(),
@@ -109,6 +134,8 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     setupHooks();
     // Default: no billing-return params
     mockSearchParams.get.mockReturnValue(null);
+    // Clear any activating state from prior tests
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -227,5 +254,134 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     });
 
     expect(mockClaimLicense).not.toHaveBeenCalled();
+  });
+
+  test("shows activating banner and sets sessionStorage on 3x retry failure", async () => {
+    mockSearchParams.get.mockImplementation((key: string) =>
+      key === "session_id" ? "cs_all_fail" : null
+    );
+    mockClaimLicense.mockRejectedValue(new Error("Webhook not processed yet"));
+
+    const consoleSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    render(<BillingPage />);
+
+    await act(async () => {
+      await jest.runAllTimersAsync();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("activating-banner")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("activating-banner-text")).toHaveTextContent(
+      "Your license is still activating"
+    );
+    expect(
+      sessionStorage.getItem("billing_license_activating_until")
+    ).not.toBeNull();
+
+    consoleSpy.mockRestore();
+  });
+
+  test("banner not rendered when no activating state", async () => {
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<BillingPage />);
+
+    await act(async () => {
+      await jest.runAllTimersAsync();
+    });
+
+    expect(screen.queryByTestId("activating-banner")).not.toBeInTheDocument();
+  });
+
+  test("banner shown on mount when sessionStorage key is set and not expired", async () => {
+    sessionStorage.setItem(
+      "billing_license_activating_until",
+      String(Date.now() + 120_000)
+    );
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<BillingPage />);
+
+    // Flush React effects — banner is visible from lazy state init, no timer advancement needed
+    await act(async () => {});
+
+    expect(screen.getByTestId("activating-banner")).toBeInTheDocument();
+  });
+
+  test("banner not shown on mount when sessionStorage key is expired", async () => {
+    sessionStorage.setItem(
+      "billing_license_activating_until",
+      String(Date.now() - 1000)
+    );
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<BillingPage />);
+
+    await act(async () => {
+      await jest.runAllTimersAsync();
+    });
+
+    expect(screen.queryByTestId("activating-banner")).not.toBeInTheDocument();
+    expect(
+      sessionStorage.getItem("billing_license_activating_until")
+    ).toBeNull();
+  });
+
+  test("poll calls claimLicense after 15s and clears banner on success", async () => {
+    sessionStorage.setItem(
+      "billing_license_activating_until",
+      String(Date.now() + 120_000)
+    );
+    mockSearchParams.get.mockReturnValue(null);
+    // Poll attempt succeeds
+    mockClaimLicense.mockResolvedValueOnce({ success: true });
+
+    render(<BillingPage />);
+
+    // Flush effects — banner visible from lazy state init
+    await act(async () => {});
+    expect(screen.getByTestId("activating-banner")).toBeInTheDocument();
+
+    // Advance past one poll interval (15s)
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(mockClaimLicense).toHaveBeenCalledWith(undefined);
+    expect(screen.queryByTestId("activating-banner")).not.toBeInTheDocument();
+    expect(
+      sessionStorage.getItem("billing_license_activating_until")
+    ).toBeNull();
+    expect(mockRefreshBilling).toHaveBeenCalled();
+    expect(mockRefreshLicense).toHaveBeenCalled();
+    expect(mockRouter.refresh).toHaveBeenCalled();
+  });
+
+  test("close button removes banner and clears sessionStorage", async () => {
+    sessionStorage.setItem(
+      "billing_license_activating_until",
+      String(Date.now() + 120_000)
+    );
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<BillingPage />);
+
+    // Flush effects — banner visible from lazy state init
+    await act(async () => {});
+    expect(screen.getByTestId("activating-banner")).toBeInTheDocument();
+
+    const closeButton = screen.getByTestId("activating-banner-close");
+    await act(async () => {
+      closeButton.click();
+    });
+
+    expect(screen.queryByTestId("activating-banner")).not.toBeInTheDocument();
+    expect(
+      sessionStorage.getItem("billing_license_activating_until")
+    ).toBeNull();
   });
 });
