@@ -901,7 +901,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             search_hits = self._client.search(
                 body=query_body,
                 search_pipeline_id=None,
-                search_type=OpenSearchSearchType.ID_RETRIEVAL,
+                search_type=OpenSearchSearchType.DOC_ID_RETRIEVAL,
             )
             inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
                 _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(

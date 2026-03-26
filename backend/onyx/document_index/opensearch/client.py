@@ -933,7 +933,7 @@ class OpenSearchIndexClient(OpenSearchClient):
     def search_for_document_ids(
         self,
         body: dict[str, Any],
-        search_type: OpenSearchSearchType = OpenSearchSearchType.DOCUMENT_IDS,
+        search_type: OpenSearchSearchType = OpenSearchSearchType.UNKNOWN,
     ) -> list[str]:
         """Searches the index and returns only document chunk IDs.
 

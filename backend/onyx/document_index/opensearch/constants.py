@@ -60,8 +60,7 @@ class OpenSearchSearchType(str, Enum):
     KEYWORD = "keyword"
     SEMANTIC = "semantic"
     RANDOM = "random"
-    ID_RETRIEVAL = "id_retrieval"
-    DOCUMENT_IDS = "document_ids"
+    DOC_ID_RETRIEVAL = "doc_id_retrieval"
     UNKNOWN = "unknown"
 
 
