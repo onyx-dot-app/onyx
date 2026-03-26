@@ -495,7 +495,9 @@ class WorkerHeartbeatMonitor:
                             "worker-offline": self._on_offline,
                         },
                     )
-                    recv.capture(limit=None, timeout=None, wakeup=True)
+                    recv.capture(
+                        limit=None, timeout=self._HEARTBEAT_TIMEOUT_SECONDS, wakeup=True
+                    )
             except Exception:
                 if self._running:
                     logger.debug(
