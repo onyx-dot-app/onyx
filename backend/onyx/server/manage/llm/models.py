@@ -463,3 +463,4 @@ class BifrostFinalModelResponse(BaseModel):
     display_name: str  # Human-readable name from Bifrost API
     max_input_tokens: int | None
     supports_image_input: bool
+    supports_reasoning: bool
