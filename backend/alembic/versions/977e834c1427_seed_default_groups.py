@@ -34,9 +34,7 @@ def _find_available_name(conn: sa.engine.Connection, base: str) -> str:
     attempt = 1
     while attempt <= MAX_RENAME_ATTEMPTS:
         exists = conn.execute(
-            sa.text(
-                "SELECT 1 FROM user_group WHERE LOWER(name) = LOWER(:name) LIMIT 1"
-            ),
+            sa.text("SELECT 1 FROM user_group WHERE name = :name LIMIT 1"),
             {"name": candidate},
         ).fetchone()
         if exists is None:
@@ -55,9 +53,7 @@ def upgrade() -> None:
     for group_name, permission_value in DEFAULT_GROUPS:
         # Step 1: Rename ALL existing groups that clash with the canonical name.
         conflicting = conn.execute(
-            sa.text(
-                "SELECT id, name FROM user_group " "WHERE LOWER(name) = LOWER(:name)"
-            ),
+            sa.text("SELECT id, name FROM user_group " "WHERE name = :name"),
             {"name": group_name},
         ).fetchall()
 
