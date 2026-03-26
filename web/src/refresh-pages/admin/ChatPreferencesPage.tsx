@@ -799,7 +799,7 @@ function ChatPreferencesForm() {
                   <InputLayouts.Vertical
                     title="Prompt"
                     subDescription={markdown(
-                      "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools. Only included when search tools are used."
+                      "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used."
                     )}
                     nonInteractive
                   >
