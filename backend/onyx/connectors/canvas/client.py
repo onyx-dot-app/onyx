@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
-
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -20,9 +19,7 @@ _CANVAS_API_VERSION: str = "/api/v1"
 # Matches the "next" URL in a Canvas Link header, e.g.:
 #   <https://canvas.example.com/api/v1/courses?page=2>; rel="next"
 # Captures the URL inside the angle brackets.
-_NEXT_LINK_PATTERN: re.Pattern[str] = re.compile(
-    r'<([^>]+)>;\s*rel="next"'
-)
+_NEXT_LINK_PATTERN: re.Pattern[str] = re.compile(r'<([^>]+)>;\s*rel="next"')
 
 
 _STATUS_TO_ERROR_CODE: dict[int, OnyxErrorCode] = {
@@ -59,13 +56,12 @@ class CanvasApiClient:
 
         self._bearer_token = bearer_token
         self.base_url = (
-            canvas_base_url.rstrip("/")
-            .removesuffix(_CANVAS_API_VERSION)
+            canvas_base_url.rstrip("/").removesuffix(_CANVAS_API_VERSION)
             + _CANVAS_API_VERSION
         )
         # Hostname is already validated above; reuse parsed_base instead
         # of re-parsing.  Used by _parse_next_link to validate pagination URLs.
-        self._expected_host: str = parsed_base.hostname  # type: ignore[assignment]
+        self._expected_host: str = parsed_base.hostname
 
     def get(
         self,
@@ -105,8 +101,7 @@ class CanvasApiClient:
                     detail=f"Invalid JSON in Canvas response: {e}",
                 )
             logger.warning(
-                "Failed to parse JSON from Canvas error response "
-                "(status=%d): %s",
+                "Failed to parse JSON from Canvas error response (status=%d): %s",
                 response.status_code,
                 e,
             )

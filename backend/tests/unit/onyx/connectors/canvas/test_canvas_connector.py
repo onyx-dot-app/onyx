@@ -32,7 +32,6 @@ def _mock_response(
     return resp
 
 
-
 # ---------------------------------------------------------------------------
 # CanvasApiClient.__init__ tests
 # ---------------------------------------------------------------------------
@@ -211,7 +210,9 @@ class TestGet:
         assert kwargs["params"] is None
 
     @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_error_extracts_message_from_error_dict(self, mock_requests: MagicMock) -> None:
+    def test_error_extracts_message_from_error_dict(
+        self, mock_requests: MagicMock
+    ) -> None:
         """Shape 1: {"error": {"message": "Not authorized"}}"""
         mock_requests.get.return_value = _mock_response(
             403, {"error": {"message": "Not authorized"}}
@@ -226,7 +227,9 @@ class TestGet:
         assert result == expected
 
     @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_error_extracts_message_from_error_string(self, mock_requests: MagicMock) -> None:
+    def test_error_extracts_message_from_error_string(
+        self, mock_requests: MagicMock
+    ) -> None:
         """Shape 2: {"error": "Invalid access token"}"""
         mock_requests.get.return_value = _mock_response(
             401, {"error": "Invalid access token"}
@@ -241,7 +244,9 @@ class TestGet:
         assert result == expected
 
     @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_error_extracts_message_from_errors_list(self, mock_requests: MagicMock) -> None:
+    def test_error_extracts_message_from_errors_list(
+        self, mock_requests: MagicMock
+    ) -> None:
         """Shape 3: {"errors": [{"message": "Invalid query"}]}"""
         mock_requests.get.return_value = _mock_response(
             400, {"errors": [{"message": "Invalid query"}]}
@@ -256,7 +261,9 @@ class TestGet:
         assert result == expected
 
     @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_error_dict_takes_priority_over_errors_list(self, mock_requests: MagicMock) -> None:
+    def test_error_dict_takes_priority_over_errors_list(
+        self, mock_requests: MagicMock
+    ) -> None:
         """When both error shapes are present, error dict wins."""
         mock_requests.get.return_value = _mock_response(
             403, {"error": "Specific error", "errors": [{"message": "Generic"}]}
