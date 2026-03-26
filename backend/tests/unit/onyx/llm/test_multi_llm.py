@@ -1462,3 +1462,69 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         assert (
             "tool_choice" not in kwargs
         ), "tool_choice must not be sent to providers when no tools are provided"
+
+
+def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        api_base="https://bifrost.example.com/",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="anthropic/claude-sonnet-4-6",
+        max_input_tokens=32000,
+    )
+
+    assert llm._custom_llm_provider == "openai"
+    assert llm._api_base == "https://bifrost.example.com/v1"
+    assert llm._model_kwargs["api_base"] == "https://bifrost.example.com/v1"
+
+
+def test_bifrost_claude_includes_allowed_openai_params() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        api_base="https://bifrost.example.com",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="anthropic/claude-sonnet-4-6",
+        max_input_tokens=32000,
+    )
+
+    messages: LanguageModelInput = [UserMessage(content="Use a tool if needed")]
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "lookup",
+                "description": "Look up data",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+            },
+        }
+    ]
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Done"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="anthropic/claude-sonnet-4-6",
+        ),
+    ]
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = mock_stream_chunks
+
+        llm.invoke(messages, tools=tools)
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["model"] == "anthropic/claude-sonnet-4-6"
+        assert kwargs["base_url"] == "https://bifrost.example.com/v1"
+        assert kwargs["custom_llm_provider"] == "openai"
+        assert kwargs["allowed_openai_params"] == ["tool_choice"]

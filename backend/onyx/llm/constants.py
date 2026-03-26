@@ -25,6 +25,7 @@ class LlmProviderNames(str, Enum):
     LM_STUDIO = "lm_studio"
     MISTRAL = "mistral"
     LITELLM_PROXY = "litellm_proxy"
+    BIFROST = "bifrost"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -44,6 +45,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OLLAMA_CHAT,
     LlmProviderNames.LM_STUDIO,
     LlmProviderNames.LITELLM_PROXY,
+    LlmProviderNames.BIFROST,
 ]
 
 
@@ -61,6 +63,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
     LlmProviderNames.LM_STUDIO: "LM Studio",
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
+    LlmProviderNames.BIFROST: "Bifrost",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -112,6 +115,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.VERTEX_AI,
     LlmProviderNames.AZURE,
     LlmProviderNames.LITELLM_PROXY,
+    LlmProviderNames.BIFROST,
 }
 
 # Model family name mappings for display name generation
