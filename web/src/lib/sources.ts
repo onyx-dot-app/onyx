@@ -290,6 +290,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "TestRail",
     category: SourceCategory.TicketingAndTaskManagement,
   },
+  jira_service_management: {
+    icon: JiraIcon,
+    displayName: "Jira Service Management",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
+  },
 
   // Messaging
   slack: slackMetadata,
