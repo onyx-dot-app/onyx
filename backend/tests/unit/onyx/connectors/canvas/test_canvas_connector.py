@@ -725,3 +725,164 @@ class TestValidateConnectorSettings:
 
         with pytest.raises(UnexpectedValidationError):
             connector.validate_connector_settings()
+
+
+# ---------------------------------------------------------------------------
+# _list_* pagination tests
+# ---------------------------------------------------------------------------
+
+NEXT_PAGE_URL = f"{FAKE_BASE_URL}/api/v1/courses?page=2&per_page=100"
+
+
+class TestListCourses:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_single_page(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(
+            json_data=[_mock_course(1), _mock_course(2, "CS201", "Data Structures")]
+        )
+        connector = _build_connector()
+
+        result = connector._list_courses()
+
+        assert len(result) == 2
+        assert result[0].id == 1
+        assert result[1].id == 2
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_two_page_pagination(self, mock_requests: MagicMock) -> None:
+        page1 = _mock_response(
+            json_data=[_mock_course(1)],
+            link_header=f'<{NEXT_PAGE_URL}>; rel="next"',
+        )
+        page2 = _mock_response(json_data=[_mock_course(2, "CS201", "Data Structures")])
+        mock_requests.get.side_effect = [
+            _mock_response(json_data=[_mock_course()]),  # load_credentials
+            page1,
+            page2,
+        ]
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        result = connector._list_courses()
+
+        assert len(result) == 2
+        assert result[0].id == 1
+        assert result[1].id == 2
+        assert mock_requests.get.call_count == 3  # 1 for creds + 2 for pages
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_empty_response(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(json_data=[])
+        connector = _build_connector()
+
+        result = connector._list_courses()
+
+        assert result == []
+
+
+class TestListPages:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_single_page(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(
+            json_data=[_mock_page(10), _mock_page(11, "Notes")]
+        )
+        connector = _build_connector()
+
+        result = connector._list_pages(course_id=1)
+
+        assert len(result) == 2
+        assert result[0].page_id == 10
+        assert result[1].page_id == 11
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_two_page_pagination(self, mock_requests: MagicMock) -> None:
+        page1 = _mock_response(
+            json_data=[_mock_page(10)],
+            link_header=f'<{NEXT_PAGE_URL}>; rel="next"',
+        )
+        page2 = _mock_response(json_data=[_mock_page(11, "Notes")])
+        mock_requests.get.side_effect = [
+            _mock_response(json_data=[_mock_course()]),  # load_credentials
+            page1,
+            page2,
+        ]
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        result = connector._list_pages(course_id=1)
+
+        assert len(result) == 2
+        assert result[0].page_id == 10
+        assert result[1].page_id == 11
+
+
+class TestListAssignments:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_single_page(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(
+            json_data=[_mock_assignment(20), _mock_assignment(21, "Quiz 1")]
+        )
+        connector = _build_connector()
+
+        result = connector._list_assignments(course_id=1)
+
+        assert len(result) == 2
+        assert result[0].id == 20
+        assert result[1].id == 21
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_two_page_pagination(self, mock_requests: MagicMock) -> None:
+        page1 = _mock_response(
+            json_data=[_mock_assignment(20)],
+            link_header=f'<{NEXT_PAGE_URL}>; rel="next"',
+        )
+        page2 = _mock_response(json_data=[_mock_assignment(21, "Quiz 1")])
+        mock_requests.get.side_effect = [
+            _mock_response(json_data=[_mock_course()]),  # load_credentials
+            page1,
+            page2,
+        ]
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        result = connector._list_assignments(course_id=1)
+
+        assert len(result) == 2
+        assert result[0].id == 20
+        assert result[1].id == 21
+
+
+class TestListAnnouncements:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_single_page(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(
+            json_data=[_mock_announcement(30), _mock_announcement(31, "Update")]
+        )
+        connector = _build_connector()
+
+        result = connector._list_announcements(course_id=1)
+
+        assert len(result) == 2
+        assert result[0].id == 30
+        assert result[1].id == 31
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_two_page_pagination(self, mock_requests: MagicMock) -> None:
+        page1 = _mock_response(
+            json_data=[_mock_announcement(30)],
+            link_header=f'<{NEXT_PAGE_URL}>; rel="next"',
+        )
+        page2 = _mock_response(json_data=[_mock_announcement(31, "Update")])
+        mock_requests.get.side_effect = [
+            _mock_response(json_data=[_mock_course()]),  # load_credentials
+            page1,
+            page2,
+        ]
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        result = connector._list_announcements(course_id=1)
+
+        assert len(result) == 2
+        assert result[0].id == 30
+        assert result[1].id == 31
