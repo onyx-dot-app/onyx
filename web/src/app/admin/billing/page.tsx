@@ -109,14 +109,7 @@ export default function BillingPage() {
   const [transitionType, setTransitionType] = useState<
     "expand" | "collapse" | "fade"
   >("fade");
-  const [isActivating, setIsActivating] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    const raw = sessionStorage.getItem(BILLING_ACTIVATING_KEY);
-    if (!raw) return false;
-    if (Number(raw) > Date.now()) return true;
-    sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
-    return false;
-  });
+  const [isActivating, setIsActivating] = useState<boolean>(false);
 
   const {
     data: billingData,
@@ -166,6 +159,17 @@ export default function BillingPage() {
     licenseData?.has_license,
     view,
   ]);
+
+  // Read activating state from sessionStorage after mount (avoids SSR hydration mismatch)
+  useEffect(() => {
+    const raw = sessionStorage.getItem(BILLING_ACTIVATING_KEY);
+    if (!raw) return;
+    if (Number(raw) > Date.now()) {
+      setIsActivating(true);
+    } else {
+      sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
+    }
+  }, []);
 
   // Show license activation card when there's a Stripe error
   useEffect(() => {
@@ -218,14 +222,13 @@ export default function BillingPage() {
             "Failed to sync license after billing return:",
             lastError
           );
-          // Show an activating banner and keep retrying in the background.
-          // The user just paid — they must not be stranded on the plans view.
+          // Show an activating banner on the plans view and keep retrying in the background.
           sessionStorage.setItem(
             BILLING_ACTIVATING_KEY,
             String(Date.now() + 120_000)
           );
           setIsActivating(true);
-          changeView("details");
+          changeView("plans");
         }
       }
       if (!cancelled) refreshBilling();
@@ -235,10 +238,9 @@ export default function BillingPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     // changeView intentionally omitted: it only calls stable state setters and the
     // effect runs at most once (when session_id/portal_return params are present).
-  }, [searchParams, router, refreshBilling, refreshLicense]);
+  }, [searchParams, router, refreshBilling, refreshLicense]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll every 15s while activating, up to 2 minutes, to detect when the license arrives.
   useEffect(() => {
@@ -250,7 +252,8 @@ export default function BillingPage() {
       if (requestInFlight) return;
       const raw = sessionStorage.getItem(BILLING_ACTIVATING_KEY);
       if (!raw || Number(raw) <= Date.now()) {
-        // Expired — stop waiting
+        // Expired — stop immediately without waiting for React cleanup
+        clearInterval(intervalId);
         sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
         setIsActivating(false);
         return;
@@ -477,7 +480,7 @@ export default function BillingPage() {
               warning
               large
               text="Your license is still activating"
-              description="Your license is being processed. This page will update automatically once confirmed."
+              description="Your license is being processed. You'll be taken to billing details automatically once confirmed."
               icon
               close
               onClose={() => {

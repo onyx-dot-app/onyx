@@ -209,9 +209,9 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     await waitFor(() => {
       expect(mockClaimLicense).toHaveBeenCalledTimes(3);
     });
-    // User just paid — they must not be stranded on plans view
+    // User stays on plans view with the activating banner
     await waitFor(() => {
-      expect(screen.getByTestId("billing-details-view")).toBeInTheDocument();
+      expect(screen.getByTestId("plans-view")).toBeInTheDocument();
     });
     // refreshBilling still fires so billing state is up to date
     expect(mockRefreshBilling).toHaveBeenCalled();
