@@ -74,17 +74,21 @@ def process_jsm_issue(
     )
     if doc:
         doc.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
-        
+
         # Add JSM-specific fields if available
         # Customer Request Type
         request_type = best_effort_get_field_from_issue(issue, _FIELD_CUSTOMER_REQUEST_TYPE)
         if request_type:
             # Request Type is usually an object with a 'requestType' name or similar
             if isinstance(request_type, dict):
-                doc.metadata["request_type"] = request_type.get("requestType", {}).get("name") or str(request_type)
+                inner_request_type = request_type.get("requestType")
+                if isinstance(inner_request_type, dict):
+                    name = inner_request_type.get("name")
+                    doc.metadata["request_type"] = name or str(request_type)
+                else:
+                    doc.metadata["request_type"] = str(request_type)
             else:
                 doc.metadata["request_type"] = str(request_type)
-                
     return doc
 
 
