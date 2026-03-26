@@ -186,7 +186,12 @@ class CanvasApiClient:
 
         Assumes endpoint is non-empty (e.g. ``"courses"``, ``"announcements"``).
         Only called on a first request, endpoint must be set for first request.
+        Verify endpoint exists in case of future changes where endpoint might be optional.
         Leading slashes are stripped to avoid double-slash in the result.
         self.base_url is already normalized with no trailing slash.
         """
-        return self.base_url + "/" + endpoint.lstrip("/")
+        final_url = self.base_url
+        clean_endpoint = endpoint.lstrip("/")
+        if clean_endpoint:
+            final_url += "/" + clean_endpoint
+        return final_url
