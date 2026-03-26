@@ -30,7 +30,10 @@ def connector() -> JiraServiceManagementConnector:
     api_token = os.environ.get("JSM_API_TOKEN")
 
     if not base_url or not user_email or not api_token:
-        pytest.skip("JSM credentials not fully configured — skipping live integration test.")
+        pytest.fail(
+            "JSM credentials not configured — set JSM_BASE_URL, JSM_USER_EMAIL, "
+            "and JSM_API_TOKEN env vars. Tests cannot run without credentials."
+        )
 
     conn = JiraServiceManagementConnector(
         jsm_base_url=base_url,
@@ -74,6 +77,10 @@ def test_poll_source_returns_documents(connector: JiraServiceManagementConnector
     # May be empty if no issues updated in the last 30 days — that is acceptable
     for doc in docs:
         assert doc.doc_updated_at is not None, "poll_source docs should have updated_at."
+        assert thirty_days_ago <= doc.doc_updated_at <= now, (
+            f"poll_source doc updated_at {doc.doc_updated_at} falls outside "
+            f"the requested window [{thirty_days_ago}, {now}] — poll filtering regressed."
+        )
 
 
 def test_validate_connector_settings(connector: JiraServiceManagementConnector) -> None:

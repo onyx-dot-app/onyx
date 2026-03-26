@@ -64,28 +64,33 @@ def format_sla_as_text(sla_data: dict[str, Any]) -> str:
     if not sla_data:
         return ""
 
-    # Check if there are actual SLA values
     values = sla_data.get("values", [])
     if not values:
         return ""
 
-    lines = ["SLA Status:"]
+    lines: list[str] = []
     for sla in values:
-        # SLA name is at top level, not in goal object
         name = sla.get("name", "Unknown SLA")
-        completed_cycles = sla.get("completedCycles", [])
-        breached = any(c.get("breached", False) for c in completed_cycles)
-        ongoing = sla.get("ongoingCycle") or {}
-        time_remaining = ongoing.get("remainingTime") or {}
+        ongoing: dict[str, Any] = sla.get("ongoingCycle") or {}
+        completed_cycles: list[dict[str, Any]] = sla.get("completedCycles") or []
 
-        if ongoing.get("completed", False):
-            status = "Completed"
-        elif breached:
+        breached: bool = ongoing.get("breached", False) or any(
+            c.get("breached", False) for c in completed_cycles
+        )
+        completed: bool = bool(completed_cycles) and not ongoing
+
+        time_remaining: dict[str, Any] = ongoing.get("remainingTime") or {}
+
+        if breached:
             status = "BREACHED"
+        elif completed:
+            status = "Completed"
+        elif not ongoing:
+            status = "Not started"
         else:
-            remaining = time_remaining.get("friendly", "")
-            status = f"{remaining} remaining" if remaining else "In progress"
+            remaining = time_remaining.get("friendly", "unknown")
+            status = f"{remaining} remaining"
 
         lines.append(f"  - {name}: {status}")
 
-    return "\n".join(lines)
+    return "\n".join(lines) if lines else ""

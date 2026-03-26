@@ -45,19 +45,20 @@ def _build_issue_url(base_url: str, issue_key: str) -> str:
 
 
 def _extract_text_from_field(field: Any) -> str:
-    """Extract plain text from a Jira field (ADF or string)."""
+    """Recursively extract plain text from a Jira ADF field or string."""
     if field is None:
         return ""
     if isinstance(field, str):
         return field
     if isinstance(field, dict):
-        # Atlassian Document Format (ADF)
-        texts: list[str] = []
-        for block in field.get("content", []):
-            for inline in block.get("content", []):
-                if inline.get("type") == "text":
-                    texts.append(inline.get("text", ""))
-        return " ".join(texts)
+        if field.get("type") == "text":
+            return field.get("text", "")
+        return " ".join(
+            _extract_text_from_field(child)
+            for child in (field.get("content") or [])
+        )
+    if isinstance(field, list):
+        return " ".join(_extract_text_from_field(item) for item in field)
     return str(field)
 
 
@@ -255,6 +256,11 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
             logger.info(f"Skipping {issue_key} — exceeds max ticket size.")
             return None
 
+        # Skip issues with no indexable content to avoid hollow documents
+        if not full_text.strip():
+            logger.debug(f"Skipping {issue_key} — no indexable content.")
+            return None
+
         # Metadata
         metadata: dict[str, str | list[str]] = {}
         if status_obj := fields.get("status"):
@@ -281,7 +287,7 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
         if updated_str:
             try:
                 doc_updated_at = datetime.fromisoformat(
-                    updated_str.replace("Z", "+00:00")
+                    updated_str.replace("Z", "+00:00").replace("+0000", "+00:00")
                 )
             except ValueError:
                 pass
@@ -320,16 +326,14 @@ class JiraServiceManagementConnector(PollConnector, LoadConnector):
                 result = self._search_jql(jql, start_at=start_at, max_results=page_size)
             except requests.exceptions.HTTPError as exc:
                 if exc.response is not None and exc.response.status_code == 429:
-                    logger.warning(
-                        "Rate limited by Jira API at offset %d/%d — "
-                        "partial results returned. Indexing will resume on next poll.",
-                        start_at,
-                        total,
-                    )
-                    break
+                    raise requests.exceptions.HTTPError(
+                        f"Rate limited by Jira API at offset {start_at} (total {total}). "
+                        f"Raising to allow orchestrator to retry.",
+                        response=exc.response,
+                    ) from exc
                 raise
             issues = result.get("issues", [])
-            total: int = result.get("total", 0)
+            total = result.get("total", 0)
 
             logger.info(
                 f"JSM: fetched {len(issues)} issues (offset {start_at}/{total})"
