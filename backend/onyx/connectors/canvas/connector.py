@@ -206,6 +206,7 @@ class CanvasConnector(
                 )
                 first_request = False
             else:
+                assert next_url is not None
                 response, next_url = self.canvas_client.get(
                     "", full_url=next_url
                 )
@@ -241,6 +242,7 @@ class CanvasConnector(
                 )
                 first_request = False
             else:
+                assert next_url is not None
                 response, next_url = self.canvas_client.get(
                     "", full_url=next_url
                 )
@@ -272,6 +274,7 @@ class CanvasConnector(
                 )
                 first_request = False
             else:
+                assert next_url is not None
                 response, next_url = self.canvas_client.get(
                     "", full_url=next_url
                 )
@@ -309,6 +312,7 @@ class CanvasConnector(
                 )
                 first_request = False
             else:
+                assert next_url is not None
                 response, next_url = self.canvas_client.get(
                     "", full_url=next_url
                 )
