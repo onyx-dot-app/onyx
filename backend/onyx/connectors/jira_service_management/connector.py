@@ -151,7 +151,34 @@ class JiraServiceManagementConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: JsmConnectorCheckpoint,
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
-        return self.load_from_checkpoint_with_perm_sync(start, end, checkpoint)
+        start_dt = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
+        end_dt = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
+
+        current_offset = checkpoint.offset
+        batch: list[Document | ConnectorFailure] = []
+
+        for issue in self._fetch_issues(start_dt, end_dt, start_at=current_offset):
+            doc = self._process_issue(issue)
+            if doc is not None:
+                batch.append(doc)
+            else:
+                issue_url = build_jira_url(self.jira_base_url, issue.key)
+                batch.append(
+                    ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=issue_url,
+                            document_link=issue_url,
+                        ),
+                        failure_message=f"Failed to process issue {issue.key}",
+                    )
+                )
+            current_offset += 1
+
+            if len(batch) >= self.batch_size:
+                yield batch, JsmConnectorCheckpoint(has_more=True, offset=current_offset)
+                batch = []
+
+        yield batch, JsmConnectorCheckpoint(has_more=False, offset=current_offset)
 
     def _get_project_permissions(
         self, project_key: str, add_prefix: bool = False

@@ -89,7 +89,7 @@ def discover_jsm_custom_field_ids(
         resp = session.get(url, timeout=10)
         resp.raise_for_status()
         fields = resp.json()
-    except Exception as e:
+    except (requests.exceptions.RequestException, ValueError) as e:
         logger.warning(f"Could not discover JSM custom field IDs: {e}")
         return {}
 
