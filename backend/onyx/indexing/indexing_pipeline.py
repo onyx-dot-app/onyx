@@ -165,11 +165,6 @@ def _upsert_documents_in_db(
         )
 
 
-def _get_failed_doc_ids(failures: list[ConnectorFailure]) -> set[str]:
-    """Extract document IDs from a list of connector failures."""
-    return {f.failed_document.document_id for f in failures if f.failed_document}
-
-
 def _spill_chunks_to_disk(
     chunks: list[IndexChunk],
     batch_file: Path,
@@ -247,7 +242,12 @@ def embed_chunks_in_batches(
             request_id=request_id,
         )
         all_embedding_failures.extend(embedding_failures)
-        all_failed_doc_ids.update(_get_failed_doc_ids(embedding_failures))
+        failed_doc_ids = {
+            f.failed_document.document_id
+            for f in embedding_failures
+            if f.failed_document
+        }
+        all_failed_doc_ids.update(failed_doc_ids)
 
         # Only keep successfully embedded chunks for non-failed docs.
         chunks_with_embeddings = [
