@@ -5,9 +5,7 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "@/interfaces/onboarding";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgProgressCircle, SvgX } from "@opal/icons";
 import { Card } from "@/refresh-components/cards";
@@ -55,9 +53,8 @@ const OnboardingHeader = React.memo(
             stepButtonText ? (
               <Section flexDirection="row">
                 {!isWelcomeStep && (
-                  <Text as="p" text03 mainUiBody>
-                    Step {onboardingState.stepIndex} of{" "}
-                    {onboardingState.totalSteps}
+                  <Text as="p" color="text-03">
+                    {`Step ${onboardingState.stepIndex} of ${onboardingState.totalSteps}`}
                   </Text>
                 )}
                 <Disabled disabled={!onboardingState.isButtonActive}>

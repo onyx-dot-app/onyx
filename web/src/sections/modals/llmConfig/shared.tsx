@@ -13,9 +13,14 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import Switch from "@/refresh-components/inputs/Switch";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
-import { Button, LineItemButton, Tag } from "@opal/components";
+import {
+  Button,
+  Card,
+  EmptyMessageCard,
+  LineItemButton,
+  Tag,
+  Text,
+} from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";
 import { WithoutStyles } from "@opal/types";
 import Separator from "@/refresh-components/Separator";
@@ -33,7 +38,6 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/icons/onyx-logo";
-import { Card, EmptyMessageCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -276,7 +280,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                 sizePreset="main-ui"
                 variant="section"
                 rightChildren={
-                  <Text secondaryBody text03>
+                  <Text font="secondary-body" color="text-03">
                     Always shared
                   </Text>
                 }

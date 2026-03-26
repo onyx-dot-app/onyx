@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { renderAsync } from "docx-preview";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
@@ -94,9 +93,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
   if (error) {
     return (
       <Section justifyContent="center" alignItems="center" padding={1.5}>
-        <Text text03 mainUiBody>
-          {error}
-        </Text>
+        <Text color="text-03">{error}</Text>
       </Section>
     );
   }
@@ -147,7 +144,7 @@ export const docxVariant: PreviewVariant = {
       lastDocxResult = null;
       return (
         <Section justifyContent="center" alignItems="center" padding={1.5}>
-          <Text text03 mainUiBody>
+          <Text color="text-03">
             Legacy .doc format cannot be previewed. Download the file to view
             it.
           </Text>

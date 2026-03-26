@@ -6,12 +6,10 @@ import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgSparkle, SvgRefreshCw, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import { Button } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import Separator from "@/refresh-components/Separator";
@@ -104,7 +102,9 @@ export default function NotificationsPopover({
   return (
     <Section gap={0.5} padding={0.25}>
       <Section flexDirection="row" justifyContent="between" padding={0.5}>
-        <Text headingH3>Notifications</Text>
+        <Text font="heading-h3" color="text-05">
+          Notifications
+        </Text>
         <Button icon={SvgX} prominence="tertiary" size="sm" onClick={onClose} />
       </Section>
 
@@ -120,7 +120,7 @@ export default function NotificationsPopover({
         ) : !notifications || notifications.length === 0 ? (
           <div className="h-48">
             <Section>
-              <Text as="p" text03>
+              <Text as="p" color="text-03">
                 No notifications
               </Text>
             </Section>

@@ -2,10 +2,8 @@
 
 import { useRef } from "react";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgUnplug } from "@opal/icons";
 interface DisconnectEntityModalProps {
@@ -58,11 +56,10 @@ export default function DisconnectEntityModal({
         />
 
         <Modal.Body>
-          <Text as="p" text03 mainUiBody>
-            All tools connected to {name} will stop working. You can reconnect
-            to this server later if needed.
+          <Text as="p" color="text-03">
+            {`All tools connected to ${name} will stop working. You can reconnect to this server later if needed.`}
           </Text>
-          <Text as="p" text03 mainUiBody>
+          <Text as="p" color="text-03">
             Are you sure you want to proceed?
           </Text>
         </Modal.Body>

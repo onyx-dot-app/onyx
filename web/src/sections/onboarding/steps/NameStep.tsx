@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useRef } from "react";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import {
   OnboardingState,
@@ -85,11 +84,11 @@ const NameStep = React.memo(
               "w-5 h-5"
             )}
           >
-            <Text as="p" inverted secondaryBody>
+            <Text as="p" font="secondary-body" color="text-inverted-05">
               {userName?.[0]?.toUpperCase()}
             </Text>
           </InputAvatar>
-          <Text as="p" text04 mainUiAction>
+          <Text as="p" font="main-ui-action">
             {userName}
           </Text>
         </div>

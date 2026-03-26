@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Modal from "@/refresh-components/Modal";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
@@ -181,9 +180,7 @@ export default function PreviewModal({
             </Section>
           ) : loadError ? (
             <Section padding={1}>
-              <Text text03 mainUiBody>
-                {loadError}
-              </Text>
+              <Text color="text-03">{loadError}</Text>
             </Section>
           ) : (
             variant.renderContent(ctx)

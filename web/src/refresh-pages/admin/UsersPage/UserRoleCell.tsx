@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { OpenButton } from "@opal/components";
+import { OpenButton, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import {
   SvgCheck,
@@ -13,8 +13,6 @@ import {
   SvgUserManage,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { toast } from "@/hooks/useToast";
@@ -46,7 +44,7 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
 
   if (!user.role) {
     return (
-      <Text as="span" secondaryBody text03>
+      <Text as="span" font="secondary-body" color="text-03">
         —
       </Text>
     );

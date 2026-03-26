@@ -1,14 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgUsers, SvgAlertTriangle } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
 import { inviteUsers } from "./svc";
 
@@ -156,7 +154,7 @@ export default function InviteUsersModal({
                 size={14}
                 className="text-status-warning-05 shrink-0"
               />
-              <Text secondaryBody text03>
+              <Text font="secondary-body" color="text-03">
                 Some email addresses are invalid and will be skipped.
               </Text>
             </div>

@@ -2,9 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
 import EnabledCount from "@/refresh-components/EnabledCount";
@@ -70,7 +68,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
           ))
         ) : isEmpty ? (
           <div className="flex items-center justify-center w-full py-8">
-            <Text as="p" text03 mainUiBody>
+            <Text as="p" color="text-03">
               {searchQuery ? emptySearchMessage : emptyMessage}
             </Text>
           </div>

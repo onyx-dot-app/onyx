@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
@@ -10,8 +10,6 @@ import { logout } from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import { ErrorTextLayout } from "@/layouts/input-layouts";
 
 // App domain should not be hardcoded
@@ -138,7 +136,7 @@ export default function NewTenantModal({
         <Modal.Header icon={SvgUsers} title={title} onClose={onClose} />
 
         <Modal.Body>
-          <Text>{description}</Text>
+          <Text color="text-05">{description}</Text>
           {error && <ErrorTextLayout>{error}</ErrorTextLayout>}
         </Modal.Body>
 

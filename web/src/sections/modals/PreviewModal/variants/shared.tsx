@@ -1,7 +1,5 @@
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgDownload, SvgZoomIn, SvgZoomOut } from "@opal/icons";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { Section } from "@/layouts/general-layouts";
 
@@ -50,8 +48,8 @@ export function ZoomControls({ zoom, onZoomIn, onZoomOut }: ZoomControlsProps) {
           onClick={onZoomOut}
           tooltip="Zoom Out"
         />
-        <Text mainUiMono text03>
-          {zoom}%
+        <Text font="main-ui-mono" color="text-03">
+          {`${zoom}%`}
         </Text>
         <Button
           prominence="tertiary"

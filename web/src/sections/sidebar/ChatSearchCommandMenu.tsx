@@ -15,8 +15,7 @@ import {
 } from "@/sections/sidebar/chatSearchUtils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useCurrentAgent } from "@/hooks/useAgents";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   useChatSearchOptimistic,
   FilterableChat,
@@ -266,11 +265,11 @@ export default function ChatSearchCommandMenu({
                       icon={SvgBubbleText}
                       rightContent={({ isHighlighted }) =>
                         isHighlighted ? (
-                          <Text figureKeystroke text02>
+                          <Text font="figure-keystroke" color="text-02">
                             ↵
                           </Text>
                         ) : (
-                          <Text secondaryBody text03>
+                          <Text font="secondary-body" color="text-03">
                             {formatDisplayTime(chat.time)}
                           </Text>
                         )
@@ -323,11 +322,11 @@ export default function ChatSearchCommandMenu({
                     icon={SvgFolder}
                     rightContent={({ isHighlighted }) =>
                       isHighlighted ? (
-                        <Text figureKeystroke text02>
+                        <Text font="figure-keystroke" color="text-02">
                           ↵
                         </Text>
                       ) : (
-                        <Text secondaryBody text03>
+                        <Text font="secondary-body" color="text-03">
                           {formatDisplayTime(project.time)}
                         </Text>
                       )
