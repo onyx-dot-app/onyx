@@ -46,15 +46,12 @@ function Main() {
     error,
   } = useSWR<APIKey[]>("/api/admin/api-key", errorHandlingFetcher);
 
-  const canCreateKeys = false; // MOCK: hardcoded for screenshot
+  const canCreateKeys = useCloudSubscription();
   const { data: billingData } = useBillingInformation();
-  const billingIsTrialing =
+  const isTrialing =
     billingData !== undefined &&
     hasActiveSubscription(billingData) &&
     billingData.status === BillingStatus.TRIALING;
-  const isTrialing =
-    true || // MOCK: hardcoded for screenshot
-    billingIsTrialing;
 
   const [fullApiKey, setFullApiKey] = useState<string | null>(null);
   const [keyIsGenerating, setKeyIsGenerating] = useState(false);
