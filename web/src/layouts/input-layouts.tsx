@@ -1,5 +1,6 @@
 "use client";
 
+import type { RichStr } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
@@ -12,9 +13,9 @@ interface OrientationLayoutProps {
   disabled?: boolean;
   nonInteractive?: boolean;
   children?: React.ReactNode;
-  title: string;
+  title: string | RichStr;
   titleSuffix?: string;
-  description?: string;
+  description?: string | RichStr;
   optional?: boolean;
   sizePreset?: "main-content" | "main-ui";
 }
