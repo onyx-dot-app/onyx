@@ -3,7 +3,11 @@
 import { Button } from "@opal/components/buttons/button/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import {
+  resolveStr,
+  toPlainString,
+} from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
 
@@ -41,10 +45,10 @@ interface ContentXlProps {
   icon?: IconFunctionComponent;
 
   /** Main title text. */
-  title: string;
+  title: string | RichStr;
 
   /** Optional description below the title. */
-  description?: string;
+  description?: string | RichStr;
 
   /** Enable inline editing of the title. */
   editable?: boolean;
@@ -116,18 +120,18 @@ function ContentXl({
   ref,
 }: ContentXlProps) {
   const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState(title);
+  const [editValue, setEditValue] = useState(toPlainString(title));
 
   const config = CONTENT_XL_PRESETS[sizePreset];
 
   function startEditing() {
-    setEditValue(title);
+    setEditValue(toPlainString(title));
     setEditing(true);
   }
 
   function commit() {
     const value = editValue.trim();
-    if (value && value !== title) onTitleChange?.(value);
+    if (value && value !== toPlainString(title)) onTitleChange?.(value);
     setEditing(false);
   }
 
@@ -214,7 +218,7 @@ function ContentXl({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") commit();
                   if (e.key === "Escape") {
-                    setEditValue(title);
+                    setEditValue(toPlainString(title));
                     setEditing(false);
                   }
                 }}
@@ -231,9 +235,9 @@ function ContentXl({
               )}
               onClick={editable ? startEditing : undefined}
               style={{ height: config.lineHeight }}
-              title={title}
+              title={toPlainString(title)}
             >
-              {title}
+              {resolveStr(title)}
             </span>
           )}
 
@@ -256,9 +260,9 @@ function ContentXl({
           )}
         </div>
 
-        {description && (
+        {description && toPlainString(description) && (
           <div className="opal-content-xl-description font-secondary-body text-text-03">
-            {description}
+            {resolveStr(description)}
           </div>
         )}
       </div>

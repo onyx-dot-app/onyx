@@ -449,40 +449,128 @@ class RedisHealthCollector(_CachedCollector):
         return [memory_used, memory_peak, memory_frag, connected_clients]
 
 
-class WorkerHealthCollector(_CachedCollector):
-    """Collects Celery worker count and process count via inspect ping.
+class WorkerHeartbeatMonitor:
+    """Monitors Celery worker health via the event stream.
 
-    Uses a longer cache TTL (60s) since inspect.ping() is a broadcast
-    command that takes a couple seconds to complete.
-
-    Maintains a set of known worker short-names so that when a worker
-    stops responding, we emit ``up=0`` instead of silently dropping the
-    metric (which would make ``absent()``-style alerts impossible).
+    Subscribes to ``worker-heartbeat``, ``worker-online``, and
+    ``worker-offline`` events via a single persistent connection.
+    Runs in a daemon thread started once during worker setup.
     """
 
-    # Remove a worker from _known_workers after this many consecutive
-    # missed pings (at 60s TTL ≈ 10 minutes of being unreachable).
-    _MAX_CONSECUTIVE_MISSES = 10
+    # Consider a worker down if no heartbeat received for this long.
+    _HEARTBEAT_TIMEOUT_SECONDS = 120.0
 
-    def __init__(self, cache_ttl: float = 60.0) -> None:
+    def __init__(self, celery_app: Any) -> None:
+        self._app = celery_app
+        self._worker_last_seen: dict[str, float] = {}
+        self._lock = threading.Lock()
+        self._running = False
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Start the background event listener thread.
+
+        Safe to call multiple times — only starts one thread.
+        """
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._listen, daemon=True)
+        self._thread.start()
+        logger.info("WorkerHeartbeatMonitor started")
+
+    def stop(self) -> None:
+        self._running = False
+
+    def _listen(self) -> None:
+        """Background loop: connect to event stream and process heartbeats."""
+        while self._running:
+            try:
+                with self._app.connection() as conn:
+                    recv = self._app.events.Receiver(
+                        conn,
+                        handlers={
+                            "worker-heartbeat": self._on_heartbeat,
+                            "worker-online": self._on_heartbeat,
+                            "worker-offline": self._on_offline,
+                        },
+                    )
+                    recv.capture(
+                        limit=None, timeout=self._HEARTBEAT_TIMEOUT_SECONDS, wakeup=True
+                    )
+            except Exception:
+                if self._running:
+                    logger.debug(
+                        "Heartbeat listener disconnected, reconnecting in 5s",
+                        exc_info=True,
+                    )
+                    time.sleep(5.0)
+            else:
+                # capture() returned normally (timeout with no events); reconnect
+                if self._running:
+                    logger.debug("Heartbeat capture timed out, reconnecting")
+                    time.sleep(5.0)
+
+    def _on_heartbeat(self, event: dict[str, Any]) -> None:
+        hostname = event.get("hostname")
+        if hostname:
+            with self._lock:
+                self._worker_last_seen[hostname] = time.monotonic()
+
+    def _on_offline(self, event: dict[str, Any]) -> None:
+        hostname = event.get("hostname")
+        if hostname:
+            with self._lock:
+                self._worker_last_seen.pop(hostname, None)
+
+    def get_worker_status(self) -> dict[str, bool]:
+        """Return {hostname: is_alive} for all known workers.
+
+        Thread-safe. Called by WorkerHealthCollector on each scrape.
+        Also prunes workers that have been dead longer than 2x the
+        heartbeat timeout to prevent unbounded growth.
+        """
+        now = time.monotonic()
+        prune_threshold = self._HEARTBEAT_TIMEOUT_SECONDS * 2
+        with self._lock:
+            # Prune workers that have been gone for 2x the timeout
+            stale = [
+                h
+                for h, ts in self._worker_last_seen.items()
+                if (now - ts) > prune_threshold
+            ]
+            for h in stale:
+                del self._worker_last_seen[h]
+
+            result: dict[str, bool] = {}
+            for hostname, last_seen in self._worker_last_seen.items():
+                alive = (now - last_seen) < self._HEARTBEAT_TIMEOUT_SECONDS
+                result[hostname] = alive
+            return result
+
+
+class WorkerHealthCollector(_CachedCollector):
+    """Collects Celery worker health from the heartbeat monitor.
+
+    Reads worker status from ``WorkerHeartbeatMonitor`` which listens
+    to the Celery event stream via a single persistent connection.
+    """
+
+    def __init__(self, cache_ttl: float = 30.0) -> None:
         super().__init__(cache_ttl)
-        self._celery_app: Any | None = None
-        # worker short-name → consecutive miss count.
-        # Workers start at 0 and reset to 0 each time they respond.
-        # Removed after _MAX_CONSECUTIVE_MISSES missed collects.
-        self._known_workers: dict[str, int] = {}
+        self._monitor: WorkerHeartbeatMonitor | None = None
 
-    def set_celery_app(self, app: Any) -> None:
-        """Set the Celery app instance for inspect commands."""
-        self._celery_app = app
+    def set_monitor(self, monitor: WorkerHeartbeatMonitor) -> None:
+        """Set the heartbeat monitor instance."""
+        self._monitor = monitor
 
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
-        if self._celery_app is None:
+        if self._monitor is None:
             return []
 
         active_workers = GaugeMetricFamily(
             "onyx_celery_active_worker_count",
-            "Number of active Celery workers responding to ping",
+            "Number of active Celery workers with recent heartbeats",
         )
         worker_up = GaugeMetricFamily(
             "onyx_celery_worker_up",
@@ -491,37 +579,15 @@ class WorkerHealthCollector(_CachedCollector):
         )
 
         try:
-            inspector = self._celery_app.control.inspect(timeout=3.0)
-            ping_result = inspector.ping()
+            status = self._monitor.get_worker_status()
+            alive_count = sum(1 for alive in status.values() if alive)
+            active_workers.add_metric([], alive_count)
 
-            responding: set[str] = set()
-            if ping_result:
-                active_workers.add_metric([], len(ping_result))
-                for worker_name in ping_result:
-                    # Strip hostname suffix for cleaner labels
-                    short_name = worker_name.split("@")[0]
-                    responding.add(short_name)
-            else:
-                active_workers.add_metric([], 0)
-
-            # Register newly-seen workers and reset miss count for
-            # workers that responded.
-            for short_name in responding:
-                self._known_workers[short_name] = 0
-
-            # Increment miss count for non-responding workers and evict
-            # those that have been missing too long.
-            stale = []
-            for short_name in list(self._known_workers):
-                if short_name not in responding:
-                    self._known_workers[short_name] += 1
-                    if self._known_workers[short_name] >= self._MAX_CONSECUTIVE_MISSES:
-                        stale.append(short_name)
-            for short_name in stale:
-                del self._known_workers[short_name]
-
-            for short_name in sorted(self._known_workers):
-                worker_up.add_metric([short_name], 1 if short_name in responding else 0)
+            for hostname in sorted(status):
+                # Use short name (before @) for single-host deployments,
+                # full hostname when multiple hosts share a worker type.
+                label = hostname.split("@")[0]
+                worker_up.add_metric([label], 1 if status[hostname] else 0)
         except Exception:
             logger.debug("Failed to collect worker health metrics", exc_info=True)
 

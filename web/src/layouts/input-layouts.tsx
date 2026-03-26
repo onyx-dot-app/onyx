@@ -1,5 +1,7 @@
 "use client";
 
+import type { RichStr } from "@opal/types";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
 import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
@@ -12,8 +14,9 @@ interface OrientationLayoutProps {
   disabled?: boolean;
   nonInteractive?: boolean;
   children?: React.ReactNode;
-  title: string;
-  description?: string;
+  title: string | RichStr;
+  titleSuffix?: string;
+  description?: string | RichStr;
   optional?: boolean;
   sizePreset?: "main-content" | "main-ui";
 }
@@ -41,7 +44,7 @@ interface OrientationLayoutProps {
  * ```
  */
 export interface VerticalLayoutProps extends OrientationLayoutProps {
-  subDescription?: React.ReactNode;
+  subDescription?: string | RichStr;
 }
 function VerticalInputLayout({
   name,
@@ -50,6 +53,7 @@ function VerticalInputLayout({
   children,
   subDescription,
   title,
+  titleSuffix,
   description,
   optional,
   sizePreset = "main-content",
@@ -58,6 +62,7 @@ function VerticalInputLayout({
     <Section gap={0.25} alignItems="start">
       <Content
         title={title}
+        titleSuffix={titleSuffix}
         description={description}
         optional={optional}
         sizePreset={sizePreset}
@@ -67,7 +72,7 @@ function VerticalInputLayout({
       {name && <ErrorLayout name={name} />}
       {subDescription && (
         <Text secondaryBody text03>
-          {subDescription}
+          {resolveStr(subDescription)}
         </Text>
       )}
     </Section>
@@ -125,6 +130,7 @@ function HorizontalInputLayout({
   children,
   center,
   title,
+  titleSuffix,
   description,
   optional,
   sizePreset = "main-content",
@@ -139,6 +145,7 @@ function HorizontalInputLayout({
         <div className="flex flex-col flex-1 min-w-0 self-stretch">
           <Content
             title={title}
+            titleSuffix={titleSuffix}
             description={description}
             optional={optional}
             sizePreset={sizePreset}

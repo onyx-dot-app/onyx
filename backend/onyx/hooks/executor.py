@@ -15,7 +15,7 @@ Usage (Celery tasks and FastAPI handlers):
         # hook failed but fail strategy is SOFT — continue with original behavior
         ...
     else:
-        # result is a validated Pydantic model instance (spec.response_model)
+        # result is a validated Pydantic model instance (response_type)
         ...
 
 is_reachable update policy

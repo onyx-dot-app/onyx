@@ -44,12 +44,14 @@ def _run_single_search(
     user: User,
     db_session: Session,
     num_hits: int | None = None,
+    hybrid_alpha: float | None = None,
 ) -> list[InferenceChunk]:
     """Execute a single search query and return chunks."""
     chunk_search_request = ChunkSearchRequest(
         query=query,
         user_selected_filters=filters,
         limit=num_hits,
+        hybrid_alpha=hybrid_alpha,
     )
 
     return search_pipeline(
@@ -74,7 +76,7 @@ def stream_search_query(
     Core search function that yields streaming packets.
     Used by both streaming and non-streaming endpoints.
     """
-    # Get document index
+    # Get document index.
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
     document_index = get_default_document_index(search_settings, None, db_session)
@@ -119,6 +121,7 @@ def stream_search_query(
             user=user,
             db_session=db_session,
             num_hits=request.num_hits,
+            hybrid_alpha=request.hybrid_alpha,
         )
     else:
         # Multiple queries - run in parallel and merge with RRF
@@ -133,6 +136,7 @@ def stream_search_query(
                     user,
                     db_session,
                     request.num_hits,
+                    request.hybrid_alpha,
                 ),
             )
             for query in all_executed_queries

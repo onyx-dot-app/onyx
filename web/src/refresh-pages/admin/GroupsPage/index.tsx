@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -47,7 +48,7 @@ function GroupsPage() {
           />
           <Button
             icon={SvgPlusCircle}
-            onClick={() => router.push("/admin/groups/create")}
+            onClick={() => router.push("/admin/groups/create" as Route)}
           >
             New Group
           </Button>

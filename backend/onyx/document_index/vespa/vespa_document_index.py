@@ -610,6 +610,22 @@ class VespaDocumentIndex(DocumentIndex):
 
         return cleanup_content_for_chunks(query_vespa(params))
 
+    def keyword_retrieval(
+        self,
+        query: str,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+    ) -> list[InferenceChunk]:
+        raise NotImplementedError
+
+    def semantic_retrieval(
+        self,
+        query_embedding: Embedding,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+    ) -> list[InferenceChunk]:
+        raise NotImplementedError
+
     def random_retrieval(
         self,
         filters: IndexFilters,

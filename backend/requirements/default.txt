@@ -549,7 +549,7 @@ mypy-extensions==1.0.0
     #   typing-inspect
 nest-asyncio==1.6.0
     # via onyx
-nltk==3.9.3
+nltk==3.9.4
     # via unstructured
 numpy==2.4.1
     # via
@@ -752,7 +752,7 @@ pypandoc-binary==1.16.2
     # via onyx
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.9.1
+pypdf==6.9.2
     # via
     #   onyx
     #   unstructured-client
@@ -861,7 +861,7 @@ regex==2025.11.3
     #   dateparser
     #   nltk
     #   tiktoken
-requests==2.32.5
+requests==2.33.0
     # via
     #   atlassian-python-api
     #   braintrust
