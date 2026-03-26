@@ -427,11 +427,11 @@ class CanvasConnector(
             raise ConnectorMissingCredentialError("Canvas")
 
         try:
-            self._canvas_client = CanvasApiClient(
+            client = CanvasApiClient(
                 bearer_token=access_token,
                 canvas_base_url=self.canvas_base_url,
             )
-            self._canvas_client.get("courses", params={"per_page": "1"})
+            client.get("courses", params={"per_page": "1"})
         except ValueError as e:
             raise ConnectorValidationError(
                 f"Invalid Canvas base URL: {e}"
@@ -455,6 +455,7 @@ class CanvasConnector(
                     f"Canvas API error during credential load (status={e.status_code}): {e}"
                 )
 
+        self._canvas_client = client
         return None
 
     @override
