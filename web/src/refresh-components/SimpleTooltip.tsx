@@ -40,8 +40,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 export interface SimpleTooltipProps
   extends React.ComponentPropsWithoutRef<typeof TooltipContent> {
@@ -73,7 +72,7 @@ export default function SimpleTooltip({
   // Check if tooltip is a string to wrap in Text component, otherwise render as-is
   const tooltipContent =
     typeof hoverContent === "string" ? (
-      <Text as="p" textLight05>
+      <Text as="p" color="text-light-05">
         {hoverContent}
       </Text>
     ) : (

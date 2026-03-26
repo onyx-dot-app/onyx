@@ -1,6 +1,5 @@
 import React from "react";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { OptionItem } from "./OptionItem";
 import { ComboBoxOption } from "../types";
 import { cn } from "@/lib/utils";
@@ -121,7 +120,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
         (matchedOptions.length > 0 ||
           (!hasSearchTerm && unmatchedOptions.length > 0)) && (
           <div className="px-3 py-1">
-            <Text as="p" text03 secondaryBody>
+            <Text as="p" color="text-03" font="secondary-body">
               {separatorLabel}
             </Text>
           </div>

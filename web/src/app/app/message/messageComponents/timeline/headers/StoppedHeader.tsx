@@ -1,8 +1,6 @@
 import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import { Button } from "@opal/components";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import { cn, noProp } from "@/lib/utils";
 
 export interface StoppedHeaderProps {
@@ -32,7 +30,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
       aria-disabled={isInteractive ? undefined : true}
     >
       <div className="px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
-        <Text as="p" mainUiAction text03>
+        <Text as="p" font="main-ui-action" color="text-03">
           Interrupted Thinking
         </Text>
       </div>

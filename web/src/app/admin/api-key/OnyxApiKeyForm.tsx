@@ -4,8 +4,7 @@ import { createApiKey, updateApiKey } from "./lib";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
@@ -80,7 +79,7 @@ export default function OnyxApiKeyForm({
           {({ isSubmitting }) => (
             <Form className="w-full overflow-visible">
               <Modal.Body>
-                <Text as="p">
+                <Text as="p" color="text-05">
                   Choose a memorable name for your API key. This is optional and
                   can be added or changed later!
                 </Text>

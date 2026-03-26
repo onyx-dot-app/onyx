@@ -3,15 +3,13 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { Table, Button } from "@opal/components";
+import { Button, Table, Text } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgUsers } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Separator from "@/refresh-components/Separator";
 import { toast } from "@/hooks/useToast";
@@ -119,9 +117,7 @@ function CreateGroupPage() {
           alignItems="stretch"
           justifyContent="start"
         >
-          <Text mainUiBody text04>
-            Group Name
-          </Text>
+          <Text>Group Name</Text>
           <InputTypeIn
             placeholder="Name your group"
             value={groupName}
@@ -135,7 +131,7 @@ function CreateGroupPage() {
         {isLoading && <SimpleLoader />}
 
         {error && (
-          <Text as="p" secondaryBody text03>
+          <Text as="p" font="secondary-body" color="text-03">
             Failed to load users.
           </Text>
         )}

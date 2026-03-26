@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   ConfluenceIcon,
   GoogleDriveIcon,
@@ -91,7 +90,7 @@ export default function ConnectDataBanner({
 
         {/* Center: Text and Arrow */}
         <div className="flex items-center justify-center gap-1">
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             Connect your data
           </Text>
           <SvgChevronRight className="h-4 w-4 text-text-03" />

@@ -9,8 +9,7 @@ const route = ADMIN_ROUTES.INDEX_MIGRATION;
 
 import Card from "@/refresh-components/cards/Card";
 import { Content, ContentAction } from "@opal/layouts";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Button from "@/refresh-components/buttons/Button";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -39,10 +38,10 @@ function MigrationStatusSection() {
   if (isLoading) {
     return (
       <Card>
-        <Text headingH3>Migration Status</Text>
-        <Text mainUiBody text03>
-          Loading...
+        <Text font="heading-h3" color="text-05">
+          Migration Status
         </Text>
+        <Text color="text-03">Loading...</Text>
       </Card>
     );
   }
@@ -50,10 +49,10 @@ function MigrationStatusSection() {
   if (error) {
     return (
       <Card>
-        <Text headingH3>Migration Status</Text>
-        <Text mainUiBody text03>
-          Failed to load migration status.
+        <Text font="heading-h3" color="text-05">
+          Migration Status
         </Text>
+        <Text color="text-03">Failed to load migration status.</Text>
       </Card>
     );
   }
@@ -74,14 +73,16 @@ function MigrationStatusSection() {
 
   return (
     <Card>
-      <Text headingH3>Migration Status</Text>
+      <Text font="heading-h3" color="text-05">
+        Migration Status
+      </Text>
 
       <ContentAction
         title="Started"
         sizePreset="main-ui"
         variant="section"
         rightChildren={
-          <Text mainUiBody>
+          <Text color="text-05">
             {hasStarted ? formatTimestamp(data.created_at!) : "Not started"}
           </Text>
         }
@@ -92,7 +93,7 @@ function MigrationStatusSection() {
         sizePreset="main-ui"
         variant="section"
         rightChildren={
-          <Text mainUiBody>
+          <Text color="text-05">
             {progressPercentage !== null
               ? `${totalChunksMigrated} (approx. progress ${Math.round(
                   progressPercentage
@@ -107,7 +108,7 @@ function MigrationStatusSection() {
         sizePreset="main-ui"
         variant="section"
         rightChildren={
-          <Text mainUiBody>
+          <Text color="text-05">
             {hasCompleted
               ? formatTimestamp(data.migration_completed_at!)
               : hasStarted
@@ -160,10 +161,10 @@ function RetrievalSourceSection() {
   if (isLoading) {
     return (
       <Card>
-        <Text headingH3>Retrieval Source</Text>
-        <Text mainUiBody text03>
-          Loading...
+        <Text font="heading-h3" color="text-05">
+          Retrieval Source
         </Text>
+        <Text color="text-03">Loading...</Text>
       </Card>
     );
   }
@@ -171,10 +172,10 @@ function RetrievalSourceSection() {
   if (error) {
     return (
       <Card>
-        <Text headingH3>Retrieval Source</Text>
-        <Text mainUiBody text03>
-          Failed to load retrieval settings.
+        <Text font="heading-h3" color="text-05">
+          Retrieval Source
         </Text>
+        <Text color="text-03">Failed to load retrieval settings.</Text>
       </Card>
     );
   }

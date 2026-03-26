@@ -12,12 +12,12 @@ import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
+import Text from "@/refresh-components/texts/Text";
 import { Persona } from "@/app/admin/agents/interfaces";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
 

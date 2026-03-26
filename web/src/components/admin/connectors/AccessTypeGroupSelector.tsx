@@ -1,9 +1,7 @@
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -111,13 +109,13 @@ export function AccessTypeGroupSelector({
           <>
             <Separator />
             <div className="flex flex-col gap-3 pt-4">
-              <Text as="p" mainUiAction text05>
+              <Text as="p" font="main-ui-action" color="text-05">
                 Assign group access for this Connector
               </Text>
               {userGroupsIsLoading ? (
                 <div className="animate-pulse bg-background-200 h-8 w-32 rounded" />
               ) : (
-                <Text as="p" mainUiMuted text03>
+                <Text as="p" font="main-ui-muted" color="text-03">
                   {isAdmin
                     ? "This Connector will be visible/accessible by the groups selected below"
                     : "Curators must select one or more groups to give access to this Connector"}

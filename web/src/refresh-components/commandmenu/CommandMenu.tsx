@@ -12,12 +12,10 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { cn } from "@/lib/utils";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import Divider from "@/refresh-components/Divider";
 import { Section } from "@/layouts/general-layouts";
@@ -528,7 +526,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
         role="status"
         aria-live="polite"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {emptyMessage}
         </Text>
       </div>
@@ -718,7 +716,7 @@ function CommandMenuAction({
         icon={icon}
         rightChildren={
           shortcut ? (
-            <Text figureKeystroke text02>
+            <Text font="figure-keystroke" color="text-02">
               {shortcut}
             </Text>
           ) : undefined
@@ -778,9 +776,7 @@ function CommandMenuFooterAction({
         className="w-[0.875rem] h-[0.875rem] stroke-text-02"
         aria-hidden="true"
       />
-      <Text mainUiBody text03>
-        {label}
-      </Text>
+      <Text color="text-03">{label}</Text>
     </div>
   );
 }

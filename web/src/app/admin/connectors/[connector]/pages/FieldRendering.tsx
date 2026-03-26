@@ -15,8 +15,7 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import { Content } from "@opal/layouts";
 import CheckboxField from "@/refresh-components/form/LabeledCheckboxField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 // Define a general type for form values
 type FormValues = Record<string, any>;
@@ -58,7 +57,7 @@ const TabsField: FC<TabsFieldProps> = ({
 
       {/* Ensure there's at least one tab before rendering */}
       {tabField.tabs.length === 0 ? (
-        <Text text03 secondaryBody>
+        <Text color="text-03" font="secondary-body">
           No tabs to display.
         </Text>
       ) : (
@@ -254,7 +253,7 @@ export const RenderField: FC<RenderFieldProps> = ({
         )
       ) : field.type === "string_tab" ? (
         <GeneralLayouts.Section>
-          <Text text03 secondaryBody>
+          <Text color="text-03" font="secondary-body">
             {description}
           </Text>
         </GeneralLayouts.Section>

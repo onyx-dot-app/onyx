@@ -1,5 +1,4 @@
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 export interface CharacterCountProps {
   value: string;
   limit: number;
@@ -7,8 +6,8 @@ export interface CharacterCountProps {
 export default function CharacterCount({ value, limit }: CharacterCountProps) {
   const length = value?.length || 0;
   return (
-    <Text text03 secondaryBody>
-      ({length}/{limit} characters)
+    <Text color="text-03" font="secondary-body">
+      {`(${length}/${limit} characters)`}
     </Text>
   );
 }

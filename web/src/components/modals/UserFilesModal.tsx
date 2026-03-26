@@ -4,8 +4,7 @@ import React, { useRef, useState, useEffect, useMemo } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/providers/ProjectsContext";
 import { formatRelativeTime } from "@/app/app/components/projects/project_utils";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/app/projects/projectsService";
@@ -25,7 +24,6 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
-import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 
@@ -212,7 +210,7 @@ export default function UserFilesModal({
           >
             {/* File display section */}
             {filtered.length === 0 ? (
-              <Text text03>No files found</Text>
+              <Text color="text-03">No files found</Text>
             ) : (
               <ScrollIndicatorDiv className="p-2 gap-2 max-h-[70vh]">
                 {filtered.map((projectFle) => {
@@ -266,9 +264,10 @@ export default function UserFilesModal({
             {/* Left side: file count and controls */}
             {onPickRecent && (
               <Section flexDirection="row" justifyContent="start" gap={0.5}>
-                <Text as="p" text03>
-                  {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
-                  selected
+                <Text as="p" color="text-03">
+                  {`${selectedCount} ${
+                    selectedCount === 1 ? "file" : "files"
+                  } selected`}
                 </Text>
                 <Button
                   icon={SvgEye}

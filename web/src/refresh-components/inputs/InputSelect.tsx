@@ -4,8 +4,7 @@ import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { cn } from "@/lib/utils";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import {
   iconClasses,
@@ -211,14 +210,14 @@ function InputSelectTrigger({
   if (!selectedItemDisplay) {
     displayContent = placeholder ? (
       typeof placeholder === "string" ? (
-        <Text as="p" text03>
+        <Text as="p" color="text-03">
           {placeholder}
         </Text>
       ) : (
         placeholder
       )
     ) : (
-      <Text as="p" text03>
+      <Text as="p" color="text-03">
         Select an option
       </Text>
     );

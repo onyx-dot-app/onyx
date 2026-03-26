@@ -2,8 +2,7 @@
 
 import { useRef } from "react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import Logo from "@/refresh-components/Logo";
 import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
 import SuggestedPrompts from "@/app/craft/components/SuggestedPrompts";
@@ -44,7 +43,7 @@ export default function BuildWelcome({
     <div className="h-full flex flex-col items-center justify-center px-4">
       <div className="flex flex-col items-center gap-4 mb-6">
         <Logo folded size={48} />
-        <Text headingH2 text05>
+        <Text font="heading-h2" color="text-05">
           What shall we craft today?
         </Text>
       </div>

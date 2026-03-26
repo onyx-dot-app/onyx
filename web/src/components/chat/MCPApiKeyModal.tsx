@@ -2,11 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Input } from "@/components/ui/input";
 import Label from "@/refresh-components/form/Label";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle, SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
 import { Disabled } from "@opal/core";
 interface MCPAuthTemplate {
@@ -162,12 +160,12 @@ export default function MCPApiKeyModal({
           onClose={handleClose}
         />
         <Modal.Body>
-          <Text as="p">
+          <Text as="p" color="text-05">
             {isAuthenticated
               ? `Update your ${credsType} for ${serverName}.`
               : `Enter your ${credsType} for ${serverName} to enable authentication.`}
           </Text>
-          <Text as="p" text02>
+          <Text as="p" color="text-02">
             {isAuthenticated
               ? "Changes will be validated against the server before being saved."
               : `Your ${credsType} will be validated against the server and stored securely.`}
@@ -187,7 +185,7 @@ export default function MCPApiKeyModal({
                 {authTemplate!.required_fields.map((field) => (
                   <div key={field} className="space-y-2">
                     <Label name={field}>
-                      <Text>
+                      <Text color="text-05">
                         {field
                           .replace(/_/g, " ")
                           .replace(/\b\w/g, (l) => l.toUpperCase())}
@@ -224,7 +222,7 @@ export default function MCPApiKeyModal({
               // Legacy API key field
               <div className="space-y-2">
                 <Label name="apiKey">
-                  <Text>{credsType}</Text>
+                  <Text color="text-05">{credsType}</Text>
                 </Label>
                 <div className="relative">
                   <Input

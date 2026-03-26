@@ -38,8 +38,7 @@ import {
   getFileTypeDefinitionForField,
   FILE_TYPE_DEFINITIONS,
 } from "@/lib/connectors/fileTypes";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -141,7 +140,7 @@ export function ExplanationText({
       {text}
     </a>
   ) : (
-    <Text as="p" text03 secondaryBody>
+    <Text as="p" color="text-03" font="secondary-body">
       {text}
     </Text>
   );

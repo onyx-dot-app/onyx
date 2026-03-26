@@ -6,8 +6,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Modal from "@/refresh-components/Modal";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
@@ -77,7 +76,7 @@ function DiscordBotContent() {
             description="This key will only be shown once!"
           />
           <Modal.Body>
-            <Text text04 mainUiBody>
+            <Text>
               Copy the command and send it from any text channel in your server!
             </Text>
             <Card variant="secondary">
@@ -86,8 +85,8 @@ function DiscordBotContent() {
                 justifyContent="between"
                 alignItems="center"
               >
-                <Text text03 secondaryMono>
-                  !register {registrationKey}
+                <Text color="text-03" font="secondary-mono">
+                  {`!register ${registrationKey}`}
                 </Text>
                 <CopyIconButton
                   getCopyText={() => `!register ${registrationKey}`}
@@ -104,7 +103,7 @@ function DiscordBotContent() {
           justifyContent="between"
           alignItems="center"
         >
-          <Text mainContentEmphasis text05>
+          <Text font="main-content-emphasis" color="text-05">
             Server Configurations
           </Text>
           <CreateButton

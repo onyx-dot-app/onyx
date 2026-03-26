@@ -5,9 +5,7 @@ import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import Separator from "@/refresh-components/Separator";
@@ -304,7 +302,7 @@ export default function MemoriesModal({
         <Modal.Body padding={0.5}>
           {filteredMemories.length === 0 ? (
             <Section alignItems="center" padding={2}>
-              <Text secondaryBody text03>
+              <Text font="secondary-body" color="text-03">
                 {searchQuery.trim()
                   ? "No memories match your search."
                   : 'No memories yet. Click "Add Line" to get started.'}

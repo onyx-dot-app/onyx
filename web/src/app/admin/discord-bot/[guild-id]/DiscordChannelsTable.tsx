@@ -11,8 +11,7 @@ import {
 import Switch from "@/refresh-components/inputs/Switch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import {
   DiscordChannelConfig,
@@ -96,9 +95,7 @@ export function DiscordChannelsTable({
                   width="fit"
                 >
                   <ChannelIcon width={16} height={16} />
-                  <Text text04 mainUiBody>
-                    {channel.channel_name}
-                  </Text>
+                  <Text>{channel.channel_name}</Text>
                 </Section>
               </TableCell>
               <TableCell>

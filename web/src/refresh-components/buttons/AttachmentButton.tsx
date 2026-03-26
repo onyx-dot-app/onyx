@@ -67,9 +67,7 @@ import React from "react";
 import { noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button } from "@opal/components";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { SvgExternalLink } from "@opal/icons";
@@ -149,7 +147,7 @@ export default function AttachmentButton({
 
       <div className="attachment-button__actions">
         {rightText && (
-          <Text as="p" secondaryBody text03>
+          <Text as="p" font="secondary-body" color="text-03">
             {rightText}
           </Text>
         )}

@@ -1,10 +1,8 @@
 import { SvgDownload, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { Interactive } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
@@ -64,7 +62,7 @@ export default function ScimModal({
           }
         >
           <Section alignItems="start" gap={0.5}>
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               Your current SCIM token will be revoked and a new token will be
               generated. You will need to update the token on your identity
               provider before SCIM provisioning will resume.

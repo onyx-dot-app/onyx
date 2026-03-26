@@ -1,17 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Table, createTableColumns } from "@opal/components";
-import { Content } from "@opal/layouts";
-import { Button } from "@opal/components";
+import { Button, Table, Text, createTableColumns } from "@opal/components";
+import { Content, IllustrationContent } from "@opal/layouts";
 import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { IllustrationContent } from "@opal/layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { toast } from "@/hooks/useToast";
 import useAdminUsers from "@/hooks/useAdminUsers";
@@ -48,11 +44,11 @@ function renderNameColumn(email: string, row: UserRow) {
 function renderStatusColumn(value: UserStatus, row: UserRow) {
   return (
     <div className="flex flex-col">
-      <Text as="span" mainUiBody text03>
+      <Text as="span" color="text-03">
         {USER_STATUS_LABELS[value] ?? value}
       </Text>
       {row.is_scim_synced && (
-        <Text as="span" secondaryBody text03>
+        <Text as="span" font="secondary-body" color="text-03">
           SCIM synced
         </Text>
       )}
@@ -62,7 +58,7 @@ function renderStatusColumn(value: UserStatus, row: UserRow) {
 
 function renderLastUpdatedColumn(value: string | null) {
   return (
-    <Text as="span" secondaryBody text03>
+    <Text as="span" font="secondary-body" color="text-03">
       {value ? timeAgo(value) ?? "\u2014" : "\u2014"}
     </Text>
   );
@@ -195,7 +191,7 @@ export default function UsersTable({
 
   if (error) {
     return (
-      <Text as="p" secondaryBody text03>
+      <Text as="p" font="secondary-body" color="text-03">
         Failed to load users. Please try refreshing the page.
       </Text>
     );

@@ -8,12 +8,10 @@ import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
 import Message from "@/refresh-components/messages/Message";
-import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgServer } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -122,7 +120,7 @@ function GuildDetailContent({
         />
 
         {!isRegistered ? (
-          <Text text03 secondaryBody>
+          <Text color="text-03" font="secondary-body">
             Channel configuration will be available after the server is
             registered.
           </Text>
