@@ -412,9 +412,9 @@ export default function UsageReports() {
           isWaitingForReport={isWaitingForReport}
         />
         {timeoutMessage && (
-          <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-regular">
+          <div className="mb-4 p-4 bg-status-warning-00 border border-status-warning-02 rounded-regular">
             <div className="flex items-start gap-2">
-              <div className="text-amber-600 dark:text-amber-500 mt-0.5">
+              <div className="text-status-warning-05 mt-0.5">
                 <svg
                   className="w-5 h-5"
                   fill="none"
@@ -430,15 +430,15 @@ export default function UsageReports() {
                 </svg>
               </div>
               <div className="flex-1">
-                <span className="text-amber-800">
+                <div className="text-status-warning-05">
                   <Text as="p" font="main-ui-action">
                     Report Generation In Progress
                   </Text>
-                </span>
+                </div>
                 <Spacer rem={0.25} />
-                <span className="text-amber-700">
+                <div className="text-status-warning-05">
                   <Text as="p">{timeoutMessage}</Text>
-                </span>
+                </div>
               </div>
             </div>
           </div>

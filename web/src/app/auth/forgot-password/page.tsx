@@ -77,9 +77,9 @@ const ForgotPasswordPage: React.FC = () => {
         </Formik>
         <Spacer rem={1} />
         <div className="flex">
-          <span className="mx-auto">
+          <div className="mx-auto">
             <Text as="p">{markdown("[Back to Login](/auth/login)")}</Text>
-          </span>
+          </div>
         </div>
       </div>
     </AuthFlowContainer>

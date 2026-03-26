@@ -69,20 +69,20 @@ export function FailedReIndexAttempts({
         />
       )}
 
-      <span className="text-status-error-05">
+      <div className="text-status-error-05">
         <Text as="p" font="main-ui-action">
           Failed Re-indexing Attempts
         </Text>
-      </span>
+      </div>
       <Spacer rem={0.5} />
-      <span className="text-status-error-05">
+      <div className="text-status-error-05">
         <Text as="p">
           The table below shows only the failed re-indexing attempts for
           existing connectors. These failures require immediate attention. Once
           all connectors have been re-indexed successfully, the new model will
           be used for all search queries.
         </Text>
-      </span>
+      </div>
       <Spacer rem={1} />
 
       <div>
