@@ -258,7 +258,7 @@ def _bulk_fetch_request(
 def bulk_fetch_issues(
     jira_client: JIRA, issue_ids: list[str], fields: str | None = None
 ) -> list[Issue]:
-    # TODO: move away from this jira library if they continue to not support
+    # TODO(evan): move away from this jira library if they continue to not support
     # the endpoints we need. Using private fields is not ideal, but
     # is likely fine for now since we pin the library version
 
@@ -268,7 +268,7 @@ def bulk_fetch_issues(
         if len(issue_ids) <= 1:
             logger.exception(
                 f"Jira bulk-fetch response for issue(s) {issue_ids} could not "
-                f"be decoded as JSON (response too large or truncated). Skipping. "
+                f"be decoded as JSON (response too large or truncated)."
             )
             raise
 

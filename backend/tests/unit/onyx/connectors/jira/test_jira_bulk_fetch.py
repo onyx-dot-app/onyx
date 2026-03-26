@@ -1,6 +1,7 @@
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 import requests
 from jira import JIRA
 from jira.resources import Issue
@@ -70,8 +71,8 @@ def test_bulk_fetch_splits_on_json_error() -> None:
     assert call_count > 1
 
 
-def test_bulk_fetch_skips_single_unfetchable_issue() -> None:
-    """A single issue that always fails JSON decode is skipped gracefully."""
+def test_bulk_fetch_raises_on_single_unfetchable_issue() -> None:
+    """A single issue that always fails JSON decode raises after splitting."""
     client = _mock_jira_client()
 
     def _post_side_effect(url: str, json: dict[str, Any]) -> MagicMock:  # noqa: ARG001
@@ -89,9 +90,8 @@ def test_bulk_fetch_skips_single_unfetchable_issue() -> None:
 
     client._session.post.side_effect = _post_side_effect
 
-    result = bulk_fetch_issues(client, ["1", "bad", "2"])
-    returned_ids = {r.raw["id"] for r in result}
-    assert returned_ids == {"1", "2"}
+    with pytest.raises(requests.exceptions.JSONDecodeError):
+        bulk_fetch_issues(client, ["1", "bad", "2"])
 
 
 def test_bulk_fetch_non_json_error_propagates() -> None:
@@ -123,20 +123,14 @@ def test_bulk_fetch_with_fields() -> None:
     assert call_payload["fields"] == ["summary", "description"]
 
 
-def test_bulk_fetch_recursive_splitting_isolates_bad_issue() -> None:
-    """With a 6-issue batch where one is bad, recursion isolates it."""
+def test_bulk_fetch_recursive_splitting_raises_on_bad_issue() -> None:
+    """With a 6-issue batch where one is bad, recursion isolates it and raises."""
     client = _mock_jira_client()
     bad_id = "BAD"
 
     def _post_side_effect(url: str, json: dict[str, Any]) -> MagicMock:  # noqa: ARG001
         ids = json["issueIdsOrKeys"]
-        if bad_id in ids and len(ids) > 1:
-            resp = MagicMock()
-            resp.json.side_effect = requests.exceptions.JSONDecodeError(
-                "truncated", "doc", 999
-            )
-            return resp
-        if bad_id in ids and len(ids) == 1:
+        if bad_id in ids:
             resp = MagicMock()
             resp.json.side_effect = requests.exceptions.JSONDecodeError(
                 "truncated", "doc", 999
@@ -149,8 +143,5 @@ def test_bulk_fetch_recursive_splitting_isolates_bad_issue() -> None:
 
     client._session.post.side_effect = _post_side_effect
 
-    ids = ["1", "2", bad_id, "3", "4", "5"]
-    result = bulk_fetch_issues(client, ids)
-    returned_ids = {r.raw["id"] for r in result}
-    assert returned_ids == {"1", "2", "3", "4", "5"}
-    assert bad_id not in returned_ids
+    with pytest.raises(requests.exceptions.JSONDecodeError):
+        bulk_fetch_issues(client, ["1", "2", bad_id, "3", "4", "5"])
