@@ -13,6 +13,7 @@ from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
@@ -542,6 +543,47 @@ class TestLoadCredentials:
         with pytest.raises(CredentialExpiredError, match="invalid or expired"):
             connector.load_credentials({"canvas_access_token": "bad-token"})
 
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_load_credentials_insufficient_permissions(
+        self, mock_requests: MagicMock
+    ) -> None:
+        mock_requests.get.return_value = _mock_response(403, {})
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+
+        with pytest.raises(InsufficientPermissionsError):
+            connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+
+# ---------------------------------------------------------------------------
+# CanvasConnector — URL normalization
+# ---------------------------------------------------------------------------
+
+
+class TestConnectorUrlNormalization:
+    def test_strips_api_v1_suffix(self) -> None:
+        connector = _build_connector(base_url=f"{FAKE_BASE_URL}/api/v1")
+
+        result = connector.canvas_base_url
+        expected = FAKE_BASE_URL
+
+        assert result == expected
+
+    def test_strips_trailing_slash(self) -> None:
+        connector = _build_connector(base_url=f"{FAKE_BASE_URL}/")
+
+        result = connector.canvas_base_url
+        expected = FAKE_BASE_URL
+
+        assert result == expected
+
+    def test_no_change_for_clean_url(self) -> None:
+        connector = _build_connector(base_url=FAKE_BASE_URL)
+
+        result = connector.canvas_base_url
+        expected = FAKE_BASE_URL
+
+        assert result == expected
+
 
 # ---------------------------------------------------------------------------
 # CanvasConnector — document conversion
@@ -702,6 +744,19 @@ class TestValidateConnectorSettings:
         connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
 
         with pytest.raises(CredentialExpiredError):
+            connector.validate_connector_settings()
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_validate_insufficient_permissions(
+        self, mock_requests: MagicMock
+    ) -> None:
+        success_resp = _mock_response(json_data=[_mock_course()])
+        fail_resp = _mock_response(403, {})
+        mock_requests.get.side_effect = [success_resp, fail_resp]
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        with pytest.raises(InsufficientPermissionsError):
             connector.validate_connector_settings()
 
     @patch("onyx.connectors.canvas.client.rl_requests")
