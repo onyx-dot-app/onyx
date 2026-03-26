@@ -90,15 +90,15 @@ import { markdown } from "@opal/utils";
 </Text>
 ```
 
-Supported syntax: `**bold**`, `*italic*`, `` `code` ``, `[link](url)`, `~~strikethrough~~`.
+Supported syntax: `**bold**`, `*italic*`, `` `code` ``, `[link](url)`, `~~strikethrough~~`, `\n` (newline → `<br />`).
 
 Markdown rendering uses `react-markdown` internally, restricted to inline elements only.
 `http(s)` links open in a new tab; `mailto:` and `tel:` links open natively. Inline code
 inherits the parent font size and switches to the monospace family.
 
-**Note:** This is inline-only markdown. Multi-paragraph content (`"Hello\n\nWorld"`) will
-collapse into a single run of text since paragraph wrappers are stripped. For block-level
-markdown, use `MinimalMarkdown` instead.
+Newlines (`\n`) are converted to `<br />` elements that inherit the parent's line-height,
+so line spacing is proportional to the font size. For full block-level markdown (code blocks,
+headings, lists), use `MinimalMarkdown` instead.
 
 ### Using `RichStr` in component props
 
