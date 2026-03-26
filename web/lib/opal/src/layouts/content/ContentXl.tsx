@@ -262,7 +262,7 @@ function ContentXl({
 
         {description && toPlainString(description) && (
           <div className="opal-content-xl-description">
-            <Text font="secondary-body" color="text-03">
+            <Text font="secondary-body" color="text-03" as="p">
               {description}
             </Text>
           </div>

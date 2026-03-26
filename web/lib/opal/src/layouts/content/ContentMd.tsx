@@ -296,7 +296,7 @@ function ContentMd({
           className="opal-content-md-description"
           style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
         >
-          <Text font="secondary-body" color="text-03">
+          <Text font="secondary-body" color="text-03" as="p">
             {description}
           </Text>
         </div>
