@@ -909,9 +909,6 @@ def index_doc_batch(
         primary_doc_idx_insertion_records: list[DocumentInsertionRecord] | None = None
         primary_doc_idx_vector_db_write_failures: list[ConnectorFailure] | None = None
 
-        def chunk_iterable_creator() -> Iterable[DocMetadataAwareIndexChunk]:
-            return metadata_aware_chunks
-
         for document_index in document_indices:
             # A document will not be spread across different batches, so all the
             # documents with chunks in this set, are fully represented by the chunks
@@ -922,7 +919,7 @@ def index_doc_batch(
 
             insertion_records, write_failures = write_chunks_to_vector_db_with_backoff(
                 document_index=document_index,
-                chunks=_enriched_stream(),
+                make_chunks=_enriched_stream,
                 index_batch_params=index_batch_params,
             )
 
