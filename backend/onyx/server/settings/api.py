@@ -19,9 +19,9 @@ from onyx.db.models import User
 from onyx.db.notification import dismiss_all_notifications
 from onyx.db.notification import get_notifications
 from onyx.db.notification import update_notification_last_shown
-from onyx.hooks.utils import HOOKS_AVAILABLE
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.hooks.utils import HOOKS_AVAILABLE
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.build.utils import is_onyx_craft_enabled
