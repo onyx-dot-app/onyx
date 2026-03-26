@@ -342,9 +342,9 @@ visible text in the DOM (e.g., `title`, `description`, `label`) should be typed 
 
 ```typescript
 import type { RichStr } from "@opal/types";
-import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { Text } from "@opal/components";
 
-// ✅ Good — new components accept string | RichStr
+// ✅ Good — new components accept string | RichStr and render via Text
 interface InfoCardProps {
   title: string | RichStr;
   description?: string | RichStr;
@@ -353,9 +353,9 @@ interface InfoCardProps {
 function InfoCard({ title, description }: InfoCardProps) {
   return (
     <div>
-      <Text font="main-ui-action">{resolveStr(title)}</Text>
+      <Text font="main-ui-action">{title}</Text>
       {description && (
-        <Text font="secondary-body" color="text-03">{resolveStr(description)}</Text>
+        <Text font="secondary-body" color="text-03">{description}</Text>
       )}
     </div>
   );

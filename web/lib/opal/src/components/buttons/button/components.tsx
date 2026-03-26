@@ -4,11 +4,15 @@ import {
   Interactive,
   type InteractiveStatelessProps,
 } from "@opal/core";
-import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
+import type {
+  ContainerSizeVariants,
+  ExtremaSizeVariants,
+  RichStr,
+} from "@opal/types";
+import { Text } from "@opal/components";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 
 // ---------------------------------------------------------------------------
@@ -18,13 +22,13 @@ import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 type ButtonContentProps =
   | {
       icon?: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
       rightIcon?: IconFunctionComponent;
       responsiveHideText?: never;
     }
   | {
       icon: IconFunctionComponent;
-      children?: string;
+      children?: string | RichStr;
       rightIcon?: IconFunctionComponent;
       responsiveHideText?: boolean;
     };
@@ -69,15 +73,24 @@ function Button({
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <span
-      className={cn(
-        "whitespace-nowrap",
-        isLarge ? "font-main-ui-body " : "font-secondary-body",
-        responsiveHideText && "hidden md:inline"
-      )}
-    >
-      {children}
-    </span>
+    responsiveHideText ? (
+      <span className="hidden md:inline whitespace-nowrap">
+        <Text
+          font={isLarge ? "main-ui-body" : "secondary-body"}
+          color="inherit"
+        >
+          {children}
+        </Text>
+      </span>
+    ) : (
+      <Text
+        font={isLarge ? "main-ui-body" : "secondary-body"}
+        color="inherit"
+        nowrap
+      >
+        {children}
+      </Text>
+    )
   ) : null;
 
   const button = (

@@ -4,7 +4,12 @@ import {
   useDisabled,
   type InteractiveStatefulProps,
 } from "@opal/core";
-import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
+import type {
+  ContainerSizeVariants,
+  ExtremaSizeVariants,
+  RichStr,
+} from "@opal/types";
+import { Text } from "@opal/components";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -26,19 +31,19 @@ type SelectButtonContentProps =
   | {
       foldable: true;
       icon: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
       rightIcon?: IconFunctionComponent;
     }
   | {
       foldable?: false;
       icon?: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
       rightIcon?: IconFunctionComponent;
     }
   | {
       foldable?: false;
       icon: IconFunctionComponent;
-      children?: string;
+      children?: string | RichStr;
       rightIcon?: IconFunctionComponent;
     };
 
@@ -79,13 +84,10 @@ function SelectButton({
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <span
-      className={cn(
-        "opal-select-button-label",
-        isLarge ? "font-main-ui-body" : "font-secondary-body"
-      )}
-    >
-      {children}
+    <span className="opal-select-button-label">
+      <Text font={isLarge ? "main-ui-body" : "secondary-body"} color="inherit">
+        {children}
+      </Text>
     </span>
   ) : null;
 
@@ -137,7 +139,7 @@ function SelectButton({
           side={tooltipSide}
           sideOffset={4}
         >
-          {resolvedTooltip}
+          <Text>{resolvedTooltip}</Text>
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

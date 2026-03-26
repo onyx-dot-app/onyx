@@ -3,9 +3,10 @@
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Button } from "@opal/components";
 import { Content } from "@opal/layouts";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
@@ -424,12 +425,12 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * </Modal.Header>
  * ```
  */
-interface ModalHeaderProps extends WithoutStyles<SectionProps> {
+interface ModalHeaderProps extends Omit<WithoutStyles<SectionProps>, "title"> {
   icon?: IconFunctionComponent;
   moreIcon1?: IconFunctionComponent;
   moreIcon2?: IconFunctionComponent;
-  title: string;
-  description?: string;
+  title: string | RichStr;
+  description?: string | RichStr;
   onClose?: () => void;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
@@ -502,7 +503,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
                 />
                 {description && (
                   <DialogPrimitive.Description className="hidden">
-                    {description}
+                    {toPlainString(description)}
                   </DialogPrimitive.Description>
                 )}
               </div>

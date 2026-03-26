@@ -7,7 +7,11 @@ import SvgAlertCircle from "@opal/icons/alert-circle";
 import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
 import SvgXOctagon from "@opal/icons/x-octagon";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import {
+  resolveStr,
+  toPlainString,
+} from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useRef, useState } from "react";
 
@@ -40,10 +44,10 @@ interface ContentMdProps {
   icon?: IconFunctionComponent;
 
   /** Main title text. */
-  title: string;
+  title: string | RichStr;
 
   /** Optional description text below the title. */
-  description?: string;
+  description?: string | RichStr;
 
   /** Enable inline editing of the title. */
   editable?: boolean;
@@ -145,19 +149,19 @@ function ContentMd({
   ref,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState(title);
+  const [editValue, setEditValue] = useState(toPlainString(title));
   const inputRef = useRef<HTMLInputElement>(null);
 
   const config = CONTENT_MD_PRESETS[sizePreset];
 
   function startEditing() {
-    setEditValue(title);
+    setEditValue(toPlainString(title));
     setEditing(true);
   }
 
   function commit() {
     const value = editValue.trim();
-    if (value && value !== title) onTitleChange?.(value);
+    if (value && value !== toPlainString(title)) onTitleChange?.(value);
     setEditing(false);
   }
 
@@ -210,7 +214,7 @@ function ContentMd({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") commit();
                   if (e.key === "Escape") {
-                    setEditValue(title);
+                    setEditValue(toPlainString(title));
                     setEditing(false);
                   }
                 }}
@@ -225,11 +229,11 @@ function ContentMd({
                 "text-text-04",
                 editable && "cursor-pointer"
               )}
-              title={title}
+              title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
               style={{ height: config.lineHeight }}
             >
-              {title}
+              {resolveStr(title)}
             </span>
           )}
 
@@ -283,12 +287,12 @@ function ContentMd({
         </div>
       </div>
 
-      {description && (
+      {description && toPlainString(description) && (
         <div
           className="opal-content-md-description font-secondary-body text-text-03"
           style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
         >
-          {description}
+          {resolveStr(description)}
         </div>
       )}
     </div>
