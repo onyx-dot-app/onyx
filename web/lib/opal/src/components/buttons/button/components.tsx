@@ -75,12 +75,19 @@ function Button({
   const labelEl = children ? (
     responsiveHideText ? (
       <span className="hidden md:inline whitespace-nowrap">
-        <Text font={isLarge ? "main-ui-body" : "secondary-body"}>
+        <Text
+          font={isLarge ? "main-ui-body" : "secondary-body"}
+          color="inherit"
+        >
           {children}
         </Text>
       </span>
     ) : (
-      <Text font={isLarge ? "main-ui-body" : "secondary-body"} nowrap>
+      <Text
+        font={isLarge ? "main-ui-body" : "secondary-body"}
+        color="inherit"
+        nowrap
+      >
         {children}
       </Text>
     )

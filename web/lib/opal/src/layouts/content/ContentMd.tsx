@@ -292,7 +292,7 @@ function ContentMd({
         </div>
       </div>
 
-      {description && (
+      {description && toPlainString(description) && (
         <div
           className="opal-content-md-description"
           style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}

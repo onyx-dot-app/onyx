@@ -106,7 +106,11 @@ function OpenButton({
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <Text font={isLarge ? "main-ui-body" : "secondary-body"} nowrap>
+    <Text
+      font={isLarge ? "main-ui-body" : "secondary-body"}
+      color="inherit"
+      nowrap
+    >
       {children}
     </Text>
   ) : null;

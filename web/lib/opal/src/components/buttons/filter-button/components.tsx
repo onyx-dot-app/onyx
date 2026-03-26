@@ -69,7 +69,7 @@ function FilterButton({
         <Interactive.Container type="button">
           <div className="interactive-foreground flex flex-row items-center gap-1">
             {iconWrapper(Icon, "lg", true)}
-            <Text font="main-ui-action" nowrap>
+            <Text font="main-ui-action" color="inherit" nowrap>
               {children}
             </Text>
             <div style={{ visibility: active ? "hidden" : "visible" }}>

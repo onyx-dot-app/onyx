@@ -29,6 +29,7 @@ type TextFont =
   | "figure-keystroke";
 
 type TextColor =
+  | "inherit"
   | "text-01"
   | "text-02"
   | "text-03"
@@ -89,7 +90,8 @@ const FONT_CONFIG: Record<TextFont, string> = {
   "figure-keystroke": "font-figure-keystroke",
 };
 
-const COLOR_CONFIG: Record<TextColor, string> = {
+const COLOR_CONFIG: Record<TextColor, string | null> = {
+  inherit: null,
   "text-01": "text-text-01",
   "text-02": "text-text-02",
   "text-03": "text-text-03",

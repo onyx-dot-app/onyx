@@ -53,7 +53,10 @@ function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
         </div>
       )}
       <span className={cn("opal-auxiliary-tag-title px-[2px]", config.text)}>
-        <Text font={size === "md" ? "secondary-body" : "figure-small-value"}>
+        <Text
+          font={size === "md" ? "secondary-body" : "figure-small-value"}
+          color="inherit"
+        >
           {title}
         </Text>
       </span>

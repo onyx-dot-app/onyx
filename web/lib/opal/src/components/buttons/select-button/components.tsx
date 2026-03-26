@@ -85,7 +85,9 @@ function SelectButton({
 
   const labelEl = children ? (
     <span className="opal-select-button-label">
-      <Text font={isLarge ? "main-ui-body" : "secondary-body"}>{children}</Text>
+      <Text font={isLarge ? "main-ui-body" : "secondary-body"} color="inherit">
+        {children}
+      </Text>
     </span>
   ) : null;
 

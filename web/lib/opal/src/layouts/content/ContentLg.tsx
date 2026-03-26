@@ -204,7 +204,7 @@ function ContentLg({
           )}
         </div>
 
-        {description && (
+        {description && toPlainString(description) && (
           <div className="opal-content-lg-description">
             <Text font="secondary-body" color="text-03">
               {description}
