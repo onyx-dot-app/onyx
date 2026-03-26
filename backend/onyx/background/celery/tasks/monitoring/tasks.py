@@ -1,6 +1,5 @@
 import json
 import time
-from collections.abc import Callable
 from datetime import timedelta
 from itertools import islice
 from typing import Any
@@ -699,31 +698,27 @@ def monitor_background_processes(self: Task, *, tenant_id: str) -> None:
         return None
 
     try:
-        # Get Redis client for Celery broker
         redis_std = get_redis_client()
 
-        with celery_get_broker_client(self.app) as redis_celery:
-            # Define metric collection functions and their dependencies
-            metric_functions: list[Callable[[], list[Metric]]] = [
-                lambda: _collect_queue_metrics(redis_celery),
-                lambda: _collect_connector_metrics(db_session, redis_std),
-                lambda: _collect_sync_metrics(db_session, redis_std),
-            ]
+        # Collect queue metrics with a short-lived broker connection
+        with celery_get_broker_client(self.app) as r_celery:
+            queue_metrics = _collect_queue_metrics(r_celery)
 
-            # Collect and log each metric
-            with get_session_with_current_tenant() as db_session:
-                for metric_fn in metric_functions:
-                    metrics = metric_fn()
-                    for metric in metrics:
-                        # double check to make sure we aren't double-emitting metrics
-                        if metric.key is None or not _has_metric_been_emitted(
-                            redis_std, metric.key
-                        ):
-                            metric.log()
-                            metric.emit(tenant_id)
+        # Collect remaining metrics (no broker connection needed)
+        with get_session_with_current_tenant() as db_session:
+            all_metrics: list[Metric] = queue_metrics
+            all_metrics.extend(_collect_connector_metrics(db_session, redis_std))
+            all_metrics.extend(_collect_sync_metrics(db_session, redis_std))
 
-                        if metric.key is not None:
-                            _mark_metric_as_emitted(redis_std, metric.key)
+            for metric in all_metrics:
+                if metric.key is None or not _has_metric_been_emitted(
+                    redis_std, metric.key
+                ):
+                    metric.log()
+                    metric.emit(tenant_id)
+
+                if metric.key is not None:
+                    _mark_metric_as_emitted(redis_std, metric.key)
 
         task_logger.info("Successfully collected background metrics")
     except SoftTimeLimitExceeded:
