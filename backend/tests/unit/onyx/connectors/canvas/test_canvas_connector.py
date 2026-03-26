@@ -1,12 +1,21 @@
-"""Tests for Canvas connector — client (PR1)."""
+"""Tests for Canvas connector — client, credentials, conversion."""
 
+from datetime import datetime
+from datetime import timezone
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
+from onyx.connectors.canvas.connector import CanvasConnector
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
 from onyx.error_handling.exceptions import OnyxError
 
 
@@ -16,6 +25,77 @@ from onyx.error_handling.exceptions import OnyxError
 
 FAKE_BASE_URL = "https://myschool.instructure.com"
 FAKE_TOKEN = "fake-canvas-token"
+
+
+def _mock_course(
+    course_id: int = 1,
+    name: str = "Intro to CS",
+    course_code: str = "CS101",
+) -> dict[str, Any]:
+    return {
+        "id": course_id,
+        "name": name,
+        "course_code": course_code,
+        "created_at": "2025-01-01T00:00:00Z",
+        "workflow_state": "available",
+    }
+
+
+def _build_connector(base_url: str = FAKE_BASE_URL) -> CanvasConnector:
+    """Build a connector with mocked credential validation."""
+    with patch("onyx.connectors.canvas.client.rl_requests") as mock_req:
+        mock_req.get.return_value = _mock_response(json_data=[_mock_course()])
+        connector = CanvasConnector(canvas_base_url=base_url)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+    return connector
+
+
+def _mock_page(
+    page_id: int = 10,
+    title: str = "Syllabus",
+    updated_at: str = "2025-06-01T12:00:00Z",
+) -> dict[str, Any]:
+    return {
+        "page_id": page_id,
+        "url": "syllabus",
+        "title": title,
+        "body": "<p>Welcome to the course</p>",
+        "created_at": "2025-01-15T00:00:00Z",
+        "updated_at": updated_at,
+    }
+
+
+def _mock_assignment(
+    assignment_id: int = 20,
+    name: str = "Homework 1",
+    course_id: int = 1,
+    updated_at: str = "2025-06-01T12:00:00Z",
+) -> dict[str, Any]:
+    return {
+        "id": assignment_id,
+        "name": name,
+        "description": "<p>Solve these problems</p>",
+        "html_url": f"{FAKE_BASE_URL}/courses/{course_id}/assignments/{assignment_id}",
+        "course_id": course_id,
+        "created_at": "2025-01-20T00:00:00Z",
+        "updated_at": updated_at,
+        "due_at": "2025-02-01T23:59:00Z",
+    }
+
+
+def _mock_announcement(
+    announcement_id: int = 30,
+    title: str = "Class Cancelled",
+    course_id: int = 1,
+    posted_at: str = "2025-06-01T12:00:00Z",
+) -> dict[str, Any]:
+    return {
+        "id": announcement_id,
+        "title": title,
+        "message": "<p>No class today</p>",
+        "html_url": f"{FAKE_BASE_URL}/courses/{course_id}/discussion_topics/{announcement_id}",
+        "posted_at": posted_at,
+    }
 
 
 def _mock_response(
@@ -430,3 +510,218 @@ class TestParseNextLink:
 
         with pytest.raises(OnyxError, match="must use https"):
             self.client._parse_next_link(header)
+
+
+# ---------------------------------------------------------------------------
+# CanvasConnector — credential loading
+# ---------------------------------------------------------------------------
+
+
+class TestLoadCredentials:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_load_credentials_success(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(json_data=[_mock_course()])
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+
+        result = connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        assert result is None
+        assert connector._canvas_client is not None
+
+    def test_canvas_client_raises_without_credentials(self) -> None:
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+
+        with pytest.raises(ConnectorMissingCredentialError):
+            _ = connector.canvas_client
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_load_credentials_invalid_token(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(401, {})
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+
+        with pytest.raises(CredentialExpiredError, match="invalid or expired"):
+            connector.load_credentials({"canvas_access_token": "bad-token"})
+
+
+# ---------------------------------------------------------------------------
+# CanvasConnector — document conversion
+# ---------------------------------------------------------------------------
+
+
+class TestDocumentConversion:
+    def setup_method(self) -> None:
+        self.connector = _build_connector()
+
+    def test_convert_page_to_document(self) -> None:
+        from onyx.connectors.canvas.connector import CanvasPage
+
+        page = CanvasPage(
+            page_id=10,
+            url="syllabus",
+            title="Syllabus",
+            body="<p>Welcome</p>",
+            created_at="2025-01-15T00:00:00Z",
+            updated_at="2025-06-01T12:00:00Z",
+            course_id=1,
+        )
+
+        doc = self.connector._convert_page_to_document(page)
+
+        expected_id = "canvas-page-1-10"
+        expected_metadata = {"course_id": "1", "type": "page"}
+        expected_updated_at = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+
+        assert doc.id == expected_id
+        assert doc.source == DocumentSource.CANVAS
+        assert doc.semantic_identifier == "Syllabus"
+        assert doc.metadata == expected_metadata
+        assert f"{FAKE_BASE_URL}/courses/1/pages/syllabus" in doc.sections[0].link
+        assert doc.doc_updated_at == expected_updated_at
+
+    def test_convert_page_without_body(self) -> None:
+        from onyx.connectors.canvas.connector import CanvasPage
+
+        page = CanvasPage(
+            page_id=11,
+            url="empty-page",
+            title="Empty Page",
+            body=None,
+            created_at="2025-01-15T00:00:00Z",
+            updated_at="2025-06-01T12:00:00Z",
+            course_id=1,
+        )
+
+        doc = self.connector._convert_page_to_document(page)
+        section_text = doc.sections[0].text
+
+        assert "Empty Page" in section_text
+        assert "<p>" not in section_text
+
+    def test_convert_assignment_to_document(self) -> None:
+        from onyx.connectors.canvas.connector import CanvasAssignment
+
+        assignment = CanvasAssignment(
+            id=20,
+            name="Homework 1",
+            description="<p>Solve these</p>",
+            html_url=f"{FAKE_BASE_URL}/courses/1/assignments/20",
+            course_id=1,
+            created_at="2025-01-20T00:00:00Z",
+            updated_at="2025-06-01T12:00:00Z",
+            due_at="2025-02-01T23:59:00Z",
+        )
+
+        doc = self.connector._convert_assignment_to_document(assignment)
+
+        expected_id = "canvas-assignment-1-20"
+        expected_due_text = "Due: February 01, 2025 23:59 UTC"
+
+        assert doc.id == expected_id
+        assert doc.source == DocumentSource.CANVAS
+        assert doc.semantic_identifier == "Homework 1"
+        assert expected_due_text in doc.sections[0].text
+
+    def test_convert_assignment_without_description(self) -> None:
+        from onyx.connectors.canvas.connector import CanvasAssignment
+
+        assignment = CanvasAssignment(
+            id=21,
+            name="Quiz 1",
+            description=None,
+            html_url=f"{FAKE_BASE_URL}/courses/1/assignments/21",
+            course_id=1,
+            created_at="2025-01-20T00:00:00Z",
+            updated_at="2025-06-01T12:00:00Z",
+            due_at=None,
+        )
+
+        doc = self.connector._convert_assignment_to_document(assignment)
+        section_text = doc.sections[0].text
+
+        assert "Quiz 1" in section_text
+        assert "Due:" not in section_text
+
+    def test_convert_announcement_to_document(self) -> None:
+        from onyx.connectors.canvas.connector import CanvasAnnouncement
+
+        announcement = CanvasAnnouncement(
+            id=30,
+            title="Class Cancelled",
+            message="<p>No class today</p>",
+            html_url=f"{FAKE_BASE_URL}/courses/1/discussion_topics/30",
+            posted_at="2025-06-01T12:00:00Z",
+            course_id=1,
+        )
+
+        doc = self.connector._convert_announcement_to_document(announcement)
+
+        expected_id = "canvas-announcement-1-30"
+        expected_updated_at = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+
+        assert doc.id == expected_id
+        assert doc.source == DocumentSource.CANVAS
+        assert doc.semantic_identifier == "Class Cancelled"
+        assert doc.doc_updated_at == expected_updated_at
+
+    def test_convert_announcement_without_posted_at(self) -> None:
+        from onyx.connectors.canvas.connector import CanvasAnnouncement
+
+        announcement = CanvasAnnouncement(
+            id=31,
+            title="TBD Announcement",
+            message=None,
+            html_url=f"{FAKE_BASE_URL}/courses/1/discussion_topics/31",
+            posted_at=None,
+            course_id=1,
+        )
+
+        doc = self.connector._convert_announcement_to_document(announcement)
+
+        assert doc.doc_updated_at is None
+
+
+# ---------------------------------------------------------------------------
+# CanvasConnector — validate_connector_settings
+# ---------------------------------------------------------------------------
+
+
+class TestValidateConnectorSettings:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_validate_success(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(json_data=[_mock_course()])
+        connector = _build_connector()
+
+        connector.validate_connector_settings()  # should not raise
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_validate_expired_credential(self, mock_requests: MagicMock) -> None:
+        success_resp = _mock_response(json_data=[_mock_course()])
+        fail_resp = _mock_response(401, {})
+        mock_requests.get.side_effect = [success_resp, fail_resp]
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        with pytest.raises(CredentialExpiredError):
+            connector.validate_connector_settings()
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_validate_rate_limited(self, mock_requests: MagicMock) -> None:
+        success_resp = _mock_response(json_data=[_mock_course()])
+        fail_resp = _mock_response(429, {})
+        mock_requests.get.side_effect = [success_resp, fail_resp]
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_validate_unexpected_error(self, mock_requests: MagicMock) -> None:
+        success_resp = _mock_response(json_data=[_mock_course()])
+        fail_resp = _mock_response(500, {})
+        mock_requests.get.side_effect = [success_resp, fail_resp]
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        with pytest.raises(UnexpectedValidationError):
+            connector.validate_connector_settings()
