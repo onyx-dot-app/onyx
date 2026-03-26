@@ -1,3 +1,5 @@
+"use client";
+
 import "@opal/core/disabled/styles.css";
 import React, { createContext, useContext } from "react";
 import { Slot } from "@radix-ui/react-slot";

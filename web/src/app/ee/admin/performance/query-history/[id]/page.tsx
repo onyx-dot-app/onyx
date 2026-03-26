@@ -1,9 +1,10 @@
 "use client";
 import { use } from "react";
 
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
 import Separator from "@/refresh-components/Separator";
+import Spacer from "@/refresh-components/Spacer";
 import { ChatSessionSnapshot, MessageSnapshot } from "../../usage/types";
 import { FiBook } from "react-icons/fi";
 import { timestampToReadableDate } from "@/lib/dateUtils";
@@ -21,13 +22,13 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
       <p className="text-xs font-bold mb-1">
         {message.message_type === "user" ? "User" : "AI"}
       </p>
-      <Text>{message.message}</Text>
+      <Text as="p">{message.message}</Text>
       {message.documents.length > 0 && (
         <div className="flex flex-col gap-y-2 mt-2">
           <p className="font-bold text-xs">Reference Documents</p>
           {message.documents.slice(0, 5).map((document) => {
             return (
-              <Text className="flex" key={document.document_id}>
+              <div className="text-sm flex" key={document.document_id}>
                 <FiBook
                   className={
                     "my-auto mr-1" + (document.link ? " text-link" : " ")
@@ -45,7 +46,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
                 ) : (
                   document.semantic_identifier
                 )}
-              </Text>
+              </div>
             );
           })}
         </div>
@@ -53,7 +54,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
       {message.feedback_type && (
         <div className="mt-2">
           <p className="font-bold text-xs">Feedback</p>
-          {message.feedback_text && <Text>{message.feedback_text}</Text>}
+          {message.feedback_text && <Text as="p">{message.feedback_text}</Text>}
           <div className="mt-1">
             <FeedbackBadge feedback={message.feedback_type} />
           </div>
@@ -95,14 +96,19 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
       <CardSection className="mt-4">
         <Title>Chat Session Details</Title>
 
-        <Text className="flex flex-wrap whitespace-normal mt-1 text-sm">
-          {chatSessionSnapshot.assistant_name}
-        </Text>
-        <Text className="flex flex-wrap whitespace-normal mt-1 text-xs">
-          {chatSessionSnapshot.user_email &&
-            `${chatSessionSnapshot.user_email}, `}
-          {timestampToReadableDate(chatSessionSnapshot.time_created)},{" "}
-          {chatSessionSnapshot.flow_type}
+        <Spacer rem={0.25} />
+        {chatSessionSnapshot.assistant_name && (
+          <Text as="p">{chatSessionSnapshot.assistant_name}</Text>
+        )}
+        <Spacer rem={0.25} />
+        <Text as="p">
+          {`${
+            chatSessionSnapshot.user_email
+              ? `${chatSessionSnapshot.user_email}, `
+              : ""
+          }${timestampToReadableDate(chatSessionSnapshot.time_created)}, ${
+            chatSessionSnapshot.flow_type
+          }`}
         </Text>
 
         <Separator />

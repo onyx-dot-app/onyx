@@ -6,7 +6,7 @@ import {
   usePersonaUniqueUsers,
 } from "../lib";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
 import CardSection from "@/components/admin/CardSection";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
@@ -180,7 +180,9 @@ export function PersonaMessagesChart({
     <CardSection className="mt-8">
       <Title>Agent Analytics</Title>
       <div className="flex flex-col gap-4">
-        <Text>Messages and unique users per day for the selected agent</Text>
+        <Text as="p">
+          Messages and unique users per day for the selected agent
+        </Text>
         <div className="flex items-center gap-4">
           <Select
             value={selectedPersonaId?.toString() ?? ""}

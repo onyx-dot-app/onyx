@@ -1,6 +1,6 @@
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 
 import { FaNewspaper, FaTrash } from "react-icons/fa";
 import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
@@ -51,7 +51,7 @@ export default function EditCredential({
 
   return (
     <div className="flex flex-col gap-y-6">
-      <Text>
+      <Text as="p">
         Ensure that you update to a credential with the proper permissions!
       </Text>
 
