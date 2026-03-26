@@ -209,8 +209,8 @@ function WebSearchDisconnectModal({
       ) : (
         <>
           <Text as="p" text03>
-            {isSearch ? "Web search" : "Web crawling"} will no longer be routed through{" "}
-            <b>{disconnectTarget.label}</b>.
+            {isSearch ? "Web search" : "Web crawling"} will no longer be routed
+            through <b>{disconnectTarget.label}</b>.
           </Text>
           <Text as="p" text03>
             Search history will be preserved.
