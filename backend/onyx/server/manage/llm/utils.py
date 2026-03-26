@@ -25,6 +25,7 @@ DYNAMIC_LLM_PROVIDERS = frozenset(
         LlmProviderNames.BEDROCK,
         LlmProviderNames.OLLAMA_CHAT,
         LlmProviderNames.LM_STUDIO,
+        LlmProviderNames.BIFROST,
     }
 )
 
@@ -47,6 +48,25 @@ BEDROCK_VISION_MODELS = frozenset(
         "amazon.nova-pro",
         "amazon.nova-lite",
         "amazon.nova-premier",
+    }
+)
+
+# Known Bifrost/OpenAI-compatible vision-capable model families where the
+# source API does not expose this metadata directly.
+BIFROST_VISION_MODEL_FAMILIES = frozenset(
+    {
+        "anthropic/claude-3",
+        "anthropic/claude-4",
+        "amazon/nova-pro",
+        "amazon/nova-lite",
+        "amazon/nova-premier",
+        "openai/gpt-4o",
+        "openai/gpt-4.1",
+        "google/gemini",
+        "meta-llama/llama-3.2",
+        "mistral/pixtral",
+        "qwen/qwen2.5-vl",
+        "qwen/qwen-vl",
     }
 )
 
@@ -76,11 +96,18 @@ def is_valid_bedrock_model(
 def infer_vision_support(model_id: str) -> bool:
     """Infer vision support from model ID when base model metadata unavailable.
 
-    Used for cross-region inference profiles when the base model isn't
-    available in the user's region.
+    Used for providers like Bedrock and Bifrost where vision support may
+    need to be inferred from vendor/model naming conventions.
     """
     model_id_lower = model_id.lower()
-    return any(vision_model in model_id_lower for vision_model in BEDROCK_VISION_MODELS)
+    if any(vision_model in model_id_lower for vision_model in BEDROCK_VISION_MODELS):
+        return True
+
+    normalized_model_id = model_id_lower.replace(".", "/")
+    return any(
+        vision_model in normalized_model_id
+        for vision_model in BIFROST_VISION_MODEL_FAMILIES
+    )
 
 
 def generate_bedrock_display_name(model_id: str) -> str:
@@ -322,7 +349,7 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
         - Ollama: "llama3:70b" → "Meta"
         - Ollama: "qwen2.5:7b" → "Alibaba"
     """
-    if provider == LlmProviderNames.OPENROUTER:
+    if provider in (LlmProviderNames.OPENROUTER, LlmProviderNames.BIFROST):
         # Format: "vendor/model-name" e.g., "anthropic/claude-3-5-sonnet"
         if "/" in model_name:
             vendor_key = model_name.split("/")[0].lower()
