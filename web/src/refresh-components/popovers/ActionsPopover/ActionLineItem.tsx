@@ -134,6 +134,7 @@ export default function ActionLineItem({
                 icon={SvgSlash}
                 onClick={noProp(onToggle)}
                 internal
+                aria-label={disabled ? "Enable" : "Disable"}
                 className={cn(
                   !disabled && "invisible group-hover/LineItem:visible",
                   // Hide when showing source count (it has its own hover behavior)
@@ -180,6 +181,11 @@ export default function ActionLineItem({
 
             {isSearchToolAndNotInProject && (
               <Button
+                aria-label={
+                  isSearchToolWithNoConnectors
+                    ? "Add Connectors"
+                    : "Configure Connectors"
+                }
                 icon={
                   isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
                 }

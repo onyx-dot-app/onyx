@@ -17,6 +17,7 @@ def get_sharepoint_external_access(
     drive_name: str | None = None,
     site_page: dict[str, Any] | None = None,
     add_prefix: bool = False,
+    treat_sharing_link_as_public: bool = False,
 ) -> ExternalAccess:
     if drive_item and drive_item.id is None:
         raise ValueError("DriveItem ID is required")
@@ -34,7 +35,13 @@ def get_sharepoint_external_access(
     )
 
     external_access = get_external_access_func(
-        ctx, graph_client, drive_name, drive_item, site_page, add_prefix
+        ctx,
+        graph_client,
+        drive_name,
+        drive_item,
+        site_page,
+        add_prefix,
+        treat_sharing_link_as_public,
     )
 
     return external_access

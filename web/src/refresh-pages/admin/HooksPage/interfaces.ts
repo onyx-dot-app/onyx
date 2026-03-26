@@ -18,6 +18,8 @@ export interface HookResponse {
   name: string;
   hook_point: HookPoint;
   endpoint_url: string | null;
+  /** Partially-masked API key (e.g. "abcd••••••••wxyz"), or null if no key is set. */
+  api_key_masked: string | null;
   fail_strategy: HookFailStrategy;
   timeout_seconds: number;
   is_active: boolean;

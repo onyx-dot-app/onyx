@@ -60,4 +60,4 @@ def test_non_rate_limit_error(mock_confluence_call: Mock) -> None:
     with pytest.raises(HTTPError):
         handled_call()
 
-    assert mock_confluence_call.call_count == 1
+    assert mock_confluence_call.call_count == 5

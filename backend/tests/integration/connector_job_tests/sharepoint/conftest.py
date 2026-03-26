@@ -80,6 +80,7 @@ def sharepoint_test_env_setup() -> Generator[SharepointTestEnvSetupTuple]:
         source=DocumentSource.SHAREPOINT,
         connector_specific_config={
             "sites": sharepoint_sites.split(","),
+            "treat_sharing_link_as_public": True,
         },
         access_type=AccessType.SYNC,  # Enable permission sync
         user_performing_action=admin_user,

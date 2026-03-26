@@ -211,10 +211,6 @@ export default function Status() {
       message: "Connector created successfully",
       type: "success",
     },
-    "connector-deleted": {
-      message: "Connector deleted successfully",
-      type: "success",
-    },
   });
 
   return (

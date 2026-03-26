@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -31,7 +32,10 @@ function GroupsPage() {
       {/* This is the sticky header for the groups page. It is used to display
        * the groups page title and search input when scrolling down.
        */}
-      <div className="sticky top-0 z-settings-header bg-background-tint-01">
+      <div
+        className="sticky top-0 z-settings-header bg-background-tint-01"
+        data-testid="groups-page-heading"
+      >
         <SettingsLayouts.Header icon={SvgUsers} title="Groups" separator />
 
         <Section flexDirection="row" padding={1}>
@@ -44,7 +48,7 @@ function GroupsPage() {
           />
           <Button
             icon={SvgPlusCircle}
-            onClick={() => router.push("/admin/groups/create")}
+            onClick={() => router.push("/admin/groups/create" as Route)}
           >
             New Group
           </Button>

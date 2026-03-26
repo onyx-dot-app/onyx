@@ -925,6 +925,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
+        # TODO(andrei): There is some duplicated logic in this function with
+        # others in this file.
         logger.debug(
             f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index {self._index_name}."
         )
@@ -973,6 +975,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
+        # TODO(andrei): There is some duplicated logic in this function with
+        # others in this file.
         logger.debug(
             f"[OpenSearchDocumentIndex] Keyword retrieving {num_to_retrieve} chunks for index {self._index_name}."
         )
@@ -1013,6 +1017,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
+        # TODO(andrei): There is some duplicated logic in this function with
+        # others in this file.
         logger.debug(
             f"[OpenSearchDocumentIndex] Semantic retrieving {num_to_retrieve} chunks for index {self._index_name}."
         )

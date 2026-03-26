@@ -13,3 +13,10 @@ export interface ApiKeyDescriptor {
 export interface MemberRow extends UserRow {
   api_key_display?: string;
 }
+
+export interface TokenRateLimitDisplay {
+  token_id: number;
+  enabled: boolean;
+  token_budget: number;
+  period_hours: number;
+}

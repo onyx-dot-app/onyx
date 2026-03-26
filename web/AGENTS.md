@@ -281,35 +281,90 @@ If you need help with this step, reach out to `raunak@onyx.app`.
 
 ## 3. Text Rendering
 
-**Prefer using the `refresh-components/texts/Text` component for all text rendering. Avoid "naked" text nodes.**
+**Use the Opal `Text` component for all text rendering. Avoid "naked" text nodes.**
 
-**Reason:** The `Text` component is fully compliant with the stylings provided in Figma. It provides easy utilities to specify the text-colour and font-size in the form of flags. Super duper easy.
+**Reason:** The `Text` component is fully compliant with the stylings provided in Figma. It uses
+string-enum props (`font` and `color`) for font preset and color selection. Inline markdown is
+opt-in via the `markdown()` function from `@opal/types`.
 
 ```typescript
-// ✅ Good
-import { Text } from '@/refresh-components/texts/Text'
+// ✅ Good — Opal Text with string-enum props
+import { Text } from "@opal/components";
 
 function UserCard({ name }: { name: string }) {
   return (
-    <Text
-      {/* The `text03` flag makes the text it renders to be coloured the 3rd-scale grey */}
-      text03
-      {/* The `mainAction` flag makes the text it renders to be "main-action" font + line-height + weightage, as described in the Figma */}
-      mainAction
-    >
+    <Text font="main-ui-action" color="text-03">
       {name}
     </Text>
   )
 }
 
-// ❌ Bad
-function UserCard({ name }: { name: string }) {
+// ✅ Good — inline markdown via markdown()
+import { markdown } from "@opal/utils";
+
+<Text font="main-ui-body" color="text-05">
+  {markdown("*Hello*, **world**! Visit [Onyx](https://onyx.app) and run `onyx start`.")}
+</Text>
+
+// ✅ Good — plain strings are never parsed as markdown
+<Text font="main-ui-body" color="text-03">
+  {userProvidedString}
+</Text>
+
+// ✅ Good — component props that support optional markdown use `string | RichStr`
+import type { RichStr } from "@opal/types";
+
+interface MyCardProps {
+  title: string | RichStr;
+}
+
+// ❌ Bad — legacy boolean-flag API (still works but deprecated)
+import Text from "@/refresh-components/texts/Text";
+<Text text03 mainUiAction>{name}</Text>
+
+// ❌ Bad — naked text nodes
+<div>
+  <h2>{name}</h2>
+  <p>User details</p>
+</div>
+```
+
+Key props:
+- `font`: `TextFont` — font preset (e.g., `"main-ui-body"`, `"heading-h2"`, `"secondary-action"`)
+- `color`: `TextColor` — text color (e.g., `"text-03"`, `"text-inverted-05"`)
+- `as`: `"p" | "span" | "li" | "h1" | "h2" | "h3"` — HTML tag (default: `"span"`)
+- `nowrap`: `boolean` — prevent text wrapping
+
+**`RichStr` convention:** When creating new components, any string prop that will be rendered as
+visible text in the DOM (e.g., `title`, `description`, `label`) should be typed as
+`string | RichStr` instead of plain `string`. This gives callers opt-in markdown support via
+`markdown()` without requiring any additional props or API surface on the component.
+
+```typescript
+import type { RichStr } from "@opal/types";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
+
+// ✅ Good — new components accept string | RichStr
+interface InfoCardProps {
+  title: string | RichStr;
+  description?: string | RichStr;
+}
+
+function InfoCard({ title, description }: InfoCardProps) {
   return (
     <div>
-      <h2>{name}</h2>
-      <p>User details</p>
+      <Text font="main-ui-action">{resolveStr(title)}</Text>
+      {description && (
+        <Text font="secondary-body" color="text-03">{resolveStr(description)}</Text>
+      )}
     </div>
-  )
+  );
+}
+
+// ❌ Bad — plain string props block markdown support for callers
+interface InfoCardProps {
+  title: string;
+  description?: string;
 }
 ```
 
