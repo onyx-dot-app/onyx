@@ -1,5 +1,6 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const WEB_SEARCH_URL = "/admin/configuration/web-search";
 
@@ -46,6 +47,10 @@ function findProviderCard(page: Page, providerLabel: string): Locator {
     .locator("div.rounded-16")
     .filter({ hasText: providerLabel })
     .first();
+}
+
+function mainContainer(page: Page): Locator {
+  return page.locator("[data-main-container]");
 }
 
 async function mockWebSearchApis(
@@ -98,6 +103,10 @@ test.describe("Web Search Provider Disconnect", () => {
       const braveCard = findProviderCard(page, "Brave");
       await braveCard.waitFor({ state: "visible", timeout: 10000 });
 
+      await expectElementScreenshot(mainContainer(page), {
+        name: "web-search-disconnect-non-active-before",
+      });
+
       const disconnectButton = braveCard.getByRole("button", {
         name: "Disconnect Brave",
       });
@@ -136,6 +145,10 @@ test.describe("Web Search Provider Disconnect", () => {
       await expect(confirmDialog).toBeVisible({ timeout: 5000 });
       await expect(confirmDialog).toContainText("Disconnect Brave");
 
+      await expectElementScreenshot(confirmDialog, {
+        name: "web-search-disconnect-non-active-modal",
+      });
+
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
@@ -144,6 +157,10 @@ test.describe("Web Search Provider Disconnect", () => {
       await expect(
         braveCard.getByRole("button", { name: "Connect" })
       ).toBeVisible({ timeout: 10000 });
+
+      await expectElementScreenshot(mainContainer(page), {
+        name: "web-search-disconnect-non-active-after",
+      });
     });
 
     test("should show replacement dropdown when disconnecting active search provider with alternatives", async ({
@@ -184,6 +201,10 @@ test.describe("Web Search Provider Disconnect", () => {
         name: "Disconnect",
       });
       await expect(confirmButton).toBeEnabled();
+
+      await expectElementScreenshot(confirmDialog, {
+        name: "web-search-disconnect-active-with-alt-modal",
+      });
     });
 
     test("should show connect message when disconnecting active search provider with no alternatives", async ({
@@ -216,6 +237,10 @@ test.describe("Web Search Provider Disconnect", () => {
         name: "Disconnect",
       });
       await expect(confirmButton).toBeEnabled();
+
+      await expectElementScreenshot(confirmDialog, {
+        name: "web-search-disconnect-no-alt-modal",
+      });
     });
 
     test("should not show disconnect button for unconfigured search provider", async ({
@@ -233,6 +258,10 @@ test.describe("Web Search Provider Disconnect", () => {
         name: "Disconnect Brave",
       });
       await expect(disconnectButton).not.toBeVisible();
+
+      await expectElementScreenshot(mainContainer(page), {
+        name: "web-search-disconnect-unconfigured",
+      });
     });
   });
 
@@ -291,6 +320,10 @@ test.describe("Web Search Provider Disconnect", () => {
       await expect(confirmDialog).toBeVisible({ timeout: 5000 });
       await expect(confirmDialog).toContainText("Disconnect Firecrawl");
 
+      await expectElementScreenshot(confirmDialog, {
+        name: "web-search-disconnect-content-non-active-modal",
+      });
+
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
@@ -335,6 +368,10 @@ test.describe("Web Search Provider Disconnect", () => {
         name: "Disconnect",
       });
       await expect(confirmButton).toBeEnabled();
+
+      await expectElementScreenshot(confirmDialog, {
+        name: "web-search-disconnect-content-active-with-alt-modal",
+      });
     });
 
     test("should not show disconnect for Onyx Web Crawler (built-in)", async ({

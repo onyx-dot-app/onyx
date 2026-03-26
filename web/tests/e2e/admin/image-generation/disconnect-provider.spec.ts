@@ -1,5 +1,6 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const IMAGE_GENERATION_URL = "/admin/configuration/image-generation";
 
@@ -23,6 +24,10 @@ const FAKE_DEFAULT_CONFIG = {
 
 function getProviderCard(page: Page, providerId: string): Locator {
   return page.getByLabel(`image-gen-provider-${providerId}`, { exact: true });
+}
+
+function mainContainer(page: Page): Locator {
+  return page.locator("[data-main-container]");
 }
 
 /**
@@ -69,6 +74,10 @@ test.describe("Image Generation Provider Disconnect", () => {
     const card = getProviderCard(page, "openai_dalle_3");
     await card.waitFor({ state: "visible", timeout: 10000 });
 
+    await expectElementScreenshot(mainContainer(page), {
+      name: "image-gen-disconnect-non-default-before",
+    });
+
     // Verify disconnect button exists and is enabled
     const disconnectButton = card.getByRole("button", {
       name: "Disconnect DALL-E 3",
@@ -111,6 +120,10 @@ test.describe("Image Generation Provider Disconnect", () => {
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
     await expect(confirmDialog).toContainText("Disconnect DALL-E 3");
 
+    await expectElementScreenshot(confirmDialog, {
+      name: "image-gen-disconnect-non-default-modal",
+    });
+
     // Click Disconnect in the confirmation modal
     const confirmButton = confirmDialog.getByRole("button", {
       name: "Disconnect",
@@ -120,6 +133,10 @@ test.describe("Image Generation Provider Disconnect", () => {
     // Verify the card reverts to disconnected state (shows "Connect" button)
     await expect(card.getByRole("button", { name: "Connect" })).toBeVisible({
       timeout: 10000,
+    });
+
+    await expectElementScreenshot(mainContainer(page), {
+      name: "image-gen-disconnect-non-default-after",
     });
   });
 
@@ -157,6 +174,10 @@ test.describe("Image Generation Provider Disconnect", () => {
       name: "Disconnect",
     });
     await expect(confirmButton).toBeEnabled();
+
+    await expectElementScreenshot(confirmDialog, {
+      name: "image-gen-disconnect-default-with-alt-modal",
+    });
   });
 
   test("should show connect message when disconnecting default provider with no alternatives", async ({
@@ -191,6 +212,10 @@ test.describe("Image Generation Provider Disconnect", () => {
       name: "Disconnect",
     });
     await expect(confirmButton).toBeEnabled();
+
+    await expectElementScreenshot(confirmDialog, {
+      name: "image-gen-disconnect-no-alt-modal",
+    });
   });
 
   test("should not show disconnect button for unconfigured providers", async ({
@@ -211,5 +236,9 @@ test.describe("Image Generation Provider Disconnect", () => {
       name: "Disconnect DALL-E 3",
     });
     await expect(disconnectButton).not.toBeVisible();
+
+    await expectElementScreenshot(mainContainer(page), {
+      name: "image-gen-disconnect-unconfigured",
+    });
   });
 });

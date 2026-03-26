@@ -1,5 +1,6 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const VOICE_URL = "/admin/configuration/voice";
 
@@ -58,6 +59,10 @@ function findModelCard(page: Page, ariaLabel: string): Locator {
   return page.getByLabel(ariaLabel, { exact: true });
 }
 
+function mainContainer(page: Page): Locator {
+  return page.locator("[data-main-container]");
+}
+
 async function mockVoiceApis(
   page: Page,
   providers: (typeof FAKE_PROVIDERS)[keyof typeof FAKE_PROVIDERS][]
@@ -92,6 +97,10 @@ test.describe("Voice Provider Disconnect", () => {
     const whisperCard = findModelCard(page, "voice-stt-whisper");
     await whisperCard.waitFor({ state: "visible", timeout: 10000 });
 
+    await expectElementScreenshot(mainContainer(page), {
+      name: "voice-disconnect-non-active-before",
+    });
+
     const disconnectButton = whisperCard.getByRole("button", {
       name: "Disconnect Whisper",
     });
@@ -125,6 +134,10 @@ test.describe("Voice Provider Disconnect", () => {
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
     await expect(confirmDialog).toContainText("Disconnect OpenAI");
 
+    await expectElementScreenshot(confirmDialog, {
+      name: "voice-disconnect-non-active-modal",
+    });
+
     const confirmButton = confirmDialog.getByRole("button", {
       name: "Disconnect",
     });
@@ -139,6 +152,10 @@ test.describe("Voice Provider Disconnect", () => {
     await expect(tts1Card.getByRole("button", { name: "Connect" })).toBeVisible(
       { timeout: 10000 }
     );
+
+    await expectElementScreenshot(mainContainer(page), {
+      name: "voice-disconnect-non-active-after",
+    });
   });
 
   test("should show replacement dropdown when disconnecting active provider with alternatives", async ({
@@ -157,6 +174,10 @@ test.describe("Voice Provider Disconnect", () => {
     const whisperCard = findModelCard(page, "voice-stt-whisper");
     await whisperCard.waitFor({ state: "visible", timeout: 10000 });
 
+    await expectElementScreenshot(mainContainer(page), {
+      name: "voice-disconnect-active-with-alt-before",
+    });
+
     const disconnectButton = whisperCard.getByRole("button", {
       name: "Disconnect Whisper",
     });
@@ -174,6 +195,10 @@ test.describe("Voice Provider Disconnect", () => {
       name: "Disconnect",
     });
     await expect(confirmButton).toBeEnabled();
+
+    await expectElementScreenshot(confirmDialog, {
+      name: "voice-disconnect-active-with-alt-modal",
+    });
   });
 
   test("should show replacement when provider is default for both STT and TTS", async ({
@@ -191,6 +216,10 @@ test.describe("Voice Provider Disconnect", () => {
 
     const whisperCard = findModelCard(page, "voice-stt-whisper");
     await whisperCard.waitFor({ state: "visible", timeout: 10000 });
+
+    await expectElementScreenshot(mainContainer(page), {
+      name: "voice-disconnect-both-modes-before",
+    });
 
     const disconnectButton = whisperCard.getByRole("button", {
       name: "Disconnect Whisper",
@@ -213,6 +242,10 @@ test.describe("Voice Provider Disconnect", () => {
       name: "Disconnect",
     });
     await expect(confirmButton).toBeEnabled();
+
+    await expectElementScreenshot(confirmDialog, {
+      name: "voice-disconnect-both-modes-modal",
+    });
   });
 
   test("should show connect message when disconnecting active provider with no alternatives", async ({
@@ -227,6 +260,10 @@ test.describe("Voice Provider Disconnect", () => {
 
     const whisperCard = findModelCard(page, "voice-stt-whisper");
     await whisperCard.waitFor({ state: "visible", timeout: 10000 });
+
+    await expectElementScreenshot(mainContainer(page), {
+      name: "voice-disconnect-no-alt-before",
+    });
 
     const disconnectButton = whisperCard.getByRole("button", {
       name: "Disconnect Whisper",
@@ -247,6 +284,10 @@ test.describe("Voice Provider Disconnect", () => {
       name: "Disconnect",
     });
     await expect(confirmButton).toBeEnabled();
+
+    await expectElementScreenshot(confirmDialog, {
+      name: "voice-disconnect-no-alt-modal",
+    });
   });
 
   test("should not show disconnect button for unconfigured provider", async ({
@@ -264,5 +305,9 @@ test.describe("Voice Provider Disconnect", () => {
       name: "Disconnect Whisper",
     });
     await expect(disconnectButton).not.toBeVisible();
+
+    await expectElementScreenshot(mainContainer(page), {
+      name: "voice-disconnect-unconfigured",
+    });
   });
 });
