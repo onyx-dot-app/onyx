@@ -1524,6 +1524,7 @@ def get_bifrost_available_models(
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
                     supports_image_input=infer_vision_support(model_id),
+                    supports_reasoning=is_reasoning_model(model_id, model_name),
                 )
             )
         except Exception as e:

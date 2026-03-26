@@ -178,6 +178,7 @@ export interface BifrostModelResponse {
   display_name: string;
   max_input_tokens: number | null;
   supports_image_input: boolean;
+  supports_reasoning: boolean;
 }
 
 export interface VertexAIFetchParams {

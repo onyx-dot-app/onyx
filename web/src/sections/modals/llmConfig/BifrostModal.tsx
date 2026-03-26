@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -126,20 +127,9 @@ function BifrostModalInternals({
           name="api_key"
           title="API Key"
           optional={true}
-          subDescription={
-            <>
-              Paste your API key from{" "}
-              <a
-                href="https://docs.getbifrost.ai/overview"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-2 hover:text-link"
-              >
-                Bifrost
-              </a>{" "}
-              to access your models.
-            </>
-          }
+          subDescription={markdown(
+            "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
+          )}
         >
           <PasswordInputTypeInField name="api_key" placeholder="API Key" />
         </InputLayouts.Vertical>

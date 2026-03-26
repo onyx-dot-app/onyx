@@ -1,5 +1,4 @@
 import { JSX } from "react";
-import { BifrostIcon } from "@/components/icons/BifrostIcon";
 import {
   AnthropicIcon,
   AmazonIcon,
@@ -34,7 +33,7 @@ import {
   LiteLLMProxyFetchParams,
   BifrostFetchParams,
 } from "@/interfaces/llm";
-import { SvgAws, SvgOpenrouter } from "@opal/icons";
+import { SvgAws, SvgBifrost, SvgOpenrouter } from "@opal/icons";
 
 // Aggregator providers that host models from multiple vendors
 export const AGGREGATOR_PROVIDERS = new Set([
@@ -82,7 +81,7 @@ export const getProviderIcon = (
     bedrock_converse: SvgAws,
     openrouter: SvgOpenrouter,
     litellm_proxy: LiteLLMIcon,
-    bifrost: BifrostIcon,
+    bifrost: SvgBifrost,
     vertex_ai: GeminiIcon,
   };
 
@@ -270,7 +269,7 @@ export const fetchOpenRouterModels = async (
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
-          "Failed to parse Bifrost model fetch error response",
+          "Failed to parse OpenRouter model fetch error response",
           jsonError
         );
       }
@@ -327,8 +326,11 @@ export const fetchLMStudioModels = async (
       try {
         const errorData = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
-      } catch {
-        // ignore JSON parsing errors
+      } catch (jsonError) {
+        console.warn(
+          "Failed to parse LM Studio model fetch error response",
+          jsonError
+        );
       }
       return { models: [], error: errorMessage };
     }
@@ -382,8 +384,11 @@ export const fetchBifrostModels = async (
       try {
         const errorData = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
-      } catch {
-        // ignore JSON parsing errors
+      } catch (jsonError) {
+        console.warn(
+          "Failed to parse Bifrost model fetch error response",
+          jsonError
+        );
       }
       return { models: [], error: errorMessage };
     }
@@ -395,7 +400,7 @@ export const fetchBifrostModels = async (
       is_visible: true,
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
-      supports_reasoning: false,
+      supports_reasoning: modelData.supports_reasoning,
     }));
 
     return { models };
