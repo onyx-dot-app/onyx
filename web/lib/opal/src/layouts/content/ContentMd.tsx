@@ -25,7 +25,6 @@ interface ContentMdPresetConfig {
   iconColorClass: string;
   titleFont: string;
   lineHeight: string;
-  gap: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
   editButtonSize: ContainerSizeVariants;
   editButtonPadding: string;
@@ -85,7 +84,6 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconColorClass: "text-text-04",
     titleFont: "font-main-content-emphasis",
     lineHeight: "1.5rem",
-    gap: "0.125rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0",
     optionalFont: "font-main-content-muted",
@@ -98,7 +96,6 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconColorClass: "text-text-03",
     titleFont: "font-main-ui-action",
     lineHeight: "1.25rem",
-    gap: "0.25rem",
     editButtonSize: "xs",
     editButtonPadding: "p-0",
     optionalFont: "font-main-ui-muted",
@@ -111,7 +108,6 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconColorClass: "text-text-04",
     titleFont: "font-secondary-action",
     lineHeight: "1rem",
-    gap: "0.125rem",
     editButtonSize: "2xs",
     editButtonPadding: "p-0",
     optionalFont: "font-secondary-action",
@@ -170,7 +166,6 @@ function ContentMd({
       ref={ref}
       className="opal-content-md"
       data-interactive={withInteractive || undefined}
-      style={{ gap: config.gap }}
     >
       <div
         className="opal-content-md-header"
