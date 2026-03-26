@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
+from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
@@ -449,15 +450,15 @@ def check_indexing_completion(
             ):
                 # Check if the task exists in the celery queue
                 # This handles the case where Redis dies after task creation but before task execution
-                redis_celery = task.app.broker_connection().channel().client  # type: ignore
-                task_exists = celery_find_task(
-                    attempt.celery_task_id,
-                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
-                    redis_celery,
-                )
-                unacked_task_ids = celery_get_unacked_task_ids(
-                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
-                )
+                with celery_get_broker_client(task.app) as redis_celery:
+                    task_exists = celery_find_task(
+                        attempt.celery_task_id,
+                        OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
+                        redis_celery,
+                    )
+                    unacked_task_ids = celery_get_unacked_task_ids(
+                        OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
+                    )
 
                 if not task_exists and attempt.celery_task_id not in unacked_task_ids:
                     # there is a race condition where the docfetching task has been taken off

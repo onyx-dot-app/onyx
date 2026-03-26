@@ -14,6 +14,7 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.configs.app_configs import JOB_TIMEOUT
@@ -132,7 +133,6 @@ def revoke_tasks_blocking_deletion(
 def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | None:
     r = get_redis_client()
     r_replica = get_redis_replica_client()
-    r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
 
     lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_CONNECTOR_DELETION_BEAT_LOCK,
@@ -149,9 +149,10 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
         if not r.exists(OnyxRedisSignals.BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES):
             # clear fences that don't have associated celery tasks in progress
             try:
-                validate_connector_deletion_fences(
-                    tenant_id, r, r_replica, r_celery, lock_beat
-                )
+                with celery_get_broker_client(self.app) as r_celery:
+                    validate_connector_deletion_fences(
+                        tenant_id, r, r_replica, r_celery, lock_beat
+                    )
             except Exception:
                 task_logger.exception(
                     "Exception while validating connector deletion fences"

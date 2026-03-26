@@ -1,5 +1,7 @@
 # These are helper objects for tracking the keys we need to write in redis
+import contextlib
 import json
+from collections.abc import Generator
 from typing import Any
 from typing import cast
 
@@ -8,6 +10,20 @@ from redis import Redis
 
 from onyx.background.celery.configs.base import CELERY_SEPARATOR
 from onyx.configs.constants import OnyxCeleryPriority
+
+
+@contextlib.contextmanager
+def celery_get_broker_client(app: Celery) -> Generator[Redis, None, None]:
+    """Borrow a Redis client from Celery's broker connection pool.
+
+    Usage:
+        with celery_get_broker_client(self.app) as r_celery:
+            length = celery_get_queue_length(queue, r_celery)
+
+    The connection is returned to the pool when the context exits.
+    """
+    with app.connection_or_acquire() as conn:  # type: ignore[attr-defined]
+        yield conn.channel().client  # type: ignore[union-attr]
 
 
 def celery_get_unacked_length(r: Redis) -> int:

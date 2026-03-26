@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.memory_monitoring import emit_process_memory
@@ -699,30 +700,30 @@ def monitor_background_processes(self: Task, *, tenant_id: str) -> None:
 
     try:
         # Get Redis client for Celery broker
-        redis_celery = self.app.broker_connection().channel().client  # type: ignore
         redis_std = get_redis_client()
 
-        # Define metric collection functions and their dependencies
-        metric_functions: list[Callable[[], list[Metric]]] = [
-            lambda: _collect_queue_metrics(redis_celery),
-            lambda: _collect_connector_metrics(db_session, redis_std),
-            lambda: _collect_sync_metrics(db_session, redis_std),
-        ]
+        with celery_get_broker_client(self.app) as redis_celery:
+            # Define metric collection functions and their dependencies
+            metric_functions: list[Callable[[], list[Metric]]] = [
+                lambda: _collect_queue_metrics(redis_celery),
+                lambda: _collect_connector_metrics(db_session, redis_std),
+                lambda: _collect_sync_metrics(db_session, redis_std),
+            ]
 
-        # Collect and log each metric
-        with get_session_with_current_tenant() as db_session:
-            for metric_fn in metric_functions:
-                metrics = metric_fn()
-                for metric in metrics:
-                    # double check to make sure we aren't double-emitting metrics
-                    if metric.key is None or not _has_metric_been_emitted(
-                        redis_std, metric.key
-                    ):
-                        metric.log()
-                        metric.emit(tenant_id)
+            # Collect and log each metric
+            with get_session_with_current_tenant() as db_session:
+                for metric_fn in metric_functions:
+                    metrics = metric_fn()
+                    for metric in metrics:
+                        # double check to make sure we aren't double-emitting metrics
+                        if metric.key is None or not _has_metric_been_emitted(
+                            redis_std, metric.key
+                        ):
+                            metric.log()
+                            metric.emit(tenant_id)
 
-                    if metric.key is not None:
-                        _mark_metric_as_emitted(redis_std, metric.key)
+                        if metric.key is not None:
+                            _mark_metric_as_emitted(redis_std, metric.key)
 
         task_logger.info("Successfully collected background metrics")
     except SoftTimeLimitExceeded:
@@ -890,61 +891,67 @@ def monitor_celery_queues_helper(
 ) -> None:
     """A task to monitor all celery queue lengths."""
 
-    r_celery = task.app.broker_connection().channel().client  # type: ignore
-    n_celery = celery_get_queue_length(OnyxCeleryQueues.PRIMARY, r_celery)
-    n_docfetching = celery_get_queue_length(
-        OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
-    )
-    n_docprocessing = celery_get_queue_length(OnyxCeleryQueues.DOCPROCESSING, r_celery)
+    with celery_get_broker_client(task.app) as r_celery:
+        n_celery = celery_get_queue_length(OnyxCeleryQueues.PRIMARY, r_celery)
+        n_docfetching = celery_get_queue_length(
+            OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
+        )
+        n_docprocessing = celery_get_queue_length(
+            OnyxCeleryQueues.DOCPROCESSING, r_celery
+        )
 
-    n_user_file_processing = celery_get_queue_length(
-        OnyxCeleryQueues.USER_FILE_PROCESSING, r_celery
-    )
-    n_user_file_project_sync = celery_get_queue_length(
-        OnyxCeleryQueues.USER_FILE_PROJECT_SYNC, r_celery
-    )
-    n_user_file_delete = celery_get_queue_length(
-        OnyxCeleryQueues.USER_FILE_DELETE, r_celery
-    )
-    n_sync = celery_get_queue_length(OnyxCeleryQueues.VESPA_METADATA_SYNC, r_celery)
-    n_deletion = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_DELETION, r_celery)
-    n_pruning = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_PRUNING, r_celery)
-    n_permissions_sync = celery_get_queue_length(
-        OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC, r_celery
-    )
-    n_external_group_sync = celery_get_queue_length(
-        OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC, r_celery
-    )
-    n_permissions_upsert = celery_get_queue_length(
-        OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT, r_celery
-    )
-    n_hierarchy_fetching = celery_get_queue_length(
-        OnyxCeleryQueues.CONNECTOR_HIERARCHY_FETCHING, r_celery
-    )
-    n_llm_model_update = celery_get_queue_length(
-        OnyxCeleryQueues.LLM_MODEL_UPDATE, r_celery
-    )
-    n_checkpoint_cleanup = celery_get_queue_length(
-        OnyxCeleryQueues.CHECKPOINT_CLEANUP, r_celery
-    )
-    n_index_attempt_cleanup = celery_get_queue_length(
-        OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP, r_celery
-    )
-    n_csv_generation = celery_get_queue_length(
-        OnyxCeleryQueues.CSV_GENERATION, r_celery
-    )
-    n_monitoring = celery_get_queue_length(OnyxCeleryQueues.MONITORING, r_celery)
-    n_sandbox = celery_get_queue_length(OnyxCeleryQueues.SANDBOX, r_celery)
-    n_opensearch_migration = celery_get_queue_length(
-        OnyxCeleryQueues.OPENSEARCH_MIGRATION, r_celery
-    )
+        n_user_file_processing = celery_get_queue_length(
+            OnyxCeleryQueues.USER_FILE_PROCESSING, r_celery
+        )
+        n_user_file_project_sync = celery_get_queue_length(
+            OnyxCeleryQueues.USER_FILE_PROJECT_SYNC, r_celery
+        )
+        n_user_file_delete = celery_get_queue_length(
+            OnyxCeleryQueues.USER_FILE_DELETE, r_celery
+        )
+        n_sync = celery_get_queue_length(OnyxCeleryQueues.VESPA_METADATA_SYNC, r_celery)
+        n_deletion = celery_get_queue_length(
+            OnyxCeleryQueues.CONNECTOR_DELETION, r_celery
+        )
+        n_pruning = celery_get_queue_length(
+            OnyxCeleryQueues.CONNECTOR_PRUNING, r_celery
+        )
+        n_permissions_sync = celery_get_queue_length(
+            OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC, r_celery
+        )
+        n_external_group_sync = celery_get_queue_length(
+            OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC, r_celery
+        )
+        n_permissions_upsert = celery_get_queue_length(
+            OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT, r_celery
+        )
+        n_hierarchy_fetching = celery_get_queue_length(
+            OnyxCeleryQueues.CONNECTOR_HIERARCHY_FETCHING, r_celery
+        )
+        n_llm_model_update = celery_get_queue_length(
+            OnyxCeleryQueues.LLM_MODEL_UPDATE, r_celery
+        )
+        n_checkpoint_cleanup = celery_get_queue_length(
+            OnyxCeleryQueues.CHECKPOINT_CLEANUP, r_celery
+        )
+        n_index_attempt_cleanup = celery_get_queue_length(
+            OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP, r_celery
+        )
+        n_csv_generation = celery_get_queue_length(
+            OnyxCeleryQueues.CSV_GENERATION, r_celery
+        )
+        n_monitoring = celery_get_queue_length(OnyxCeleryQueues.MONITORING, r_celery)
+        n_sandbox = celery_get_queue_length(OnyxCeleryQueues.SANDBOX, r_celery)
+        n_opensearch_migration = celery_get_queue_length(
+            OnyxCeleryQueues.OPENSEARCH_MIGRATION, r_celery
+        )
 
-    n_docfetching_prefetched = celery_get_unacked_task_ids(
-        OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
-    )
-    n_docprocessing_prefetched = celery_get_unacked_task_ids(
-        OnyxCeleryQueues.DOCPROCESSING, r_celery
-    )
+        n_docfetching_prefetched = celery_get_unacked_task_ids(
+            OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
+        )
+        n_docprocessing_prefetched = celery_get_unacked_task_ids(
+            OnyxCeleryQueues.DOCPROCESSING, r_celery
+        )
 
     task_logger.info(
         f"Queue lengths: celery={n_celery} "
@@ -1080,26 +1087,26 @@ def cloud_monitor_celery_pidbox(
     num_deleted = 0
 
     MAX_PIDBOX_IDLE = 24 * 3600  # 1 day in seconds
-    r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
-    for key in r_celery.scan_iter("*.reply.celery.pidbox"):
-        key_bytes = cast(bytes, key)
-        key_str = key_bytes.decode("utf-8")
-        if key_str.startswith("_kombu"):
-            continue
+    with celery_get_broker_client(self.app) as r_celery:
+        for key in r_celery.scan_iter("*.reply.celery.pidbox"):
+            key_bytes = cast(bytes, key)
+            key_str = key_bytes.decode("utf-8")
+            if key_str.startswith("_kombu"):
+                continue
 
-        idletime_raw = r_celery.object("idletime", key)
-        if idletime_raw is None:
-            continue
+            idletime_raw = r_celery.object("idletime", key)
+            if idletime_raw is None:
+                continue
 
-        idletime = cast(int, idletime_raw)
-        if idletime < MAX_PIDBOX_IDLE:
-            continue
+            idletime = cast(int, idletime_raw)
+            if idletime < MAX_PIDBOX_IDLE:
+                continue
 
-        r_celery.delete(key)
-        task_logger.info(
-            f"Deleted idle pidbox: pidbox={key_str} idletime={idletime} max_idletime={MAX_PIDBOX_IDLE}"
-        )
-        num_deleted += 1
+            r_celery.delete(key)
+            task_logger.info(
+                f"Deleted idle pidbox: pidbox={key_str} idletime={idletime} max_idletime={MAX_PIDBOX_IDLE}"
+            )
+            num_deleted += 1
 
     # Enable later in case we want some aggregate metrics
     # task_logger.info(f"Deleted idle pidbox: pidbox={key_str}")
