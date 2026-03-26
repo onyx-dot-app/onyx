@@ -12,13 +12,15 @@ for (const theme of THEMES) {
 
     test("should screenshot each settings tab", async ({ page }) => {
       await page.goto("/app/settings");
-      await page.waitForLoadState("networkidle");
+      await page
+        .getByTestId("settings-left-tab-navigation")
+        .waitFor({ state: "visible" });
 
       const nav = page.getByTestId("settings-left-tab-navigation");
       const tabs = nav.locator("a");
+      await expect(tabs.first()).toBeVisible({ timeout: 10_000 });
       const count = await tabs.count();
 
-      expect(count).toBeGreaterThan(0);
       for (let i = 0; i < count; i++) {
         const tab = tabs.nth(i);
         const href = await tab.getAttribute("href");
