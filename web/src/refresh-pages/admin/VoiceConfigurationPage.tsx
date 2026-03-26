@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AzureIcon,
   ElevenLabsIcon,
@@ -191,6 +191,14 @@ function VoiceDisconnectModal({
   const needsReplacement = isActive;
   const hasReplacements = replacementOptions.length > 0;
 
+  // Auto-select first replacement when modal opens
+  useEffect(() => {
+    if (needsReplacement && hasReplacements && !replacementProviderId) {
+      const first = replacementOptions[0];
+      if (first) onReplacementChange(String(first.id));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
@@ -218,6 +226,9 @@ function VoiceDisconnectModal({
                 ? "speech-to-text"
                 : "text-to-speech"}{" "}
               provider. Choose a replacement:
+            </Text>
+            <Text as="p" secondaryBody text03>
+              Set New Default
             </Text>
             <InputSelect
               value={replacementProviderId ?? undefined}

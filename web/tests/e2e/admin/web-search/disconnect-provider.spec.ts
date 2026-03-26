@@ -179,11 +179,11 @@ test.describe("Web Search Provider Disconnect", () => {
         confirmDialog.getByText("Choose a replacement")
       ).toBeVisible();
 
-      // Disconnect button should be disabled until replacement is selected
+      // Disconnect button should be enabled because first replacement is auto-selected
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
-      await expect(confirmButton).toBeDisabled();
+      await expect(confirmButton).toBeEnabled();
     });
 
     test("should show warning when disconnecting active search provider with no alternatives", async ({
@@ -330,11 +330,11 @@ test.describe("Web Search Provider Disconnect", () => {
         confirmDialog.getByText("Choose a replacement")
       ).toBeVisible();
 
-      // Disconnect should be disabled until replacement is selected
+      // Disconnect should be enabled because first replacement is auto-selected
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
-      await expect(confirmButton).toBeDisabled();
+      await expect(confirmButton).toBeEnabled();
     });
 
     test("should not show disconnect for Onyx Web Crawler (built-in)", async ({

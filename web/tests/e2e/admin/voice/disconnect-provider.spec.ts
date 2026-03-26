@@ -169,15 +169,12 @@ test.describe("Voice Provider Disconnect", () => {
       await expect(
         confirmDialog.getByText("Choose a replacement")
       ).toBeVisible();
-      await expect(
-        confirmDialog.getByText("Select a replacement provider")
-      ).toBeVisible();
 
-      // Disconnect button should be disabled until a replacement is selected
+      // Disconnect button should be enabled because first replacement is auto-selected
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
-      await expect(confirmButton).toBeDisabled();
+      await expect(confirmButton).toBeEnabled();
     });
 
     test("should show warning when disconnecting active STT provider with no alternatives", async ({
@@ -318,11 +315,11 @@ test.describe("Voice Provider Disconnect", () => {
         confirmDialog.getByText("Choose a replacement")
       ).toBeVisible();
 
-      // Disconnect should be disabled until replacement is selected
+      // Disconnect should be enabled because first replacement is auto-selected
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
-      await expect(confirmButton).toBeDisabled();
+      await expect(confirmButton).toBeEnabled();
     });
 
     test("should not show disconnect button for unconfigured TTS provider", async ({

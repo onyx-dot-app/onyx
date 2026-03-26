@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import useSWR from "swr";
 import Text from "@/refresh-components/texts/Text";
 import { Select } from "@/refresh-components/cards";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
+import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LLMProviderResponse, LLMProviderView } from "@/interfaces/llm";
 import {
@@ -181,6 +182,14 @@ export default function ImageGenerationContent() {
   const needsReplacement = !!isDisconnectingDefault;
   const hasReplacements = replacementOptions.length > 0;
 
+  // Auto-select first replacement when modal opens
+  useEffect(() => {
+    if (needsReplacement && hasReplacements && !replacementProviderId) {
+      const first = replacementOptions[0];
+      if (first) setReplacementProviderId(first.image_provider_id);
+    }
+  }, [disconnectProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <>
       <div className="flex flex-col gap-6">
@@ -261,34 +270,44 @@ export default function ImageGenerationContent() {
         >
           {needsReplacement ? (
             hasReplacements ? (
-              <div className="flex flex-col gap-2">
+              <Section alignItems="start">
                 <Text as="p" text03>
                   <b>{disconnectProvider.title}</b> is currently the default
                   image generation model. Choose a replacement:
                 </Text>
-                <InputSelect
-                  value={replacementProviderId ?? undefined}
-                  onValueChange={(v) => setReplacementProviderId(v)}
-                >
-                  <InputSelect.Trigger placeholder="Select a replacement model" />
-                  <InputSelect.Content>
-                    {replacementOptions.map((p) => (
-                      <InputSelect.Item
-                        key={p.image_provider_id}
-                        value={p.image_provider_id}
-                      >
-                        {p.title}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
-              </div>
+                <Section alignItems="start" gap={0.25}>
+                  <Text as="p" text04>
+                    Set New Default
+                  </Text>
+                  <InputSelect
+                    value={replacementProviderId ?? undefined}
+                    onValueChange={(v) => setReplacementProviderId(v)}
+                  >
+                    <InputSelect.Trigger placeholder="Select a replacement model" />
+                    <InputSelect.Content>
+                      {replacementOptions.map((p) => (
+                        <InputSelect.Item
+                          key={p.image_provider_id}
+                          value={p.image_provider_id}
+                        >
+                          {p.title}
+                        </InputSelect.Item>
+                      ))}
+                    </InputSelect.Content>
+                  </InputSelect>
+                </Section>
+              </Section>
             ) : (
-              <Text as="p" text03>
-                <b>{disconnectProvider.title}</b> is currently the default image
-                generation model. Disconnecting will disable image generation
-                until you configure another model.
-              </Text>
+              <>
+                <Text as="p" text03>
+                  <b>{disconnectProvider.title}</b> is currently the default
+                  image generation model.
+                </Text>
+                <Text as="p" text03>
+                  Disconnecting will disable image generation until you
+                  configure another model.
+                </Text>
+              </>
             )
           ) : (
             <div className="flex flex-col gap-1">

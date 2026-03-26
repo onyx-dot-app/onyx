@@ -152,11 +152,11 @@ test.describe("Image Generation Provider Disconnect", () => {
     // Should show replacement dropdown since there's an alternative
     await expect(confirmDialog.getByText("Choose a replacement")).toBeVisible();
 
-    // Disconnect button should be disabled until replacement is selected
+    // Disconnect button should be enabled because first replacement is auto-selected
     const confirmButton = confirmDialog.getByRole("button", {
       name: "Disconnect",
     });
-    await expect(confirmButton).toBeDisabled();
+    await expect(confirmButton).toBeEnabled();
   });
 
   test("should show warning when disconnecting default provider with no alternatives", async ({

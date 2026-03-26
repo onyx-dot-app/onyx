@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState, useReducer } from "react";
+import { useEffect, useMemo, useState, useReducer } from "react";
 import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import { Select } from "@/refresh-components/cards";
@@ -119,6 +119,14 @@ function WebSearchDisconnectModal({
   const needsReplacement = isActive;
   const hasReplacements = replacementOptions.length > 0;
 
+  // Auto-select first replacement when modal opens
+  useEffect(() => {
+    if (needsReplacement && hasReplacements && !replacementProviderId) {
+      const first = replacementOptions[0];
+      if (first) onReplacementChange(String(first.id));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const getLabel = (p: { name: string; provider_type: string }) => {
     if (isSearch) {
       const details =
@@ -155,6 +163,9 @@ function WebSearchDisconnectModal({
             <Text as="p" text03>
               <b>{disconnectTarget.label}</b> is currently the active{" "}
               {categoryLabel}. Choose a replacement:
+            </Text>
+            <Text as="p" secondaryBody text03>
+              Set New Default
             </Text>
             <InputSelect
               value={replacementProviderId ?? undefined}
