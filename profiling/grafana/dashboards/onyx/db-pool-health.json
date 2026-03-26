@@ -25,7 +25,7 @@
       "type": "timeseries",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 0 },
       "id": 1,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -71,13 +71,13 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "onyx_db_pool_checked_out{engine=\"sync\"}",
           "legendFormat": "checked_out",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "onyx_db_pool_size{engine=\"sync\"}",
           "legendFormat": "pool_size",
           "refId": "B"
@@ -90,7 +90,7 @@
       "type": "timeseries",
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 0 },
       "id": 2,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -112,7 +112,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "onyx_db_pool_checked_out",
           "legendFormat": "{{engine}}",
           "refId": "A"
@@ -125,7 +125,7 @@
       "type": "timeseries",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
       "id": 3,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -146,7 +146,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "onyx_db_connections_held_by_endpoint{engine=\"sync\"} > 0",
           "legendFormat": "{{handler}}",
           "refId": "A"
@@ -159,7 +159,7 @@
       "type": "timeseries",
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 10 },
       "id": 4,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -180,25 +180,25 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "histogram_quantile(0.50, sum by (le)(rate(onyx_db_connection_hold_seconds_bucket{engine=\"sync\"}[1m])))",
           "legendFormat": "sync p50",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "histogram_quantile(0.95, sum by (le)(rate(onyx_db_connection_hold_seconds_bucket{engine=\"sync\"}[1m])))",
           "legendFormat": "sync p95",
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "histogram_quantile(0.99, sum by (le)(rate(onyx_db_connection_hold_seconds_bucket{engine=\"sync\"}[1m])))",
           "legendFormat": "sync p99",
           "refId": "C"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "histogram_quantile(0.99, sum by (le)(rate(onyx_db_connection_hold_seconds_bucket{engine=\"async\"}[1m])))",
           "legendFormat": "async p99",
           "refId": "D"
@@ -211,7 +211,7 @@
       "type": "timeseries",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 20 },
       "id": 11,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -245,13 +245,13 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "histogram_quantile(0.99, sum by (le)(rate(onyx_db_connection_hold_seconds_bucket{engine=\"sync\"}[1m])))",
           "legendFormat": "sync p99",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "histogram_quantile(0.99, sum by (le)(rate(onyx_db_connection_hold_seconds_bucket{engine=\"async\"}[1m])))",
           "legendFormat": "async p99",
           "refId": "B"
@@ -264,7 +264,7 @@
       "type": "timeseries",
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 20 },
       "id": 12,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -294,13 +294,13 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "onyx_db_pool_checked_out{engine=\"async\"}",
           "legendFormat": "async checked_out",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "onyx_db_pool_size{engine=\"async\"}",
           "legendFormat": "async pool_size",
           "refId": "B"
@@ -313,7 +313,7 @@
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
       "id": 5,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -334,13 +334,13 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "rate(onyx_db_pool_checkout_total{engine=\"sync\"}[30s])",
           "legendFormat": "sync checkouts/s",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "rate(onyx_db_pool_checkin_total{engine=\"sync\"}[30s])",
           "legendFormat": "sync checkins/s",
           "refId": "B"
@@ -353,7 +353,7 @@
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
       "id": 6,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -381,13 +381,13 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "onyx_db_pool_overflow{engine=\"sync\"}",
           "legendFormat": "overflow (sync)",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "increase(onyx_db_pool_checkout_timeout_total{engine=\"sync\"}[30s])",
           "legendFormat": "timeouts",
           "refId": "B"
@@ -400,7 +400,7 @@
       "type": "stat",
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 38 },
       "id": 7,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -422,7 +422,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "onyx_db_pool_checked_out{engine=\"sync\"}",
           "legendFormat": "Checked Out (sync)",
           "refId": "A"
@@ -435,7 +435,7 @@
       "type": "stat",
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 38 },
       "id": 8,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -456,7 +456,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(onyx_db_pool_checkout_timeout_total)",
           "legendFormat": "Timeouts",
           "refId": "A"
@@ -469,7 +469,7 @@
       "type": "gauge",
       "gridPos": { "h": 6, "w": 6, "x": 12, "y": 38 },
       "id": 9,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -493,7 +493,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "onyx_db_pool_checked_out{engine=\"sync\"} / onyx_db_pool_size{engine=\"sync\"} * 100",
           "legendFormat": "Utilization",
           "refId": "A"
@@ -506,7 +506,7 @@
       "type": "stat",
       "gridPos": { "h": 6, "w": 6, "x": 18, "y": 38 },
       "id": 10,
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -524,7 +524,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(onyx_db_pool_checkout_total{engine=\"sync\"})",
           "legendFormat": "Total Checkouts",
           "refId": "A"
@@ -536,7 +536,19 @@
   "schemaVersion": 37,
   "style": "dark",
   "tags": ["onyx", "db-pool", "load-test"],
-  "templating": { "list": [] },
+  "templating": {
+    "list": [
+    {
+      "current": { "text": "Prometheus", "value": "prometheus" },
+      "includeAll": false,
+      "name": "DS_PROMETHEUS",
+      "options": [],
+      "query": "prometheus",
+      "refresh": 1,
+      "type": "datasource"
+    }
+    ]
+  },
   "time": { "from": "now-15m", "to": "now" },
   "timepicker": {
     "refresh_intervals": ["5s", "10s", "30s", "1m"]

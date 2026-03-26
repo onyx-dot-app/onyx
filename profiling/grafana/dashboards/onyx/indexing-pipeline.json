@@ -16,7 +16,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nonyx_index_attempts_active\n```\n\nCurrent indexing attempts by status (in_progress, not_started) and connector. Shows what the system is actively working on.",
       "fieldConfig": {
@@ -67,7 +67,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nsum by (status) (onyx_connectors_by_status)\n```\n\nDistribution of all connectors by their current status (Active, Paused, etc.).",
       "fieldConfig": {
@@ -106,7 +106,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nsum(onyx_connectors_in_error_total)\n```\n\nTotal count of connectors currently in a repeated error state. Yellow at 1+, red at 5+.",
       "fieldConfig": {
@@ -159,7 +159,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\ntopk(20, onyx_connector_last_success_age_seconds)\n```\n\nTime since each connector last completed a successful index. Red = stale (>1 day), Yellow = warning (>1 hour), Green = fresh. Updates after each successful indexing run.",
       "fieldConfig": {
@@ -258,7 +258,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nonyx_connector_in_error_state == 1\n```\n\nConnectors that have failed repeatedly and entered an error state. These need manual attention.",
       "fieldConfig": {
@@ -305,7 +305,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nA: onyx_connector_docs_indexed\nB: onyx_connector_error_count\n```\n\nTotal documents indexed (90-day rolling sum of successful attempts) and total failed index attempts for each connector.",
       "fieldConfig": {
@@ -423,7 +423,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nsum by (source, outcome) (rate(onyx_indexing_task_completed_total[5m])) * 60\n```\n\nRate of completed indexing tasks per minute on docfetching and docprocessing workers, broken down by source type and outcome (success/failure).",
       "fieldConfig": {
@@ -471,7 +471,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\np95: histogram_quantile(0.95, sum by (source, le) (rate(onyx_indexing_task_duration_seconds_bucket[5m])))\np50: histogram_quantile(0.50, ...)\n```\n\nHow long indexing tasks take to complete. p95 = worst-case (95th percentile), p50 = typical (median). Use to identify slow connector types.",
       "fieldConfig": {
@@ -524,7 +524,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nsum by (source, connector_name, outcome) (rate(onyx_indexing_task_completed_total[5m])) * 60\n```\n\nCompleted indexing tasks per minute broken down by individual connector and outcome. Use to compare throughput across connectors.",
       "fieldConfig": {
@@ -572,7 +572,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nhistogram_quantile(0.95, sum by (source, connector_name, le) (rate(onyx_indexing_task_duration_seconds_bucket[5m])))\n```\n\n95th percentile indexing task duration per connector. Shows which specific connectors are slowest to index.",
       "fieldConfig": {
@@ -620,7 +620,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nsum(increase(onyx_indexing_task_duration_seconds_bucket[5m])) by (le)\n```\n\nDistribution of task execution times. Color intensity shows how many tasks fell into each duration bucket. Reveals bimodal distributions and outliers.",
       "fieldConfig": {
@@ -669,7 +669,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nA: rate(onyx_celery_task_retried_total[5m]) * 60\nB: rate(onyx_celery_task_revoked_total[5m]) * 60\nC: rate(onyx_celery_task_rejected_total[5m]) * 60\n```\n\nRate of task retries, revocations, and rejections per minute. Retries indicate transient failures. Revocations indicate cancelled tasks. Rejections indicate worker refusals.",
       "fieldConfig": {
@@ -740,7 +740,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nonyx_queue_depth\n```\n\nNumber of tasks waiting in each Celery queue. High values indicate workers can't keep up with incoming work. Covers all 20 queue types.",
       "fieldConfig": {
@@ -791,7 +791,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nderiv(onyx_queue_depth[5m]) * 60\n```\n\nRate of change of queue depth per minute. Positive = queue growing (tasks arriving faster than consumed). Negative = queue draining. Zero = stable.",
       "fieldConfig": {
@@ -863,7 +863,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nonyx_queue_oldest_task_age_seconds > 0\n```\n\nAge of the oldest waiting task in each non-empty queue. High values indicate stuck or starved queues. Only shows queues with items.",
       "fieldConfig": {
@@ -941,7 +941,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nA: onyx_redis_memory_used_bytes\nB: onyx_redis_memory_peak_bytes\n```\n\nRedis memory consumption over time. Compare current usage vs historical peak. Watch for growth trends indicating memory leaks or unbounded queue growth.",
       "fieldConfig": {
@@ -994,7 +994,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nonyx_redis_memory_fragmentation_ratio\n```\n\nRatio of OS-allocated memory to Redis-used memory. >1.5 = significant fragmentation. <1.0 = Redis is swapping to disk (critical).",
       "fieldConfig": {
@@ -1051,7 +1051,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nonyx_redis_connected_clients\n```\n\nNumber of active client connections to Redis. Each Celery worker and API server maintains connections. A steadily rising count indicates a connection leak.",
       "fieldConfig": {
@@ -1099,7 +1099,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nonyx_celery_active_worker_count\n```\n\nTotal number of Celery workers responding to heartbeat ping. Checked every 60 seconds from the monitoring worker.",
       "fieldConfig": {
@@ -1152,7 +1152,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nonyx_celery_worker_up\n```\n\nPer-worker heartbeat status. Green = responding to ping. Red = not responding. Workers removed after 10 consecutive missed pings.",
       "fieldConfig": {
@@ -1220,7 +1220,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "```\nup{job=~\"onyx-.*\"}\n```\n\nHealth of each Prometheus scrape target (metrics HTTP endpoint). Green = UP (metrics flowing). Red = DOWN (worker unreachable or metrics server not started).",
       "fieldConfig": {
@@ -1295,6 +1295,18 @@
   ],
   "templating": {
     "list": [
+    {
+      "current": {
+        "text": "Prometheus",
+        "value": "prometheus"
+      },
+      "includeAll": false,
+      "name": "DS_PROMETHEUS",
+      "options": [],
+      "query": "prometheus",
+      "refresh": 1,
+      "type": "datasource"
+    },
       {
         "allValue": ".*",
         "current": {
@@ -1304,7 +1316,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(onyx_connector_last_success_age_seconds, source)",
         "includeAll": true,
@@ -1323,7 +1335,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(onyx_connector_last_success_age_seconds, connector_name)",
         "includeAll": true,
@@ -1342,7 +1354,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(onyx_connector_last_success_age_seconds, tenant_id)",
         "includeAll": true,
