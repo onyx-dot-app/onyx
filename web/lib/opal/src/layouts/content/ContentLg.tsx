@@ -179,7 +179,7 @@ function ContentLg({
               style={{ height: config.lineHeight }}
               title={toPlainString(title)}
             >
-              <Text font={config.titleFont} color="text-04">
+              <Text font={config.titleFont} color="inherit">
                 {title}
               </Text>
             </span>

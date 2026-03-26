@@ -122,7 +122,9 @@ function ContentSm({
         style={{ height: config.lineHeight }}
         title={toPlainString(title)}
       >
-        <Text font={config.titleFont}>{title}</Text>
+        <Text font={config.titleFont} color="inherit">
+          {title}
+        </Text>
       </span>
     </div>
   );

@@ -237,7 +237,7 @@ function ContentMd({
               onClick={editable ? startEditing : undefined}
               style={{ height: config.lineHeight }}
             >
-              <Text font={config.titleFont} color="text-04">
+              <Text font={config.titleFont} color="inherit">
                 {title}
               </Text>
             </span>
