@@ -321,7 +321,22 @@
   "schemaVersion": 37,
   "style": "dark",
   "tags": ["onyx", "opensearch", "search", "latency"],
-  "templating": { "list": [] },
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "Prometheus",
+          "value": "prometheus"
+        },
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  },
   "time": { "from": "now-60m", "to": "now" },
   "timepicker": {
     "refresh_intervals": ["5s", "10s", "30s", "1m"]
