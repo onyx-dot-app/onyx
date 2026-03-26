@@ -549,7 +549,7 @@ mypy-extensions==1.0.0
     #   typing-inspect
 nest-asyncio==1.6.0
     # via onyx
-nltk==3.9.3
+nltk==3.9.4
     # via unstructured
 numpy==2.4.1
     # via
