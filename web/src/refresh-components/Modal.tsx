@@ -457,6 +457,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       <div
         tabIndex={-1}
         ref={closeButtonRef as React.RefObject<HTMLDivElement>}
+        className="outline-none"
       >
         <DialogPrimitive.Close asChild>
           <Button

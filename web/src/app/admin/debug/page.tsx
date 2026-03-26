@@ -11,9 +11,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Card } from "@/components/ui/card";
-import Text from "@/components/ui/text";
+import { markdown } from "@opal/utils";
+import Spacer from "@/refresh-components/Spacer";
 import { Spinner } from "@/components/Spinner";
 import { SvgDownloadCloud } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -75,11 +76,12 @@ function Main() {
     <>
       {isDownloading && <Spinner />}
       <div className="mb-8">
-        <Text className="mb-3">
-          <b>Debug Logs</b> provide detailed information about system operations
-          and events. You can download logs for each category to analyze system
-          behavior or troubleshoot issues.
+        <Text as="p">
+          {markdown(
+            "**Debug Logs** provide detailed information about system operations and events. You can download logs for each category to analyze system behavior or troubleshoot issues."
+          )}
         </Text>
+        <Spacer rem={0.75} />
 
         {categories.length > 0 && (
           <Card className="mt-4">

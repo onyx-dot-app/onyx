@@ -5,7 +5,9 @@ import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
+import { markdown } from "@opal/utils";
+import Spacer from "@/refresh-components/Spacer";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
 import { Button } from "@opal/components";
@@ -185,13 +187,14 @@ function Main() {
           <ConnectorStaggeredSkeleton rowCount={8} standalone={true} />
         </div>
       ) : !ccPairsIndexingStatuses || ccPairsIndexingStatuses.length === 0 ? (
-        <Text className="mt-12">
-          It looks like you don&apos;t have any connectors setup yet. Visit the{" "}
-          <Link className="text-link" href="/admin/add-connector">
-            Add Connector
-          </Link>{" "}
-          page to get started!
-        </Text>
+        <div>
+          <Spacer rem={3} />
+          <Text as="p">
+            {markdown(
+              "It looks like you don't have any connectors setup yet. Visit the [Add Connector](/admin/add-connector) page to get started!"
+            )}
+          </Text>
+        </div>
       ) : (
         <CCPairIndexingStatusTable
           ccPairsIndexingStatuses={ccPairsIndexingStatuses}

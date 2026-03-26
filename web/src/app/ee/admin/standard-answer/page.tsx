@@ -25,7 +25,9 @@ import { deleteStandardAnswer } from "./lib";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { FiTag } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
+import { markdown } from "@opal/utils";
+import Spacer from "@/refresh-components/Spacer";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SvgEdit, SvgTrash } from "@opal/icons";
@@ -316,19 +318,17 @@ const StandardAnswersTable = ({
         <div>
           {paginatedStandardAnswers.length === 0 && (
             <div className="flex justify-center">
-              <Text>No matching standard answers found...</Text>
+              <Text as="p">No matching standard answers found...</Text>
             </div>
           )}
         </div>
         {paginatedStandardAnswers.length > 0 && (
           <>
             <div className="mt-4">
-              <Text>
-                Ensure that you have added the category to the relevant{" "}
-                <a className="text-link" href="/admin/bots">
-                  Slack Bot
-                </a>
-                .
+              <Text as="p">
+                {markdown(
+                  "Ensure that you have added the category to the relevant [Slack Bot](/admin/bots)."
+                )}
               </Text>
             </div>
             <div className="mt-4 flex justify-center">
@@ -389,14 +389,17 @@ function Main() {
 
   return (
     <div className="mb-8">
-      <Text className="mb-2">
-        Manage the standard answers for pre-defined questions.
-        <br />
-        Note: Currently, only questions asked from Slack can receive standard
-        answers.
+      <Text as="p">
+        {markdown(
+          "Manage the standard answers for pre-defined questions.\nNote: Currently, only questions asked from Slack can receive standard answers."
+        )}
       </Text>
+      <Spacer rem={0.5} />
       {standardAnswers.length == 0 && (
-        <Text className="mb-2">Add your first standard answer below!</Text>
+        <>
+          <Text as="p">Add your first standard answer below!</Text>
+          <Spacer rem={0.5} />
+        </>
       )}
       <div className="mb-2"></div>
 
