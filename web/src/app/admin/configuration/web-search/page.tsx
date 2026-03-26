@@ -209,7 +209,7 @@ function WebSearchDisconnectModal({
       ) : (
         <>
           <Text as="p" text03>
-            Web search will no longer be routed through{" "}
+            {isSearch ? "Web search" : "Web crawling"} will no longer be routed through{" "}
             <b>{disconnectTarget.label}</b>.
           </Text>
           <Text as="p" text03>
