@@ -1,5 +1,6 @@
 import base64
 import copy
+import fnmatch
 import html
 import io
 import os
@@ -83,6 +84,44 @@ SHARED_DOCUMENTS_MAP = {
 SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
 
 ASPX_EXTENSION = ".aspx"
+
+
+def _is_site_excluded(site_url: str, excluded_site_patterns: list[str]) -> bool:
+    """Check if a site URL matches any of the exclusion glob patterns."""
+    for pattern in excluded_site_patterns:
+        if fnmatch.fnmatch(site_url, pattern) or fnmatch.fnmatch(
+            site_url.rstrip("/"), pattern.rstrip("/")
+        ):
+            return True
+    return False
+
+
+def _is_path_excluded(item_path: str, excluded_path_patterns: list[str]) -> bool:
+    """Check if a drive item path matches any of the exclusion glob patterns.
+
+    item_path is the relative path within a drive, e.g. "Engineering/API/report.docx".
+    Matches are attempted against the full path and the filename alone so that
+    patterns like "*.tmp" match files at any depth.
+    """
+    filename = item_path.rsplit("/", 1)[-1] if "/" in item_path else item_path
+    for pattern in excluded_path_patterns:
+        if fnmatch.fnmatch(item_path, pattern) or fnmatch.fnmatch(filename, pattern):
+            return True
+    return False
+
+
+def _build_item_relative_path(parent_reference_path: str | None, item_name: str) -> str:
+    """Build the relative path of a drive item from its parentReference.path and name.
+
+    Example: parentReference.path="/drives/abc/root:/Eng/API", name="report.docx"
+    => "Eng/API/report.docx"
+    """
+    if parent_reference_path and "root:/" in parent_reference_path:
+        folder = unquote(parent_reference_path.split("root:/", 1)[1])
+        if folder:
+            return f"{folder}/{item_name}"
+    return item_name
+
 
 DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
 DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
@@ -863,6 +902,8 @@ class SharepointConnector(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
         sites: list[str] = [],
+        excluded_sites: list[str] = [],
+        excluded_paths: list[str] = [],
         include_site_pages: bool = True,
         include_site_documents: bool = True,
         treat_sharing_link_as_public: bool = False,
@@ -872,6 +913,8 @@ class SharepointConnector(
     ) -> None:
         self.batch_size = batch_size
         self.sites = list(sites)
+        self.excluded_sites = [s for p in excluded_sites if (s := p.strip())]
+        self.excluded_paths = [s for p in excluded_paths if (s := p.strip())]
         self.treat_sharing_link_as_public = treat_sharing_link_as_public
         self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(
             sites
@@ -1243,6 +1286,29 @@ class SharepointConnector(
                 break
             sites = sites._get_next().execute_query()
 
+    def _is_driveitem_excluded(self, driveitem: DriveItemData) -> bool:
+        """Check if a drive item should be excluded based on excluded_paths patterns."""
+        if not self.excluded_paths:
+            return False
+        relative_path = _build_item_relative_path(
+            driveitem.parent_reference_path, driveitem.name
+        )
+        return _is_path_excluded(relative_path, self.excluded_paths)
+
+    def _filter_excluded_sites(
+        self, site_descriptors: list[SiteDescriptor]
+    ) -> list[SiteDescriptor]:
+        """Remove sites matching any excluded_sites glob pattern."""
+        if not self.excluded_sites:
+            return site_descriptors
+        result = []
+        for sd in site_descriptors:
+            if _is_site_excluded(sd.url, self.excluded_sites):
+                logger.info(f"Excluding site by denylist: {sd.url}")
+                continue
+            result.append(sd)
+        return result
+
     def fetch_sites(self) -> list[SiteDescriptor]:
         sites = self.graph_client.sites.get_all_sites().execute_query()
 
@@ -1259,7 +1325,7 @@ class SharepointConnector(
             for site in self._handle_paginated_sites(sites)
             if "-my.sharepoint" not in site.web_url
         ]
-        return site_descriptors
+        return self._filter_excluded_sites(site_descriptors)
 
     def _fetch_site_pages(
         self,
@@ -1700,7 +1766,9 @@ class SharepointConnector(
         checkpoint.seen_document_ids.clear()
 
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
-        site_descriptors = self.site_descriptors or self.fetch_sites()
+        site_descriptors = self._filter_excluded_sites(
+            self.site_descriptors or self.fetch_sites()
+        )
 
         # Create a temporary checkpoint for hierarchy node tracking
         temp_checkpoint = SharepointConnectorCheckpoint(has_more=True)
@@ -1720,6 +1788,10 @@ class SharepointConnector(
                 for driveitem, drive_name, drive_web_url in self._fetch_driveitems(
                     site_descriptor=site_descriptor
                 ):
+                    if self._is_driveitem_excluded(driveitem):
+                        logger.debug(f"Excluding by path denylist: {driveitem.web_url}")
+                        continue
+
                     if drive_web_url:
                         doc_batch.extend(
                             self._yield_drive_hierarchy_node(
@@ -2055,7 +2127,9 @@ class SharepointConnector(
             and not checkpoint.process_site_pages
         ):
             logger.info("Initializing SharePoint sites for processing")
-            site_descs = self.site_descriptors or self.fetch_sites()
+            site_descs = self._filter_excluded_sites(
+                self.site_descriptors or self.fetch_sites()
+            )
             checkpoint.cached_site_descriptors = deque(site_descs)
 
             if not checkpoint.cached_site_descriptors:
@@ -2275,6 +2349,10 @@ class SharepointConnector(
             item_count = 0
             for driveitem in driveitems:
                 item_count += 1
+
+                if self._is_driveitem_excluded(driveitem):
+                    logger.debug(f"Excluding by path denylist: {driveitem.web_url}")
+                    continue
 
                 if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
                     logger.debug(
