@@ -10,6 +10,31 @@
     "description": "Frontend coding standards for the web directory"
   },
   {
+    "scope": ["web/**"],
+    "path": "web/tests/README.md",
+    "description": "Frontend testing guide and conventions"
+  },
+  {
+    "scope": ["web/**"],
+    "path": "web/CLAUDE.md",
+    "description": "Single source of truth for frontend coding standards"
+  },
+  {
+    "scope": ["web/**"],
+    "path": "web/lib/opal/README.md",
+    "description": "Opal component library usage guide"
+  },
+  {
+    "scope": ["backend/**"],
+    "path": "backend/tests/README.md",
+    "description": "Backend testing guide covering all 4 test types, fixtures, and conventions"
+  },
+  {
+    "scope": ["backend/onyx/connectors/**"],
+    "path": "backend/onyx/connectors/README.md",
+    "description": "Connector development guide covering design, interfaces, and required changes"
+  },
+  {
     "scope": [],
     "path": "CLAUDE.md",
     "description": "Project instructions and coding standards"
