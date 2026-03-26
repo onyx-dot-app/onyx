@@ -164,9 +164,7 @@ class JiraServiceManagementConnector(CheckpointConnector, CredentialedConnector)
         email = credentials.get("jira_user_email")
         token = credentials.get("jira_api_token")
         if not email or not token:
-            raise ConnectorMissingCredentialError(
-                "jira_user_email and jira_api_token are required."
-            )
+            raise ConnectorMissingCredentialError("JiraServiceManagement")
         self._jira_client = JIRA(
             server=self.jira_base_url,
             basic_auth=(email, token),
@@ -180,9 +178,7 @@ class JiraServiceManagementConnector(CheckpointConnector, CredentialedConnector)
     @property
     def _client(self) -> JIRA:
         if self._jira_client is None:
-            raise ConnectorMissingCredentialError(
-                "load_credentials() must be called before indexing."
-            )
+            raise ConnectorMissingCredentialError("JiraServiceManagement")
         return self._jira_client
 
     def _fetch_batch(
