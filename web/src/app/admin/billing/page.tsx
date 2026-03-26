@@ -235,6 +235,9 @@ export default function BillingPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // changeView intentionally omitted: it only calls stable state setters and the
+    // effect runs at most once (when session_id/portal_return params are present).
   }, [searchParams, router, refreshBilling, refreshLicense]);
 
   // Poll every 15s while activating, up to 2 minutes, to detect when the license arrives.
@@ -261,8 +264,10 @@ export default function BillingPage() {
         refreshBilling();
         router.refresh();
         changeView("details");
-      } catch {
-        // License not ready yet — keep polling
+      } catch (err) {
+        // License not ready yet — keep polling. Log so unexpected failures
+        // (network errors, 500s) are distinguishable from expected 404s.
+        console.debug("License activation poll: will retry", err);
       } finally {
         requestInFlight = false;
       }
