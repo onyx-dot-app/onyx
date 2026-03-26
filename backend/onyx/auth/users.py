@@ -764,6 +764,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 # (e.g. oidc_expiry check) sees the updated fields.
                 user = await self.user_db.get(user.id)  # type: ignore[arg-type]
 
+                # Assign upgraded user to the Basic default group.
+                # Let exceptions propagate — user without a group has no permissions.
+                with get_session_with_current_tenant() as sync_db:
+                    sync_user = sync_db.query(User).filter(User.id == user.id).first()
+                    if sync_user:
+                        assign_user_to_default_groups__no_commit(sync_db, sync_user)
+                        sync_db.commit()
+
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
             if user.oidc_expiry is not None and not TRACK_EXTERNAL_IDP_EXPIRY:
