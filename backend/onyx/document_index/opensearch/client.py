@@ -1101,7 +1101,7 @@ class OpenSearchIndexClient(OpenSearchClient):
 
     def _get_emit_metrics_context_manager(
         self, search_type: OpenSearchSearchType
-    ) -> AbstractContextManager:
+    ) -> AbstractContextManager[None]:
         """
         Returns a context manager that tracks in-flight OpenSearch searches via
         a Gauge if emit_metrics is True, otherwise returns a null context

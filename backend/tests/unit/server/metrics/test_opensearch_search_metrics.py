@@ -89,11 +89,13 @@ class TestTrackOpenSearchSearchInProgress:
             search_type=search_type.value
         )._value.get()
 
+        raised = False
         try:
             with track_opensearch_search_in_progress(search_type):
                 raise ValueError("simulated search failure")
         except ValueError:
-            pass
+            raised = True
+        assert raised
 
         after = _searches_in_progress.labels(search_type=search_type.value)._value.get()
         assert after == before
