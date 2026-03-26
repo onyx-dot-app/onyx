@@ -19,11 +19,15 @@ import {
 import {
   activateVoiceProvider,
   deactivateVoiceProvider,
+  deleteVoiceProvider,
 } from "@/lib/admin/voice/svc";
 import { ThreeDotsLoader } from "@/components/Loading";
+import { toast } from "@/hooks/useToast";
 import { Callout } from "@/components/ui/callout";
 import { Content } from "@opal/layouts";
-import { SvgMicrophone } from "@opal/icons";
+import { SvgMicrophone, SvgUnplug } from "@opal/icons";
+import { Button as OpalButton } from "@opal/components";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import VoiceProviderSetupModal from "@/app/admin/configuration/voice/VoiceProviderSetupModal";
 
@@ -146,6 +150,12 @@ export default function VoiceConfigurationPage() {
   const [ttsActivationError, setTTSActivationError] = useState<string | null>(
     null
   );
+  const [disconnectTarget, setDisconnectTarget] = useState<{
+    providerId: number;
+    label: string;
+    providerType: string;
+    mode: ProviderMode;
+  } | null>(null);
 
   const { providers, error, isLoading, refresh: mutate } = useVoiceProviders();
 
@@ -237,6 +247,34 @@ export default function VoiceConfigurationPage() {
     handleModalClose();
   };
 
+  const handleDisconnect = async () => {
+    if (!disconnectTarget) return;
+    const setError =
+      disconnectTarget.mode === "stt"
+        ? setSTTActivationError
+        : setTTSActivationError;
+    try {
+      const response = await deleteVoiceProvider(disconnectTarget.providerId);
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof errorBody?.detail === "string"
+            ? errorBody.detail
+            : "Failed to disconnect provider."
+        );
+      }
+      await mutate();
+      toast.success(`${disconnectTarget.label} disconnected`);
+    } catch (err) {
+      console.error("Failed to disconnect voice provider:", err);
+      const message =
+        err instanceof Error ? err.message : "Unexpected error occurred.";
+      setError(message);
+    } finally {
+      setDisconnectTarget(null);
+    }
+  };
+
   const isProviderConfigured = (provider?: VoiceProviderView): boolean => {
     return !!provider?.has_api_key;
   };
@@ -270,6 +308,9 @@ export default function VoiceConfigurationPage() {
     const provider = providersByType.get(model.providerType);
     const status = getModelStatus(model, mode);
     const Icon = getProviderIcon(model.providerType);
+    const isProviderActiveForMode =
+      provider !== undefined &&
+      (mode === "stt" ? provider.is_default_stt : provider.is_default_tts);
 
     return (
       <Select
@@ -289,6 +330,18 @@ export default function VoiceConfigurationPage() {
         onEdit={() => {
           if (provider) handleEdit(provider, mode, model.id);
         }}
+        onDisconnect={
+          status !== "disconnected" && provider
+            ? () =>
+                setDisconnectTarget({
+                  providerId: provider.id,
+                  label: model.label,
+                  providerType: model.providerType,
+                  mode,
+                })
+            : undefined
+        }
+        disconnectDisabled={isProviderActiveForMode}
       />
     );
   };
@@ -411,6 +464,28 @@ export default function VoiceConfigurationPage() {
           ))}
         </div>
       </SettingsLayouts.Body>
+
+      {disconnectTarget && (
+        <ConfirmationModalLayout
+          icon={SvgUnplug}
+          title={`Disconnect ${disconnectTarget.label}`}
+          description="This will remove the stored credentials. All voice models from this provider will be disconnected."
+          onClose={() => setDisconnectTarget(null)}
+          submit={
+            <OpalButton
+              variant="danger"
+              onClick={() => void handleDisconnect()}
+            >
+              Disconnect
+            </OpalButton>
+          }
+        >
+          <Text as="p" text03>
+            <b>{disconnectTarget.label}</b> models will no longer be used for
+            speech-to-text or text-to-speech.
+          </Text>
+        </ConfirmationModalLayout>
+      )}
 
       {modalOpen && selectedProvider && (
         <VoiceProviderSetupModal

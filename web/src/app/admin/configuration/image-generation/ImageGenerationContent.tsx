@@ -17,9 +17,13 @@ import {
   ImageGenerationConfigView,
   setDefaultImageGenerationConfig,
   unsetDefaultImageGenerationConfig,
+  deleteImageGenerationConfig,
 } from "@/lib/configuration/imageConfigurationService";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import Message from "@/refresh-components/messages/Message";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { Button } from "@opal/components";
+import { SvgUnplug } from "@opal/icons";
 
 export default function ImageGenerationContent() {
   const {
@@ -47,6 +51,8 @@ export default function ImageGenerationContent() {
   );
   const [editConfig, setEditConfig] =
     useState<ImageGenerationConfigView | null>(null);
+  const [disconnectProvider, setDisconnectProvider] =
+    useState<ImageProvider | null>(null);
 
   const connectedProviderIds = useMemo(() => {
     return new Set(configs.map((c) => c.image_provider_id));
@@ -115,6 +121,23 @@ export default function ImageGenerationContent() {
     modal.toggle(true);
   };
 
+  const handleDisconnect = async () => {
+    if (!disconnectProvider) return;
+    try {
+      await deleteImageGenerationConfig(disconnectProvider.image_provider_id);
+      toast.success(`${disconnectProvider.title} disconnected`);
+      refetchConfigs();
+      refetchProviders();
+    } catch (error) {
+      console.error("Failed to disconnect image generation provider:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to disconnect"
+      );
+    } finally {
+      setDisconnectProvider(null);
+    }
+  };
+
   const handleModalSuccess = () => {
     toast.success("Provider configured successfully");
     setEditConfig(null);
@@ -175,12 +198,40 @@ export default function ImageGenerationContent() {
                   onSelect={() => handleSelect(provider)}
                   onDeselect={() => handleDeselect(provider)}
                   onEdit={() => handleEdit(provider)}
+                  onDisconnect={
+                    getStatus(provider) !== "disconnected"
+                      ? () => setDisconnectProvider(provider)
+                      : undefined
+                  }
+                  disconnectDisabled={getStatus(provider) === "selected"}
                 />
               ))}
             </div>
           </div>
         ))}
       </div>
+
+      {disconnectProvider && (
+        <ConfirmationModalLayout
+          icon={SvgUnplug}
+          title={`Disconnect ${disconnectProvider.title}`}
+          description="This will remove the stored credentials for this provider."
+          onClose={() => setDisconnectProvider(null)}
+          submit={
+            <Button variant="danger" onClick={() => void handleDisconnect()}>
+              Disconnect
+            </Button>
+          }
+        >
+          <Text as="p" text03>
+            <b>{disconnectProvider.title}</b> models will no longer be used to
+            generate images.
+          </Text>
+          <Text as="p" text03>
+            Session history will be preserved.
+          </Text>
+        </ConfirmationModalLayout>
+      )}
 
       {activeProvider && (
         <modal.Provider>
