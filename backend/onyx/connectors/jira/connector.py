@@ -264,14 +264,13 @@ def bulk_fetch_issues(
 
     try:
         raw_issues = _bulk_fetch_request(jira_client, issue_ids, fields)
-    except requests.exceptions.JSONDecodeError as e:
+    except requests.exceptions.JSONDecodeError:
         if len(issue_ids) <= 1:
-            logger.error(
+            logger.exception(
                 f"Jira bulk-fetch response for issue(s) {issue_ids} could not "
                 f"be decoded as JSON (response too large or truncated). Skipping. "
-                f"Error: {e}"
             )
-            return []
+            raise
 
         mid = len(issue_ids) // 2
         logger.warning(
