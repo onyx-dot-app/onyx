@@ -3,9 +3,9 @@
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@/hooks/useToast";
 import { SettingsContext } from "@/providers/SettingsProvider";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import { markdown } from "@opal/utils";
 import { Callout } from "@/components/ui/callout";
-import { Text } from "@opal/components";
 import { useContext, useState } from "react";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Spacer from "@/refresh-components/Spacer";
@@ -59,14 +59,11 @@ export function CustomAnalyticsUpdateForm() {
             initialize your custom tracking/analytics.
           </Text>
           <Spacer rem={0.75} />
-          {/* TODO(@raunakab): migrate to @opal/components Text */}
-          <p className="text-sm">
-            Do not include the{" "}
-            <span className="font-mono">&lt;script&gt;&lt;/script&gt;</span>{" "}
-            tags. If you upload a script below but you are not recieving any
-            events in your analytics platform, try removing all extra whitespace
-            before each line of JavaScript.
-          </p>
+          <Text as="p">
+            {markdown(
+              "Do not include the `<script></script>` tags. If you upload a script below but you are not receiving any events in your analytics platform, try removing all extra whitespace before each line of JavaScript."
+            )}
+          </Text>
           <Spacer rem={0.5} />
           <InputTextArea
             value={newCustomAnalyticsScript}

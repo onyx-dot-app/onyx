@@ -28,8 +28,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
           <p className="font-bold text-xs">Reference Documents</p>
           {message.documents.slice(0, 5).map((document) => {
             return (
-              // TODO(@raunakab): migrate to @opal/components Text
-              <p className="text-sm flex" key={document.document_id}>
+              <div className="text-sm flex" key={document.document_id}>
                 <FiBook
                   className={
                     "my-auto mr-1" + (document.link ? " text-link" : " ")
@@ -47,7 +46,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
                 ) : (
                   document.semantic_identifier
                 )}
-              </p>
+              </div>
             );
           })}
         </div>
@@ -102,13 +101,15 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
           <Text as="p">{chatSessionSnapshot.assistant_name}</Text>
         )}
         <Spacer rem={0.25} />
-        {/* TODO(@raunakab): migrate to @opal/components Text */}
-        <p className="text-sm">
-          {chatSessionSnapshot.user_email &&
-            `${chatSessionSnapshot.user_email}, `}
-          {timestampToReadableDate(chatSessionSnapshot.time_created)},{" "}
-          {chatSessionSnapshot.flow_type}
-        </p>
+        <Text as="p">
+          {`${
+            chatSessionSnapshot.user_email
+              ? `${chatSessionSnapshot.user_email}, `
+              : ""
+          }${timestampToReadableDate(chatSessionSnapshot.time_created)}, ${
+            chatSessionSnapshot.flow_type
+          }`}
+        </Text>
 
         <Separator />
 
