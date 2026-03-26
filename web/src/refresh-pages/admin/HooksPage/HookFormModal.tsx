@@ -230,7 +230,7 @@ export default function HookFormModal({
       } else if (err instanceof HookTimeoutError) {
         setTimeoutServerError(true);
       } else if (err instanceof HookConnectError) {
-        setEndpointServerError("Could not connect to endpoint.");
+        setEndpointServerError(err.message || "Could not connect to endpoint.");
       } else {
         toast.error(
           err instanceof Error ? err.message : "Something went wrong."
