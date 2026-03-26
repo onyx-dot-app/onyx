@@ -473,6 +473,8 @@ def connector_permission_sync_generator_task(
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
                 cc_pair_id=cc_pair_id,
+                eager_load_connector=True,
+                eager_load_credential=True,
             )
             if cc_pair is None:
                 raise ValueError(
