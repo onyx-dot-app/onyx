@@ -17,6 +17,7 @@ from jira.resources import Issue
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
@@ -348,3 +349,50 @@ class TestSLAHelpers:
 
     def test_extract_request_type_name_none(self) -> None:
         assert _extract_request_type_name(None) is None
+
+
+class TestLoadFromCheckpointEnrichment:
+    """Verify that _load_from_checkpoint calls JSM enrichment on each document."""
+
+    @patch(
+        "onyx.connectors.jira_service_management.connector._perform_jql_search"
+    )
+    @patch(
+        "onyx.connectors.jira_service_management.connector.process_jira_issue"
+    )
+    def test_load_from_checkpoint_enriches_documents(
+        self,
+        mock_process_jira_issue: MagicMock,
+        mock_jql_search: MagicMock,
+    ) -> None:
+        connector = _make_connector()
+        connector._jsm_field_map = {}
+
+        issue = _make_mock_issue()
+        mock_jql_search.return_value = iter([issue])
+
+        base_doc = _make_mock_document()
+        base_doc.source = DocumentSource.JIRA
+        mock_process_jira_issue.return_value = base_doc
+
+        checkpoint = JiraConnectorCheckpoint(
+            has_more=True,
+            offset=0,
+            cursor=None,
+            all_issue_ids=[],
+            ids_done=True,
+            seen_hierarchy_node_ids=[],
+        )
+
+        results = list(
+            connector._load_from_checkpoint(
+                jql="issuetype in (\"Service Request\")",
+                checkpoint=checkpoint,
+                include_permissions=False,
+            )
+        )
+
+        # Should have yielded the enriched document
+        docs = [r for r in results if isinstance(r, Document)]
+        assert len(docs) == 1
+        assert docs[0].source == DocumentSource.JIRA_SERVICE_MANAGEMENT

@@ -4,29 +4,42 @@ Extends the base JiraConnector to index JSM-specific ticket data including
 service requests, incidents, problems, changes, and SLA information.
 """
 
+import copy
 from typing import Any
 
 from jira.resources import Issue
+from typing_extensions import override
 
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.jira.connector import _FIELD_PARENT
+from onyx.connectors.jira.connector import _FIELD_PROJECT
+from onyx.connectors.jira.connector import _JIRA_FULL_PAGE_SIZE
+from onyx.connectors.jira.connector import _perform_jql_search
 from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.connector import JiraConnectorCheckpoint
+from onyx.connectors.jira.connector import make_checkpoint_callback
 from onyx.connectors.jira.connector import process_jira_issue
 from onyx.connectors.jira.utils import best_effort_get_field_from_issue
 from onyx.connectors.jira.utils import build_jira_url
+from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import DocumentFailure
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
 
-# JSM issue type names (case-insensitive matching)
+# JSM issue type names (title case to match Jira's canonical names)
 _JSM_ISSUE_TYPES = (
-    "service request",
-    "service request with approvals",
-    "incident",
-    "problem",
-    "change",
+    "Service Request",
+    "Service Request with Approvals",
+    "Incident",
+    "Problem",
+    "Change",
 )
 
 # Dynamic field name patterns for discovery via /rest/api/2/field
@@ -131,6 +144,8 @@ class JiraServiceManagementConnector(JiraConnector):
         service_desk_id: str | None = None,
         project_key: str | None = None,
         comment_email_blacklist: list[str] | None = None,
+        batch_size: int = INDEX_BATCH_SIZE,
+        labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
         jql_query: str | None = None,
         scoped_token: bool = False,
     ) -> None:
@@ -138,6 +153,8 @@ class JiraServiceManagementConnector(JiraConnector):
             jira_base_url=jira_base_url,
             project_key=project_key,
             comment_email_blacklist=comment_email_blacklist,
+            batch_size=batch_size,
+            labels_to_skip=labels_to_skip,
             jql_query=jql_query,
             scoped_token=scoped_token,
         )
@@ -231,10 +248,11 @@ class JiraServiceManagementConnector(JiraConnector):
         type_list = ", ".join(f'"{t}"' for t in _JSM_ISSUE_TYPES)
         return f"issuetype in ({type_list})"
 
+    @override
     def _get_jql_query(
         self,
-        start: float,
-        end: float,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
     ) -> str:
         """Override to inject JSM issue type filter when no custom JQL is set."""
         base_jql = super()._get_jql_query(start, end)
@@ -243,19 +261,103 @@ class JiraServiceManagementConnector(JiraConnector):
         if self.jql_query:
             return base_jql
 
-        # If service_desk_id is set, filter by that project instead of adding
-        # JSM issue types (the project itself is JSM-scoped)
-        if self.service_desk_id and not self.jira_project:
-            return base_jql
-
         # Inject JSM issue type filter
         jsm_filter = self._get_jsm_jql_filter()
         return f"({base_jql}) AND {jsm_filter}"
+
+    @override
+    def _load_from_checkpoint(
+        self,
+        jql: str,
+        checkpoint: JiraConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> CheckpointOutput[JiraConnectorCheckpoint]:
+        """Override to inject JSM metadata enrichment into each yielded document."""
+        starting_offset = checkpoint.offset or 0
+        current_offset = starting_offset
+        new_checkpoint = copy.deepcopy(checkpoint)
+
+        seen_hierarchy_node_ids = set(new_checkpoint.seen_hierarchy_node_ids)
+        checkpoint_callback = make_checkpoint_callback(new_checkpoint)
+
+        for issue in _perform_jql_search(
+            jira_client=self.jira_client,
+            jql=jql,
+            start=current_offset,
+            max_results=_JIRA_FULL_PAGE_SIZE,
+            all_issue_ids=new_checkpoint.all_issue_ids,
+            checkpoint_callback=checkpoint_callback,
+            nextPageToken=new_checkpoint.cursor,
+            ids_done=new_checkpoint.ids_done,
+        ):
+            issue_key = issue.key
+            try:
+                project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+                project_key = project.key if project else None
+                project_name = project.name if project else None
+
+                if project_key:
+                    yield from self._yield_project_hierarchy_node(
+                        project_key, project_name, seen_hierarchy_node_ids
+                    )
+
+                    parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+                    if parent:
+                        yield from self._yield_parent_hierarchy_node_if_epic(
+                            parent, project_key, seen_hierarchy_node_ids
+                        )
+
+                    if self._is_epic(issue):
+                        yield from self._yield_epic_hierarchy_node(
+                            issue, project_key, seen_hierarchy_node_ids
+                        )
+
+                parent_hierarchy_raw_node_id = (
+                    self._get_parent_hierarchy_raw_node_id(issue, project_key)
+                    if project_key
+                    else None
+                )
+
+                if document := process_jira_issue(
+                    jira_base_url=self.jira_base,
+                    issue=issue,
+                    comment_email_blacklist=self.comment_email_blacklist,
+                    labels_to_skip=self.labels_to_skip,
+                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                ):
+                    document = self._enrich_document_with_jsm_metadata(
+                        document, issue
+                    )
+                    if include_permissions:
+                        document.external_access = self._get_project_permissions(
+                            project_key,
+                            add_prefix=True,
+                        )
+                    yield document
+
+            except Exception as e:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=issue_key,
+                        document_link=build_jira_url(self.jira_base, issue_key),
+                    ),
+                    failure_message=f"Failed to process JSM issue: {str(e)}",
+                    exception=e,
+                )
+
+            current_offset += 1
+
+        new_checkpoint.seen_hierarchy_node_ids = list(seen_hierarchy_node_ids)
+        self.update_checkpoint_for_next_run(
+            new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE
+        )
+        return new_checkpoint
 
 
 def process_jsm_issue(
     connector: "JiraServiceManagementConnector",
     issue: Issue,
+    parent_hierarchy_raw_node_id: str | None = None,
 ) -> Document | None:
     """Process a Jira issue into a JSM-enriched Document.
 
@@ -267,6 +369,7 @@ def process_jsm_issue(
         issue=issue,
         comment_email_blacklist=connector.comment_email_blacklist,
         labels_to_skip=connector.labels_to_skip,
+        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
     if document is None:
         return None
