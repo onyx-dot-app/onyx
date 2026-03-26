@@ -172,6 +172,8 @@ export default function BillingPage() {
 
     router.replace("/admin/billing", { scroll: false });
 
+    let cancelled = false;
+
     const handleBillingReturn = async () => {
       if (!NEXT_PUBLIC_CLOUD_ENABLED) {
         // Retry up to 3 times with 2s backoff. The license may not be available
@@ -179,9 +181,11 @@ export default function BillingPage() {
         // (redirect and webhook fire nearly simultaneously).
         let lastError: Error | null = null;
         for (let attempt = 0; attempt < 3; attempt++) {
+          if (cancelled) return;
           try {
             // After checkout, exchange session_id for license; after portal, re-sync license
             await claimLicense(sessionId ?? undefined);
+            if (cancelled) return;
             refreshLicense();
             // Refresh the page to update settings (including ee_features_enabled)
             router.refresh();
@@ -196,6 +200,7 @@ export default function BillingPage() {
             }
           }
         }
+        if (cancelled) return;
         if (lastError) {
           console.error(
             "Failed to sync license after billing return:",
@@ -206,9 +211,13 @@ export default function BillingPage() {
           changeView("details");
         }
       }
-      refreshBilling();
+      if (!cancelled) refreshBilling();
     };
     handleBillingReturn();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, router, refreshBilling, refreshLicense]);
 
   const handleRefresh = async () => {

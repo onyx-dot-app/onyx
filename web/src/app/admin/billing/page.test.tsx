@@ -7,7 +7,7 @@
  * the browser redirect and the license isn't ready yet.
  */
 import React from "react";
-import { render, waitFor } from "@tests/setup/test-utils";
+import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { act } from "@testing-library/react";
 
 // ---- Stable mock objects (must be named with mock* prefix for jest hoisting) ----
@@ -113,6 +113,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
 
   afterEach(() => {
     jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
   test("calls claimLicense once and refreshes on first-attempt success", async () => {
@@ -181,7 +182,11 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     await waitFor(() => {
       expect(mockClaimLicense).toHaveBeenCalledTimes(3);
     });
-    // User just paid — refreshBilling still fires so UI doesn't stall them
+    // User just paid — they must not be stranded on plans view
+    await waitFor(() => {
+      expect(screen.getByTestId("billing-details-view")).toBeInTheDocument();
+    });
+    // refreshBilling still fires so billing state is up to date
     expect(mockRefreshBilling).toHaveBeenCalled();
     // Failure is logged
     expect(consoleSpy).toHaveBeenCalledWith(
