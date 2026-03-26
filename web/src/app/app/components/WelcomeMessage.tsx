@@ -6,6 +6,7 @@ import {
   GREETING_MESSAGES,
 } from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useState, useEffect } from "react";

@@ -7,6 +7,7 @@ import { toast } from "@/hooks/useToast";
 import { useScimToken } from "@/hooks/useScimToken";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { ThreeDotsLoader } from "@/components/Loading";
 

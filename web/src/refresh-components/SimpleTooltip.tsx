@@ -40,6 +40,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 export interface SimpleTooltipProps

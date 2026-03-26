@@ -7,6 +7,7 @@ import {
 } from "@/app/app/message/messageComponents/interfaces";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgEditBig, SvgMaximize2 } from "@opal/icons";
 import { cn } from "@/lib/utils";

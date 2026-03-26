@@ -6,6 +6,7 @@ import { FullChatState, RenderType } from "../interfaces";
 import { TurnGroup } from "./transformers";
 import { cn } from "@/lib/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { useTimelineExpansion } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineExpansion";
 import { useTimelineMetrics } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineMetrics";

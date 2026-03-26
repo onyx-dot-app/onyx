@@ -7,6 +7,7 @@ import {
   IconProps,
   OpenAIIcon,
 } from "@/components/icons/icons";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Select } from "@/refresh-components/cards";
 import Message from "@/refresh-components/messages/Message";

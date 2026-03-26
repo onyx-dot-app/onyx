@@ -1,4 +1,5 @@
 import type { Components } from "react-markdown";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 // Expanded view: normal spacing between paragraphs/lists

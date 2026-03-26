@@ -17,6 +17,7 @@ import { Tag, ValidSources } from "@/lib/types";
 import { getTimeFilterDate, TimeFilter } from "@/lib/time";
 import useTags from "@/hooks/useTags";
 import { SourceIcon } from "@/components/SourceIcon";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";

@@ -7,6 +7,7 @@ import { Section } from "@/layouts/general-layouts";
 import Popover from "@/refresh-components/Popover";
 import Separator from "@/refresh-components/Separator";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import type { ResourcePopoverProps } from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/interfaces";

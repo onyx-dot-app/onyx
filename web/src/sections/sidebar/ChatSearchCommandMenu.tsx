@@ -15,6 +15,7 @@ import {
 } from "@/sections/sidebar/chatSearchUtils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useCurrentAgent } from "@/hooks/useAgents";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import {
   useChatSearchOptimistic,

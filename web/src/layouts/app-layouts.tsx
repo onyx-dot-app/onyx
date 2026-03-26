@@ -27,6 +27,7 @@ import {
   noProp,
 } from "@/lib/utils";
 import type { Components } from "react-markdown";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";

@@ -59,6 +59,7 @@ import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";

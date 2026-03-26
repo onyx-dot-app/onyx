@@ -3,6 +3,7 @@
 import { SvgCheckCircle } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import { Disabled } from "@opal/core";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { LLMProviderName, LLMProviderDescriptor } from "@/interfaces/llm";

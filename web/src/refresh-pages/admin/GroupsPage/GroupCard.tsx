@@ -8,6 +8,7 @@ import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import {
   isBuiltInGroup,

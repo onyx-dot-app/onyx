@@ -21,6 +21,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import Modal from "@/refresh-components/Modal";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgCheck,

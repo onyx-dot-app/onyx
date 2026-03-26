@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { FileDescriptor } from "@/app/app/interfaces";
 import { cn } from "@/lib/utils";

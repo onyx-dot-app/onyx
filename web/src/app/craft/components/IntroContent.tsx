@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { motion } from "motion/react";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import BigButton from "@/app/craft/components/BigButton";
 

@@ -5,6 +5,7 @@ import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import Label from "@/refresh-components/form/Label";
 import { ErrorMessage } from "formik";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SvgX } from "@opal/icons";

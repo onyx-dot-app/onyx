@@ -10,6 +10,7 @@ import { logout } from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { ErrorTextLayout } from "@/layouts/input-layouts";
 

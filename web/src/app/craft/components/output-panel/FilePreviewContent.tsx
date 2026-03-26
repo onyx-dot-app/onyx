@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import useSWR from "swr";
 import { fetchFileContent } from "@/app/craft/services/apiServices";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";

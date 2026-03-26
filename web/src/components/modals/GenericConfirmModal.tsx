@@ -1,5 +1,6 @@
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgCheck } from "@opal/icons";
 export interface GenericConfirmModalProps {

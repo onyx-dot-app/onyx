@@ -12,6 +12,7 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useLicense } from "@/hooks/useLicense";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { ApplicationStatus } from "@/interfaces/settings";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgLock } from "@opal/icons";
 

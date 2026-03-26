@@ -8,6 +8,7 @@ import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";

@@ -14,6 +14,7 @@ import { SubQuestionDetail, CitationMap } from "../interfaces";
 import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "../projects/projectsService";
 import { BlinkingBar } from "./BlinkingBar";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import {

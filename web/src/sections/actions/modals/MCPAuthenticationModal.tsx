@@ -11,6 +11,7 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";

@@ -21,6 +21,7 @@ import {
 } from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
 import { TimelineStepComposer } from "@/app/app/message/messageComponents/timeline/TimelineStepComposer";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import {
   processContent,

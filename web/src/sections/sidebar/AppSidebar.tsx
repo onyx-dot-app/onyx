@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import AgentButton from "@/sections/sidebar/AgentButton";

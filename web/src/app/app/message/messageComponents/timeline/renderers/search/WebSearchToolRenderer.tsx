@@ -13,6 +13,7 @@ import {
   INITIAL_QUERIES_TO_SHOW,
   QUERIES_PER_EXPANSION,
 } from "./searchStateUtils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({

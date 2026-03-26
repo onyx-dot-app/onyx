@@ -1,6 +1,7 @@
 import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { cn, noProp } from "@/lib/utils";
 

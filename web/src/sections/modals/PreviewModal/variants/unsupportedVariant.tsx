@@ -1,4 +1,5 @@
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";

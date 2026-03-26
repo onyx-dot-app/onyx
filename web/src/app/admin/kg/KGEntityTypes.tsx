@@ -8,6 +8,7 @@ import { ValidSources } from "@/lib/types";
 import { FaCircleQuestion } from "react-icons/fa6";
 import { CheckmarkIcon } from "@/components/icons/icons";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { cn } from "@/lib/utils";

@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Logo from "@/refresh-components/Logo";
 import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";

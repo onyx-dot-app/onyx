@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import type { IconProps } from "@opal/types";
 import { cn, noProp } from "@/lib/utils";
 import { Disabled } from "@opal/core";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import SelectButton from "@/refresh-components/buttons/SelectButton";

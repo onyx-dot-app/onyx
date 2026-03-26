@@ -11,6 +11,7 @@ import { toast } from "@/hooks/useToast";
 import { TextFormField } from "@/components/Field";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 const ImpersonateSchema = Yup.object().shape({

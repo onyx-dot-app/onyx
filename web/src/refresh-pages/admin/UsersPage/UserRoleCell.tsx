@@ -13,6 +13,7 @@ import {
   SvgUserManage,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";

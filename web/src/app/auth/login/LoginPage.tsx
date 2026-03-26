@@ -6,6 +6,7 @@ import SignInButton from "@/app/auth/login/SignInButton";
 import EmailPasswordForm from "./EmailPasswordForm";
 import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import Message from "@/refresh-components/messages/Message";

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
 import type { Components } from "react-markdown";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Popover from "@/refresh-components/Popover";
 import { OpenButton } from "@opal/components";

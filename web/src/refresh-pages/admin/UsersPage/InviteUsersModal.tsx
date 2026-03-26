@@ -7,6 +7,7 @@ import { Disabled } from "@opal/core";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
 import { inviteUsers } from "./svc";

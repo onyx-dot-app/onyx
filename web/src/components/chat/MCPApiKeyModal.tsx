@@ -5,6 +5,7 @@ import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { Input } from "@/components/ui/input";
 import Label from "@/refresh-components/form/Label";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle, SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
 import { Disabled } from "@opal/core";

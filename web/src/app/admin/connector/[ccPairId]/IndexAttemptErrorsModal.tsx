@@ -10,6 +10,7 @@ import {
 import { IndexAttemptError } from "./types";
 import { localizeAndPrettify } from "@/lib/time";
 import Button from "@/refresh-components/buttons/Button";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { PageSelector } from "@/components/PageSelector";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";

@@ -21,6 +21,7 @@ import { toast } from "@/hooks/useToast";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 interface AddMCPServerModalProps {

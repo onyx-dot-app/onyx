@@ -10,6 +10,7 @@ import {
 import { Hoverable } from "@opal/core";
 import { SvgEdit } from "@opal/icons";
 import { Button, Tag } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import EditUserModal from "./EditUserModal";

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";
 import { SvgCheck, SvgCode, SvgCopy } from "@opal/icons";

@@ -11,6 +11,7 @@ import {
 import Switch from "@/refresh-components/inputs/Switch";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import {

@@ -13,6 +13,7 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import Switch from "@/refresh-components/inputs/Switch";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Button, LineItemButton, Tag } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";

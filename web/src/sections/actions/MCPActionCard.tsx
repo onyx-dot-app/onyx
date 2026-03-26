@@ -24,6 +24,7 @@ import type { IconProps } from "@opal/types";
 import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";

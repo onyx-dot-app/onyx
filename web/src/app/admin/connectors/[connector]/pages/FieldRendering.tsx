@@ -15,6 +15,7 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import { Content } from "@opal/layouts";
 import CheckboxField from "@/refresh-components/form/LabeledCheckboxField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 // Define a general type for form values

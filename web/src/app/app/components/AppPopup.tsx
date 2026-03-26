@@ -3,6 +3,7 @@
 import Modal from "@/refresh-components/Modal";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";
 import Checkbox from "@/refresh-components/inputs/Checkbox";

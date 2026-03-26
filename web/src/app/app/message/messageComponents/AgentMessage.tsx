@@ -20,6 +20,7 @@ import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline
 import MessageToolbar from "@/app/app/message/messageComponents/MessageToolbar";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";

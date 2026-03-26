@@ -68,6 +68,7 @@ import { noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";

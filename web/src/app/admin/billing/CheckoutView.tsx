@@ -5,6 +5,7 @@ import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import Separator from "@/refresh-components/Separator";

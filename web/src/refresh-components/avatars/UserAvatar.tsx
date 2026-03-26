@@ -1,6 +1,7 @@
 import { SvgUser } from "@opal/icons";
 import { DEFAULT_AVATAR_SIZE_PX } from "@/lib/constants";
 import { getUserEmail, getUserInitials } from "@/lib/user";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import type { User } from "@/lib/types";
 

@@ -4,6 +4,7 @@ import React, { useRef, useState, useEffect, useMemo } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/providers/ProjectsContext";
 import { formatRelativeTime } from "@/app/app/components/projects/project_utils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";

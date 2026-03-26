@@ -1,5 +1,6 @@
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 const DISABLED_MESSAGE = "Wait for agent message to complete";

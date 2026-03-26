@@ -6,6 +6,7 @@ import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import LineItem from "@/refresh-components/buttons/LineItem";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";

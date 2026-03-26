@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FileDescriptor } from "@/app/app/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import useScreenSize from "@/hooks/useScreenSize";

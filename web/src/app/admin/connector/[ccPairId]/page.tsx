@@ -7,6 +7,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { toast } from "@/hooks/useToast";
 import CredentialSection from "@/components/credentials/CredentialSection";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import {
   updateConnectorCredentialPairName,

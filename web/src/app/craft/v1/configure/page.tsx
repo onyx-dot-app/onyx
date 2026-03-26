@@ -12,6 +12,7 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import { useBuildLlmSelection } from "@/app/craft/hooks/useBuildLlmSelection";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import {

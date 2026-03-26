@@ -27,6 +27,7 @@ import KeyValueInput, {
 } from "@/refresh-components/inputs/InputKeyValue";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";

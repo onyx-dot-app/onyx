@@ -4,6 +4,7 @@ import { useRef } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgUnplug } from "@opal/icons";

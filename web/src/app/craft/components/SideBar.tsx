@@ -12,6 +12,7 @@ import {
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarBody from "@/sections/sidebar/SidebarBody";

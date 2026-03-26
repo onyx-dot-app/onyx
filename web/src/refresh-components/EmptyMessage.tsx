@@ -30,6 +30,7 @@
 
 import { SvgEmpty } from "@opal/icons";
 import Card from "@/refresh-components/cards/Card";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Content } from "@opal/layouts";
 import { IconProps } from "@opal/types";

@@ -8,6 +8,7 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction } from "@opal/layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Separator from "@/refresh-components/Separator";

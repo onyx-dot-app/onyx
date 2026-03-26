@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Image from "next/image";
 import { DEFAULT_AVATAR_SIZE_PX } from "@/lib/constants";

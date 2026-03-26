@@ -8,6 +8,7 @@ import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import InputSearch from "@/refresh-components/inputs/InputSearch";
 import Card from "@/refresh-components/cards/Card";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgArrowExchange,

@@ -5,6 +5,7 @@ import { cn, noProp } from "@/lib/utils";
 import { SvgPlus, SvgX } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { useImageDropzone } from "@/hooks/useImageDropzone";
 

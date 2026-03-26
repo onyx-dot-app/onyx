@@ -1,5 +1,6 @@
 "use client";
 
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertTriangle } from "@opal/icons";
 import { UsageLimits } from "@/app/craft/types/streamingTypes";

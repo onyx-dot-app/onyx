@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import Card from "./Card";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 const meta: Meta<typeof Card> = {

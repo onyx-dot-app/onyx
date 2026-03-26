@@ -5,6 +5,7 @@ import { Table, createTableColumns } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import type { MinimalUserSnapshot } from "@/lib/types";

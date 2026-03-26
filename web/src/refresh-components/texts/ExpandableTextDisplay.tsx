@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import Modal from "@/refresh-components/Modal";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";
 import { Button } from "@opal/components";

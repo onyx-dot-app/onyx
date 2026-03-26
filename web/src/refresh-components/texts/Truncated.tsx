@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useLayoutEffect } from "react";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import { TextProps } from "@/refresh-components/texts/Text";
 import {
   Tooltip,
@@ -8,6 +9,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 

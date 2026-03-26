@@ -1,4 +1,5 @@
 import React from "react";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { OptionItem } from "./OptionItem";
 import { ComboBoxOption } from "../types";

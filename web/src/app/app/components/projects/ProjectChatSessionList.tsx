@@ -8,6 +8,7 @@ import { ChatSession } from "@/app/app/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/hooks/useAgents";
 import { formatRelativeTime } from "./project_utils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";

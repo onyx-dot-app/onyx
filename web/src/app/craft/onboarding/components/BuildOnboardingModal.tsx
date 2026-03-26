@@ -8,6 +8,7 @@ import {
 } from "@/lib/analytics";
 import { SvgArrowRight, SvgArrowLeft, SvgX } from "@opal/icons";
 import { cn } from "@/lib/utils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import {
   BuildUserInfo,

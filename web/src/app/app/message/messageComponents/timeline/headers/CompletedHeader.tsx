@@ -4,6 +4,7 @@ import React from "react";
 import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
 import { Button } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { Section } from "@/layouts/general-layouts";

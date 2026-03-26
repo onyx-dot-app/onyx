@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import {

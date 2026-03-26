@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Callout } from "@/components/ui/callout";
 import { Button } from "@opal/components";

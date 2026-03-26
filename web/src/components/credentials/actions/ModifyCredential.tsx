@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Modal from "@/refresh-components/Modal";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";

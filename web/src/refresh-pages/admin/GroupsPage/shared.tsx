@@ -2,6 +2,7 @@ import { createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgUser, SvgUserManage, SvgGlobe, SvgSlack } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { UserRole, UserStatus, USER_ROLE_LABELS } from "@/lib/types";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";

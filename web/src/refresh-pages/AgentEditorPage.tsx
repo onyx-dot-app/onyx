@@ -34,6 +34,7 @@ import {
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";

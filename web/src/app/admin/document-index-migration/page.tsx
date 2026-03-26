@@ -9,6 +9,7 @@ const route = ADMIN_ROUTES.INDEX_MIGRATION;
 
 import Card from "@/refresh-components/cards/Card";
 import { Content, ContentAction } from "@opal/layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Button from "@/refresh-components/buttons/Button";

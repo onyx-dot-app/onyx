@@ -20,6 +20,7 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Section } from "@/layouts/general-layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import useShareableUsers from "@/hooks/useShareableUsers";
 import useShareableGroups from "@/hooks/useShareableGroups";

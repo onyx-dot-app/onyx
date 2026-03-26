@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { renderAsync } from "docx-preview";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";

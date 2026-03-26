@@ -9,6 +9,7 @@ import {
   useIsPreProvisioningFailed,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { Card } from "@/components/ui/card";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 const STATUS_CONFIG = {

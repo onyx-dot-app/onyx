@@ -2,6 +2,7 @@
 
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { useUser } from "@/providers/UserProvider";
 import { SvgUser } from "@opal/icons";

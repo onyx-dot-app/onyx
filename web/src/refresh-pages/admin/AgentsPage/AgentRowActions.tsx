@@ -19,6 +19,7 @@ import {
 } from "@opal/icons";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
 import { useRouter } from "next/navigation";
