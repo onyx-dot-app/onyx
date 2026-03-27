@@ -7,7 +7,7 @@ Export the following environment variables before running:
     export JSM_BASE_URL="https://your-org.atlassian.net"
     export JSM_USER_EMAIL="you@example.com"
     export JSM_API_TOKEN="your-api-token"
-    export JSM_PROJECT_KEY="SD"   # optional — omit to test all service desks
+    export JSM_PROJECT_KEY="SD"   # optional - omit to test all service desks
 
 Then run::
 
@@ -15,6 +15,7 @@ Then run::
 """
 import os
 import time
+from datetime import datetime, timezone
 
 import pytest
 
@@ -31,7 +32,7 @@ def connector() -> JiraServiceManagementConnector:
 
     if not base_url or not user_email or not api_token:
         pytest.fail(
-            "JSM credentials not configured — set JSM_BASE_URL, JSM_USER_EMAIL, "
+            "JSM credentials not configured - set JSM_BASE_URL, JSM_USER_EMAIL, "
             "and JSM_API_TOKEN env vars. Tests cannot run without credentials."
         )
 
@@ -65,21 +66,24 @@ def test_load_from_state_returns_documents(connector: JiraServiceManagementConne
 
 def test_poll_source_returns_documents(connector: JiraServiceManagementConnector) -> None:
     """Verify that poll_source yields documents within the last 30 days."""
-    now = time.time()
-    thirty_days_ago = now - 30 * 86400
+    now_ts = time.time()
+    thirty_days_ago_ts = now_ts - 30 * 86400
+    # Convert to datetime for comparison with doc.doc_updated_at (datetime, not float)
+    now_dt = datetime.fromtimestamp(now_ts, tz=timezone.utc)
+    thirty_days_ago_dt = datetime.fromtimestamp(thirty_days_ago_ts, tz=timezone.utc)
 
     docs = []
-    for batch in connector.poll_source(thirty_days_ago, now):
+    for batch in connector.poll_source(thirty_days_ago_ts, now_ts):
         docs.extend(batch)
         if len(docs) >= 5:
             break
 
-    # May be empty if no issues updated in the last 30 days — that is acceptable
+    # May be empty if no issues updated in the last 30 days - that is acceptable
     for doc in docs:
         assert doc.doc_updated_at is not None, "poll_source docs should have updated_at."
-        assert thirty_days_ago <= doc.doc_updated_at <= now, (
+        assert thirty_days_ago_dt <= doc.doc_updated_at <= now_dt, (
             f"poll_source doc updated_at {doc.doc_updated_at} falls outside "
-            f"the requested window [{thirty_days_ago}, {now}] — poll filtering regressed."
+            f"the requested window [{thirty_days_ago_dt}, {now_dt}] - poll filtering regressed."
         )
 
 
@@ -97,7 +101,7 @@ def test_document_has_expected_fields(connector: JiraServiceManagementConnector)
             break
 
     if not docs:
-        pytest.skip("No documents returned — skipping field check.")
+        pytest.skip("No documents returned - skipping field check.")
 
     doc = docs[0]
     assert doc.sections, "Document should have at least one section."
@@ -106,4 +110,3 @@ def test_document_has_expected_fields(connector: JiraServiceManagementConnector)
     assert section.text, "Section should have text content."
     assert doc.metadata.get("project"), "Document should include 'project' metadata."
     assert doc.metadata.get("status"), "Document should include 'status' metadata."
-

@@ -14,27 +14,38 @@ _JSM_API_PATH = "/rest/servicedeskapi"
 _JSM_HEADERS = {"Accept": "application/json"}
 
 
-def get_request_details(
-    jsm_base_url: str, auth: HTTPBasicAuth, issue_key: str
+def _jsm_get(
+    url: str, auth: HTTPBasicAuth, issue_key: str
 ) -> dict[str, Any]:
-    """Fetch JSM request details for an issue (request type, participants)."""
-    url = f"{jsm_base_url}{_JSM_API_PATH}/request/{issue_key}"
+    """Internal shared helper for JSM API GET requests.
+
+    Handles 404 (absent/not-a-service-desk), 429 (rate-limit), and other
+    errors consistently so callers don't each need to repeat the same
+    error-handling pattern.
+    """
     try:
         response = requests.get(url, auth=auth, headers=_JSM_HEADERS, timeout=15)
         if response.status_code == 404:
-            # Not a service desk request - return empty
             return {}
         if response.status_code == 429:
-            logger.warning(f"Rate limited fetching request details for {issue_key}")
+            logger.warning(f"Rate limited fetching {url} for {issue_key}")
             return {}
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException:
         logger.warning(
-            f"Failed to fetch request details for {issue_key}",
+            f"Failed to fetch {url} for {issue_key}",
             exc_info=True,
         )
         return {}
+
+
+def get_request_details(
+    jsm_base_url: str, auth: HTTPBasicAuth, issue_key: str
+) -> dict[str, Any]:
+    """Fetch JSM request details for an issue (request type, participants)."""
+    url = f"{jsm_base_url}{_JSM_API_PATH}/request/{issue_key}"
+    return _jsm_get(url, auth, issue_key)
 
 
 def get_sla_information(
@@ -42,21 +53,7 @@ def get_sla_information(
 ) -> dict[str, Any]:
     """Fetch SLA information for a JSM request."""
     url = f"{jsm_base_url}{_JSM_API_PATH}/request/{issue_key}/sla"
-    try:
-        response = requests.get(url, auth=auth, headers=_JSM_HEADERS, timeout=15)
-        if response.status_code == 404:
-            return {}
-        if response.status_code == 429:
-            logger.warning(f"Rate limited fetching SLA for {issue_key}")
-            return {}
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException:
-        logger.warning(
-            f"Failed to fetch SLA information for {issue_key}",
-            exc_info=True,
-        )
-        return {}
+    return _jsm_get(url, auth, issue_key)
 
 
 def format_sla_as_text(sla_data: dict[str, Any]) -> str:
