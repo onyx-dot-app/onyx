@@ -5,6 +5,8 @@ import (
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/version"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -35,6 +37,19 @@ func newValidateConfigCmd() *cobra.Command {
 			}
 
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Status:  connected and authenticated")
+
+			// Check backend version compatibility
+			backendVersion, err := client.GetBackendVersion(cmd.Context())
+			if err != nil {
+				log.WithError(err).Debug("could not fetch backend version")
+			} else {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Version: %s\n", backendVersion)
+				if sv, ok := version.Parse(backendVersion); ok && sv.LessThan(version.MinServer) {
+					log.Warnf("Server version %s is below minimum required %d.%d, please upgrade",
+						backendVersion, version.MinServer.Major, version.MinServer.Minor)
+				}
+			}
+
 			return nil
 		},
 	}

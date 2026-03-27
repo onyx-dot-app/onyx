@@ -122,7 +122,7 @@ repos:
     rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
     hooks:
       - id: golangci-lint
-        language_version: "1.26.0"
+        language_version: "1.26.1"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
