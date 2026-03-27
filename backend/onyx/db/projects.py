@@ -94,7 +94,7 @@ def create_user_files(
                 user_file_id=new_file.id,
             )
             db_session.add(project_to_user_file)
-        if persona_id:
+        if persona_id is not None:
             persona_to_user_file = Persona__UserFile(
                 persona_id=persona_id,
                 user_file_id=new_file.id,
