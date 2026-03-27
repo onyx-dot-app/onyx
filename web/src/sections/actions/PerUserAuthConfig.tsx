@@ -6,6 +6,7 @@ import InputKeyValue, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/MCPAuthenticationModal";

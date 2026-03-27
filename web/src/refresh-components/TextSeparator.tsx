@@ -1,6 +1,6 @@
 import React from "react";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 export interface TextSeparatorProps {
   count?: number;
@@ -20,11 +20,11 @@ export default function TextSeparator({
       <div className="flex-1 h-px bg-border" />
       <div className="flex flex-row items-center gap-1 flex-shrink-0">
         {count !== undefined && (
-          <Text as="p" secondaryBody text03>
-            {count}
+          <Text as="p" font="secondary-body" color="text-03">
+            {String(count)}
           </Text>
         )}
-        <Text as="p" secondaryBody text03>
+        <Text as="p" font="secondary-body" color="text-03">
           {text}
         </Text>
       </div>

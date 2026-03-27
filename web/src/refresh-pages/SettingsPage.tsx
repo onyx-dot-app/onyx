@@ -41,6 +41,7 @@ import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import Separator from "@/refresh-components/Separator";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Code from "@/refresh-components/Code";

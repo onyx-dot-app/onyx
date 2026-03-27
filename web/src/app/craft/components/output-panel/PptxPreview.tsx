@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import useSWR from "swr";
 import { cn } from "@/lib/utils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronLeft, SvgChevronRight, SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";

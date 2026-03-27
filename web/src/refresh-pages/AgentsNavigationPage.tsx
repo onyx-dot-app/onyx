@@ -6,6 +6,7 @@ import { useUser } from "@/providers/UserProvider";
 import { checkUserOwnsAgent as checkUserOwnsAgent } from "@/lib/agents";
 import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";

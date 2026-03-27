@@ -13,6 +13,7 @@ import { updateToolStatus } from "@/lib/tools/mcpService";
 import { SvgServer, SvgTrash } from "@opal/icons";
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 

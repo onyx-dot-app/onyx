@@ -1,6 +1,7 @@
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Content } from "@opal/layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgLock } from "@opal/icons";
 interface NonSelectableConnectorsProps {

@@ -3,6 +3,7 @@
 import React, { useRef, useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Callout } from "@/components/ui/callout";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";

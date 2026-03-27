@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgArrowUpCircle, SvgWallet } from "@opal/icons";
 import type { IconProps } from "@opal/types";

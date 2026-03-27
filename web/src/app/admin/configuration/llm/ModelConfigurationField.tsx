@@ -8,6 +8,7 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgX } from "@opal/icons";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 function ModelConfigurationRow({

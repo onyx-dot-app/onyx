@@ -7,6 +7,7 @@ import {
   SvgChevronRight,
   SvgPlug,
 } from "@opal/icons";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import Switch from "@/refresh-components/inputs/Switch";

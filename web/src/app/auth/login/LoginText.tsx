@@ -2,6 +2,7 @@
 
 import React, { useContext } from "react";
 import { SettingsContext } from "@/providers/SettingsProvider";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 export default function LoginText() {

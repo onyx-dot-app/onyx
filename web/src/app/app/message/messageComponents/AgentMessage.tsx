@@ -20,7 +20,7 @@ import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline
 import MessageToolbar from "@/app/app/message/messageComponents/MessageToolbar";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
@@ -319,7 +319,7 @@ const AgentMessage = React.memo(function AgentMessage({
         {/* Show stopped message when user cancelled and no display content */}
         {pacedDisplayGroups.length === 0 &&
           stopReason === StopReason.USER_CANCELLED && (
-            <Text as="p" secondaryBody text04>
+            <Text as="p" font="secondary-body">
               User has stopped generation
             </Text>
           )}

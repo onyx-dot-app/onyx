@@ -78,10 +78,9 @@ import React, {
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
-import { Button, EmptyMessageCard } from "@opal/components";
+import { Button, EmptyMessageCard, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import type { WithoutStyles } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
 import { FieldMessage } from "../messages/FieldMessage";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
@@ -454,9 +453,13 @@ export default function KeyValueInput({
             Since we're using a `grid` template, the padding below *one* item in a row applies additional height to *all* items in that row.
           */}
           <div className="pb-1">
-            <Text mainUiAction>{keyTitle}</Text>
+            <Text font="main-ui-action" color="text-05">
+              {keyTitle}
+            </Text>
           </div>
-          <Text mainUiAction>{valueTitle}</Text>
+          <Text font="main-ui-action" color="text-05">
+            {valueTitle}
+          </Text>
           <div aria-hidden />
 
           {items.map((item, index) => (

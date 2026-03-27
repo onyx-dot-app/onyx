@@ -7,7 +7,12 @@ import {
   SourceMetadata,
 } from "@/lib/search/interfaces";
 import SearchCard from "@/ee/sections/SearchCard";
-import { Pagination } from "@opal/components";
+import {
+  FilterButton,
+  LineItemButton,
+  Pagination,
+  Text,
+} from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { IllustrationContent } from "@opal/layouts";
@@ -17,14 +22,11 @@ import { Tag, ValidSources } from "@/lib/types";
 import { getTimeFilterDate, TimeFilter } from "@/lib/time";
 import useTags from "@/hooks/useTags";
 import { SourceIcon } from "@/components/SourceIcon";
-import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
-import { FilterButton } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
-import { LineItemButton } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
@@ -316,8 +318,8 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         {!showEmpty && (
           <div className="flex-1 flex flex-col justify-end gap-3">
             <Section alignItems="start">
-              <Text text03 mainUiMuted>
-                {results.length} Results
+              <Text color="text-03" font="main-ui-muted">
+                {`${results.length} Results`}
               </Text>
             </Section>
 
@@ -381,7 +383,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   selectVariant="select-heavy"
                   sizePreset="main-ui"
                   variant="section"
-                  rightChildren={<Text text03>{count}</Text>}
+                  rightChildren={<Text color="text-03">{String(count)}</Text>}
                 />
               ))}
             </Section>

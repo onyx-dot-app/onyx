@@ -28,6 +28,7 @@ import Title from "@/components/ui/title";
 import { redirect } from "next/navigation";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgSettings } from "@opal/icons";

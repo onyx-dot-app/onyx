@@ -12,7 +12,6 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import { useBuildLlmSelection } from "@/app/craft/hooks/useBuildLlmSelection";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
-import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import {
   SvgPlug,
@@ -35,7 +34,7 @@ import {
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { getSourceMetadata } from "@/lib/sources";
 import { deleteConnector } from "@/app/craft/services/apiServices";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import {
   OAUTH_STATE_KEY,
@@ -396,7 +395,9 @@ export default function BuildConfigPage() {
           {isLoading ? (
             <Card variant="tertiary">
               <Section alignItems="center" gap={0.5} height="fit">
-                <Text mainContentBody>Loading...</Text>
+                <Text font="main-content-body" color="text-05">
+                  Loading...
+                </Text>
               </Section>
             </Card>
           ) : (
@@ -480,7 +481,9 @@ export default function BuildConfigPage() {
                               );
                               return <ProviderIcon className="w-4 h-4" />;
                             })()}
-                          <Text mainUiAction>{pendingLlmDisplayName}</Text>
+                          <Text font="main-ui-action" color="text-05">
+                            {pendingLlmDisplayName}
+                          </Text>
                           <SvgChevronDown className="w-4 h-4 text-text-03" />
                         </button>
                       </BuildLLMPopover>
@@ -490,10 +493,8 @@ export default function BuildConfigPage() {
                 <Separator />
                 <div className="w-full flex items-center justify-between">
                   <div className="flex flex-col gap-0.25">
-                    <Text mainContentEmphasis text04>
-                      Connectors
-                    </Text>
-                    <Text secondaryBody text03>
+                    <Text font="main-content-emphasis">Connectors</Text>
+                    <Text font="secondary-body" color="text-03">
                       Connect your own data sources
                     </Text>
                   </div>
@@ -540,7 +541,9 @@ export default function BuildConfigPage() {
                                 />
                               </span>
                             </SimpleTooltip>
-                            <Text mainUiAction>Use Demo Dataset</Text>
+                            <Text font="main-ui-action" color="text-05">
+                              Use Demo Dataset
+                            </Text>
                           </div>
                           <Switch
                             checked={pendingDemoData ?? demoDataEnabled}

@@ -15,6 +15,7 @@ import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/app/interfaces";
 import { getSourceDisplayName } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 const MAX_CITATION_TEXT_LENGTH = 40;

@@ -3,6 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { SvgChevronRight, SvgChevronDown, SvgInfoSmall } from "@opal/icons";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import Truncated from "./texts/Truncated";

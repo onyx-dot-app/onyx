@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Section } from "@/layouts/general-layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { Button } from "@opal/components";

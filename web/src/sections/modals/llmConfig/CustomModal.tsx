@@ -27,8 +27,7 @@ import KeyValueInput, {
 } from "@/refresh-components/inputs/InputKeyValue";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Card, EmptyMessageCard } from "@opal/components";
+import { Button, Card, EmptyMessageCard, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { toast } from "@/hooks/useToast";
@@ -148,11 +147,19 @@ function ModelConfigurationList({ formikProps }: ModelConfigurationListProps) {
       {models.length > 0 ? (
         <div className={`grid items-center gap-1 ${MODEL_GRID_COLS}`}>
           <div className="pb-1">
-            <Text mainUiAction>Model Name</Text>
+            <Text font="main-ui-action" color="text-05">
+              Model Name
+            </Text>
           </div>
-          <Text mainUiAction>Display Name</Text>
-          <Text mainUiAction>Input Type</Text>
-          <Text mainUiAction>Max Tokens</Text>
+          <Text font="main-ui-action" color="text-05">
+            Display Name
+          </Text>
+          <Text font="main-ui-action" color="text-05">
+            Input Type
+          </Text>
+          <Text font="main-ui-action" color="text-05">
+            Max Tokens
+          </Text>
           <div aria-hidden />
 
           {models.map((model, index) => (

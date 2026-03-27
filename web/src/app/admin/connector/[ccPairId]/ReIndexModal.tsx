@@ -6,6 +6,7 @@ import { useState } from "react";
 import { toast } from "@/hooks/useToast";
 import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
 import Modal from "@/refresh-components/Modal";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
 import { SvgRefreshCw } from "@opal/icons";

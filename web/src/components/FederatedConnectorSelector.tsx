@@ -7,10 +7,9 @@ import {
 import { SourceIcon } from "@/components/SourceIcon";
 import Label from "@/refresh-components/form/Label";
 import { ErrorMessage } from "formik";
-import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SvgX } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 
 interface FederatedConnectorSelectorProps {
   name: string;
@@ -130,11 +129,11 @@ export const FederatedConnectorSelector = ({
     <div className="flex flex-col w-full space-y-2 mb-4">
       {label && (
         <Label>
-          <Text>{label}</Text>
+          <Text color="text-05">{label}</Text>
         </Label>
       )}
 
-      <Text as="p" mainUiMuted text03>
+      <Text as="p" font="main-ui-muted" color="text-03">
         Documents from selected federated connectors will be searched in
         real-time during queries.
       </Text>

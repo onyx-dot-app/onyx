@@ -16,6 +16,7 @@ import {
   RESULTS_PER_EXPANSION,
   getMetadataTags,
 } from "./searchStateUtils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({

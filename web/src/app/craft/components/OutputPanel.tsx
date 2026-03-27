@@ -20,6 +20,7 @@ import {
   exportDocx,
 } from "@/app/craft/services/apiServices";
 import { cn, getFileIcon } from "@/lib/utils";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgGlobe,

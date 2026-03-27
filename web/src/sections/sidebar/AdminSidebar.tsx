@@ -26,6 +26,7 @@ import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { getUserDisplayName } from "@/lib/user";
 import { APP_SLOGAN } from "@/lib/constants";

@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronDownSmall } from "@opal/icons";
 import { useContentSize } from "@/hooks/useContentSize";

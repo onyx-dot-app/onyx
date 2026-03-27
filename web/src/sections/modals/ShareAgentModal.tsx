@@ -20,14 +20,13 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 import useShareableUsers from "@/hooks/useShareableUsers";
 import useShareableGroups from "@/hooks/useShareableGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/agents/interfaces";
@@ -244,7 +243,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                               // Note:
                               // This user, during creation, is assumed to be the "owner".
                               // That is why the `(isCurrentUser && !agent)` condition exists.
-                              <Text secondaryBody text03>
+                              <Text font="secondary-body" color="text-03">
                                 Owner
                               </Text>
                             ) : (
@@ -329,7 +328,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                   placeholder="Add labels..."
                   icon={SvgTag}
                 />
-                <Text secondaryBody text04>
+                <Text font="secondary-body">
                   Add labels and categories to help people better discover this
                   agent.
                 </Text>

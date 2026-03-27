@@ -7,6 +7,7 @@ import {
   TableCell,
   TableHeader,
 } from "@/components/ui/table";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { ThreeDotsLoader } from "@/components/Loading";

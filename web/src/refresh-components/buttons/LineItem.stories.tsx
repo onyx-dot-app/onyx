@@ -9,6 +9,7 @@ import {
   SvgSearch,
 } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 const meta: Meta<typeof LineItem> = {

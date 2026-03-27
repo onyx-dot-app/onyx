@@ -6,7 +6,7 @@ import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -34,7 +34,7 @@ interface SharedGroupResourcesProps {
 
 function SharedBadge() {
   return (
-    <Text as="span" secondaryBody text03>
+    <Text as="span" font="secondary-body" color="text-03">
       Shared
     </Text>
   );
@@ -288,9 +288,7 @@ function SharedGroupResources({
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
-                  Connectors & Document Sets
-                </Text>
+                <Text font="main-ui-action">Connectors & Document Sets</Text>
                 <ResourcePopover
                   placeholder="Add connectors, document sets"
                   searchValue={connectorSearch}
@@ -355,9 +353,7 @@ function SharedGroupResources({
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
-                  Agents
-                </Text>
+                <Text font="main-ui-action">Agents</Text>
                 <ResourcePopover
                   placeholder="Add agents"
                   searchValue={agentSearch}

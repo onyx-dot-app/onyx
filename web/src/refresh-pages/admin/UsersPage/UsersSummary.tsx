@@ -1,10 +1,9 @@
 import { SvgArrowUpRight, SvgFilterPlus, SvgUserSync } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
@@ -28,10 +27,10 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
       }`}
       onClick={onFilter}
     >
-      <Text as="span" mainUiAction text04>
+      <Text as="span" font="main-ui-action">
         {display}
       </Text>
-      <Text as="span" secondaryBody text03>
+      <Text as="span" font="secondary-body" color="text-03">
         {label}
       </Text>
       {onFilter && (

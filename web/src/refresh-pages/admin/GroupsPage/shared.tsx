@@ -1,8 +1,7 @@
-import { createTableColumns } from "@opal/components";
+import { createTableColumns, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgUser, SvgUserManage, SvgGlobe, SvgSlack } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
 import { UserRole, UserStatus, USER_ROLE_LABELS } from "@/lib/types";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 
@@ -62,7 +61,7 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
   return (
     <div className="flex flex-row items-center gap-1">
       <Icon className="w-4 h-4 text-text-03" />
-      <Text as="span" mainUiBody text03>
+      <Text as="span" color="text-03">
         {row.role ? USER_ROLE_LABELS[row.role] ?? row.role : "\u2014"}
       </Text>
     </div>
@@ -88,7 +87,7 @@ export const baseColumns = [
     enableSorting: false,
     cell: (value) =>
       value ? (
-        <Text as="span" secondaryBody text03>
+        <Text as="span" font="secondary-body" color="text-03">
           {value}
         </Text>
       ) : null,

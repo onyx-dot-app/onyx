@@ -2,6 +2,7 @@
 
 import type { RichStr } from "@opal/types";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";

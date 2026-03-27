@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { SvgFold, SvgExpand, SvgXOctagon } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 

@@ -1,4 +1,5 @@
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { DOCS_BASE_URL } from "@/lib/constants";
 import { SvgAlertCircle } from "@opal/icons";

@@ -1,5 +1,6 @@
 import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import StepSidebar from "@/sections/sidebar/StepSidebarWrapper";
 import { useUser } from "@/providers/UserProvider";

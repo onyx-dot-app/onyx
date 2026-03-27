@@ -1,5 +1,6 @@
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle } from "@opal/icons";
 import type { IconProps } from "@opal/types";

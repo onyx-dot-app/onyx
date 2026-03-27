@@ -30,7 +30,7 @@
 
 import { SvgEmpty } from "@opal/icons";
 import Card from "@/refresh-components/cards/Card";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { IconProps } from "@opal/types";
 
@@ -55,7 +55,7 @@ export default function EmptyMessage({
         prominence="muted"
       />
       {description && (
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {description}
         </Text>
       )}

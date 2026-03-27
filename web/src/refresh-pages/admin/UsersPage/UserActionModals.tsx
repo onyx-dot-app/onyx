@@ -5,6 +5,7 @@ import { Button } from "@opal/components";
 import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
 import {

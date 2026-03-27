@@ -16,6 +16,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover from "@/refresh-components/Popover";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";

@@ -1,4 +1,5 @@
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import StepSidebar from "@/sections/sidebar/StepSidebarWrapper";
 import { SvgSettings } from "@opal/icons";

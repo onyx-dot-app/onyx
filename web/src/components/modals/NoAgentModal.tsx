@@ -1,8 +1,7 @@
 "use client";
 
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { SvgUser } from "@opal/icons";
 
@@ -14,13 +13,13 @@ export default function NoAgentModal() {
       <Modal.Content width="sm" height="sm">
         <Modal.Header icon={SvgUser} title="No Agent Available" />
         <Modal.Body>
-          <Text as="p">
+          <Text as="p" color="text-05">
             You currently have no agent configured. To use this feature, you
             need to take action.
           </Text>
           {isAdmin ? (
             <>
-              <Text as="p">
+              <Text as="p" color="text-05">
                 As an administrator, you can create a new agent by visiting the
                 admin panel.
               </Text>
@@ -29,7 +28,7 @@ export default function NoAgentModal() {
               </Button>
             </>
           ) : (
-            <Text as="p">
+            <Text as="p" color="text-05">
               Please contact your administrator to configure an agent for you.
             </Text>
           )}

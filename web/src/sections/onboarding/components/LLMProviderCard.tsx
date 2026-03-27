@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useState } from "react";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
@@ -81,7 +81,7 @@ function LLMProviderCardInner({
             )}
           </div>
           <div className="min-w-0 flex flex-col justify-center">
-            <Text as="p" text04 mainUiAction>
+            <Text as="p" font="main-ui-action">
               {title}
             </Text>
             <Truncated text03 secondaryBody>
@@ -108,7 +108,7 @@ function LLMProviderCardInner({
         ) : (
           <div className="flex items-start p-1">
             <div className="flex items-center gap-0.5">
-              <Text as="p" text03 secondaryAction>
+              <Text as="p" font="secondary-action" color="text-03">
                 Connect
               </Text>
               <div className="p-0.5">

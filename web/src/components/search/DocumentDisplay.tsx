@@ -3,6 +3,7 @@ import React, { JSX } from "react";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { SourceIcon } from "../SourceIcon";
 import { WebResultIcon } from "../WebResultIcon";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/app/interfaces";

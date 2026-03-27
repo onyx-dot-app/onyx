@@ -8,7 +8,7 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Separator from "@/refresh-components/Separator";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -29,7 +29,6 @@ import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { Horizontal } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
-import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useFilters, useLlmManager } from "@/lib/hooks";
@@ -280,7 +279,9 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           </Section>
 
           {/* Description */}
-          {agent.description && <Text text03>{agent.description}</Text>}
+          {agent.description && (
+            <Text color="text-03">{agent.description}</Text>
+          )}
 
           {/* Knowledge */}
           <Separator noPadding />
@@ -356,7 +357,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                     nonInteractive
                     sizePreset="main-ui"
                   >
-                    <Text>{defaultModel}</Text>
+                    <Text color="text-05">{defaultModel}</Text>
                   </Horizontal>
                 )}
                 {agent.search_start_date && (
@@ -366,7 +367,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                     nonInteractive
                     sizePreset="main-ui"
                   >
-                    <Text mainUiMono>
+                    <Text font="main-ui-mono" color="text-05">
                       {formatMmDdYyyy(agent.search_start_date)}
                     </Text>
                   </Horizontal>

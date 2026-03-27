@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
 import { setSessionSharing } from "@/app/craft/services/apiServices";

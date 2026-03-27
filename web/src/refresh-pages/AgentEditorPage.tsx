@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button as OpalButton, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
@@ -34,7 +34,6 @@ import {
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
@@ -1575,7 +1574,7 @@ export default function AgentEditorPage({
                                   placeholder="Remember, I want you to always format your response as a numbered list."
                                 />
                               </InputLayouts.Vertical>
-                              <Text text03 secondaryBody>
+                              <Text color="text-03" font="secondary-body">
                                 Append a brief reminder to the prompt messages.
                                 Use this to remind the agent if you find that it
                                 tends to forget certain instructions as the chat

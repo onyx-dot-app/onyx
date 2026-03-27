@@ -13,6 +13,7 @@ import { FilterButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import {

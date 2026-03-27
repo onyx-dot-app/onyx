@@ -2,6 +2,7 @@
 
 import Switch from "@/refresh-components/inputs/Switch";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { Button } from "@opal/components";

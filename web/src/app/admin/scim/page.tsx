@@ -7,7 +7,7 @@ import { toast } from "@/hooks/useToast";
 import { useScimToken } from "@/hooks/useScimToken";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { ThreeDotsLoader } from "@/components/Loading";
 
 import type { ScimTokenCreatedResponse, ScimModalView } from "./interfaces";
@@ -43,7 +43,7 @@ function ScimContent() {
 
   if (tokenError && !is404) {
     return (
-      <Text as="p" text03>
+      <Text as="p" color="text-03">
         Failed to load SCIM token status.
       </Text>
     );

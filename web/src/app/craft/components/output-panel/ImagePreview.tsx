@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgImage } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 
@@ -37,10 +37,10 @@ export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
         padding={2}
       >
         <SvgImage size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
+        <Text font="heading-h3" color="text-03">
           Failed to load image
         </Text>
-        <Text secondaryBody text02>
+        <Text font="secondary-body" color="text-02">
           The image could not be displayed
         </Text>
       </Section>
@@ -52,7 +52,7 @@ export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
       <div className="flex-1 flex items-center justify-center p-4">
         {imageLoading && (
           <div className="absolute">
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               Loading image...
             </Text>
           </div>

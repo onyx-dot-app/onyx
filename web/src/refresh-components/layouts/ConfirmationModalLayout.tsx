@@ -2,8 +2,7 @@
 
 import React from "react";
 import type { IconProps } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useModalClose } from "../contexts/ModalContext";
 
@@ -44,7 +43,7 @@ export default function ConfirmationModalLayout({
         />
         <Modal.Body twoTone={twoTone}>
           {typeof children === "string" ? (
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {children}
             </Text>
           ) : (

@@ -1,4 +1,5 @@
 import Modal from "@/refresh-components/Modal";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { Callout } from "@/components/ui/callout";

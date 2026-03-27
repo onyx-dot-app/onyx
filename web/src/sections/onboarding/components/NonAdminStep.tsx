@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
-import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
@@ -142,11 +141,11 @@ export default function NonAdminStep() {
                 "w-5 h-5"
               )}
             >
-              <Text as="p" inverted secondaryBody>
+              <Text as="p" font="secondary-body" color="text-inverted-05">
                 {savedName?.[0]?.toUpperCase()}
               </Text>
             </InputAvatar>
-            <Text as="p" text04 mainUiAction>
+            <Text as="p" font="main-ui-action">
               {savedName}
             </Text>
           </div>

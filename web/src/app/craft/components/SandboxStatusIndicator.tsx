@@ -9,7 +9,7 @@ import {
   useIsPreProvisioningFailed,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { Card } from "@/components/ui/card";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 const STATUS_CONFIG = {
   provisioning: {
@@ -143,7 +143,7 @@ export default function SandboxStatusIndicator(
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.2 }}
           >
-            <Text text05>{label}</Text>
+            <Text color="text-05">{label}</Text>
           </motion.span>
         </AnimatePresence>
       </Card>

@@ -6,7 +6,7 @@ import {
   GREETING_MESSAGES,
 } from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useState, useEffect } from "react";
 import { useSettingsContext } from "@/providers/SettingsProvider";
@@ -41,7 +41,7 @@ export default function WelcomeMessage({
     content = (
       <div data-testid="onyx-logo" className="flex flex-row items-center gap-4">
         <Logo folded size={32} />
-        <Text as="p" headingH2>
+        <Text as="p" font="heading-h2" color="text-05">
           {greeting}
         </Text>
       </div>
@@ -54,7 +54,7 @@ export default function WelcomeMessage({
           className="flex flex-row items-center gap-3"
         >
           <AgentAvatar agent={agent} size={36} />
-          <Text as="p" headingH2>
+          <Text as="p" font="heading-h2" color="text-05">
             {agent.name}
           </Text>
         </div>

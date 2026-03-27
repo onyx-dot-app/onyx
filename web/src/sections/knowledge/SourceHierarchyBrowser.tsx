@@ -9,8 +9,7 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Separator from "@/refresh-components/Separator";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
@@ -84,14 +83,14 @@ function HierarchyBreadcrumb({
           {sourceMetadata.displayName}
         </Button>
       ) : (
-        <Text text03>{sourceMetadata.displayName}</Text>
+        <Text color="text-03">{sourceMetadata.displayName}</Text>
       )}
 
       {/* Collapsed indicator */}
       {shouldCollapse && (
         <>
           <SvgChevronRight size={12} className="stroke-text-04" />
-          <Text text03 secondaryBody>
+          <Text font="secondary-body" color="text-03">
             ...
           </Text>
         </>
@@ -108,7 +107,7 @@ function HierarchyBreadcrumb({
           <React.Fragment key={node.id}>
             <SvgChevronRight size={12} className="stroke-text-04" />
             {isLast ? (
-              <Text text03>{node.title}</Text>
+              <Text color="text-03">{node.title}</Text>
             ) : (
               <Button
                 prominence="tertiary"
@@ -654,7 +653,7 @@ export default function SourceHierarchyBrowser({
   if (isLoadingNodes) {
     return (
       <GeneralLayouts.Section height="auto" padding={1}>
-        <Text text03 secondaryBody>
+        <Text font="secondary-body" color="text-03">
           Loading folders...
         </Text>
       </GeneralLayouts.Section>
@@ -665,7 +664,7 @@ export default function SourceHierarchyBrowser({
   if (nodesError) {
     return (
       <GeneralLayouts.Section height="auto" padding={1}>
-        <Text text03 secondaryBody>
+        <Text font="secondary-body" color="text-03">
           {nodesError}
         </Text>
       </GeneralLayouts.Section>
@@ -733,7 +732,7 @@ export default function SourceHierarchyBrowser({
           )}
         </TableLayouts.CheckboxCell>
         <TableLayouts.TableCell flex>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             Name
           </Text>
         </TableLayouts.TableCell>
@@ -836,7 +835,7 @@ export default function SourceHierarchyBrowser({
       >
         {filteredItems.length === 0 && !isLoadingDocuments ? (
           <GeneralLayouts.Section height="auto" padding={1}>
-            <Text text03 secondaryBody>
+            <Text font="secondary-body" color="text-03">
               {path.length === 0
                 ? "Select a folder to browse documents."
                 : "No items in this folder."}
@@ -886,7 +885,7 @@ export default function SourceHierarchyBrowser({
                     </GeneralLayouts.Section>
                   </TableLayouts.TableCell>
                   <TableLayouts.TableCell width={8}>
-                    <Text text03 secondaryBody>
+                    <Text font="secondary-body" color="text-03">
                       {isFolder
                         ? "—"
                         : timeAgo(
@@ -901,7 +900,7 @@ export default function SourceHierarchyBrowser({
             {/* Loading more indicator */}
             {isLoadingDocuments && documents.length > 0 && (
               <GeneralLayouts.Section height="auto" padding={0.5}>
-                <Text text03 secondaryBody>
+                <Text font="secondary-body" color="text-03">
                   Loading more...
                 </Text>
               </GeneralLayouts.Section>
@@ -921,9 +920,10 @@ export default function SourceHierarchyBrowser({
             gap={0.5}
             height="auto"
           >
-            <Text text03 secondaryBody>
-              {currentSourceSelectedCount}{" "}
-              {currentSourceSelectedCount === 1 ? "item" : "items"} selected
+            <Text font="secondary-body" color="text-03">
+              {`${currentSourceSelectedCount} ${
+                currentSourceSelectedCount === 1 ? "item" : "items"
+              } selected`}
             </Text>
             <Button
               icon={SvgEye}

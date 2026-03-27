@@ -2,9 +2,8 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Text from "@/refresh-components/texts/Text";
 import { SvgPlusCircle } from "@opal/icons";
 interface ActionbarProps {
   hasActions: boolean;
@@ -50,7 +49,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
         </div>
       ) : (
         <div className="flex-1">
-          <Text as="p" mainUiMuted text03>
+          <Text as="p" font="main-ui-muted" color="text-03">
             {barText}
           </Text>
         </div>

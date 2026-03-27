@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import useSWR from "swr";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Select } from "@/refresh-components/cards";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
@@ -201,10 +201,8 @@ export default function ImageGenerationContent() {
       <div className="flex flex-col gap-6">
         {/* Section Header */}
         <div className="flex flex-col gap-0.5">
-          <Text mainContentEmphasis text05>
-            Image Generation Model
-          </Text>
-          <Text secondaryBody text03>
+          <Text font="main-content-emphasis">Image Generation Model</Text>
+          <Text font="secondary-body" color="text-03">
             Select a model to generate images in chat.
           </Text>
         </div>
@@ -223,7 +221,7 @@ export default function ImageGenerationContent() {
         {/* Provider Groups */}
         {IMAGE_PROVIDER_GROUPS.map((group) => (
           <div key={group.name} className="flex flex-col gap-2">
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {group.name}
             </Text>
             <div className="flex flex-col gap-2">

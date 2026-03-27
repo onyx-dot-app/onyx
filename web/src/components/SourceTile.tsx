@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import React from "react";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 
 interface SourceTileProps {

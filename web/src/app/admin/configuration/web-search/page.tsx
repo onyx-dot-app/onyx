@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState, useReducer } from "react";
 import { InfoIcon } from "@/components/icons/icons";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { Select } from "@/refresh-components/cards";
 import { Section } from "@/layouts/general-layouts";

@@ -31,6 +31,7 @@ import { Credential } from "@/lib/connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 

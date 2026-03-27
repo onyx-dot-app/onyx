@@ -7,7 +7,7 @@ import {
   IconProps,
   OpenAIIcon,
 } from "@/components/icons/icons";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Select } from "@/refresh-components/cards";
 import Message from "@/refresh-components/messages/Message";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -536,7 +536,7 @@ export default function VoiceConfigurationPage() {
           <Callout type="danger" title="Failed to load voice settings">
             {message}
             {detail && (
-              <Text as="p" mainContentBody text03>
+              <Text as="p" font="main-content-body" color="text-03">
                 {detail}
               </Text>
             )}
@@ -626,7 +626,7 @@ export default function VoiceConfigurationPage() {
 
           {TTS_PROVIDER_GROUPS.map((group) => (
             <div key={group.providerType} className="flex flex-col gap-2">
-              <Text secondaryBody text03>
+              <Text font="secondary-body" color="text-03">
                 {group.providerLabel}
               </Text>
               <div className="flex flex-col gap-2">

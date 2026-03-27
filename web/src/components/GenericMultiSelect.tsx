@@ -1,4 +1,5 @@
 import { FormikProps, ErrorMessage } from "formik";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";

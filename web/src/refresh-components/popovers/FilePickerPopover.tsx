@@ -13,6 +13,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { toast } from "@/hooks/useToast";
 import { useProjectsContext } from "@/providers/ProjectsContext";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 import { isImageFile } from "@/lib/utils";

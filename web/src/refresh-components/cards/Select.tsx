@@ -4,8 +4,7 @@ import React, { useState } from "react";
 import type { IconProps } from "@opal/types";
 import { cn, noProp } from "@/lib/utils";
 import { Disabled } from "@opal/core";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import {
   SvgArrowExchange,
@@ -114,10 +113,10 @@ export default function Select({
             />
           </div>
           <div className="flex flex-col gap-0.5">
-            <Text mainUiAction text05>
+            <Text font="main-ui-action" color="text-05">
               {title}
             </Text>
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {description}
             </Text>
           </div>

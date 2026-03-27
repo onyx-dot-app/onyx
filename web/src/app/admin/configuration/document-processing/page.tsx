@@ -7,6 +7,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useSWR from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgLock } from "@opal/icons";

@@ -29,6 +29,7 @@ import {
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
 import Message from "@/refresh-components/messages/Message";

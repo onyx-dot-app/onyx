@@ -1,8 +1,7 @@
 "use client";
 
 import { memo, useState, useCallback } from "react";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
 import LLMProviderCard from "../components/LLMProviderCard";
 import {
@@ -80,8 +79,8 @@ const StackedProviderIcons = ({ providers }: StackedProviderIconsProps) => {
             zIndex: 0,
           }}
         >
-          <Text as="p" text03 secondaryBody>
-            +{providers.length - 3}
+          <Text as="p" font="secondary-body" color="text-03">
+            {`+${providers.length - 3}`}
           </Text>
         </div>
       )}
@@ -231,12 +230,12 @@ const LLMStepInner = ({
           <StackedProviderIcons
             providers={onboardingState.data.llmProviders || []}
           />
-          <Text as="p" text04 mainUiAction>
-            {onboardingState.data.llmProviders?.length || 0}{" "}
-            {(onboardingState.data.llmProviders?.length || 0) === 1
-              ? "model"
-              : "models"}{" "}
-            connected
+          <Text as="p" font="main-ui-action">
+            {`${onboardingState.data.llmProviders?.length || 0} ${
+              (onboardingState.data.llmProviders?.length || 0) === 1
+                ? "model"
+                : "models"
+            } connected`}
           </Text>
         </div>
         <div className="p-1">

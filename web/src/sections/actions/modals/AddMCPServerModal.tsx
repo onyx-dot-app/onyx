@@ -15,13 +15,12 @@ import {
 } from "@/lib/tools/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
@@ -198,9 +197,11 @@ export default function AddMCPServerModal({
                           width="fit"
                         >
                           <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-                          <Text>Authenticated &amp; Connected</Text>
+                          <Text color="text-05">
+                            Authenticated &amp; Connected
+                          </Text>
                         </Section>
-                        <Text secondaryBody text03>
+                        <Text font="secondary-body" color="text-03">
                           {server.auth_type === "OAUTH"
                             ? `OAuth connected to ${server.owner}`
                             : server.auth_type === "API_TOKEN"

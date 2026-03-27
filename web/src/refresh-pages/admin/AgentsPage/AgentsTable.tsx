@@ -1,11 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Table, createTableColumns } from "@opal/components";
+import { Table, Text, createTableColumns } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -99,7 +98,7 @@ function buildColumns(onMutate: () => void) {
       header: "Name",
       weight: 25,
       cell: (value) => (
-        <Text as="span" mainUiBody text05>
+        <Text as="span" color="text-05">
           {value}
         </Text>
       ),
@@ -108,7 +107,7 @@ function buildColumns(onMutate: () => void) {
       header: "Description",
       weight: 35,
       cell: (value) => (
-        <Text as="span" mainUiBody text03>
+        <Text as="span" color="text-03">
           {value || "\u2014"}
         </Text>
       ),
@@ -173,7 +172,7 @@ export default function AgentsTable() {
   if (error) {
     console.error("Failed to load agents:", error);
     return (
-      <Text as="p" secondaryBody text03>
+      <Text as="p" font="secondary-body" color="text-03">
         Failed to load agents. Please try refreshing the page.
       </Text>
     );

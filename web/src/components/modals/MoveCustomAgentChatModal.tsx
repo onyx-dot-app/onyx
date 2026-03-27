@@ -4,6 +4,7 @@ import { useState } from "react";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
+// TODO(@raunakab): migrate this `refresh-components/Text` to `@opal/components` Text
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle } from "@opal/icons";
 interface MoveCustomAgentChatModalProps {
