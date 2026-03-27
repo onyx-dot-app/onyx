@@ -30,26 +30,41 @@ _GLOBAL_MODELS_DICT: dict[str, "SentenceTransformer"] = {}
 # (e.g., 7 requests × 6 torch threads = 42 threads fighting over 6 cores),
 # degrading performance by ~30-200x.
 _EMBED_SEMAPHORE: asyncio.Semaphore | None = None
+_EMBED_SEMAPHORE_GPU_TYPE: str | None = None
 
 
-def _get_embed_semaphore(gpu_type: str) -> asyncio.Semaphore:
-    """Get or create the embedding concurrency semaphore.
+def init_embed_semaphore(gpu_type: str) -> None:
+    """Initialize the embedding semaphore eagerly at app startup.
 
-    On CPU (gpu_type == "none"), serialize requests (max_concurrent=1) to
-    avoid thread contention — this is actually *faster* than concurrent
-    execution on CPU due to reduced context switching overhead.
-
-    On GPU, allow moderate concurrency (max_concurrent=4) since GPU
-    operations are less affected by CPU thread contention.
+    Must be called once during FastAPI lifespan when gpu_type is known,
+    before any embedding requests arrive. This avoids the risk of the
+    semaphore being lazily initialized with a wrong gpu_type (e.g.
+    the default "UNKNOWN" from a warm-up probe or unit test).
     """
+    global _EMBED_SEMAPHORE, _EMBED_SEMAPHORE_GPU_TYPE
+    if _EMBED_SEMAPHORE is not None:
+        logger.warning(
+            f"Embed semaphore already initialized with gpu_type="
+            f"{_EMBED_SEMAPHORE_GPU_TYPE}, ignoring re-init with {gpu_type}"
+        )
+        return
+    max_concurrent: int = 1 if gpu_type.lower() == "none" else 4
+    logger.info(
+        f"Initializing embedding semaphore with max_concurrent={max_concurrent} "
+        f"(gpu_type={gpu_type})"
+    )
+    _EMBED_SEMAPHORE = asyncio.Semaphore(max_concurrent)
+    _EMBED_SEMAPHORE_GPU_TYPE = gpu_type
+
+
+def _get_embed_semaphore() -> asyncio.Semaphore:
+    """Get the embedding semaphore. Must be initialized via init_embed_semaphore()."""
     global _EMBED_SEMAPHORE
     if _EMBED_SEMAPHORE is None:
-        max_concurrent = 1 if gpu_type.lower() == "none" else 4
-        logger.info(
-            f"Initializing embedding semaphore with max_concurrent={max_concurrent} "
-            f"(gpu_type={gpu_type})"
+        raise RuntimeError(
+            "Embed semaphore not initialized. Call init_embed_semaphore() "
+            "at app startup before making embedding requests."
         )
-        _EMBED_SEMAPHORE = asyncio.Semaphore(max_concurrent)
     return _EMBED_SEMAPHORE
 
 
