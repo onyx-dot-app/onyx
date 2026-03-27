@@ -122,15 +122,18 @@ func runTrace(args []string, opts *TraceOptions) {
 		return
 	}
 
-	selected := traces
-	if len(traces) > 1 {
-		selected = selectTraces(traces, projects)
+	if len(traces) == 1 {
+		openTraces(traces)
+		return
+	}
+
+	for {
+		selected := selectTraces(traces, projects)
 		if len(selected) == 0 {
 			return
 		}
+		openTraces(selected)
 	}
-
-	openTraces(selected)
 }
 
 // resolveRunID determines the run ID from the provided arguments and options.
@@ -535,11 +538,12 @@ func openTraces(traces []traceInfo) {
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			if code := exitErr.ExitCode(); code != -1 {
-				os.Exit(code)
-			}
+			// Normal exit (e.g. user closed the window) — just log and return
+			// so the picker loop can continue.
+			log.Debugf("playwright exited with code %d", exitErr.ExitCode())
+			return
 		}
-		log.Fatalf("playwright show-trace failed: %v\nMake sure Playwright is installed (npx playwright install)", err)
+		log.Errorf("playwright show-trace failed: %v\nMake sure Playwright is installed (npx playwright install)", err)
 	}
 }
 

@@ -57,7 +57,9 @@ func Pick(groups []PickerGroup) ([]int, error) {
 			case actionQuit:
 				return nil, nil
 			case actionConfirm:
-				return collectSelected(entries), nil
+				if countSelected(entries) > 0 {
+					return collectSelected(entries), nil
+				}
 			case actionUp:
 				if cursor > 0 {
 					cursor--
