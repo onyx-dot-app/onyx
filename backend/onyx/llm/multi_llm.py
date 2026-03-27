@@ -185,6 +185,21 @@ def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
+def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
+    """Check if the prompt contains any assistant messages with tool_calls.
+
+    When Anthropic's extended thinking is enabled, the API requires every
+    assistant message to start with a thinking block before any tool_use
+    blocks.  Since we don't preserve thinking_blocks (they carry
+    cryptographic signatures that can't be reconstructed), we must skip
+    the thinking param whenever history contains prior tool-calling turns.
+    """
+    from onyx.llm.models import AssistantMessage
+
+    msgs = prompt if isinstance(prompt, list) else [prompt]
+    return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)
+
+
 def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
     normalized_model_name = model_name.lower()
     return any(
@@ -466,7 +481,19 @@ class LitellmLLM(LLM):
                     reasoning_effort
                 )
 
-                if budget_tokens is not None:
+                # Anthropic requires every assistant message with tool_use
+                # blocks to start with a thinking block that carries a
+                # cryptographic signature.  We don't preserve those blocks
+                # across turns, so skip thinking when the history already
+                # contains tool-calling assistant messages.  LiteLLM's
+                # modify_params workaround doesn't cover all providers
+                # (notably Bedrock).
+                can_enable_thinking = (
+                    budget_tokens is not None
+                    and not _prompt_contains_tool_call_history(prompt)
+                )
+
+                if can_enable_thinking:
                     if max_tokens is not None:
                         # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
                         # and the minimum budget tokens is 1024
