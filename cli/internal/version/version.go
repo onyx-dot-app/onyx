@@ -13,8 +13,11 @@ type Semver struct {
 	Patch int
 }
 
-// MinServer is the minimum backend version required by this CLI.
-var MinServer = Semver{Major: 3, Minor: 0, Patch: 0}
+// minServer is the minimum backend version required by this CLI.
+var minServer = Semver{Major: 3, Minor: 0, Patch: 0}
+
+// MinServer returns the minimum backend version required by this CLI.
+func MinServer() Semver { return minServer }
 
 // Parse extracts major, minor, patch from a version string like "3.1.2" or "v3.1.2".
 // Returns ok=false if the string is not valid semver.

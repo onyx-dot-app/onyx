@@ -47,11 +47,17 @@ func printVersion(cmd *cobra.Command) {
 		return
 	}
 
+	if backendVersion == "" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: unknown (empty response)\n")
+		return
+	}
+
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: %s\n", backendVersion)
 
-	if sv, ok := version.Parse(backendVersion); ok && sv.LessThan(version.MinServer) {
+	min := version.MinServer()
+	if sv, ok := version.Parse(backendVersion); ok && sv.LessThan(min) {
 		log.Warnf("Server version %s is below minimum required %d.%d, please upgrade",
-			backendVersion, version.MinServer.Major, version.MinServer.Minor)
+			backendVersion, min.Major, min.Minor)
 	}
 }
 
