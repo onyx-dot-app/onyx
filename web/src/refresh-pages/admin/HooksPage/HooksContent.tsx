@@ -9,7 +9,7 @@ import { ContentAction } from "@opal/layouts";
 import InputSearch from "@/refresh-components/inputs/InputSearch";
 import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
-import { SvgArrowExchange } from "@opal/icons";
+import { SvgArrowExchange, SvgExternalLink } from "@opal/icons";
 import HookFormModal from "@/refresh-pages/admin/HooksPage/HookFormModal";
 import ConnectedHookCard from "@/refresh-pages/admin/HooksPage/ConnectedHookCard";
 import { getHookPointIcon } from "@/refresh-pages/admin/HooksPage/hookPointIcons";
@@ -162,6 +162,19 @@ export default function HooksContent() {
                         </Button>
                       }
                     />
+                    {spec.docs_url && (
+                      <div className="ml-6 px-2 pb-1">
+                        <a
+                          href={spec.docs_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 w-fit font-secondary-body text-text-03"
+                        >
+                          <span className="underline">Documentation</span>
+                          <SvgExternalLink size={12} className="shrink-0" />
+                        </a>
+                      </div>
+                    )}
                   </Card>
                 );
               })}

@@ -11,6 +11,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import {
   SvgCheckCircle,
+  SvgExternalLink,
   SvgPlug,
   SvgRefreshCw,
   SvgSettings,
@@ -398,6 +399,19 @@ export default function ConnectedHookCard({
             </Section>
           }
         />
+        {spec?.docs_url && (
+          <div className="ml-6 px-2 pb-1">
+            <a
+              href={spec.docs_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 w-fit font-secondary-body text-text-03"
+            >
+              <span className="underline">Documentation</span>
+              <SvgExternalLink size={12} className="shrink-0" />
+            </a>
+          </div>
+        )}
       </Card>
     </>
   );
