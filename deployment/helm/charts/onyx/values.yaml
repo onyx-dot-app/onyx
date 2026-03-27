@@ -259,7 +259,7 @@ tooling:
 monitoring:
   grafana:
     dashboards:
-      # -- Set to true to deploy Grafana dashboard ConfigMaps for the Onyx indexing pipeline and Redis queues.
+      # -- Set to true to deploy Grafana dashboard ConfigMaps for the Onyx indexing pipeline.
       # Requires kube-prometheus-stack (or equivalent) with the Grafana sidecar enabled and watching this namespace.
       # The sidecar must be configured with label selector: grafana_dashboard=1
       enabled: false
