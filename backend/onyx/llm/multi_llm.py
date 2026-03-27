@@ -494,6 +494,7 @@ class LitellmLLM(LLM):
                 )
 
                 if can_enable_thinking:
+                    assert budget_tokens is not None  # mypy
                     if max_tokens is not None:
                         # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
                         # and the minimum budget tokens is 1024
