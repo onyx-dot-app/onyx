@@ -15,7 +15,7 @@ import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import { SvgGlobe, SvgOnyxLogo, SvgSlash, SvgUnplug } from "@opal/icons";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -151,7 +151,7 @@ function WebSearchDisconnectModal({
       description="This will remove the stored credentials for this provider."
       onClose={onClose}
       submit={
-        <OpalButton
+        <Button
           variant="danger"
           onClick={onDisconnect}
           disabled={
@@ -159,7 +159,7 @@ function WebSearchDisconnectModal({
           }
         >
           Disconnect
-        </OpalButton>
+        </Button>
       }
     >
       {needsReplacement ? (
