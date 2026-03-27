@@ -34,7 +34,7 @@
 # For a complete production setup, refer to docker-compose.prod.yml
 # =============================================================================
 
-name: onyx
+name: hop
 
 services:
   api_server:
@@ -46,7 +46,7 @@ services:
         - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "alembic upgrade head &&
-      echo \"Starting Onyx Api Server\" &&
+      echo \"Iniciando API de Hop\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     # Check env.template and copy to .env for env vars
     env_file:
@@ -76,7 +76,7 @@ services:
     environment:
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-basic}
-      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
+      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-postgres}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
@@ -158,7 +158,8 @@ services:
         condition: service_started
     restart: unless-stopped
     environment:
-      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
+      - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
+      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-postgres}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
