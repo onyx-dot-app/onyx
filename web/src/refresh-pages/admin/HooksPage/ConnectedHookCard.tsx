@@ -5,6 +5,7 @@ import { toast } from "@/hooks/useToast";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { cn } from "@/lib/utils";
+import { markdown } from "@opal/utils";
 import { ContentAction } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
@@ -315,7 +316,7 @@ export default function ConnectedHookCard({
           variant="section"
           paddingVariant="sm"
           icon={HookIcon}
-          title={hook.name}
+          title={!hook.is_active ? markdown(`~~${hook.name}~~`) : hook.name}
           description={`Hook Point: ${spec?.display_name ?? hook.hook_point}`}
           rightChildren={
             <Section
