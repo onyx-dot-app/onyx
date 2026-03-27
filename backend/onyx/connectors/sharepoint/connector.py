@@ -1765,7 +1765,11 @@ class SharepointConnector(
         checkpoint.current_drive_delta_next_link = None
         checkpoint.seen_document_ids.clear()
 
-    def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
+    def _fetch_slim_documents_from_sharepoint(
+        self,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> GenerateSlimDocumentOutput:
         site_descriptors = self._filter_excluded_sites(
             self.site_descriptors or self.fetch_sites()
         )
@@ -1786,7 +1790,9 @@ class SharepointConnector(
             # Process site documents if flag is True
             if self.include_site_documents:
                 for driveitem, drive_name, drive_web_url in self._fetch_driveitems(
-                    site_descriptor=site_descriptor
+                    site_descriptor=site_descriptor,
+                    start=start,
+                    end=end,
                 ):
                     if self._is_driveitem_excluded(driveitem):
                         logger.debug(f"Excluding by path denylist: {driveitem.web_url}")
@@ -1841,7 +1847,9 @@ class SharepointConnector(
 
             # Process site pages if flag is True
             if self.include_site_pages:
-                site_pages = self._fetch_site_pages(site_descriptor)
+                site_pages = self._fetch_site_pages(
+                    site_descriptor, start=start, end=end
+                )
                 for site_page in site_pages:
                     logger.debug(
                         f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
@@ -2565,12 +2573,22 @@ class SharepointConnector(
 
     def retrieve_all_slim_docs_perm_sync(
         self,
-        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
     ) -> GenerateSlimDocumentOutput:
-
-        yield from self._fetch_slim_documents_from_sharepoint()
+        start_dt = (
+            datetime.fromtimestamp(start, tz=timezone.utc)
+            if start is not None
+            else None
+        )
+        end_dt = (
+            datetime.fromtimestamp(end, tz=timezone.utc) if end is not None else None
+        )
+        yield from self._fetch_slim_documents_from_sharepoint(
+            start=start_dt,
+            end=end_dt,
+        )
 
 
 if __name__ == "__main__":
