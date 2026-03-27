@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useEffect } from "react";
 import useSWR from "swr";
-import Text from "@/refresh-components/texts/Text";
 import { Select } from "@/refresh-components/cards";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
@@ -24,8 +23,9 @@ import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgSlash, SvgUnplug } from "@opal/icons";
+import { markdown } from "@opal/utils";
 
 const NO_DEFAULT_VALUE = "__none__";
 
@@ -201,10 +201,10 @@ export default function ImageGenerationContent() {
       <div className="flex flex-col gap-6">
         {/* Section Header */}
         <div className="flex flex-col gap-0.5">
-          <Text mainContentEmphasis text05>
+          <Text font="main-content-emphasis" color="text-05">
             Image Generation Model
           </Text>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             Select a model to generate images in chat.
           </Text>
         </div>
@@ -223,7 +223,7 @@ export default function ImageGenerationContent() {
         {/* Provider Groups */}
         {IMAGE_PROVIDER_GROUPS.map((group) => (
           <div key={group.name} className="flex flex-col gap-2">
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {group.name}
             </Text>
             <div className="flex flex-col gap-2">
@@ -277,12 +277,13 @@ export default function ImageGenerationContent() {
           {needsReplacement ? (
             hasReplacements ? (
               <Section alignItems="start">
-                <Text as="p" text03>
-                  <b>{disconnectProvider.title}</b> is currently the default
-                  image generation model. Session history will be preserved.
+                <Text as="p" color="text-03">
+                  {markdown(
+                    `**${disconnectProvider.title}** is currently the default image generation model. Session history will be preserved.`
+                  )}
                 </Text>
                 <Section alignItems="start" gap={0.25}>
-                  <Text as="p" text04>
+                  <Text as="p" color="text-04">
                     Set New Default
                   </Text>
                   <InputSelect
@@ -329,22 +330,24 @@ export default function ImageGenerationContent() {
               </Section>
             ) : (
               <>
-                <Text as="p" text03>
-                  <b>{disconnectProvider.title}</b> is currently the default
-                  image generation model.
+                <Text as="p" color="text-03">
+                  {markdown(
+                    `**${disconnectProvider.title}** is currently the default image generation model.`
+                  )}
                 </Text>
-                <Text as="p" text03>
+                <Text as="p" color="text-03">
                   Connect another provider to continue using image generation.
                 </Text>
               </>
             )
           ) : (
             <>
-              <Text as="p" text03>
-                <b>{disconnectProvider.title}</b> models will no longer be used
-                to generate images.
+              <Text as="p" color="text-03">
+                {markdown(
+                  `**${disconnectProvider.title}** models will no longer be used to generate images.`
+                )}
               </Text>
-              <Text as="p" text03>
+              <Text as="p" color="text-03">
                 Session history will be preserved.
               </Text>
             </>
