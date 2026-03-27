@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
 import { OAuthTokenStatus, ToolSnapshot } from "@/lib/tools/interfaces";
 
@@ -23,6 +23,9 @@ export function useToolOAuthStatus(agentId?: number) {
     {
       revalidateOnFocus: false,
       dedupingInterval: 60_000,
+      onErrorRetry: skipRetryOnAuthError,
+      onError: (err) =>
+        console.error("[useToolOAuthStatus] fetch failed:", err),
     }
   );
 

@@ -13,7 +13,7 @@ import {
   SetStateAction,
 } from "react";
 import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import type {
   CategorizedFiles,
   Project,
@@ -169,6 +169,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   >("/api/user/files/recent", errorHandlingFetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 60_000,
+    onErrorRetry: skipRetryOnAuthError,
+    onError: (err) =>
+      console.error("[ProjectsContext] recent files fetch failed:", err),
   });
   // Track whether allRecentFiles has been seeded from the initial server fetch.
   // Subsequent updates come through the merge effect below, not a full reset.
