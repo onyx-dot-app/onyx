@@ -498,13 +498,14 @@ def delete_user_from_db(
 def batch_get_user_groups(
     db_session: Session,
     user_ids: list[UUID],
+    include_default: bool = False,
 ) -> dict[UUID, list[tuple[int, str]]]:
     """Fetch group memberships for a batch of users in a single query.
     Returns a mapping of user_id -> list of (group_id, group_name) tuples."""
     if not user_ids:
         return {}
 
-    rows = db_session.execute(
+    stmt = (
         select(
             User__UserGroup.user_id,
             UserGroup.id,
@@ -512,7 +513,11 @@ def batch_get_user_groups(
         )
         .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
         .where(User__UserGroup.user_id.in_(user_ids))
-    ).all()
+    )
+    if not include_default:
+        stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
+
+    rows = db_session.execute(stmt).all()
 
     result: dict[UUID, list[tuple[int, str]]] = {uid: [] for uid in user_ids}
     for user_id, group_id, group_name in rows:
