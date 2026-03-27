@@ -112,13 +112,16 @@ func (m authModel) Update(msg tea.Msg) (authModel, tea.Cmd) {
 		m.input.Width = max(msg.Width-14, 20) // account for prompt width
 		return m, nil
 	case tea.KeyMsg:
-		if m.state == authValidating {
-			return m, nil
-		}
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyCtrlD:
 			m.aborted = true
 			return m, nil
+		default:
+			if m.state == authValidating {
+				return m, nil
+			}
+		}
+		switch msg.Type {
 		case tea.KeyEnter:
 			key := strings.TrimSpace(m.input.Value())
 			if key == "" {
