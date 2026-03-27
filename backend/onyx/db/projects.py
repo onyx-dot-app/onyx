@@ -17,6 +17,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.models import Persona__UserFile
 from onyx.db.models import Project__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
@@ -50,6 +51,7 @@ def create_user_files(
     db_session: Session,
     link_url: str | None = None,
     temp_id_map: dict[str, str] | None = None,
+    persona_id: int | None = None,
 ) -> CategorizedFilesResult:
 
     # Categorize the files
@@ -92,6 +94,12 @@ def create_user_files(
                 user_file_id=new_file.id,
             )
             db_session.add(project_to_user_file)
+        if persona_id:
+            persona_to_user_file = Persona__UserFile(
+                persona_id=persona_id,
+                user_file_id=new_file.id,
+            )
+            db_session.add(persona_to_user_file)
         user_files.append(new_file)
     db_session.commit()
     return CategorizedFilesResult(
@@ -108,6 +116,7 @@ def upload_files_to_user_files_with_indexing(
     temp_id_map: dict[str, str] | None,
     db_session: Session,
     background_tasks: BackgroundTasks | None = None,
+    persona_id: int | None = None,
 ) -> CategorizedFilesResult:
     if project_id is not None and user is not None:
         if not check_project_ownership(project_id, user.id, db_session):
@@ -119,7 +128,15 @@ def upload_files_to_user_files_with_indexing(
         user,
         db_session,
         temp_id_map=temp_id_map,
+        persona_id=persona_id,
     )
+    if persona_id is not None and categorized_files_result.user_files:
+        from onyx.db.persona import _mark_files_need_persona_sync
+
+        _mark_files_need_persona_sync(
+            db_session, [uf.id for uf in categorized_files_result.user_files]
+        )
+        db_session.commit()
     user_files = categorized_files_result.user_files
     rejected_files = categorized_files_result.rejected_files
     id_to_temp_id = categorized_files_result.id_to_temp_id

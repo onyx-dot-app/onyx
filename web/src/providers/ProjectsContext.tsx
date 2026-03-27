@@ -95,7 +95,8 @@ interface ProjectsContextType {
     files: File[],
     projectId?: number | null,
     onSuccess?: (uploaded: CategorizedFiles) => void,
-    onFailure?: (failedTempIds: string[]) => void
+    onFailure?: (failedTempIds: string[]) => void,
+    personaId?: number | null
   ) => Promise<ProjectFile[]>;
   allRecentFiles: ProjectFile[];
   allCurrentProjectFiles: ProjectFile[];
@@ -336,7 +337,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       files: File[],
       projectId?: number | null,
       onSuccess?: (uploaded: CategorizedFiles) => void,
-      onFailure?: (failedTempIds: string[]) => void
+      onFailure?: (failedTempIds: string[]) => void,
+      personaId?: number | null
     ): Promise<ProjectFile[]> => {
       const rawMax = settingsContext?.settings?.user_file_max_upload_size_mb;
 
@@ -370,7 +372,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
-      svcUploadFiles(validFiles, projectId, tempIdMap)
+      svcUploadFiles(validFiles, projectId, tempIdMap, personaId)
         .then((uploaded) => {
           const uploadedFiles = uploaded.user_files || [];
           const tempIdToUploadedFileMap = new Map(

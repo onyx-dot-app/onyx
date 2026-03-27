@@ -1000,7 +1000,10 @@ export default function useChatController({
       updateChatStateAction(getCurrentSessionId(), "uploading");
       const uploadedMessageFiles = await beginUpload(
         Array.from(acceptedFiles),
-        null
+        null,
+        undefined,
+        undefined,
+        liveAgent?.id ?? null
       );
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");

@@ -128,6 +128,7 @@ def upload_user_files(
     bg_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     project_id: int | None = Form(None),
+    persona_id: int | None = Form(None),
     temp_id_map: str | None = Form(None),  # JSON string mapping hashed key -> temp_id
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -153,6 +154,7 @@ def upload_user_files(
             temp_id_map=parsed_temp_id_map,
             db_session=db_session,
             background_tasks=bg_tasks if DISABLE_VECTOR_DB else None,
+            persona_id=persona_id,
         )
 
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
