@@ -6,7 +6,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Wraps a string for inline markdown parsing by `Text` and other Opal components. */
-export function markdown(content: string): RichStr {
-  return { __brand: "RichStr", raw: content };
+/**
+ * Wraps strings for inline markdown parsing by `Text` and other Opal components.
+ *
+ * Multiple arguments are joined with newlines, so each string renders on its own line:
+ * ```tsx
+ * markdown("Line one", "Line two", "Line three")
+ * ```
+ */
+export function markdown(...lines: string[]): RichStr {
+  return { __brand: "RichStr", raw: lines.join("\n") };
 }
