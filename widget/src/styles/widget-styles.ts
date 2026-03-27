@@ -522,4 +522,36 @@ export const widgetStyles = css`
     color: var(--text-04);
     font-weight: 400;
   }
+
+  /* Citation badges */
+  .citation-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-01);
+  }
+
+  .citation-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--background-neutral-03);
+    color: var(--theme-primary-05);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 150ms ease;
+  }
+
+  .citation-badge:hover {
+    background: var(--theme-primary-05);
+    color: var(--background-neutral-00);
+  }
 `;
