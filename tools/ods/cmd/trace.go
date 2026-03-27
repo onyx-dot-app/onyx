@@ -229,7 +229,11 @@ func findLatestRunForPR(prNumber string) (string, error) {
 // downloadTraceArtifacts downloads playwright trace artifacts for a run.
 // Returns the path to the download directory.
 func downloadTraceArtifacts(runID string, project string) (string, error) {
-	destDir := filepath.Join(os.TempDir(), "ods-traces", runID)
+	cacheKey := runID
+	if project != "" {
+		cacheKey = runID + "-" + project
+	}
+	destDir := filepath.Join(os.TempDir(), "ods-traces", cacheKey)
 
 	// Reuse a previous download if traces exist
 	if info, err := os.Stat(destDir); err == nil && info.IsDir() {
