@@ -33,9 +33,11 @@ class TestCeleryGetBrokerClient:
         result = celery_redis.celery_get_broker_client(app)
 
         assert result is mock_client
-        mock_redis_cls.from_url.assert_called_once_with(
-            "redis://localhost:6379/15", decode_responses=False
-        )
+        call_args = mock_redis_cls.from_url.call_args
+        assert call_args[0][0] == "redis://localhost:6379/15"
+        assert call_args[1]["decode_responses"] is False
+        assert call_args[1]["socket_keepalive"] is True
+        assert call_args[1]["retry_on_timeout"] is True
 
     @patch("onyx.background.celery.celery_redis.Redis")
     def test_reuses_cached_client(self, mock_redis_cls: MagicMock) -> None:
@@ -79,6 +81,5 @@ class TestCeleryGetBrokerClient:
         app = _make_mock_app("redis://custom-host:6380/3")
         celery_redis.celery_get_broker_client(app)
 
-        mock_redis_cls.from_url.assert_called_once_with(
-            "redis://custom-host:6380/3", decode_responses=False
-        )
+        call_args = mock_redis_cls.from_url.call_args
+        assert call_args[0][0] == "redis://custom-host:6380/3"
