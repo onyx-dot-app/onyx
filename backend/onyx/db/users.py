@@ -22,7 +22,6 @@ from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.db.enums import AccountType
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__User
-from onyx.db.models import PermissionGrant
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import SamlAccount
