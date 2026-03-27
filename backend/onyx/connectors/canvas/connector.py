@@ -496,7 +496,8 @@ class CanvasConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: CanvasConnectorCheckpoint,
     ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
-        raise NotImplementedError("Implemented in follow-up PR")
+        # TODO(benwu408): implemented in PR3 (checkpoint)
+        raise NotImplementedError
 
     @override
     def load_from_checkpoint_with_perm_sync(
@@ -505,17 +506,20 @@ class CanvasConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: CanvasConnectorCheckpoint,
     ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
-        raise NotImplementedError("Implemented in follow-up PR")
+        # TODO(benwu408): implemented in PR3 (checkpoint)
+        raise NotImplementedError
 
     @override
     def build_dummy_checkpoint(self) -> CanvasConnectorCheckpoint:
-        raise NotImplementedError("Implemented in follow-up PR")
+        # TODO(benwu408): implemented in PR3 (checkpoint)
+        raise NotImplementedError
 
     @override
     def validate_checkpoint_json(
         self, checkpoint_json: str
     ) -> CanvasConnectorCheckpoint:
-        raise NotImplementedError("Implemented in follow-up PR")
+        # TODO(benwu408): implemented in PR3 (checkpoint)
+        raise NotImplementedError
 
     @override
     def retrieve_all_slim_docs_perm_sync(
@@ -524,4 +528,5 @@ class CanvasConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        raise NotImplementedError("Implemented in follow-up PR")
+        # TODO(benwu408): implemented in PR4 (perm sync)
+        raise NotImplementedError
