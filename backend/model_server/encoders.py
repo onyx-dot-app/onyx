@@ -24,6 +24,34 @@ router = APIRouter(prefix="/encoder")
 
 _GLOBAL_MODELS_DICT: dict[str, "SentenceTransformer"] = {}
 
+# Semaphore to limit concurrent embedding calls and prevent thread contention.
+# On CPU, PyTorch spawns multiple internal threads per model.encode() call.
+# Without a limit, unbounded concurrent requests cause massive thread contention
+# (e.g., 7 requests × 6 torch threads = 42 threads fighting over 6 cores),
+# degrading performance by ~30-200x.
+_EMBED_SEMAPHORE: asyncio.Semaphore | None = None
+
+
+def _get_embed_semaphore(gpu_type: str) -> asyncio.Semaphore:
+    """Get or create the embedding concurrency semaphore.
+
+    On CPU (gpu_type == "none"), serialize requests (max_concurrent=1) to
+    avoid thread contention — this is actually *faster* than concurrent
+    execution on CPU due to reduced context switching overhead.
+
+    On GPU, allow moderate concurrency (max_concurrent=4) since GPU
+    operations are less affected by CPU thread contention.
+    """
+    global _EMBED_SEMAPHORE
+    if _EMBED_SEMAPHORE is None:
+        max_concurrent = 1 if gpu_type.lower() == "none" else 4
+        logger.info(
+            f"Initializing embedding semaphore with max_concurrent={max_concurrent} "
+            f"(gpu_type={gpu_type})"
+        )
+        _EMBED_SEMAPHORE = asyncio.Semaphore(max_concurrent)
+    return _EMBED_SEMAPHORE
+
 
 def get_embedding_model(
     model_name: str,
@@ -135,13 +163,17 @@ async def embed_text(
         local_model = get_embedding_model(
             model_name=model_name, max_context_length=max_context_length
         )
-        # Run CPU-bound embedding in a thread pool
-        embeddings_vectors = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: _concurrent_embedding(
-                prefixed_texts, local_model, normalize_embeddings
-            ),
-        )
+        # Run CPU-bound embedding in a thread pool, with concurrency limiting
+        # to prevent thread contention on CPU (see issue #8396)
+        loop = asyncio.get_event_loop()
+        semaphore = _get_embed_semaphore(gpu_type)
+        async with semaphore:
+            embeddings_vectors = await loop.run_in_executor(
+                None,
+                lambda: _concurrent_embedding(
+                    prefixed_texts, local_model, normalize_embeddings
+                ),
+            )
         embeddings = [
             embedding if isinstance(embedding, list) else embedding.tolist()
             for embedding in embeddings_vectors
