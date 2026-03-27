@@ -21,6 +21,8 @@ type ContentMdSizePreset = "main-content" | "main-ui" | "secondary";
 
 type ContentMdAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 
+type ContentMdSuffix = "optional" | (string & {});
+
 interface ContentMdPresetConfig {
   iconSize: string;
   iconContainerPadding: string;
@@ -53,11 +55,11 @@ interface ContentMdProps {
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
 
-  /** When `true`, renders "(Optional)" beside the title. */
-  optional?: boolean;
-
-  /** Custom muted suffix rendered beside the title. */
-  titleSuffix?: string;
+  /**
+   * Muted suffix rendered beside the title.
+   * Use `"optional"` for the standard "(Optional)" label, or pass any string.
+   */
+  suffix?: ContentMdSuffix;
 
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: ContentMdAuxIcon;
@@ -135,8 +137,7 @@ function ContentMd({
   description,
   editable,
   onTitleChange,
-  optional,
-  titleSuffix,
+  suffix,
   auxIcon,
   tag,
   sizePreset = "main-ui",
@@ -226,9 +227,9 @@ function ContentMd({
             </Text>
           )}
 
-          {(optional || titleSuffix) && (
+          {suffix && (
             <Text font={config.optionalFont as any} color="text-03">
-              {titleSuffix ?? "(Optional)"}
+              {suffix === "optional" ? "(Optional)" : suffix}
             </Text>
           )}
 
@@ -291,5 +292,6 @@ export {
   ContentMd,
   type ContentMdProps,
   type ContentMdSizePreset,
+  type ContentMdSuffix,
   type ContentMdAuxIcon,
 };

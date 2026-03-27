@@ -147,7 +147,7 @@ function LMStudioFormInternals({
           name="custom_config.LM_STUDIO_API_KEY"
           title="API Key"
           subDescription="Optional API key if your LM Studio server requires authentication."
-          optional
+          suffix="optional"
         >
           <PasswordInputTypeInField
             name="custom_config.LM_STUDIO_API_KEY"

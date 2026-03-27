@@ -91,10 +91,8 @@ type LgContentProps = ContentBaseProps & {
 type MdContentProps = ContentBaseProps & {
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant?: "section";
-  /** When `true`, renders "(Optional)" beside the title in the muted font variant. */
-  optional?: boolean;
-  /** Custom muted suffix rendered beside the title. */
-  titleSuffix?: string;
+  /** Muted suffix rendered beside the title. Use `"optional"` for "(Optional)". */
+  suffix?: "optional" | (string & {});
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
   /** Tag rendered beside the title. */
