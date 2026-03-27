@@ -195,13 +195,32 @@ export class OnyxChatWidget extends LitElement {
    * Render markdown content safely.
    * Strips [[n]](url) citation links before markdown parsing so they render
    * as plain [n] text references. Citation badges are rendered separately.
+   * Renumbers citations to sequential display numbers (1, 2, 3...).
    */
-  private renderMarkdown(content: string) {
+  private renderMarkdown(content: string, citations?: ResolvedCitation[]) {
     try {
-      // Strip citation markdown links: [[1]](url) → [1]
-      const stripped = content.replace(/\[\[(\d+)\]\]\([^)]*\)/g, "[$1]");
+      let stripped = content;
+      if (citations?.length) {
+        // Build a map from backend citation number → sequential display number
+        const displayMap = new Map<number, number>();
+        citations.forEach((c, i) => displayMap.set(c.citation_number, i + 1));
+
+        // Replace [[n]](url) with superscript-style display number
+        stripped = stripped.replace(
+          /\[\[(\d+)\]\]\([^)]*\)/g,
+          (_match, num) => {
+            const displayNum = displayMap.get(Number(num));
+            return displayNum ? `<sup>[${displayNum}]</sup>` : "";
+          },
+        );
+      } else {
+        // No citations — strip citation links entirely
+        stripped = stripped.replace(/\[\[(\d+)\]\]\([^)]*\)/g, "");
+      }
       const htmlContent = marked.parse(stripped, { async: false }) as string;
-      const sanitizedHTML = DOMPurify.sanitize(htmlContent);
+      const sanitizedHTML = DOMPurify.sanitize(htmlContent, {
+        ADD_TAGS: ["sup"],
+      });
       return unsafeHTML(sanitizedHTML);
     } catch (err) {
       console.error("Failed to parse markdown:", err);
@@ -211,28 +230,30 @@ export class OnyxChatWidget extends LitElement {
 
   /**
    * Render citation badges for a message.
-   * Each badge links to the source document.
+   * Each badge links to the source document with a sequential display number.
    */
   private renderCitations(citations?: ResolvedCitation[]) {
     if (!citations?.length) return "";
     return html`
       <div class="citation-list">
-        ${citations.map((c) =>
-          c.link
+        <span class="citation-label">Sources</span>
+        ${citations.map((c, i) => {
+          const displayNum = i + 1;
+          return c.link
             ? html`<a
                 class="citation-badge"
                 href=${c.link}
                 target="_blank"
                 rel="noopener noreferrer"
                 title=${c.semantic_identifier || "Source document"}
-                >${c.citation_number}</a
+                >${displayNum}</a
               >`
             : html`<span
                 class="citation-badge"
                 title=${c.semantic_identifier || "Source document"}
-                >${c.citation_number}</span
-              >`,
-        )}
+                >${displayNum}</span
+              >`;
+        })}
       </div>
     `;
   }
@@ -547,6 +568,7 @@ export class OnyxChatWidget extends LitElement {
                 ${msg.role === "assistant"
                   ? html`${this.renderMarkdown(
                       msg.content,
+                      msg.citations,
                     )}${this.renderCitations(msg.citations)}`
                   : msg.content}
               </div>

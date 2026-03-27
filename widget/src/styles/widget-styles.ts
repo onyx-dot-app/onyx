@@ -523,14 +523,31 @@ export const widgetStyles = css`
     font-weight: 400;
   }
 
-  /* Citation badges */
+  /* Inline citation superscripts */
+  .message-bubble sup {
+    font-size: 0.7em;
+    color: var(--theme-primary-05);
+    font-weight: 600;
+    cursor: default;
+  }
+
+  /* Citation badge row */
   .citation-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 6px;
-    padding-top: 6px;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
     border-top: 1px solid var(--border-01);
+  }
+
+  .citation-label {
+    font-size: 11px;
+    color: var(--text-04);
+    opacity: 0.6;
+    font-weight: 500;
+    margin-right: 2px;
   }
 
   .citation-badge {
@@ -539,19 +556,29 @@ export const widgetStyles = css`
     justify-content: center;
     font-size: 11px;
     font-weight: 600;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 4px;
-    border-radius: 4px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
     background: var(--background-neutral-03);
     color: var(--theme-primary-05);
     text-decoration: none;
     cursor: pointer;
-    transition: background 150ms ease;
+    transition:
+      background 150ms ease,
+      color 150ms ease,
+      transform 100ms ease;
+    border: 1px solid transparent;
   }
 
-  .citation-badge:hover {
+  a.citation-badge:hover {
     background: var(--theme-primary-05);
     color: var(--background-neutral-00);
+    transform: translateY(-1px);
+  }
+
+  span.citation-badge {
+    cursor: default;
+    opacity: 0.7;
   }
 `;
