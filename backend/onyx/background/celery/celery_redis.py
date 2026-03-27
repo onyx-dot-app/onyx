@@ -1,5 +1,6 @@
 # These are helper objects for tracking the keys we need to write in redis
 import json
+import threading
 from typing import Any
 from typing import cast
 
@@ -11,6 +12,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 
 
 _broker_client: Redis | None = None
+_broker_client_lock = threading.Lock()
 
 
 def celery_get_broker_client(app: Celery) -> Redis:
@@ -18,25 +20,26 @@ def celery_get_broker_client(app: Celery) -> Redis:
 
     Uses a module-level singleton so all tasks on a worker share one
     connection instead of creating a new one per call. The client
-    connects directly to the broker Redis DB (parsed from the broker URL)
-    rather than going through Celery's connection/channel abstraction.
+    connects directly to the broker Redis DB (parsed from the broker URL).
+
+    Thread-safe via lock — safe for use in Celery thread-pool workers.
 
     Usage:
         r_celery = celery_get_broker_client(self.app)
         length = celery_get_queue_length(queue, r_celery)
     """
     global _broker_client
-    if _broker_client is not None:
-        try:
-            _broker_client.ping()
-            return _broker_client
-        except Exception:
-            _broker_client = None
+    with _broker_client_lock:
+        if _broker_client is not None:
+            try:
+                _broker_client.ping()
+                return _broker_client
+            except Exception:
+                _broker_client = None
 
-    # Parse broker URL to get host/port/db
-    url = app.conf.broker_url
-    _broker_client = Redis.from_url(url, decode_responses=False)
-    return _broker_client
+        url = app.conf.broker_url
+        _broker_client = Redis.from_url(url, decode_responses=False)
+        return _broker_client
 
 
 def celery_get_unacked_length(r: Redis) -> int:
