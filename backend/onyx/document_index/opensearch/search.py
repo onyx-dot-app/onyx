@@ -785,7 +785,7 @@ class DocumentQuery:
                                 # The title fields are strongly discounted as
                                 # they are included in the content. This just
                                 # acts as a minor boost.
-                                "boost": 0.1,
+                                "boost": 0.2,
                             }
                         }
                     },
@@ -794,7 +794,7 @@ class DocumentQuery:
                             TITLE_FIELD_NAME: {
                                 "query": query_text,
                                 "slop": 1,
-                                "boost": 0.2,
+                                "boost": 0.4,
                             }
                         }
                     },

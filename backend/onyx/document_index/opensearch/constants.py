@@ -40,7 +40,7 @@ M = 32  # Set relatively high for better accuracy.
 # Defaults to 100 for now. Initially this defaulted to 750 but we were seeing
 # poor search performance.
 DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES = int(
-    os.environ.get("DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES", 100)
+    os.environ.get("DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES", 1000)
 )
 
 # Number of vectors to examine to decide the top k neighbors for the HNSW
@@ -78,7 +78,7 @@ HYBRID_SEARCH_SUBQUERY_CONFIGURATION: HybridSearchSubqueryConfiguration = (
     HybridSearchSubqueryConfiguration(
         int(os.environ["HYBRID_SEARCH_SUBQUERY_CONFIGURATION"])
     )
-    if os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION", None) is not None
+    if os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION")
     else HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
 )
 
@@ -99,6 +99,6 @@ HYBRID_SEARCH_NORMALIZATION_PIPELINE: HybridSearchNormalizationPipeline = (
     HybridSearchNormalizationPipeline(
         int(os.environ["HYBRID_SEARCH_NORMALIZATION_PIPELINE"])
     )
-    if os.environ.get("HYBRID_SEARCH_NORMALIZATION_PIPELINE", None) is not None
+    if os.environ.get("HYBRID_SEARCH_NORMALIZATION_PIPELINE")
     else HybridSearchNormalizationPipeline.MIN_MAX
 )
