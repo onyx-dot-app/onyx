@@ -37,6 +37,7 @@ export interface Settings {
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
   user_file_max_upload_size_mb?: number | null;
+  file_token_count_threshold_k?: number | null;
 
   // Connector settings
   show_extra_connectors?: boolean;
@@ -68,6 +69,12 @@ export interface Settings {
 
   // Application version from the ONYX_VERSION env var on the server.
   version?: string | null;
+  // Hard ceiling for user_file_max_upload_size_mb, derived from env var.
+  max_allowed_upload_size_mb?: number;
+
+  // Factory defaults for the restore button.
+  default_user_file_max_upload_size_mb?: number;
+  default_file_token_count_threshold_k?: number;
 }
 
 export enum NotificationType {
