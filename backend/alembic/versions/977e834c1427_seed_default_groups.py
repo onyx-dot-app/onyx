@@ -85,7 +85,7 @@ def upgrade() -> None:
         conn.execute(
             sa.text(
                 "INSERT INTO permission_grant (group_id, permission, grant_source) "
-                "VALUES (:group_id, :permission, 'system') "
+                "VALUES (:group_id, :permission, 'SYSTEM') "
                 "ON CONFLICT (group_id, permission) DO NOTHING"
             ),
             {"group_id": group_id, "permission": permission_value},
