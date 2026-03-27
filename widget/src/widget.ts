@@ -239,10 +239,12 @@ export class OnyxChatWidget extends LitElement {
         ${citations.map((c, i) => {
           const displayNum = i + 1;
           const title = c.semantic_identifier || "Source";
-          return c.link
+          const safeHref =
+            c.link && /^https?:\/\//i.test(c.link) ? c.link : undefined;
+          return safeHref
             ? html`<a
                 class="citation-badge"
-                href=${c.link}
+                href=${safeHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 title=${title}
