@@ -1,11 +1,8 @@
-import pickle
-import tempfile
 from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Protocol
 
 from pydantic import BaseModel
@@ -50,12 +47,12 @@ from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
+from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import IndexingBatchAdapter
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
@@ -168,72 +165,18 @@ def _get_failed_doc_ids(failures: list[ConnectorFailure]) -> set[str]:
     return {f.failed_document.document_id for f in failures if f.failed_document}
 
 
-def _save_batch(chunks: list[IndexChunk], batch_file: Path) -> None:
-    """Serialize a list of embedded chunks to *batch_file*."""
-    with open(batch_file, "wb") as f:
-        pickle.dump(chunks, f)
-
-
-def _load_batch(batch_file: Path) -> list[IndexChunk]:
-    """Deserialize a list of embedded chunks from *batch_file*."""
-    with open(batch_file, "rb") as f:
-        return pickle.load(f)
-
-
-def _list_batch_files(tmpdir: Path) -> list[Path]:
-    """Return batch files in *tmpdir* sorted by numeric index."""
-    return sorted(
-        tmpdir.glob("batch_*.pkl"),
-        key=lambda p: int(p.stem.removeprefix("batch_")),
-    )
-
-
-def _scrub_failed_docs_from_disk(
-    chunk_batch_tmpdir: Path,
-    failed_doc_ids: set[str],
-) -> None:
-    """Re-read each batch file and remove chunks belonging to failed docs.
-
-    When a document fails embedding in batch N, earlier batches may already
-    contain successfully embedded chunks for that document.  This pass
-    ensures those are removed so the output is all-or-nothing per document.
-    """
-    for batch_file in _list_batch_files(chunk_batch_tmpdir):
-        batch_chunks = _load_batch(batch_file)
-        cleaned = [
-            c for c in batch_chunks if c.source_document.id not in failed_doc_ids
-        ]
-        if len(cleaned) != len(batch_chunks):
-            _save_batch(cleaned, batch_file)
-
-
-class EmbedStream:
-    """Lazily streams embedded chunks from batch files on disk.
-
-    Each call to ``stream()`` returns a fresh generator, so the data can be
-    iterated multiple times (e.g. once per document index).
-    """
-
-    def __init__(self, tmpdir: Path) -> None:
-        self._tmpdir = tmpdir
-
-    def stream(self) -> Iterator[IndexChunk]:
-        for batch_file in _list_batch_files(self._tmpdir):
-            yield from _load_batch(batch_file)
-
-
-def _embed_chunks_to_disk(
+def _embed_chunks_to_store(
     chunks: list[DocAwareChunk],
     embedder: IndexingEmbedder,
     tenant_id: str,
     request_id: str | None,
-    tmpdir: Path,
+    store: ChunkBatchStore,
 ) -> ChunkEmbeddingResult:
-    """Embed chunks in batches, spilling each batch to disk.
+    """Embed chunks in batches, spilling each batch to *store*.
 
     If a document fails embedding in any batch, its chunks are excluded from
-    all batches (including earlier ones already written to disk) so that the
-    output is all-or-nothing per document.
+    all batches (including earlier ones already written) so that the output
+    is all-or-nothing per document.
     """
     successful_chunk_ids: list[tuple[int, str]] = []
     all_embedding_failures: list[ConnectorFailure] = []
@@ -274,12 +217,12 @@ def _embed_chunks_to_disk(
             (c.chunk_id, c.source_document.id) for c in chunks_with_embeddings
         )
 
-        _save_batch(chunks_with_embeddings, tmpdir / f"batch_{batch_idx}.pkl")
+        store.save(chunks_with_embeddings, batch_idx)
         del chunks_with_embeddings
 
     # Scrub earlier batches for docs that failed in later batches.
     if all_failed_doc_ids:
-        _scrub_failed_docs_from_disk(tmpdir, all_failed_doc_ids)
+        store.scrub_failed_docs(all_failed_doc_ids)
         successful_chunk_ids = [
             (chunk_id, doc_id)
             for chunk_id, doc_id in successful_chunk_ids
@@ -298,28 +241,27 @@ def embed_and_stream(
     embedder: IndexingEmbedder,
     tenant_id: str,
     request_id: str | None,
-) -> Generator[tuple[ChunkEmbeddingResult, EmbedStream], None, None]:
-    """Embed chunks to disk and yield a ``(result, stream)`` pair.
+) -> Generator[tuple[ChunkEmbeddingResult, ChunkBatchStore], None, None]:
+    """Embed chunks to disk and yield a ``(result, store)`` pair.
 
-    Owns the temp directory lifetime — files are cleaned up when the context
+    The store owns the temp directory — files are cleaned up when the context
     manager exits.
 
     Usage::
 
-        with embed_and_stream(chunks, embedder, tenant_id, req_id) as (result, stream):
-            for chunk in stream.stream():
+        with embed_and_stream(chunks, embedder, tenant_id, req_id) as (result, store):
+            for chunk in store.stream():
                 ...
     """
-    with tempfile.TemporaryDirectory(prefix="onyx_embeddings_") as raw_tmpdir:
-        tmpdir = Path(raw_tmpdir)
-        result = _embed_chunks_to_disk(
+    with ChunkBatchStore() as store:
+        result = _embed_chunks_to_store(
             chunks=chunks,
             embedder=embedder,
             tenant_id=tenant_id,
             request_id=request_id,
-            tmpdir=tmpdir,
+            store=store,
         )
-        yield result, EmbedStream(tmpdir)
+        yield result, store
 
 
 def get_doc_ids_to_update(
@@ -919,7 +861,7 @@ def index_doc_batch(
     logger.debug("Starting embedding")
     with embed_and_stream(chunks, embedder, tenant_id, request_id) as (
         embedding_result,
-        embed_stream,
+        chunk_store,
     ):
         updatable_ids = [doc.id for doc in context.updatable_docs]
         updatable_chunk_data = [
@@ -968,7 +910,7 @@ def index_doc_batch(
             for document_index in document_indices:
 
                 def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
-                    for chunk in embed_stream.stream():
+                    for chunk in chunk_store.stream():
                         yield enricher.enrich_chunk(chunk, 1.0)
 
                 insertion_records, write_failures = (
