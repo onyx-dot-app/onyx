@@ -10,6 +10,7 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
+from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 
 
@@ -48,7 +49,7 @@ def _make_chunk(
         doc_summary="",
         chunk_context="",
         contextual_rag_reserved_tokens=0,
-        embeddings={"full_embedding": [0.1] * 10, "mini_chunk_embeddings": []},
+        embeddings=ChunkEmbedding(full_embedding=[0.1] * 10, mini_chunk_embeddings=[]),
         title_embedding=[0.1] * 10,
         tenant_id="test_tenant",
         access=access,
@@ -61,10 +62,12 @@ def _make_chunk(
     )
 
 
-def _make_index() -> OpenSearchDocumentIndex:
-    """Creates an OpenSearchDocumentIndex with a mocked client."""
+def _make_index() -> tuple[OpenSearchDocumentIndex, MagicMock]:
+    """Creates an OpenSearchDocumentIndex with a mocked client.
+    Returns the index and the mock for bulk_index_documents."""
     mock_client = MagicMock()
-    mock_client.bulk_index_documents = MagicMock()
+    mock_bulk = MagicMock()
+    mock_client.bulk_index_documents = mock_bulk
 
     tenant_state = TenantState(tenant_id="test_tenant", multitenant=False)
 
@@ -73,7 +76,7 @@ def _make_index() -> OpenSearchDocumentIndex:
     index._client = mock_client
     index._tenant_state = tenant_state
 
-    return index
+    return index, mock_bulk
 
 
 def _make_metadata(doc_id: str, chunk_count: int) -> IndexingMetadata:
@@ -93,7 +96,7 @@ def _make_metadata(doc_id: str, chunk_count: int) -> IndexingMetadata:
 )
 def test_single_doc_under_batch_limit_flushes_once() -> None:
     """A document with fewer chunks than MAX_CHUNKS_PER_DOC_BATCH should flush once."""
-    index = _make_index()
+    index, mock_bulk = _make_index()
     doc_id = "doc_1"
     num_chunks = 50
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
@@ -102,8 +105,8 @@ def test_single_doc_under_batch_limit_flushes_once() -> None:
     with patch.object(index, "delete", return_value=0):
         index.index(chunks, metadata)
 
-    assert index._client.bulk_index_documents.call_count == 1
-    batch_arg = index._client.bulk_index_documents.call_args_list[0]
+    assert mock_bulk.call_count == 1
+    batch_arg = mock_bulk.call_args_list[0]
     assert len(batch_arg.kwargs["documents"]) == num_chunks
 
 
@@ -113,7 +116,7 @@ def test_single_doc_under_batch_limit_flushes_once() -> None:
 )
 def test_single_doc_over_batch_limit_flushes_multiple_times() -> None:
     """A document with more chunks than MAX_CHUNKS_PER_DOC_BATCH should flush multiple times."""
-    index = _make_index()
+    index, mock_bulk = _make_index()
     doc_id = "doc_1"
     num_chunks = 250
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
@@ -123,11 +126,8 @@ def test_single_doc_over_batch_limit_flushes_multiple_times() -> None:
         index.index(chunks, metadata)
 
     # 250 chunks / 100 per batch = 3 flushes (100 + 100 + 50)
-    assert index._client.bulk_index_documents.call_count == 3
-    batch_sizes = [
-        len(call.kwargs["documents"])
-        for call in index._client.bulk_index_documents.call_args_list
-    ]
+    assert mock_bulk.call_count == 3
+    batch_sizes = [len(call.kwargs["documents"]) for call in mock_bulk.call_args_list]
     assert batch_sizes == [100, 100, 50]
 
 
@@ -138,7 +138,7 @@ def test_single_doc_over_batch_limit_flushes_multiple_times() -> None:
 def test_single_doc_exactly_at_batch_limit() -> None:
     """A document with exactly MAX_CHUNKS_PER_DOC_BATCH chunks should flush once
     (the flush happens on the next chunk, not at the boundary)."""
-    index = _make_index()
+    index, mock_bulk = _make_index()
     doc_id = "doc_1"
     num_chunks = 100
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
@@ -153,7 +153,7 @@ def test_single_doc_exactly_at_batch_limit() -> None:
     # when current_chunks has 100 items and the 101st chunk arrives.
     # With exactly 100 chunks, the 100th chunk makes len == 99, then appended -> 100.
     # No 101st chunk arrives, so the final flush handles all 100.
-    assert index._client.bulk_index_documents.call_count == 1
+    assert mock_bulk.call_count == 1
 
 
 @patch(
@@ -163,7 +163,7 @@ def test_single_doc_exactly_at_batch_limit() -> None:
 def test_single_doc_one_over_batch_limit() -> None:
     """101 chunks for one doc: first 100 flushed when the 101st arrives, then
     the 101st is flushed at the end."""
-    index = _make_index()
+    index, mock_bulk = _make_index()
     doc_id = "doc_1"
     num_chunks = 101
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
@@ -172,11 +172,8 @@ def test_single_doc_one_over_batch_limit() -> None:
     with patch.object(index, "delete", return_value=0):
         index.index(chunks, metadata)
 
-    assert index._client.bulk_index_documents.call_count == 2
-    batch_sizes = [
-        len(call.kwargs["documents"])
-        for call in index._client.bulk_index_documents.call_args_list
-    ]
+    assert mock_bulk.call_count == 2
+    batch_sizes = [len(call.kwargs["documents"]) for call in mock_bulk.call_args_list]
     assert batch_sizes == [100, 1]
 
 
@@ -186,7 +183,7 @@ def test_single_doc_one_over_batch_limit() -> None:
 )
 def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
     """Multiple documents each under the batch limit should flush once per document."""
-    index = _make_index()
+    index, mock_bulk = _make_index()
     chunks = []
     for doc_idx in range(3):
         doc_id = f"doc_{doc_idx}"
@@ -204,7 +201,7 @@ def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
         index.index(chunks, metadata)
 
     # 3 documents = 3 flushes (one per doc boundary + final)
-    assert index._client.bulk_index_documents.call_count == 3
+    assert mock_bulk.call_count == 3
 
 
 @patch(
@@ -214,7 +211,7 @@ def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
 def test_delete_called_once_per_document() -> None:
     """Even with multiple flushes for a single document, delete should only be
     called once per document."""
-    index = _make_index()
+    index, _mock_bulk = _make_index()
     doc_id = "doc_1"
     num_chunks = 250
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
