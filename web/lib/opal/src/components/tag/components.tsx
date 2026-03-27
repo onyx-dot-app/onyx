@@ -4,12 +4,6 @@ import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
-// NOTE: Tag uses <Text> directly (no wrapper span) because Text now includes
-// px-[2px] natively. The theme color is applied on a wrapper span and Text
-// inherits via color="inherit".
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 

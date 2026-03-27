@@ -34,8 +34,8 @@ interface InteractiveStatefulProps
    * - `"select-heavy"` — tinted selected background (for list rows, model pickers)
    * - `"select-tinted"` — like select-heavy but with a tinted rest background
    * - `"select-filter"` — like select-tinted for empty/filled; selected state uses inverted tint backgrounds and inverted text (for filter buttons)
-   * - `"sidebar-heavy"` — for sidebar navigation items (bold unselected, muted selected)
-   * - `"sidebar-light"` — for sidebar navigation items (muted all states)
+   * - `"sidebar-heavy"` — sidebar navigation items: muted when unselected (text-03/text-02), bold when selected (text-04/text-03)
+   * - `"sidebar-light"` — sidebar navigation items: uniformly muted across all states (text-02/text-02)
    *
    * @default "select-heavy"
    */
