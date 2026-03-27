@@ -168,17 +168,28 @@ def _get_failed_doc_ids(failures: list[ConnectorFailure]) -> set[str]:
     return {f.failed_document.document_id for f in failures if f.failed_document}
 
 
-def _spill_chunks_to_disk(
-    chunks: list[IndexChunk],
-    batch_file: Path,
-) -> None:
-    """Pickle embedded chunks to disk and free memory."""
+def _save_batch(chunks: list[IndexChunk], batch_file: Path) -> None:
+    """Serialize a list of embedded chunks to *batch_file*."""
     with open(batch_file, "wb") as f:
         pickle.dump(chunks, f)
 
 
+def _load_batch(batch_file: Path) -> list[IndexChunk]:
+    """Deserialize a list of embedded chunks from *batch_file*."""
+    with open(batch_file, "rb") as f:
+        return pickle.load(f)
+
+
+def _list_batch_files(tmpdir: Path) -> list[Path]:
+    """Return batch files in *tmpdir* sorted by numeric index."""
+    return sorted(
+        tmpdir.glob("batch_*.pkl"),
+        key=lambda p: int(p.stem.removeprefix("batch_")),
+    )
+
+
 def _scrub_failed_docs_from_disk(
-    tmpdir: Path,
+    chunk_batch_tmpdir: Path,
     failed_doc_ids: set[str],
 ) -> None:
     """Re-read each batch file and remove chunks belonging to failed docs.
@@ -187,22 +198,17 @@ def _scrub_failed_docs_from_disk(
     contain successfully embedded chunks for that document.  This pass
     ensures those are removed so the output is all-or-nothing per document.
     """
-    for batch_file in sorted(
-        tmpdir.glob("batch_*.pkl"),
-        key=lambda p: int(p.stem.removeprefix("batch_")),
-    ):
-        with open(batch_file, "rb") as f:
-            batch_chunks: list[IndexChunk] = pickle.load(f)
+    for batch_file in _list_batch_files(chunk_batch_tmpdir):
+        batch_chunks = _load_batch(batch_file)
         cleaned = [
             c for c in batch_chunks if c.source_document.id not in failed_doc_ids
         ]
         if len(cleaned) != len(batch_chunks):
-            with open(batch_file, "wb") as f:
-                pickle.dump(cleaned, f)
+            _save_batch(cleaned, batch_file)
 
 
 class EmbedStream:
-    """Lazily streams embedded chunks from pickle files on disk.
+    """Lazily streams embedded chunks from batch files on disk.
 
     Each call to ``stream()`` returns a fresh generator, so the data can be
     iterated multiple times (e.g. once per document index).
@@ -212,13 +218,8 @@ class EmbedStream:
         self._tmpdir = tmpdir
 
     def stream(self) -> Iterator[IndexChunk]:
-        for batch_file in sorted(
-            self._tmpdir.glob("batch_*.pkl"),
-            key=lambda p: int(p.stem.removeprefix("batch_")),
-        ):
-            with open(batch_file, "rb") as f:
-                batch: list[IndexChunk] = pickle.load(f)
-            yield from batch
+        for batch_file in _list_batch_files(self._tmpdir):
+            yield from _load_batch(batch_file)
 
 
 def _embed_chunks_to_disk(
@@ -273,7 +274,7 @@ def _embed_chunks_to_disk(
             (c.chunk_id, c.source_document.id) for c in chunks_with_embeddings
         )
 
-        _spill_chunks_to_disk(chunks_with_embeddings, tmpdir / f"batch_{batch_idx}.pkl")
+        _save_batch(chunks_with_embeddings, tmpdir / f"batch_{batch_idx}.pkl")
         del chunks_with_embeddings
 
     # Scrub earlier batches for docs that failed in later batches.
@@ -942,7 +943,7 @@ def index_doc_batch(
 
         # Acquires a lock on the documents so that no other process can modify
         # them.  Not needed until here, since this is when the actual race
-        # condition with Vespa can occur.
+        # condition with vector db can occur.
         with adapter.lock_context(context.updatable_docs):
             enricher = adapter.prepare_enrichment(
                 context=context,
