@@ -200,19 +200,24 @@ export class OnyxChatWidget extends LitElement {
   private renderMarkdown(content: string, citations?: ResolvedCitation[]) {
     try {
       let stripped = content;
-      if (this.config.includeCitations && citations?.length) {
-        // Build a map from backend citation number → sequential display number
-        const displayMap = new Map<number, number>();
-        citations.forEach((c, i) => displayMap.set(c.citation_number, i + 1));
+      if (this.config.includeCitations) {
+        if (citations?.length) {
+          // Build a map from backend citation number → sequential display number
+          const displayMap = new Map<number, number>();
+          citations.forEach((c, i) => displayMap.set(c.citation_number, i + 1));
 
-        // Replace [[n]](url) with superscript-style display number
-        stripped = stripped.replace(
-          /\[\[(\d+)\]\]\([^)]*\)/g,
-          (_match, num) => {
-            const displayNum = displayMap.get(Number(num));
-            return displayNum ? `<sup>[${displayNum}]</sup>` : "";
-          },
-        );
+          // Replace [[n]](url) with superscript-style display number
+          stripped = stripped.replace(
+            /\[\[(\d+)\]\]\([^)]*\)/g,
+            (_match, num) => {
+              const displayNum = displayMap.get(Number(num));
+              return displayNum ? `<sup>[${displayNum}]</sup>` : "";
+            },
+          );
+        } else {
+          // Still streaming or no citations resolved yet — strip raw links
+          stripped = stripped.replace(/\[\[(\d+)\]\]\([^)]*\)/g, "");
+        }
       }
       const htmlContent = marked.parse(stripped, { async: false }) as string;
       const sanitizedHTML = DOMPurify.sanitize(htmlContent, {
