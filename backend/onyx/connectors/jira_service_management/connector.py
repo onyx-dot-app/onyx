@@ -4,7 +4,6 @@ Extends the base JiraConnector to index JSM-specific ticket data including
 service requests, incidents, problems, changes, and SLA information.
 """
 
-import copy
 from typing import Any
 
 from jira.resources import Issue
@@ -13,21 +12,11 @@ from typing_extensions import override
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.jira.connector import _FIELD_PARENT
-from onyx.connectors.jira.connector import _FIELD_PROJECT
-from onyx.connectors.jira.connector import _JIRA_FULL_PAGE_SIZE
-from onyx.connectors.jira.connector import _perform_jql_search
 from onyx.connectors.jira.connector import JiraConnector
-from onyx.connectors.jira.connector import JiraConnectorCheckpoint
-from onyx.connectors.jira.connector import make_checkpoint_callback
 from onyx.connectors.jira.connector import process_jira_issue
 from onyx.connectors.jira.utils import best_effort_get_field_from_issue
-from onyx.connectors.jira.utils import build_jira_url
-from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
 from onyx.utils.logger import setup_logger
 
 
@@ -76,6 +65,9 @@ def _extract_sla_display(sla_value: Any) -> tuple[str | None, bool]:
                 friendly = remaining.get("friendly")
                 if friendly:
                     return str(friendly), breached
+            # Breached but no remaining time display
+            if breached:
+                return "Breached", True
 
         # Try completedCycles
         completed = sla_value.get("completedCycles")
@@ -88,6 +80,9 @@ def _extract_sla_display(sla_value: Any) -> tuple[str | None, bool]:
                     friendly = elapsed.get("friendly")
                     if friendly:
                         return str(friendly), breached
+                # Breached but no elapsed time display
+                if breached:
+                    return "Breached", True
 
     # Server / simple string
     if isinstance(sla_value, str):
@@ -98,7 +93,11 @@ def _extract_sla_display(sla_value: Any) -> tuple[str | None, bool]:
     if name:
         return str(name), False
 
-    return None, breached
+    # If breached but no display could be extracted, provide fallback
+    if breached:
+        return "Breached", True
+
+    return None, False
 
 
 def _extract_request_type_name(rt_value: Any) -> str | None:
@@ -195,7 +194,8 @@ class JiraServiceManagementConnector(JiraConnector):
             logger.debug(f"Discovered JSM fields: {field_map}")
         except Exception:
             logger.warning(
-                "Could not discover JSM custom fields; SLA enrichment will be skipped"
+                "Could not discover JSM custom fields; SLA enrichment will be skipped",
+                exc_info=True,
             )
 
         self._jsm_field_map = field_map
@@ -257,101 +257,19 @@ class JiraServiceManagementConnector(JiraConnector):
         """Override to inject JSM issue type filter when no custom JQL is set."""
         base_jql = super()._get_jql_query(start, end)
 
-        # If user provided a custom JQL, don't add JSM filter — trust the user
-        if self.jql_query:
+        # If user provided a custom JQL and no service_desk_id, trust the user
+        if self.jql_query and not self.service_desk_id:
             return base_jql
 
-        # Inject JSM issue type filter
+        # Inject JSM issue type filter — always when service_desk_id is set,
+        # or when no custom JQL is provided
         jsm_filter = self._get_jsm_jql_filter()
         return f"({base_jql}) AND {jsm_filter}"
 
     @override
-    def _load_from_checkpoint(
-        self,
-        jql: str,
-        checkpoint: JiraConnectorCheckpoint,
-        include_permissions: bool,
-    ) -> CheckpointOutput[JiraConnectorCheckpoint]:
-        """Override to inject JSM metadata enrichment into each yielded document."""
-        starting_offset = checkpoint.offset or 0
-        current_offset = starting_offset
-        new_checkpoint = copy.deepcopy(checkpoint)
-
-        seen_hierarchy_node_ids = set(new_checkpoint.seen_hierarchy_node_ids)
-        checkpoint_callback = make_checkpoint_callback(new_checkpoint)
-
-        for issue in _perform_jql_search(
-            jira_client=self.jira_client,
-            jql=jql,
-            start=current_offset,
-            max_results=_JIRA_FULL_PAGE_SIZE,
-            all_issue_ids=new_checkpoint.all_issue_ids,
-            checkpoint_callback=checkpoint_callback,
-            nextPageToken=new_checkpoint.cursor,
-            ids_done=new_checkpoint.ids_done,
-        ):
-            issue_key = issue.key
-            try:
-                project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
-                project_key = project.key if project else None
-                project_name = project.name if project else None
-
-                if project_key:
-                    yield from self._yield_project_hierarchy_node(
-                        project_key, project_name, seen_hierarchy_node_ids
-                    )
-
-                    parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
-                    if parent:
-                        yield from self._yield_parent_hierarchy_node_if_epic(
-                            parent, project_key, seen_hierarchy_node_ids
-                        )
-
-                    if self._is_epic(issue):
-                        yield from self._yield_epic_hierarchy_node(
-                            issue, project_key, seen_hierarchy_node_ids
-                        )
-
-                parent_hierarchy_raw_node_id = (
-                    self._get_parent_hierarchy_raw_node_id(issue, project_key)
-                    if project_key
-                    else None
-                )
-
-                if document := process_jira_issue(
-                    jira_base_url=self.jira_base,
-                    issue=issue,
-                    comment_email_blacklist=self.comment_email_blacklist,
-                    labels_to_skip=self.labels_to_skip,
-                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
-                ):
-                    document = self._enrich_document_with_jsm_metadata(
-                        document, issue
-                    )
-                    if include_permissions:
-                        document.external_access = self._get_project_permissions(
-                            project_key,
-                            add_prefix=True,
-                        )
-                    yield document
-
-            except Exception as e:
-                yield ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=issue_key,
-                        document_link=build_jira_url(self.jira_base, issue_key),
-                    ),
-                    failure_message=f"Failed to process JSM issue: {str(e)}",
-                    exception=e,
-                )
-
-            current_offset += 1
-
-        new_checkpoint.seen_hierarchy_node_ids = list(seen_hierarchy_node_ids)
-        self.update_checkpoint_for_next_run(
-            new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE
-        )
-        return new_checkpoint
+    def _enrich_document(self, document: Document, issue: Issue) -> Document:
+        """Override hook to inject JSM metadata into each document."""
+        return self._enrich_document_with_jsm_metadata(document, issue)
 
 
 def process_jsm_issue(

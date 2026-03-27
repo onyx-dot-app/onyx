@@ -713,6 +713,14 @@ class JiraConnector(
                 )
             raise e
 
+    def _enrich_document(self, document: Document, issue: Issue) -> Document:
+        """Hook for subclasses to enrich a document after initial processing.
+
+        Called by _load_from_checkpoint after process_jira_issue succeeds.
+        The default implementation returns the document unchanged.
+        """
+        return document
+
     def _load_from_checkpoint(
         self, jql: str, checkpoint: JiraConnectorCheckpoint, include_permissions: bool
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
@@ -777,6 +785,7 @@ class JiraConnector(
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                 ):
+                    document = self._enrich_document(document, issue)
                     # Add permission information to the document if requested
                     if include_permissions:
                         document.external_access = self._get_project_permissions(

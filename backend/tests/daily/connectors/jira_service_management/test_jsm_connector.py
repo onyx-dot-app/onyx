@@ -26,6 +26,10 @@ from onyx.connectors.jira_service_management.connector import _extract_sla_displ
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 
+# Patch targets for base class (hook pattern — JSM no longer overrides _load_from_checkpoint)
+_PATCH_JQL_SEARCH = "onyx.connectors.jira.connector._perform_jql_search"
+_PATCH_PROCESS_ISSUE = "onyx.connectors.jira.connector.process_jira_issue"
+
 
 def _make_connector(
     service_desk_id: str | None = None,
@@ -287,11 +291,27 @@ class TestJQLGeneration:
         assert "issuetype in" in jql
 
     def test_jql_custom_query_no_jsm_filter(self) -> None:
-        """When user provides custom JQL, don't inject JSM issue type filter."""
+        """When user provides custom JQL without service_desk_id, trust the user."""
         connector = _make_connector(jql_query="project = SD AND priority = High")
         jql = connector._get_jql_query(0.0, 9999999999.0)
         assert "project = SD AND priority = High" in jql
         assert "issuetype in" not in jql
+
+    def test_jql_custom_query_with_service_desk_id_still_filters(self) -> None:
+        """When service_desk_id is set, JSM issue type filter is always applied."""
+        connector = _make_connector(
+            service_desk_id="5",
+            jql_query="priority = High",
+        )
+        jql = connector._get_jql_query(0.0, 9999999999.0)
+        assert "priority = High" in jql
+        assert "issuetype in" in jql
+
+    def test_jql_service_desk_id_no_project_includes_jsm_filter(self) -> None:
+        """When service_desk_id is set but no project, JSM filter is applied."""
+        connector = _make_connector(service_desk_id="5")
+        jql = connector._get_jql_query(0.0, 9999999999.0)
+        assert "issuetype in" in jql
 
 
 class TestSLAHelpers:
@@ -340,6 +360,43 @@ class TestSLAHelpers:
         assert display is None
         assert breached is False
 
+    def test_extract_sla_display_breached_no_friendly(self) -> None:
+        """Breached=True but no friendly string should return 'Breached' fallback."""
+        sla = {
+            "ongoingCycle": {
+                "breached": True,
+                "remainingTime": {},
+            }
+        }
+        display, breached = _extract_sla_display(sla)
+        assert display == "Breached"
+        assert breached is True
+
+    def test_extract_sla_display_breached_no_remaining_time(self) -> None:
+        """Breached=True with no remainingTime key at all."""
+        sla = {
+            "ongoingCycle": {
+                "breached": True,
+            }
+        }
+        display, breached = _extract_sla_display(sla)
+        assert display == "Breached"
+        assert breached is True
+
+    def test_extract_sla_display_completed_breached_no_elapsed(self) -> None:
+        """Completed cycle breached but no elapsed time display."""
+        sla = {
+            "completedCycles": [
+                {
+                    "breached": True,
+                    "elapsedTime": {},
+                }
+            ]
+        }
+        display, breached = _extract_sla_display(sla)
+        assert display == "Breached"
+        assert breached is True
+
     def test_extract_request_type_name_dict(self) -> None:
         rt = {"requestType": {"name": "VPN Access"}}
         assert _extract_request_type_name(rt) == "VPN Access"
@@ -352,14 +409,10 @@ class TestSLAHelpers:
 
 
 class TestLoadFromCheckpointEnrichment:
-    """Verify that _load_from_checkpoint calls JSM enrichment on each document."""
+    """Verify that _load_from_checkpoint calls JSM enrichment via hook pattern."""
 
-    @patch(
-        "onyx.connectors.jira_service_management.connector._perform_jql_search"
-    )
-    @patch(
-        "onyx.connectors.jira_service_management.connector.process_jira_issue"
-    )
+    @patch(_PATCH_JQL_SEARCH)
+    @patch(_PATCH_PROCESS_ISSUE)
     def test_load_from_checkpoint_enriches_documents(
         self,
         mock_process_jira_issue: MagicMock,
@@ -392,7 +445,19 @@ class TestLoadFromCheckpointEnrichment:
             )
         )
 
-        # Should have yielded the enriched document
+        # Should have yielded the enriched document via hook pattern
         docs = [r for r in results if isinstance(r, Document)]
         assert len(docs) == 1
         assert docs[0].source == DocumentSource.JIRA_SERVICE_MANAGEMENT
+
+    def test_enrich_document_hook_delegates_to_jsm_metadata(self) -> None:
+        """Verify _enrich_document calls _enrich_document_with_jsm_metadata."""
+        connector = _make_connector()
+        connector._jsm_field_map = {}
+
+        issue = _make_mock_issue()
+        doc = _make_mock_document()
+        assert doc.source == DocumentSource.JIRA
+
+        enriched = connector._enrich_document(doc, issue)
+        assert enriched.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
