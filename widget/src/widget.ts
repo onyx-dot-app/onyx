@@ -3,7 +3,7 @@
  * Orchestrates launcher/inline modes and manages widget lifecycle
  */
 
-import { LitElement, html } from "lit";
+import { LitElement, html, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
@@ -232,7 +232,9 @@ export class OnyxChatWidget extends LitElement {
    * Render citation badges for a message.
    * Each badge shows a numbered pill with the document title, linking to the source.
    */
-  private renderCitations(citations?: ResolvedCitation[]) {
+  private renderCitations(
+    citations?: ResolvedCitation[],
+  ): string | TemplateResult {
     if (!citations?.length) return "";
     return html`
       <div class="citation-list">
