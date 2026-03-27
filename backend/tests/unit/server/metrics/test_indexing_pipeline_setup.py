@@ -1,43 +1,22 @@
-"""Tests for indexing pipeline setup (broker Redis factory)."""
+"""Tests for indexing pipeline setup."""
 
 from unittest.mock import MagicMock
-from unittest.mock import patch
 
-from onyx.server.metrics.indexing_pipeline_setup import _make_broker_redis_factory
+from onyx.server.metrics.indexing_pipeline import QueueDepthCollector
+from onyx.server.metrics.indexing_pipeline import RedisHealthCollector
 
 
-class TestMakeBrokerRedisFactory:
-    @patch(
-        "onyx.background.celery.celery_redis.celery_get_broker_client",
-        wraps=None,
-    )
-    def test_delegates_to_singleton(self, mock_get_client: MagicMock) -> None:
-        """Factory should delegate to celery_get_broker_client."""
-        mock_client = MagicMock()
-        mock_get_client.return_value = mock_client
-
+class TestCollectorCeleryAppSetup:
+    def test_queue_depth_collector_uses_celery_app(self) -> None:
+        """QueueDepthCollector.set_celery_app stores the app for broker access."""
+        collector = QueueDepthCollector()
         mock_app = MagicMock()
-        factory = _make_broker_redis_factory(mock_app)
+        collector.set_celery_app(mock_app)
+        assert collector._celery_app is mock_app
 
-        result = factory()
-
-        assert result is mock_client
-        mock_get_client.assert_called_once_with(mock_app)
-
-    @patch(
-        "onyx.background.celery.celery_redis.celery_get_broker_client",
-        wraps=None,
-    )
-    def test_passes_app_on_each_call(self, mock_get_client: MagicMock) -> None:
-        """Factory should pass the app on every call."""
-        mock_get_client.return_value = MagicMock()
-
+    def test_redis_health_collector_uses_celery_app(self) -> None:
+        """RedisHealthCollector.set_celery_app stores the app for broker access."""
+        collector = RedisHealthCollector()
         mock_app = MagicMock()
-        factory = _make_broker_redis_factory(mock_app)
-
-        factory()
-        factory()
-
-        assert mock_get_client.call_count == 2
-        for call in mock_get_client.call_args_list:
-            assert call[0][0] is mock_app
+        collector.set_celery_app(mock_app)
+        assert collector._celery_app is mock_app
