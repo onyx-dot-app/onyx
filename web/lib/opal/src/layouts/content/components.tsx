@@ -1,39 +1,3 @@
-// ---------------------------------------------------------------------------
-// NOTE (@raunakab): Why Content uses resolveStr() instead of <Text>
-//
-// Content sub-components (ContentXl, ContentLg, ContentMd, ContentSm) render
-// titles and descriptions inside styled <span> elements that carry CSS classes
-// (e.g., `.opal-content-md-title`) for:
-//
-//   1. Truncation — `-webkit-box` + `-webkit-line-clamp` for single-line
-//      clamping with ellipsis. This requires the text to be a DIRECT child
-//      of the `-webkit-box` element. Wrapping it in a child <span> (which
-//      is what <Text> renders) breaks the clamping behavior.
-//
-//   2. Pixel-exact sizing — the wrapper <span> has an explicit `height`
-//      matching the font's `line-height`. Adding a child <Text> <span>
-//      inside creates a double-span where the inner element's line-height
-//      conflicts with the outer element's height, causing a ~4px vertical
-//      offset.
-//
-//   3. Interactive color overrides — CSS selectors like
-//      `.opal-content-md[data-interactive] .opal-content-md-title` set
-//      `color: var(--interactive-foreground)`. <Text> with `color="inherit"`
-//      can inherit this, but <Text> with any explicit color prop overrides
-//      it. And the wrapper <span> needs the CSS class for the selector to
-//      match — removing it breaks the cascade.
-//
-//   4. Horizontal padding — the title CSS class applies `padding: 0 0.125rem`
-//      (2px). Since <Text> uses WithoutStyles (no className/style), this
-//      padding cannot be applied to <Text> directly. A wrapper <div> was
-//      attempted but introduced additional layout conflicts.
-//
-// For these reasons, Content uses `resolveStr()` from InlineMarkdown.tsx to
-// handle `string | RichStr` rendering. `resolveStr()` returns a ReactNode
-// that slots directly into the existing single <span> — no extra wrapper,
-// no layout conflicts, pixel-exact match with main.
-// ---------------------------------------------------------------------------
-
 import "@opal/layouts/content/styles.css";
 import {
   ContentSm,
@@ -97,9 +61,6 @@ interface ContentBaseProps {
    * @default "fit"
    */
   widthVariant?: ExtremaSizeVariants;
-
-  /** When `true`, the title color hooks into `Interactive.Stateful`/`Interactive.Stateless`'s `--interactive-foreground` variable. */
-  withInteractive?: boolean;
 
   /** Ref forwarded to the root `<div>` of the resolved layout. */
   ref?: React.Ref<HTMLDivElement>;
@@ -168,7 +129,6 @@ function Content(props: ContentProps) {
     sizePreset = "headline",
     variant = "heading",
     widthVariant = "full",
-    withInteractive,
     ref,
     ...rest
   } = props;
@@ -181,7 +141,6 @@ function Content(props: ContentProps) {
       layout = (
         <ContentXl
           sizePreset={sizePreset}
-          withInteractive={withInteractive}
           ref={ref}
           {...(rest as Omit<ContentXlProps, "sizePreset">)}
         />
@@ -190,7 +149,6 @@ function Content(props: ContentProps) {
       layout = (
         <ContentLg
           sizePreset={sizePreset}
-          withInteractive={withInteractive}
           ref={ref}
           {...(rest as Omit<ContentLgProps, "sizePreset">)}
         />
@@ -204,7 +162,6 @@ function Content(props: ContentProps) {
     layout = (
       <ContentMd
         sizePreset={sizePreset}
-        withInteractive={withInteractive}
         ref={ref}
         {...(rest as Omit<ContentMdProps, "sizePreset">)}
       />
@@ -216,7 +173,6 @@ function Content(props: ContentProps) {
     layout = (
       <ContentSm
         sizePreset={sizePreset}
-        withInteractive={withInteractive}
         ref={ref}
         {...(rest as Omit<
           React.ComponentProps<typeof ContentSm>,

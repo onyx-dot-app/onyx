@@ -400,6 +400,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="sidebar"][data-interactive-state="empty"] {
   @apply bg-transparent;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-03);
 }
 .interactive[data-interactive-variant="sidebar"][data-interactive-state="empty"]:hover:not(
     [data-disabled]
@@ -415,6 +417,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="sidebar"][data-interactive-state="filled"] {
   @apply bg-transparent;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-03);
 }
 .interactive[data-interactive-variant="sidebar"][data-interactive-state="filled"]:hover:not(
     [data-disabled]
@@ -430,6 +434,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="sidebar"][data-interactive-state="selected"] {
   @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-03);
 }
 .interactive[data-interactive-variant="sidebar"][data-interactive-state="selected"]:hover:not(
     [data-disabled]
