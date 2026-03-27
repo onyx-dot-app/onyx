@@ -3,7 +3,7 @@
 Covers:
 - _check_ssrf_safety: scheme enforcement and private-IP blocklist
 - _validate_endpoint: httpx exception → HookValidateStatus mapping
-  ConnectTimeout     → cannot_connect  (TCP handshake never completed)
+  ConnectTimeout     → timeout         (any timeout directs user to increase timeout_seconds)
   ConnectError       → cannot_connect  (DNS / TLS failure)
   ReadTimeout et al. → timeout         (TCP connected, server slow)
   Any other exc      → cannot_connect
@@ -61,7 +61,7 @@ class TestCheckSsrfSafety:
     def test_non_https_scheme_rejected(self, url: str) -> None:
         with pytest.raises(OnyxError) as exc_info:
             self._call(url)
-        assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+        assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
         assert "https" in (exc_info.value.detail or "").lower()
 
     # --- private IP blocklist ---
@@ -87,7 +87,7 @@ class TestCheckSsrfSafety:
         ):
             mock_dns.return_value = [(None, None, None, None, (ip, 0))]
             self._call("https://internal.example.com/hook")
-        assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+        assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
         assert ip in (exc_info.value.detail or "")
 
     def test_public_ip_is_allowed(self) -> None:
@@ -106,7 +106,7 @@ class TestCheckSsrfSafety:
             pytest.raises(OnyxError) as exc_info,
         ):
             self._call("https://no-such-host.example.com/hook")
-        assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+        assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
 
 
 # ---------------------------------------------------------------------------
@@ -158,13 +158,11 @@ class TestValidateEndpoint:
         assert self._call().status == HookValidateStatus.passed
 
     @patch("onyx.server.features.hooks.api.httpx.Client")
-    def test_connect_timeout_returns_cannot_connect(
-        self, mock_client_cls: MagicMock
-    ) -> None:
+    def test_connect_timeout_returns_timeout(self, mock_client_cls: MagicMock) -> None:
         mock_client_cls.return_value.__enter__.return_value.post.side_effect = (
             httpx.ConnectTimeout("timed out")
         )
-        assert self._call().status == HookValidateStatus.cannot_connect
+        assert self._call().status == HookValidateStatus.timeout
 
     @patch("onyx.server.features.hooks.api.httpx.Client")
     @pytest.mark.parametrize(

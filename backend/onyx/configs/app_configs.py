@@ -44,6 +44,31 @@ SEND_USER_METADATA_TO_LLM_PROVIDER = (
 # User Facing Features Configs
 #####
 BLURB_SIZE = 128  # Number Encoder Tokens included in the chunk blurb
+
+# Hard ceiling for the admin-configurable file upload size (in MB).
+# Self-hosted customers can raise or lower this via the environment variable.
+_raw_max_upload_size_mb = int(os.environ.get("MAX_ALLOWED_UPLOAD_SIZE_MB", "250"))
+if _raw_max_upload_size_mb < 0:
+    logger.warning(
+        "MAX_ALLOWED_UPLOAD_SIZE_MB=%d is negative; falling back to 250",
+        _raw_max_upload_size_mb,
+    )
+    _raw_max_upload_size_mb = 250
+MAX_ALLOWED_UPLOAD_SIZE_MB = _raw_max_upload_size_mb
+
+# Default fallback for the per-user file upload size limit (in MB) when no
+# admin-configured value exists.  Clamped to MAX_ALLOWED_UPLOAD_SIZE_MB at
+# runtime so this never silently exceeds the hard ceiling.
+_raw_default_upload_size_mb = int(
+    os.environ.get("DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", "100")
+)
+if _raw_default_upload_size_mb < 0:
+    logger.warning(
+        "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB=%d is negative; falling back to 100",
+        _raw_default_upload_size_mb,
+    )
+    _raw_default_upload_size_mb = 100
+DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _raw_default_upload_size_mb
 GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
@@ -60,17 +85,6 @@ DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
 CACHE_BACKEND = CacheBackendType(
     os.environ.get("CACHE_BACKEND", CacheBackendType.REDIS)
 )
-
-# Maximum token count for a single uploaded file. Files exceeding this are rejected.
-# Defaults to 100k tokens (or 10M when vector DB is disabled).
-_DEFAULT_FILE_TOKEN_LIMIT = 10_000_000 if DISABLE_VECTOR_DB else 100_000
-FILE_TOKEN_COUNT_THRESHOLD = int(
-    os.environ.get("FILE_TOKEN_COUNT_THRESHOLD", str(_DEFAULT_FILE_TOKEN_LIMIT))
-)
-
-# Maximum upload size for a single user file (chat/projects) in MB.
-USER_FILE_MAX_UPLOAD_SIZE_MB = int(os.environ.get("USER_FILE_MAX_UPLOAD_SIZE_MB") or 50)
-USER_FILE_MAX_UPLOAD_SIZE_BYTES = USER_FILE_MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"

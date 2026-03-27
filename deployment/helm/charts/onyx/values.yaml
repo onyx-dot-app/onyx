@@ -282,7 +282,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "2"
+      onyx.app/nginx-config-version: "3"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1285,11 +1285,5 @@ configMap:
   DOMAIN: "localhost"
   # Chat Configs
   HARD_DELETE_CHATS: ""
-  # User File Upload Configuration
-  # Skip the token count threshold check (100,000 tokens) for uploaded files
-  # For self-hosted: set to true to skip for all users
-  SKIP_USERFILE_THRESHOLD: ""
-  # For multi-tenant: comma-separated list of tenant IDs to skip threshold
-  SKIP_USERFILE_THRESHOLD_TENANT_IDS: ""
-  # Maximum user upload file size in MB for chat/projects uploads
-  USER_FILE_MAX_UPLOAD_SIZE_MB: ""
+  MAX_ALLOWED_UPLOAD_SIZE_MB: ""
+  DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""

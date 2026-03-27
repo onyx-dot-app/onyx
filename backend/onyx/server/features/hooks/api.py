@@ -44,11 +44,12 @@ def _check_ssrf_safety(endpoint_url: str) -> None:
     """Raise OnyxError if endpoint_url could be used for SSRF.
 
     Delegates to validate_outbound_http_url with https_only=True.
+    Uses BAD_GATEWAY so the frontend maps the error to the Endpoint URL field.
     """
     try:
         validate_outbound_http_url(endpoint_url, https_only=True)
     except (SSRFException, ValueError) as e:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -122,9 +123,8 @@ def _validate_endpoint(
     (not reachable — indicates the api_key is invalid).
 
     Timeout handling:
-    - ConnectTimeout: TCP handshake never completed → cannot_connect.
-    - ReadTimeout / WriteTimeout: TCP was established, server responded slowly → timeout
-      (operator should consider increasing timeout_seconds).
+    - Any httpx.TimeoutException (ConnectTimeout, ReadTimeout, WriteTimeout, PoolTimeout) →
+      timeout (operator should consider increasing timeout_seconds).
     - All other exceptions → cannot_connect.
     """
     _check_ssrf_safety(endpoint_url)
@@ -141,19 +141,11 @@ def _validate_endpoint(
             )
         return HookValidateResponse(status=HookValidateStatus.passed)
     except httpx.TimeoutException as exc:
-        # ConnectTimeout: TCP handshake never completed → cannot_connect.
-        # ReadTimeout / WriteTimeout: TCP was established, server just responded slowly → timeout.
-        if isinstance(exc, httpx.ConnectTimeout):
-            logger.warning(
-                "Hook endpoint validation: connect timeout for %s",
-                endpoint_url,
-                exc_info=exc,
-            )
-            return HookValidateResponse(
-                status=HookValidateStatus.cannot_connect, error_message=str(exc)
-            )
+        # Any timeout (connect, read, or write) means the configured timeout_seconds
+        # is too low for this endpoint. Report as timeout so the UI directs the user
+        # to increase the timeout setting.
         logger.warning(
-            "Hook endpoint validation: read/write timeout for %s",
+            "Hook endpoint validation: timeout for %s",
             endpoint_url,
             exc_info=exc,
         )
