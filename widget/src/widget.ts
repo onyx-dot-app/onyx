@@ -200,7 +200,7 @@ export class OnyxChatWidget extends LitElement {
   private renderMarkdown(content: string, citations?: ResolvedCitation[]) {
     try {
       let stripped = content;
-      if (citations?.length) {
+      if (this.config.includeCitations && citations?.length) {
         // Build a map from backend citation number → sequential display number
         const displayMap = new Map<number, number>();
         citations.forEach((c, i) => displayMap.set(c.citation_number, i + 1));
@@ -213,9 +213,6 @@ export class OnyxChatWidget extends LitElement {
             return displayNum ? `<sup>[${displayNum}]</sup>` : "";
           },
         );
-      } else {
-        // No citations — strip citation links entirely
-        stripped = stripped.replace(/\[\[(\d+)\]\]\([^)]*\)/g, "");
       }
       const htmlContent = marked.parse(stripped, { async: false }) as string;
       const sanitizedHTML = DOMPurify.sanitize(htmlContent, {
