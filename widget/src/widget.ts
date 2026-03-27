@@ -230,28 +230,28 @@ export class OnyxChatWidget extends LitElement {
 
   /**
    * Render citation badges for a message.
-   * Each badge links to the source document with a sequential display number.
+   * Each badge shows a numbered pill with the document title, linking to the source.
    */
   private renderCitations(citations?: ResolvedCitation[]) {
     if (!citations?.length) return "";
     return html`
       <div class="citation-list">
-        <span class="citation-label">Sources</span>
         ${citations.map((c, i) => {
           const displayNum = i + 1;
+          const title = c.semantic_identifier || "Source";
           return c.link
             ? html`<a
                 class="citation-badge"
                 href=${c.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                title=${c.semantic_identifier || "Source document"}
-                >${displayNum}</a
+                title=${title}
+                ><span class="citation-num">${displayNum}</span
+                ><span class="citation-title">${title}</span></a
               >`
-            : html`<span
-                class="citation-badge"
-                title=${c.semantic_identifier || "Source document"}
-                >${displayNum}</span
+            : html`<span class="citation-badge" title=${title}
+                ><span class="citation-num">${displayNum}</span
+                ><span class="citation-title">${title}</span></span
               >`;
         })}
       </div>

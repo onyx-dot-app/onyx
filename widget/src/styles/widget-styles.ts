@@ -525,60 +525,72 @@ export const widgetStyles = css`
 
   /* Inline citation superscripts */
   .message-bubble sup {
-    font-size: 0.7em;
+    font-size: 0.65em;
     color: var(--theme-primary-05);
-    font-weight: 600;
+    font-weight: 700;
+    opacity: 0.5;
     cursor: default;
+    letter-spacing: -0.02em;
   }
 
-  /* Citation badge row */
+  /* Citation source row */
   .citation-list {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: stretch;
     gap: 6px;
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border-01);
-  }
-
-  .citation-label {
-    font-size: 11px;
-    color: var(--text-04);
-    opacity: 0.6;
-    font-weight: 500;
-    margin-right: 2px;
+    margin-top: 10px;
   }
 
   .citation-badge {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 600;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 6px;
-    border-radius: 10px;
-    background: var(--background-neutral-03);
-    color: var(--theme-primary-05);
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px 4px 8px;
+    border-radius: var(--onyx-radius-08);
+    background: var(--background-neutral-00);
+    color: var(--text-04);
     text-decoration: none;
     cursor: pointer;
+    border: 1px solid var(--border-01);
     transition:
-      background 150ms ease,
-      color 150ms ease,
-      transform 100ms ease;
-    border: 1px solid transparent;
+      border-color 150ms ease,
+      background 150ms ease;
+    line-height: 1.2;
+    font-family: var(--onyx-font-family);
+  }
+
+  .citation-badge .citation-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--theme-primary-05);
+    color: var(--background-neutral-00);
+    flex-shrink: 0;
+  }
+
+  .citation-badge .citation-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 180px;
+    font-size: 11px;
+    opacity: 0.8;
   }
 
   a.citation-badge:hover {
-    background: var(--theme-primary-05);
-    color: var(--background-neutral-00);
-    transform: translateY(-1px);
+    border-color: var(--theme-primary-05);
+    background: var(--background-neutral-03);
   }
 
   span.citation-badge {
     cursor: default;
-    opacity: 0.7;
   }
 `;
