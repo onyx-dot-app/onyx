@@ -20,10 +20,8 @@ from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
 from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__User
-from onyx.db.models import PermissionGrant
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import SamlAccount
@@ -405,25 +403,20 @@ def assign_user_to_default_groups__no_commit(
     ):
         return
 
-    target_permission = (
-        Permission.FULL_ADMIN_PANEL_ACCESS if is_admin else Permission.BASIC_ACCESS
-    )
+    target_group_name = "Admin" if is_admin else "Basic"
 
-    # Find the default group with the matching permission
     default_group = (
         db_session.query(UserGroup)
-        .join(PermissionGrant, PermissionGrant.group_id == UserGroup.id)
         .filter(
+            UserGroup.name == target_group_name,
             UserGroup.is_default.is_(True),
-            PermissionGrant.permission == target_permission,
-            PermissionGrant.is_deleted.is_(False),
         )
         .first()
     )
 
     if default_group is None:
         logger.warning(
-            f"No default group found with permission={target_permission.value} "
+            f"No default group found with name='{target_group_name}' "
             f"for user {user.email}"
         )
         return

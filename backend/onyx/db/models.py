@@ -4016,7 +4016,12 @@ class PermissionGrant(Base):
         ForeignKey("user_group.id", ondelete="CASCADE"), nullable=False
     )
     permission: Mapped[Permission] = mapped_column(
-        Enum(Permission, native_enum=False), nullable=False
+        Enum(
+            Permission,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
     )
     grant_source: Mapped[GrantSource] = mapped_column(
         Enum(GrantSource, native_enum=False), nullable=False
