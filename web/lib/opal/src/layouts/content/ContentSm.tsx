@@ -1,7 +1,7 @@
 "use client";
 
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text } from "@opal/components/text/components";
+import { Text, type TextFont } from "@opal/components/text/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 
@@ -18,8 +18,8 @@ interface ContentSmPresetConfig {
   iconSize: string;
   /** Tailwind padding class for the icon container. */
   iconContainerPadding: string;
-  /** Opal font name for the title (without `font-` prefix). */
-  titleFont: string;
+  /** Font preset for the title. */
+  titleFont: TextFont;
   /** Title line-height — also used as icon container min-height (CSS value). */
   lineHeight: string;
   /** Gap between icon container and title (CSS value). */
@@ -113,7 +113,7 @@ function ContentSm({
       )}
 
       <Text
-        font={config.titleFont as any}
+        font={config.titleFont}
         color="inherit"
         maxLines={1}
         title={toPlainString(title)}

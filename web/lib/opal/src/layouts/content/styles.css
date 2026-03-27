@@ -63,7 +63,7 @@
   gap: 0.25rem;
 }
 
-.opal-content-xl-title {
+.opal-content-xl-title-row > span {
   @apply text-left;
   min-width: 0.0625rem;
 }
@@ -158,7 +158,7 @@
   gap: 0.25rem;
 }
 
-.opal-content-lg-title {
+.opal-content-lg-title-row > span {
   @apply text-left;
   min-width: 0.0625rem;
 }
@@ -247,7 +247,7 @@
   gap: 0.25rem;
 }
 
-.opal-content-md-title {
+.opal-content-md-title-row > span {
   @apply text-left;
   min-width: 0.0625rem;
 }

@@ -4,7 +4,7 @@ import { Button } from "@opal/components/buttons/button/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text } from "@opal/components/text/components";
+import { Text, type TextFont } from "@opal/components/text/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
@@ -23,7 +23,7 @@ interface ContentLgPresetConfig {
   /** Gap between icon container and content (CSS value). */
   gap: string;
   /** Opal font name for the title (without `font-` prefix). */
-  titleFont: string;
+  titleFont: TextFont;
   /** Title line-height — also used as icon container min-height (CSS value). */
   lineHeight: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
@@ -162,7 +162,7 @@ function ContentLg({
             </div>
           ) : (
             <Text
-              font={config.titleFont as any}
+              font={config.titleFont}
               color="inherit"
               maxLines={1}
               title={toPlainString(title)}

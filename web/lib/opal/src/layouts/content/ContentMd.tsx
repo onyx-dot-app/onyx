@@ -8,7 +8,7 @@ import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
 import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text } from "@opal/components/text/components";
+import { Text, type TextFont } from "@opal/components/text/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useRef, useState } from "react";
@@ -27,12 +27,12 @@ interface ContentMdPresetConfig {
   iconSize: string;
   iconContainerPadding: string;
   iconColorClass: string;
-  titleFont: string;
+  titleFont: TextFont;
   lineHeight: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
   editButtonSize: ContainerSizeVariants;
   editButtonPadding: string;
-  optionalFont: string;
+  optionalFont: TextFont;
   /** Aux icon size = lineHeight − 2 × p-0.5. */
   auxIconSize: string;
   /** Left indent for the description so it aligns with the title (past the icon). */
@@ -217,7 +217,7 @@ function ContentMd({
             </div>
           ) : (
             <Text
-              font={config.titleFont as any}
+              font={config.titleFont}
               color="inherit"
               maxLines={1}
               title={toPlainString(title)}
@@ -228,7 +228,7 @@ function ContentMd({
           )}
 
           {suffix && (
-            <Text font={config.optionalFont as any} color="text-03">
+            <Text font={config.optionalFont} color="text-03">
               {suffix === "optional" ? "(Optional)" : suffix}
             </Text>
           )}
