@@ -91,8 +91,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
 
-    # Clear backfilled values
-    conn.execute(sa.text('UPDATE "user" SET account_type = NULL'))
-
-    # Revert to nullable
+    # Revert to nullable first, then clear backfilled values
     op.alter_column("user", "account_type", nullable=True)
+    conn.execute(sa.text('UPDATE "user" SET account_type = NULL'))
