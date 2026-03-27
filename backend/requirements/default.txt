@@ -187,7 +187,7 @@ coloredlogs==15.0.1
     # via onnxruntime
 courlan==1.3.2
     # via trafilatura
-cryptography==46.0.5
+cryptography==46.0.6
     # via
     #   authlib
     #   google-auth
