@@ -73,6 +73,15 @@ interface ContentMdProps {
   /** When `true`, the title color hooks into `Interactive`'s `--interactive-foreground` variable. */
   withInteractive?: boolean;
 
+  /** Optional class name applied to the title element. */
+  titleClassName?: string;
+
+  /** Optional class name applied to the icon element. */
+  iconClassName?: string;
+
+  /** Content rendered below the description, indented to align with it. */
+  bottomChildren?: React.ReactNode;
+
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -146,6 +155,9 @@ function ContentMd({
   tag,
   sizePreset = "main-ui",
   withInteractive,
+  titleClassName,
+  iconClassName,
+  bottomChildren,
   ref,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
@@ -184,7 +196,11 @@ function ContentMd({
             style={{ minHeight: config.lineHeight }}
           >
             <Icon
-              className={cn("opal-content-md-icon", config.iconColorClass)}
+              className={cn(
+                "opal-content-md-icon",
+                config.iconColorClass,
+                iconClassName
+              )}
               style={{ width: config.iconSize, height: config.iconSize }}
             />
           </div>
@@ -227,7 +243,8 @@ function ContentMd({
                 "opal-content-md-title",
                 config.titleFont,
                 "text-text-04",
-                editable && "cursor-pointer"
+                editable && "cursor-pointer",
+                titleClassName
               )}
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
@@ -293,6 +310,13 @@ function ContentMd({
           style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
         >
           {resolveStr(description)}
+        </div>
+      )}
+      {bottomChildren && (
+        <div
+          style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
+        >
+          {bottomChildren}
         </div>
       )}
     </div>
