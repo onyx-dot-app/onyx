@@ -100,6 +100,7 @@ def create_user_files(
         # Persist the UserFile first to satisfy FK constraints for association table
         db_session.add(new_file)
         db_session.flush()
+
         if project_id:
             project_to_user_file = Project__UserFile(
                 project_id=project_id,
