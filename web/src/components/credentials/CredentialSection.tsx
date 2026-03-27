@@ -16,7 +16,7 @@ import { toast } from "@/hooks/useToast";
 import CreateCredential from "./actions/CreateCredential";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
 import ModifyCredential from "./actions/ModifyCredential";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
@@ -185,7 +185,7 @@ export default function CredentialSection({
           <div className="flex-grow flex flex-col justify-center">
             <div className="flex items-center justify-between">
               <div>
-                <Text className="font-medium">
+                <Text as="p">
                   {ccPair.credential.name ||
                     `Credential #${ccPair.credential.id}`}
                 </Text>

@@ -71,6 +71,7 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
           memories={memories}
           onSaveMemories={onSaveMemories}
           initialTargetMemoryId={targetMemoryId}
+          focusNewLine={targetMemoryId === null}
         />
       </memoriesModal.Provider>
     </>

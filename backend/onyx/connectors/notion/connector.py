@@ -53,7 +53,7 @@ class NotionPage(BaseModel):
     id: str
     created_time: str
     last_edited_time: str
-    archived: bool
+    in_trash: bool
     properties: dict[str, Any]
     url: str
 
@@ -61,6 +61,13 @@ class NotionPage(BaseModel):
     parent: dict[str, Any] | None = (
         None  # Raw parent object from API for hierarchy tracking
     )
+
+
+class NotionDataSource(BaseModel):
+    """Represents a Notion Data Source within a database."""
+
+    id: str
+    name: str = ""
 
 
 class NotionBlock(BaseModel):
@@ -107,7 +114,7 @@ class NotionConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.headers = {
             "Content-Type": "application/json",
-            "Notion-Version": "2022-06-28",
+            "Notion-Version": "2026-03-11",
         }
         self.indexed_pages: set[str] = set()
         self.root_page_id = root_page_id
@@ -127,6 +134,9 @@ class NotionConnector(LoadConnector, PollConnector):
         # Maps child page IDs to their containing page ID (discovered in _read_blocks).
         # Used to resolve block_id parent types to the actual containing page.
         self._child_page_parent_map: dict[str, str] = {}
+        # Maps data_source_id -> database_id (populated in _read_pages_from_database).
+        # Used to resolve data_source_id parent types back to the database.
+        self._data_source_to_database_map: dict[str, str] = {}
 
     @classmethod
     @override
@@ -227,7 +237,11 @@ class NotionConnector(LoadConnector, PollConnector):
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_database_as_page(self, database_id: str) -> NotionPage:
-        """Attempt to fetch a database as a page."""
+        """Attempt to fetch a database as a page.
+
+        Note: As of API 2025-09-03, database objects no longer include
+        `properties` (schema moved to individual data sources).
+        """
         logger.debug(f"Fetching database for ID '{database_id}' as a page")
         database_url = f"https://api.notion.com/v1/databases/{database_id}"
         res = rl_requests.get(
@@ -246,18 +260,52 @@ class NotionConnector(LoadConnector, PollConnector):
             database_name[0].get("text", {}).get("content") if database_name else None
         )
 
+        db_data.setdefault("properties", {})
+
         return NotionPage(**db_data, database_name=database_name)
 
     @retry(tries=3, delay=1, backoff=2)
-    def _fetch_database(
-        self, database_id: str, cursor: str | None = None
+    def _fetch_data_sources_for_database(
+        self, database_id: str
+    ) -> list[NotionDataSource]:
+        """Fetch the list of data sources for a database."""
+        logger.debug(f"Fetching data sources for database '{database_id}'")
+        res = rl_requests.get(
+            f"https://api.notion.com/v1/databases/{database_id}",
+            headers=self.headers,
+            timeout=_NOTION_CALL_TIMEOUT,
+        )
+        try:
+            res.raise_for_status()
+        except Exception as e:
+            if res.status_code in (403, 404):
+                logger.error(
+                    f"Unable to access database with ID '{database_id}'. "
+                    f"This is likely due to the database not being shared "
+                    f"with the Onyx integration. Exact exception:\n{e}"
+                )
+                return []
+            logger.exception(f"Error fetching database - {res.json()}")
+            raise e
+
+        db_data = res.json()
+        data_sources = db_data.get("data_sources", [])
+        return [
+            NotionDataSource(id=ds["id"], name=ds.get("name", ""))
+            for ds in data_sources
+            if ds.get("id")
+        ]
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _fetch_data_source(
+        self, data_source_id: str, cursor: str | None = None
     ) -> dict[str, Any]:
-        """Fetch a database from it's ID via the Notion API."""
-        logger.debug(f"Fetching database for ID '{database_id}'")
-        block_url = f"https://api.notion.com/v1/databases/{database_id}/query"
+        """Query a data source via POST /v1/data_sources/{id}/query."""
+        logger.debug(f"Querying data source '{data_source_id}'")
+        url = f"https://api.notion.com/v1/data_sources/{data_source_id}/query"
         body = None if not cursor else {"start_cursor": cursor}
         res = rl_requests.post(
-            block_url,
+            url,
             headers=self.headers,
             json=body,
             timeout=_NOTION_CALL_TIMEOUT,
@@ -265,25 +313,14 @@ class NotionConnector(LoadConnector, PollConnector):
         try:
             res.raise_for_status()
         except Exception as e:
-            json_data = res.json()
-            code = json_data.get("code")
-            # Sep 3 2025 backend changed the error message for this case
-            # TODO: it is also now possible for there to be multiple data sources per database; at present we
-            # just don't handle that. We will need to upgrade the API to the current version + query the
-            # new data sources endpoint to handle that case correctly.
-            if code == "object_not_found" or (
-                code == "validation_error"
-                and "does not contain any data sources" in json_data.get("message", "")
-            ):
-                # this happens when a database is not shared with the integration
-                # in this case, we should just ignore the database
+            if res.status_code in (403, 404):
                 logger.error(
                     f"Unable to access database with ID '{database_id}'. "
                     f"This is likely due to the database not being shared "
                     f"with the PrivateGPT integration. Exact exception:\n{e}"
                 )
                 return {"results": [], "next_cursor": None}
-            logger.exception(f"Error fetching database - {res.json()}")
+            logger.exception(f"Error querying data source - {res.json()}")
             raise e
         return res.json()
 
@@ -348,8 +385,9 @@ class NotionConnector(LoadConnector, PollConnector):
             # Fallback to workspace if we don't know the parent
             return self.workspace_id
         elif parent_type == "data_source_id":
-            # Newer Notion API may use data_source_id for databases
-            return parent.get("database_id") or parent.get("data_source_id")
+            ds_id = parent.get("data_source_id")
+            if ds_id:
+                return self._data_source_to_database_map.get(ds_id, self.workspace_id)
         elif parent_type in ["page_id", "database_id"]:
             return parent.get(parent_type)
 
@@ -497,18 +535,32 @@ class NotionConnector(LoadConnector, PollConnector):
         if db_node:
             hierarchy_nodes.append(db_node)
 
-        cursor = None
-        while True:
-            data = self._fetch_database(database_id, cursor)
+        # Discover all data sources under this database, then query each one.
+        # Even legacy single-source databases have one entry in the array.
+        data_sources = self._fetch_data_sources_for_database(database_id)
+        if not data_sources:
+            logger.warning(
+                f"Database '{database_id}' returned zero data sources — "
+                f"no pages will be indexed from this database."
+            )
+        for ds in data_sources:
+            self._data_source_to_database_map[ds.id] = database_id
+            cursor = None
+            while True:
+                data = self._fetch_data_source(ds.id, cursor)
 
-            for result in data["results"]:
-                obj_id = result["id"]
-                obj_type = result["object"]
-                text = self._properties_to_str(result.get("properties", {}))
-                if text:
-                    result_blocks.append(NotionBlock(id=obj_id, text=text, prefix="\n"))
+                for result in data["results"]:
+                    obj_id = result["id"]
+                    obj_type = result["object"]
+                    text = self._properties_to_str(result.get("properties", {}))
+                    if text:
+                        result_blocks.append(
+                            NotionBlock(id=obj_id, text=text, prefix="\n")
+                        )
 
-                if self.recursive_index_enabled:
+                    if not self.recursive_index_enabled:
+                        continue
+
                     if obj_type == "page":
                         logger.debug(
                             f"Found page with ID '{obj_id}' in database '{database_id}'"
@@ -518,7 +570,6 @@ class NotionConnector(LoadConnector, PollConnector):
                         logger.debug(
                             f"Found database with ID '{obj_id}' in database '{database_id}'"
                         )
-                        # Get nested database name from properties if available
                         nested_db_title = result.get("title", [])
                         nested_db_name = None
                         if nested_db_title and len(nested_db_title) > 0:
@@ -533,10 +584,10 @@ class NotionConnector(LoadConnector, PollConnector):
                         result_pages.extend(nested_output.child_page_ids)
                         hierarchy_nodes.extend(nested_output.hierarchy_nodes)
 
-            if data["next_cursor"] is None:
-                break
+                if data["next_cursor"] is None:
+                    break
 
-            cursor = data["next_cursor"]
+                cursor = data["next_cursor"]
 
         return BlockReadOutput(
             blocks=result_blocks,
@@ -807,36 +858,55 @@ class NotionConnector(LoadConnector, PollConnector):
     def _yield_database_hierarchy_nodes(
         self,
     ) -> Generator[HierarchyNode | Document, None, None]:
-        """Search for all databases and yield hierarchy nodes for each.
+        """Search for all data sources and yield hierarchy nodes for their parent databases.
 
         This must be called BEFORE page indexing so that database hierarchy nodes
         exist when pages inside databases reference them as parents.
+
+        With the new API, search returns data source objects instead of databases.
+        Multiple data sources can share the same parent database, so we use
+        database_id as the hierarchy node key and deduplicate via
+        _maybe_yield_hierarchy_node.
         """
         query_dict: dict[str, Any] = {
-            "filter": {"property": "object", "value": "database"},
+            "filter": {"property": "object", "value": "data_source"},
             "page_size": _NOTION_PAGE_SIZE,
         }
         pages_seen = 0
         while pages_seen < _MAX_PAGES:
             db_res = self._search_notion(query_dict)
-            for db in db_res.results:
-                db_id = db["id"]
-                # Extract title from the title array
-                title_arr = db.get("title", [])
-                db_name = None
-                if title_arr:
-                    db_name = " ".join(
-                        t.get("plain_text", "") for t in title_arr
-                    ).strip()
-                if not db_name:
+            for ds in db_res.results:
+                # Extract the parent database_id from the data source's parent
+                ds_parent = ds.get("parent", {})
+                db_id = ds_parent.get("database_id")
+                if not db_id:
+                    continue
+
+                # Populate the mapping so _get_parent_raw_id can resolve later
+                ds_id = ds.get("id")
+                if not ds_id:
+                    continue
+                self._data_source_to_database_map[ds_id] = db_id
+
+                # Fetch the database to get its actual name and parent
+                try:
+                    db_page = self._fetch_database_as_page(db_id)
+                    db_name = db_page.database_name or f"Database {db_id}"
+                    parent_raw_id = self._get_parent_raw_id(db_page.parent)
+                    db_url = (
+                        db_page.url or f"https://notion.so/{db_id.replace('-', '')}"
+                    )
+                except requests.exceptions.RequestException as e:
+                    logger.warning(
+                        f"Could not fetch database '{db_id}', "
+                        f"defaulting to workspace root. Error: {e}"
+                    )
                     db_name = f"Database {db_id}"
+                    parent_raw_id = self.workspace_id
+                    db_url = f"https://notion.so/{db_id.replace('-', '')}"
 
-                # Get parent using existing helper
-                parent_raw_id = self._get_parent_raw_id(db.get("parent"))
-
-                # Notion URLs omit dashes from UUIDs
-                db_url = db.get("url") or f"https://notion.so/{db_id.replace('-', '')}"
-
+                # _maybe_yield_hierarchy_node deduplicates by raw_node_id,
+                # so multiple data sources under one database produce one node.
                 node = self._maybe_yield_hierarchy_node(
                     raw_node_id=db_id,
                     raw_parent_id=parent_raw_id or self.workspace_id,

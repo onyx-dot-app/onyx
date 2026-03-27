@@ -41,6 +41,21 @@ class MessageResponseIDInfo(BaseModel):
     reserved_assistant_message_id: int
 
 
+class ModelResponseSlot(BaseModel):
+    """Pairs a reserved assistant message ID with its model display name."""
+
+    message_id: int
+    model_name: str
+
+
+class MultiModelMessageResponseIDInfo(BaseModel):
+    """Sent at the start of a multi-model streaming response.
+    Contains the user message ID and one slot per model being run in parallel."""
+
+    user_message_id: int | None
+    responses: list[ModelResponseSlot]
+
+
 class SourceTag(Tag):
     source: DocumentSource
 
@@ -86,6 +101,9 @@ class SendMessageRequest(BaseModel):
     message: str
 
     llm_override: LLMOverride | None = None
+    # For multi-model mode: up to 3 LLM overrides to run in parallel.
+    # When provided with >1 entry, triggers multi-model streaming.
+    llm_overrides: list[LLMOverride] | None = None
     # Test-only override for deterministic LiteLLM mock responses.
     mock_llm_response: str | None = None
 
@@ -211,11 +229,18 @@ class ChatMessageDetail(BaseModel):
     error: str | None = None
     current_feedback: str | None = None  # "like" | "dislike" | null
     processing_duration_seconds: float | None = None
+    preferred_response_id: int | None = None
+    model_display_name: str | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
         initial_dict["time_sent"] = self.time_sent.isoformat()
         return initial_dict
+
+
+class SetPreferredResponseRequest(BaseModel):
+    user_message_id: int
+    preferred_response_id: int
 
 
 class ChatSessionDetailResponse(BaseModel):

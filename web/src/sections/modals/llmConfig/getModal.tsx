@@ -9,6 +9,7 @@ import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
 import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
 
 function detectIfRealOpenAIProvider(provider: LLMProviderView) {
   return (
@@ -22,9 +23,15 @@ function detectIfRealOpenAIProvider(provider: LLMProviderView) {
 export function getModalForExistingProvider(
   provider: LLMProviderView,
   open?: boolean,
-  onOpenChange?: (open: boolean) => void
+  onOpenChange?: (open: boolean) => void,
+  defaultModelName?: string
 ) {
-  const props = { existingLlmProvider: provider, open, onOpenChange };
+  const props = {
+    existingLlmProvider: provider,
+    open,
+    onOpenChange,
+    defaultModelName,
+  };
 
   switch (provider.provider) {
     case LLMProviderName.OPENAI:
@@ -50,6 +57,8 @@ export function getModalForExistingProvider(
       return <LMStudioForm {...props} />;
     case LLMProviderName.LITELLM_PROXY:
       return <LiteLLMProxyModal {...props} />;
+    case LLMProviderName.BIFROST:
+      return <BifrostModal {...props} />;
     default:
       return <CustomModal {...props} />;
   }

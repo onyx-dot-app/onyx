@@ -1,7 +1,9 @@
 "use client";
 
 import Button from "@/refresh-components/buttons/Button";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
+import { markdown } from "@opal/utils";
+import Spacer from "@/refresh-components/Spacer";
 import Title from "@/components/ui/title";
 import { ModelSelector } from "../../../../components/embedding/ModelSelector";
 import {
@@ -25,10 +27,12 @@ export default function OpenEmbeddingPage({
       <Title className="mt-8">
         Here are some locally-hosted models to choose from.
       </Title>
-      <Text className="mb-4">
-        These models can be used without any API keys, and can leverage a GPU
-        for faster inference.
+      <Text as="p">
+        {
+          "These models can be used without any API keys, and can leverage a GPU for faster inference."
+        }
       </Text>
+      <Spacer rem={1} />
       <ModelSelector
         modelOptions={AVAILABLE_MODELS}
         setSelectedModel={onSelectOpenSource}

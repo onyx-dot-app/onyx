@@ -2,7 +2,8 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { CUSTOM_ANALYTICS_ENABLED } from "@/lib/constants";
 import { Callout } from "@/components/ui/callout";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
+import Spacer from "@/refresh-components/Spacer";
 import { CustomAnalyticsUpdateForm } from "./CustomAnalyticsUpdateForm";
 
 const route = ADMIN_ROUTES.CUSTOM_ANALYTICS;
@@ -29,6 +30,7 @@ function Main() {
         snippet from your analytics provider into the box below, and we&apos;ll
         start sending usage events.
       </Text>
+      <Spacer rem={2} />
 
       <CustomAnalyticsUpdateForm />
     </div>

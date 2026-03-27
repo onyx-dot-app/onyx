@@ -51,6 +51,7 @@ from onyx.context.search.models import ChunkSearchRequest
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import PersonaSearchInfo
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
@@ -65,7 +66,6 @@ from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
 )
 from onyx.db.federated import list_federated_connector_oauth_tokens
-from onyx.db.models import Persona
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
@@ -238,16 +238,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         emitter: Emitter,
         # Used for ACLs and federated search, anonymous users only see public docs
         user: User,
-        # Used for filter settings
-        persona: Persona,
+        # Pre-extracted persona search configuration
+        persona_search_info: PersonaSearchInfo,
         llm: LLM,
         document_index: DocumentIndex,
         # Respecting user selections
         user_selected_filters: BaseFilters | None,
-        # If the chat is part of a project
-        project_id: int | None,
-        # If set, search scopes to files attached to this persona
-        persona_id: int | None = None,
+        # Vespa metadata filters for overflowing user files.  NOT the raw IDs
+        # of the current project/persona — only set when user files couldn't
+        # fit in the LLM context and need to be searched via vector DB.
+        project_id_filter: int | None,
+        persona_id_filter: int | None = None,
         bypass_acl: bool = False,
         # Slack context for federated Slack search (tokens fetched internally)
         slack_context: SlackContext | None = None,
@@ -257,12 +258,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         super().__init__(emitter=emitter)
 
         self.user = user
-        self.persona = persona
+        self.persona_search_info = persona_search_info
         self.llm = llm
         self.document_index = document_index
         self.user_selected_filters = user_selected_filters
-        self.project_id = project_id
-        self.persona_id = persona_id
+        self.project_id_filter = project_id_filter
+        self.persona_id_filter = persona_id_filter
         self.bypass_acl = bypass_acl
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
@@ -288,7 +289,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Case 1: Slack bot context — requires a Slack federated connector
         # linked via the persona's document sets
         if self.slack_context:
-            document_set_names = [ds.name for ds in self.persona.document_sets]
+            document_set_names = self.persona_search_info.document_set_names
             if not document_set_names:
                 logger.debug(
                     "Skipping Slack federated search: no document sets on persona"
@@ -451,16 +452,18 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 hybrid_alpha=hybrid_alpha,
                 # For projects, the search scope is the project and has no other limits
                 user_selected_filters=(
-                    self.user_selected_filters if self.project_id is None else None
+                    self.user_selected_filters
+                    if self.project_id_filter is None
+                    else None
                 ),
                 bypass_acl=self.bypass_acl,
                 limit=num_hits,
             ),
-            project_id=self.project_id,
-            persona_id=self.persona_id,
+            project_id_filter=self.project_id_filter,
+            persona_id_filter=self.persona_id_filter,
             document_index=self.document_index,
             user=self.user,
-            persona=self.persona,
+            persona_search_info=self.persona_search_info,
             acl_filters=acl_filters,
             embedding_model=embedding_model,
             prefetched_federated_retrieval_infos=federated_retrieval_infos,
@@ -574,7 +577,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             # Federated retrieval functions (non-Slack; Slack is separate)
-            if self.project_id is not None:
+            if self.project_id_filter is not None:
                 # Project mode ignores user filters → no federated sources
                 prefetch_source_types = None
             else:
@@ -584,19 +587,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     and self.user_selected_filters.source_type
                     else None
                 )
-            persona_document_sets = (
-                [ds.name for ds in self.persona.document_sets] if self.persona else None
-            )
-            user_file_ids = (
-                [uf.id for uf in self.persona.user_files] if self.persona else None
-            )
             federated_retrieval_infos = (
                 get_federated_retrieval_functions(
                     db_session=db_session,
                     user_id=self.user.id if self.user else None,
                     source_types=prefetch_source_types,
-                    document_set_names=persona_document_sets,
-                    user_file_ids=user_file_ids,
+                    document_set_names=self.persona_search_info.document_set_names,
                 )
                 or []
             )

@@ -67,7 +67,7 @@ function LargeModalDemo() {
     <div style={{ padding: 32 }}>
       <Button onClick={() => setOpen(true)}>Open Large Modal</Button>
       <Modal open={open} onOpenChange={setOpen}>
-        <Modal.Content width="lg" height="full">
+        <Modal.Content width="full" height="full">
           <Modal.Header
             icon={SvgInfoSmall}
             title="Large Modal"

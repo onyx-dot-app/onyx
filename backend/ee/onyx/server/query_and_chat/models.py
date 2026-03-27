@@ -35,7 +35,7 @@ class SendSearchQueryRequest(BaseModel):
     num_docs_fed_to_llm_selection: int | None = None
     run_query_expansion: bool = False
     num_hits: int = 30
-
+    hybrid_alpha: float | None = None
     include_content: bool = False
     stream: bool = False
 

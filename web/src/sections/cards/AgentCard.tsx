@@ -117,7 +117,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           userIds={fullAgent?.users?.map((u) => u.id) ?? []}
           groupIds={fullAgent?.groups ?? []}
           isPublic={fullAgent?.is_public ?? false}
-          isFeatured={fullAgent?.featured ?? false}
+          isFeatured={fullAgent?.is_featured ?? false}
           labelIds={fullAgent?.labels?.map((l) => l.id) ?? []}
           onShare={handleShare}
         />

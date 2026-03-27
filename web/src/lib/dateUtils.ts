@@ -35,6 +35,20 @@ export function getXYearsAgo(yearsAgo: number) {
   return yearsAgoDate;
 }
 
+export function normalizeDate(date: Date): Date {
+  const normalizedDate = new Date(date);
+  normalizedDate.setHours(0, 0, 0, 0);
+  return normalizedDate;
+}
+
+export function isAfterDate(date: Date, maxDate: Date): boolean {
+  return normalizeDate(date).getTime() > normalizeDate(maxDate).getTime();
+}
+
+export function isDateInFuture(date: Date): boolean {
+  return isAfterDate(date, new Date());
+}
+
 export const timestampToDateString = (timestamp: string) => {
   const date = new Date(timestamp);
   const year = date.getFullYear();

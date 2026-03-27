@@ -28,7 +28,7 @@ Some commands require external tools to be installed and configured:
 - **uv** - Required for `backend` commands
   - Install from [docs.astral.sh/uv](https://docs.astral.sh/uv/)
 
-- **GitHub CLI** (`gh`) - Required for `run-ci` and `cherry-pick` commands
+- **GitHub CLI** (`gh`) - Required for `run-ci`, `cherry-pick`, and `trace` commands
   - Install from [cli.github.com](https://cli.github.com/)
   - Authenticate with `gh auth login`
 
@@ -411,6 +411,62 @@ ods screenshot-diff upload-baselines --project admin --delete
 The `compare` subcommand writes a `summary.json` alongside the report with aggregate
 counts (changed, added, removed, unchanged). The HTML report is only generated when
 visual differences are detected.
+
+### `trace` - View Playwright Traces from CI
+
+Download Playwright trace artifacts from a GitHub Actions run and open them
+with `playwright show-trace`. Traces are only generated for failing tests
+(`retain-on-failure`).
+
+```shell
+ods trace [run-id-or-url]
+```
+
+The run can be specified as a numeric run ID, a full GitHub Actions URL, or
+omitted to find the latest Playwright run for the current branch.
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--branch`, `-b` | | Find latest run for this branch |
+| `--pr` | | Find latest run for this PR number |
+| `--project`, `-p` | | Filter to a specific project (`admin`, `exclusive`, `lite`) |
+| `--list`, `-l` | `false` | List available traces without opening |
+| `--no-open` | `false` | Download traces but don't open them |
+
+When multiple traces are found, an interactive picker lets you select which
+traces to open. Use arrow keys or `j`/`k` to navigate, `space` to toggle,
+`a` to select all, `n` to deselect all, and `enter` to open. Falls back to a
+plain-text prompt when no TTY is available.
+
+Downloaded artifacts are cached in `/tmp/ods-traces/<run-id>/` so repeated
+invocations for the same run are instant.
+
+**Examples:**
+
+```shell
+# Latest run for the current branch
+ods trace
+
+# Specific run ID
+ods trace 12345678
+
+# Full GitHub Actions URL
+ods trace https://github.com/onyx-dot-app/onyx/actions/runs/12345678
+
+# Latest run for a PR
+ods trace --pr 9500
+
+# Latest run for a specific branch
+ods trace --branch main
+
+# Only download admin project traces
+ods trace --project admin
+
+# List traces without opening
+ods trace --list
+```
 
 ### Testing Changes Locally (Dry Run)
 

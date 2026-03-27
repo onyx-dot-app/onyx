@@ -127,7 +127,7 @@ export const docxVariant: PreviewVariant = {
     const lower = (name || "").toLowerCase();
     return lower.endsWith(".docx") || lower.endsWith(".doc");
   },
-  width: "lg",
+  width: "full",
   height: "full",
   needsTextContent: false,
   codeBackground: false,

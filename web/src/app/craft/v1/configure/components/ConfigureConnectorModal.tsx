@@ -151,7 +151,7 @@ export default function ConfigureConnectorModal({
   return (
     <>
       <Modal open={open} onOpenChange={onClose}>
-        <Modal.Content width="md" height="fit">
+        <Modal.Content width="xl" height="fit">
           <Modal.Header
             icon={SvgPlug}
             title={getStepTitle()}

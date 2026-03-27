@@ -26,13 +26,13 @@ export default function AppHealthBanner() {
 
   const { user, mutateUser, userError } = useCurrentUser();
 
-  // Handle 403 errors from the /api/me endpoint
+  // Handle 403 errors from the /api/me endpoint.
+  // Skip entirely on auth pages — the user isn't logged in yet, so there's
+  // nothing to "log out" of and hitting /auth/logout just creates noise.
   useEffect(() => {
-    if (userError && userError.status === 403) {
+    if (userError && userError.status === 403 && !pathname?.includes("/auth")) {
       logout().then(() => {
-        if (!pathname?.includes("/auth")) {
-          setShowLoggedOutModal(true);
-        }
+        setShowLoggedOutModal(true);
       });
     }
   }, [userError, pathname]);

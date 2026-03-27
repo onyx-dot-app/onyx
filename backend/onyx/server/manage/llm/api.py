@@ -57,6 +57,8 @@ from onyx.llm.well_known_providers.llm_provider_options import (
 )
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
+from onyx.server.manage.llm.models import BifrostFinalModelResponse
+from onyx.server.manage.llm.models import BifrostModelsRequest
 from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LitellmFinalModelResponse
 from onyx.server.manage.llm.models import LitellmModelDetails
@@ -1422,11 +1424,26 @@ def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
     cleaned_api_base = api_base.strip().rstrip("/")
     url = f"{cleaned_api_base}/v1/models"
 
+    return _get_openai_compatible_models_response(
+        url=url,
+        source_name="LiteLLM proxy",
+        api_key=api_key,
+    )
+
+
+def _get_openai_compatible_models_response(
+    url: str,
+    source_name: str,
+    api_key: str | None = None,
+) -> dict:
+    """Fetch model metadata from an OpenAI-compatible `/models` endpoint."""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": "https://onyx.app",
         "X-Title": "PrivateGPT",
     }
+    if not api_key:
+        headers.pop("Authorization")
 
     try:
         response = httpx.get(url, headers=headers, timeout=10.0)
@@ -1436,20 +1453,125 @@ def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
         if e.response.status_code == 401:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
-                "Authentication failed: invalid or missing API key for LiteLLM proxy.",
+                f"Authentication failed: invalid or missing API key for {source_name}.",
             )
         elif e.response.status_code == 404:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
-                f"LiteLLM models endpoint not found at {url}. Please verify the API base URL.",
+                f"{source_name} models endpoint not found at {url}. Please verify the API base URL.",
             )
         else:
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,
-                f"Failed to fetch LiteLLM models: {e}",
+                f"Failed to fetch {source_name} models: {e}",
             )
-    except Exception as e:
+    except httpx.RequestError as e:
+        logger.warning(
+            "Failed to fetch models from OpenAI-compatible endpoint",
+            extra={"source": source_name, "url": url, "error": str(e)},
+            exc_info=True,
+        )
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            f"Failed to fetch LiteLLM models: {e}",
+            f"Failed to fetch {source_name} models: {e}",
         )
+    except ValueError as e:
+        logger.warning(
+            "Received invalid model response from OpenAI-compatible endpoint",
+            extra={"source": source_name, "url": url, "error": str(e)},
+            exc_info=True,
+        )
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch {source_name} models: {e}",
+        )
+
+
+@admin_router.post("/bifrost/available-models")
+def get_bifrost_available_models(
+    request: BifrostModelsRequest,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[BifrostFinalModelResponse]:
+    """Fetch available models from Bifrost gateway /v1/models endpoint."""
+    response_json = _get_bifrost_models_response(
+        api_base=request.api_base, api_key=request.api_key
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Bifrost endpoint",
+        )
+
+    results: list[BifrostFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            model_name = model.get("name", model_id)
+
+            if not model_id:
+                continue
+
+            # Skip embedding models
+            if is_embedding_model(model_id):
+                continue
+
+            results.append(
+                BifrostFinalModelResponse(
+                    name=model_id,
+                    display_name=model_name,
+                    max_input_tokens=model.get("context_length"),
+                    supports_image_input=infer_vision_support(model_id),
+                    supports_reasoning=is_reasoning_model(model_id, model_name),
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Bifrost model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from Bifrost",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_name is specified
+    if request.provider_name:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_name=request.provider_name,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                )
+                for r in sorted_results
+            ],
+            source_label="Bifrost",
+        )
+
+    return sorted_results
+
+
+def _get_bifrost_models_response(api_base: str, api_key: str | None = None) -> dict:
+    """Perform GET to Bifrost /v1/models and return parsed JSON."""
+    cleaned_api_base = api_base.strip().rstrip("/")
+    # Ensure we hit /v1/models
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+
+    return _get_openai_compatible_models_response(
+        url=url,
+        source_name="Bifrost",
+        api_key=api_key,
+    )

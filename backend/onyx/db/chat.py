@@ -16,6 +16,7 @@ from sqlalchemy import Row
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.exc import MultipleResultsFound
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,7 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
+from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
@@ -53,8 +55,21 @@ def get_chat_session_by_id(
     db_session: Session,
     include_deleted: bool = False,
     is_shared: bool = False,
+    eager_load_persona: bool = False,
 ) -> ChatSession:
     stmt = select(ChatSession).where(ChatSession.id == chat_session_id)
+
+    if eager_load_persona:
+        stmt = stmt.options(
+            joinedload(ChatSession.persona).options(
+                selectinload(Persona.tools),
+                selectinload(Persona.user_files),
+                selectinload(Persona.document_sets),
+                selectinload(Persona.attached_documents),
+                selectinload(Persona.hierarchy_nodes),
+            ),
+            joinedload(ChatSession.project),
+        )
 
     if is_shared:
         stmt = stmt.where(ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC)

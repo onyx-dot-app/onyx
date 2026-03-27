@@ -1,6 +1,6 @@
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList, useQueryAnalytics } from "../lib";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
 
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
@@ -68,7 +68,7 @@ export function FeedbackChart({
   return (
     <CardSection className="mt-8">
       <Title>Feedback</Title>
-      <Text>Thumbs Up / Thumbs Down over time</Text>
+      <Text as="p">Thumbs Up / Thumbs Down over time</Text>
       {chart}
     </CardSection>
   );

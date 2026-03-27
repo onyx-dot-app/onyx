@@ -974,7 +974,7 @@ class TestOpenSearchClient:
         settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
-        # Index documents with different public/hidden and tenant states.
+        # Index documents with different public/hidden, ACL, and tenant states.
         docs = {
             "public-doc": _create_test_document_chunk(
                 document_id="public-doc",
@@ -997,7 +997,7 @@ class TestOpenSearchClient:
                 hidden=False,
                 tenant_state=tenant_x,
                 document_access=DocumentAccess.build(
-                    user_emails=["user-a@example.com"],
+                    user_emails=["user-a@example.com", "user-b@example.com"],
                     user_groups=[],
                     external_user_emails=[],
                     external_user_group_ids=[],
@@ -1044,7 +1044,10 @@ class TestOpenSearchClient:
             # The user should only be able to see their private docs. tenant_id
             # in this object is not relevant.
             index_filters=IndexFilters(
-                access_control_list=[prefix_user_email("user-a@example.com")],
+                access_control_list=[
+                    prefix_user_email("user-a@example.com"),
+                    prefix_user_email("user-c@example.com"),
+                ],
                 tenant_id=None,
             ),
             include_hidden=False,
@@ -1661,7 +1664,7 @@ class TestOpenSearchClient:
         settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
-        # Index documents with different public/hidden and tenant states.
+        # Index documents with different public/hidden, ACL, and tenant states.
         docs = {
             "public-doc": _create_test_document_chunk(
                 document_id="public-doc",
@@ -1684,7 +1687,7 @@ class TestOpenSearchClient:
                 hidden=False,
                 tenant_state=tenant_x,
                 document_access=DocumentAccess.build(
-                    user_emails=["user-a@example.com"],
+                    user_emails=["user-a@example.com", "user-b@example.com"],
                     user_groups=[],
                     external_user_emails=[],
                     external_user_group_ids=[],
@@ -1746,7 +1749,10 @@ class TestOpenSearchClient:
             # The user should only be able to see their private docs. tenant_id
             # in this object is not relevant.
             index_filters=IndexFilters(
-                access_control_list=[prefix_user_email("user-a@example.com")],
+                access_control_list=[
+                    prefix_user_email("user-a@example.com"),
+                    prefix_user_email("user-c@example.com"),
+                ],
                 tenant_id=None,
             ),
             include_hidden=False,
@@ -1805,7 +1811,7 @@ class TestOpenSearchClient:
         settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
 
-        # Index documents with different public/hidden and tenant states.
+        # Index documents with different public/hidden, ACL, and tenant states.
         docs = {
             "public-doc": _create_test_document_chunk(
                 document_id="public-doc",
@@ -1831,7 +1837,7 @@ class TestOpenSearchClient:
                 hidden=False,
                 tenant_state=tenant_x,
                 document_access=DocumentAccess.build(
-                    user_emails=["user-a@example.com"],
+                    user_emails=["user-a@example.com", "user-b@example.com"],
                     user_groups=[],
                     external_user_emails=[],
                     external_user_group_ids=[],
@@ -1879,7 +1885,10 @@ class TestOpenSearchClient:
             # The user should only be able to see their private docs. tenant_id
             # in this object is not relevant.
             index_filters=IndexFilters(
-                access_control_list=[prefix_user_email("user-a@example.com")],
+                access_control_list=[
+                    prefix_user_email("user-a@example.com"),
+                    prefix_user_email("user-c@example.com"),
+                ],
                 tenant_id=None,
             ),
             include_hidden=False,

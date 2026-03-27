@@ -145,6 +145,7 @@ def _mock_convert(monkeypatch: pytest.MonkeyPatch) -> None:
         include_permissions: bool = False,  # noqa: ARG001
         parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
         access_token: str | None = None,  # noqa: ARG001
+        treat_sharing_link_as_public: bool = False,  # noqa: ARG001
     ) -> Document:
         return _make_document(driveitem)
 

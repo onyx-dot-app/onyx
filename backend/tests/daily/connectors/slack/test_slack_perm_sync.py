@@ -1,4 +1,6 @@
 import time
+from datetime import datetime
+from datetime import timezone
 
 import pytest
 
@@ -16,6 +18,10 @@ PRIVATE_CHANNEL_USERS = [
     # user 2 added via a group
     "test_user_2@onyx-test.com",
 ]
+
+# Predates any test workspace messages, so the result set should match
+# the "no start time" case while exercising the oldest= parameter.
+OLDEST_TS_2016 = datetime(2016, 1, 1, tzinfo=timezone.utc).timestamp()
 
 pytestmark = pytest.mark.usefixtures("enable_ee")
 
@@ -105,15 +111,17 @@ def test_load_from_checkpoint_access__private_channel(
     ],
     indirect=True,
 )
+@pytest.mark.parametrize("start_ts", [None, OLDEST_TS_2016])
 def test_slim_documents_access__public_channel(
     slack_connector: SlackConnector,
+    start_ts: float | None,
 ) -> None:
     """Test that retrieve_all_slim_docs_perm_sync returns correct access information for slim documents."""
     if not slack_connector.client:
         raise RuntimeError("Web client must be defined")
 
     slim_docs_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
-        start=0.0,
+        start=start_ts,
         end=time.time(),
     )
 
@@ -149,7 +157,7 @@ def test_slim_documents_access__private_channel(
         raise RuntimeError("Web client must be defined")
 
     slim_docs_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
-        start=0.0,
+        start=None,
         end=time.time(),
     )
 

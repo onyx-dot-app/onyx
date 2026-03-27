@@ -26,6 +26,8 @@ class DocumentIngestionSpec(HookPointSpec):
     default_timeout_seconds = 30.0
     fail_hard_description = "The document will not be indexed."
     default_fail_strategy = HookFailStrategy.HARD
+    # TODO(Bo-Onyx): update later
+    docs_url = "https://docs.google.com/document/d/1pGhB8Wcnhhj8rS4baEJL6CX05yFhuIDNk1gbBRiWu94/edit?tab=t.ue263ual5vdi"
 
     payload_model = DocumentIngestionPayload
     response_model = DocumentIngestionResponse

@@ -17,6 +17,7 @@ import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import AppHealthBanner from "@/sections/AppHealthBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
+import SWRConfigProvider from "@/providers/SWRConfigProvider";
 
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
@@ -79,21 +80,23 @@ export default function RootLayout({
           <div className="text-text min-h-screen bg-background">
             <TooltipProvider>
               <PHProvider>
-                <AppHealthBanner />
-                <AppProvider>
-                  <DynamicMetadata />
-                  <CustomAnalyticsScript />
-                  <Suspense fallback={null}>
-                    <PostHogPageView />
-                  </Suspense>
-                  <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-                    <ProductGatingWrapper>{children}</ProductGatingWrapper>
-                  </div>
-                  {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
-                  {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
-                    <StatsOverlayLoader />
-                  )}
-                </AppProvider>
+                <SWRConfigProvider>
+                  <AppHealthBanner />
+                  <AppProvider>
+                    <DynamicMetadata />
+                    <CustomAnalyticsScript />
+                    <Suspense fallback={null}>
+                      <PostHogPageView />
+                    </Suspense>
+                    <div id={MODAL_ROOT_ID} className="h-screen w-screen">
+                      <ProductGatingWrapper>{children}</ProductGatingWrapper>
+                    </div>
+                    {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
+                    {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
+                      <StatsOverlayLoader />
+                    )}
+                  </AppProvider>
+                </SWRConfigProvider>
               </PHProvider>
             </TooltipProvider>
           </div>

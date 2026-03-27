@@ -263,7 +263,7 @@ oauthlib==3.2.2
     # via
     #   kubernetes
     #   requests-oauthlib
-onyx-devtools==0.7.1
+onyx-devtools==0.7.2
     # via onyx
 openai==2.14.0
     # via
@@ -410,7 +410,7 @@ release-tag==0.5.2
     # via onyx
 reorder-python-imports-black==3.14.0
     # via onyx
-requests==2.32.5
+requests==2.33.0
     # via
     #   cohere
     #   google-genai

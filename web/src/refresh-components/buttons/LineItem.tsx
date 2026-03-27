@@ -16,6 +16,10 @@ const buttonClassNames = {
     normal: "line-item-button-strikethrough",
     emphasized: "line-item-button-strikethrough-emphasized",
   },
+  disabled: {
+    normal: "line-item-button-disabled",
+    emphasized: "line-item-button-disabled-emphasized",
+  },
   danger: {
     normal: "line-item-button-danger",
     emphasized: "line-item-button-danger-emphasized",
@@ -37,6 +41,7 @@ const buttonClassNames = {
 const textClassNames = {
   main: "line-item-text-main",
   strikethrough: "line-item-text-strikethrough",
+  disabled: "line-item-text-disabled",
   danger: "line-item-text-danger",
   action: "line-item-text-action",
   muted: "line-item-text-muted",
@@ -46,6 +51,7 @@ const textClassNames = {
 const iconClassNames = {
   main: "line-item-icon-main",
   strikethrough: "line-item-icon-strikethrough",
+  disabled: "line-item-icon-disabled",
   danger: "line-item-icon-danger",
   action: "line-item-icon-action",
   muted: "line-item-icon-muted",
@@ -65,6 +71,7 @@ export interface LineItemProps
   interactive?: boolean;
   // line-item variants
   strikethrough?: boolean;
+  disabled?: boolean;
   danger?: boolean;
   action?: boolean;
   muted?: boolean;
@@ -140,6 +147,7 @@ export default function LineItem({
   interactive = true,
   selected,
   strikethrough,
+  disabled,
   danger,
   action,
   muted,
@@ -155,20 +163,31 @@ export default function LineItem({
   ref,
   ...props
 }: LineItemProps) {
-  // Determine variant (mutually exclusive, with priority order: strikethrough > danger > action > muted > main)
+  // Determine variant (mutually exclusive, with priority order: strikethrough > disabled > danger > action > muted > main)
   const variant = strikethrough
     ? "strikethrough"
-    : danger
-      ? "danger"
-      : action
-        ? "action"
-        : muted
-          ? "muted"
-          : skeleton
-            ? "skeleton"
-            : "main";
+    : disabled
+      ? "disabled"
+      : danger
+        ? "danger"
+        : action
+          ? "action"
+          : muted
+            ? "muted"
+            : skeleton
+              ? "skeleton"
+              : "main";
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
+
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (disabled) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    props.onClick?.(e);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!interactive) {
@@ -178,7 +197,9 @@ export default function LineItem({
 
     if (e.key === "Enter") {
       e.preventDefault();
-      (e.currentTarget as HTMLDivElement).click();
+      if (!disabled) {
+        (e.currentTarget as HTMLDivElement).click();
+      }
     } else if (e.key === " ") {
       e.preventDefault();
     }
@@ -193,7 +214,9 @@ export default function LineItem({
 
     if (e.key === " ") {
       e.preventDefault();
-      (e.currentTarget as HTMLDivElement).click();
+      if (!disabled) {
+        (e.currentTarget as HTMLDivElement).click();
+      }
     }
     props.onKeyUp?.(e);
   };
@@ -203,6 +226,7 @@ export default function LineItem({
       ref={ref}
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}
+      aria-disabled={disabled || undefined}
       className={cn(
         "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
         !!(children && description) ? "items-start" : "items-center",
@@ -210,6 +234,7 @@ export default function LineItem({
       )}
       data-selected={selected}
       {...props}
+      onClick={handleClick}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
     >

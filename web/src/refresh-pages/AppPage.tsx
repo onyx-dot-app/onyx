@@ -5,6 +5,7 @@ import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
@@ -62,6 +63,9 @@ import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button } from "@opal/components";
+import { IllustrationContent } from "@opal/layouts";
+import SvgNotFound from "@opal/illustrations/not-found";
+import SvgNoAccess from "@opal/illustrations/no-access";
 import Spacer from "@/refresh-components/Spacer";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -381,23 +385,26 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     setSelectedAgentFromId,
   });
 
-  const { onMessageSelection, currentSessionFileTokenCount } =
-    useChatSessionController({
-      existingChatSessionId: currentChatSessionId,
-      searchParams,
-      filterManager,
-      firstMessage,
-      setSelectedAgentFromId,
-      setSelectedDocuments,
-      setCurrentMessageFiles,
-      chatSessionIdRef,
-      loadedIdSessionRef,
-      chatInputBarRef,
-      isInitialLoad,
-      submitOnLoadPerformed,
-      refreshChatSessions,
-      onSubmit,
-    });
+  const {
+    onMessageSelection,
+    currentSessionFileTokenCount,
+    sessionFetchError,
+  } = useChatSessionController({
+    existingChatSessionId: currentChatSessionId,
+    searchParams,
+    filterManager,
+    firstMessage,
+    setSelectedAgentFromId,
+    setSelectedDocuments,
+    setCurrentMessageFiles,
+    chatSessionIdRef,
+    loadedIdSessionRef,
+    chatInputBarRef,
+    isInitialLoad,
+    submitOnLoadPerformed,
+    refreshChatSessions,
+    onSubmit,
+  });
 
   useSendMessageToParent();
 
@@ -458,7 +465,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const onChat = useCallback(
     (message: string) => {
-      resetInputBar();
       onSubmit({
         message,
         currentMessageFiles,
@@ -469,7 +475,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
     },
     [
-      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,
@@ -506,7 +511,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
-        resetInputBar();
         onSubmit({
           message,
           currentMessageFiles,
@@ -519,7 +523,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
 
       // For new sessions, let the query controller handle routing.
-      // resetInputBar is called inside onChat for chat-routed queries.
+      // resetInputBar is called inside useChatController.onSubmit for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
       // so the user can see and refine their search query.
       await submitQuery(message, onChat);
@@ -528,7 +532,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentChatSessionId,
       submitQuery,
       onChat,
-      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,
@@ -679,7 +682,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* ChatUI */}
                   <Fade
                     show={
-                      appFocus.isChat() && !!currentChatSessionId && !!liveAgent
+                      appFocus.isChat() &&
+                      !!currentChatSessionId &&
+                      !!liveAgent &&
+                      !sessionFetchError
                     }
                     className="h-full w-full flex flex-col items-center"
                   >
@@ -706,6 +712,45 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         anchorNodeId={anchorNodeId}
                       />
                     </ChatScrollContainer>
+                  </Fade>
+
+                  {/* Session fetch error (404 / 403) */}
+                  <Fade
+                    show={appFocus.isChat() && sessionFetchError !== null}
+                    className="h-full w-full flex flex-col items-center justify-center"
+                  >
+                    {sessionFetchError && (
+                      <Section
+                        flexDirection="column"
+                        alignItems="center"
+                        gap={1}
+                      >
+                        <IllustrationContent
+                          illustration={
+                            sessionFetchError.type === "access_denied"
+                              ? SvgNoAccess
+                              : SvgNotFound
+                          }
+                          title={
+                            sessionFetchError.type === "not_found"
+                              ? "Chat not found"
+                              : sessionFetchError.type === "access_denied"
+                                ? "Access denied"
+                                : "Something went wrong"
+                          }
+                          description={
+                            sessionFetchError.type === "not_found"
+                              ? "This chat session doesn't exist or has been deleted."
+                              : sessionFetchError.type === "access_denied"
+                                ? "You don't have permission to view this chat session."
+                                : sessionFetchError.detail
+                          }
+                        />
+                        <Button href="/app" prominence="secondary">
+                          Start a new chat
+                        </Button>
+                      </Section>
+                    )}
                   </Fade>
 
                   {/* ProjectUI */}
@@ -736,7 +781,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Middle-center: AppInputBar ── */}
-                <div className="row-start-2 flex flex-col items-center px-4">
+                <div
+                  className={cn(
+                    "row-start-2 flex flex-col items-center px-4",
+                    sessionFetchError && "hidden"
+                  )}
+                >
                   <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appFocus.isChat() && showScrollButton && (

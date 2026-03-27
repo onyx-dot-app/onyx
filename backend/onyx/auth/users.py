@@ -135,6 +135,8 @@ from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
+from onyx.utils.telemetry import mt_cloud_alias
+from onyx.utils.telemetry import mt_cloud_get_anon_id
 from onyx.utils.telemetry import mt_cloud_identify
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
@@ -251,18 +253,12 @@ def verify_email_is_invited(email: str) -> None:
     whitelist = get_invited_users()
 
     if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"reason": "Email must be specified"},
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email must be specified")
 
     try:
         email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"reason": "Email is not valid"},
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email is not valid")
 
     for email_whitelist in whitelist:
         try:
@@ -279,12 +275,9 @@ def verify_email_is_invited(email: str) -> None:
         if email_info.normalized.lower() == email_info_whitelist.normalized.lower():
             return
 
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail={
-            "code": REGISTER_INVITE_ONLY_CODE,
-            "reason": "This workspace is invite-only. Please ask your admin to invite you.",
-        },
+    raise OnyxError(
+        OnyxErrorCode.UNAUTHORIZED,
+        "This workspace is invite-only. Please ask your admin to invite you.",
     )
 
 
@@ -296,10 +289,7 @@ def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
 
 def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
     if email.count("@") != 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email is not valid",
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email is not valid")
 
     local_part, domain = email.split("@")
     domain = domain.lower()
@@ -308,45 +298,36 @@ def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
     if AUTH_TYPE == AuthType.CLOUD:
         # Normalize googlemail.com to gmail.com (they deliver to the same inbox)
         if domain == "googlemail.com":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"reason": "Please use @gmail.com instead of @googlemail.com."},
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Please use @gmail.com instead of @googlemail.com.",
             )
 
         # Only block dotted Gmail on new signups — existing users must still be
         # able to sign in with the address they originally registered with.
         if is_registration and domain == "gmail.com" and "." in local_part:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "reason": "Gmail addresses with '.' are not allowed. Please use your base email address."
-                },
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Gmail addresses with '.' are not allowed. Please use your base email address.",
             )
 
         if "+" in local_part and domain != "onyx.app":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "reason": "Email addresses with '+' are not allowed. Please use your base email address."
-                },
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Email addresses with '+' are not allowed. Please use your base email address.",
             )
 
     # Check if email uses a disposable/temporary domain
     if is_disposable_email(email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "reason": "Disposable email addresses are not allowed. Please use a permanent email address."
-            },
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Disposable email addresses are not allowed. Please use a permanent email address.",
         )
 
     # Check domain whitelist if configured
     if VALID_EMAIL_DOMAINS:
         if domain not in VALID_EMAIL_DOMAINS:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email domain is not valid",
-            )
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email domain is not valid")
 
 
 def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
@@ -362,7 +343,7 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
     )(db_session, seats_needed=seats_needed)
 
     if result is not None and not result.available:
-        raise HTTPException(status_code=402, detail=result.error_message)
+        raise OnyxError(OnyxErrorCode.SEAT_LIMIT_EXCEEDED, result.error_message)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -415,10 +396,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     captcha_token or "", expected_action="signup"
                 )
             except CaptchaVerificationError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={"reason": str(e)},
-                )
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
         # We verify the password here to make sure it's valid before we proceed
         await self.validate_password(
@@ -429,12 +407,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # This prevents creating tenants for throwaway email addresses
         try:
             verify_email_domain(user_create.email, is_registration=True)
-        except HTTPException as e:
+        except OnyxError as e:
             # Log blocked disposable email attempts
-            if (
-                e.status_code == status.HTTP_400_BAD_REQUEST
-                and "Disposable email" in str(e.detail)
-            ):
+            if "Disposable email" in e.detail:
                 domain = (
                     user_create.email.split("@")[-1]
                     if "@" in user_create.email
@@ -578,9 +553,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         result = await db_session.execute(
             select(Persona.id)
             .where(
-                Persona.featured.is_(True),
+                Persona.is_featured.is_(True),
                 Persona.is_public.is_(True),
-                Persona.is_visible.is_(True),
+                Persona.is_listed.is_(True),
                 Persona.deleted.is_(False),
             )
             .order_by(
@@ -808,6 +783,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             logger.exception("Error deleting anonymous user cookie")
 
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+
+        # Link the anonymous PostHog session to the identified user so that
+        # pre-login session recordings and events merge into one person profile.
+        if anon_id := mt_cloud_get_anon_id(request):
+            mt_cloud_alias(distinct_id=str(user.id), anonymous_id=anon_id)
+
         mt_cloud_identify(
             distinct_id=str(user.id),
             properties={"email": user.email, "tenant_id": tenant_id},
@@ -830,6 +811,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         try:
             user_count = await get_user_count()
             logger.debug(f"Current tenant user count: {user_count}")
+
+            # Link the anonymous PostHog session to the identified user so
+            # that pre-signup session recordings merge into one person profile.
+            if anon_id := mt_cloud_get_anon_id(request):
+                mt_cloud_alias(distinct_id=str(user.id), anonymous_id=anon_id)
 
             # Ensure a PostHog person profile exists for this user.
             mt_cloud_identify(
@@ -859,9 +845,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             attribute="get_marketing_posthog_cookie_name",
             noop_return_value=None,
         )
-        parse_marketing_cookie = fetch_ee_implementation_or_noop(
+        parse_posthog_cookie = fetch_ee_implementation_or_noop(
             module="onyx.utils.posthog_client",
-            attribute="parse_marketing_cookie",
+            attribute="parse_posthog_cookie",
             noop_return_value=None,
         )
         capture_and_sync_with_alternate_posthog = fetch_ee_implementation_or_noop(
@@ -875,7 +861,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             and user_count is not None
             and (marketing_cookie_name := get_marketing_posthog_cookie_name())
             and (marketing_cookie_value := request.cookies.get(marketing_cookie_name))
-            and (parsed_cookie := parse_marketing_cookie(marketing_cookie_value))
+            and (parsed_cookie := parse_posthog_cookie(marketing_cookie_value))
         ):
             marketing_anonymous_id = parsed_cookie["distinct_id"]
 

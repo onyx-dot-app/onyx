@@ -1,9 +1,11 @@
 "use client";
 
-import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import { Button } from "@opal/components";
+import AuthErrorContent from "./AuthErrorContent";
+import { useSearchParams } from "next/navigation";
 
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+function Page() {
+  const searchParams = useSearchParams();
+  const error = searchParams?.get("error") || null;
 
 const Page = () => {
   return (

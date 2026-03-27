@@ -1,3 +1,5 @@
+"use client";
+
 import "@opal/core/animations/styles.css";
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { cn } from "@opal/utils";
@@ -88,9 +90,12 @@ function HoverableRoot({
   ref,
   onMouseEnter: consumerMouseEnter,
   onMouseLeave: consumerMouseLeave,
+  onFocusCapture: consumerFocusCapture,
+  onBlurCapture: consumerBlurCapture,
   ...props
 }: HoverableRootProps) {
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   const onMouseEnter = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -108,16 +113,40 @@ function HoverableRoot({
     [consumerMouseLeave]
   );
 
+  const onFocusCapture = useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      setFocused(true);
+      consumerFocusCapture?.(e);
+    },
+    [consumerFocusCapture]
+  );
+
+  const onBlurCapture = useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      if (
+        !(e.relatedTarget instanceof Node) ||
+        !e.currentTarget.contains(e.relatedTarget)
+      ) {
+        setFocused(false);
+      }
+      consumerBlurCapture?.(e);
+    },
+    [consumerBlurCapture]
+  );
+
+  const active = hovered || focused;
   const GroupContext = getOrCreateContext(group);
 
   return (
-    <GroupContext.Provider value={hovered}>
+    <GroupContext.Provider value={active}>
       <div
         {...props}
         ref={ref}
         className={cn(widthVariants[widthVariant])}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
+        onFocusCapture={onFocusCapture}
+        onBlurCapture={onBlurCapture}
       >
         {children}
       </div>

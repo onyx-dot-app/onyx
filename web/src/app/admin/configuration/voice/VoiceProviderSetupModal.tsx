@@ -1,5 +1,6 @@
 "use client";
 
+import { markdown } from "@opal/utils";
 import Image from "next/image";
 import { FunctionComponent, useState, useEffect } from "react";
 import {
@@ -260,7 +261,7 @@ export default function VoiceProviderSetupModal({
         <SvgArrowExchange className="size-3 text-text-04" />
       </div>
       <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-        <SvgOnyxLogo size={24} className="text-text-04 shrink-0" />
+        <SvgOnyxLogo size={24} className="shrink-0" />
       </div>
     </div>
   );
@@ -503,24 +504,14 @@ export default function VoiceProviderSetupModal({
             {mode === "tts" && (
               <Vertical
                 title="Voice"
-                subDescription={
-                  <>
-                    This voice will be used for spoken responses. See full list
-                    of supported languages and voices at{" "}
-                    <a
-                      href={
-                        PROVIDER_VOICE_DOCS_URLS[providerType]?.url ??
-                        PROVIDER_DOCS_URLS[providerType]
-                      }
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      {PROVIDER_VOICE_DOCS_URLS[providerType]?.label ?? label}
-                    </a>
-                    .
-                  </>
-                }
+                subDescription={markdown(
+                  `This voice will be used for spoken responses. See full list of supported languages and voices at [${
+                    PROVIDER_VOICE_DOCS_URLS[providerType]?.label ?? label
+                  }](${
+                    PROVIDER_VOICE_DOCS_URLS[providerType]?.url ??
+                    PROVIDER_DOCS_URLS[providerType]
+                  }).`
+                )}
                 nonInteractive
               >
                 <InputComboBox

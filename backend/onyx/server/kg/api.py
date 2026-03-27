@@ -142,7 +142,7 @@ def enable_or_disable_kg(
         users=[user.id],
         groups=[],
         label_ids=[],
-        featured=False,
+        is_featured=False,
         display_priority=0,
         user_file_ids=[],
     )

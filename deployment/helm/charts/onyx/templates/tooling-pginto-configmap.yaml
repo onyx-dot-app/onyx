@@ -10,7 +10,7 @@ data:
     #!/usr/bin/env sh
     set -eu
 
-    HOST="${POSTGRES_HOST:-localhost}"
+    HOST="${PGINTO_HOST:-${POSTGRES_HOST:-localhost}}"
     PORT="${POSTGRES_PORT:-5432}"
     USER="${POSTGRES_USER:-postgres}"
     DB="${POSTGRES_DB:-postgres}"

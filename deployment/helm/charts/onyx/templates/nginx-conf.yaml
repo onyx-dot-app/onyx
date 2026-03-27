@@ -28,6 +28,12 @@ data:
     }
     {{- end }}
 
+    # WebSocket support: only set Connection "upgrade" for actual upgrade requests
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      close;
+    }
+
   server.conf: |
     server {
         listen 1024;
@@ -57,6 +63,22 @@ data:
         }
         {{- end }}
 
+        location ~ ^/scim(/.*)?$ {
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header Host $host;
+            proxy_http_version 1.1;
+            proxy_buffering off;
+            proxy_redirect off;
+            # timeout settings
+            proxy_connect_timeout {{ .Values.nginx.timeouts.connect }}s;
+            proxy_send_timeout {{ .Values.nginx.timeouts.send }}s;
+            proxy_read_timeout {{ .Values.nginx.timeouts.read }}s;
+            proxy_pass http://api_server;
+        }
+
         location ~ ^/(api|openapi\.json)(/.*)?$ {
             rewrite ^/api(/.*)$ $1 break;
             proxy_set_header X-Real-IP $remote_addr;
@@ -65,6 +87,8 @@ data:
             proxy_set_header X-Forwarded-Host $host;
             proxy_set_header Host $host;
             proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
             proxy_buffering off;
             proxy_redirect off;
             # timeout settings

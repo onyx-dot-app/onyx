@@ -49,7 +49,9 @@ export function SettingsProvider({
   const [isMobile, setIsMobile] = useState<boolean | undefined>();
   const settingsLoading = coreSettingsLoading || enterpriseSettingsLoading;
   const vectorDbEnabled =
-    !coreSettingsLoading && settings.vector_db_enabled !== false;
+    !coreSettingsLoading &&
+    !settingsError &&
+    settings.vector_db_enabled !== false;
   const { ccPairs } = useCCPairs(vectorDbEnabled);
 
   useEffect(() => {

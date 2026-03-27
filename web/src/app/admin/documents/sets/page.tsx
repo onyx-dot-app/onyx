@@ -10,7 +10,9 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
+import { markdown } from "@opal/utils";
+import Spacer from "@/refresh-components/Spacer";
 import Title from "@/components/ui/title";
 import Separator from "@/refresh-components/Separator";
 import { DocumentSetSummary } from "@/lib/types";
@@ -398,6 +400,7 @@ function Main() {
         into a single bundle. These can then be used as a filter when performing
         searches to control the scope of information PrivateGPT searches over.
       </Text>
+      <Spacer rem={0.75} />
 
       <div className="mb-3"></div>
 

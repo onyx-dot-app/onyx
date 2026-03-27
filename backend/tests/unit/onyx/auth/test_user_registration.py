@@ -15,11 +15,11 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
 
 from onyx.auth.schemas import UserCreate
 from onyx.auth.users import UserManager
 from onyx.configs.constants import AuthType
+from onyx.error_handling.exceptions import OnyxError
 
 # Note: Only async test methods are marked with @pytest.mark.asyncio individually
 # to avoid warnings on synchronous tests
@@ -89,11 +89,11 @@ class TestDisposableEmailValidation:
         user_manager = UserManager(MagicMock())
 
         # Execute & Assert
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(OnyxError) as exc:
             await user_manager.create(mock_user_create)
 
         assert exc.value.status_code == 400
-        assert "Disposable email" in str(exc.value.detail)
+        assert "Disposable email" in exc.value.detail
         # Verify we never got to tenant provisioning
         mock_fetch_ee.assert_not_called()
 
@@ -333,7 +333,7 @@ class TestSAMLOIDCBehavior:
         mock_get_invited.return_value = ["allowed@example.com"]
 
         # Execute & Assert
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(OnyxError) as exc:
             verify_email_is_invited("newuser@example.com")
         assert exc.value.status_code == 403
 
@@ -387,7 +387,7 @@ class TestWhitelistBehavior:
         mock_get_invited.return_value = ["allowed@example.com"]
 
         # Execute & Assert
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(OnyxError) as exc:
             verify_email_is_invited("notallowed@example.com")
 
         assert exc.value.status_code == 403
@@ -422,7 +422,7 @@ class TestSeatLimitEnforcement:
             "onyx.auth.users.fetch_ee_implementation_or_noop",
             return_value=lambda *_a, **_kw: seat_result,
         ):
-            with pytest.raises(HTTPException) as exc:
+            with pytest.raises(OnyxError) as exc:
                 enforce_seat_limit(MagicMock())
 
             assert exc.value.status_code == 402

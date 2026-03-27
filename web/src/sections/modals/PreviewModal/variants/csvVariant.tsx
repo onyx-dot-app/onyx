@@ -31,7 +31,7 @@ function parseCsv(content: string): CsvData {
 export const csvVariant: PreviewVariant = {
   matches: (name, mime) =>
     mime.startsWith("text/csv") || (name || "").toLowerCase().endsWith(".csv"),
-  width: "lg",
+  width: "full",
   height: "full",
   needsTextContent: true,
   codeBackground: false,
