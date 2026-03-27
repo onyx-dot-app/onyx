@@ -235,6 +235,9 @@ func collectSelected(entries []entry) []int {
 }
 
 func toggleAtCursor(entries []entry, cursor int) {
+	if cursor < 0 || cursor >= len(entries) {
+		return
+	}
 	e := entries[cursor]
 	if e.isHeader {
 		// Toggle entire group: if all selected -> deselect all, else select all
