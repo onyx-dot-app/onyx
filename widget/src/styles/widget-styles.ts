@@ -563,16 +563,10 @@ export const widgetStyles = css`
   }
 
   .citation-badge .citation-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 700;
-    min-width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    background: var(--theme-primary-05);
-    color: var(--background-neutral-00);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-04);
+    opacity: 0.45;
     flex-shrink: 0;
   }
 
@@ -583,6 +577,14 @@ export const widgetStyles = css`
     max-width: 180px;
     font-size: 11px;
     opacity: 0.8;
+    text-decoration: none;
+  }
+
+  a.citation-badge,
+  a.citation-badge:visited,
+  a.citation-badge:active,
+  a.citation-badge:hover {
+    text-decoration: none !important;
   }
 
   a.citation-badge:hover {
