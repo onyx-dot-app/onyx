@@ -39,7 +39,17 @@ def celery_get_broker_client(app: Celery) -> Redis:
                 _broker_client.ping()
                 return _broker_client
             except Exception:
+                try:
+                    _broker_client.close()
+                except Exception:
+                    pass
                 _broker_client = None
+        elif _broker_client is not None:
+            try:
+                _broker_client.close()
+            except Exception:
+                pass
+            _broker_client = None
 
         _broker_url = url
         _broker_client = Redis.from_url(
