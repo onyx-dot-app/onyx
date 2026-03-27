@@ -63,11 +63,6 @@
   gap: 0.25rem;
 }
 
-.opal-content-xl-title-row > span {
-  @apply text-left;
-  min-width: 0.0625rem;
-}
-
 .opal-content-xl-input-sizer {
   display: inline-grid;
   align-items: stretch;
@@ -158,11 +153,6 @@
   gap: 0.25rem;
 }
 
-.opal-content-lg-title-row > span {
-  @apply text-left;
-  min-width: 0.0625rem;
-}
-
 .opal-content-lg-input-sizer {
   display: inline-grid;
   align-items: stretch;
@@ -245,11 +235,6 @@
 .opal-content-md-title-row {
   @apply flex items-center w-full;
   gap: 0.25rem;
-}
-
-.opal-content-md-title-row > span {
-  @apply text-left;
-  min-width: 0.0625rem;
 }
 
 .opal-content-md-input-sizer {
@@ -358,11 +343,6 @@
 /* ---------------------------------------------------------------------------
    Title
    --------------------------------------------------------------------------- */
-
-.opal-content-sm-title {
-  @apply text-left;
-  min-width: 0.0625rem;
-}
 
 .opal-content-sm[data-prominence="muted"] {
   @apply text-text-03;
