@@ -19,6 +19,12 @@ interface FullUserSnapshot {
   id: string;
   email: string;
   role: UserRole;
+  account_type:
+    | "standard"
+    | "bot"
+    | "ext_perm_user"
+    | "service_account"
+    | "anonymous";
   is_active: boolean;
   password_configured: boolean;
   personal_name: string | null;
