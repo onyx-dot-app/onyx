@@ -5,6 +5,7 @@ accidentally reaches the vector DB layer will fail loudly instead of timing
 out against a nonexistent Vespa/OpenSearch instance.
 """
 
+from collections.abc import Iterable
 from typing import Any
 
 from onyx.context.search.models import IndexFilters
@@ -66,7 +67,7 @@ class DisabledDocumentIndex(DocumentIndex):
     # ------------------------------------------------------------------
     def index(
         self,
-        chunks: list[DocMetadataAwareIndexChunk],  # noqa: ARG002
+        chunks: Iterable[DocMetadataAwareIndexChunk],  # noqa: ARG002
         index_batch_params: IndexBatchParams,  # noqa: ARG002
     ) -> set[DocumentInsertionRecord]:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
