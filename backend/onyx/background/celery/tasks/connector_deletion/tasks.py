@@ -149,10 +149,10 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
         if not r.exists(OnyxRedisSignals.BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES):
             # clear fences that don't have associated celery tasks in progress
             try:
-                with celery_get_broker_client(self.app) as r_celery:
-                    validate_connector_deletion_fences(
-                        tenant_id, r, r_replica, r_celery, lock_beat
-                    )
+                r_celery = celery_get_broker_client(self.app)
+                validate_connector_deletion_fences(
+                    tenant_id, r, r_replica, r_celery, lock_beat
+                )
             except Exception:
                 task_logger.exception(
                     "Exception while validating connector deletion fences"

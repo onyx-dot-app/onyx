@@ -106,10 +106,10 @@ def _user_file_delete_queued_key(user_file_id: str | UUID) -> str:
 
 
 def get_user_file_project_sync_queue_depth(celery_app: Celery) -> int:
-    with celery_get_broker_client(celery_app) as redis_celery:
-        return celery_get_queue_length(
-            OnyxCeleryQueues.USER_FILE_PROJECT_SYNC, redis_celery
-        )
+    redis_celery = celery_get_broker_client(celery_app)
+    return celery_get_queue_length(
+        OnyxCeleryQueues.USER_FILE_PROJECT_SYNC, redis_celery
+    )
 
 
 def enqueue_user_file_project_sync_task(
@@ -239,10 +239,10 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
     skipped_guard = 0
     try:
         # --- Protection 1: queue depth backpressure ---
-        with celery_get_broker_client(self.app) as r_celery:
-            queue_len = celery_get_queue_length(
-                OnyxCeleryQueues.USER_FILE_PROCESSING, r_celery
-            )
+        r_celery = celery_get_broker_client(self.app)
+        queue_len = celery_get_queue_length(
+            OnyxCeleryQueues.USER_FILE_PROCESSING, r_celery
+        )
         if queue_len > USER_FILE_PROCESSING_MAX_QUEUE_DEPTH:
             task_logger.warning(
                 f"check_user_file_processing - Queue depth {queue_len} exceeds "
@@ -592,10 +592,8 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
         # --- Protection 1: queue depth backpressure ---
         # NOTE: must use the broker's Redis client (not redis_client) because
         # Celery queues live on a separate Redis DB with CELERY_SEPARATOR keys.
-        with celery_get_broker_client(self.app) as r_celery:
-            queue_len = celery_get_queue_length(
-                OnyxCeleryQueues.USER_FILE_DELETE, r_celery
-            )
+        r_celery = celery_get_broker_client(self.app)
+        queue_len = celery_get_queue_length(OnyxCeleryQueues.USER_FILE_DELETE, r_celery)
         if queue_len > USER_FILE_DELETE_MAX_QUEUE_DEPTH:
             task_logger.warning(
                 f"check_for_user_file_delete - Queue depth {queue_len} exceeds "

@@ -221,10 +221,10 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
             # tasks can be in the queue in redis, in reserved tasks (prefetched by the worker),
             # or be currently executing
             try:
-                with celery_get_broker_client(self.app) as r_celery:
-                    validate_external_group_sync_fences(
-                        tenant_id, self.app, r, r_replica, r_celery, lock_beat
-                    )
+                r_celery = celery_get_broker_client(self.app)
+                validate_external_group_sync_fences(
+                    tenant_id, self.app, r, r_replica, r_celery, lock_beat
+                )
             except Exception:
                 task_logger.exception(
                     "Exception while validating external group sync fences"

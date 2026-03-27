@@ -450,15 +450,15 @@ def check_indexing_completion(
             ):
                 # Check if the task exists in the celery queue
                 # This handles the case where Redis dies after task creation but before task execution
-                with celery_get_broker_client(task.app) as redis_celery:
-                    task_exists = celery_find_task(
-                        attempt.celery_task_id,
-                        OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
-                        redis_celery,
-                    )
-                    unacked_task_ids = celery_get_unacked_task_ids(
-                        OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
-                    )
+                redis_celery = celery_get_broker_client(task.app)
+                task_exists = celery_find_task(
+                    attempt.celery_task_id,
+                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
+                    redis_celery,
+                )
+                unacked_task_ids = celery_get_unacked_task_ids(
+                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
+                )
 
                 if not task_exists and attempt.celery_task_id not in unacked_task_ids:
                     # there is a race condition where the docfetching task has been taken off

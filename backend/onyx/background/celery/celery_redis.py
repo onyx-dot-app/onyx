@@ -1,7 +1,5 @@
 # These are helper objects for tracking the keys we need to write in redis
-import contextlib
 import json
-from collections.abc import Generator
 from typing import Any
 from typing import cast
 
@@ -12,18 +10,33 @@ from onyx.background.celery.configs.base import CELERY_SEPARATOR
 from onyx.configs.constants import OnyxCeleryPriority
 
 
-@contextlib.contextmanager
-def celery_get_broker_client(app: Celery) -> Generator[Redis, None, None]:
-    """Borrow a Redis client from Celery's broker connection pool.
+_broker_client: Redis | None = None
+
+
+def celery_get_broker_client(app: Celery) -> Redis:
+    """Return a shared Redis client connected to the Celery broker DB.
+
+    Uses a module-level singleton so all tasks on a worker share one
+    connection instead of creating a new one per call. The client
+    connects directly to the broker Redis DB (parsed from the broker URL)
+    rather than going through Celery's connection/channel abstraction.
 
     Usage:
-        with celery_get_broker_client(self.app) as r_celery:
-            length = celery_get_queue_length(queue, r_celery)
-
-    The connection is returned to the pool when the context exits.
+        r_celery = celery_get_broker_client(self.app)
+        length = celery_get_queue_length(queue, r_celery)
     """
-    with app.connection_or_acquire() as conn:  # type: ignore[attr-defined]
-        yield conn.channel().client
+    global _broker_client
+    if _broker_client is not None:
+        try:
+            _broker_client.ping()
+            return _broker_client
+        except Exception:
+            _broker_client = None
+
+    # Parse broker URL to get host/port/db
+    url = app.conf.broker_url
+    _broker_client = Redis.from_url(url, decode_responses=False)
+    return _broker_client
 
 
 def celery_get_unacked_length(r: Redis) -> int:

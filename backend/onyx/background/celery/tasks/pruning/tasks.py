@@ -261,10 +261,8 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
             # tasks can be in the queue in redis, in reserved tasks (prefetched by the worker),
             # or be currently executing
             try:
-                with celery_get_broker_client(self.app) as r_celery:
-                    validate_pruning_fences(
-                        tenant_id, r, r_replica, r_celery, lock_beat
-                    )
+                r_celery = celery_get_broker_client(self.app)
+                validate_pruning_fences(tenant_id, r, r_replica, r_celery, lock_beat)
             except Exception:
                 task_logger.exception("Exception while validating pruning fences")
 
