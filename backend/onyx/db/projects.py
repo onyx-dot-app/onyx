@@ -3,7 +3,6 @@ import uuid
 from typing import List
 from uuid import UUID
 
-from fastapi import HTTPException
 from fastapi import UploadFile
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -22,6 +21,8 @@ from onyx.db.models import Project__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.connector import upload_files
 from onyx.server.features.projects.projects_file_utils import categorize_uploaded_files
 from onyx.server.features.projects.projects_file_utils import RejectedFile
@@ -53,6 +54,22 @@ def create_user_files(
     temp_id_map: dict[str, str] | None = None,
     persona_id: int | None = None,
 ) -> CategorizedFilesResult:
+    # Validate persona access before creating any file associations
+    if persona_id is not None:
+        from onyx.db.persona import fetch_persona_by_id_for_user
+
+        try:
+            fetch_persona_by_id_for_user(
+                db_session=db_session,
+                persona_id=persona_id,
+                user=user,
+                get_editable=False,
+            )
+        except Exception:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "User does not have access to the specified persona",
+            )
 
     # Categorize the files
     categorized_files = categorize_uploaded_files(files, db_session)
@@ -120,7 +137,23 @@ def upload_files_to_user_files_with_indexing(
 ) -> CategorizedFilesResult:
     if project_id is not None and user is not None:
         if not check_project_ownership(project_id, user.id, db_session):
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
+
+    if persona_id is not None and user is not None:
+        from onyx.db.persona import fetch_persona_by_id_for_user
+
+        try:
+            fetch_persona_by_id_for_user(
+                db_session=db_session,
+                persona_id=persona_id,
+                user=user,
+                get_editable=False,
+            )
+        except Exception:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "User does not have access to the specified persona",
+            )
 
     categorized_files_result = create_user_files(
         files,
