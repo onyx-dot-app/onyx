@@ -12,6 +12,8 @@ import {
   Dispatch,
   SetStateAction,
 } from "react";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
   CategorizedFiles,
   Project,
@@ -160,6 +162,18 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const route = useAppRouter();
   const settingsContext = useContext(SettingsContext);
 
+  // SWR-backed fetch for recent files. Deduplicates across all mounts and
+  // handles React StrictMode double-invocation without firing duplicate requests.
+  const { data: recentFilesData, mutate: mutateRecentFiles } = useSWR<
+    ProjectFile[]
+  >("/api/user/files/recent", errorHandlingFetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  });
+  // Track whether allRecentFiles has been seeded from the initial server fetch.
+  // Subsequent updates come through the merge effect below, not a full reset.
+  const hasInitializedAllRecentFilesRef = useRef(false);
+
   // Use SWR's mutate to refresh projects - returns the new data
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
     try {
@@ -286,9 +300,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   }, []);
 
   const refreshRecentFiles = useCallback(async () => {
-    const files = await getRecentFiles();
-    setRecentFiles(files);
-  }, [getRecentFiles]);
+    await mutateRecentFiles();
+  }, [mutateRecentFiles]);
 
   const getTempIdMap = (files: File[], optimisticFiles: ProjectFile[]) => {
     const tempIdMap = new Map<string, string>();
@@ -521,13 +534,17 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     []
   );
 
+  // Sync SWR-fetched recent files into local state. On first arrival, seed
+  // allRecentFiles as well; subsequent updates only touch recentFiles so the
+  // merge effect below can non-destructively apply them to allRecentFiles.
   useEffect(() => {
-    // Initial load - only fetch recent files since projects come from props
-    getRecentFiles().then((recent) => {
-      setRecentFiles(recent);
-      setAllRecentFiles(recent);
-    });
-  }, [getRecentFiles]);
+    if (!recentFilesData) return;
+    setRecentFiles(recentFilesData);
+    if (!hasInitializedAllRecentFilesRef.current) {
+      setAllRecentFiles(recentFilesData);
+      hasInitializedAllRecentFilesRef.current = true;
+    }
+  }, [recentFilesData]);
 
   useEffect(() => {
     setAllRecentFiles((prev) =>
