@@ -1,5 +1,6 @@
 "use client";
 
+import { markdown } from "@opal/utils";
 import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
@@ -238,28 +239,9 @@ function FormContent({
         <InputLayouts.Vertical
           name="definition"
           title="OpenAPI Schema Definition"
-          subDescription={
-            <>
-              Specify an OpenAPI schema that defines the APIs you want to make
-              available as part of this action. Learn more about{" "}
-              <span className="inline-flex">
-                <SimpleTooltip
-                  tooltip={`Open ${DOCS_ADMINS_PATH}/actions/openapi`}
-                  side="top"
-                >
-                  <Link
-                    href={`${DOCS_ADMINS_PATH}/actions/openapi`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
-                  >
-                    OpenAPI actions
-                  </Link>
-                </SimpleTooltip>
-              </span>
-              .
-            </>
-          }
+          subDescription={markdown(
+            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
+          )}
         >
           <div className="group/DefinitionTextAreaField relative w-full">
             {values.definition.trim() && (

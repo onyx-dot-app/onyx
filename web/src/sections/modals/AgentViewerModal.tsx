@@ -237,7 +237,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
       onOpenChange={agentViewerModal.toggle}
     >
       <Modal.Content
-        width="md-sm"
+        width="lg"
         height="lg"
         bottomSlot={<AgentChatInput agent={agent} onSubmit={handleStartChat} />}
       >
@@ -256,6 +256,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 title="Featured"
                 sizePreset="main-ui"
                 variant="body"
+                widthVariant="fit"
               />
             )}
             <Content
@@ -264,6 +265,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               sizePreset="main-ui"
               variant="body"
               prominence="muted"
+              widthVariant="fit"
             />
             {agent.is_public && (
               <Content
@@ -272,6 +274,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 sizePreset="main-ui"
                 variant="body"
                 prominence="muted"
+                widthVariant="fit"
               />
             )}
           </Section>

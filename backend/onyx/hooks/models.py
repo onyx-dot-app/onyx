@@ -91,6 +91,8 @@ class HookResponse(BaseModel):
     # Nullable to match the DB column — endpoint_url is required on creation but
     # future hook point types may not use an external endpoint (e.g. built-in handlers).
     endpoint_url: str | None
+    # Partially-masked API key (e.g. "abcd••••••••wxyz"), or None if no key is set.
+    api_key_masked: str | None
     fail_strategy: HookFailStrategy
     timeout_seconds: float  # always resolved — None from request is replaced with spec default before DB write
     is_active: bool

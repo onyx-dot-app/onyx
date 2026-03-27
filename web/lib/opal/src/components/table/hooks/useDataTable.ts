@@ -103,6 +103,10 @@ interface UseDataTableOptions<TData extends RowData> {
   initialSorting?: SortingState;
   /** Initial column visibility state. @default {} */
   initialColumnVisibility?: VisibilityState;
+  /** Initial row selection state. Keys are row IDs (from `getRowId`), values are `true`. @default {} */
+  initialRowSelection?: RowSelectionState;
+  /** When true AND `initialRowSelection` is non-empty, start in view-selected mode (filtered to selected rows). @default false */
+  initialViewSelected?: boolean;
   /** Called whenever the set of selected row IDs changes. */
   onSelectionChange?: (selectedIds: string[]) => void;
   /** Search term for global text filtering. Rows are filtered to those containing
@@ -195,6 +199,8 @@ export default function useDataTable<TData extends RowData>(
     columnResizeMode = "onChange",
     initialSorting = [],
     initialColumnVisibility = {},
+    initialRowSelection = {},
+    initialViewSelected = false,
     getRowId,
     onSelectionChange,
     searchTerm,
@@ -206,7 +212,8 @@ export default function useDataTable<TData extends RowData>(
 
   // ---- internal state -----------------------------------------------------
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [rowSelection, setRowSelection] =
+    useState<RowSelectionState>(initialRowSelection);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
     initialColumnVisibility
@@ -216,8 +223,12 @@ export default function useDataTable<TData extends RowData>(
     pageSize: pageSizeOption,
   });
   /** Combined global filter: view-mode (selected IDs) + text search. */
+  const initialSelectedIds =
+    initialViewSelected && Object.keys(initialRowSelection).length > 0
+      ? new Set(Object.keys(initialRowSelection))
+      : null;
   const [globalFilter, setGlobalFilter] = useState<GlobalFilterValue>({
-    selectedIds: null,
+    selectedIds: initialSelectedIds,
     searchTerm: "",
   });
 
@@ -384,6 +395,31 @@ export default function useDataTable<TData extends RowData>(
       : data.length;
   const isPaginated = isFinite(pagination.pageSize);
 
+  // ---- keep view-mode filter in sync with selection ----------------------
+  // When in view-selected mode, deselecting a row should remove it from
+  // the visible set so it disappears immediately.
+  useEffect(() => {
+    if (isServerSide) return;
+    if (globalFilter.selectedIds == null) return;
+
+    const currentIds = new Set(Object.keys(rowSelection));
+    // Remove any ID from the filter that is no longer selected
+    let changed = false;
+    const next = new Set<string>();
+    globalFilter.selectedIds.forEach((id) => {
+      if (currentIds.has(id)) {
+        next.add(id);
+      } else {
+        changed = true;
+      }
+    });
+    if (changed) {
+      setGlobalFilter((prev) => ({ ...prev, selectedIds: next }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to
+    // selection changes while in view mode
+  }, [rowSelection, isServerSide]);
+
   // ---- selection change callback ------------------------------------------
   const isFirstRenderRef = useRef(true);
   const onSelectionChangeRef = useRef(onSelectionChange);
@@ -392,6 +428,10 @@ export default function useDataTable<TData extends RowData>(
   useEffect(() => {
     if (isFirstRenderRef.current) {
       isFirstRenderRef.current = false;
+      // Still fire the callback on first render if there's an initial selection
+      if (selectedRowIds.length > 0) {
+        onSelectionChangeRef.current?.(selectedRowIds);
+      }
       return;
     }
     onSelectionChangeRef.current?.(selectedRowIds);

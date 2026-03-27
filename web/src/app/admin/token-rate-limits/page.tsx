@@ -2,7 +2,7 @@
 
 import SimpleTabs from "@/refresh-components/SimpleTabs";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 import { useState } from "react";
 import {
   insertGlobalTokenRateLimit,
@@ -104,14 +104,14 @@ function Main() {
 
   return (
     <Section alignItems="stretch" justifyContent="start" height="auto">
-      <Text>
+      <Text as="p">
         Token rate limits enable you control how many tokens can be spent in a
         given time period. With token rate limits, you can:
       </Text>
 
       <ul className="list-disc ml-4">
         <li>
-          <Text>
+          <Text as="p">
             Set a global rate limit to control your team&apos;s overall token
             spend.
           </Text>
@@ -119,13 +119,13 @@ function Main() {
         {isPaidEnterpriseFeaturesEnabled && (
           <>
             <li>
-              <Text>
+              <Text as="p">
                 Set rate limits for users to ensure that no single user can
                 spend too many tokens.
               </Text>
             </li>
             <li>
-              <Text>
+              <Text as="p">
                 Set rate limits for user groups to control token spend for your
                 teams.
               </Text>
@@ -133,7 +133,7 @@ function Main() {
           </>
         )}
         <li>
-          <Text>Enable and disable rate limits on the fly.</Text>
+          <Text as="p">Enable and disable rate limits on the fly.</Text>
         </li>
       </ul>
 

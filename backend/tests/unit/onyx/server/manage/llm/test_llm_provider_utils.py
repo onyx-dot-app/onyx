@@ -176,6 +176,14 @@ class TestInferVisionSupport:
         """Test Nova Pro has vision."""
         assert infer_vision_support("amazon.nova-pro-v1") is True
 
+    def test_bifrost_claude_has_vision(self) -> None:
+        """Test Bifrost Claude models are recognized as vision-capable."""
+        assert infer_vision_support("anthropic/claude-3-5-sonnet") is True
+
+    def test_bifrost_gpt4o_has_vision(self) -> None:
+        """Test Bifrost GPT-4o models are recognized as vision-capable."""
+        assert infer_vision_support("openai/gpt-4o") is True
+
     def test_mistral_no_vision(self) -> None:
         """Test Mistral doesn't have vision (not in known list)."""
         assert infer_vision_support("mistral.mistral-large") is False

@@ -5,7 +5,7 @@ import { getDatesList, useQueryAnalytics, useUserAnalytics } from "../lib";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 import Title from "@/components/ui/title";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 import CardSection from "@/components/admin/CardSection";
 
 export function QueryPerformanceChart({
@@ -98,7 +98,7 @@ export function QueryPerformanceChart({
   return (
     <CardSection className="mt-8">
       <Title>Usage</Title>
-      <Text>Usage over time</Text>
+      <Text as="p">Usage over time</Text>
       {chart}
     </CardSection>
   );

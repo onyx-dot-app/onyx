@@ -21,7 +21,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
-import FilterButton from "@/refresh-components/buttons/FilterButton";
+import { FilterButton } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { LineItemButton } from "@opal/components";
@@ -217,7 +217,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             <Popover open={timeFilterOpen} onOpenChange={setTimeFilterOpen}>
               <Popover.Trigger asChild>
                 <FilterButton
-                  leftIcon={SvgClock}
+                  icon={SvgClock}
                   active={!!timeFilter}
                   onClear={() => {
                     setTimeFilter(null);
@@ -253,7 +253,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             <Popover open={tagFilterOpen} onOpenChange={setTagFilterOpen}>
               <Popover.Trigger asChild>
                 <FilterButton
-                  leftIcon={SvgTag}
+                  icon={SvgTag}
                   active={selectedTags.length > 0}
                   onClear={() => {
                     setSelectedTags([]);

@@ -1,32 +1,22 @@
-import "@opal/components/buttons/open-button/styles.css";
-import "@opal/components/tooltip.css";
 import {
   Interactive,
   useDisabled,
   type InteractiveStatefulProps,
   type InteractiveStatefulInteraction,
 } from "@opal/core";
-import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
+import type {
+  ContainerSizeVariants,
+  ExtremaSizeVariants,
+  RichStr,
+} from "@opal/types";
+import { Text } from "@opal/components";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
 import type { TooltipSide } from "@opal/components";
-import type { IconFunctionComponent, IconProps } from "@opal/types";
-import { SvgChevronDownSmall } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
-
-// ---------------------------------------------------------------------------
-// Chevron (stable identity — never causes React to remount the SVG)
-// ---------------------------------------------------------------------------
-
-function ChevronIcon({ className, ...props }: IconProps) {
-  return (
-    <SvgChevronDownSmall
-      className={cn(className, "opal-open-button-chevron")}
-      {...props}
-    />
-  );
-}
+import { ChevronIcon } from "@opal/components/buttons/chevron";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,17 +33,17 @@ type OpenButtonContentProps =
   | {
       foldable: true;
       icon: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
     }
   | {
       foldable?: false;
       icon?: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
     }
   | {
       foldable?: false;
       icon: IconFunctionComponent;
-      children?: string;
+      children?: string | RichStr;
     };
 
 type OpenButtonVariant = "select-light" | "select-heavy" | "select-tinted";
@@ -116,14 +106,13 @@ function OpenButton({
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <span
-      className={cn(
-        "whitespace-nowrap",
-        isLarge ? "font-main-ui-body" : "font-secondary-body"
-      )}
+    <Text
+      font={isLarge ? "main-ui-body" : "secondary-body"}
+      color="inherit"
+      nowrap
     >
       {children}
-    </span>
+    </Text>
   ) : null;
 
   const button = (
@@ -192,7 +181,7 @@ function OpenButton({
           side={tooltipSide}
           sideOffset={4}
         >
-          {resolvedTooltip}
+          <Text>{resolvedTooltip}</Text>
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

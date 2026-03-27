@@ -51,13 +51,12 @@ class HookPointSpec:
     output_schema: ClassVar[dict[str, Any]]
 
     def __init_subclass__(cls, **kwargs: object) -> None:
-        """Enforce that every concrete subclass declares all required class attributes.
+        """Enforce that every subclass declares all required class attributes.
 
         Called automatically by Python whenever a class inherits from HookPointSpec.
-        Abstract subclasses (those still carrying unimplemented abstract methods) are
-        skipped — they are intermediate base classes and may not yet define everything.
-        Only fully concrete subclasses are validated, ensuring a clear TypeError at
-        import time rather than a confusing AttributeError at runtime.
+        Raises TypeError at import time if any required attribute is missing or if
+        payload_model / response_model are not Pydantic BaseModel subclasses.
+        input_schema and output_schema are derived automatically from the models.
         """
         super().__init_subclass__(**kwargs)
         missing = [attr for attr in _REQUIRED_ATTRS if not hasattr(cls, attr)]

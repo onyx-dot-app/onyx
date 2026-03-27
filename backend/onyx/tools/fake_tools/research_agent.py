@@ -736,7 +736,7 @@ if __name__ == "__main__":
             llm.config.model_name, llm.config.model_provider
         )
 
-        persona = get_default_behavior_persona(db_session)
+        persona = get_default_behavior_persona(db_session, eager_load_for_tools=True)
         if persona is None:
             raise ValueError("No default persona found")
 

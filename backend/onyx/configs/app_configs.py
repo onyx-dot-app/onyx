@@ -332,6 +332,10 @@ OPENSEARCH_INDEX_NUM_REPLICAS: int | None = (
     if os.environ.get("OPENSEARCH_INDEX_NUM_REPLICAS", None) is not None
     else None
 )
+ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH = (
+    os.environ.get("ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH", "").lower()
+    == "true"
+)
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 # NOTE: this is used if and only if the vespa config server is accessible via a

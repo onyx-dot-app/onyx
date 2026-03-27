@@ -45,6 +45,7 @@ const SETTINGS_LAYOUT_PREFIXES = [
   ADMIN_ROUTES.GROUPS.path,
   ADMIN_ROUTES.PERFORMANCE.path,
   ADMIN_ROUTES.SCIM.path,
+  ADMIN_ROUTES.VOICE.path,
 ];
 
 export function ClientLayout({ children, enableCloud }: ClientLayoutProps) {
