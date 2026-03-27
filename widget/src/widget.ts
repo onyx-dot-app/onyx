@@ -225,7 +225,7 @@ export class OnyxChatWidget extends LitElement {
     }
   }
 
-  private static readonly CITATIONS_COLLAPSED_COUNT = 3;
+  private static readonly CITATIONS_COLLAPSED_COUNT = 1;
 
   /**
    * Render a single citation badge.
