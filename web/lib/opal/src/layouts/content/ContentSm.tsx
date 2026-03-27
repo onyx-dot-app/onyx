@@ -11,7 +11,7 @@ import { cn } from "@opal/utils";
 
 type ContentSmSizePreset = "main-content" | "main-ui" | "secondary";
 type ContentSmOrientation = "vertical" | "inline" | "reverse";
-type ContentSmProminence = "default" | "muted" | "muted-2x";
+type ContentSmProminence = "default" | "muted";
 
 interface ContentSmPresetConfig {
   /** Icon width/height (CSS value). */

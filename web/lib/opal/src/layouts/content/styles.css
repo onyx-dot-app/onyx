@@ -313,7 +313,7 @@
      reverse : flex-row-reverse — title left, icon right
 
    Icon color is always text-03. Title color varies by prominence
-   (text-04 default, text-03 muted, text-02 muted-2x) via data-prominence.
+   (text-04 default, text-03 muted) via data-prominence.
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -355,10 +355,6 @@
   @apply text-text-02;
 }
 
-.opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-icon {
-  @apply text-text-02;
-}
-
 /* ---------------------------------------------------------------------------
    Title
    --------------------------------------------------------------------------- */
@@ -370,10 +366,6 @@
 
 .opal-content-sm[data-prominence="muted"] {
   @apply text-text-03;
-}
-
-.opal-content-sm[data-prominence="muted-2x"] {
-  @apply text-text-02;
 }
 
 /* ===========================================================================
