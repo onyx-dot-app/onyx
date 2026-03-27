@@ -595,4 +595,42 @@ export const widgetStyles = css`
   span.citation-badge {
     cursor: default;
   }
+
+  .citation-more {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: var(--onyx-radius-08);
+    background: none;
+    color: var(--text-04);
+    opacity: 0.6;
+    border: 1px dashed var(--border-01);
+    cursor: pointer;
+    font-family: var(--onyx-font-family);
+    transition:
+      opacity 150ms ease,
+      border-color 150ms ease;
+  }
+
+  .citation-more:hover {
+    opacity: 1;
+    border-color: var(--theme-primary-05);
+  }
+
+  .citation-list.expanded .citation-more {
+    display: none;
+  }
+
+  .citation-overflow {
+    display: none;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .citation-list.expanded .citation-overflow {
+    display: flex;
+  }
 `;

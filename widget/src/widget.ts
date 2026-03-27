@@ -225,36 +225,71 @@ export class OnyxChatWidget extends LitElement {
     }
   }
 
+  private static readonly CITATIONS_COLLAPSED_COUNT = 3;
+
+  /**
+   * Render a single citation badge.
+   */
+  private renderCitationBadge(
+    c: ResolvedCitation,
+    displayNum: number,
+  ): TemplateResult {
+    const title = c.semantic_identifier || "Source";
+    const safeHref =
+      c.link && /^https?:\/\//i.test(c.link) ? c.link : undefined;
+    return safeHref
+      ? html`<a
+          class="citation-badge"
+          href=${safeHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          title=${title}
+          ><span class="citation-num">${displayNum}</span
+          ><span class="citation-title">${title}</span></a
+        >`
+      : html`<span class="citation-badge" title=${title}
+          ><span class="citation-num">${displayNum}</span
+          ><span class="citation-title">${title}</span></span
+        >`;
+  }
+
+  /**
+   * Toggle expanded state for a citation list.
+   */
+  private toggleCitationExpand(e: Event): void {
+    const container = (e.target as HTMLElement).closest(".citation-list");
+    if (container) {
+      container.classList.toggle("expanded");
+    }
+  }
+
   /**
    * Render citation badges for a message.
-   * Each badge shows a numbered pill with the document title, linking to the source.
+   * Shows first 3 inline, collapses the rest behind a "+N more" toggle.
    */
   private renderCitations(
     citations?: ResolvedCitation[],
   ): string | TemplateResult {
     if (!citations?.length) return "";
+    const limit = OnyxChatWidget.CITATIONS_COLLAPSED_COUNT;
+    const visible = citations.slice(0, limit);
+    const overflow = citations.slice(limit);
+
     return html`
       <div class="citation-list">
-        ${citations.map((c, i) => {
-          const displayNum = i + 1;
-          const title = c.semantic_identifier || "Source";
-          const safeHref =
-            c.link && /^https?:\/\//i.test(c.link) ? c.link : undefined;
-          return safeHref
-            ? html`<a
-                class="citation-badge"
-                href=${safeHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                title=${title}
-                ><span class="citation-num">${displayNum}</span
-                ><span class="citation-title">${title}</span></a
-              >`
-            : html`<span class="citation-badge" title=${title}
-                ><span class="citation-num">${displayNum}</span
-                ><span class="citation-title">${title}</span></span
-              >`;
-        })}
+        ${visible.map((c, i) => this.renderCitationBadge(c, i + 1))}
+        ${overflow.length > 0
+          ? html`
+              <button class="citation-more" @click=${this.toggleCitationExpand}>
+                +${overflow.length} more
+              </button>
+              <div class="citation-overflow">
+                ${overflow.map((c, i) =>
+                  this.renderCitationBadge(c, limit + i + 1),
+                )}
+              </div>
+            `
+          : ""}
       </div>
     `;
   }
