@@ -101,7 +101,6 @@
 
 .opal-content-xl-description {
   @apply text-left w-full;
-  padding: 0 0.125rem;
 }
 
 /* ===========================================================================
@@ -191,7 +190,6 @@
 
 .opal-content-lg-description {
   @apply text-left w-full;
-  padding: 0 0.125rem;
 }
 
 /* ===========================================================================
@@ -286,7 +284,6 @@
 
 .opal-content-md-description {
   @apply text-left w-full;
-  padding: 0 0.125rem;
 }
 
 /* ===========================================================================
