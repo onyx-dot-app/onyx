@@ -13,8 +13,10 @@ from onyx.background.celery import celery_redis
 def reset_singleton() -> Iterator[None]:
     """Reset the module-level singleton between tests."""
     celery_redis._broker_client = None
+    celery_redis._broker_url = None
     yield
     celery_redis._broker_client = None
+    celery_redis._broker_url = None
 
 
 def _make_mock_app(broker_url: str = "redis://localhost:6379/15") -> MagicMock:

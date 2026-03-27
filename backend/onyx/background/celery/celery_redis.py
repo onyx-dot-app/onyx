@@ -14,6 +14,7 @@ from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
 
 
 _broker_client: Redis | None = None
+_broker_url: str | None = None
 _broker_client_lock = threading.Lock()
 
 
@@ -30,16 +31,17 @@ def celery_get_broker_client(app: Celery) -> Redis:
         r_celery = celery_get_broker_client(self.app)
         length = celery_get_queue_length(queue, r_celery)
     """
-    global _broker_client
+    global _broker_client, _broker_url
     with _broker_client_lock:
-        if _broker_client is not None:
+        url = app.conf.broker_url
+        if _broker_client is not None and _broker_url == url:
             try:
                 _broker_client.ping()
                 return _broker_client
             except Exception:
                 _broker_client = None
 
-        url = app.conf.broker_url
+        _broker_url = url
         _broker_client = Redis.from_url(
             url,
             decode_responses=False,
