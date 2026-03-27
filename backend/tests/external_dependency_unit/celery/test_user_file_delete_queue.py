@@ -88,10 +88,22 @@ def _patch_task_app(task: Any, mock_app: MagicMock) -> Generator[None, None, Non
     the actual task instance.  We patch ``app`` on that instance's class
     (a unique Celery-generated Task subclass) so the mock is scoped to this
     task only.
+
+    Also patches ``celery_get_broker_client`` so the mock app doesn't need
+    a real broker URL.
     """
     task_instance = task.run.__self__
-    with patch.object(
-        type(task_instance), "app", new_callable=PropertyMock, return_value=mock_app
+    with (
+        patch.object(
+            type(task_instance),
+            "app",
+            new_callable=PropertyMock,
+            return_value=mock_app,
+        ),
+        patch(
+            "onyx.background.celery.tasks.user_file_processing.tasks.celery_get_broker_client",
+            return_value=MagicMock(),
+        ),
     ):
         yield
 

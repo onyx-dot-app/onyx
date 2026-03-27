@@ -12,7 +12,6 @@ stale, which is fine for monitoring dashboards.
 import json
 import threading
 import time
-from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -104,25 +103,23 @@ class _CachedCollector(Collector):
 
 
 class QueueDepthCollector(_CachedCollector):
-    """Reads Celery queue lengths from the broker Redis on each scrape.
-
-    Uses a Redis client factory (callable) rather than a stored client
-    reference so the connection is always fresh from Celery's pool.
-    """
+    """Reads Celery queue lengths from the broker Redis on each scrape."""
 
     def __init__(self, cache_ttl: float = _DEFAULT_CACHE_TTL) -> None:
         super().__init__(cache_ttl)
-        self._get_redis: Callable[[], Redis] | None = None
+        self._celery_app: Any | None = None
 
-    def set_redis_factory(self, factory: Callable[[], Redis]) -> None:
-        """Set a callable that returns a broker Redis client on demand."""
-        self._get_redis = factory
+    def set_celery_app(self, app: Any) -> None:
+        """Set the Celery app for broker Redis access."""
+        self._celery_app = app
 
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
-        if self._get_redis is None:
+        if self._celery_app is None:
             return []
 
-        redis_client = self._get_redis()
+        from onyx.background.celery.celery_redis import celery_get_broker_client
+
+        redis_client = celery_get_broker_client(self._celery_app)
 
         depth = GaugeMetricFamily(
             "onyx_queue_depth",
@@ -404,17 +401,19 @@ class RedisHealthCollector(_CachedCollector):
 
     def __init__(self, cache_ttl: float = _DEFAULT_CACHE_TTL) -> None:
         super().__init__(cache_ttl)
-        self._get_redis: Callable[[], Redis] | None = None
+        self._celery_app: Any | None = None
 
-    def set_redis_factory(self, factory: Callable[[], Redis]) -> None:
-        """Set a callable that returns a broker Redis client on demand."""
-        self._get_redis = factory
+    def set_celery_app(self, app: Any) -> None:
+        """Set the Celery app for broker Redis access."""
+        self._celery_app = app
 
     def _collect_fresh(self) -> list[GaugeMetricFamily]:
-        if self._get_redis is None:
+        if self._celery_app is None:
             return []
 
-        redis_client = self._get_redis()
+        from onyx.background.celery.celery_redis import celery_get_broker_client
+
+        redis_client = celery_get_broker_client(self._celery_app)
 
         memory_used = GaugeMetricFamily(
             "onyx_redis_memory_used_bytes",
