@@ -69,7 +69,11 @@ func Pick(groups []PickerGroup) ([]int, error) {
 			case actionTop:
 				cursor = 0
 			case actionBottom:
-				cursor = len(entries) - 1
+				if len(entries) == 0 {
+					cursor = 0
+				} else {
+					cursor = len(entries) - 1
+				}
 			case actionPageUp:
 				listHeight := h - headerLines - footerLines
 				cursor -= listHeight
