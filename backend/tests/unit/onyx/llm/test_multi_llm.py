@@ -11,6 +11,7 @@ from litellm.types.utils import ChatCompletionDeltaToolCall
 from litellm.types.utils import Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
+import onyx.llm.models
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
@@ -1477,6 +1478,147 @@ def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:
     assert llm._custom_llm_provider == "openai"
     assert llm._api_base == "https://bifrost.example.com/v1"
     assert llm._model_kwargs["api_base"] == "https://bifrost.example.com/v1"
+
+
+def test_prompt_contains_tool_call_history_true() -> None:
+    from onyx.llm.multi_llm import _prompt_contains_tool_call_history
+
+    messages: LanguageModelInput = [
+        UserMessage(content="What's the weather?"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[
+                ToolCall(
+                    id="tc_1",
+                    function=FunctionCall(name="get_weather", arguments="{}"),
+                )
+            ],
+        ),
+    ]
+    assert _prompt_contains_tool_call_history(messages) is True
+
+
+def test_prompt_contains_tool_call_history_false_no_tools() -> None:
+    from onyx.llm.multi_llm import _prompt_contains_tool_call_history
+
+    messages: LanguageModelInput = [
+        UserMessage(content="Hello"),
+        AssistantMessage(content="Hi there!"),
+    ]
+    assert _prompt_contains_tool_call_history(messages) is False
+
+
+def test_prompt_contains_tool_call_history_false_user_only() -> None:
+    from onyx.llm.multi_llm import _prompt_contains_tool_call_history
+
+    messages: LanguageModelInput = [UserMessage(content="Hello")]
+    assert _prompt_contains_tool_call_history(messages) is False
+
+
+def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
+    """When thinking is enabled but assistant messages with tool_calls lack
+    thinking_blocks, the thinking param must be dropped to avoid the Bedrock
+    BadRequestError about missing thinking blocks."""
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-sonnet-4-20250514-v1:0",
+        max_input_tokens=200000,
+    )
+
+    messages: LanguageModelInput = [
+        UserMessage(content="What's the weather?"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[
+                ToolCall(
+                    id="tc_1",
+                    function=FunctionCall(
+                        name="get_weather",
+                        arguments='{"city": "Paris"}',
+                    ),
+                )
+            ],
+        ),
+        onyx.llm.models.ToolMessage(
+            content="22°C sunny",
+            tool_call_id="tc_1",
+        ),
+    ]
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "Get the weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                },
+            },
+        }
+    ]
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        list(llm.stream(messages, tools=tools, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs, (
+            "thinking param should be dropped when thinking_blocks are missing "
+            "from assistant messages with tool_calls"
+        )
+
+
+def test_bedrock_claude_keeps_thinking_when_no_tool_history() -> None:
+    """When thinking is enabled and there are no historical assistant messages
+    with tool_calls, the thinking param should be preserved."""
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-sonnet-4-20250514-v1:0",
+        max_input_tokens=200000,
+    )
+
+    messages: LanguageModelInput = [
+        UserMessage(content="What's the weather?"),
+    ]
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "Get the weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                },
+            },
+        }
+    ]
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        list(llm.stream(messages, tools=tools, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" in kwargs, (
+            "thinking param should be preserved when no assistant messages "
+            "with tool_calls exist in history"
+        )
+        assert kwargs["thinking"]["type"] == "enabled"
 
 
 def test_bifrost_claude_includes_allowed_openai_params() -> None:
