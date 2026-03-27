@@ -181,7 +181,7 @@ async def embed_text(
         # Run CPU-bound embedding in a thread pool, with concurrency limiting
         # to prevent thread contention on CPU (see issue #8396)
         loop = asyncio.get_event_loop()
-        semaphore = _get_embed_semaphore(gpu_type)
+        semaphore = _get_embed_semaphore()
         async with semaphore:
             embeddings_vectors = await loop.run_in_executor(
                 None,
