@@ -107,14 +107,16 @@ def insert_api_key(
 
     # Assign the API key virtual user to the appropriate default group
     # before commit so everything is atomic.
+    # LIMITED role service accounts should have no group membership.
     # Late import to avoid circular dependency (api_key <- users <- api_key).
-    from onyx.db.users import assign_user_to_default_groups__no_commit
+    if api_key_args.role != UserRole.LIMITED:
+        from onyx.db.users import assign_user_to_default_groups__no_commit
 
-    assign_user_to_default_groups__no_commit(
-        db_session,
-        api_key_user_row,
-        is_admin=(api_key_args.role == UserRole.ADMIN),
-    )
+        assign_user_to_default_groups__no_commit(
+            db_session,
+            api_key_user_row,
+            is_admin=(api_key_args.role == UserRole.ADMIN),
+        )
 
     db_session.commit()
 
