@@ -96,5 +96,13 @@ def downgrade() -> None:
     conn = op.get_bind()
 
     # Remove the default groups created by this migration.
-    # Permission grants cascade-delete via FK.
+    # First remove user-group memberships that reference default groups
+    # to avoid FK violations, then delete the groups themselves.
+    conn.execute(
+        sa.text(
+            "DELETE FROM user__user_group "
+            "WHERE user_group_id IN "
+            "(SELECT id FROM user_group WHERE is_default = true)"
+        )
+    )
     conn.execute(sa.text("DELETE FROM user_group WHERE is_default = true"))
