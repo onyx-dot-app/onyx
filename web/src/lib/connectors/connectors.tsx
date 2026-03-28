@@ -1366,7 +1366,26 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         hidden: true,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter a custom S3-compatible endpoint URL (e.g. https://minio.example.com:9000):",
+        label: "Endpoint URL",
+        name: "endpoint_url",
+        optional: true,
+        description:
+          "For S3-compatible storage services such as MinIO or Ceph. Leave empty for AWS S3.",
+      },
+      {
+        type: "checkbox",
+        label: "Skip SSL Verification",
+        name: "s3_skip_ssl_verification",
+        description:
+          "Disable SSL certificate verification when connecting to the custom endpoint. Not recommended for production use.",
+        optional: true,
+        default: false,
+      },
+    ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
   r2: {
@@ -2081,6 +2100,8 @@ export interface S3Config {
   bucket_type: "s3";
   bucket_name: string;
   prefix: string;
+  endpoint_url?: string;
+  s3_skip_ssl_verification?: boolean;
 }
 
 export interface R2Config {
