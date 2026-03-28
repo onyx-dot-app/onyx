@@ -25,6 +25,7 @@ _GRANOLA_BASE_URL = "https://public-api.granola.ai/v1"
 _GRANOLA_ID_PREFIX = "GRANOLA_"
 _GRANOLA_PAGE_SIZE = 30  # Max page size per Granola docs
 _MIN_REQUEST_INTERVAL = 0.25  # seconds; stay under 5 req/sec sustained
+_REQUEST_TIMEOUT_SECONDS = 30  # prevent workers from hanging on stalled upstream
 
 
 def _parse_iso_datetime(dt_str: str | None) -> datetime | None:
@@ -57,7 +58,7 @@ class GranolaConnector(PollConnector, LoadConnector):
     # ---------------------------------------------------------------------
     # Credentials
     # ---------------------------------------------------------------------
-    def load_credentials(self, credentials: dict[str, str]) -> None:
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         api_key = credentials.get("granola_api_key")
 
         if not isinstance(api_key, str):
@@ -66,6 +67,8 @@ class GranolaConnector(PollConnector, LoadConnector):
             )
 
         self.api_key = api_key
+
+        return None
 
     # ---------------------------------------------------------------------
     # HTTP helpers
@@ -86,7 +89,13 @@ class GranolaConnector(PollConnector, LoadConnector):
             time.sleep(_MIN_REQUEST_INTERVAL - elapsed)
 
         url = f"{_GRANOLA_BASE_URL}{path}"
-        response = self._session.request(method, url, headers=headers, **kwargs)
+        response = self._session.request(
+            method,
+            url,
+            headers=headers,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+            **kwargs,
+        )
         self._last_request_time = time.monotonic()
 
         response.raise_for_status()
@@ -155,6 +164,8 @@ class GranolaConnector(PollConnector, LoadConnector):
 
         created_at_str = cast(str | None, note.get("created_at"))
         created_at = _parse_iso_datetime(created_at_str) or datetime.now(timezone.utc)
+        updated_at_str = cast(str | None, note.get("updated_at"))
+        updated_at = _parse_iso_datetime(updated_at_str) or created_at
 
         year_month = created_at.strftime("%Y-%m")
 
@@ -250,10 +261,14 @@ class GranolaConnector(PollConnector, LoadConnector):
 
         metadata: dict[str, Any] = {
             "created_at": created_at_str,
-            "updated_at": note.get("updated_at"),
+            "updated_at": updated_at_str,
             "scheduled_start_time": calendar_event.get("scheduled_start_time"),
             "scheduled_end_time": calendar_event.get("scheduled_end_time"),
         }
+
+        if not sections:
+            # Skip documents with no indexable content (no summary or transcript)
+            return None
 
         return Document(
             id=doc_id,
@@ -266,7 +281,7 @@ class GranolaConnector(PollConnector, LoadConnector):
                 for k, v in metadata.items()
                 if v is not None
             },
-            doc_updated_at=created_at,
+            doc_updated_at=updated_at,
             primary_owners=primary_owners,
             secondary_owners=attendees_infos,
         )
@@ -278,12 +293,14 @@ class GranolaConnector(PollConnector, LoadConnector):
         self,
         created_after: str | None = None,
         created_before: str | None = None,
+        updated_after: str | None = None,
     ) -> GenerateDocumentsOutput:
         doc_batch: List[Document | HierarchyNode] = []
 
         for notes_page in self._iter_notes(
             created_after=created_after,
             created_before=created_before,
+            updated_after=updated_after,
         ):
             for note_summary in notes_page:
                 note_id = note_summary.get("id")
@@ -317,9 +334,10 @@ class GranolaConnector(PollConnector, LoadConnector):
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        """Incremental sync based on note creation time.
+        """Incremental sync based on creation and update time.
 
-        We bound the window using created_after/created_before filters.
+        We bound the window using created_after/created_before and also include
+        notes whose updated_at falls within the same window via updated_after.
         """
 
         start_iso = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
@@ -332,4 +350,5 @@ class GranolaConnector(PollConnector, LoadConnector):
         return self._generate_documents(
             created_after=start_iso,
             created_before=end_iso,
+            updated_after=start_iso,
         )
