@@ -8,6 +8,8 @@ from numbers import Integral
 from typing import Any
 from typing import Optional
 from urllib.parse import quote
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 import boto3
 from botocore.client import Config
@@ -50,6 +52,17 @@ logger = setup_logger()
 
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 SIZE_THRESHOLD_BUFFER = 64
+
+
+def _sanitize_url(url: str) -> str:
+    """Strip embedded credentials from a URL before logging."""
+    parsed = urlparse(url)
+    if parsed.username or parsed.password:
+        sanitized = parsed._replace(
+            netloc="***@" + parsed.hostname + (f":{parsed.port}" if parsed.port else "")
+        )
+        return urlunparse(sanitized)
+    return url
 
 
 class BlobStorageConnector(LoadConnector, PollConnector):
@@ -152,19 +165,19 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             extra_client_kwargs: dict[str, Any] = {}
             if self.endpoint_url:
                 logger.info(
-                    f"Using custom S3 endpoint: {self.endpoint_url}"
+                    f"Using custom S3 endpoint: {_sanitize_url(self.endpoint_url)}"
                 )
                 extra_client_kwargs["endpoint_url"] = self.endpoint_url
                 extra_client_kwargs["config"] = Config(
                     signature_version="s3v4",
                     s3={"addressing_style": "path"},
                 )
-            if self.s3_skip_ssl_verification:
+            if self.endpoint_url and self.s3_skip_ssl_verification:
                 extra_client_kwargs["verify"] = False
                 logger.warning(
                     "SSL verification is disabled for S3 endpoint '%s'. "
                     "This is not recommended for production use.",
-                    self.endpoint_url,
+                    _sanitize_url(self.endpoint_url),
                 )
 
             # For S3, we can use either access keys or IAM roles.
@@ -337,7 +350,10 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         elif self.bucket_type == BlobType.S3:
             if self.endpoint_url:
-                # For custom S3-compatible endpoints, use path-style URL
+                # For custom S3-compatible endpoints (MinIO, Ceph, etc.) we
+                # intentionally return a direct object URL rather than a
+                # dashboard URL because these services do not have a
+                # standardised web console path.
                 base = self.endpoint_url.rstrip("/")
                 return f"{base}/{self.bucket_name}/{encoded_key}"
             region = self.bucket_region or self.s3_client.meta.region_name
