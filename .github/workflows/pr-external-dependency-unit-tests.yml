@@ -82,7 +82,6 @@ jobs:
       - runner=2cpu-linux-arm64
       - ${{ format('run-id={0}-external-dependency-unit-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=s3-cache
-    environment: ci-protected
     timeout-minutes: 45
     strategy:
       fail-fast: false
