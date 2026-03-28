@@ -99,7 +99,10 @@ export default function AzureModal({
 
   if (open === false) return null;
 
-  const onClose = () => onOpenChange?.(false);
+  const onClose = () => {
+    setAddedModels([]);
+    onOpenChange?.(false);
+  };
 
   const baseModelConfigurations = buildAvailableModelConfigurations(
     existingLlmProvider,

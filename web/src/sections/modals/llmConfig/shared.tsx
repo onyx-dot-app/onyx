@@ -607,7 +607,10 @@ export function ModelsField<T extends BaseLLMFormValues>({
               prominence="secondary"
               icon={SvgPlusCircle}
               type="button"
-              disabled={!newModelName.trim()}
+              disabled={
+                !newModelName.trim() ||
+                modelConfigurations.some((m) => m.name === newModelName.trim())
+              }
               onClick={() => {
                 const trimmed = newModelName.trim();
                 if (
