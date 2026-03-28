@@ -92,7 +92,6 @@ jobs:
         "run-id=${{ github.run_id }}-build-backend-image",
         "extras=ecr-cache",
       ]
-    environment: ci-protected
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -153,7 +152,6 @@ jobs:
         "run-id=${{ github.run_id }}-build-model-server-image",
         "extras=ecr-cache",
       ]
-    environment: ci-protected
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -213,7 +211,6 @@ jobs:
         "run-id=${{ github.run_id }}-build-integration-image",
         "extras=ecr-cache",
       ]
-    environment: ci-protected
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
