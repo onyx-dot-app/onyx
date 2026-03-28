@@ -132,7 +132,7 @@ function OpenButton({
       >
         <div
           className={cn(
-            "interactive-foreground flex flex-row items-center",
+            "flex flex-row items-center",
             justifyContent === "between" ? "w-full justify-between" : "gap-1",
             foldable &&
               justifyContent !== "between" &&

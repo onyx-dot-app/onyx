@@ -10,7 +10,7 @@ import type { ButtonType, WithoutStyles } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-type InteractiveStatelessVariant = "none" | "default" | "action" | "danger";
+type InteractiveStatelessVariant = "default" | "action" | "danger";
 type InteractiveStatelessProminence =
   | "primary"
   | "secondary"
@@ -108,8 +108,8 @@ function InteractiveStateless({
   );
 
   const dataAttrs = {
-    "data-interactive-variant": variant !== "none" ? variant : undefined,
-    "data-interactive-prominence": variant !== "none" ? prominence : undefined,
+    "data-interactive-variant": variant,
+    "data-interactive-prominence": prominence,
     "data-interaction": interaction !== "rest" ? interaction : undefined,
     "data-disabled": isDisabled ? "true" : undefined,
     "aria-disabled": isDisabled || undefined,

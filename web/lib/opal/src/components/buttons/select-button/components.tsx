@@ -1,3 +1,5 @@
+"use client";
+
 import "@opal/components/buttons/select-button/styles.css";
 import {
   Interactive,
@@ -84,11 +86,13 @@ function SelectButton({
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <span className="opal-select-button-label">
-      <Text font={isLarge ? "main-ui-body" : "secondary-body"} color="inherit">
-        {children}
-      </Text>
-    </span>
+    <Text
+      font={isLarge ? "main-ui-body" : "secondary-body"}
+      color="inherit"
+      nowrap
+    >
+      {children}
+    </Text>
   ) : null;
 
   const button = (
@@ -103,7 +107,7 @@ function SelectButton({
       >
         <div
           className={cn(
-            "opal-select-button interactive-foreground",
+            "opal-select-button",
             foldable && "interactive-foldable-host"
           )}
         >

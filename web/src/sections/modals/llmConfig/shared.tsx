@@ -103,7 +103,7 @@ export function APIKeyField({
             ? `Paste your API key from ${providerName} to access your models.`
             : "Paste your API key to access your models."
         }
-        optional={optional}
+        suffix={optional ? "optional" : undefined}
       >
         <PasswordInputTypeInField name="api_key" placeholder="API Key" />
       </InputLayouts.Vertical>

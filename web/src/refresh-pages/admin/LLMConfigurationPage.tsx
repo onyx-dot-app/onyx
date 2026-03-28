@@ -216,7 +216,7 @@ function ExistingProviderCard({
             icon={getProviderIcon(provider.provider)}
             title={provider.name}
             description={getProviderDisplayName(provider.provider)}
-            sizePreset="main-content"
+            sizePreset="main-ui"
             variant="section"
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
@@ -280,7 +280,7 @@ function NewProviderCard({
         icon={getProviderIcon(provider.name)}
         title={getProviderProductName(provider.name)}
         description={getProviderDisplayName(provider.name)}
-        sizePreset="main-content"
+        sizePreset="main-ui"
         variant="section"
         rightChildren={
           <Button
@@ -316,7 +316,7 @@ function NewCustomProviderCard({
         icon={getProviderIcon("custom")}
         title={getProviderProductName("custom")}
         description={getProviderDisplayName("custom")}
-        sizePreset="main-content"
+        sizePreset="main-ui"
         variant="section"
         rightChildren={
           <Button

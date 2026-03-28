@@ -8,10 +8,8 @@ import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
 import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import {
-  resolveStr,
-  toPlainString,
-} from "@opal/components/text/InlineMarkdown";
+import { Text, type TextFont } from "@opal/components/text/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useRef, useState } from "react";
 
@@ -23,16 +21,18 @@ type ContentMdSizePreset = "main-content" | "main-ui" | "secondary";
 
 type ContentMdAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 
+type ContentMdSuffix = "optional" | (string & {});
+
 interface ContentMdPresetConfig {
   iconSize: string;
   iconContainerPadding: string;
   iconColorClass: string;
-  titleFont: string;
+  titleFont: TextFont;
   lineHeight: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
   editButtonSize: ContainerSizeVariants;
   editButtonPadding: string;
-  optionalFont: string;
+  optionalFont: TextFont;
   /** Aux icon size = lineHeight − 2 × p-0.5. */
   auxIconSize: string;
   /** Left indent for the description so it aligns with the title (past the icon). */
@@ -55,11 +55,11 @@ interface ContentMdProps {
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
 
-  /** When `true`, renders "(Optional)" beside the title. */
-  optional?: boolean;
-
-  /** Custom muted suffix rendered beside the title. */
-  titleSuffix?: string;
+  /**
+   * Muted suffix rendered beside the title.
+   * Use `"optional"` for the standard "(Optional)" label, or pass any string.
+   */
+  suffix?: ContentMdSuffix;
 
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: ContentMdAuxIcon;
@@ -69,18 +69,6 @@ interface ContentMdProps {
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
-
-  /** When `true`, the title color hooks into `Interactive`'s `--interactive-foreground` variable. */
-  withInteractive?: boolean;
-
-  /** Optional class name applied to the title element. */
-  titleClassName?: string;
-
-  /** Optional class name applied to the icon element. */
-  iconClassName?: string;
-
-  /** Content rendered below the description, indented to align with it. */
-  bottomChildren?: React.ReactNode;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -95,11 +83,11 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconSize: "1rem",
     iconContainerPadding: "p-1",
     iconColorClass: "text-text-04",
-    titleFont: "font-main-content-emphasis",
+    titleFont: "main-content-emphasis",
     lineHeight: "1.5rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0",
-    optionalFont: "font-main-content-muted",
+    optionalFont: "main-content-muted",
     auxIconSize: "1.25rem",
     descriptionIndent: "1.625rem",
   },
@@ -107,11 +95,11 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconSize: "1rem",
     iconContainerPadding: "p-0.5",
     iconColorClass: "text-text-03",
-    titleFont: "font-main-ui-action",
+    titleFont: "main-ui-action",
     lineHeight: "1.25rem",
     editButtonSize: "xs",
     editButtonPadding: "p-0",
-    optionalFont: "font-main-ui-muted",
+    optionalFont: "main-ui-muted",
     auxIconSize: "1rem",
     descriptionIndent: "1.375rem",
   },
@@ -119,11 +107,11 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconSize: "0.75rem",
     iconContainerPadding: "p-0.5",
     iconColorClass: "text-text-04",
-    titleFont: "font-secondary-action",
+    titleFont: "secondary-action",
     lineHeight: "1rem",
     editButtonSize: "2xs",
     editButtonPadding: "p-0",
-    optionalFont: "font-secondary-action",
+    optionalFont: "secondary-action",
     auxIconSize: "0.75rem",
     descriptionIndent: "1.125rem",
   },
@@ -149,15 +137,10 @@ function ContentMd({
   description,
   editable,
   onTitleChange,
-  optional,
-  titleSuffix,
+  suffix,
   auxIcon,
   tag,
   sizePreset = "main-ui",
-  withInteractive,
-  titleClassName,
-  iconClassName,
-  bottomChildren,
   ref,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
@@ -178,11 +161,7 @@ function ContentMd({
   }
 
   return (
-    <div
-      ref={ref}
-      className="opal-content-md"
-      data-interactive={withInteractive || undefined}
-    >
+    <div ref={ref} className="opal-content-md">
       <div
         className="opal-content-md-header"
         data-editing={editing || undefined}
@@ -196,11 +175,7 @@ function ContentMd({
             style={{ minHeight: config.lineHeight }}
           >
             <Icon
-              className={cn(
-                "opal-content-md-icon",
-                config.iconColorClass,
-                iconClassName
-              )}
+              className={cn("opal-content-md-icon", config.iconColorClass)}
               style={{ width: config.iconSize, height: config.iconSize }}
             />
           </div>
@@ -210,7 +185,10 @@ function ContentMd({
           {editing ? (
             <div className="opal-content-md-input-sizer">
               <span
-                className={cn("opal-content-md-input-mirror", config.titleFont)}
+                className={cn(
+                  "opal-content-md-input-mirror",
+                  `font-${config.titleFont}`
+                )}
               >
                 {editValue || "\u00A0"}
               </span>
@@ -218,7 +196,7 @@ function ContentMd({
                 ref={inputRef}
                 className={cn(
                   "opal-content-md-input",
-                  config.titleFont,
+                  `font-${config.titleFont}`,
                   "text-text-04"
                 )}
                 value={editValue}
@@ -238,29 +216,21 @@ function ContentMd({
               />
             </div>
           ) : (
-            <span
-              className={cn(
-                "opal-content-md-title",
-                config.titleFont,
-                "text-text-04",
-                editable && "cursor-pointer",
-                titleClassName
-              )}
+            <Text
+              font={config.titleFont}
+              color="inherit"
+              maxLines={1}
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
-              style={{ height: config.lineHeight }}
             >
-              {resolveStr(title)}
-            </span>
+              {title}
+            </Text>
           )}
 
-          {(optional || titleSuffix) && (
-            <span
-              className={cn(config.optionalFont, "text-text-03 shrink-0")}
-              style={{ height: config.lineHeight }}
-            >
-              {titleSuffix ?? "(Optional)"}
-            </span>
+          {suffix && (
+            <Text font={config.optionalFont} color="text-03">
+              {suffix === "optional" ? "(Optional)" : suffix}
+            </Text>
           )}
 
           {auxIcon &&
@@ -306,17 +276,12 @@ function ContentMd({
 
       {description && toPlainString(description) && (
         <div
-          className="opal-content-md-description font-secondary-body text-text-03"
+          className="opal-content-md-description"
           style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
         >
-          {resolveStr(description)}
-        </div>
-      )}
-      {bottomChildren && (
-        <div
-          style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
-        >
-          {bottomChildren}
+          <Text font="secondary-body" color="text-03" as="p">
+            {description}
+          </Text>
         </div>
       )}
     </div>
@@ -327,5 +292,6 @@ export {
   ContentMd,
   type ContentMdProps,
   type ContentMdSizePreset,
+  type ContentMdSuffix,
   type ContentMdAuxIcon,
 };

@@ -29,13 +29,12 @@ export default function DocumentSetCard({
       disabled={!disabled || !disabledTooltip}
     >
       <div className="max-w-[12rem]">
-        <Interactive.Stateless
+        <Interactive.Simple
           onClick={
             disabled || isSelected === undefined
               ? undefined
               : () => onSelectToggle?.(!isSelected)
           }
-          variant="none"
         >
           <Interactive.Container
             data-testid={`document-set-card-${documentSet.id}`}
@@ -64,7 +63,7 @@ export default function DocumentSetCard({
             />
             <Spacer horizontal rem={0.5} />
           </Interactive.Container>
-        </Interactive.Stateless>
+        </Interactive.Simple>
       </div>
     </SimpleTooltip>
   );

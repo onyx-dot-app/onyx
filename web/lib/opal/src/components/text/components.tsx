@@ -125,6 +125,7 @@ function Text({
   ...rest
 }: TextProps) {
   const resolvedClassName = cn(
+    "px-[2px]",
     FONT_CONFIG[font],
     COLOR_CONFIG[color],
     nowrap && "whitespace-nowrap",
