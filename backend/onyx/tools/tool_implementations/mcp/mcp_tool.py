@@ -72,7 +72,7 @@ class MCPTool(Tool[None]):
         # "Tool names must be unique" errors when multiple MCP servers expose
         # tools with the same name.  The numeric server ID guarantees
         # uniqueness; the original _name is kept for MCP protocol calls.
-        safe_tool_name = re.sub(r"[^a-zA-Z0-9_]", "_", tool_name)
+        safe_tool_name: str = re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name)
         self._llm_name = f"mcp_{mcp_server.id}_{safe_tool_name}"
 
     @property
