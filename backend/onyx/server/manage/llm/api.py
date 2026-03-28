@@ -302,7 +302,8 @@ def test_llm_configuration(
                 else None
             )
         if existing_provider and not test_llm_request.custom_config_changed:
-            test_custom_config = existing_provider.custom_config
+            if test_custom_config is None:
+                test_custom_config = existing_provider.custom_config
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
