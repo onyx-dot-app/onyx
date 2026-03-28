@@ -638,7 +638,9 @@ export class OnyxApiClient {
   async getUserGroups(): Promise<
     Array<{ id: number; name: string; is_default: boolean }>
   > {
-    const response = await this.get("/manage/admin/user-group");
+    const response = await this.get(
+      "/manage/admin/user-group?include_default=true"
+    );
     return response.json();
   }
 
