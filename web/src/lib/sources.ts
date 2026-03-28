@@ -47,7 +47,6 @@ import {
   DrupalWikiIcon,
   EmailIcon,
   TestRailIcon,
-  GranolaIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -365,7 +364,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/fireflies`,
   },
   granola: {
-    icon: GranolaIcon,
+    icon: FirefliesIcon,
     displayName: "Granola",
     category: SourceCategory.Sales,
     // Placeholder docs path; can be updated when official docs exist

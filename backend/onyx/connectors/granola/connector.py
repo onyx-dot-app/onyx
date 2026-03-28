@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import Any, List, cast
+from typing import Any, cast
 import time
 
 import requests
@@ -128,7 +128,7 @@ class GranolaConnector(PollConnector, LoadConnector):
             resp = self._request("GET", "/notes", params=params)
             data = resp.json()
 
-            notes = cast(List[dict[str, Any]], data.get("notes", []))
+            notes = cast(list[dict[str, Any]], data.get("notes", []))
             if not notes:
                 break
 
@@ -272,7 +272,7 @@ class GranolaConnector(PollConnector, LoadConnector):
 
         return Document(
             id=doc_id,
-            sections=cast(List[TextSection | ImageSection], sections),
+            sections=cast(list[TextSection | ImageSection], sections),
             source=DocumentSource.GRANOLA,
             semantic_identifier=title,
             doc_metadata={"hierarchy": hierarchy},
@@ -295,7 +295,7 @@ class GranolaConnector(PollConnector, LoadConnector):
         created_before: str | None = None,
         updated_after: str | None = None,
     ) -> GenerateDocumentsOutput:
-        doc_batch: List[Document | HierarchyNode] = []
+        doc_batch: list[Document | HierarchyNode] = []
 
         for notes_page in self._iter_notes(
             created_after=created_after,
@@ -336,8 +336,13 @@ class GranolaConnector(PollConnector, LoadConnector):
     ) -> GenerateDocumentsOutput:
         """Incremental sync based on creation and update time.
 
-        We bound the window using created_after/created_before and also include
-        notes whose updated_at falls within the same window via updated_after.
+        We fetch the union of:
+          - notes created in the window [start, end]
+          - notes updated after ``start`` (regardless of creation time)
+
+        This avoids relying on the Granola API treating created/updated
+        filters with OR semantics and ensures we don't miss notes created
+        before the window but updated within it.
         """
 
         start_iso = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
@@ -347,8 +352,34 @@ class GranolaConnector(PollConnector, LoadConnector):
             "%Y-%m-%dT%H:%M:%SZ"
         )
 
-        return self._generate_documents(
-            created_after=start_iso,
-            created_before=end_iso,
-            updated_after=start_iso,
-        )
+        def _iterator() -> GenerateDocumentsOutput:
+            seen_ids: set[str] = set()
+
+            def _stream(gen: GenerateDocumentsOutput) -> GenerateDocumentsOutput:
+                for batch in gen:
+                    new_batch: list[Document | HierarchyNode] = []
+                    for item in batch:
+                        if isinstance(item, Document):
+                            if item.id in seen_ids:
+                                continue
+                            seen_ids.add(item.id)
+                        new_batch.append(item)
+                    if new_batch:
+                        yield new_batch
+
+            # First: notes created in the window
+            yield from _stream(
+                self._generate_documents(
+                    created_after=start_iso,
+                    created_before=end_iso,
+                )
+            )
+
+            # Second: notes updated after the window start
+            yield from _stream(
+                self._generate_documents(
+                    updated_after=start_iso,
+                )
+            )
+
+        return _iterator()

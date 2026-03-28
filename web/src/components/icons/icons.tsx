@@ -96,7 +96,6 @@ import loopioIcon from "@public/Loopio.png";
 import notionIcon from "@public/Notion.png";
 import productboardIcon from "@public/Productboard.png";
 import slabLogoIcon from "@public/SlabLogo.png";
-import granolaIcon from "@public/Granola.png";
 
 export interface IconProps {
   size?: number;
@@ -845,7 +844,6 @@ export const DiscourseIcon = createLogoIcon(discourseIcon);
 export const Document360Icon = createLogoIcon(document360Icon);
 export const DropboxIcon = createLogoIcon(dropboxIcon);
 export const DrupalWikiIcon = createLogoIcon(drupalwikiIcon);
-export const GranolaIcon = createLogoIcon(granolaIcon);
 export const EgnyteIcon = createLogoIcon(egnyteIcon);
 export const ElevenLabsIcon = createLogoIcon(elevenLabsSVG, {
   darkSrc: elevenLabsDarkSVG,
