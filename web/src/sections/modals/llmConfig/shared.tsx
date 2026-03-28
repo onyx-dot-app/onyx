@@ -11,6 +11,7 @@ import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
@@ -378,6 +379,10 @@ export interface ModelsFieldProps<T> {
   shouldShowAutoUpdateToggle: boolean;
   /** Called when the user clicks the refresh button to re-fetch models. */
   onRefetch?: () => Promise<void> | void;
+  /** When true, show an editable Max Input Tokens field for each model. */
+  showMaxInputTokens?: boolean;
+  /** Callback invoked when a model's max_input_tokens value is changed. */
+  onMaxInputTokensChange?: (modelName: string, value: number | null) => void;
 }
 
 export function ModelsField<T extends BaseLLMFormValues>({
@@ -386,6 +391,8 @@ export function ModelsField<T extends BaseLLMFormValues>({
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
   onRefetch,
+  showMaxInputTokens = false,
+  onMaxInputTokensChange,
 }: ModelsFieldProps<T>) {
   const isAutoMode = formikProps.values.is_auto_mode;
   const selectedModels = formikProps.values.selected_model_names ?? [];
@@ -526,52 +533,84 @@ export function ModelsField<T extends BaseLLMFormValues>({
                   const isDefault = defaultModel === modelConfiguration.name;
 
                   return (
-                    <Hoverable.Root
+                    <div
                       key={modelConfiguration.name}
-                      group="LLMConfigurationButton"
-                      widthVariant="full"
+                      className="flex flex-col w-full"
                     >
-                      <LineItemButton
-                        variant="section"
-                        sizePreset="main-ui"
-                        selectVariant="select-heavy"
-                        state={isSelected ? "selected" : "empty"}
-                        icon={() => <Checkbox checked={isSelected} />}
-                        title={modelConfiguration.name}
-                        onClick={() =>
-                          handleCheckboxChange(
-                            modelConfiguration.name,
-                            !isSelected
-                          )
-                        }
-                        rightChildren={
-                          isSelected ? (
-                            isDefault ? (
-                              <Section>
-                                <Tag color="blue" title="Default Model" />
-                              </Section>
-                            ) : (
-                              <Hoverable.Item
-                                group="LLMConfigurationButton"
-                                variant="opacity-on-hover"
-                              >
-                                <Button
-                                  size="sm"
-                                  prominence="internal"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSetDefault(modelConfiguration.name);
-                                  }}
-                                  type="button"
-                                >
-                                  Set as default
-                                </Button>
-                              </Hoverable.Item>
+                      <Hoverable.Root
+                        group="LLMConfigurationButton"
+                        widthVariant="full"
+                      >
+                        <LineItemButton
+                          variant="section"
+                          sizePreset="main-ui"
+                          selectVariant="select-heavy"
+                          state={isSelected ? "selected" : "empty"}
+                          icon={() => <Checkbox checked={isSelected} />}
+                          title={modelConfiguration.name}
+                          onClick={() =>
+                            handleCheckboxChange(
+                              modelConfiguration.name,
+                              !isSelected
                             )
-                          ) : undefined
-                        }
-                      />
-                    </Hoverable.Root>
+                          }
+                          rightChildren={
+                            isSelected ? (
+                              isDefault ? (
+                                <Section>
+                                  <Tag color="blue" title="Default Model" />
+                                </Section>
+                              ) : (
+                                <Hoverable.Item
+                                  group="LLMConfigurationButton"
+                                  variant="opacity-on-hover"
+                                >
+                                  <Button
+                                    size="sm"
+                                    prominence="internal"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSetDefault(
+                                        modelConfiguration.name
+                                      );
+                                    }}
+                                    type="button"
+                                  >
+                                    Set as default
+                                  </Button>
+                                </Hoverable.Item>
+                              )
+                            ) : undefined
+                          }
+                        />
+                      </Hoverable.Root>
+                      {showMaxInputTokens && isSelected && (
+                        <div className="flex items-center gap-2 pl-10 pr-2 pb-2">
+                          <Text secondaryBody text03>
+                            Max Input Tokens
+                          </Text>
+                          <div className="w-36">
+                            <InputTypeIn
+                              placeholder="Default"
+                              value={
+                                modelConfiguration.max_input_tokens?.toString() ??
+                                ""
+                              }
+                              onChange={(e) =>
+                                onMaxInputTokensChange?.(
+                                  modelConfiguration.name,
+                                  e.target.value === ""
+                                    ? null
+                                    : Number(e.target.value)
+                                )
+                              }
+                              showClearButton={false}
+                              type="number"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
           </Section>
