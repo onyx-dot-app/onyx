@@ -1,0 +1,103 @@
+{{- if .Values.cliServer.enabled }}
+# Onyx CLI SSH server — provides a terminal interface for chatting with Onyx agents.
+# Clients connect via SSH and authenticate with their Onyx API key.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.fullname" . }}-cli-server
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.cliServer.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.cliServer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      {{- if .Values.cliServer.deploymentLabels }}
+      {{- toYaml .Values.cliServer.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      {{- with .Values.cliServer.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.cliServer.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.cliServer.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.cliServer.podSecurityContext | nindent 8 }}
+      {{- with .Values.cliServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cliServer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.cliServer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cli-server
+          securityContext:
+            {{- toYaml .Values.cliServer.securityContext | nindent 12 }}
+          image: "{{ .Values.cliServer.image.repository }}:{{ .Values.cliServer.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.cliServer.image.pullPolicy | default .Values.global.pullPolicy }}
+          command:
+            - onyx-cli
+            - serve
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "{{ .Values.cliServer.containerPort }}"
+            {{- if .Values.cliServer.idleTimeout }}
+            - --idle-timeout
+            - "{{ .Values.cliServer.idleTimeout }}"
+            {{- end }}
+            {{- if .Values.cliServer.maxSessionTimeout }}
+            - --max-session-timeout
+            - "{{ .Values.cliServer.maxSessionTimeout }}"
+            {{- end }}
+          ports:
+            - name: ssh
+              containerPort: {{ .Values.cliServer.containerPort }}
+              protocol: TCP
+          env:
+            - name: ONYX_SERVER_URL
+              value: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }}"
+          livenessProbe:
+            tcpSocket:
+              port: ssh
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: ssh
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.cliServer.resources | nindent 12 }}
+          {{- with .Values.cliServer.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.cliServer.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

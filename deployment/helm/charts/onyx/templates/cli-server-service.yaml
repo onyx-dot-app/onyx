@@ -1,0 +1,27 @@
+{{- if .Values.cliServer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.fullname" . }}-cli-server-service
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- if .Values.cliServer.deploymentLabels }}
+    {{- toYaml .Values.cliServer.deploymentLabels | nindent 4 }}
+    {{- end }}
+  {{- with .Values.cliServer.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.cliServer.service.type }}
+  ports:
+    - port: {{ .Values.cliServer.service.servicePort }}
+      targetPort: ssh
+      protocol: TCP
+      name: ssh
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    {{- if .Values.cliServer.deploymentLabels }}
+    {{- toYaml .Values.cliServer.deploymentLabels | nindent 4 }}
+    {{- end }}
+{{- end }}

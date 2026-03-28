@@ -862,6 +862,44 @@ mcpServer:
   tolerations: []
   affinity: {}
 
+# Onyx CLI SSH Server
+# Exposes the interactive chat TUI over SSH so users can `ssh <host>` to chat with Onyx.
+# Users authenticate with their Onyx API key at the SSH prompt.
+cliServer:
+  enabled: false  # Disabled by default
+  replicaCount: 1
+  image:
+    repository: onyxdotapp/onyx-cli
+    tag: "latest"
+    pullPolicy: Always
+  containerPort: 22
+  # SSH session timeout settings
+  idleTimeout: "15m"
+  maxSessionTimeout: "8h"
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-cli
+  deploymentLabels:
+    app: cli-server
+  service:
+    type: ClusterIP
+    servicePort: 22
+    annotations: {}
+  podSecurityContext: {}
+  securityContext: {}
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "64Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+  volumes: []
+  volumeMounts: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 celery_worker_docfetching:
   replicaCount: 1
   logLevel: INFO
