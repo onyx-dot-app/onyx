@@ -570,11 +570,16 @@ class LitellmLLM(LLM):
                 ):
                     messages = _strip_tool_content_from_messages(messages)
 
-                # Some models (e.g. Mistral on Azure) reject a user message
+                # Some models (e.g. Mistral) reject a user message
                 # immediately after a tool message. Insert a synthetic
                 # assistant bridge message to satisfy the ordering
-                # constraint.
-                if is_mistral or self._model_provider == LlmProviderNames.AZURE:
+                # constraint. Check both the provider and the deployment/
+                # model name to catch Mistral hosted on Azure.
+                model_or_deployment = (
+                    self._deployment_name or self._model_version or ""
+                ).lower()
+                is_mistral_model = is_mistral or "mistral" in model_or_deployment
+                if is_mistral_model:
                     messages = _fix_tool_user_message_ordering(messages)
 
                 # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
