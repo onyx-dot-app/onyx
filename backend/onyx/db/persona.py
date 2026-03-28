@@ -311,6 +311,7 @@ def create_update_persona(
             search_start_date=create_persona_request.search_start_date,
             label_ids=create_persona_request.label_ids,
             is_featured=create_persona_request.is_featured,
+            is_listed=create_persona_request.is_visible,
             user_file_ids=converted_user_file_ids,
             commit=False,
             hierarchy_node_ids=create_persona_request.hierarchy_node_ids,

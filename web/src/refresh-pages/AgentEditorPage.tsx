@@ -663,6 +663,7 @@ export default function AgentEditorPage({
     shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
     shared_group_ids: existingAgent?.groups ?? [],
     is_public: existingAgent?.is_public ?? false,
+    is_visible: existingAgent?.is_listed ?? true,
     label_ids: existingAgent?.labels?.map((l) => l.id) ?? [],
     is_featured: existingAgent?.is_featured ?? false,
   };
@@ -802,6 +803,7 @@ export default function AgentEditorPage({
           ? values.document_set_ids
           : [],
         is_public: values.is_public,
+        is_visible: values.is_visible,
         llm_model_provider_override: values.llm_model_provider_override || null,
         llm_model_version_override: values.llm_model_version_override || null,
         starter_messages: finalStarterMessages,

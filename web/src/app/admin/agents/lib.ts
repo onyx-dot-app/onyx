@@ -12,6 +12,7 @@ interface PersonaUpsertRequest {
   datetime_aware: boolean;
   document_set_ids: number[];
   is_public: boolean;
+  is_visible: boolean;
   llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
@@ -42,6 +43,7 @@ export interface PersonaUpsertParameters {
   datetime_aware: boolean;
   document_set_ids: number[];
   is_public: boolean;
+  is_visible: boolean;
   llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
@@ -68,6 +70,7 @@ function buildPersonaUpsertRequest({
   task_prompt,
   document_set_ids,
   is_public,
+  is_visible,
   groups,
   datetime_aware,
   users,
@@ -93,6 +96,7 @@ function buildPersonaUpsertRequest({
     task_prompt,
     document_set_ids,
     is_public,
+    is_visible,
     uploaded_image_id,
     icon_name,
     groups,
