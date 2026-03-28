@@ -12,7 +12,7 @@ interface PersonaUpsertRequest {
   datetime_aware: boolean;
   document_set_ids: number[];
   is_public: boolean;
-  is_visible: boolean;
+  is_visible?: boolean;
   llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
@@ -43,7 +43,7 @@ export interface PersonaUpsertParameters {
   datetime_aware: boolean;
   document_set_ids: number[];
   is_public: boolean;
-  is_visible: boolean;
+  is_visible?: boolean;
   llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
