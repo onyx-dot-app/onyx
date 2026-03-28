@@ -166,7 +166,10 @@ if [[ "${START_OPENSEARCH:-false}" == "true" ]]; then
     FIND_WAIT=0
     while [[ -z "$OPENSEARCH_CONTAINER" && $FIND_WAIT -lt 10 ]]; do
         # Use docker compose ps to get the exact container name for this project's opensearch service
-        OPENSEARCH_CONTAINER=$(docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled ps -q opensearch 2>/dev/null | xargs -r docker inspect --format='{{.Name}}' 2>/dev/null | sed 's/^\///')
+        CONTAINER_ID=$(docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled ps -q opensearch 2>/dev/null)
+        if [[ -n "$CONTAINER_ID" ]]; then
+            OPENSEARCH_CONTAINER=$(docker inspect --format='{{.Name}}' "$CONTAINER_ID" 2>/dev/null | sed 's/^\///')
+        fi
         if [[ -z "$OPENSEARCH_CONTAINER" ]]; then
             echo "  Container not found yet, retrying... (${FIND_WAIT}s elapsed)"
             sleep 1
