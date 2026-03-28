@@ -596,16 +596,26 @@ export function ModelsField<T extends BaseLLMFormValues>({
                                 modelConfiguration.max_input_tokens?.toString() ??
                                 ""
                               }
-                              onChange={(e) =>
-                                onMaxInputTokensChange?.(
-                                  modelConfiguration.name,
-                                  e.target.value === ""
-                                    ? null
-                                    : Number(e.target.value)
-                                )
-                              }
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === "") {
+                                  onMaxInputTokensChange?.(
+                                    modelConfiguration.name,
+                                    null
+                                  );
+                                } else {
+                                  const num = Number(val);
+                                  if (!isNaN(num) && num > 0) {
+                                    onMaxInputTokensChange?.(
+                                      modelConfiguration.name,
+                                      num
+                                    );
+                                  }
+                                }
+                              }}
                               showClearButton={false}
                               type="number"
+                              min={1}
                             />
                           </div>
                         </div>

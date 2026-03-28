@@ -60,6 +60,7 @@ interface OllamaModalInternalsProps {
   isOnboarding: boolean;
   maxTokenOverrides: Record<string, number | null>;
   onMaxInputTokensChange: (modelName: string, value: number | null) => void;
+  onClearOverrides: () => void;
 }
 
 function OllamaModalInternals({
@@ -72,6 +73,7 @@ function OllamaModalInternals({
   isOnboarding,
   maxTokenOverrides,
   onMaxInputTokensChange,
+  onClearOverrides,
 }: OllamaModalInternalsProps) {
   const isInitialMount = useRef(true);
 
@@ -109,6 +111,7 @@ function OllamaModalInternals({
     }
 
     if (formikProps.values.api_base) {
+      onClearOverrides();
       const controller = new AbortController();
       debouncedFetchModels(formikProps.values.api_base, controller.signal);
       return () => {
@@ -116,6 +119,7 @@ function OllamaModalInternals({
         controller.abort();
       };
     } else {
+      onClearOverrides();
       setFetchedModels([]);
     }
   }, [
@@ -123,6 +127,7 @@ function OllamaModalInternals({
     debouncedFetchModels,
     setFetchedModels,
     existingLlmProvider,
+    onClearOverrides,
   ]);
 
   const baseModels =
@@ -146,7 +151,7 @@ function OllamaModalInternals({
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
       isFormValid={formikProps.isValid}
-      isDirty={formikProps.dirty || Object.keys(maxTokenOverrides).length > 0}
+      isDirty={formikProps.dirty || Object.values(maxTokenOverrides).some(v => v !== null && v !== undefined)}
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
@@ -245,6 +250,10 @@ export default function OllamaModal({
     },
     []
   );
+
+  const handleClearOverrides = useCallback(() => {
+    setMaxTokenOverrides({});
+  }, []);
 
   const applyMaxTokenOverrides = useCallback(
     (configs: ModelConfiguration[]): ModelConfiguration[] =>
@@ -365,6 +374,7 @@ export default function OllamaModal({
           isOnboarding={isOnboarding}
           maxTokenOverrides={maxTokenOverrides}
           onMaxInputTokensChange={handleMaxInputTokensChange}
+          onClearOverrides={handleClearOverrides}
         />
       )}
     </Formik>
