@@ -161,7 +161,7 @@ def test_integrity_error_race_condition_handled() -> None:
     db_session = _setup_db_session(group_result=group, membership_result=None)
     savepoint = MagicMock()
     db_session.begin_nested.return_value = savepoint
-    db_session.flush.side_effect = IntegrityError(None, None, None)
+    db_session.flush.side_effect = IntegrityError(None, None, Exception("duplicate"))
     user = _mock_user()
 
     # Should not raise

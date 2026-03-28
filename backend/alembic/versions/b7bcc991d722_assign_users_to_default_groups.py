@@ -34,25 +34,29 @@ def upgrade() -> None:
     ).fetchone()
 
     # Users with role=admin → Admin group
+    # Exclude inactive placeholder/anonymous users that are not real users
     if admin_row is not None:
         conn.execute(
             sa.text(
                 "INSERT INTO user__user_group (user_group_id, user_id) "
                 'SELECT :gid, id FROM "user" '
-                "WHERE role = 'ADMIN' "
+                "WHERE role = 'ADMIN' AND is_active = true "
                 "ON CONFLICT (user_group_id, user_id) DO NOTHING"
             ),
             {"gid": admin_row[0]},
         )
 
     # STANDARD users (non-admin) and SERVICE_ACCOUNT users (role=basic) → Basic group
+    # Exclude inactive placeholder/anonymous users that are not real users
     if basic_row is not None:
         conn.execute(
             sa.text(
                 "INSERT INTO user__user_group (user_group_id, user_id) "
                 'SELECT :gid, id FROM "user" '
-                "WHERE (account_type = 'STANDARD' AND role != 'ADMIN') "
-                "OR (account_type = 'SERVICE_ACCOUNT' AND role = 'BASIC') "
+                "WHERE is_active = true AND ("
+                "(account_type = 'STANDARD' AND role != 'ADMIN') "
+                "OR (account_type = 'SERVICE_ACCOUNT' AND role = 'BASIC')"
+                ") "
                 "ON CONFLICT (user_group_id, user_id) DO NOTHING"
             ),
             {"gid": basic_row[0]},

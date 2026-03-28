@@ -632,6 +632,16 @@ export class OnyxApiClient {
     this.log(`Deleted user group: ${groupId}`);
   }
 
+  /**
+   * Lists all user groups.
+   */
+  async getUserGroups(): Promise<
+    Array<{ id: number; name: string; is_default: boolean }>
+  > {
+    const response = await this.get("/manage/admin/user-group");
+    return response.json();
+  }
+
   async setUserRole(
     email: string,
     role: "admin" | "curator" | "global_curator" | "basic",
