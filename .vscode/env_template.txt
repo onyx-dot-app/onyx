@@ -63,3 +63,9 @@ LANGSMITH_PROJECT=<REPLACE_THIS>
 # OAUTH_CONFLUENCE_CLOUD_CLIENT_ID=<REPLACE_THIS>
 # OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET=<REPLACE_THIS>
 # NEXT_PUBLIC_TEST_ENV=True
+
+# OpenSearch Configuration (for restart_containers.sh)
+# OpenSearch is disabled by default to save resources during development.
+# Uncomment START_OPENSEARCH=true if you need OpenSearch for local testing.
+# START_OPENSEARCH=true
+# OPENSEARCH_ADMIN_PASSWORD=StrongPassword123!

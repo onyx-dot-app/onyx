@@ -9,21 +9,33 @@ PROJECT_NAME="onyx-stack"
 stop_and_remove_containers() {
   docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
   docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
-  docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled stop opensearch 2>/dev/null || true
-  docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled rm -f opensearch 2>/dev/null || true
+  # Only stop OpenSearch if it was started
+  if [[ "${START_OPENSEARCH:-false}" == "true" ]]; then
+    docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled stop opensearch 2>/dev/null || true
+    docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled rm -f opensearch 2>/dev/null || true
+  fi
 }
+
+CLEANUP_ON_EXIT=true
 
 cleanup() {
-  echo "Error occurred. Cleaning up..."
-  stop_and_remove_containers
+  if [[ "$CLEANUP_ON_EXIT" == "true" ]]; then
+    echo "Error occurred. Cleaning up..."
+    stop_and_remove_containers
+  fi
 }
 
-# Trap errors and output a message, then cleanup
+# Trap errors and exits to ensure cleanup runs on failure
 trap 'echo "Error occurred on line $LINENO. Exiting script." >&2; cleanup' ERR
+trap cleanup EXIT
 
 # Usage of the script with optional volume arguments
 # ./restart_containers.sh [vespa_volume] [postgres_volume] [redis_volume]
 # [minio_volume] [--keep-opensearch-data]
+#
+# Environment variables:
+#   START_OPENSEARCH=true        Enable OpenSearch (default: false)
+#   OPENSEARCH_ADMIN_PASSWORD    OpenSearch admin password (default: StrongPassword123!)
 
 KEEP_OPENSEARCH_DATA=false
 POSITIONAL_ARGS=()
@@ -53,7 +65,7 @@ if [[ -n "$POSTGRES_VOLUME" ]]; then
         --health-timeout 3s \
         --health-retries 5 \
         --health-start-period 10s \
-        -v $POSTGRES_VOLUME:/var/lib/postgresql/data postgres -c max_connections=250
+        -v "$POSTGRES_VOLUME:/var/lib/postgresql/data" postgres -c max_connections=250
 else
     docker run -p 5432:5432 --name onyx_postgres -e POSTGRES_PASSWORD=password -d \
         --health-cmd "pg_isready -U postgres" \
@@ -89,7 +101,7 @@ if [[ -n "$VESPA_VOLUME" ]]; then
         --health-timeout 5s \
         --health-retries 5 \
         --health-start-period 30s \
-        -v $VESPA_VOLUME:/opt/vespa/var vespaengine/vespa:8
+        -v "$VESPA_VOLUME:/opt/vespa/var" vespaengine/vespa:8
 else
     docker run --detach --name onyx_vespa --hostname vespa-container \
         --publish 8081:8081 --publish 19071:19071 \
@@ -127,81 +139,83 @@ if [[ -z "${OPENSEARCH_ADMIN_PASSWORD:-}" && -f "$VSCODE_ENV" ]]; then
     set +a
 fi
 
-# Start the OpenSearch container using the same service from docker-compose that
-# our users use, setting OPENSEARCH_INITIAL_ADMIN_PASSWORD from the env's
-# OPENSEARCH_ADMIN_PASSWORD if it exists, else defaulting to StrongPassword123!.
-# Pass --keep-opensearch-data to preserve the opensearch-data volume across
-# restarts, else the volume is deleted so the container starts fresh.
-if [[ "$KEEP_OPENSEARCH_DATA" == "false" ]]; then
-    echo "Deleting opensearch-data volume..."
-    docker volume rm "${PROJECT_NAME}_opensearch-data" 2>/dev/null || true
+# Start the OpenSearch container only if explicitly enabled
+# Set START_OPENSEARCH=true to enable OpenSearch (disabled by default)
+if [[ "${START_OPENSEARCH:-false}" == "true" ]]; then
+    echo "OpenSearch enabled - starting container..."
+    # Delete opensearch-data volume unless --keep-opensearch-data is specified
+    if [[ "$KEEP_OPENSEARCH_DATA" == "false" ]]; then
+        echo "Deleting opensearch-data volume..."
+        docker volume rm "${PROJECT_NAME}_opensearch-data" 2>/dev/null || true
+    fi
+    echo "Starting OpenSearch container..."
+    docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled up --force-recreate -d opensearch
+else
+    echo "OpenSearch disabled (set START_OPENSEARCH=true to enable)"
 fi
-echo "Starting OpenSearch container..."
-docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled up --force-recreate -d opensearch
 
-# Wait for OpenSearch to be ready
-echo "Waiting for OpenSearch to be ready (this may take up to 90 seconds)..."
-MAX_WAIT=90
-ELAPSED=0
+# Wait for OpenSearch to be ready (only if it was started)
+if [[ "${START_OPENSEARCH:-false}" == "true" ]]; then
+    echo "Waiting for OpenSearch to be ready (this may take up to 90 seconds)..."
+    MAX_WAIT=90
+    ELAPSED=0
 
-# Dynamically find the OpenSearch container name (with retry loop)
-echo "Looking for OpenSearch container..."
-OPENSEARCH_CONTAINER=""
-FIND_WAIT=0
-while [[ -z "$OPENSEARCH_CONTAINER" && $FIND_WAIT -lt 10 ]]; do
-    # Check for container in any state (running or not)
-    OPENSEARCH_CONTAINER=$(docker ps -a --filter "name=opensearch" --format "{{.Names}}" | head -n 1)
-    if [[ -z "$OPENSEARCH_CONTAINER" ]]; then
-        echo "  Container not found yet, retrying... (${FIND_WAIT}s elapsed)"
-        sleep 1
-        FIND_WAIT=$((FIND_WAIT + 1))
-    else
-        # Found the container, now check if it's running
-        CONTAINER_STATE=$(docker inspect --format='{{.State.Status}}' "$OPENSEARCH_CONTAINER" 2>/dev/null)
-        if [[ "$CONTAINER_STATE" != "running" ]]; then
-            echo "WARNING: OpenSearch container found but not running (state: $CONTAINER_STATE)"
-            if [[ "$CONTAINER_STATE" == "exited" ]]; then
-                echo "Container logs:"
-                docker logs "$OPENSEARCH_CONTAINER" --tail 50
-                exit 1
-            fi
-            # If it's in a transitional state (creating, restarting), keep waiting
-            OPENSEARCH_CONTAINER=""
+    # Dynamically find the OpenSearch container name (with retry loop)
+    echo "Looking for OpenSearch container..."
+    OPENSEARCH_CONTAINER=""
+    FIND_WAIT=0
+    while [[ -z "$OPENSEARCH_CONTAINER" && $FIND_WAIT -lt 10 ]]; do
+        # Use docker compose ps to get the exact container name for this project's opensearch service
+        OPENSEARCH_CONTAINER=$(docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled ps -q opensearch 2>/dev/null | xargs -r docker inspect --format='{{.Name}}' 2>/dev/null | sed 's/^\///')
+        if [[ -z "$OPENSEARCH_CONTAINER" ]]; then
+            echo "  Container not found yet, retrying... (${FIND_WAIT}s elapsed)"
             sleep 1
             FIND_WAIT=$((FIND_WAIT + 1))
+        else
+            # Found the container, now check if it's running
+            CONTAINER_STATE=$(docker inspect --format='{{.State.Status}}' "$OPENSEARCH_CONTAINER" 2>/dev/null)
+            if [[ "$CONTAINER_STATE" != "running" ]]; then
+                echo "WARNING: OpenSearch container found but not running (state: $CONTAINER_STATE)"
+                if [[ "$CONTAINER_STATE" == "exited" ]]; then
+                    echo "Container logs:"
+                    docker logs "$OPENSEARCH_CONTAINER" --tail 50
+                    exit 1
+                fi
+                # If it's in a transitional state (creating, restarting), keep waiting
+                OPENSEARCH_CONTAINER=""
+                sleep 1
+                FIND_WAIT=$((FIND_WAIT + 1))
+            fi
         fi
-    fi
-done
+    done
 
-if [[ -z "$OPENSEARCH_CONTAINER" ]]; then
-    echo "ERROR: OpenSearch container not found or failed to start after ${FIND_WAIT} seconds"
-    echo "All containers with 'opensearch' in name:"
-    docker ps -a --filter "name=opensearch"
-    echo ""
-    echo "Compose status:"
-    docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled ps
-    exit 1
+    if [[ -z "$OPENSEARCH_CONTAINER" ]]; then
+        echo "ERROR: OpenSearch container not found or failed to start after ${FIND_WAIT} seconds"
+        echo "Compose status for project '$PROJECT_NAME':"
+        docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled ps
+        exit 1
+    fi
+    echo "Found running OpenSearch container: $OPENSEARCH_CONTAINER"
+
+    until docker exec "$OPENSEARCH_CONTAINER" curl -s -k -u "admin:${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}" https://localhost:9200/_cluster/health 2>&1 | grep -qE '"status":"(green|yellow)"'; do
+        if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "ERROR: OpenSearch failed to become ready within ${MAX_WAIT} seconds"
+            echo "Last health check output:"
+            docker exec "$OPENSEARCH_CONTAINER" curl -s -k -u "admin:${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}" https://localhost:9200/_cluster/health 2>&1 || echo "Failed to connect"
+            exit 1
+        fi
+        # Check if container is still running
+        if ! docker ps --filter "name=$OPENSEARCH_CONTAINER" --format "{{.Names}}" | grep -q "$OPENSEARCH_CONTAINER"; then
+            echo "ERROR: OpenSearch container stopped unexpectedly"
+            docker logs "$OPENSEARCH_CONTAINER" --tail 50
+            exit 1
+        fi
+        echo "  OpenSearch is not ready yet, waiting... (${ELAPSED}s elapsed)"
+        sleep 3
+        ELAPSED=$((ELAPSED + 3))
+    done
+    echo "OpenSearch is ready!"
 fi
-echo "Found running OpenSearch container: $OPENSEARCH_CONTAINER"
-
-until docker exec "$OPENSEARCH_CONTAINER" curl -s -k -u admin:${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!} https://localhost:9200/_cluster/health 2>&1 | grep -q '"status":"green"\|"status":"yellow"'; do
-    if [ $ELAPSED -ge $MAX_WAIT ]; then
-        echo "ERROR: OpenSearch failed to become ready within ${MAX_WAIT} seconds"
-        echo "Last health check output:"
-        docker exec "$OPENSEARCH_CONTAINER" curl -s -k -u admin:${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!} https://localhost:9200/_cluster/health 2>&1 || echo "Failed to connect"
-        exit 1
-    fi
-    # Check if container is still running
-    if ! docker ps --filter "name=$OPENSEARCH_CONTAINER" --format "{{.Names}}" | grep -q "$OPENSEARCH_CONTAINER"; then
-        echo "ERROR: OpenSearch container stopped unexpectedly"
-        docker logs "$OPENSEARCH_CONTAINER" --tail 50
-        exit 1
-    fi
-    echo "  OpenSearch is not ready yet, waiting... (${ELAPSED}s elapsed)"
-    sleep 3
-    ELAPSED=$((ELAPSED + 3))
-done
-echo "OpenSearch is ready!"
 
 # Start the Redis container with optional volume
 echo "Starting Redis container..."
@@ -212,7 +226,7 @@ if [[ -n "$REDIS_VOLUME" ]]; then
         --health-timeout 3s \
         --health-retries 3 \
         --health-start-period 10s \
-        -v $REDIS_VOLUME:/data redis
+        -v "$REDIS_VOLUME:/data" redis
 else
     docker run --detach --name onyx_redis --publish 6379:6379 \
         --health-cmd "redis-cli ping || exit 1" \
@@ -248,7 +262,7 @@ if [[ -n "$MINIO_VOLUME" ]]; then
         --health-retries 3 \
         --health-start-period 10s \
         -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-        -v $MINIO_VOLUME:/data minio/minio server /data --console-address ":9001"
+        -v "$MINIO_VOLUME:/data" minio/minio server /data --console-address ":9001"
 else
     docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 \
         --health-cmd "mc ready local || exit 1" \
@@ -313,3 +327,6 @@ alembic upgrade head
 # alembic -n schema_private upgrade head
 
 echo "All containers are healthy and migration completed successfully!"
+
+# Disable cleanup on successful exit
+CLEANUP_ON_EXIT=false
