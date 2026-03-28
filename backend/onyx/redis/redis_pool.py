@@ -158,10 +158,12 @@ class RedisPool:
         if self._pool is None:
             with self._lock:
                 if self._pool is None:
-                    self._pool = RedisPool.create_pool(ssl=REDIS_SSL)
-                    self._replica_pool = RedisPool.create_pool(
+                    pool = RedisPool.create_pool(ssl=REDIS_SSL)
+                    replica_pool = RedisPool.create_pool(
                         host=REDIS_REPLICA_HOST, ssl=REDIS_SSL
                     )
+                    self._replica_pool = replica_pool
+                    self._pool = pool
 
     def get_client(self, tenant_id: str) -> Redis:
         self._ensure_pools()
