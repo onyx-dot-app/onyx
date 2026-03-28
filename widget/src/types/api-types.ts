@@ -49,13 +49,14 @@ export interface MessageDelta {
 
 export interface CitationInfo {
   type: "citation_info";
-  citations: Citation[];
+  citation_number: number;
+  document_id: string;
 }
 
-export interface Citation {
+export interface ResolvedCitation {
+  citation_number: number;
   document_id: string;
-  semantic_identifier: string;
-  title?: string;
+  semantic_identifier?: string;
   link?: string;
 }
 
@@ -156,7 +157,7 @@ export interface Message {
   content: string;
   timestamp: number;
   isStreaming?: boolean;
-  citations?: Citation[];
+  citations?: ResolvedCitation[];
 }
 
 export interface ChatSession {

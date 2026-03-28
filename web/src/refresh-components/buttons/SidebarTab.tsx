@@ -57,7 +57,7 @@ export default function SidebarTab({
   const content = (
     <div className="relative">
       <Interactive.Stateful
-        variant="sidebar"
+        variant={lowlight ? "sidebar-light" : "sidebar-heavy"}
         state={selected ? "selected" : "empty"}
         onClick={onClick}
         type="button"
@@ -90,9 +90,6 @@ export default function SidebarTab({
               title={folded ? "" : children}
               sizePreset="main-ui"
               variant="body"
-              prominence={
-                lowlight ? "muted-2x" : selected ? "default" : "muted"
-              }
               widthVariant="full"
               paddingVariant="fit"
               rightChildren={truncationSpacer}

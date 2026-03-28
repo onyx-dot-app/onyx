@@ -5,7 +5,8 @@ import { toast } from "@/hooks/useToast";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { cn } from "@/lib/utils";
-import { ContentAction } from "@opal/layouts";
+import { markdown } from "@opal/utils";
+import { Content } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
@@ -310,110 +311,109 @@ export default function ConnectedHookCard({
           !hook.is_active && "!bg-background-neutral-02"
         )}
       >
-        <ContentAction
-          sizePreset="main-ui"
-          variant="section"
-          paddingVariant="sm"
-          icon={HookIcon}
-          title={hook.name}
-          titleClassName={!hook.is_active ? "line-through" : undefined}
-          iconClassName="text-text-04"
-          description={`Hook Point: ${spec?.display_name ?? hook.hook_point}`}
-          bottomChildren={
-            spec?.docs_url ? (
+        <div className="w-full flex flex-row">
+          <div className="flex-1 p-2">
+            <Content
+              sizePreset="main-ui"
+              variant="section"
+              icon={HookIcon}
+              title={!hook.is_active ? markdown(`~~${hook.name}~~`) : hook.name}
+              description={`Hook Point: ${
+                spec?.display_name ?? hook.hook_point
+              }`}
+            />
+
+            {spec?.docs_url && (
               <a
                 href={spec.docs_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 w-fit font-secondary-body text-text-03"
+                className="pl-6 flex items-center gap-1"
               >
-                <span className="underline">Documentation</span>
+                <span className="underline font-secondary-body text-text-03">
+                  Documentation
+                </span>
                 <SvgExternalLink size={12} className="shrink-0" />
               </a>
-            ) : undefined
-          }
-          rightChildren={
-            <Section
-              flexDirection="column"
-              alignItems="end"
-              width="fit"
-              height="fit"
-              gap={0}
-            >
-              <div className="flex items-center gap-1 p-2">
+            )}
+          </div>
+
+          <Section
+            flexDirection="column"
+            alignItems="end"
+            width="fit"
+            height="fit"
+            gap={0}
+          >
+            <div className="flex items-center gap-1 p-2">
+              {hook.is_active ? (
+                <>
+                  <Text mainUiAction text03>
+                    Connected
+                  </Text>
+                  <SvgCheckCircle
+                    size={16}
+                    className="text-status-success-05"
+                  />
+                </>
+              ) : (
+                <div
+                  className={cn(
+                    "flex items-center gap-1",
+                    isBusy ? "opacity-50 pointer-events-none" : "cursor-pointer"
+                  )}
+                  onClick={handleActivate}
+                >
+                  <Text mainUiAction text03>
+                    Reconnect
+                  </Text>
+                  <SvgPlug size={16} className="text-text-03 shrink-0" />
+                </div>
+              )}
+            </div>
+            <Disabled disabled={isBusy}>
+              <div className="flex items-center gap-0.5 pl-1 pr-1 pb-1">
                 {hook.is_active ? (
                   <>
-                    <Text mainUiAction text03>
-                      Connected
-                    </Text>
-                    <SvgCheckCircle
-                      size={16}
-                      className="text-status-success-05"
-                    />
-                  </>
-                ) : (
-                  <div
-                    className={cn(
-                      "flex items-center gap-1",
-                      isBusy
-                        ? "opacity-50 pointer-events-none"
-                        : "cursor-pointer"
-                    )}
-                    onClick={handleActivate}
-                  >
-                    <Text mainUiAction text03>
-                      Reconnect
-                    </Text>
-                    <SvgPlug size={16} className="text-text-03 shrink-0" />
-                  </div>
-                )}
-              </div>
-              <Disabled disabled={isBusy}>
-                {/* Plain div instead of Section: Section applies style={{ padding }} inline which
-                    overrides Tailwind padding classes, making per-side padding (pl/pr/pb) ineffective. */}
-                <div className="flex items-center gap-0.5 pl-1 pr-1 pb-1">
-                  {hook.is_active ? (
-                    <>
-                      <Button
-                        prominence="tertiary"
-                        size="sm"
-                        icon={SvgUnplug}
-                        onClick={() => setDisconnectConfirmOpen(true)}
-                        tooltip="Disconnect Hook"
-                        aria-label="Deactivate hook"
-                      />
-                      <Button
-                        prominence="tertiary"
-                        size="sm"
-                        icon={SvgRefreshCw}
-                        onClick={handleValidate}
-                        tooltip="Test Connection"
-                        aria-label="Re-validate hook"
-                      />
-                    </>
-                  ) : (
                     <Button
                       prominence="tertiary"
                       size="sm"
-                      icon={SvgTrash}
-                      onClick={() => setDeleteConfirmOpen(true)}
-                      tooltip="Delete"
-                      aria-label="Delete hook"
+                      icon={SvgUnplug}
+                      onClick={() => setDisconnectConfirmOpen(true)}
+                      tooltip="Disconnect Hook"
+                      aria-label="Deactivate hook"
                     />
-                  )}
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
+                      icon={SvgRefreshCw}
+                      onClick={handleValidate}
+                      tooltip="Test Connection"
+                      aria-label="Re-validate hook"
+                    />
+                  </>
+                ) : (
                   <Button
                     prominence="tertiary"
                     size="sm"
-                    icon={SvgSettings}
-                    onClick={onEdit}
-                    tooltip="Manage"
-                    aria-label="Configure hook"
+                    icon={SvgTrash}
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    tooltip="Delete"
+                    aria-label="Delete hook"
                   />
-                </div>
-              </Disabled>
-            </Section>
-          }
-        />
+                )}
+                <Button
+                  prominence="tertiary"
+                  size="sm"
+                  icon={SvgSettings}
+                  onClick={onEdit}
+                  tooltip="Manage"
+                  aria-label="Configure hook"
+                />
+              </div>
+            </Disabled>
+          </Section>
+        </div>
       </Card>
     </>
   );

@@ -13,7 +13,9 @@ const SAFE_PROTOCOL = /^https?:|^mailto:|^tel:/i;
 const ALLOWED_ELEMENTS = ["p", "br", "a", "strong", "em", "code", "del"];
 
 const INLINE_COMPONENTS = {
-  p: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  p: ({ children }: { children?: ReactNode }) => (
+    <span className="block">{children}</span>
+  ),
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {
     if (!href || !SAFE_PROTOCOL.test(href)) {
       return <>{children}</>;

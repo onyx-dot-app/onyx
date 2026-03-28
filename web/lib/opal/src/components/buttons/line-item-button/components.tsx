@@ -16,7 +16,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 type ContentPassthroughProps = DistributiveOmit<
   ContentActionProps,
-  "paddingVariant" | "widthVariant" | "ref" | "withInteractive"
+  "paddingVariant" | "widthVariant" | "ref"
 >;
 
 type LineItemButtonOwnProps = Pick<
@@ -92,7 +92,6 @@ function LineItemButton({
       >
         <ContentAction
           {...(contentActionProps as ContentActionProps)}
-          withInteractive
           paddingVariant="fit"
         />
       </Interactive.Container>
