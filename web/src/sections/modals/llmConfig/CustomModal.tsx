@@ -19,6 +19,7 @@ import {
   ModelsAccessField,
   LLMConfigurationModalWrapper,
   FieldWrapper,
+  SingleDefaultModelField,
 } from "@/sections/modals/llmConfig/shared";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -191,6 +192,12 @@ function customConfigProcessing(items: KeyValue[]) {
   return customConfig;
 }
 
+function getFirstConfiguredModelName(
+  models: CustomModelConfiguration[] | undefined
+): string {
+  return models?.find((model) => model.name.trim() !== "")?.name ?? "";
+}
+
 export default function CustomModal({
   variant = "llm-configuration",
   existingLlmProvider,
@@ -232,6 +239,16 @@ export default function CustomModal({
         supports_image_input: false,
       },
     ],
+    default_model_name:
+      existingLlmProvider?.model_configurations?.[0]?.name ??
+      getFirstConfiguredModelName(
+        existingLlmProvider?.model_configurations.map((mc) => ({
+          name: mc.name,
+          display_name: mc.display_name ?? "",
+          max_input_tokens: mc.max_input_tokens ?? null,
+          supports_image_input: mc.supports_image_input,
+        }))
+      ),
     custom_config_list: existingLlmProvider?.custom_config
       ? Object.entries(existingLlmProvider.custom_config).map(
           ([key, value]) => ({ key, value: String(value) })
@@ -252,11 +269,13 @@ export default function CustomModal({
   const validationSchema = isOnboarding
     ? Yup.object().shape({
         provider: Yup.string().required("Provider Name is required"),
+        default_model_name: Yup.string().required("Default model is required"),
         model_configurations: Yup.array(modelConfigurationSchema),
       })
     : Yup.object().shape({
         name: Yup.string().required("Display Name is required"),
         provider: Yup.string().required("Provider Name is required"),
+        default_model_name: Yup.string().required("Default model is required"),
         model_configurations: Yup.array(modelConfigurationSchema),
       });
 
@@ -285,11 +304,21 @@ export default function CustomModal({
           return;
         }
 
+        const resolvedDefaultModelName =
+          values.default_model_name || modelConfigurations[0]?.name || "";
+
+        if (!resolvedDefaultModelName) {
+          toast.error("A default model is required");
+          setSubmitting(false);
+          return;
+        }
+
         if (isOnboarding && onboardingState && onboardingActions) {
           await submitOnboardingProvider({
             providerName: values.provider,
             payload: {
               ...values,
+              default_model_name: resolvedDefaultModelName,
               model_configurations: modelConfigurations,
               custom_config: customConfigProcessing(values.custom_config_list),
             },
@@ -308,6 +337,7 @@ export default function CustomModal({
             providerName: values.provider,
             values: {
               ...values,
+              default_model_name: resolvedDefaultModelName,
               selected_model_names: selectedModelNames,
               custom_config: customConfigProcessing(values.custom_config_list),
             },
@@ -397,6 +427,12 @@ export default function CustomModal({
               <ModelConfigurationList formikProps={formikProps as any} />
             </Card>
           </Section>
+
+          <FieldSeparator />
+
+          <FieldWrapper>
+            <SingleDefaultModelField placeholder="E.g. gemini-3-flash" />
+          </FieldWrapper>
 
           {!isOnboarding && (
             <>
