@@ -14,6 +14,7 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
+  APIKeyField,
   DisplayNameField,
   FieldSeparator,
   ModelsAccessField,
@@ -209,14 +210,19 @@ export default function CustomModal({
 
   const onClose = () => onOpenChange?.(false);
 
+  const existingModelConfigurations =
+    existingLlmProvider?.model_configurations ?? [];
+
   const initialValues = {
     ...buildDefaultInitialValues(
       existingLlmProvider,
-      undefined,
+      existingModelConfigurations,
       defaultModelName
     ),
     ...(isOnboarding ? buildOnboardingInitialValues() : {}),
     provider: existingLlmProvider?.provider ?? "",
+    api_key: existingLlmProvider?.api_key ?? "",
+    api_base: existingLlmProvider?.api_base ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map(
       (mc) => ({
         name: mc.name,
@@ -304,10 +310,15 @@ export default function CustomModal({
             (config) => config.name
           );
 
+          // Ensure default_model_name is set to the first model if not already
+          const defaultModelName =
+            values.default_model_name || selectedModelNames[0] || "";
+
           await submitLLMProvider({
             providerName: values.provider,
             values: {
               ...values,
+              default_model_name: defaultModelName,
               selected_model_names: selectedModelNames,
               custom_config: customConfigProcessing(values.custom_config_list),
             },
@@ -357,6 +368,26 @@ export default function CustomModal({
               </FieldWrapper>
             </Section>
           )}
+
+          <FieldSeparator />
+
+          <Section gap={0}>
+            <APIKeyField />
+
+            <FieldWrapper>
+              <InputLayouts.Vertical
+                name="api_base"
+                title="API Base URL"
+                subDescription="Custom API endpoint URL for OpenAI-compatible providers (e.g. LiteLLM, vLLM, Ollama)."
+                suffix="optional"
+              >
+                <InputTypeInField
+                  name="api_base"
+                  placeholder="https://your-api-endpoint.example.com/v1"
+                />
+              </InputLayouts.Vertical>
+            </FieldWrapper>
+          </Section>
 
           <FieldSeparator />
 
