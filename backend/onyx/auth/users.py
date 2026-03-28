@@ -767,7 +767,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 # Assign upgraded user to the Basic default group.
                 # Let exceptions propagate — user without a group has no permissions.
                 with get_session_with_current_tenant() as sync_db:
-                    sync_user = sync_db.query(User).filter(User.id == user.id).first()
+                    sync_user = sync_db.query(User).filter(User.id == user.id).first()  # type: ignore[arg-type]
                     if sync_user:
                         assign_user_to_default_groups__no_commit(sync_db, sync_user)
                         sync_db.commit()
