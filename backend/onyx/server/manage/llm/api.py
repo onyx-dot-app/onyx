@@ -471,8 +471,14 @@ def put_llm_provider(
             if existing_provider.api_key
             else None
         )
+    # When custom_config_changed is False and the request body includes a non-None
+    # custom_config, we still honour the value the caller sent (after masked-value
+    # restoration that already happened above).  We only fall back to the stored
+    # config when the request omitted / nulled custom_config, so that existing
+    # credentials are not accidentally wiped out.
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
-        llm_provider_upsert_request.custom_config = existing_provider.custom_config
+        if llm_provider_upsert_request.custom_config is None:
+            llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
     # Check if we're transitioning to Auto mode
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
