@@ -106,6 +106,7 @@ class GranolaConnector(PollConnector, LoadConnector):
         created_after: str | None = None,
         created_before: str | None = None,
         updated_after: str | None = None,
+        updated_before: str | None = None,
     ) -> Iterator[list[dict[str, Any]]]:
         """Yield pages of notes from Granola.
 
@@ -119,6 +120,8 @@ class GranolaConnector(PollConnector, LoadConnector):
             params["created_before"] = created_before
         if updated_after:
             params["updated_after"] = updated_after
+        if updated_before:
+            params["updated_before"] = updated_before
 
         cursor: str | None = None
         while True:
@@ -294,6 +297,7 @@ class GranolaConnector(PollConnector, LoadConnector):
         created_after: str | None = None,
         created_before: str | None = None,
         updated_after: str | None = None,
+        updated_before: str | None = None,
     ) -> GenerateDocumentsOutput:
         doc_batch: list[Document | HierarchyNode] = []
 
@@ -301,17 +305,21 @@ class GranolaConnector(PollConnector, LoadConnector):
             created_after=created_after,
             created_before=created_before,
             updated_after=updated_after,
+            updated_before=updated_before,
         ):
             for note_summary in notes_page:
                 note_id = note_summary.get("id")
                 if not isinstance(note_id, str):
                     continue
 
+                # Surface per-note fetch failures rather than silently dropping
+                # notes, so upstream callers can decide how to handle errors
+                # and avoid advancing checkpoints while data is missing.
                 try:
                     note = self._get_note_details(note_id)
                 except Exception as e:  # pragma: no cover - defensive logging
                     logger.error("Failed to fetch Granola note %s: %s", note_id, e)
-                    continue
+                    raise
 
                 doc = self._create_document_from_note(note_summary, note)
                 if not doc:
@@ -338,7 +346,7 @@ class GranolaConnector(PollConnector, LoadConnector):
 
         We fetch the union of:
           - notes created in the window [start, end]
-          - notes updated after ``start`` (regardless of creation time)
+                    - notes updated in the window [start, end]
 
         This avoids relying on the Granola API treating created/updated
         filters with OR semantics and ensures we don't miss notes created
@@ -375,10 +383,11 @@ class GranolaConnector(PollConnector, LoadConnector):
                 )
             )
 
-            # Second: notes updated after the window start
+            # Second: notes updated within the window
             yield from _stream(
                 self._generate_documents(
                     updated_after=start_iso,
+                    updated_before=end_iso,
                 )
             )
 
