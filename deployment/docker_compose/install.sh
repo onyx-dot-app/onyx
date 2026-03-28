@@ -177,7 +177,7 @@ ensure_file() {
 
 # --- Interactive prompt helpers ---
 is_interactive() {
-    [[ "$NO_PROMPT" = false ]] && [[ -t 0 ]]
+    [[ "$NO_PROMPT" = false ]] && [[ -t 0 ]] || true
 }
 
 prompt_or_default() {
