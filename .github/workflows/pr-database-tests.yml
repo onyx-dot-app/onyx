@@ -22,6 +22,7 @@ jobs:
       - runs-on
       - runner=2cpu-linux-arm64
       - "run-id=${{ github.run_id }}-database-tests"
+    environment: ci-protected
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2

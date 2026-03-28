@@ -20,6 +20,7 @@ jobs:
   backend-check:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
+    environment: ci-protected
     timeout-minutes: 45
 
 

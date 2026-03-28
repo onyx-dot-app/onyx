@@ -18,6 +18,7 @@ jobs:
     # See https://runs-on.com/runners/linux/
     # use a lower powered instance since this just does i/o to docker hub
     runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-tag"]
+    environment: ci-protected
     timeout-minutes: 45
     steps:
       - name: Set up Docker Buildx
