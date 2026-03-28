@@ -364,7 +364,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/fireflies`,
   },
   granola: {
-    icon: FirefliesIcon,
+    icon: SvgGlobe,
     displayName: "Granola",
     category: SourceCategory.Sales,
     // Placeholder docs path; can be updated when official docs exist

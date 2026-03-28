@@ -15,7 +15,6 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -200,7 +199,7 @@ class GranolaConnector(PollConnector, LoadConnector):
                 )
             )
 
-        sections: list[TextSection | ImageSection] = []
+        sections: list[TextSection] = []
 
         # First section: AI-generated summary
         summary_markdown = note.get("summary_markdown")
@@ -275,7 +274,7 @@ class GranolaConnector(PollConnector, LoadConnector):
 
         return Document(
             id=doc_id,
-            sections=cast(list[TextSection | ImageSection], sections),
+            sections=cast(list[TextSection], sections),
             source=DocumentSource.GRANOLA,
             semantic_identifier=title,
             doc_metadata={"hierarchy": hierarchy},
