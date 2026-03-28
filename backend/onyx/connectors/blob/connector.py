@@ -73,6 +73,10 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.bucket_region: Optional[str] = None
         self.european_residency: bool = european_residency
         self.endpoint_url: str = endpoint_url.strip() if endpoint_url else ""
+        if self.endpoint_url and not self.endpoint_url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"Invalid S3 endpoint URL: must start with http:// or https://"
+            )
         self.s3_skip_ssl_verification: bool = s3_skip_ssl_verification
 
     def set_allow_images(self, allow_images: bool) -> None:
@@ -157,6 +161,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 )
             if self.s3_skip_ssl_verification:
                 extra_client_kwargs["verify"] = False
+                logger.warning(
+                    "SSL verification is disabled for S3 endpoint '%s'. "
+                    "This is not recommended for production use.",
+                    self.endpoint_url,
+                )
 
             # For S3, we can use either access keys or IAM roles.
             authentication_method = credentials.get(
