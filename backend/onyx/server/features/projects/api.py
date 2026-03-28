@@ -27,6 +27,7 @@ from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
 from onyx.db.persona import get_personas_by_ids
+from onyx.error_handling.exceptions import OnyxError
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import upload_files_to_user_files_with_indexing
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
@@ -159,6 +160,10 @@ def upload_user_files(
 
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
+    except OnyxError:
+        # Re-raise OnyxError (e.g. permission errors) so the global
+        # handler returns the correct status code instead of a generic 500.
+        raise
     except Exception as e:
         logger.exception(f"Error uploading files - {type(e).__name__}: {str(e)}")
         raise HTTPException(

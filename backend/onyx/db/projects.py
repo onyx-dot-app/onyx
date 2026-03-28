@@ -56,6 +56,8 @@ def create_user_files(
 ) -> CategorizedFilesResult:
     # Validate persona access before creating any file associations
     if persona_id is not None:
+        from fastapi import HTTPException
+
         from onyx.db.persona import fetch_persona_by_id_for_user
 
         try:
@@ -65,7 +67,7 @@ def create_user_files(
                 user=user,
                 get_editable=False,
             )
-        except Exception:
+        except HTTPException:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "User does not have access to the specified persona",
@@ -140,6 +142,8 @@ def upload_files_to_user_files_with_indexing(
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
     if persona_id is not None and user is not None:
+        from fastapi import HTTPException
+
         from onyx.db.persona import fetch_persona_by_id_for_user
 
         try:
@@ -149,7 +153,7 @@ def upload_files_to_user_files_with_indexing(
                 user=user,
                 get_editable=False,
             )
-        except Exception:
+        except HTTPException:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "User does not have access to the specified persona",
