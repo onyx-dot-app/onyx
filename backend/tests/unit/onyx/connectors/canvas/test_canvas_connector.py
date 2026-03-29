@@ -20,6 +20,7 @@ from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import SlimDocument
 from onyx.error_handling.exceptions import OnyxError
 
 # ---------------------------------------------------------------------------
@@ -1464,3 +1465,299 @@ class TestLoadFromCheckpointWithPermSync:
         assert items[0].external_access == expected_access
         assert new_cp.stage == "assignments"
         mock_perms.assert_called_once()
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_per_document_conversion_failure_yields_connector_failure(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Bad data for one page yields ConnectorFailure, doesn't stop processing."""
+        bad_page = {"page_id": 10, "url": "test", "title": "Test", "body": None,
+                     "created_at": "2025-06-15T12:00:00Z", "updated_at": "bad-date"}
+        mock_requests.get.side_effect = _make_url_dispatcher(pages=[bad_page])
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+
+        items, new_cp = _run_checkpoint(connector, cp)
+
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
+        assert new_cp.stage == "assignments"
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_all_courses_done_sets_has_more_false(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.side_effect = _make_url_dispatcher()
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=1
+        )
+
+        items, new_cp = _run_checkpoint(connector, cp)
+
+        assert items == []
+        assert new_cp.has_more is False
+
+    def test_invalid_stage_raises_value_error(self) -> None:
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+        cp.stage = "invalid"  # type: ignore[assignment]
+
+        with pytest.raises(ValueError, match="Invalid checkpoint stage"):
+            _run_checkpoint(connector, cp)
+
+
+# ---------------------------------------------------------------------------
+# retrieve_all_slim_docs_perm_sync tests
+# ---------------------------------------------------------------------------
+
+
+class TestRetrieveAllSlimDocsPermSync:
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_yields_slim_documents_with_ids(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        mock_perms.return_value = ExternalAccess(
+            external_user_emails={"prof@school.edu"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(1)],
+            pages=[_mock_page(10)],
+            assignments=[_mock_assignment(20)],
+            announcements=[_mock_announcement(30)],
+        )
+        connector = _build_connector()
+
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        all_docs = [doc for batch in batches for doc in batch]
+        result_ids = {doc.id for doc in all_docs if isinstance(doc, SlimDocument)}
+
+        expected_ids = {"canvas-page-1-10", "canvas-assignment-1-20", "canvas-announcement-1-30"}
+
+        assert result_ids == expected_ids
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_slim_docs_have_external_access(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        expected_access = ExternalAccess(
+            external_user_emails={"prof@school.edu", "ta@school.edu"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        mock_perms.return_value = expected_access
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(1)],
+            pages=[_mock_page(10)],
+            assignments=[],
+            announcements=[],
+        )
+        connector = _build_connector()
+
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        all_docs = [doc for batch in batches for doc in batch]
+
+        assert len(all_docs) == 1
+        assert isinstance(all_docs[0], SlimDocument)
+        assert all_docs[0].external_access == expected_access
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_batching(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        mock_perms.return_value = ExternalAccess(
+            external_user_emails={"prof@school.edu"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(1)],
+            pages=[_mock_page(10), _mock_page(11, "Page 2"), _mock_page(12, "Page 3")],
+            assignments=[],
+            announcements=[],
+        )
+        connector = _build_connector()
+        connector.batch_size = 2
+
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
+
+        expected_batch_count = 2
+
+        assert len(batches) == expected_batch_count
+        assert len(batches[0]) == 2
+        assert len(batches[1]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Permission cache tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetCoursePermissions:
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    def test_permissions_cached(self, mock_perms: MagicMock) -> None:
+        mock_perms.return_value = ExternalAccess(
+            external_user_emails={"prof@school.edu"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        connector = _build_connector()
+
+        result1 = connector._get_course_permissions(1)
+        result2 = connector._get_course_permissions(1)
+
+        assert result1 == result2
+        mock_perms.assert_called_once()
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    def test_returns_none_when_ce(self, mock_perms: MagicMock) -> None:
+        """When not EE, get_course_permissions returns None."""
+        mock_perms.return_value = None
+        connector = _build_connector()
+
+        result = connector._get_course_permissions(1)
+
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# EE access — get_course_permissions (enrollment API)
+# ---------------------------------------------------------------------------
+
+
+def _mock_enrollment(
+    login_id: str = "student@school.edu",
+    email: str | None = None,
+    enrollment_type: str = "StudentEnrollment",
+) -> dict[str, Any]:
+    """Create a mock Canvas enrollment API response entry."""
+    user: dict[str, Any] = {"login_id": login_id}
+    if email is not None:
+        user["email"] = email
+    return {
+        "type": enrollment_type,
+        "user": user,
+    }
+
+
+@pytest.mark.usefixtures("enable_ee")
+class TestEEGetCoursePermissions:
+    def test_extracts_emails_from_login_id(self) -> None:
+        """Emails are extracted from user.login_id."""
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        client = MagicMock(spec=CanvasApiClient)
+        client.get.return_value = (
+            [
+                _mock_enrollment("prof@school.edu", enrollment_type="TeacherEnrollment"),
+                _mock_enrollment("student@school.edu", enrollment_type="StudentEnrollment"),
+            ],
+            None,
+        )
+
+        result = get_course_permissions(client, course_id=1)
+
+        expected_emails = {"prof@school.edu", "student@school.edu"}
+
+        assert result.external_user_emails == expected_emails
+        assert result.is_public is False
+        assert result.external_user_group_ids == set()
+
+    def test_falls_back_to_email_field(self) -> None:
+        """If login_id is missing, falls back to user.email."""
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        client = MagicMock(spec=CanvasApiClient)
+        client.get.return_value = (
+            [{"type": "StudentEnrollment", "user": {"email": "fallback@school.edu"}}],
+            None,
+        )
+
+        result = get_course_permissions(client, course_id=1)
+
+        expected_emails = {"fallback@school.edu"}
+
+        assert result.external_user_emails == expected_emails
+
+    def test_skips_users_without_email(self) -> None:
+        """Users with no login_id or email are skipped."""
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        client = MagicMock(spec=CanvasApiClient)
+        client.get.return_value = (
+            [
+                _mock_enrollment("valid@school.edu"),
+                {"type": "StudentEnrollment", "user": {}},
+            ],
+            None,
+        )
+
+        result = get_course_permissions(client, course_id=1)
+
+        expected_emails = {"valid@school.edu"}
+
+        assert result.external_user_emails == expected_emails
+
+    def test_deduplicates_emails(self) -> None:
+        """Same email appearing twice is deduplicated."""
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        client = MagicMock(spec=CanvasApiClient)
+        client.get.return_value = (
+            [
+                _mock_enrollment("same@school.edu"),
+                _mock_enrollment("same@school.edu", enrollment_type="TaEnrollment"),
+            ],
+            None,
+        )
+
+        result = get_course_permissions(client, course_id=1)
+
+        expected_emails = {"same@school.edu"}
+
+        assert result.external_user_emails == expected_emails
+
+    def test_paginates_via_next_url(self) -> None:
+        """Follows pagination links to collect all enrollments."""
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        client = MagicMock(spec=CanvasApiClient)
+        client.get.side_effect = [
+            ([_mock_enrollment("page1@school.edu")], "https://canvas.example.com/api/v1/next"),
+            ([_mock_enrollment("page2@school.edu")], None),
+        ]
+
+        result = get_course_permissions(client, course_id=1)
+
+        expected_emails = {"page1@school.edu", "page2@school.edu"}
+
+        assert result.external_user_emails == expected_emails
+        assert client.get.call_count == 2
+
+    def test_empty_enrollments_returns_empty_access(self) -> None:
+        """No enrollments returns ExternalAccess.empty()."""
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        client = MagicMock(spec=CanvasApiClient)
+        client.get.return_value = ([], None)
+
+        result = get_course_permissions(client, course_id=1)
+
+        assert result == ExternalAccess.empty()
+
+    def test_api_error_returns_empty_access(self) -> None:
+        """API failure returns ExternalAccess.empty() (safe fallback)."""
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        client = MagicMock(spec=CanvasApiClient)
+        client.get.side_effect = Exception("Canvas API down")
+
+        result = get_course_permissions(client, course_id=1)
+
+        assert result == ExternalAccess.empty()
