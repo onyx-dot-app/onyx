@@ -2,7 +2,7 @@
 Unit tests for UserCreate schema dict methods.
 
 Verifies that account_type is always included in create_update_dict
-and create_update_dict_superuser, and that captcha_token is excluded.
+and create_update_dict_superuser.
 """
 
 from onyx.auth.schemas import UserCreate
