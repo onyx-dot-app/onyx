@@ -1,5 +1,5 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "backend/Dockerfile"
+dockerfilePath = "backend/Dockerfile.model_server"
 [build.dockerBuild]
 context = "backend"

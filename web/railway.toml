@@ -1,0 +1,5 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "web/Dockerfile"
+[build.dockerBuild]
+context = "web"
