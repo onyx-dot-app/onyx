@@ -40,19 +40,19 @@ logger = setup_logger()
 
 class CanvasCourse(BaseModel):
     id: int
-    name: str
-    course_code: str
-    created_at: str
-    workflow_state: str
+    name: str | None = None
+    course_code: str | None = None
+    created_at: str | None = None
+    workflow_state: str | None = None
 
     @classmethod
     def from_api(cls, payload: dict[str, Any]) -> "CanvasCourse":
         return cls(
             id=payload["id"],
-            name=payload.get("name", ""),
-            course_code=payload.get("course_code", ""),
-            created_at=payload.get("created_at", ""),
-            workflow_state=payload.get("workflow_state", ""),
+            name=payload.get("name"),
+            course_code=payload.get("course_code"),
+            created_at=payload.get("created_at"),
+            workflow_state=payload.get("workflow_state"),
         )
 
 
@@ -61,8 +61,8 @@ class CanvasPage(BaseModel):
     url: str
     title: str
     body: str | None = None
-    created_at: str
-    updated_at: str
+    created_at: str | None = None
+    updated_at: str | None = None
     course_id: int
 
     @classmethod
@@ -74,8 +74,8 @@ class CanvasPage(BaseModel):
             url=payload["url"],
             title=payload["title"],
             body=payload.get("body"),
-            created_at=payload.get("created_at", ""),
-            updated_at=payload.get("updated_at", ""),
+            created_at=payload.get("created_at"),
+            updated_at=payload.get("updated_at"),
             course_id=course_id,
         )
 
@@ -86,8 +86,8 @@ class CanvasAssignment(BaseModel):
     description: str | None = None
     html_url: str
     course_id: int
-    created_at: str
-    updated_at: str
+    created_at: str | None = None
+    updated_at: str | None = None
     due_at: str | None = None
 
     @classmethod
@@ -100,8 +100,8 @@ class CanvasAssignment(BaseModel):
             description=payload.get("description"),
             html_url=payload["html_url"],
             course_id=course_id,
-            created_at=payload.get("created_at", ""),
-            updated_at=payload.get("updated_at", ""),
+            created_at=payload.get("created_at"),
+            updated_at=payload.get("updated_at"),
             due_at=payload.get("due_at"),
         )
 
