@@ -107,6 +107,7 @@ from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.constants import NotificationType
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import PASSWORD_SPECIAL_CHARS
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
@@ -125,6 +126,7 @@ from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
+from onyx.db.notification import create_notification
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.users import get_user_by_email
@@ -757,12 +759,33 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 )
 
                 # Assign upgraded user to the Basic default group.
-                # Let exceptions propagate — user without a group has no permissions.
-                with get_session_with_current_tenant() as sync_db:
-                    sync_user = sync_db.query(User).filter(User.id == user.id).first()  # type: ignore[arg-type]
-                    if sync_user:
-                        assign_user_to_default_groups__no_commit(sync_db, sync_user)
-                        sync_db.commit()
+                # If this fails, the user update is already committed, so
+                # log the error and notify admins rather than leaving a
+                # silently broken state.
+                try:
+                    with get_session_with_current_tenant() as sync_db:
+                        sync_user = sync_db.query(User).filter(User.id == user.id).first()  # type: ignore[arg-type]
+                        if sync_user:
+                            assign_user_to_default_groups__no_commit(sync_db, sync_user)
+                            sync_db.commit()
+                except Exception:
+                    logger.exception(
+                        "Failed to assign user %s to default groups after "
+                        "account upgrade",
+                        user.email,
+                    )
+                    with get_session_with_current_tenant() as sync_db:
+                        create_notification(
+                            user_id=None,
+                            notif_type=NotificationType.USER_GROUP_ASSIGNMENT_FAILED,
+                            db_session=sync_db,
+                            title="User group assignment failed",
+                            description=(
+                                f"User {user.email} was upgraded to STANDARD "
+                                f"but could not be assigned to default groups. "
+                                f"Please assign them manually."
+                            ),
+                        )
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
