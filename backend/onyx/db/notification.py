@@ -3,6 +3,7 @@ from datetime import timezone
 from uuid import UUID
 
 from sqlalchemy import cast
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
@@ -90,9 +91,18 @@ def get_notifications(
     notif_type: NotificationType | None = None,
     include_dismissed: bool = True,
 ) -> list[Notification]:
-    query = select(Notification).where(
-        Notification.user_id == user.id if user else Notification.user_id.is_(None)
-    )
+    if user is None:
+        user_filter = Notification.user_id.is_(None)
+    elif user.role == UserRole.ADMIN:
+        # Admins see their own notifications AND admin-targeted ones (user_id IS NULL)
+        user_filter = or_(
+            Notification.user_id == user.id,
+            Notification.user_id.is_(None),
+        )
+    else:
+        user_filter = Notification.user_id == user.id
+
+    query = select(Notification).where(user_filter)
     if not include_dismissed:
         query = query.where(Notification.dismissed.is_(False))
     if notif_type:
