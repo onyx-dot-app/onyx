@@ -326,6 +326,57 @@ class TestGet:
 
 
 # ---------------------------------------------------------------------------
+# CanvasApiClient.paginate tests
+# ---------------------------------------------------------------------------
+
+
+class TestPaginate:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_single_page(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(
+            json_data=[{"id": 1}, {"id": 2}]
+        )
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        pages = list(client.paginate("courses"))
+
+        assert len(pages) == 1
+        assert pages[0] == [{"id": 1}, {"id": 2}]
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_two_pages(self, mock_requests: MagicMock) -> None:
+        next_link = f'<{FAKE_BASE_URL}/api/v1/courses?page=2>; rel="next"'
+        page1 = _mock_response(json_data=[{"id": 1}], link_header=next_link)
+        page2 = _mock_response(json_data=[{"id": 2}])
+        mock_requests.get.side_effect = [page1, page2]
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        pages = list(client.paginate("courses"))
+
+        assert len(pages) == 2
+        assert pages[0] == [{"id": 1}]
+        assert pages[1] == [{"id": 2}]
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_empty_response(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(json_data=[])
+        client = CanvasApiClient(
+            bearer_token=FAKE_TOKEN,
+            canvas_base_url=FAKE_BASE_URL,
+        )
+
+        pages = list(client.paginate("courses"))
+
+        assert pages == []
+
+
+# ---------------------------------------------------------------------------
 # CanvasApiClient._parse_next_link tests
 # ---------------------------------------------------------------------------
 
