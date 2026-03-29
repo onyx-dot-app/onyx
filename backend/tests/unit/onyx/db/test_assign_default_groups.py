@@ -4,14 +4,13 @@ Unit tests for assign_user_to_default_groups__no_commit in onyx.db.users.
 Covers:
 1. Standard/service-account users get assigned to the correct default group
 2. BOT, EXT_PERM_USER, ANONYMOUS account types are skipped
-3. Missing default group logs a warning and returns
+3. Missing default group raises RuntimeError
 4. Already-in-group is a no-op
 5. IntegrityError race condition is handled gracefully
 6. The function never commits the session
 """
 
 from unittest.mock import MagicMock
-from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -129,17 +128,12 @@ def test_service_account_not_skipped() -> None:
     db_session.add.assert_called_once()
 
 
-@patch("onyx.db.users.logger")
-def test_missing_default_group_logs_warning(mock_logger: MagicMock) -> None:
+def test_missing_default_group_raises_error() -> None:
     db_session = _setup_db_session(group_result=None)
     user = _mock_user()
 
-    assign_user_to_default_groups__no_commit(db_session, user)
-
-    mock_logger.warning.assert_called_once()
-    warning_msg = mock_logger.warning.call_args[0][0]
-    assert "No default group found" in warning_msg
-    db_session.add.assert_not_called()
+    with pytest.raises(RuntimeError, match="Default group .* not found"):
+        assign_user_to_default_groups__no_commit(db_session, user)
 
 
 def test_already_in_group_is_noop() -> None:

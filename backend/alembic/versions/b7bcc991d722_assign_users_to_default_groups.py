@@ -33,34 +33,44 @@ def upgrade() -> None:
         )
     ).fetchone()
 
+    if admin_row is None:
+        raise RuntimeError(
+            "Default 'Admin' group not found. "
+            "Ensure migration 977e834c1427 (seed_default_groups) ran successfully."
+        )
+
+    if basic_row is None:
+        raise RuntimeError(
+            "Default 'Basic' group not found. "
+            "Ensure migration 977e834c1427 (seed_default_groups) ran successfully."
+        )
+
     # Users with role=admin → Admin group
     # Exclude inactive placeholder/anonymous users that are not real users
-    if admin_row is not None:
-        conn.execute(
-            sa.text(
-                "INSERT INTO user__user_group (user_group_id, user_id) "
-                'SELECT :gid, id FROM "user" '
-                "WHERE role = 'ADMIN' AND is_active = true "
-                "ON CONFLICT (user_group_id, user_id) DO NOTHING"
-            ),
-            {"gid": admin_row[0]},
-        )
+    conn.execute(
+        sa.text(
+            "INSERT INTO user__user_group (user_group_id, user_id) "
+            'SELECT :gid, id FROM "user" '
+            "WHERE role = 'ADMIN' AND is_active = true "
+            "ON CONFLICT (user_group_id, user_id) DO NOTHING"
+        ),
+        {"gid": admin_row[0]},
+    )
 
     # STANDARD users (non-admin) and SERVICE_ACCOUNT users (role=basic) → Basic group
     # Exclude inactive placeholder/anonymous users that are not real users
-    if basic_row is not None:
-        conn.execute(
-            sa.text(
-                "INSERT INTO user__user_group (user_group_id, user_id) "
-                'SELECT :gid, id FROM "user" '
-                "WHERE is_active = true AND ("
-                "(account_type = 'STANDARD' AND role != 'ADMIN') "
-                "OR (account_type = 'SERVICE_ACCOUNT' AND role = 'BASIC')"
-                ") "
-                "ON CONFLICT (user_group_id, user_id) DO NOTHING"
-            ),
-            {"gid": basic_row[0]},
-        )
+    conn.execute(
+        sa.text(
+            "INSERT INTO user__user_group (user_group_id, user_id) "
+            'SELECT :gid, id FROM "user" '
+            "WHERE is_active = true AND ("
+            "(account_type = 'STANDARD' AND role != 'ADMIN') "
+            "OR (account_type = 'SERVICE_ACCOUNT' AND role = 'BASIC')"
+            ") "
+            "ON CONFLICT (user_group_id, user_id) DO NOTHING"
+        ),
+        {"gid": basic_row[0]},
+    )
 
 
 def downgrade() -> None:

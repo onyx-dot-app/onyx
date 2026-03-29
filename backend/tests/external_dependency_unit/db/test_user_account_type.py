@@ -35,12 +35,10 @@ def test_ext_perm_user_creation_sets_account_type(db_session: Session) -> None:
     assert user.account_type == AccountType.EXT_PERM_USER
 
 
-def test_ext_perm_to_slack_upgrade_updates_role(db_session: Session) -> None:
-    """When an EXT_PERM_USER is upgraded to slack, role becomes SLACK_USER.
-
-    Note: currently account_type is NOT updated during this upgrade path —
-    it remains EXT_PERM_USER. This test documents the current behaviour.
-    """
+def test_ext_perm_to_slack_upgrade_updates_role_and_account_type(
+    db_session: Session,
+) -> None:
+    """When an EXT_PERM_USER is upgraded to slack, both role and account_type update."""
     email = "ext_to_slack_acct_type@test.com"
 
     # Create as ext_perm user first
@@ -50,5 +48,4 @@ def test_ext_perm_to_slack_upgrade_updates_role(db_session: Session) -> None:
     user = add_slack_user_if_not_exists(db_session, email)
 
     assert user.role == UserRole.SLACK_USER
-    # Documents current gap: account_type stays EXT_PERM_USER after upgrade
-    assert user.account_type == AccountType.EXT_PERM_USER
+    assert user.account_type == AccountType.BOT

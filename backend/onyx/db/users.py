@@ -313,6 +313,7 @@ def add_slack_user_if_not_exists(db_session: Session, email: str) -> User:
         # If the user is an external permissioned user, we update it to a slack user
         if user.role == UserRole.EXT_PERM_USER:
             user.role = UserRole.SLACK_USER
+            user.account_type = AccountType.BOT
             db_session.commit()
         return user
 
@@ -415,11 +416,11 @@ def assign_user_to_default_groups__no_commit(
     )
 
     if default_group is None:
-        logger.warning(
-            f"No default group found with name='{target_group_name}' "
-            f"for user {user.email}"
+        raise RuntimeError(
+            f"Default group '{target_group_name}' not found. "
+            f"Cannot assign user {user.email} to a group. "
+            f"Ensure the seed_default_groups migration has run."
         )
-        return
 
     # Check if the user is already in the group
     existing = (

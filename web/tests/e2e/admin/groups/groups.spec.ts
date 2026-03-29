@@ -76,12 +76,12 @@ test.describe("Groups page — layout", () => {
     await expect(groupsPage.newGroupButton).toBeVisible();
   });
 
-  test("shows built-in groups (Admin, Basic)", async ({ groupsPage }) => {
+  test.skip("shows built-in groups (Admin, Basic)", async ({ groupsPage }) => {
+    // TODO: Enable once default groups are shown via include_default=true
     await groupsPage.goto();
 
-    //will be uncommented once the group permissions are implemented.
-    // await groupsPage.expectGroupVisible("Admin");
-    // await groupsPage.expectGroupVisible("Basic");
+    await groupsPage.expectGroupVisible("Admin");
+    await groupsPage.expectGroupVisible("Basic");
   });
 
   test("search filters groups by name", async ({ groupsPage, api }) => {
