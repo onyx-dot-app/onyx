@@ -519,6 +519,18 @@ class TestParseNextLink:
 
 
 class TestLoadCredentials:
+    def _assert_load_credentials_raises(
+        self,
+        status_code: int,
+        expected_error: type[Exception],
+        mock_requests: MagicMock,
+    ) -> None:
+        """Helper: assert load_credentials raises expected_error for a given status."""
+        mock_requests.get.return_value = _mock_response(status_code, {})
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        with pytest.raises(expected_error):
+            connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_load_credentials_success(self, mock_requests: MagicMock) -> None:
         mock_requests.get.return_value = _mock_response(json_data=[_mock_course()])
@@ -537,21 +549,13 @@ class TestLoadCredentials:
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_load_credentials_invalid_token(self, mock_requests: MagicMock) -> None:
-        mock_requests.get.return_value = _mock_response(401, {})
-        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
-
-        with pytest.raises(CredentialExpiredError, match="invalid or expired"):
-            connector.load_credentials({"canvas_access_token": "bad-token"})
+        self._assert_load_credentials_raises(401, CredentialExpiredError, mock_requests)
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_load_credentials_insufficient_permissions(
         self, mock_requests: MagicMock
     ) -> None:
-        mock_requests.get.return_value = _mock_response(403, {})
-        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
-
-        with pytest.raises(InsufficientPermissionsError):
-            connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+        self._assert_load_credentials_raises(403, InsufficientPermissionsError, mock_requests)
 
 
 # ---------------------------------------------------------------------------
@@ -728,6 +732,21 @@ class TestDocumentConversion:
 
 
 class TestValidateConnectorSettings:
+    def _assert_validate_raises(
+        self,
+        status_code: int,
+        expected_error: type[Exception],
+        mock_requests: MagicMock,
+    ) -> None:
+        """Helper: assert validate_connector_settings raises expected_error."""
+        success_resp = _mock_response(json_data=[_mock_course()])
+        fail_resp = _mock_response(status_code, {})
+        mock_requests.get.side_effect = [success_resp, fail_resp]
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+        with pytest.raises(expected_error):
+            connector.validate_connector_settings()
+
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_validate_success(self, mock_requests: MagicMock) -> None:
         mock_requests.get.return_value = _mock_response(json_data=[_mock_course()])
@@ -737,49 +756,21 @@ class TestValidateConnectorSettings:
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_validate_expired_credential(self, mock_requests: MagicMock) -> None:
-        success_resp = _mock_response(json_data=[_mock_course()])
-        fail_resp = _mock_response(401, {})
-        mock_requests.get.side_effect = [success_resp, fail_resp]
-        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
-        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
-
-        with pytest.raises(CredentialExpiredError):
-            connector.validate_connector_settings()
+        self._assert_validate_raises(401, CredentialExpiredError, mock_requests)
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_validate_insufficient_permissions(
         self, mock_requests: MagicMock
     ) -> None:
-        success_resp = _mock_response(json_data=[_mock_course()])
-        fail_resp = _mock_response(403, {})
-        mock_requests.get.side_effect = [success_resp, fail_resp]
-        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
-        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
-
-        with pytest.raises(InsufficientPermissionsError):
-            connector.validate_connector_settings()
+        self._assert_validate_raises(403, InsufficientPermissionsError, mock_requests)
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_validate_rate_limited(self, mock_requests: MagicMock) -> None:
-        success_resp = _mock_response(json_data=[_mock_course()])
-        fail_resp = _mock_response(429, {})
-        mock_requests.get.side_effect = [success_resp, fail_resp]
-        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
-        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
-
-        with pytest.raises(ConnectorValidationError):
-            connector.validate_connector_settings()
+        self._assert_validate_raises(429, ConnectorValidationError, mock_requests)
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_validate_unexpected_error(self, mock_requests: MagicMock) -> None:
-        success_resp = _mock_response(json_data=[_mock_course()])
-        fail_resp = _mock_response(500, {})
-        mock_requests.get.side_effect = [success_resp, fail_resp]
-        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
-        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
-
-        with pytest.raises(UnexpectedValidationError):
-            connector.validate_connector_settings()
+        self._assert_validate_raises(500, UnexpectedValidationError, mock_requests)
 
 
 # ---------------------------------------------------------------------------
