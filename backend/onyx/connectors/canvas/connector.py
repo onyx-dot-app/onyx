@@ -193,33 +193,10 @@ class CanvasConnector(
         logger.debug("Fetching Canvas courses")
 
         courses: list[CanvasCourse] = []
-        next_url: str | None = None
-        first_request = True
-        while True:
-            if first_request:
-                response, next_url = self.canvas_client.get(
-                    "courses",
-                    params={
-                        "per_page": "100",
-                        "state[]": "available",
-                    },
-                )
-                first_request = False
-            else:
-                assert next_url is not None
-                response, next_url = self.canvas_client.get(
-                    "", full_url=next_url
-                )
-
-            if not response:
-                break
-            courses.extend(
-                CanvasCourse.from_api(course)
-                for course in response
-            )
-            if not next_url:
-                break
-
+        for page in self.canvas_client.paginate(
+            "courses", params={"per_page": "100", "state[]": "available"}
+        ):
+            courses.extend(CanvasCourse.from_api(c) for c in page)
         return courses
 
     @retry(tries=3, delay=1, backoff=2)
@@ -228,34 +205,11 @@ class CanvasConnector(
         logger.debug(f"Fetching pages for course {course_id}")
 
         pages: list[CanvasPage] = []
-        next_url: str | None = None
-        first_request = True
-        while True:
-            if first_request:
-                response, next_url = self.canvas_client.get(
-                    f"courses/{course_id}/pages",
-                    params={
-                        "per_page": "100",
-                        "include[]": "body",
-                        "published": "true",
-                    },
-                )
-                first_request = False
-            else:
-                assert next_url is not None
-                response, next_url = self.canvas_client.get(
-                    "", full_url=next_url
-                )
-
-            if not response:
-                break
-            pages.extend(
-                CanvasPage.from_api(p, course_id=course_id)
-                for p in response
-            )
-            if not next_url:
-                break
-
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/pages",
+            params={"per_page": "100", "include[]": "body", "published": "true"},
+        ):
+            pages.extend(CanvasPage.from_api(p, course_id=course_id) for p in page)
         return pages
 
     @retry(tries=3, delay=1, backoff=2)
@@ -264,32 +218,13 @@ class CanvasConnector(
         logger.debug(f"Fetching assignments for course {course_id}")
 
         assignments: list[CanvasAssignment] = []
-        next_url: str | None = None
-        first_request = True
-        while True:
-            if first_request:
-                response, next_url = self.canvas_client.get(
-                    f"courses/{course_id}/assignments",
-                    params={"per_page": "100", "published": "true"},
-                )
-                first_request = False
-            else:
-                assert next_url is not None
-                response, next_url = self.canvas_client.get(
-                    "", full_url=next_url
-                )
-
-            if not response:
-                break
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/assignments",
+            params={"per_page": "100", "published": "true"},
+        ):
             assignments.extend(
-                CanvasAssignment.from_api(
-                    assignment, course_id=course_id
-                )
-                for assignment in response
+                CanvasAssignment.from_api(a, course_id=course_id) for a in page
             )
-            if not next_url:
-                break
-
         return assignments
 
     @retry(tries=3, delay=1, backoff=2)
@@ -298,34 +233,17 @@ class CanvasConnector(
         logger.debug(f"Fetching announcements for course {course_id}")
 
         announcements: list[CanvasAnnouncement] = []
-        next_url: str | None = None
-        first_request = True
-        while True:
-            if first_request:
-                response, next_url = self.canvas_client.get(
-                    "announcements",
-                    params={
-                        "per_page": "100",
-                        "context_codes[]": f"course_{course_id}",
-                        "active_only": "true",
-                    },
-                )
-                first_request = False
-            else:
-                assert next_url is not None
-                response, next_url = self.canvas_client.get(
-                    "", full_url=next_url
-                )
-
-            if not response:
-                break
+        for page in self.canvas_client.paginate(
+            "announcements",
+            params={
+                "per_page": "100",
+                "context_codes[]": f"course_{course_id}",
+                "active_only": "true",
+            },
+        ):
             announcements.extend(
-                CanvasAnnouncement.from_api(a, course_id=course_id)
-                for a in response
+                CanvasAnnouncement.from_api(a, course_id=course_id) for a in page
             )
-            if not next_url:
-                break
-
         return announcements
 
     def _convert_page_to_document(self, page: CanvasPage) -> Document:
