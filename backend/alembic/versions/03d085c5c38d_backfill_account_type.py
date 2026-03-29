@@ -86,12 +86,17 @@ def upgrade() -> None:
     # ------------------------------------------------------------------
     # Step 2: Set account_type to NOT NULL now that every row is filled.
     # ------------------------------------------------------------------
-    op.alter_column("user", "account_type", nullable=False)
+    op.alter_column(
+        "user",
+        "account_type",
+        nullable=False,
+        server_default="STANDARD",
+    )
 
 
 def downgrade() -> None:
     conn = op.get_bind()
 
     # Revert to nullable first, then clear backfilled values
-    op.alter_column("user", "account_type", nullable=True)
+    op.alter_column("user", "account_type", nullable=True, server_default=None)
     conn.execute(sa.text('UPDATE "user" SET account_type = NULL'))
