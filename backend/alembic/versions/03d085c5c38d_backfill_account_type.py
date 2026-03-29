@@ -26,7 +26,8 @@ _ANONYMOUS = "ANONYMOUS"
 ANONYMOUS_USER_ID = "00000000-0000-0000-0000-000000000002"
 
 # Email pattern for API key virtual users
-API_KEY_EMAIL_PATTERN = "API_KEY__%@%.onyxapikey.ai"
+
+API_KEY_EMAIL_PATTERN = r"API\_KEY\_\_%"
 
 
 def upgrade() -> None:
@@ -42,7 +43,7 @@ def upgrade() -> None:
     conn.execute(
         sa.text(
             'UPDATE "user" SET account_type = :acct_type '
-            "WHERE email LIKE :pattern AND account_type IS NULL"
+            "WHERE email ILIKE :pattern AND account_type IS NULL"
         ),
         {"acct_type": _SERVICE_ACCOUNT, "pattern": API_KEY_EMAIL_PATTERN},
     )
