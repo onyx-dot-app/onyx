@@ -33,16 +33,7 @@ export default function Error() {
       </Text>
 
       <Text as="p" text03>
-        Need help? Join our{" "}
-        <a
-          className="text-action-link-05"
-          href="https://discord.gg/4NA5SbzrWb"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Discord community
-        </a>{" "}
-        for support.
+        Need help? Contact your administrator for support.
       </Text>
     </ErrorPageLayout>
   );

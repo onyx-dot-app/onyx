@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
@@ -8,7 +9,7 @@ import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { SvgSparkle, SvgRefreshCw, SvgX } from "@opal/icons";
+import { SvgSparkle, SvgRefreshCw, SvgX, SvgChevronDown } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import { Button } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -38,6 +39,7 @@ export default function NotificationsPopover({
   onShowBuildIntro,
 }: NotificationsPopoverProps) {
   const router = useRouter();
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const {
     data: notifications,
     mutate,
@@ -57,7 +59,14 @@ export default function NotificationsPopover({
     }
 
     const link = notification.additional_data?.link;
-    if (!link) return;
+
+    // If no link, toggle expand to show full content
+    if (!link) {
+      setExpandedId((prev) =>
+        prev === notification.id ? null : notification.id
+      );
+      return;
+    }
 
     // Track release notes clicks
     if (notification.notif_type === NotificationType.RELEASE_NOTES) {
@@ -127,28 +136,60 @@ export default function NotificationsPopover({
         ) : (
           <div className="max-h-96 overflow-y-auto w-full">
             <Section alignItems="stretch" gap={0}>
-              {notifications.map((notification) => (
-                <LineItem
-                  key={notification.id}
-                  icon={getNotificationIcon(notification.notif_type)}
-                  description={notification.description ?? undefined}
-                  onClick={() => handleNotificationClick(notification)}
-                  strikethrough={notification.dismissed}
-                  rightChildren={
-                    !notification.dismissed ? (
-                      <Button
-                        prominence="tertiary"
-                        size="sm"
-                        icon={SvgX}
-                        onClick={(e) => handleDismiss(notification.id, e)}
-                        tooltip="Dismiss"
-                      />
-                    ) : undefined
-                  }
-                >
-                  {notification.title}
-                </LineItem>
-              ))}
+              {notifications.map((notification) => {
+                const isExpanded = expandedId === notification.id;
+                return (
+                  <div key={notification.id}>
+                    <LineItem
+                      icon={getNotificationIcon(notification.notif_type)}
+                      description={
+                        isExpanded ? undefined : (notification.description ?? undefined)
+                      }
+                      onClick={() => handleNotificationClick(notification)}
+                      strikethrough={notification.dismissed}
+                      rightChildren={
+                        <Section flexDirection="row" gap={0.25} width="fit">
+                          {!notification.dismissed && (
+                            <Button
+                              prominence="tertiary"
+                              size="sm"
+                              icon={SvgX}
+                              onClick={(e) => handleDismiss(notification.id, e)}
+                              tooltip="Dismiss"
+                            />
+                          )}
+                          {notification.description && (
+                            <SvgChevronDown
+                              className={`h-3 w-3 text-text-03 transition-transform ${
+                                isExpanded ? "rotate-180" : ""
+                              }`}
+                            />
+                          )}
+                        </Section>
+                      }
+                    >
+                      {notification.title}
+                    </LineItem>
+                    {isExpanded && notification.description && (
+                      <div className="px-4 pb-3 pt-1">
+                        <Text as="p" secondaryBody text02>
+                          {notification.description}
+                        </Text>
+                        {notification.additional_data?.link && (
+                          <a
+                            href={notification.additional_data.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-action-link-01 text-xs mt-1 inline-block"
+                          >
+                            Learn more
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </Section>
           </div>
         )}

@@ -277,6 +277,7 @@ class NotificationType(str, Enum):
     RELEASE_NOTES = "release_notes"
     ASSISTANT_FILES_READY = "assistant_files_ready"
     FEATURE_ANNOUNCEMENT = "feature_announcement"
+    CUSTOM_BROADCAST = "custom_broadcast"
 
 
 class BlobType(str, Enum):

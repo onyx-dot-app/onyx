@@ -11,7 +11,6 @@ import {
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import { useBuildLlmSelection } from "@/app/craft/hooks/useBuildLlmSelection";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
-import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import {
@@ -87,7 +86,7 @@ interface SelectedConnectorState {
 export default function BuildConfigPage() {
   const { isAdmin, isCurator } = useUser();
   const { llmProviders } = useLLMProviders();
-  const { openPersonaEditor, openLlmSetup } = useOnboarding();
+  const { openPersonaEditor } = useOnboarding();
   const [selectedConnector, setSelectedConnector] =
     useState<SelectedConnectorState | null>(null);
   const [connectorToDelete, setConnectorToDelete] =
@@ -438,55 +437,7 @@ export default function BuildConfigPage() {
                     </SimpleTooltip>
                   </InputLayouts.Horizontal>
                 </Card>
-                <Card
-                  className={
-                    isUpdating || isPreProvisioning ? "opacity-50" : ""
-                  }
-                  title={
-                    isUpdating || isPreProvisioning
-                      ? "Please wait while your session is being provisioned"
-                      : undefined
-                  }
-                >
-                  <div
-                    className={`w-full ${
-                      isUpdating || isPreProvisioning
-                        ? "pointer-events-none"
-                        : ""
-                    }`}
-                  >
-                    <InputLayouts.Horizontal
-                      title="Default LLM"
-                      description="Select the language model to craft with"
-                      center
-                    >
-                      <BuildLLMPopover
-                        currentSelection={pendingLlmSelection}
-                        onSelectionChange={handleLlmSelectionChange}
-                        llmProviders={llmProviders}
-                        onOpenOnboarding={(providerKey) =>
-                          openLlmSetup(providerKey)
-                        }
-                        disabled={isUpdating || isPreProvisioning}
-                      >
-                        <button
-                          type="button"
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-08 border border-border-01 bg-background-tint-00 hover:bg-background-tint-01 transition-colors"
-                        >
-                          {pendingLlmSelection?.provider &&
-                            (() => {
-                              const ProviderIcon = getProviderIcon(
-                                pendingLlmSelection.provider
-                              );
-                              return <ProviderIcon className="w-4 h-4" />;
-                            })()}
-                          <Text mainUiAction>{pendingLlmDisplayName}</Text>
-                          <SvgChevronDown className="w-4 h-4 text-text-03" />
-                        </button>
-                      </BuildLLMPopover>
-                    </InputLayouts.Horizontal>
-                  </div>
-                </Card>
+                {/* LLM selection removed - auto-configured via RunPod */}
                 <Separator />
                 <div className="w-full flex items-center justify-between">
                   <div className="flex flex-col gap-0.25">

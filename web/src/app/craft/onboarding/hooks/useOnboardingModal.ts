@@ -2,8 +2,6 @@
 
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useUser } from "@/providers/UserProvider";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
-import { LLMProviderName } from "@/interfaces/llm";
 import {
   OnboardingModalMode,
   OnboardingModalController,
@@ -16,35 +14,8 @@ import {
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
-// Check if all 3 build mode providers are configured (anthropic, openai, openrouter)
-function checkAllProvidersConfigured(
-  llmProviders: import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
-): boolean {
-  if (!llmProviders || llmProviders.length === 0) {
-    return false;
-  }
-  const configuredProviders = new Set(llmProviders.map((p) => p.provider));
-  return (
-    configuredProviders.has(LLMProviderName.ANTHROPIC) &&
-    configuredProviders.has(LLMProviderName.OPENAI) &&
-    configuredProviders.has(LLMProviderName.OPENROUTER)
-  );
-}
-
-// Check if at least one provider is configured
-function checkHasAnyProvider(
-  llmProviders: import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
-): boolean {
-  return !!(llmProviders && llmProviders.length > 0);
-}
-
 export function useOnboardingModal(): OnboardingModalController {
   const { user, isAdmin, refreshUser } = useUser();
-  const {
-    llmProviders,
-    isLoading: isLoadingLlm,
-    refetch: refetchLlmProviders,
-  } = useLLMProviders();
 
   // Get ensurePreProvisionedSession from the session store
   const ensurePreProvisionedSession = useBuildSessionStore(
@@ -76,39 +47,17 @@ export function useOnboardingModal(): OnboardingModalController {
     return !!getBuildUserPersona()?.workArea;
   }, [user]);
 
-  // Check if all providers are configured (skip LLM step entirely if so)
-  const allProvidersConfigured = useMemo(
-    () => checkAllProvidersConfigured(llmProviders),
-    [llmProviders]
-  );
-
-  // Check if at least one provider is configured (allow skipping LLM step)
-  const hasAnyProvider = useMemo(
-    () => checkHasAnyProvider(llmProviders),
-    [llmProviders]
-  );
-
   // Auto-open initial onboarding modal on first load
-  // Shows if: user info (role) missing OR (admin AND no providers configured)
+  // Shows if user info (role) is missing
   useEffect(() => {
-    if (hasInitialized || isLoadingLlm || !user) return;
+    if (hasInitialized || !user) return;
 
-    const needsUserInfo = !hasUserInfo;
-    const needsLlmSetup = isAdmin && !hasAnyProvider;
-
-    if (needsUserInfo || needsLlmSetup) {
+    if (!hasUserInfo) {
       setMode({ type: "initial-onboarding" });
     }
 
     setHasInitialized(true);
-  }, [
-    hasInitialized,
-    isLoadingLlm,
-    user,
-    hasUserInfo,
-    isAdmin,
-    hasAnyProvider,
-  ]);
+  }, [hasInitialized, user, hasUserInfo]);
 
   // Complete user info callback
   const completeUserInfo = useCallback(
@@ -129,25 +78,14 @@ export function useOnboardingModal(): OnboardingModalController {
       await refreshUser();
 
       // Trigger pre-provisioning now that onboarding is complete
-      // This ensures the sandbox starts provisioning immediately rather than
-      // waiting for the controller effect to detect the cookie change
       ensurePreProvisionedSession();
     },
     [refreshUser, ensurePreProvisionedSession]
   );
 
-  // Complete LLM setup callback
-  const completeLlmSetup = useCallback(async () => {
-    await refetchLlmProviders();
-  }, [refetchLlmProviders]);
-
   // Actions
   const openPersonaEditor = useCallback(() => {
     setMode({ type: "edit-persona" });
-  }, []);
-
-  const openLlmSetup = useCallback((provider?: string) => {
-    setMode({ type: "add-llm", provider });
   }, []);
 
   const close = useCallback(() => {
@@ -160,17 +98,11 @@ export function useOnboardingModal(): OnboardingModalController {
     mode,
     isOpen,
     openPersonaEditor,
-    openLlmSetup,
     close,
-    llmProviders,
     initialValues,
     completeUserInfo,
-    completeLlmSetup,
-    refetchLlmProviders,
     isAdmin,
     hasUserInfo,
-    allProvidersConfigured,
-    hasAnyProvider,
-    isLoading: isLoadingLlm,
+    isLoading: false,
   };
 }

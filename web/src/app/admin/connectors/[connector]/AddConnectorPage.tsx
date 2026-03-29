@@ -658,7 +658,9 @@ export default function AddConnector({
                   null
                 }
               />
-              <ConnectorDocsLink sourceType={connector} />
+              {connector !== "file" && (
+                <ConnectorDocsLink sourceType={connector} />
+              )}
             </CardSection>
           )}
 
@@ -674,6 +676,7 @@ export default function AddConnector({
             onSubmit={formikProps.handleSubmit}
             noCredentials={noCredentials}
             noAdvanced={connector == "file"}
+            connector={connector}
           />
         </div>
       )}

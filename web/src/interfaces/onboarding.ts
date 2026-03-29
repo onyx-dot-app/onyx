@@ -4,6 +4,7 @@ export enum OnboardingStep {
   Welcome = "welcome",
   Name = "name",
   LlmSetup = "llm-setup",
+  DataSource = "data-source",
   Complete = "complete",
 }
 

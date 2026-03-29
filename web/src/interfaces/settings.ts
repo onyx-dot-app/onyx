@@ -84,6 +84,7 @@ export enum NotificationType {
   ASSISTANT_FILES_READY = "assistant_files_ready",
   RELEASE_NOTES = "release_notes",
   FEATURE_ANNOUNCEMENT = "feature_announcement",
+  CUSTOM_BROADCAST = "custom_broadcast",
 }
 
 export interface Notification {

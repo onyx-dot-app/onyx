@@ -1,5 +1,5 @@
 import { OnboardingStep, FinalStepItemProps } from "@/interfaces/onboarding";
-import { SvgGlobe, SvgImage, SvgUsers } from "@opal/icons";
+import { SvgUsers } from "@opal/icons";
 
 type StepConfig = {
   index: number;
@@ -19,11 +19,17 @@ export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
     index: 1,
     title: "Let's take a moment to get you set up.",
     buttonText: "Next",
-    iconPercentage: 40,
+    iconPercentage: 30,
   },
   [OnboardingStep.LlmSetup]: {
     index: 2,
     title: "Almost there! Connect your models to start chatting.",
+    buttonText: "Next",
+    iconPercentage: 50,
+  },
+  [OnboardingStep.DataSource]: {
+    index: 2,
+    title: "Connect your company data to start searching.",
     buttonText: "Next",
     iconPercentage: 70,
   },
@@ -43,31 +49,21 @@ export const STEP_NAVIGATION: Record<
 > = {
   [OnboardingStep.Welcome]: { next: OnboardingStep.Name },
   [OnboardingStep.Name]: {
-    next: OnboardingStep.LlmSetup,
+    next: OnboardingStep.DataSource,
     prev: OnboardingStep.Welcome,
   },
   [OnboardingStep.LlmSetup]: {
+    next: OnboardingStep.DataSource,
+    prev: OnboardingStep.Name,
+  },
+  [OnboardingStep.DataSource]: {
     next: OnboardingStep.Complete,
     prev: OnboardingStep.Name,
   },
-  [OnboardingStep.Complete]: { prev: OnboardingStep.LlmSetup },
+  [OnboardingStep.Complete]: { prev: OnboardingStep.DataSource },
 };
 
 export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
-  {
-    title: "Select web search provider",
-    description: "Enable PrivateGPT to search the internet for information.",
-    icon: SvgGlobe,
-    buttonText: "Web Search",
-    buttonHref: "/admin/configuration/web-search",
-  },
-  {
-    title: "Enable image generation",
-    description: "Set up models to create images in your chats.",
-    icon: SvgImage,
-    buttonText: "Image Generation",
-    buttonHref: "/admin/configuration/image-generation",
-  },
   {
     title: "Invite your team",
     description: "Manage users and permissions for your team",

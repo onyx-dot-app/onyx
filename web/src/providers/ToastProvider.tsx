@@ -30,7 +30,7 @@ function buildDescription(t: Toast): string | undefined {
   if (t.description) parts.push(t.description);
   if (t.level === "error" && NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK) {
     parts.push(
-      "Need help? Join our community at https://discord.gg/4NA5SbzrWb for support!"
+      "Need help? Contact your administrator for support."
     );
   }
   return parts.length > 0 ? parts.join(" ") : undefined;

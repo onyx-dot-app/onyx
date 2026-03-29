@@ -199,19 +199,17 @@ export default function RequestConnectorModal({
                       Close
                     </Text>
                   </button>
-                  <a
-                    href={DISCORD_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={handleClose}
                     className="flex-1 px-4 py-2 rounded-12 bg-black dark:bg-white hover:opacity-90 transition-colors text-center"
                   >
                     <Text
                       mainUiAction
                       className="text-text-light-05 dark:text-text-dark-05"
                     >
-                      Join PrivateGPT Discord
+                      Contact Admin
                     </Text>
-                  </a>
+                  </button>
                 </div>
               </>
             )}

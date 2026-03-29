@@ -10,8 +10,8 @@ from onyx.db.notification import dismiss_notification
 from onyx.db.notification import get_notification_by_id
 from onyx.db.notification import get_notifications
 from onyx.server.features.build.utils import ensure_build_mode_intro_notification
-from onyx.server.features.release_notes.utils import (
-    ensure_release_notes_fresh_and_notify,
+from onyx.server.features.custom_notifications.utils import (
+    ensure_custom_notifications_fresh,
 )
 from onyx.server.settings.models import Notification as NotificationModel
 from onyx.utils.logger import setup_logger
@@ -44,9 +44,11 @@ def get_notifications_api(
         )
 
     try:
-        ensure_release_notes_fresh_and_notify(db_session)
+        ensure_custom_notifications_fresh(db_session)
     except Exception:
-        logger.exception("Failed to check for release notes in notifications endpoint")
+        logger.exception(
+            "Failed to check for custom broadcast notifications in notifications endpoint"
+        )
 
     notifications = [
         NotificationModel.from_model(notif)

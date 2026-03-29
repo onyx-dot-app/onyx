@@ -10,9 +10,6 @@ from typing import Any
 
 from onyx.configs.constants import DocumentSource
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
 from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
 from onyx.document_index.opensearch.search import DocumentQuery
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -20,12 +17,6 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 ATTACHED_DOCUMENT_ID = "https://docs.google.com/document/d/test-doc-id"
 HIERARCHY_NODE_ID = 42
 PERSONA_ID = 7
-KNOWLEDGE_FILTER_SCHEMA_FIELDS = {
-    DOCUMENT_ID_FIELD_NAME,
-    ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME,
-    DOCUMENT_SETS_FIELD_NAME,
-    PERSONAS_FIELD_NAME,
-}
 
 
 def _get_search_filters(
@@ -71,26 +62,7 @@ class TestAssistantKnowledgeFilter:
         knowledge_filter = None
         for clause in filter_clauses:
             if "bool" in clause and "should" in clause["bool"]:
-                if (
-                    clause["bool"].get("minimum_should_match") == 1
-                    and len(clause["bool"]["should"]) > 0
-                    and (
-                        (
-                            clause["bool"]["should"][0].get("term", {}).keys()
-                            and list(
-                                clause["bool"]["should"][0].get("term", {}).keys()
-                            )[0]
-                            in KNOWLEDGE_FILTER_SCHEMA_FIELDS
-                        )
-                        or (
-                            clause["bool"]["should"][0].get("terms", {}).keys()
-                            and list(
-                                clause["bool"]["should"][0].get("terms", {}).keys()
-                            )[0]
-                            in KNOWLEDGE_FILTER_SCHEMA_FIELDS
-                        )
-                    )
-                ):
+                if clause["bool"].get("minimum_should_match") == 1:
                     knowledge_filter = clause
                     break
 
@@ -124,26 +96,7 @@ class TestAssistantKnowledgeFilter:
         knowledge_filter = None
         for clause in filter_clauses:
             if "bool" in clause and "should" in clause["bool"]:
-                if (
-                    clause["bool"].get("minimum_should_match") == 1
-                    and len(clause["bool"]["should"]) > 0
-                    and (
-                        (
-                            clause["bool"]["should"][0].get("term", {}).keys()
-                            and list(
-                                clause["bool"]["should"][0].get("term", {}).keys()
-                            )[0]
-                            in KNOWLEDGE_FILTER_SCHEMA_FIELDS
-                        )
-                        or (
-                            clause["bool"]["should"][0].get("terms", {}).keys()
-                            and list(
-                                clause["bool"]["should"][0].get("terms", {}).keys()
-                            )[0]
-                            in KNOWLEDGE_FILTER_SCHEMA_FIELDS
-                        )
-                    )
-                ):
+                if clause["bool"].get("minimum_should_match") == 1:
                     knowledge_filter = clause
                     break
 
@@ -174,26 +127,7 @@ class TestAssistantKnowledgeFilter:
         knowledge_filter = None
         for clause in filter_clauses:
             if "bool" in clause and "should" in clause["bool"]:
-                if (
-                    clause["bool"].get("minimum_should_match") == 1
-                    and len(clause["bool"]["should"]) > 0
-                    and (
-                        (
-                            clause["bool"]["should"][0].get("term", {}).keys()
-                            and list(
-                                clause["bool"]["should"][0].get("term", {}).keys()
-                            )[0]
-                            in KNOWLEDGE_FILTER_SCHEMA_FIELDS
-                        )
-                        or (
-                            clause["bool"]["should"][0].get("terms", {}).keys()
-                            and list(
-                                clause["bool"]["should"][0].get("terms", {}).keys()
-                            )[0]
-                            in KNOWLEDGE_FILTER_SCHEMA_FIELDS
-                        )
-                    )
-                ):
+                if clause["bool"].get("minimum_should_match") == 1:
                     knowledge_filter = clause
                     break
 

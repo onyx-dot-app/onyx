@@ -190,14 +190,7 @@ export default function AccessRestricted() {
       )}
 
       <Text text03>
-        Need help? Join our{" "}
-        <InlineExternalLink
-          className={linkClassName}
-          href="https://discord.gg/4NA5SbzrWb"
-        >
-          Discord community
-        </InlineExternalLink>{" "}
-        for support.
+        Need help? Contact your administrator for support.
       </Text>
     </ErrorPageLayout>
   );

@@ -13,6 +13,9 @@ from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
 from onyx.configs.embedding_configs import SupportedEmbeddingModel
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
+from onyx.configs.model_configs import RUNPOD_API_BASE
+from onyx.configs.model_configs import RUNPOD_API_KEY
+from onyx.configs.model_configs import RUNPOD_MODEL_NAME
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import create_initial_default_connector
@@ -285,6 +288,44 @@ def setup_postgres(db_session: Session) -> None:
             return
         update_default_provider(
             provider_id=new_llm_provider.id, model_name=llm_model, db_session=db_session
+        )
+
+    if RUNPOD_API_BASE and fetch_default_llm_model(db_session) is None:
+        logger.notice("Setting up RunPod LLM provider.")
+
+        model_name = RUNPOD_MODEL_NAME or "default"
+        provider_name = "RunPod"
+        existing = fetch_existing_llm_provider(
+            name=provider_name, db_session=db_session
+        )
+        model_req = LLMProviderUpsertRequest(
+            id=existing.id if existing else None,
+            name=provider_name,
+            provider=LlmProviderNames.OPENAI,
+            api_key=RUNPOD_API_KEY,
+            api_base=RUNPOD_API_BASE,
+            api_version=None,
+            custom_config=None,
+            is_public=True,
+            groups=[],
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=model_name, is_visible=True
+                )
+            ],
+            api_key_changed=True,
+        )
+        try:
+            new_llm_provider = upsert_llm_provider(
+                llm_provider_upsert_request=model_req, db_session=db_session
+            )
+        except ValueError as e:
+            logger.warning("Failed to upsert RunPod LLM provider during setup: %s", e)
+            return
+        update_default_provider(
+            provider_id=new_llm_provider.id,
+            model_name=model_name,
+            db_session=db_session,
         )
 
 

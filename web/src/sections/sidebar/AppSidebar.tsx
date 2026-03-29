@@ -61,6 +61,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgDevKit,
   SvgEditBig,
+  SvgFolder,
   SvgFolderPlus,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
@@ -682,6 +683,14 @@ const MemoizedAppSidebarInner = memo(
               <div className="flex flex-col">
                 {newSessionButton}
                 {searchChatsButton}
+                <SidebarTab
+                  icon={SvgFolder}
+                  folded={folded}
+                  href="/app/company-files"
+                  selected={activeSidebarTab.isCompanyFiles()}
+                >
+                  Company Files
+                </SidebarTab>
                 {isOnyxCraftEnabled && buildButton}
                 {folded && moreAgentsButton}
                 {folded && newProjectButton}

@@ -10,7 +10,6 @@ import React, {
 } from "react";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/app/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
@@ -606,16 +605,6 @@ const AppInputBar = React.memo(
 
         {/* Bottom right controls */}
         <div className="flex flex-row items-center gap-1">
-          <div
-            data-testid="AppInputBar/llm-popover-trigger"
-            className={cn(controlsLoading && "invisible")}
-          >
-            <LLMPopover
-              llmManager={llmManager}
-              requiresImageInput={hasImageFiles}
-              disabled={disabled}
-            />
-          </div>
           {showMicButton &&
             (sttEnabled ? (
               <MicrophoneButton

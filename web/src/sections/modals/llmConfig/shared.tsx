@@ -555,17 +555,25 @@ export function ModelsField<T extends BaseLLMFormValues>({
                                 group="LLMConfigurationButton"
                                 variant="opacity-on-hover"
                               >
-                                <Button
-                                  size="sm"
-                                  prominence="internal"
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  className="interactive-container rounded-08 h-[1.5rem] px-2 flex items-center cursor-pointer text-text-03 hover:text-text-05 hover:bg-background-tint-02 transition-colors"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleSetDefault(modelConfiguration.name);
                                   }}
-                                  type="button"
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.stopPropagation();
+                                      handleSetDefault(modelConfiguration.name);
+                                    }
+                                  }}
                                 >
-                                  Set as default
-                                </Button>
+                                  <Text secondaryAction text03>
+                                    Set as default
+                                  </Text>
+                                </span>
                               </Hoverable.Item>
                             )
                           ) : undefined

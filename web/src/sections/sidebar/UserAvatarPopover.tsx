@@ -107,7 +107,7 @@ function SettingsPopover({
           <LineItem
             key="help-faq"
             icon={SvgExternalLink}
-            href="https://docs.onyx.app"
+            href="https://www.privategpt.cloud/"
             target="_blank"
             rel="noopener noreferrer"
           >

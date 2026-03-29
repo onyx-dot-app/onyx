@@ -55,6 +55,13 @@ CROSS_ENCODER_RANGE_MIN = 0
 GEN_AI_API_KEY = os.environ.get("GEN_AI_API_KEY")
 GEN_AI_MODEL_VERSION = os.environ.get("GEN_AI_MODEL_VERSION")
 
+# RunPod LLM auto-provisioning config.
+# Set RUNPOD_API_BASE to enable auto-provisioning of a RunPod-hosted LLM on startup.
+# The endpoint should be an OpenAI-compatible vLLM/TGI URL (e.g., https://<pod-id>-8000.proxy.runpod.net/v1).
+RUNPOD_API_BASE = os.environ.get("RUNPOD_API_BASE")
+RUNPOD_API_KEY = os.environ.get("RUNPOD_API_KEY")
+RUNPOD_MODEL_NAME = os.environ.get("RUNPOD_MODEL_NAME")
+
 # Override the auto-detection of LLM max context length
 GEN_AI_MAX_TOKENS = int(os.environ.get("GEN_AI_MAX_TOKENS") or 0) or None
 

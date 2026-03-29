@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { useMemo } from "react";
-import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/icons";
+import { SvgOnyxLogoTyped } from "@opal/icons";
 
 export interface LogoProps {
   folded?: boolean;
@@ -19,20 +19,22 @@ export interface LogoProps {
 }
 
 function PrivateGPTLogoType({
-  size = 120,
+  size = 24,
   className,
 }: {
   size?: number;
   className?: string;
 }) {
-  const fontSize = size * 0.22;
   return (
-    <span
-      className={cn("font-bold tracking-tight leading-none select-none", className)}
-      style={{ fontSize: `${fontSize}px` }}
-    >
-      PrivateGPT
-    </span>
+    <div className={cn("flex items-center gap-2", className)}>
+      <OnyxIcon size={size} className="flex-shrink-0" />
+      <span
+        className="font-bold tracking-tight leading-none select-none"
+        style={{ fontSize: `${Math.max(size * 0.65, 14)}px` }}
+      >
+        PrivateGPT
+      </span>
+    </div>
   );
 }
 
@@ -69,7 +71,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
       />
     </div>
   ) : (
-    <SvgOnyxLogo
+    <OnyxIcon
       size={resolvedSize}
       className={cn("flex-shrink-0", className)}
     />
@@ -118,11 +120,11 @@ export default function Logo({ folded, size, className }: LogoProps) {
   return applicationName ? (
     renderNameAndPoweredBy({ includeLogo: true, includeName: true })
   ) : folded ? (
-    <SvgOnyxLogo
+    <OnyxIcon
       size={resolvedSize}
       className={cn("flex-shrink-0", className)}
     />
   ) : (
-    <PrivateGPTLogoType size={unfoldedSize} className={className} />
+    <PrivateGPTLogoType size={resolvedSize} className={className} />
   );
 }

@@ -13,7 +13,6 @@ import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 
 function getOnboardingCompletedKey(userId: string): string {
@@ -30,17 +29,13 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
 
-  // Get provider data from ProviderContext instead of duplicating the call
+  // Get provider data from ProviderContext
   const {
     llmProviders,
     isLoadingProviders,
     hasProviders: hasLlmProviders,
     providerOptions,
-    refreshProviderInfo,
   } = useProviderStatus();
-
-  // Only fetch persona-specific providers (different endpoint)
-  const { refetch: refreshPersonaProviders } = useLLMProviders(liveAgent?.id);
 
   const userName = user?.personalization?.name;
   const llmDescriptors = providerOptions;
@@ -83,19 +78,6 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
       return;
     }
 
-    // LlmSetup step is incomplete if no LLM providers are configured
-    if (!hasLlmProviders) {
-      dispatch({
-        type: OnboardingActionType.SET_BUTTON_ACTIVE,
-        isButtonActive: false,
-      });
-      dispatch({
-        type: OnboardingActionType.GO_TO_STEP,
-        step: OnboardingStep.LlmSetup,
-      });
-      return;
-    }
-
     // All steps complete - go to Complete step
     dispatch({
       type: OnboardingActionType.SET_BUTTON_ACTIVE,
@@ -111,55 +93,19 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   const nextStep = useCallback(() => {
     dispatch({
       type: OnboardingActionType.SET_BUTTON_ACTIVE,
-      isButtonActive: false,
+      isButtonActive: true,
     });
 
-    if (state.currentStep === OnboardingStep.Name) {
-      const hasProviders = (state.data.llmProviders?.length ?? 0) > 0;
-      if (hasProviders) {
-        dispatch({
-          type: OnboardingActionType.SET_BUTTON_ACTIVE,
-          isButtonActive: true,
-        });
-      } else {
-        dispatch({
-          type: OnboardingActionType.SET_BUTTON_ACTIVE,
-          isButtonActive: false,
-        });
-      }
-    }
-
-    if (state.currentStep === OnboardingStep.LlmSetup) {
-      refreshProviderInfo();
-      if (liveAgent) {
-        refreshPersonaProviders();
-      }
-    }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, [state, refreshProviderInfo, refreshPersonaProviders, liveAgent]);
+  }, []);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });
   }, []);
 
-  const goToStep = useCallback(
-    (step: OnboardingStep) => {
-      const hasProviders = (state.data.llmProviders?.length ?? 0) > 0;
-      if (step === OnboardingStep.LlmSetup && hasProviders) {
-        dispatch({
-          type: OnboardingActionType.SET_BUTTON_ACTIVE,
-          isButtonActive: true,
-        });
-      } else if (step === OnboardingStep.LlmSetup) {
-        dispatch({
-          type: OnboardingActionType.SET_BUTTON_ACTIVE,
-          isButtonActive: false,
-        });
-      }
-      dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
-    },
-    [state]
-  );
+  const goToStep = useCallback((step: OnboardingStep) => {
+    dispatch({ type: OnboardingActionType.GO_TO_STEP, step });
+  }, []);
 
   const updateName = useCallback(
     (name: string) => {
@@ -306,12 +252,8 @@ export function useShowOnboarding({
       return;
     }
 
-    // Only check once per user — but allow self-correction from true→false
-    // when provider data arrives (e.g. after a transient fetch error).
+    // Only check once per user
     if (hasCheckedOnboardingForUserId.current === userId) {
-      if (showOnboarding && hasAnyProvider && onboardingState.stepIndex === 0) {
-        setShowOnboarding(false);
-      }
       return;
     }
     hasCheckedOnboardingForUserId.current = userId;
@@ -322,8 +264,8 @@ export function useShowOnboarding({
       return;
     }
 
-    // Show onboarding if no LLM providers are configured.
-    setShowOnboarding(hasAnyProvider === false);
+    // Show onboarding only for name setup (LLM is auto-configured).
+    setShowOnboarding(true);
   }, [
     isLoadingProviders,
     isLoadingChatSessions,

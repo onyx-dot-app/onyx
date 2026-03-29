@@ -17,7 +17,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   const logo = useMemo(
     () => (
       <div className="px-1">
-        <Logo folded={folded} size={28} />
+        <Logo folded={folded} size={32} />
       </div>
     ),
     [folded]

@@ -14,7 +14,8 @@ export type AppFocusType =
   | "new-session"
   | "more-agents"
   | "user-settings"
-  | "shared-chat";
+  | "shared-chat"
+  | "company-files";
 
 export class AppFocus {
   constructor(public value: AppFocusType) {}
@@ -47,6 +48,10 @@ export class AppFocus {
     return this.value === "user-settings";
   }
 
+  isCompanyFiles(): boolean {
+    return this.value === "company-files";
+  }
+
   getId(): string | null {
     return typeof this.value === "object" ? this.value.id : null;
   }
@@ -58,7 +63,8 @@ export class AppFocus {
     | "shared-chat"
     | "new-session"
     | "more-agents"
-    | "user-settings" {
+    | "user-settings"
+    | "company-files" {
     return typeof this.value === "object" ? this.value.type : this.value;
   }
 }
@@ -79,6 +85,9 @@ export default function useAppFocus(): AppFocus {
     }
     if (pathname.startsWith("/app/settings")) {
       return new AppFocus("user-settings");
+    }
+    if (pathname.startsWith("/app/company-files")) {
+      return new AppFocus("company-files");
     }
     if (pathname.startsWith("/app/agents")) {
       return new AppFocus("more-agents");

@@ -27,9 +27,8 @@ import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { toast } from "@/hooks/useToast";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
-import { useAuthType, useLlmManager } from "@/lib/hooks";
+import { useAuthType } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -749,15 +748,12 @@ function ChatPreferencesSettings() {
     updateUserPersonalization,
     updateUserAutoScroll,
     updateUserShortcuts,
-    updateUserDefaultModel,
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
   } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const settings = useSettingsContext();
   const { isSearchModeAvailable: searchUiEnabled } = settings;
-  const llmManager = useLlmManager();
-
   const {
     personalizationValues,
     toggleUseMemories,
@@ -828,18 +824,6 @@ function ChatPreferencesSettings() {
           widthVariant="full"
         />
         <Card>
-          <InputLayouts.Horizontal
-            title="Default Model"
-            description="This model will be used by PrivateGPT by default in your chats."
-          >
-            <LLMPopover
-              llmManager={llmManager}
-              onSelect={(selected) => {
-                void updateUserDefaultModel(selected);
-              }}
-            />
-          </InputLayouts.Horizontal>
-
           <InputLayouts.Horizontal
             title="Chat Auto-scroll"
             description="Automatically scroll to new content as chat generates response."
@@ -1068,7 +1052,7 @@ function AccountsAccessSettings() {
     useState<CreatedTokenState | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
-  const canCreateTokens = useCloudSubscription();
+  const canCreateTokens = true;
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = authType !== null;

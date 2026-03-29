@@ -865,15 +865,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         selectedAgent={selectedAgent || liveAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
-                        // Intentionally enabled during name-only onboarding (showOnboarding=false)
-                        // since LLM providers are already configured and the user can chat.
                         disabled={
-                          (!llmManager.isLoadingProviders &&
-                            llmManager.hasAnyProvider === false) ||
-                          (showOnboarding &&
-                            !isLoadingOnboarding &&
-                            onboardingState.currentStep !==
-                              OnboardingStep.Complete)
+                          showOnboarding &&
+                          !isLoadingOnboarding &&
+                          onboardingState.currentStep !==
+                            OnboardingStep.Complete
                         }
                       />
                       <div

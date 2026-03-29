@@ -9,12 +9,14 @@ const NavigationRow = ({
   activatedCredential,
   onSubmit,
   isValid,
+  connector,
 }: {
   isValid: boolean;
   onSubmit: () => void;
   noAdvanced: boolean;
   noCredentials: boolean;
   activatedCredential: boolean;
+  connector?: string;
 }) => {
   const { formStep, prevFormStep, nextFormStep } = useFormContext();
 
@@ -36,7 +38,7 @@ const NavigationRow = ({
         {(formStep > 0 || noCredentials) && (
           <Disabled disabled={!isValid}>
             <Button rightIcon={SvgPlusCircle} onClick={onSubmit}>
-              Create Connector
+              {connector === "file" ? "Create Folder" : "Create Connector"}
             </Button>
           </Disabled>
         )}

@@ -3,7 +3,7 @@
 import { memo } from "react";
 import OnboardingHeader from "./components/OnboardingHeader";
 import NameStep from "./steps/NameStep";
-import LLMStep from "./steps/LLMStep";
+import DataSourceStep from "./steps/DataSourceStep";
 import FinalStep from "./steps/FinalStep";
 import {
   OnboardingActions,
@@ -30,7 +30,6 @@ const OnboardingFlowInner = ({
   handleFinishOnboarding,
   state: onboardingState,
   actions: onboardingActions,
-  llmDescriptors,
 }: OnboardingFlowProps) => {
   const { user } = useUser();
 
@@ -54,12 +53,10 @@ const OnboardingFlowInner = ({
           <div className="relative w-full overflow-hidden">
             <div className="flex flex-col gap-2 animate-in slide-in-from-right duration-500 ease-out">
               <NameStep state={onboardingState} actions={onboardingActions} />
-              <LLMStep
+              <DataSourceStep
                 state={onboardingState}
-                actions={onboardingActions}
-                llmDescriptors={llmDescriptors}
                 disabled={
-                  onboardingState.currentStep !== OnboardingStep.LlmSetup
+                  onboardingState.currentStep !== OnboardingStep.DataSource
                 }
               />
               <div

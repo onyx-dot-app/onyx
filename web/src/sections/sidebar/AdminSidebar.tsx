@@ -15,7 +15,8 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Disabled } from "@opal/core";
-import { SvgArrowUpCircle, SvgUserManage, SvgX } from "@opal/icons";
+import { SvgArrowUpCircle, SvgLock, SvgUserManage, SvgX } from "@opal/icons";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   useBillingInformation,
   useLicense,
@@ -47,6 +48,7 @@ interface SidebarItemEntry {
   link: string;
   error?: boolean;
   disabled?: boolean;
+  comingSoon?: boolean;
 }
 
 function buildItems(
@@ -78,8 +80,18 @@ function buildItems(
   if (!isCurator) {
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.LLM_MODELS);
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.WEB_SEARCH);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.IMAGE_GENERATION);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.VOICE);
+    items.push({
+      ...sidebarItem(ADMIN_ROUTES.IMAGE_GENERATION),
+      section: SECTIONS.UNLABELED,
+      disabled: true,
+      comingSoon: true,
+    });
+    items.push({
+      ...sidebarItem(ADMIN_ROUTES.VOICE),
+      section: SECTIONS.UNLABELED,
+      disabled: true,
+      comingSoon: true,
+    });
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CODE_INTERPRETER);
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
 
@@ -139,16 +151,6 @@ function buildItems(
 
   // 6. Organization (admin only)
   if (!isCurator) {
-    if (hasSubscription) {
-      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
-    } else {
-      items.push({
-        section: SECTIONS.ORGANIZATION,
-        name: "Upgrade Plan",
-        icon: SvgArrowUpCircle,
-        link: ADMIN_ROUTES.BILLING.path,
-      });
-    }
     add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.TOKEN_RATE_LIMITS);
     addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
   }
@@ -286,26 +288,37 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
         }
       >
         {groups.map((group, groupIndex) => {
-          const tabs = group.items.map(({ link, icon, name, disabled }) => (
-            <Disabled key={link} disabled={disabled}>
-              {/*
-                # NOTE (@raunakab)
-                We intentionally add a `div` intermediary here.
-                Without it, the disabled styling that is default provided by the `Disabled` component (which we want here) would be overridden by the custom disabled styling provided by the `SidebarTab`.
-                Therefore, in order to avoid that overriding, we add a layer of indirection.
-              */}
-              <div>
-                <SidebarTab
-                  lowlight={disabled}
-                  icon={icon}
-                  href={disabled ? undefined : link}
-                  selected={!disabled && pathname.startsWith(link)}
-                >
-                  {name}
-                </SidebarTab>
-              </div>
-            </Disabled>
-          ));
+          const tabs = group.items.map(
+            ({ link, icon, name, disabled, comingSoon }) => (
+              <Disabled key={link} disabled={disabled}>
+                {/*
+                  # NOTE (@raunakab)
+                  We intentionally add a `div` intermediary here.
+                  Without it, the disabled styling that is default provided by the `Disabled` component (which we want here) would be overridden by the custom disabled styling provided by the `SidebarTab`.
+                  Therefore, in order to avoid that overriding, we add a layer of indirection.
+                */}
+                <div className="relative">
+                  <SidebarTab
+                    lowlight={disabled}
+                    icon={icon}
+                    href={disabled ? undefined : link}
+                    selected={!disabled && pathname.startsWith(link)}
+                  >
+                    {name}
+                  </SidebarTab>
+                  {comingSoon && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-auto z-10">
+                      <SimpleTooltip tooltip="Coming Soon" side="right">
+                        <span className="flex items-center cursor-default">
+                          <SvgLock className="w-3.5 h-3.5 text-text-03" />
+                        </span>
+                      </SimpleTooltip>
+                    </div>
+                  )}
+                </div>
+              </Disabled>
+            )
+          );
 
           if (!group.section) {
             return <div key={groupIndex}>{tabs}</div>;

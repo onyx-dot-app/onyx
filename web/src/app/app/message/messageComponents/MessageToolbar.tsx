@@ -17,11 +17,9 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor } from "@/lib/llmConfig/utils";
 import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
-import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
+import { SvgThumbsDown, SvgThumbsUp, SvgRefreshCw } from "@opal/icons";
 import { RegenerationFactory } from "./AgentMessage";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -297,18 +295,18 @@ export default function MessageToolbar({
               parentMessage &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
-                  <LLMPopover
-                    llmManager={llmManager}
-                    currentModelName={currentModelName}
-                    onSelect={(modelName) => {
-                      const llmDescriptor = parseLlmDescriptor(modelName);
+                  <SelectButton
+                    icon={SvgRefreshCw}
+                    onClick={() => {
                       const regenerator = onRegenerate({
                         messageId,
                         parentMessage,
                       });
-                      regenerator(llmDescriptor);
+                      regenerator(llmManager.currentLlm);
                     }}
-                    foldable
+                    variant="select-light"
+                    state="empty"
+                    tooltip="Regenerate"
                   />
                 </div>
               )}

@@ -50,9 +50,13 @@ export default function DynamicConnectionForm({
       )}
 
       <TextFormField
-        subtext="A descriptive name for the connector."
+        subtext={
+          connector === "file"
+            ? "A name to identify this upload."
+            : "A descriptive name for the connector."
+        }
         type={"text"}
-        label={"Connector Name"}
+        label={connector === "file" ? "Company Name" : "Connector Name"}
         name={"name"}
       />
 
