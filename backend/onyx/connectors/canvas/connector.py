@@ -37,6 +37,25 @@ logger = setup_logger()
 
 
 
+def _handle_canvas_api_error(e: OnyxError) -> None:
+    """Map Canvas API errors to connector framework exceptions."""
+    if e.status_code == 401:
+        raise CredentialExpiredError(
+            "Canvas API token is invalid or expired (HTTP 401)."
+        )
+    elif e.status_code == 403:
+        raise InsufficientPermissionsError(
+            "Canvas API token does not have sufficient permissions (HTTP 403)."
+        )
+    elif e.status_code == 429:
+        raise ConnectorValidationError(
+            "Canvas rate-limit exceeded (HTTP 429). Please try again later."
+        )
+    else:
+        raise ConnectorValidationError(
+            f"Canvas API error (status={e.status_code}): {e}"
+        )
+
 
 class CanvasCourse(BaseModel):
     id: int
@@ -384,23 +403,7 @@ class CanvasConnector(
                 f"Invalid Canvas base URL: {e}"
             )
         except OnyxError as e:
-            if e.status_code == 401:
-                raise CredentialExpiredError(
-                    "Canvas API token is invalid or expired (HTTP 401)."
-                )
-            elif e.status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Canvas API token does not have sufficient permissions (HTTP 403)."
-                )
-            elif e.status_code == 429:
-                raise ConnectorValidationError(
-                    "Canvas rate-limit exceeded during credential validation (HTTP 429). "
-                    "Please try again later."
-                )
-            else:
-                raise ConnectorValidationError(
-                    f"Canvas API error during credential load (status={e.status_code}): {e}"
-                )
+            _handle_canvas_api_error(e)
 
         self._canvas_client = client
         return None
@@ -412,23 +415,7 @@ class CanvasConnector(
             self.canvas_client.get("courses", params={"per_page": "1"})
             logger.info("Canvas connector settings validated successfully")
         except OnyxError as e:
-            if e.status_code == 401:
-                raise CredentialExpiredError(
-                    "Canvas credential appears to be invalid or expired (HTTP 401)."
-                )
-            elif e.status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Canvas API token does not have sufficient permissions (HTTP 403)."
-                )
-            elif e.status_code == 429:
-                raise ConnectorValidationError(
-                    "Validation failed due to Canvas rate-limits being exceeded (HTTP 429). "
-                    "Please try again later."
-                )
-            else:
-                raise UnexpectedValidationError(
-                    f"Unexpected Canvas HTTP error (status={e.status_code}): {e}"
-                )
+            _handle_canvas_api_error(e)
         except ConnectorMissingCredentialError:
             raise
         except Exception as exc:
