@@ -246,9 +246,31 @@ class CanvasConnector(
             )
         return announcements
 
+    def _build_document(
+        self,
+        doc_id: str,
+        link: str,
+        text: str,
+        semantic_identifier: str,
+        doc_updated_at: datetime | None,
+        course_id: int,
+        doc_type: str,
+    ) -> Document:
+        """Build a Document with standard Canvas fields."""
+        return Document(
+            id=doc_id,
+            sections=cast(
+                list[TextSection | ImageSection],
+                [TextSection(link=link, text=text)],
+            ),
+            source=DocumentSource.CANVAS,
+            semantic_identifier=semantic_identifier,
+            doc_updated_at=doc_updated_at,
+            metadata={"course_id": str(course_id), "type": doc_type},
+        )
+
     def _convert_page_to_document(self, page: CanvasPage) -> Document:
         """Convert a Canvas page to a Document."""
-
         link = f"{self.canvas_base_url}/courses/{page.course_id}/pages/{page.url}"
 
         text_parts = [page.title]
@@ -256,28 +278,34 @@ class CanvasConnector(
         if body_text:
             text_parts.append(body_text)
 
-        sections = [TextSection(link=link, text="\n\n".join(text_parts))]
-
-        return Document(
-            id=f"canvas-page-{page.course_id}-{page.page_id}",
-            sections=cast(list[TextSection | ImageSection], sections),
-            source=DocumentSource.CANVAS,
-            semantic_identifier=page.title or f"Page {page.page_id}",
-            doc_updated_at=datetime.fromisoformat(
-                page.updated_at.replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
+        doc_updated_at = (
+            datetime.fromisoformat(page.updated_at.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
             if page.updated_at
-            else None,
-            metadata={"course_id": str(page.course_id), "type": "page"},
+            else None
         )
+
+        document = self._build_document(
+            doc_id=f"canvas-page-{page.course_id}-{page.page_id}",
+            link=link,
+            text="\n\n".join(text_parts),
+            semantic_identifier=page.title or f"Page {page.page_id}",
+            doc_updated_at=doc_updated_at,
+            course_id=page.course_id,
+            doc_type="page",
+        )
+        return document
 
     def _convert_assignment_to_document(
         self, assignment: CanvasAssignment
     ) -> Document:
         """Convert a Canvas assignment to a Document."""
-
         text_parts = [assignment.name]
-        desc_text = parse_html_page_basic(assignment.description) if assignment.description else ""
+        desc_text = (
+            parse_html_page_basic(assignment.description)
+            if assignment.description
+            else ""
+        )
         if desc_text:
             text_parts.append(desc_text)
         if assignment.due_at:
@@ -286,54 +314,55 @@ class CanvasConnector(
             ).astimezone(timezone.utc)
             text_parts.append(f"Due: {due_dt.strftime('%B %d, %Y %H:%M UTC')}")
 
-        sections = [
-            TextSection(link=assignment.html_url, text="\n\n".join(text_parts))
-        ]
-
-        return Document(
-            id=f"canvas-assignment-{assignment.course_id}-{assignment.id}",
-            sections=cast(list[TextSection | ImageSection], sections),
-            source=DocumentSource.CANVAS,
-            semantic_identifier=assignment.name or f"Assignment {assignment.id}",
-            doc_updated_at=datetime.fromisoformat(
-                assignment.updated_at.replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
+        doc_updated_at = (
+            datetime.fromisoformat(assignment.updated_at.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
             if assignment.updated_at
-            else None,
-            metadata={"course_id": str(assignment.course_id), "type": "assignment"},
+            else None
         )
+
+        document = self._build_document(
+            doc_id=f"canvas-assignment-{assignment.course_id}-{assignment.id}",
+            link=assignment.html_url,
+            text="\n\n".join(text_parts),
+            semantic_identifier=assignment.name or f"Assignment {assignment.id}",
+            doc_updated_at=doc_updated_at,
+            course_id=assignment.course_id,
+            doc_type="assignment",
+        )
+        return document
 
     def _convert_announcement_to_document(
         self, announcement: CanvasAnnouncement
     ) -> Document:
         """Convert a Canvas announcement to a Document."""
-
         text_parts = [announcement.title]
-        msg_text = parse_html_page_basic(announcement.message) if announcement.message else ""
+        msg_text = (
+            parse_html_page_basic(announcement.message)
+            if announcement.message
+            else ""
+        )
         if msg_text:
             text_parts.append(msg_text)
 
-        sections = [
-            TextSection(
-                link=announcement.html_url, text="\n\n".join(text_parts)
-            )
-        ]
+        doc_updated_at = (
+            datetime.fromisoformat(announcement.posted_at.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
+            if announcement.posted_at
+            else None
+        )
 
-        doc_updated_at = None
-        if announcement.posted_at:
-            doc_updated_at = datetime.fromisoformat(
-                announcement.posted_at.replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
-
-        return Document(
-            id=f"canvas-announcement-{announcement.course_id}-{announcement.id}",
-            sections=cast(list[TextSection | ImageSection], sections),
-            source=DocumentSource.CANVAS,
+        document = self._build_document(
+            doc_id=f"canvas-announcement-{announcement.course_id}-{announcement.id}",
+            link=announcement.html_url,
+            text="\n\n".join(text_parts),
             semantic_identifier=announcement.title
             or f"Announcement {announcement.id}",
             doc_updated_at=doc_updated_at,
-            metadata={"course_id": str(announcement.course_id), "type": "announcement"},
+            course_id=announcement.course_id,
+            doc_type="announcement",
         )
+        return document
 
     @override
     def load_credentials(
