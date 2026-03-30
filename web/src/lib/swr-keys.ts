@@ -36,6 +36,9 @@ export const SWR_KEYS = {
   tags: "/api/query/valid-tags",
   connectorStatus: "/api/manage/connector-status",
 
+  // ── Chat Sessions ─────────────────────────────────────────────────────────
+  chatSessions: "/api/chat/get-user-chat-sessions",
+
   // ── Projects & Files ──────────────────────────────────────────────────────
   userProjects: "/api/user/projects",
   recentFiles: "/api/user/files/recent",

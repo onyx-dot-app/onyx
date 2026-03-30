@@ -121,7 +121,10 @@ export const DocumentSetCreationForm = ({
                 ? "Successfully updated document set!"
                 : "Successfully created document set!"
             );
-            await mutate(SWR_KEYS.documentSets);
+            await Promise.all([
+              mutate(SWR_KEYS.documentSets),
+              mutate(SWR_KEYS.documentSetsEditable),
+            ]);
             onClose();
           } else {
             const errorMsg = await response.text();

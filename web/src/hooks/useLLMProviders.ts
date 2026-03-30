@@ -52,6 +52,7 @@ export function useLLMProviders(personaId?: number) {
     LLMProviderResponse<LLMProviderDescriptor>
   >(url, errorHandlingFetcher, {
     revalidateOnFocus: false,
+    revalidateIfStale: false,
     dedupingInterval: 60000,
   });
 
