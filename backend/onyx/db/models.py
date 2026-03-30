@@ -356,6 +356,13 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         postgresql.JSONB(), nullable=True, default=None
     )
 
+    effective_permissions: Mapped[list[str]] = mapped_column(
+        postgresql.JSONB(),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+
     oidc_expiry: Mapped[datetime.datetime] = mapped_column(
         TIMESTAMPAware(timezone=True), nullable=True
     )
