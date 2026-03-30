@@ -73,18 +73,17 @@ ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 ARG NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 ENV NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
 
-# SENTRY_AUTH_TOKEN is used by the Sentry webpack plugin to upload source maps
-# at build time. Intentionally not set as ENV so it is not baked into the image.
-ARG SENTRY_AUTH_TOKEN
-
 ARG SENTRY_RELEASE
 ENV SENTRY_RELEASE=${SENTRY_RELEASE}
 
 # Add NODE_OPTIONS argument
 ARG NODE_OPTIONS
 
+# SENTRY_AUTH_TOKEN is injected via BuildKit secret mount so it is never written
+# to any image layer, build cache, or registry manifest.
 # Use NODE_OPTIONS in the build command
-RUN SENTRY_AUTH_TOKEN="${SENTRY_AUTH_TOKEN}" NODE_OPTIONS="${NODE_OPTIONS}" npx next build
+RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
+    NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
 # Step 2. Production image, copy all the files and run next
 FROM base AS runner

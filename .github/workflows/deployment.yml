@@ -704,8 +704,9 @@ jobs:
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
             NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=true
             NODE_OPTIONS=--max-old-space-size=8192
-            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
             SENTRY_RELEASE=${{ github.sha }}
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -788,8 +789,9 @@ jobs:
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
             NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=true
             NODE_OPTIONS=--max-old-space-size=8192
-            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
             SENTRY_RELEASE=${{ github.sha }}
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
