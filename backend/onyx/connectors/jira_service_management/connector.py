@@ -254,17 +254,35 @@ class JiraServiceManagementConnector(JiraConnector):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
     ) -> str:
-        """Override to inject JSM issue type filter when no custom JQL is set."""
+        """Override to inject JSM issue type filter and service desk scoping.
+
+        When ``service_desk_id`` is provided and no ``project_key`` or custom
+        ``jql_query`` already scopes the query, a ``project =`` clause is
+        prepended so the search is limited to that specific service desk project.
+        The JSM issue-type filter is always appended (unless the caller supplied
+        a custom JQL without a ``service_desk_id``, in which case we trust the
+        caller's intent).
+        """
         base_jql = super()._get_jql_query(start, end)
 
         # If user provided a custom JQL and no service_desk_id, trust the user
         if self.jql_query and not self.service_desk_id:
             return base_jql
 
-        # Inject JSM issue type filter — always when service_desk_id is set,
-        # or when no custom JQL is provided
-        jsm_filter = self._get_jsm_jql_filter()
-        return f"({base_jql}) AND {jsm_filter}"
+        clauses: list[str] = [f"({base_jql})"]
+
+        # Scope to the specific service desk project when provided and not
+        # already covered by project_key or a custom JQL.
+        if self.service_desk_id and not self.jira_project and not self.jql_query:
+            # service_desk_id is treated as a Jira project key (JSM project
+            # keys are valid JQL project identifiers).
+            clauses.append(f"project = {self.service_desk_id}")
+
+        # Always restrict to JSM issue types so we don't pull regular Jira
+        # issues when no project scoping is present.
+        clauses.append(self._get_jsm_jql_filter())
+
+        return " AND ".join(clauses)
 
     @override
     def _enrich_document(self, document: Document, issue: Issue) -> Document:

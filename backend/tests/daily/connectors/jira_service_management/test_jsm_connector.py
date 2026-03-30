@@ -307,11 +307,37 @@ class TestJQLGeneration:
         assert "priority = High" in jql
         assert "issuetype in" in jql
 
-    def test_jql_service_desk_id_no_project_includes_jsm_filter(self) -> None:
-        """When service_desk_id is set but no project, JSM filter is applied."""
-        connector = _make_connector(service_desk_id="5")
+    def test_jql_service_desk_id_no_project_scopes_to_service_desk(self) -> None:
+        """service_desk_id without project_key must scope query to that project."""
+        connector = _make_connector(service_desk_id="SD-HELPDESK")
         jql = connector._get_jql_query(0.0, 9999999999.0)
+        # Must include both a project scope AND the JSM issue-type filter
+        assert "project = SD-HELPDESK" in jql
         assert "issuetype in" in jql
+
+    def test_jql_service_desk_id_with_project_key_no_duplicate_project(self) -> None:
+        """When both service_desk_id and project_key are set, project scoping
+        comes from project_key (via base class) and service_desk_id is not
+        added a second time."""
+        connector = _make_connector(service_desk_id="SD-HELPDESK", project_key="SD")
+        jql = connector._get_jql_query(0.0, 9999999999.0)
+        # project_key drives the project clause; service_desk_id must NOT be
+        # injected again to avoid a duplicate / conflicting project filter.
+        assert 'project = "SD"' in jql
+        assert "project = SD-HELPDESK" not in jql
+        assert "issuetype in" in jql
+
+    def test_jql_service_desk_id_with_custom_jql_no_project_injection(self) -> None:
+        """When service_desk_id and custom jql_query are both set, the project
+        scope is NOT injected (the caller's JQL is trusted to scope correctly)."""
+        connector = _make_connector(
+            service_desk_id="SD-HELPDESK",
+            jql_query="project = SD-HELPDESK AND priority = High",
+        )
+        jql = connector._get_jql_query(0.0, 9999999999.0)
+        # Custom JQL is preserved; no duplicate project clause injected
+        assert "project = SD-HELPDESK AND priority = High" in jql
+        assert jql.count("project = SD-HELPDESK") == 1
 
 
 class TestSLAHelpers:
