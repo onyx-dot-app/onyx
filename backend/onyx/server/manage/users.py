@@ -774,6 +774,13 @@ def _get_token_created_at(
     return get_current_token_creation_postgres(user, db_session)
 
 
+@router.get("/me/permissions", tags=PUBLIC_API_TAGS)
+def get_current_user_permissions(
+    user: User = Depends(current_user),
+) -> list[str]:
+    return list(user.effective_permissions)
+
+
 @router.get("/me", tags=PUBLIC_API_TAGS)
 def verify_user_logged_in(
     request: Request,
