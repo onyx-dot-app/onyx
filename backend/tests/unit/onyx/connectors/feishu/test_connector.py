@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import patch
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
@@ -10,17 +11,19 @@ from onyx.connectors.feishu.connector import FeishuConnector
 
 
 class _MockResponse:
-    def __init__(self, payload: dict, text: str = "") -> None:
+    def __init__(self, payload: dict[str, Any], text: str = "") -> None:
         self._payload = payload
         self.text = text
 
-    def json(self) -> dict:
+    def json(self) -> dict[str, Any]:
         return self._payload
 
 
 def test_oauth_authorization_url_uses_feishu_config() -> None:
     with patch.object(feishu_connector_module, "FEISHU_CLIENT_ID", "cli_123"):
-        with patch.object(feishu_connector_module, "FEISHU_OAUTH_SCOPE", "scope.one scope.two"):
+        with patch.object(
+            feishu_connector_module, "FEISHU_OAUTH_SCOPE", "scope.one scope.two"
+        ):
             with patch.object(feishu_connector_module, "FEISHU_REDIRECT_URI", None):
                 url = FeishuConnector.oauth_authorization_url(
                     base_domain="https://onyx.example.com",
@@ -90,6 +93,36 @@ def test_oauth_code_to_token_unwraps_nested_feishu_payloads() -> None:
     assert mock_request.call_count == 2
 
 
+def test_oauth_code_to_token_raises_on_feishu_application_error() -> None:
+    responses = [
+        _MockResponse(
+            {
+                "data": {
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                    "expires_in": 7200,
+                    "token_type": "Bearer",
+                }
+            }
+        ),
+        _MockResponse({"code": 99991663, "msg": "user access token is invalid"}),
+    ]
+
+    with patch.object(feishu_connector_module, "FEISHU_CLIENT_ID", "cli_123"):
+        with patch.object(feishu_connector_module, "FEISHU_CLIENT_SECRET", "sec_123"):
+            with patch.object(feishu_connector_module, "FEISHU_REDIRECT_URI", None):
+                with patch(
+                    "onyx.connectors.feishu.connector.request_with_retries",
+                    side_effect=responses,
+                ):
+                    with pytest.raises(RuntimeError, match="Feishu API request failed"):
+                        FeishuConnector.oauth_code_to_token(
+                            base_domain="https://onyx.example.com",
+                            code="oauth-code",
+                            additional_kwargs={},
+                        )
+
+
 def test_load_credentials_requires_access_token() -> None:
     connector = FeishuConnector()
 
@@ -110,3 +143,17 @@ def test_validate_connector_settings_refreshes_user_info() -> None:
         connector.validate_connector_settings()
 
     assert connector.user_info == {"open_id": "ou_123", "name": "Feishu User"}
+
+
+def test_validate_connector_settings_raises_on_feishu_application_error() -> None:
+    connector = FeishuConnector()
+    connector.load_credentials({"access_token": "access-token"})
+
+    with patch(
+        "onyx.connectors.feishu.connector.request_with_retries",
+        return_value=_MockResponse(
+            {"code": 99991663, "msg": "user access token is invalid"}
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="Feishu API request failed"):
+            connector.validate_connector_settings()

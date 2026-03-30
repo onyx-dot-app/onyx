@@ -20,6 +20,11 @@ _FEISHU_USERINFO_URL = "https://open.feishu.cn/open-apis/authen/v1/user_info"
 
 
 def _unwrap_feishu_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    error_code = payload.get("code")
+    if error_code not in (None, 0):
+        message = payload.get("msg") or payload.get("message") or "Unknown Feishu error"
+        raise RuntimeError(f"Feishu API request failed with code {error_code}: {message}")
+
     data = payload.get("data")
     if isinstance(data, dict):
         return data
@@ -40,10 +45,8 @@ class FeishuConnector(OAuthConnector):
         cls,
         base_domain: str,
         state: str,
-        additional_kwargs: dict[str, str],
+        additional_kwargs: dict[str, str],  # noqa: ARG003
     ) -> str:
-        del additional_kwargs
-
         if not FEISHU_CLIENT_ID:
             raise ValueError("FEISHU_CLIENT_ID environment variable must be set")
 
@@ -66,10 +69,8 @@ class FeishuConnector(OAuthConnector):
         cls,
         base_domain: str,
         code: str,
-        additional_kwargs: dict[str, str],
+        additional_kwargs: dict[str, str],  # noqa: ARG003
     ) -> dict[str, Any]:
-        del additional_kwargs
-
         if not FEISHU_CLIENT_ID:
             raise ValueError("FEISHU_CLIENT_ID environment variable must be set")
         if not FEISHU_CLIENT_SECRET:
