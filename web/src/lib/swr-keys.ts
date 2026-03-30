@@ -33,6 +33,7 @@ export const SWR_KEYS = {
 
   // ── Documents ─────────────────────────────────────────────────────────────
   documentSets: "/api/manage/document-set",
+  documentSetsEditable: "/api/manage/document-set?get_editable=true",
   tags: "/api/query/valid-tags",
   connectorStatus: "/api/manage/connector-status",
 
