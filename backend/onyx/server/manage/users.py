@@ -27,6 +27,7 @@ from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
+from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
@@ -778,7 +779,7 @@ def _get_token_created_at(
 def get_current_user_permissions(
     user: User = Depends(current_user),
 ) -> list[str]:
-    return list(user.effective_permissions)
+    return sorted(p.value for p in get_effective_permissions(user))
 
 
 @router.get("/me", tags=PUBLIC_API_TAGS)
