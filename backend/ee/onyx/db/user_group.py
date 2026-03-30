@@ -19,6 +19,8 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import GrantSource
+from onyx.db.enums import Permission
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Credential__UserGroup
@@ -28,6 +30,7 @@ from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__UserGroup
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import LLMProvider__UserGroup
+from onyx.db.models import PermissionGrant
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import TokenRateLimit__UserGroup
@@ -484,6 +487,16 @@ def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserG
     )
     db_session.add(db_user_group)
     db_session.flush()  # give the group an ID
+
+    # Every group gets the "basic" permission by default
+    db_session.add(
+        PermissionGrant(
+            group_id=db_user_group.id,
+            permission=Permission.BASIC_ACCESS,
+            grant_source=GrantSource.SYSTEM,
+        )
+    )
+    db_session.flush()
 
     _add_user__user_group_relationships__no_commit(
         db_session=db_session,

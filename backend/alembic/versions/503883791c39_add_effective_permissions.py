@@ -9,7 +9,7 @@ user's granted permissions into a sorted JSON array. Users without
 group memberships keep the default [].
 
 Revision ID: 503883791c39
-Revises: b7bcc991d722
+Revises: b4b7e1028dfd
 Create Date: 2026-03-30 14:49:22.261748
 
 """
@@ -23,7 +23,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "503883791c39"
-down_revision = "b7bcc991d722"
+down_revision = "b4b7e1028dfd"
 branch_labels: str | None = None
 depends_on: str | Sequence[str] | None = None
 
