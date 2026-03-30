@@ -41,9 +41,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoadingCredentials, setIsLoadingCredentials] = useState(false);
 
-  // Form reset key for re-initialization
-  const [formResetKey, setFormResetKey] = useState(0);
-
   // Track merged initial values with fetched credentials
   const [mergedInitialValues, setMergedInitialValues] =
     useState<T>(initialValues);
@@ -73,7 +70,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
               imageProvider
             );
             setMergedInitialValues((prev) => ({ ...prev, ...credValues }));
-            setFormResetKey((k) => k + 1);
           }
         })
         .catch((err) => {
@@ -276,7 +272,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
 
   return (
     <Formik<T>
-      key={formResetKey}
       initialValues={mergedInitialValues}
       onSubmit={handleSubmit}
       validationSchema={validationSchema}
