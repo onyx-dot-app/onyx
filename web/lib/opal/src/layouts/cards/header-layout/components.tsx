@@ -56,7 +56,7 @@ function CardHeaderLayout({
       </div>
       {hasRight && (
         <div className="flex flex-col items-end shrink-0">
-          <div className="flex-1">{rightChildren}</div>
+          {rightChildren && <div className="flex-1">{rightChildren}</div>}
           {bottomRightChildren && (
             <div className="flex flex-row">{bottomRightChildren}</div>
           )}
