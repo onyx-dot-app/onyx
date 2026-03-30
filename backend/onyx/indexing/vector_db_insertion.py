@@ -69,7 +69,14 @@ def write_chunks_to_vector_db_with_backoff(
     def key(chunk: DocMetadataAwareIndexChunk) -> str:
         return chunk.source_document.id
 
+    seen_doc_ids: set[str] = set()
     for doc_id, chunks_for_doc in groupby(make_chunks(), key=key):
+        if doc_id in seen_doc_ids:
+            raise RuntimeError(
+                f"Doc chunks are not arriving in order. Current doc_id={doc_id}, seen_doc_ids={list(seen_doc_ids)}"
+            )
+        seen_doc_ids.add(doc_id)
+
         first_chunk = next(chunks_for_doc)
         chunks_for_doc = chain([first_chunk], chunks_for_doc)
 
