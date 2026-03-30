@@ -40,7 +40,7 @@ The right column uses `justify-between` so when both slots are present, `rightCh
 ```tsx
 import { CardHeaderLayout } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgSettings, SvgUnplug, SvgCheckSquare } from "@opal/icons";
+import { SvgGlobe, SvgSettings, SvgUnplug, SvgCheckSquare } from "@opal/icons";
 
 <CardHeaderLayout
   icon={SvgGlobe}

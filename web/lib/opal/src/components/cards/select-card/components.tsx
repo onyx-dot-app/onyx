@@ -61,7 +61,7 @@ const roundingForSize: Record<ContainerSizeVariants, string> = {
  *
  * @example
  * ```tsx
- * <SelectCard variant="select-heavy" state="selected" onClick={handleClick}>
+ * <SelectCard variant="select-card" state="selected" onClick={handleClick}>
  *   <ContentAction
  *     icon={SvgGlobe}
  *     title="Google"
