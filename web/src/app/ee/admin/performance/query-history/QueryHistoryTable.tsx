@@ -330,46 +330,48 @@ export function QueryHistoryTable() {
           </div>
         </div>
         <Separator />
-        <Table className="py-4">
-          <TableHeader>
-            <TableRow>
-              <TableHead>First User Message</TableHead>
-              <TableHead>First AI Response</TableHead>
-              <TableHead>Feedback</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Persona</TableHead>
-              <TableHead>Date</TableHead>
-            </TableRow>
-          </TableHeader>
-          {isLoading ? (
-            <TableBody>
+        <Section>
+          <Table className="mt-5">
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-center">
-                  <ThreeDotsLoader />
-                </TableCell>
+                <TableHead>First User Message</TableHead>
+                <TableHead>First AI Response</TableHead>
+                <TableHead>Feedback</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Persona</TableHead>
+                <TableHead>Date</TableHead>
               </TableRow>
-            </TableBody>
-          ) : (
-            <TableBody>
-              {chatSessionData?.map((chatSessionMinimal) => (
-                <QueryHistoryTableRow
-                  key={chatSessionMinimal.id}
-                  chatSessionMinimal={chatSessionMinimal}
-                />
-              ))}
-            </TableBody>
-          )}
-        </Table>
+            </TableHeader>
+            {isLoading ? (
+              <TableBody>
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center">
+                    <ThreeDotsLoader />
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            ) : (
+              <TableBody>
+                {chatSessionData?.map((chatSessionMinimal) => (
+                  <QueryHistoryTableRow
+                    key={chatSessionMinimal.id}
+                    chatSessionMinimal={chatSessionMinimal}
+                  />
+                ))}
+              </TableBody>
+            )}
+          </Table>
 
-        {chatSessionData && (
-          <Section>
-            <PageSelector
-              totalPages={totalPages}
-              currentPage={currentPage}
-              onPageChange={goToPage}
-            />
-          </Section>
-        )}
+          {chatSessionData && (
+            <Section>
+              <PageSelector
+                totalPages={totalPages}
+                currentPage={currentPage}
+                onPageChange={goToPage}
+              />
+            </Section>
+          )}
+        </Section>
       </CardSection>
 
       {showModal && (
