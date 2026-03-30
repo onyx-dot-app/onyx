@@ -65,7 +65,7 @@ def create_user_files(
                 db_session=db_session,
                 persona_id=persona_id,
                 user=user,
-                get_editable=False,
+                get_editable=True,
             )
         except HTTPException:
             raise OnyxError(
