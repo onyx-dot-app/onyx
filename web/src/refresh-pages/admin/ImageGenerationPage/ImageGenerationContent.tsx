@@ -207,7 +207,7 @@ export default function ImageGenerationContent() {
         <Content
           title="Image Generation Model"
           description="Select a model to generate images in chat."
-          sizePreset="secondary"
+          sizePreset="main-content"
           variant="section"
         />
 
