@@ -1,7 +1,6 @@
 "use client";
 
-import type { FunctionComponent } from "react";
-import type { IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import { Button, SelectCard } from "@opal/components";
 import { Content, CardHeaderLayout } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
@@ -16,7 +15,7 @@ import {
 type ProviderStatus = "disconnected" | "connected" | "selected";
 
 interface ProviderCardProps {
-  icon: FunctionComponent<IconProps>;
+  icon: IconFunctionComponent;
   title: string;
   description: string;
   status: ProviderStatus;
