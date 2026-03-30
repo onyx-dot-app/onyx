@@ -65,6 +65,9 @@ resource "aws_cloudwatch_metric_alarm" "cpu_utilization" {
   threshold           = var.cpu_alarm_threshold
   treat_missing_data  = "missing"
 
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+
   dimensions = {
     DBInstanceIdentifier = aws_db_instance.this.identifier
   }
