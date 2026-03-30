@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import contextlib
 from collections.abc import Generator
 
@@ -93,7 +91,7 @@ class DocumentIndexingBatchAdapter:
         context: DocumentBatchPrepareContext,
         tenant_id: str,
         chunks: list[DocAwareChunk],
-    ) -> DocumentChunkEnricher:
+    ) -> "DocumentChunkEnricher":
         """Do all DB lookups once and return a per-chunk enricher."""
         updatable_ids = [doc.id for doc in context.updatable_docs]
 
