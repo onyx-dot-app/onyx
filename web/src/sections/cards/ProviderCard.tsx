@@ -90,16 +90,14 @@ export default function ProviderCard({
                 Set as Default
               </Button>
             ) : isSelected ? (
-              <Button
-                prominence="tertiary"
-                icon={SvgCheckSquare}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeselect?.();
-                }}
-              >
-                {selectedLabel}
-              </Button>
+              <div className="p-2">
+                <Content
+                  title={selectedLabel}
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgCheckSquare}
+                />
+              </div>
             ) : undefined
           }
           bottomRightChildren={
