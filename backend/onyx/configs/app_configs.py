@@ -740,6 +740,9 @@ FEISHU_OAUTH_SCOPE = os.getenv(
     "FEISHU_OAUTH_SCOPE", "contact:user.base:readonly"
 )
 FEISHU_REDIRECT_URI = os.getenv("FEISHU_REDIRECT_URI")
+FEISHU_OAUTH_EMAIL_FALLBACK = (
+    os.getenv("FEISHU_OAUTH_EMAIL_FALLBACK", "false").lower() == "true"
+)
 
 # Slack specific configs
 SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
@@ -1194,4 +1197,5 @@ STRIPE_PUBLISHABLE_KEY_URL = (
 )
 # Override for local testing with Stripe test keys (pk_test_*)
 STRIPE_PUBLISHABLE_KEY_OVERRIDE = os.environ.get("STRIPE_PUBLISHABLE_KEY")
+
 

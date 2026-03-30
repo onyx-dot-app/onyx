@@ -131,6 +131,14 @@ class FeishuConnector(OAuthConnector):
             if value:
                 token_data[key] = value
 
+        if not token_data.get("email") and FEISHU_OAUTH_EMAIL_FALLBACK:
+            subject = cast(
+                str | None,
+                token_data.get("open_id") or token_data.get("union_id"),
+            )
+            if subject:
+                token_data["email"] = f"feishu@{subject}.local"
+
         token_data["user_info"] = userinfo_payload
         return token_data
 
@@ -156,4 +164,5 @@ class FeishuConnector(OAuthConnector):
             delay=0.1,
         )
         self.user_info = _unwrap_feishu_payload(response.json())
+
 

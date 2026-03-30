@@ -93,6 +93,48 @@ def test_oauth_code_to_token_unwraps_nested_feishu_payloads() -> None:
     assert mock_request.call_count == 2
 
 
+
+
+def test_oauth_code_to_token_generates_fallback_email() -> None:
+    responses = [
+        _MockResponse(
+            {
+                "data": {
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                    "expires_in": 7200,
+                    "token_type": "Bearer",
+                }
+            }
+        ),
+        _MockResponse(
+            {
+                "data": {
+                    "open_id": "ou_123",
+                    "union_id": "on_456",
+                    "name": "Feishu User",
+                }
+            }
+        ),
+    ]
+
+    with patch.object(feishu_connector_module, "FEISHU_CLIENT_ID", "cli_123"):
+        with patch.object(feishu_connector_module, "FEISHU_CLIENT_SECRET", "sec_123"):
+            with patch.object(feishu_connector_module, "FEISHU_REDIRECT_URI", None):
+                with patch.object(
+                    feishu_connector_module, "FEISHU_OAUTH_EMAIL_FALLBACK", True
+                ):
+                    with patch(
+                        "onyx.connectors.feishu.connector.request_with_retries",
+                        side_effect=responses,
+                    ):
+                        token = FeishuConnector.oauth_code_to_token(
+                            base_domain="https://onyx.example.com",
+                            code="oauth-code",
+                            additional_kwargs={},
+                        )
+
+    assert token["email"] == "feishu@ou_123.local"
 def test_oauth_code_to_token_raises_on_feishu_application_error() -> None:
     responses = [
         _MockResponse(
@@ -157,3 +199,4 @@ def test_validate_connector_settings_raises_on_feishu_application_error() -> Non
     ):
         with pytest.raises(RuntimeError, match="Feishu API request failed"):
             connector.validate_connector_settings()
+
