@@ -7,6 +7,7 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 interface UseHookExecutionLogsResult {
   isLoading: boolean;
+  error: Error | undefined;
   hasRecentErrors: boolean;
   recentErrors: HookExecutionRecord[];
   olderErrors: HookExecutionRecord[];
@@ -16,7 +17,7 @@ export function useHookExecutionLogs(
   hookId: number,
   limit = 10
 ): UseHookExecutionLogsResult {
-  const { data, isLoading } = useSWR(
+  const { data, isLoading, error } = useSWR(
     ["hook-execution-logs", hookId, limit],
     () => fetchExecutionLogs(hookId, limit),
     { refreshInterval: 60_000 }
@@ -37,5 +38,5 @@ export function useHookExecutionLogs(
 
   const hasRecentErrors = recentErrors.length > 0;
 
-  return { isLoading, hasRecentErrors, recentErrors, olderErrors };
+  return { isLoading, error, hasRecentErrors, recentErrors, olderErrors };
 }

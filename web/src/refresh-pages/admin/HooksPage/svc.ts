@@ -25,7 +25,8 @@ async function parseError(res: Response, fallback: string): Promise<Error> {
       );
     }
     return new Error(body?.detail ?? fallback);
-  } catch {
+  } catch (err) {
+    console.error("parseError: failed to parse error response body:", err);
     return new Error(fallback);
   }
 }

@@ -1,9 +1,8 @@
 "use client";
 
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgDownload, SvgTextLines } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
-import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { useHookExecutionLogs } from "@/hooks/useHookExecutionLogs";
@@ -38,7 +37,7 @@ function SectionHeader({ label }: { label: string }) {
       height="fit"
       className="py-1"
     >
-      <Text secondaryBody text03 className="px-0.5">
+      <Text font="secondary-body" color="text-03">
         {label}
       </Text>
       <div className="flex-1 ml-2 border-t border-border-02" />
@@ -57,13 +56,17 @@ function LogRow({ log }: { log: HookExecutionRecord }) {
       className="py-2"
     >
       {/* 1. Timestamp */}
-      <Text secondaryMonoLabel text04 nowrap className="shrink-0 px-0.5">
-        {formatTimestamp(log.created_at)}
-      </Text>
+      <span className="shrink-0 text-code-code">
+        <Text font="secondary-mono-label" color="inherit" nowrap>
+          {formatTimestamp(log.created_at)}
+        </Text>
+      </span>
       {/* 2. Error message */}
-      <Text secondaryMono text04 className="flex-1 min-w-0 break-all px-0.5">
-        {log.error_message ?? "Unknown error"}
-      </Text>
+      <span className="flex-1 min-w-0 break-all text-code-code">
+        <Text font="secondary-mono" color="inherit">
+          {log.error_message ?? "Unknown error"}
+        </Text>
+      </span>
       {/* 3. Copy button */}
       <Section width="fit" height="fit" alignItems="center">
         <CopyIconButton size="xs" getCopyText={() => log.error_message ?? ""} />
@@ -78,7 +81,7 @@ export default function HookLogsModal({
   hook,
   spec,
 }: HookLogsModalProps) {
-  const { recentErrors, olderErrors, isLoading } = useHookExecutionLogs(
+  const { recentErrors, olderErrors, isLoading, error } = useHookExecutionLogs(
     hook.id,
     10
   );
@@ -104,7 +107,7 @@ export default function HookLogsModal({
     a.href = url;
     a.download = `${hook.name}-errors.txt`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
   }
 
   return (
@@ -123,8 +126,12 @@ export default function HookLogsModal({
             <Section justifyContent="center" height="fit" className="py-6">
               <SimpleLoader />
             </Section>
+          ) : error ? (
+            <Text font="main-ui-body" color="text-03">
+              Failed to load logs.
+            </Text>
           ) : totalLines === 0 ? (
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               No errors in the past 30 days.
             </Text>
           ) : (
@@ -133,7 +140,7 @@ export default function HookLogsModal({
                 <>
                   <SectionHeader label="Past Hour" />
                   {recentErrors.map((log, idx) => (
-                    <LogRow key={idx} log={log} />
+                    <LogRow key={log.created_at + String(idx)} log={log} />
                   ))}
                 </>
               )}
@@ -141,7 +148,7 @@ export default function HookLogsModal({
                 <>
                   <SectionHeader label="Older" />
                   {olderErrors.map((log, idx) => (
-                    <LogRow key={idx} log={log} />
+                    <LogRow key={log.created_at + String(idx)} log={log} />
                   ))}
                 </>
               )}
@@ -155,8 +162,8 @@ export default function HookLogsModal({
           padding={0.5}
           className="bg-background-tint-01"
         >
-          <Text mainUiBody text03>
-            {totalLines} {totalLines === 1 ? "line" : "lines"}
+          <Text font="main-ui-body" color="text-03">
+            {`${totalLines} ${totalLines === 1 ? "line" : "lines"}`}
           </Text>
           <Section
             flexDirection="row"

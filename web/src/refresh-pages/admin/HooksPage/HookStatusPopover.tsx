@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { Text } from "@opal/components";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover from "@/refresh-components/Popover";
-import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
@@ -47,15 +48,23 @@ export default function HookStatusPopover({
   const [clickOpened, setClickOpened] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { hasRecentErrors, recentErrors, isLoading } = useHookExecutionLogs(
-    hook.id
-  );
+  const { hasRecentErrors, recentErrors, isLoading, error } =
+    useHookExecutionLogs(hook.id);
 
   useEffect(() => {
     return () => {
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (error) {
+      console.error(
+        "HookStatusPopover: failed to fetch execution logs:",
+        error
+      );
+    }
+  }, [error]);
 
   function clearCloseTimer() {
     if (closeTimerRef.current) {
@@ -130,7 +139,7 @@ export default function HookStatusPopover({
               isBusy && "opacity-50 pointer-events-none"
             )}
           >
-            <Text mainUiAction text03>
+            <Text font="main-ui-action" color="text-03">
               Connected
             </Text>
             {hasRecentErrors ? (
@@ -164,6 +173,12 @@ export default function HookStatusPopover({
               <Section justifyContent="center" height="fit" className="p-3">
                 <SimpleLoader />
               </Section>
+            ) : error ? (
+              <Section justifyContent="center" height="fit" className="p-3">
+                <Text font="secondary-body" color="text-03">
+                  Failed to load logs.
+                </Text>
+              </Section>
             ) : hasRecentErrors ? (
               // Errors state
               <>
@@ -195,14 +210,14 @@ export default function HookStatusPopover({
                     gap={0}
                     className="px-0.5"
                   >
-                    <Text mainUiAction text04>
+                    <Text font="main-ui-action" color="text-04">
                       {recentErrors.length <= 3
                         ? `${recentErrors.length} ${
                             recentErrors.length === 1 ? "Error" : "Errors"
                           }`
                         : "Most Recent Errors"}
                     </Text>
-                    <Text secondaryBody text03>
+                    <Text font="secondary-body" color="text-03">
                       in the past hour
                     </Text>
                   </Section>
@@ -221,7 +236,7 @@ export default function HookStatusPopover({
                 >
                   {recentErrors.slice(0, 3).map((log, idx) => (
                     <Section
-                      key={idx}
+                      key={log.created_at + String(idx)}
                       flexDirection="column"
                       justifyContent="start"
                       alignItems="start"
@@ -236,51 +251,36 @@ export default function HookStatusPopover({
                         gap={0}
                         height="fit"
                       >
-                        <Text secondaryMonoLabel text04>
-                          {formatTime(log.created_at)}
-                        </Text>
+                        <span className="text-code-code">
+                          <Text font="secondary-mono-label" color="inherit">
+                            {formatTime(log.created_at)}
+                          </Text>
+                        </span>
                         <CopyIconButton
                           size="xs"
                           getCopyText={() => log.error_message ?? ""}
                         />
                       </Section>
-                      <Text secondaryMono text03 className="break-all">
-                        {log.error_message ?? "Unknown error"}
-                      </Text>
+                      <span className="break-all">
+                        <Text font="secondary-mono" color="text-03">
+                          {log.error_message ?? "Unknown error"}
+                        </Text>
+                      </span>
                     </Section>
                   ))}
                 </Section>
 
                 {/* View More Lines */}
-                <Popover.Close asChild>
-                  <button
-                    className="flex items-center w-full py-1 pl-1.5 pr-2 hover:bg-background-neutral-02 transition-colors rounded-lg cursor-pointer"
-                    onClick={() => setLogsOpen(true)}
-                  >
-                    <Section
-                      flexDirection="row"
-                      justifyContent="start"
-                      alignItems="center"
-                      gap={0.25}
-                      width="fit"
-                      height="fit"
-                      className="px-0.5"
-                    >
-                      <Section
-                        justifyContent="center"
-                        alignItems="center"
-                        width={1.25}
-                        height={1.25}
-                        className="p-0.5 rounded shrink-0"
-                      >
-                        <SvgMaximize2 size={16} className="text-text-03" />
-                      </Section>
-                      <Text secondaryBody text03 className="px-0.5">
-                        View More Lines
-                      </Text>
-                    </Section>
-                  </button>
-                </Popover.Close>
+                <LineItem
+                  muted
+                  icon={SvgMaximize2}
+                  onClick={() => {
+                    handleOpenChange(false);
+                    setLogsOpen(true);
+                  }}
+                >
+                  View More Lines
+                </LineItem>
               </>
             ) : (
               // No errors state
@@ -316,10 +316,10 @@ export default function HookStatusPopover({
                     gap={0}
                     className="px-0.5"
                   >
-                    <Text mainUiAction text04>
+                    <Text font="main-ui-action" color="text-04">
                       No Error
                     </Text>
-                    <Text secondaryBody text03>
+                    <Text font="secondary-body" color="text-03">
                       in the past hour
                     </Text>
                   </Section>
@@ -328,35 +328,16 @@ export default function HookStatusPopover({
                 <Separator noPadding className="py-1" />
 
                 {/* View Older Errors */}
-                <Popover.Close asChild>
-                  <button
-                    className="flex items-center w-full py-1 pl-1.5 pr-2 hover:bg-background-neutral-02 transition-colors rounded-lg cursor-pointer"
-                    onClick={() => setLogsOpen(true)}
-                  >
-                    <Section
-                      flexDirection="row"
-                      justifyContent="start"
-                      alignItems="center"
-                      gap={0.25}
-                      width="fit"
-                      height="fit"
-                      className="px-0.5"
-                    >
-                      <Section
-                        justifyContent="center"
-                        alignItems="center"
-                        width={1.25}
-                        height={1.25}
-                        className="p-0.5 rounded shrink-0"
-                      >
-                        <SvgMaximize2 size={16} className="text-text-03" />
-                      </Section>
-                      <Text secondaryBody text03 className="px-0.5">
-                        View Older Errors
-                      </Text>
-                    </Section>
-                  </button>
-                </Popover.Close>
+                <LineItem
+                  muted
+                  icon={SvgMaximize2}
+                  onClick={() => {
+                    handleOpenChange(false);
+                    setLogsOpen(true);
+                  }}
+                >
+                  View Older Errors
+                </LineItem>
               </>
             )}
           </Section>
