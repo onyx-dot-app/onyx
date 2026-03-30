@@ -10,6 +10,9 @@ export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
   me: "/api/me",
 
+  // ── Health ────────────────────────────────────────────────────────────────
+  health: "/api/health",
+
   // ── Settings ──────────────────────────────────────────────────────────────
   settings: "/api/settings",
   enterpriseSettings: "/api/enterprise-settings",
@@ -21,15 +24,20 @@ export const SWR_KEYS = {
   persona: (id: number) => `/api/persona/${id}`,
   agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
+  personaLabels: "/api/persona/labels",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",
   llmProvidersForPersona: (personaId: number) =>
     `/api/llm/persona/${personaId}/providers`,
   adminLlmProviders: "/api/admin/llm/provider",
+  llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
+
+  // ── Image Generation ──────────────────────────────────────────────────────
+  imageGenConfig: "/api/admin/image-generation/config",
 
   // ── Documents ─────────────────────────────────────────────────────────────
   documentSets: "/api/manage/document-set",
@@ -37,20 +45,88 @@ export const SWR_KEYS = {
   tags: "/api/query/valid-tags",
   connectorStatus: "/api/manage/connector-status",
 
+  // ── Credentials & Connectors ──────────────────────────────────────────────
+  adminCredentials: "/api/manage/admin/credential",
+  indexingStatus: "/api/manage/admin/connector/indexing-status",
+  adminConnectorStatus: "/api/manage/admin/connector/status",
+  federatedConnectors: "/api/federated",
+
+  // ── Search Settings ───────────────────────────────────────────────────────
+  currentSearchSettings: "/api/search-settings/get-current-search-settings",
+  secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
+
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/api/chat/get-user-chat-sessions",
 
   // ── Projects & Files ──────────────────────────────────────────────────────
   userProjects: "/api/user/projects",
   recentFiles: "/api/user/files/recent",
+  userPats: "/api/user/pats",
+  notifications: "/api/notifications",
+
+  // ── Users ─────────────────────────────────────────────────────────────────
+  acceptedUsers: "/api/manage/users/accepted/all",
+  invitedUsers: "/api/manage/users/invited",
+  pendingTenantUsers: "/api/tenants/users/pending",
+  userCounts: "/api/manage/users/counts",
+
+  // ── API Keys ──────────────────────────────────────────────────────────────
+  adminApiKeys: "/api/admin/api-key",
+
+  // ── Groups ────────────────────────────────────────────────────────────────
+  adminUserGroups: "/api/manage/admin/user-group",
+  shareableGroups: "/api/manage/user-groups/minimal",
+  scimToken: "/api/admin/enterprise-settings/scim/token",
+
+  // ── MCP Servers ───────────────────────────────────────────────────────────
+  adminMcpServers: "/api/admin/mcp/servers",
+  mcpServers: "/api/mcp/servers",
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
+  openApiTools: "/api/tool/openapi",
   oauthTokenStatus: "/api/user-oauth-token/status",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   voiceProviders: "/api/admin/voice/providers",
   voiceStatus: "/api/voice/status",
+
+  // ── Build (Craft) ─────────────────────────────────────────────────────────
+  buildConnectors: "/api/build/connectors",
+  buildUserLibraryTree: "/api/build/user-library/tree",
+  buildSessionFiles: (sessionId: string) =>
+    `/api/build/sessions/${sessionId}/files?path=`,
+  buildSessionOutputFiles: (sessionId: string) =>
+    `/api/build/sessions/${sessionId}/files?path=outputs`,
+  buildSessionWebappInfo: (sessionId: string) =>
+    `/api/build/sessions/${sessionId}/webapp-info`,
+  buildSessionArtifacts: (sessionId: string) =>
+    `/api/build/sessions/${sessionId}/artifacts`,
+  buildSessionArtifactFile: (sessionId: string, filePath: string) =>
+    `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
+  buildSessionPptxPreview: (sessionId: string, filePath: string) =>
+    `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
+
+  // ── Knowledge Graph ───────────────────────────────────────────────────────
+  kgConfig: "/api/admin/kg/config",
+  kgEntityTypes: "/api/admin/kg/entity-types",
+  kgExposed: "/api/admin/kg/exposed",
+
+  // ── OpenSearch Migration ──────────────────────────────────────────────────
+  opensearchMigrationStatus: "/api/admin/opensearch-migration/status",
+  opensearchMigrationRetrieval: "/api/admin/opensearch-migration/retrieval",
+
+  // ── Token Rate Limits ─────────────────────────────────────────────────────
+  globalTokenRateLimits: "/api/admin/token-rate-limits/global",
+  userTokenRateLimits: "/api/admin/token-rate-limits/users",
+  userGroupTokenRateLimits: "/api/admin/token-rate-limits/user-groups",
+
+  // ── Usage Reports ─────────────────────────────────────────────────────────
+  usageReport: "/api/admin/usage-report",
+
+  // ── Web Search ────────────────────────────────────────────────────────────
+  webSearchContentProviders: "/api/admin/web-search/content-providers",
+  webSearchSearchProviders: "/api/admin/web-search/search-providers",
 
   // ── Prompt shortcuts ──────────────────────────────────────────────────────
   promptShortcuts: "/api/input_prompt",
@@ -63,4 +139,28 @@ export const SWR_KEYS = {
   // ── Admin ─────────────────────────────────────────────────────────────────
   hooks: "/api/admin/hooks",
   hookSpecs: "/api/admin/hooks/specs",
+
+  // ── Slack Bots ────────────────────────────────────────────────────────────
+  slackChannels: "/api/manage/admin/slack-app/channel",
+  slackBots: "/api/manage/admin/slack-app/bots",
+  slackBot: (botId: number) => `/api/manage/admin/slack-app/bots/${botId}`,
+  slackBotConfig: (botId: number) =>
+    `/api/manage/admin/slack-app/bots/${botId}/config`,
+
+  // ── Standard Answers (EE) ─────────────────────────────────────────────────
+  standardAnswerCategories: "/api/manage/admin/standard-answer/category",
+  standardAnswers: "/api/manage/admin/standard-answer",
+
+  // ── Query History (EE) ────────────────────────────────────────────────────
+  adminChatSessionHistory: "/api/admin/chat-session-history",
+  adminChatSession: (id: string) => `/api/admin/chat-session-history/${id}`,
+
+  // ── MCP Server (per-ID) ───────────────────────────────────────────────────
+  adminMcpServer: (id: number) => `/api/admin/mcp/servers/${id}`,
+
+  // ── Document Processing ───────────────────────────────────────────────────
+  unstructuredApiKeySet: "/api/search-settings/unstructured-api-key-set",
+
+  // ── Connectors ────────────────────────────────────────────────────────────
+  connector: "/api/manage/connector",
 } as const;

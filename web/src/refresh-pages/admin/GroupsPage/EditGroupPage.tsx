@@ -34,7 +34,6 @@ import {
   PAGE_SIZE,
 } from "./shared";
 import {
-  USER_GROUP_URL,
   renameGroup,
   updateGroup,
   deleteGroup,
@@ -42,6 +41,7 @@ import {
   updateDocSetGroupSharing,
   saveTokenLimits,
 } from "./svc";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
@@ -66,7 +66,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     data: groups,
     isLoading: groupLoading,
     error: groupError,
-  } = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher, {
+  } = useSWR<UserGroup[]>(SWR_KEYS.adminUserGroups, errorHandlingFetcher, {
     refreshInterval: (latestData) => {
       const g = latestData?.find((g) => g.id === groupId);
       return g && !g.is_up_to_date ? 5000 : 0;
@@ -111,7 +111,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     data: apiKeys,
     isLoading: apiKeysLoading,
     error: apiKeysError,
-  } = useSWR<ApiKeyDescriptor[]>("/api/admin/api-key", errorHandlingFetcher);
+  } = useSWR<ApiKeyDescriptor[]>(SWR_KEYS.adminApiKeys, errorHandlingFetcher);
 
   const isLoading =
     groupLoading || usersLoading || apiKeysLoading || tokenLimitsLoading;
@@ -216,7 +216,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
 
     // Re-fetch group to check sync status before saving
-    const freshGroups = await fetch(USER_GROUP_URL).then((r) => r.json());
+    const freshGroups = await fetch(SWR_KEYS.adminUserGroups).then((r) =>
+      r.json()
+    );
     const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
     if (freshGroup && !freshGroup.is_up_to_date) {
       toast.error(
@@ -257,7 +259,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       initialAgentIdsRef.current = selectedAgentIds;
       initialDocSetIdsRef.current = selectedDocSetIds;
 
-      mutate(USER_GROUP_URL);
+      mutate(SWR_KEYS.adminUserGroups);
       mutate(`/api/admin/token-rate-limits/user-group/${groupId}`);
       toast.success(`Group "${trimmed}" updated`);
       router.push("/admin/groups");
@@ -273,7 +275,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     setIsDeleting(true);
     try {
       await deleteGroup(groupId);
-      mutate(USER_GROUP_URL);
+      mutate(SWR_KEYS.adminUserGroups);
       toast.success(`Group "${group?.name}" deleted`);
       router.push("/admin/groups");
     } catch (e) {

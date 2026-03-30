@@ -19,6 +19,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import { Disabled } from "@opal/core";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import React, { useState } from "react";
 import { UsageReport } from "./types";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -225,7 +226,7 @@ function GenerateReportInput({
   );
 }
 
-const USAGE_REPORT_URL = "/api/admin/usage-report";
+const USAGE_REPORT_URL = SWR_KEYS.usageReport;
 
 function UsageReportsTable({
   refreshTrigger,

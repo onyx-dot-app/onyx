@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
@@ -31,7 +32,7 @@ function formatTimestamp(iso: string): string {
 
 function MigrationStatusSection() {
   const { data, isLoading, error } = useSWR<MigrationStatus>(
-    "/api/admin/opensearch-migration/status",
+    SWR_KEYS.opensearchMigrationStatus,
     errorHandlingFetcher
   );
 
@@ -121,7 +122,7 @@ function MigrationStatusSection() {
 
 function RetrievalSourceSection() {
   const { data, isLoading, error, mutate } = useSWR<RetrievalStatus>(
-    "/api/admin/opensearch-migration/retrieval",
+    SWR_KEYS.opensearchMigrationRetrieval,
     errorHandlingFetcher
   );
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
@@ -136,16 +137,13 @@ function RetrievalSourceSection() {
   async function handleUpdate() {
     setUpdating(true);
     try {
-      const response = await fetch(
-        "/api/admin/opensearch-migration/retrieval",
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            enable_opensearch_retrieval: currentValue === "opensearch",
-          }),
-        }
-      );
+      const response = await fetch(SWR_KEYS.opensearchMigrationRetrieval, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enable_opensearch_retrieval: currentValue === "opensearch",
+        }),
+      });
       if (!response.ok) {
         throw new Error("Failed to update retrieval setting");
       }

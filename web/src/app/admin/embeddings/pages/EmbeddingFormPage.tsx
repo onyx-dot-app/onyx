@@ -17,6 +17,7 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
 import {
@@ -119,7 +120,7 @@ export default function EmbeddingForm() {
     isLoading: isLoadingCurrentModel,
     error: currentEmbeddingModelError,
   } = useSWR<CloudEmbeddingModel | HostedEmbeddingModel | null>(
-    "/api/search-settings/get-current-search-settings",
+    SWR_KEYS.currentSearchSettings,
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
   );
@@ -130,7 +131,7 @@ export default function EmbeddingForm() {
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useSWR<SavedSearchSettings | null>(
-      "/api/search-settings/get-current-search-settings",
+      SWR_KEYS.currentSearchSettings,
       errorHandlingFetcher,
       { refreshInterval: 5000 } // 5 seconds
     );

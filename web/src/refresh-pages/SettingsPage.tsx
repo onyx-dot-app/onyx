@@ -32,6 +32,7 @@ import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
@@ -1080,7 +1081,7 @@ function AccountsAccessSettings() {
     error,
     isLoading,
   } = useSWR<PAT[]>(
-    showTokensSection ? "/api/user/pats" : null,
+    showTokensSection ? SWR_KEYS.userPats : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: true,

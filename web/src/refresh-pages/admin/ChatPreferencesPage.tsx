@@ -417,7 +417,7 @@ function ChatPreferencesForm() {
   // Default agent configuration (system prompt)
   const { data: defaultAgentConfig, mutate: mutateDefaultAgent } =
     useSWR<DefaultAgentConfiguration>(
-      "/api/admin/default-assistant/configuration",
+      SWR_KEYS.defaultAssistantConfig,
       errorHandlingFetcher
     );
 

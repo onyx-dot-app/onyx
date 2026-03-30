@@ -3,6 +3,7 @@
 import useSWR from "swr";
 import { CCPairBasicInfo } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
  * Hook for fetching connector-credential pairs (CC Pairs).
@@ -68,7 +69,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
  */
 export default function useCCPairs(enabled: boolean = true) {
   const { data, error, isLoading, mutate } = useSWR<CCPairBasicInfo[]>(
-    enabled ? "/api/manage/connector-status" : null,
+    enabled ? SWR_KEYS.connectorStatus : null,
     errorHandlingFetcher
   );
 

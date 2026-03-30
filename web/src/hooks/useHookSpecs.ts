@@ -3,10 +3,11 @@
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { HookPointMeta } from "@/refresh-pages/admin/HooksPage/interfaces";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export function useHookSpecs() {
   const { data, isLoading, error } = useSWR<HookPointMeta[]>(
-    "/api/admin/hooks/specs",
+    SWR_KEYS.hookSpecs,
     errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
