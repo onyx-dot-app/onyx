@@ -450,6 +450,11 @@ def assign_user_to_default_groups__no_commit(
         savepoint.rollback()
         return
 
+    # lazy import to avoid circular dependency
+    from onyx.auth.permissions import recompute_user_permissions
+
+    recompute_user_permissions(user.id, db_session)
+
     logger.info(f"Assigned user {user.email} to default group '{default_group.name}'")
 
 
