@@ -185,7 +185,15 @@ def delete_messages_and_files_from_chat_session(
     for _, files in messages_with_files:
         file_store = get_default_file_store()
         for file_info in files or []:
-            file_store.delete_file(file_id=file_info.get("id"))
+            try:
+                file_store.delete_file(file_id=file_info.get("id"))
+            except Exception:
+                logger.warning(
+                    "Failed to delete file %s from file store during "
+                    "chat session cleanup, skipping.",
+                    file_info.get("id"),
+                )
+                continue
 
     # Delete ChatMessage records - CASCADE constraints will automatically handle:
     # - ChatMessage__StandardAnswer relationship records

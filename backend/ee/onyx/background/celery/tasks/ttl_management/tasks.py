@@ -54,27 +54,35 @@ def perform_ttl_management_task(
                 retention_limit_days, db_session
             )
 
+        failures = 0
         for user_id, session_id in old_chat_sessions:
-            # one session per delete so that we don't blow up if a deletion fails.
-            with get_session_with_current_tenant() as db_session:
-                delete_chat_session(
-                    user_id,
-                    session_id,
-                    db_session,
-                    include_deleted=True,
-                    hard_delete=True,
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    delete_chat_session(
+                        user_id,
+                        session_id,
+                        db_session,
+                        include_deleted=True,
+                        hard_delete=True,
+                    )
+            except Exception:
+                failures += 1
+                logger.exception(
+                    "Failed to delete chat session "
+                    f"user_id={user_id} session_id={session_id}, "
+                    "continuing with remaining sessions"
                 )
 
         with get_session_with_current_tenant() as db_session:
             mark_task_as_finished_with_id(
                 db_session=db_session,
                 task_id=task_id,
-                success=True,
+                success=failures == 0,
             )
 
     except Exception:
         logger.exception(
-            f"delete_chat_session exceptioned. user_id={user_id} session_id={session_id}"
+            f"TTL management task failed. user_id={user_id} session_id={session_id}"
         )
         with get_session_with_current_tenant() as db_session:
             mark_task_as_finished_with_id(
