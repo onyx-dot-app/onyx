@@ -51,6 +51,49 @@ logger = setup_logger()
 IMAGE_GENERATION_TOOL_NAME = "generate_image"
 
 
+def build_file_context_message(
+    file_id: str,
+    filename: str,
+    file_type: ChatFileType,
+    content_text: str | None = None,
+    token_count: int = 0,
+) -> ChatMessageSimple:
+    """Build the LLM context message for a single file.
+
+    Centralises the decision of how a file appears in the LLM prompt.
+    Metadata-only types get a lightweight pointer; all other text files
+    get their full content injected.
+
+    This is the single place to extend when new file-type handling is
+    needed (e.g. search-retrieved documents).
+    """
+    if file_type.is_metadata_only():
+        message = (
+            f"File: {filename} (id={file_id})\n"
+            "Use the file_reader or python tools to access "
+            "this file's contents."
+        )
+        return ChatMessageSimple(
+            message=message,
+            token_count=0,
+            message_type=MessageType.USER,
+            file_id=file_id,
+        )
+
+    # Full-content injection for regular text files
+    message = (
+        f"File: {filename}\n{content_text or ''}\nEnd of File"
+        if filename
+        else content_text or ""
+    )
+    return ChatMessageSimple(
+        message=message,
+        token_count=token_count,
+        message_type=MessageType.USER,
+        file_id=file_id,
+    )
+
+
 def create_chat_session_from_request(
     chat_session_request: ChatSessionCreationRequest,
     user_id: UUID | None,
@@ -549,33 +592,26 @@ def convert_chat_history(
                         if loaded_file.file_type == ChatFileType.IMAGE:
                             image_files.append(loaded_file)
                         else:
-                            # Text files (DOC, PLAIN_TEXT, CSV) are added as separate messages
                             text_files.append(loaded_file)
 
             # Add text files as separate messages before the user message.
             # Each message is tagged with ``file_id`` so that forgotten files
             # can be detected after context-window truncation.
             for text_file in text_files:
-                file_text = text_file.content_text or ""
-                filename = text_file.filename
-                message = (
-                    f"File: {filename}\n{file_text}\nEnd of File"
-                    if filename
-                    else file_text
-                )
+                filename = text_file.filename or "unknown"
                 simple_messages.append(
-                    ChatMessageSimple(
-                        message=message,
-                        token_count=text_file.token_count,
-                        message_type=MessageType.USER,
-                        image_files=None,
+                    build_file_context_message(
                         file_id=text_file.file_id,
+                        filename=filename,
+                        file_type=text_file.file_type,
+                        content_text=text_file.content_text,
+                        token_count=text_file.token_count,
                     )
                 )
                 all_injected_file_metadata[text_file.file_id] = FileToolMetadata(
                     file_id=text_file.file_id,
-                    filename=filename or "unknown",
-                    approx_char_count=len(file_text),
+                    filename=filename,
+                    approx_char_count=len(text_file.content_text or ""),
                 )
 
             # Sum token counts from image files (excluding project image files)

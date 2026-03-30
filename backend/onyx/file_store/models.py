@@ -23,6 +23,11 @@ class ChatFileType(str, Enum):
             ChatFileType.TABULAR,
         )
 
+    def is_metadata_only(self) -> bool:
+        """File types where only metadata (filename, file_id) is injected
+        into the LLM context. The LLM uses tools to access the actual data."""
+        return self in (ChatFileType.TABULAR,)
+
 
 class FileDescriptor(TypedDict):
     """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column

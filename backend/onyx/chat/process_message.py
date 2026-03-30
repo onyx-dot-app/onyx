@@ -117,6 +117,8 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 
+APPROX_CHARS_PER_TOKEN = 4
+
 
 class _AvailableFiles(BaseModel):
     """Separated file IDs for the FileReaderTool so it knows which loader to use."""
@@ -263,9 +265,6 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
         return None
 
 
-APPROX_CHARS_PER_TOKEN = 4
-
-
 def extract_context_files(
     user_files: list[UserFile],
     llm_max_context_window: int,
@@ -304,14 +303,14 @@ def extract_context_files(
     if not user_files:
         return _empty_extracted_context_files()
 
-    # Tabular files only inject metadata (not full content), so exclude
+    # Metadata-only file types don't inject full content, so exclude
     # their token counts from the context-window fit check.
     from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 
     aggregate_tokens = sum(
         uf.token_count or 0
         for uf in user_files
-        if mime_type_to_chat_file_type(uf.file_type) != ChatFileType.TABULAR
+        if not mime_type_to_chat_file_type(uf.file_type).is_metadata_only()
     )
     max_actual_tokens = (
         llm_max_context_window - reserved_token_count
@@ -321,7 +320,9 @@ def extract_context_files(
         tool_metadata = []
         use_as_search_filter = not DISABLE_VECTOR_DB
         if DISABLE_VECTOR_DB:
-            tool_metadata = _build_file_tool_metadata_for_user_files(user_files)
+            tool_metadata = [
+                _build_file_tool_metadata_for_user_file(uf) for uf in user_files
+            ]
         return ExtractedContextFiles(
             file_texts=[],
             image_files=[],
@@ -349,18 +350,16 @@ def extract_context_files(
         uf = user_file_map.get(str(f.file_id))
         filename = f.filename or f"file_{f.file_id}"
 
-        if f.file_type == ChatFileType.TABULAR:
-            # Tabular files are not injected as full text — only metadata
-            # is provided so the LLM can use tools to access the data.
-            tool_metadata.append(
-                FileToolMetadata(
-                    file_id=str(f.file_id),
-                    filename=filename,
-                    approx_char_count=(
-                        (uf.token_count or 0) * APPROX_CHARS_PER_TOKEN if uf else 0
-                    ),
+        if f.file_type.is_metadata_only():
+            # Metadata-only files are not injected as full text — only
+            # their metadata is provided so the LLM uses tools to access
+            # the data.
+            if not uf:
+                logger.error(
+                    f"File with id={f.file_id} in metadata-only path with no associated user file"
                 )
-            )
+                continue
+            tool_metadata.append(_build_file_tool_metadata_for_user_file(uf))
         elif f.file_type.is_text_file():
             text_content = _extract_text_from_in_memory_file(f)
             if not text_content:
@@ -400,18 +399,15 @@ def extract_context_files(
     )
 
 
-def _build_file_tool_metadata_for_user_files(
-    user_files: list[UserFile],
-) -> list[FileToolMetadata]:
-    """Build lightweight FileToolMetadata from a list of UserFile records."""
-    return [
-        FileToolMetadata(
-            file_id=str(uf.id),
-            filename=uf.name,
-            approx_char_count=(uf.token_count or 0) * APPROX_CHARS_PER_TOKEN,
-        )
-        for uf in user_files
-    ]
+def _build_file_tool_metadata_for_user_file(
+    user_file: UserFile,
+) -> FileToolMetadata:
+    """Build lightweight FileToolMetadata from a list of UserFile record."""
+    return FileToolMetadata(
+        file_id=str(user_file.id),
+        filename=user_file.name,
+        approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
+    )
 
 
 def determine_search_params(
