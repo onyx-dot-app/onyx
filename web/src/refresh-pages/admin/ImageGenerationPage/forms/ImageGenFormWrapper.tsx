@@ -10,14 +10,14 @@ import {
   createImageGenerationConfig,
   updateImageGenerationConfig,
   fetchImageGenerationCredentials,
-} from "../svc";
+} from "@/refresh-pages/admin/ImageGenerationPage/svc";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import {
   ImageGenFormWrapperProps,
   ImageGenFormChildProps,
   ImageGenSubmitPayload,
   FormValues,
-} from "./types";
+} from "@/refresh-pages/admin/ImageGenerationPage/forms/types";
 import { toast } from "@/hooks/useToast";
 
 export function ImageGenFormWrapper<T extends FormValues>({

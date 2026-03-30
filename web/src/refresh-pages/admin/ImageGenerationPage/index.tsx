@@ -1,7 +1,7 @@
 "use client";
 
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import ImageGenerationContent from "./ImageGenerationContent";
+import ImageGenerationContent from "@/refresh-pages/admin/ImageGenerationPage/ImageGenerationContent";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 const route = ADMIN_ROUTES.IMAGE_GENERATION;

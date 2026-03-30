@@ -6,14 +6,14 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
-import { ImageGenFormWrapper } from "./ImageGenFormWrapper";
+import { ImageGenFormWrapper } from "@/refresh-pages/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
   ImageGenFormChildProps,
   ImageGenSubmitPayload,
-} from "./types";
-import { ImageProvider } from "../constants";
-import { ImageGenerationCredentials } from "../svc";
+} from "@/refresh-pages/admin/ImageGenerationPage/forms/types";
+import { ImageProvider } from "@/refresh-pages/admin/ImageGenerationPage/constants";
+import { ImageGenerationCredentials } from "@/refresh-pages/admin/ImageGenerationPage/svc";
 
 const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DEFAULT_LOCATION = "global";

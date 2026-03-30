@@ -7,13 +7,16 @@ import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LLMProviderResponse, LLMProviderView } from "@/interfaces/llm";
-import { IMAGE_PROVIDER_GROUPS, ImageProvider } from "./constants";
+import {
+  IMAGE_PROVIDER_GROUPS,
+  ImageProvider,
+} from "@/refresh-pages/admin/ImageGenerationPage/constants";
 import {
   ImageGenerationConfigView,
   setDefaultImageGenerationConfig,
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
-} from "./svc";
+} from "@/refresh-pages/admin/ImageGenerationPage/svc";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -30,7 +33,7 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import { getImageGenForm } from "./forms";
+import { getImageGenForm } from "@/refresh-pages/admin/ImageGenerationPage/forms";
 
 const NO_DEFAULT_VALUE = "__none__";
 
