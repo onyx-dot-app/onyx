@@ -390,14 +390,12 @@ function PaginationCount({
         <span className={textClasses(size, "muted")}>of</span>
         {totalItems}
         {units && (
-          <span className="ml-1">
-            <Text
-              color="inherit"
-              font={size === "sm" ? "secondary-body" : "main-ui-muted"}
-            >
-              {units}
-            </Text>
-          </span>
+          <Text
+            color="inherit"
+            font={size === "sm" ? "secondary-body" : "main-ui-muted"}
+          >
+            {units}
+          </Text>
         )}
       </span>
 

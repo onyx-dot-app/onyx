@@ -229,7 +229,7 @@ export const RenderField: FC<RenderFieldProps> = ({
             name={field.name}
             title={label}
             description={description}
-            optional={field.optional}
+            suffix={field.optional ? "optional" : undefined}
           >
             <InputTextAreaField
               name={field.name}

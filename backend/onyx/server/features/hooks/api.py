@@ -123,9 +123,8 @@ def _validate_endpoint(
     (not reachable — indicates the api_key is invalid).
 
     Timeout handling:
-    - ConnectTimeout: TCP handshake never completed → cannot_connect.
-    - ReadTimeout / WriteTimeout: TCP was established, server responded slowly → timeout
-      (operator should consider increasing timeout_seconds).
+    - Any httpx.TimeoutException (ConnectTimeout, ReadTimeout, WriteTimeout, PoolTimeout) →
+      timeout (operator should consider increasing timeout_seconds).
     - All other exceptions → cannot_connect.
     """
     _check_ssrf_safety(endpoint_url)

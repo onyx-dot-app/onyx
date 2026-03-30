@@ -158,7 +158,7 @@ export default function AddMCPServerModal({
                 <InputLayouts.Vertical
                   name="description"
                   title="Description"
-                  optional
+                  suffix="optional"
                 >
                   <InputTextAreaField
                     name="description"
