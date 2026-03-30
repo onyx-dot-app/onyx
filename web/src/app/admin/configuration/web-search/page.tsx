@@ -24,7 +24,7 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import { Button, SelectCard } from "@opal/components";
-import { Hoverable, Interactive } from "@opal/core";
+import { Hoverable } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -277,7 +277,13 @@ function ProviderCard({
         variant="select-card"
         state={STATUS_TO_STATE[status]}
         sizeVariant="lg"
-        onClick={isDisconnected && onConnect ? onConnect : undefined}
+        onClick={
+          isDisconnected && onConnect
+            ? onConnect
+            : isSelected && onDeselect
+              ? onDeselect
+              : undefined
+        }
       >
         <CardHeaderLayout
           sizePreset="main-ui"
