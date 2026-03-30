@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.user_group.models import SetCuratorRequest
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.auth.permissions import recompute_user_permissions
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
@@ -509,6 +510,9 @@ def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserG
         cc_pair_ids=user_group.cc_pair_ids,
     )
 
+    for uid in user_group.user_ids:
+        recompute_user_permissions(uid, db_session)
+
     db_session.commit()
     return db_user_group
 
@@ -815,6 +819,9 @@ def update_user_group(
 
     # update "time_updated" to now
     db_user_group.time_last_modified_by_user = func.now()
+
+    for uid in set(added_user_ids) | set(removed_user_ids):
+        recompute_user_permissions(uid, db_session)
 
     db_session.commit()
     return db_user_group
