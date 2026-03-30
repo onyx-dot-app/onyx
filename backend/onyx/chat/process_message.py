@@ -263,6 +263,9 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
         return None
 
 
+APPROX_CHARS_PER_TOKEN = 4
+
+
 def extract_context_files(
     user_files: list[UserFile],
     llm_max_context_window: int,
@@ -301,7 +304,15 @@ def extract_context_files(
     if not user_files:
         return _empty_extracted_context_files()
 
-    aggregate_tokens = sum(uf.token_count or 0 for uf in user_files)
+    # Tabular files only inject metadata (not full content), so exclude
+    # their token counts from the context-window fit check.
+    from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
+
+    aggregate_tokens = sum(
+        uf.token_count or 0
+        for uf in user_files
+        if mime_type_to_chat_file_type(uf.file_type) != ChatFileType.TABULAR
+    )
     max_actual_tokens = (
         llm_max_context_window - reserved_token_count
     ) * max_llm_context_percentage
@@ -331,11 +342,26 @@ def extract_context_files(
     file_texts: list[str] = []
     image_files: list[ChatLoadedFile] = []
     file_metadata: list[ContextFileMetadata] = []
+    tool_metadata: list[FileToolMetadata] = []
     total_token_count = 0
 
     for f in in_memory_files:
         uf = user_file_map.get(str(f.file_id))
-        if f.file_type.is_text_file():
+        filename = f.filename or f"file_{f.file_id}"
+
+        if f.file_type == ChatFileType.TABULAR:
+            # Tabular files are not injected as full text — only metadata
+            # is provided so the LLM can use tools to access the data.
+            tool_metadata.append(
+                FileToolMetadata(
+                    file_id=str(f.file_id),
+                    filename=filename,
+                    approx_char_count=(
+                        (uf.token_count or 0) * APPROX_CHARS_PER_TOKEN if uf else 0
+                    ),
+                )
+            )
+        elif f.file_type.is_text_file():
             text_content = _extract_text_from_in_memory_file(f)
             if not text_content:
                 continue
@@ -343,7 +369,7 @@ def extract_context_files(
             file_metadata.append(
                 ContextFileMetadata(
                     file_id=str(f.file_id),
-                    filename=f.filename or f"file_{f.file_id}",
+                    filename=filename,
                     file_content=text_content,
                 )
             )
@@ -370,10 +396,8 @@ def extract_context_files(
         total_token_count=total_token_count,
         file_metadata=file_metadata,
         uncapped_token_count=aggregate_tokens,
+        file_metadata_for_tool=tool_metadata,
     )
-
-
-APPROX_CHARS_PER_TOKEN = 4
 
 
 def _build_file_tool_metadata_for_user_files(
