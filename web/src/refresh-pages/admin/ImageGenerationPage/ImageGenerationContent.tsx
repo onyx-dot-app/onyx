@@ -34,6 +34,12 @@ import { getImageGenForm } from "./forms";
 
 const NO_DEFAULT_VALUE = "__none__";
 
+const STATUS_TO_STATE = {
+  disconnected: "empty",
+  connected: "filled",
+  selected: "selected",
+} as const;
+
 export default function ImageGenerationContent() {
   const {
     data: llmProviderResponse,
@@ -232,12 +238,6 @@ export default function ImageGenerationContent() {
               const isConnected = status === "connected";
               const isSelected = status === "selected";
 
-              const STATUS_TO_STATE = {
-                disconnected: "empty",
-                connected: "filled",
-                selected: "selected",
-              } as const;
-
               return (
                 <Hoverable.Root
                   key={provider.image_provider_id}
@@ -305,20 +305,18 @@ export default function ImageGenerationContent() {
                       bottomRightChildren={
                         !isDisconnected ? (
                           <div className="flex flex-row px-1 pb-1">
-                            {getStatus(provider) !== "disconnected" && (
-                              <Hoverable.Item group="image-gen/ProviderCard">
-                                <Button
-                                  icon={SvgUnplug}
-                                  tooltip="Disconnect"
-                                  prominence="tertiary"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDisconnectProvider(provider);
-                                  }}
-                                  size="md"
-                                />
-                              </Hoverable.Item>
-                            )}
+                            <Hoverable.Item group="image-gen/ProviderCard">
+                              <Button
+                                icon={SvgUnplug}
+                                tooltip="Disconnect"
+                                prominence="tertiary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDisconnectProvider(provider);
+                                }}
+                                size="md"
+                              />
+                            </Hoverable.Item>
                             <Button
                               icon={SvgSettings}
                               tooltip="Edit"
