@@ -15,6 +15,7 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/interfaces/settings";
 import { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 const route = ADMIN_ROUTES.THEME;
 
@@ -54,7 +55,7 @@ export default function ThemePage() {
       }),
     });
     if (response.ok) {
-      await mutate("/api/enterprise-settings");
+      await mutate(SWR_KEYS.enterpriseSettings);
       return true;
     } else {
       const errorMsg = (await response.json()).detail;
