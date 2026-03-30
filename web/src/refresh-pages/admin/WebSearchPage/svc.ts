@@ -1,5 +1,5 @@
-import { CONTENT_PROVIDER_DETAILS } from "./contentProviderUtils";
-import type { WebContentProviderView } from "./interfaces";
+import { CONTENT_PROVIDER_DETAILS } from "@/refresh-pages/admin/WebSearchPage/contentProviderUtils";
+import type { WebContentProviderView } from "@/refresh-pages/admin/WebSearchPage/interfaces";
 
 async function parseErrorDetail(
   res: Response,

@@ -26,7 +26,7 @@ import {
 import { Button, SelectCard } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { WebProviderSetupModal } from "./WebProviderSetupModal";
+import { WebProviderSetupModal } from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -41,7 +41,7 @@ import {
   isSearchProviderConfigured,
   searchProviderRequiresApiKey,
   type WebSearchProviderType,
-} from "./searchProviderUtils";
+} from "@/refresh-pages/admin/WebSearchPage/searchProviderUtils";
 import {
   CONTENT_PROVIDERS_URL,
   CONTENT_PROVIDER_DETAILS,
@@ -52,25 +52,25 @@ import {
   getCurrentContentProviderType,
   isContentProviderConfigured,
   type WebContentProviderType,
-} from "./contentProviderUtils";
+} from "@/refresh-pages/admin/WebSearchPage/contentProviderUtils";
 import {
   initialWebProviderModalState,
   WebProviderModalReducer,
   MASKED_API_KEY_PLACEHOLDER,
-} from "./WebProviderModalReducer";
-import { connectProviderFlow } from "./connectProviderFlow";
+} from "@/refresh-pages/admin/WebSearchPage/WebProviderModalReducer";
+import { connectProviderFlow } from "@/refresh-pages/admin/WebSearchPage/connectProviderFlow";
 import {
   activateSearchProvider,
   deactivateSearchProvider,
   activateContentProvider,
   deactivateContentProvider,
   disconnectProvider,
-} from "./svc";
+} from "@/refresh-pages/admin/WebSearchPage/svc";
 import type {
   WebSearchProviderView,
   WebContentProviderView,
   DisconnectTargetState,
-} from "./interfaces";
+} from "@/refresh-pages/admin/WebSearchPage/interfaces";
 
 const NO_DEFAULT_VALUE = "__none__";
 

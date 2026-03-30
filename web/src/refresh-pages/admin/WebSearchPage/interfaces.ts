@@ -1,5 +1,5 @@
-import type { WebSearchProviderType } from "./searchProviderUtils";
-import type { WebContentProviderType } from "./contentProviderUtils";
+import type { WebSearchProviderType } from "@/refresh-pages/admin/WebSearchPage/searchProviderUtils";
+import type { WebContentProviderType } from "@/refresh-pages/admin/WebSearchPage/contentProviderUtils";
 
 export interface WebSearchProviderView {
   id: number;
