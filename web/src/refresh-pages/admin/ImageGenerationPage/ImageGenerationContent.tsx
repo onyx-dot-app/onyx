@@ -203,7 +203,7 @@ export default function ImageGenerationContent() {
 
   return (
     <>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         <Content
           title="Image Generation Model"
           description="Select a model to generate images in chat."
@@ -226,119 +226,117 @@ export default function ImageGenerationContent() {
         {IMAGE_PROVIDER_GROUPS.map((group) => (
           <div key={group.name} className="flex flex-col gap-2">
             <Content title={group.name} sizePreset="secondary" variant="body" />
-            <div className="flex flex-col gap-2">
-              {group.providers.map((provider) => {
-                const status = getStatus(provider);
-                const isDisconnected = status === "disconnected";
-                const isConnected = status === "connected";
-                const isSelected = status === "selected";
+            {group.providers.map((provider) => {
+              const status = getStatus(provider);
+              const isDisconnected = status === "disconnected";
+              const isConnected = status === "connected";
+              const isSelected = status === "selected";
 
-                const STATUS_TO_STATE = {
-                  disconnected: "empty",
-                  connected: "filled",
-                  selected: "selected",
-                } as const;
+              const STATUS_TO_STATE = {
+                disconnected: "empty",
+                connected: "filled",
+                selected: "selected",
+              } as const;
 
-                return (
-                  <Hoverable.Root
-                    key={provider.image_provider_id}
-                    group="image-gen/ProviderCard"
+              return (
+                <Hoverable.Root
+                  key={provider.image_provider_id}
+                  group="image-gen/ProviderCard"
+                >
+                  <SelectCard
+                    variant="select-card"
+                    state={STATUS_TO_STATE[status]}
+                    sizeVariant="lg"
+                    onClick={
+                      isDisconnected
+                        ? () => handleConnect(provider)
+                        : isSelected
+                          ? () => handleDeselect(provider)
+                          : undefined
+                    }
                   >
-                    <SelectCard
-                      variant="select-card"
-                      state={STATUS_TO_STATE[status]}
-                      sizeVariant="lg"
-                      onClick={
-                        isDisconnected
-                          ? () => handleConnect(provider)
-                          : isSelected
-                            ? () => handleDeselect(provider)
-                            : undefined
-                      }
-                    >
-                      <CardHeaderLayout
-                        sizePreset="main-ui"
-                        variant="section"
-                        icon={() => (
-                          <ProviderIcon
-                            provider={provider.provider_name}
-                            size={16}
-                          />
-                        )}
-                        title={provider.title}
-                        description={provider.description}
-                        rightChildren={
-                          isDisconnected ? (
+                    <CardHeaderLayout
+                      sizePreset="main-ui"
+                      variant="section"
+                      icon={() => (
+                        <ProviderIcon
+                          provider={provider.provider_name}
+                          size={16}
+                        />
+                      )}
+                      title={provider.title}
+                      description={provider.description}
+                      rightChildren={
+                        isDisconnected ? (
+                          <Button
+                            prominence="tertiary"
+                            rightIcon={SvgArrowExchange}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConnect(provider);
+                            }}
+                          >
+                            Connect
+                          </Button>
+                        ) : isConnected ? (
+                          <Hoverable.Item group="image-gen/ProviderCard">
                             <Button
                               prominence="tertiary"
-                              rightIcon={SvgArrowExchange}
+                              rightIcon={SvgArrowRightCircle}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleConnect(provider);
+                                handleSelect(provider);
                               }}
                             >
-                              Connect
+                              Set as Default
                             </Button>
-                          ) : isConnected ? (
-                            <Hoverable.Item group="image-gen/ProviderCard">
-                              <Button
-                                prominence="tertiary"
-                                rightIcon={SvgArrowRightCircle}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSelect(provider);
-                                }}
-                              >
-                                Set as Default
-                              </Button>
-                            </Hoverable.Item>
-                          ) : isSelected ? (
-                            <div className="p-2">
-                              <Content
-                                title="Current Default"
-                                sizePreset="main-ui"
-                                variant="section"
-                                icon={SvgCheckSquare}
-                              />
-                            </div>
-                          ) : undefined
-                        }
-                        bottomRightChildren={
-                          !isDisconnected ? (
-                            <div className="flex flex-row px-1 pb-1">
-                              {getStatus(provider) !== "disconnected" && (
-                                <Hoverable.Item group="image-gen/ProviderCard">
-                                  <Button
-                                    icon={SvgUnplug}
-                                    tooltip="Disconnect"
-                                    prominence="tertiary"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDisconnectProvider(provider);
-                                    }}
-                                    size="md"
-                                  />
-                                </Hoverable.Item>
-                              )}
-                              <Button
-                                icon={SvgSettings}
-                                tooltip="Edit"
-                                prominence="tertiary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEdit(provider);
-                                }}
-                                size="md"
-                              />
-                            </div>
-                          ) : undefined
-                        }
-                      />
-                    </SelectCard>
-                  </Hoverable.Root>
-                );
-              })}
-            </div>
+                          </Hoverable.Item>
+                        ) : isSelected ? (
+                          <div className="p-2">
+                            <Content
+                              title="Current Default"
+                              sizePreset="main-ui"
+                              variant="section"
+                              icon={SvgCheckSquare}
+                            />
+                          </div>
+                        ) : undefined
+                      }
+                      bottomRightChildren={
+                        !isDisconnected ? (
+                          <div className="flex flex-row px-1 pb-1">
+                            {getStatus(provider) !== "disconnected" && (
+                              <Hoverable.Item group="image-gen/ProviderCard">
+                                <Button
+                                  icon={SvgUnplug}
+                                  tooltip="Disconnect"
+                                  prominence="tertiary"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDisconnectProvider(provider);
+                                  }}
+                                  size="md"
+                                />
+                              </Hoverable.Item>
+                            )}
+                            <Button
+                              icon={SvgSettings}
+                              tooltip="Edit"
+                              prominence="tertiary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(provider);
+                              }}
+                              size="md"
+                            />
+                          </div>
+                        ) : undefined
+                      }
+                    />
+                  </SelectCard>
+                </Hoverable.Root>
+              );
+            })}
           </div>
         ))}
       </div>
