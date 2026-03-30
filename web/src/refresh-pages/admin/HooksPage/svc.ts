@@ -1,5 +1,6 @@
 import {
   HookCreateRequest,
+  HookExecutionRecord,
   HookResponse,
   HookUpdateRequest,
   HookValidateResponse,
@@ -91,6 +92,19 @@ export async function validateHook(id: number): Promise<HookValidateResponse> {
   });
   if (!res.ok) {
     throw await parseError(res, "Failed to validate hook");
+  }
+  return res.json();
+}
+
+export async function fetchExecutionLogs(
+  id: number,
+  limit = 20
+): Promise<HookExecutionRecord[]> {
+  const res = await fetch(
+    `/api/admin/hooks/${id}/execution-logs?limit=${limit}`
+  );
+  if (!res.ok) {
+    throw await parseError(res, "Failed to fetch execution logs");
   }
   return res.json();
 }

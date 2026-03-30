@@ -11,7 +11,6 @@ import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import {
-  SvgCheckCircle,
   SvgExternalLink,
   SvgPlug,
   SvgRefreshCw,
@@ -31,6 +30,7 @@ import {
   validateHook,
 } from "@/refresh-pages/admin/HooksPage/svc";
 import { getHookPointIcon } from "@/refresh-pages/admin/HooksPage/hookPointIcons";
+import HookStatusPopover from "@/refresh-pages/admin/HooksPage/HookStatusPopover";
 
 // ---------------------------------------------------------------------------
 // Sub-component: disconnect confirmation modal
@@ -328,7 +328,7 @@ export default function ConnectedHookCard({
                 href={spec.docs_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="pl-6 flex items-center gap-1"
+                className="pl-6 flex items-center gap-1 w-fit"
               >
                 <span className="underline font-secondary-body text-text-03">
                   Documentation
@@ -345,21 +345,13 @@ export default function ConnectedHookCard({
             height="fit"
             gap={0}
           >
-            <div className="flex items-center gap-1 p-2">
+            <div className="flex items-center gap-1">
               {hook.is_active ? (
-                <>
-                  <Text mainUiAction text03>
-                    Connected
-                  </Text>
-                  <SvgCheckCircle
-                    size={16}
-                    className="text-status-success-05"
-                  />
-                </>
+                <HookStatusPopover hook={hook} spec={spec} isBusy={isBusy} />
               ) : (
                 <div
                   className={cn(
-                    "flex items-center gap-1",
+                    "flex items-center gap-1 p-2",
                     isBusy ? "opacity-50 pointer-events-none" : "cursor-pointer"
                   )}
                   onClick={handleActivate}
