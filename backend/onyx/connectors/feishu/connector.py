@@ -1,3 +1,4 @@
+import json
 from typing import Any
 from typing import cast
 from urllib.parse import urlencode
@@ -82,14 +83,16 @@ class FeishuConnector(OAuthConnector):
         token_response = request_with_retries(
             method="POST",
             url=_FEISHU_TOKEN_URL,
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": FEISHU_CLIENT_ID,
-                "client_secret": FEISHU_CLIENT_SECRET,
-                "redirect_uri": redirect_uri,
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data=json.dumps(
+                {
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "client_id": FEISHU_CLIENT_ID,
+                    "client_secret": FEISHU_CLIENT_SECRET,
+                    "redirect_uri": redirect_uri,
+                }
+            ),
+            headers={"Content-Type": "application/json"},
             backoff=0,
             delay=0.1,
         )
@@ -153,3 +156,4 @@ class FeishuConnector(OAuthConnector):
             delay=0.1,
         )
         self.user_info = _unwrap_feishu_payload(response.json())
+
