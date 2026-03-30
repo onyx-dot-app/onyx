@@ -67,3 +67,25 @@ variable "enable_rds_iam_auth" {
   description = "Enable AWS IAM database authentication for this RDS instance"
   default     = false
 }
+
+variable "backup_retention_period" {
+  type        = number
+  description = "Number of days to retain automated backups (0 to disable)"
+  default     = 7
+
+  validation {
+    condition     = var.backup_retention_period >= 0 && var.backup_retention_period <= 35
+    error_message = "backup_retention_period must be between 0 and 35 (AWS RDS limit)."
+  }
+}
+
+variable "backup_window" {
+  type        = string
+  description = "Preferred UTC time window for automated backups (hh24:mi-hh24:mi)"
+  default     = "03:00-04:00"
+
+  validation {
+    condition     = can(regex("^([01]\\d|2[0-3]):[0-5]\\d-([01]\\d|2[0-3]):[0-5]\\d$", var.backup_window))
+    error_message = "backup_window must be in hh24:mi-hh24:mi format (e.g. \"03:00-04:00\")."
+  }
+}
