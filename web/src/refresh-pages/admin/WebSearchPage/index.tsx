@@ -295,18 +295,16 @@ function ProviderCard({
                 Connect
               </Button>
             ) : isConnected && onSelect ? (
-              <Hoverable.Item group="web-search/ProviderCard">
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgArrowRightCircle}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelect();
-                  }}
-                >
-                  Set as Default
-                </Button>
-              </Hoverable.Item>
+              <Button
+                prominence="tertiary"
+                rightIcon={SvgArrowRightCircle}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect();
+                }}
+              >
+                Set as Default
+              </Button>
             ) : isSelected ? (
               <div className="p-2">
                 <Content
