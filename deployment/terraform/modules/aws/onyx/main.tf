@@ -54,6 +54,9 @@ module "postgres" {
   password            = var.postgres_password
   tags                = local.merged_tags
   enable_rds_iam_auth = var.enable_iam_auth
+
+  backup_retention_period = var.postgres_backup_retention_period
+  backup_window           = var.postgres_backup_window
 }
 
 module "s3" {

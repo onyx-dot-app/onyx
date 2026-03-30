@@ -250,3 +250,16 @@ variable "opensearch_subnet_ids" {
   description = "Subnet IDs for OpenSearch. If empty, uses first 3 private subnets."
   default     = []
 }
+
+# RDS Backup Configuration
+variable "postgres_backup_retention_period" {
+  type        = number
+  description = "Number of days to retain automated RDS backups (0 to disable)"
+  default     = 7
+}
+
+variable "postgres_backup_window" {
+  type        = string
+  description = "Preferred UTC time window for automated RDS backups (hh24:mi-hh24:mi)"
+  default     = "03:00-04:00"
+}

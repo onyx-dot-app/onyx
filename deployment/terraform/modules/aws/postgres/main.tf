@@ -44,5 +44,10 @@ resource "aws_db_instance" "this" {
   publicly_accessible    = false
   deletion_protection    = true
   storage_encrypted      = true
-  tags                   = var.tags
+
+  # Automated backups
+  backup_retention_period = var.backup_retention_period
+  backup_window           = var.backup_window
+
+  tags = var.tags
 }

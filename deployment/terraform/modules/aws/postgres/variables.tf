@@ -67,3 +67,15 @@ variable "enable_rds_iam_auth" {
   description = "Enable AWS IAM database authentication for this RDS instance"
   default     = false
 }
+
+variable "backup_retention_period" {
+  type        = number
+  description = "Number of days to retain automated backups (0 to disable)"
+  default     = 7
+}
+
+variable "backup_window" {
+  type        = string
+  description = "Preferred UTC time window for automated backups (hh24:mi-hh24:mi)"
+  default     = "03:00-04:00"
+}
