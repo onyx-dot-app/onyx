@@ -1,85 +1,14 @@
-import { test, expect, Page, Locator } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
-
-const WEB_SEARCH_URL = "/admin/configuration/web-search";
-
-const FAKE_SEARCH_PROVIDERS = {
-  exa: {
-    id: 1,
-    name: "Exa",
-    provider_type: "exa",
-    is_active: true,
-    config: null,
-    has_api_key: true,
-  },
-  brave: {
-    id: 2,
-    name: "Brave",
-    provider_type: "brave",
-    is_active: false,
-    config: null,
-    has_api_key: true,
-  },
-};
-
-const FAKE_CONTENT_PROVIDERS = {
-  firecrawl: {
-    id: 10,
-    name: "Firecrawl",
-    provider_type: "firecrawl",
-    is_active: true,
-    config: { base_url: "https://api.firecrawl.dev/v2/scrape" },
-    has_api_key: true,
-  },
-  exa: {
-    id: 11,
-    name: "Exa",
-    provider_type: "exa",
-    is_active: false,
-    config: null,
-    has_api_key: true,
-  },
-};
-
-function findProviderCard(page: Page, providerLabel: string): Locator {
-  return page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerLabel })
-    .first();
-}
-
-function mainContainer(page: Page): Locator {
-  return page.locator("[data-main-container]");
-}
-
-async function mockWebSearchApis(
-  page: Page,
-  searchProviders: (typeof FAKE_SEARCH_PROVIDERS)[keyof typeof FAKE_SEARCH_PROVIDERS][],
-  contentProviders: (typeof FAKE_CONTENT_PROVIDERS)[keyof typeof FAKE_CONTENT_PROVIDERS][]
-) {
-  await page.route(
-    "**/api/admin/web-search/search-providers",
-    async (route) => {
-      if (route.request().method() === "GET") {
-        await route.fulfill({ status: 200, json: searchProviders });
-      } else {
-        await route.continue();
-      }
-    }
-  );
-
-  await page.route(
-    "**/api/admin/web-search/content-providers",
-    async (route) => {
-      if (route.request().method() === "GET") {
-        await route.fulfill({ status: 200, json: contentProviders });
-      } else {
-        await route.continue();
-      }
-    }
-  );
-}
+import {
+  WEB_SEARCH_URL,
+  FAKE_SEARCH_PROVIDERS,
+  FAKE_CONTENT_PROVIDERS,
+  findProviderCard,
+  mainContainer,
+  mockWebSearchApis,
+} from "./svc";
 
 test.describe("Web Search Provider Disconnect", () => {
   test.beforeEach(async ({ page }) => {
