@@ -252,6 +252,8 @@ events==0.5
     # via opensearch-py
 exa-py==1.15.4
     # via onyx
+tavily-python==0.5.0
+    # via onyx
 exceptiongroup==1.3.0
     # via
     #   braintrust

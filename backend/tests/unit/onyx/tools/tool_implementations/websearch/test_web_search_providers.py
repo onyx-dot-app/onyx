@@ -3,6 +3,9 @@ import pytest
 from onyx.tools.tool_implementations.web_search.clients.brave_client import (
     BraveClient,
 )
+from onyx.tools.tool_implementations.web_search.clients.tavily_client import (
+    TavilyClient,
+)
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
@@ -18,6 +21,7 @@ def test_provider_requires_api_key() -> None:
     assert provider_requires_api_key(WebSearchProviderType.BRAVE) is True
     assert provider_requires_api_key(WebSearchProviderType.SERPER) is True
     assert provider_requires_api_key(WebSearchProviderType.GOOGLE_PSE) is True
+    assert provider_requires_api_key(WebSearchProviderType.TAVILY) is True
     assert provider_requires_api_key(WebSearchProviderType.SEARXNG) is False
 
 
@@ -120,3 +124,23 @@ def test_build_google_pse_provider_requires_search_engine_id() -> None:
             api_key="test-api-key",
             config={},
         )
+
+
+def test_build_tavily_provider_requires_api_key() -> None:
+    """Test that Tavily provider requires an API key."""
+    with pytest.raises(ValueError, match="API key is required"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.TAVILY,
+            api_key=None,
+            config={},
+        )
+
+
+def test_build_tavily_provider() -> None:
+    """Test that Tavily provider can be built with an API key."""
+    provider = build_search_provider_from_config(
+        provider_type=WebSearchProviderType.TAVILY,
+        api_key="test-api-key",
+        config={},
+    )
+    assert isinstance(provider, TavilyClient)

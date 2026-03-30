@@ -28,6 +28,9 @@ from onyx.tools.tool_implementations.web_search.clients.searxng_client import (
 from onyx.tools.tool_implementations.web_search.clients.serper_client import (
     SerperClient,
 )
+from onyx.tools.tool_implementations.web_search.clients.tavily_client import (
+    TavilyClient,
+)
 from onyx.tools.tool_implementations.web_search.models import DEFAULT_MAX_RESULTS
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
@@ -110,6 +113,8 @@ def build_search_provider_from_config(
         )
     if provider_type == WebSearchProviderType.SERPER:
         return SerperClient(api_key=api_key, num_results=num_results)
+    if provider_type == WebSearchProviderType.TAVILY:
+        return TavilyClient(api_key=api_key, num_results=num_results)
     if provider_type == WebSearchProviderType.GOOGLE_PSE:
         search_engine_id = (
             config.get("search_engine_id")
