@@ -25,6 +25,7 @@ interface ProviderCardProps {
   onEdit?: () => void;
   onDisconnect?: () => void;
   selectedLabel?: string;
+  "aria-label"?: string;
 }
 
 const STATUS_TO_STATE = {
@@ -44,6 +45,7 @@ export default function ProviderCard({
   onEdit,
   onDisconnect,
   selectedLabel = "Current Default",
+  "aria-label": ariaLabel,
 }: ProviderCardProps) {
   const isDisconnected = status === "disconnected";
   const isConnected = status === "connected";
@@ -55,13 +57,8 @@ export default function ProviderCard({
         variant="select-card"
         state={STATUS_TO_STATE[status]}
         sizeVariant="lg"
-        onClick={
-          isDisconnected && onConnect
-            ? onConnect
-            : isSelected && onDeselect
-              ? onDeselect
-              : undefined
-        }
+        aria-label={ariaLabel}
+        onClick={isDisconnected && onConnect ? onConnect : undefined}
       >
         <CardHeaderLayout
           sizePreset="main-ui"

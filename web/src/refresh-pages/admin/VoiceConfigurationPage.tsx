@@ -490,6 +490,7 @@ export default function VoiceConfigurationPage() {
     return (
       <ProviderCard
         key={`${mode}-${model.id}`}
+        aria-label={`voice-${mode}-${model.id}`}
         icon={Icon}
         title={model.label}
         description={model.subtitle}
