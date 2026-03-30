@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import useSWR from "swr";
-import { Select } from "@/refresh-components/cards";
+import ProviderCard from "@/sections/cards/ProviderCard";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
@@ -228,11 +228,10 @@ export default function ImageGenerationContent() {
             </Text>
             <div className="flex flex-col gap-2">
               {group.providers.map((provider) => (
-                <Select
+                <ProviderCard
                   key={provider.image_provider_id}
-                  aria-label={`image-gen-provider-${provider.image_provider_id}`}
                   icon={() => (
-                    <ProviderIcon provider={provider.provider_name} size={18} />
+                    <ProviderIcon provider={provider.provider_name} size={16} />
                   )}
                   title={provider.title}
                   description={provider.description}

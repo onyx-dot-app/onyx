@@ -7,7 +7,7 @@ import {
   IconProps,
   OpenAIIcon,
 } from "@/components/icons/icons";
-import { Select } from "@/refresh-components/cards";
+import ProviderCard from "@/sections/cards/ProviderCard";
 import Message from "@/refresh-components/messages/Message";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { FetchError } from "@/lib/fetcher";
@@ -488,9 +488,8 @@ export default function VoiceConfigurationPage() {
     const Icon = getProviderIcon(model.providerType);
 
     return (
-      <Select
+      <ProviderCard
         key={`${mode}-${model.id}`}
-        aria-label={`voice-${mode}-${model.id}`}
         icon={Icon}
         title={model.label}
         description={model.subtitle}
