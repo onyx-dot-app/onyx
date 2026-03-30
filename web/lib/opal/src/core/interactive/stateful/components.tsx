@@ -4,7 +4,7 @@ import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import { useDisabled } from "@opal/core/disabled/components";
-import type { WithoutStyles } from "@opal/types";
+import type { ButtonType, WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,8 +13,11 @@ import type { WithoutStyles } from "@opal/types";
 type InteractiveStatefulVariant =
   | "select-light"
   | "select-heavy"
+  | "select-card"
   | "select-tinted"
-  | "sidebar";
+  | "select-filter"
+  | "sidebar-heavy"
+  | "sidebar-light";
 type InteractiveStatefulState = "empty" | "filled" | "selected";
 type InteractiveStatefulInteraction = "rest" | "hover" | "active";
 
@@ -30,7 +33,11 @@ interface InteractiveStatefulProps
    *
    * - `"select-light"` — transparent selected background (for inline toggles)
    * - `"select-heavy"` — tinted selected background (for list rows, model pickers)
-   * - `"sidebar"` — for sidebar navigation items
+   * - `"select-card"` — like select-heavy but filled state has a visible background (for cards/larger surfaces)
+   * - `"select-tinted"` — like select-heavy but with a tinted rest background
+   * - `"select-filter"` — like select-tinted for empty/filled; selected state uses inverted tint backgrounds and inverted text (for filter buttons)
+   * - `"sidebar-heavy"` — sidebar navigation items: muted when unselected (text-03/text-02), bold when selected (text-04/text-03)
+   * - `"sidebar-light"` — sidebar navigation items: uniformly muted across all states (text-02/text-02)
    *
    * @default "select-heavy"
    */
@@ -64,6 +71,13 @@ interface InteractiveStatefulProps
   group?: string;
 
   /**
+   * HTML button type. When set to `"submit"`, `"button"`, or `"reset"`, the
+   * element is treated as inherently interactive for cursor styling purposes
+   * even without an explicit `onClick` or `href`.
+   */
+  type?: ButtonType;
+
+  /**
    * URL to navigate to when clicked. Passed through Slot to the child.
    */
   href?: string;
@@ -94,6 +108,7 @@ function InteractiveStateful({
   state = "empty",
   interaction = "rest",
   group,
+  type,
   href,
   target,
   ...props
@@ -104,7 +119,7 @@ function InteractiveStateful({
   // so Radix Slot-injected handlers don't bypass this guard.
   const classes = cn(
     "interactive",
-    !props.onClick && !href && "!cursor-default !select-auto",
+    !props.onClick && !href && !type && "!cursor-default !select-auto",
     group
   );
 

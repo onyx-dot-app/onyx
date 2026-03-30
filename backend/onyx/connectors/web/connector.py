@@ -88,8 +88,9 @@ WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
 IFRAME_TEXT_LENGTH_THRESHOLD = 700
 # Message indicating JavaScript is disabled, which often appears when scraping fails
 JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
-# Grace period after page navigation to allow bot-detection challenges to complete
-BOT_DETECTION_GRACE_PERIOD_MS = 5000
+# Grace period after page navigation to allow bot-detection challenges
+# and SPA content rendering to complete
+PAGE_RENDER_TIMEOUT_MS = 5000
 
 # Define common headers that mimic a real browser
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
@@ -547,7 +548,15 @@ class WebConnector(LoadConnector):
             )
             # Give the page a moment to start rendering after navigation commits.
             # Allows CloudFlare and other bot-detection challenges to complete.
-            page.wait_for_timeout(BOT_DETECTION_GRACE_PERIOD_MS)
+            page.wait_for_timeout(PAGE_RENDER_TIMEOUT_MS)
+
+            # Wait for network activity to settle so SPAs that fetch content
+            # asynchronously after the initial JS bundle have time to render.
+            try:
+                # A bit of extra time to account for long-polling, websockets, etc.
+                page.wait_for_load_state("networkidle", timeout=PAGE_RENDER_TIMEOUT_MS)
+            except TimeoutError:
+                pass
 
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None
@@ -576,7 +585,7 @@ class WebConnector(LoadConnector):
                     # (e.g., CloudFlare protection keeps making requests)
                     try:
                         page.wait_for_load_state(
-                            "networkidle", timeout=BOT_DETECTION_GRACE_PERIOD_MS
+                            "networkidle", timeout=PAGE_RENDER_TIMEOUT_MS
                         )
                     except TimeoutError:
                         # If networkidle times out, just give it a moment for content to render

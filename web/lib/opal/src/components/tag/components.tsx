@@ -1,6 +1,6 @@
 import "@opal/components/tag/styles.css";
-
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -16,7 +16,7 @@ interface TagProps {
   icon?: IconFunctionComponent;
 
   /** Tag label text. */
-  title: string;
+  title: string | RichStr;
 
   /** Color variant. Default: `"gray"`. */
   color?: TagColor;
@@ -45,21 +45,22 @@ function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
   const config = COLOR_CONFIG[color];
 
   return (
-    <div className={cn("opal-auxiliary-tag", config.bg)} data-size={size}>
+    <div
+      className={cn("opal-auxiliary-tag", config.bg, config.text)}
+      data-size={size}
+    >
       {Icon && (
         <div className="opal-auxiliary-tag-icon-container">
           <Icon className={cn("opal-auxiliary-tag-icon", config.text)} />
         </div>
       )}
-      <span
-        className={cn(
-          "opal-auxiliary-tag-title px-[2px]",
-          size === "md" ? "font-secondary-body" : "font-figure-small-value",
-          config.text
-        )}
+      <Text
+        font={size === "md" ? "secondary-body" : "figure-small-value"}
+        color="inherit"
+        nowrap
       >
         {title}
-      </span>
+      </Text>
     </div>
   );
 }

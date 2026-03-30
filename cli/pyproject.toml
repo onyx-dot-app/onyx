@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "go-bin~=1.24.11", "manygo"]
+requires = ["hatchling==1.29.0", "go-bin~=1.26.1", "manygo==0.2.0"]
 build-backend = "hatchling.build"
 
 [project]

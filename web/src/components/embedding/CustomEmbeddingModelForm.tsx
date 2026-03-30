@@ -7,7 +7,8 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { TextFormField, BooleanFormField } from "@/components/Field";
 import { Dispatch, SetStateAction } from "react";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
+import Spacer from "@/refresh-components/Spacer";
 import Button from "@/refresh-components/buttons/Button";
 import { EmbeddingDetails } from "@/app/admin/embeddings/EmbeddingModelSelectionForm";
 
@@ -59,10 +60,12 @@ export function CustomEmbeddingModelForm({
       >
         {({ isSubmitting, submitForm, errors }) => (
           <Form>
-            <Text className="text-xl text-text-900 font-bold mb-4">
-              Specify details for your {getFormattedProviderName(embeddingType)}{" "}
-              Provider&apos;s model
+            <Text as="p" font="heading-h3">
+              {`Specify details for your ${getFormattedProviderName(
+                embeddingType
+              )} Provider's model`}
             </Text>
+            <Spacer rem={1} />
             <TextFormField
               name="model_name"
               label="Model Name:"

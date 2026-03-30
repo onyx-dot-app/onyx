@@ -105,7 +105,7 @@ export default function ShadowDiv({
   }, [containerRef, checkScroll]);
 
   return (
-    <div className="relative min-h-0">
+    <div className="relative min-h-0 flex flex-col">
       <div
         ref={containerRef}
         className={cn("overflow-y-auto", className)}

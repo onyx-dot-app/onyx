@@ -75,7 +75,7 @@ export default function ProjectChatSessionList() {
                   <div className="flex h-full w-fit pt-1 pl-1">
                     {(() => {
                       const personaIdToFeatured =
-                        currentProjectDetails?.persona_id_to_featured || {};
+                        currentProjectDetails?.persona_id_to_is_featured || {};
                       const isFeatured = personaIdToFeatured[chat.persona_id];
                       if (isFeatured === false) {
                         const agent = agents.find(

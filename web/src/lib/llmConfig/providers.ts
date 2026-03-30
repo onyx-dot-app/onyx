@@ -1,5 +1,6 @@
 import type { IconFunctionComponent } from "@opal/types";
 import {
+  SvgBifrost,
   SvgCpu,
   SvgOpenai,
   SvgClaude,
@@ -28,6 +29,7 @@ const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
   [LLMProviderName.AVIAN]: SvgAvian,
   [LLMProviderName.LM_STUDIO]: SvgLmStudio,
+  [LLMProviderName.BIFROST]: SvgBifrost,
 
   // fallback
   [LLMProviderName.CUSTOM]: SvgServer,
@@ -45,6 +47,7 @@ const PROVIDER_PRODUCT_NAMES: Record<string, string> = {
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.AVIAN]: "Avian",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
+  [LLMProviderName.BIFROST]: "Bifrost",
 
   // fallback
   [LLMProviderName.CUSTOM]: "Custom Models",
@@ -62,6 +65,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.AVIAN]: "Avian",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
+  [LLMProviderName.BIFROST]: "Bifrost",
 
   // fallback
   [LLMProviderName.CUSTOM]: "Other providers or self-hosted",

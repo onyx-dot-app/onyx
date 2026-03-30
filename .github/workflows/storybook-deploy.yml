@@ -25,6 +25,7 @@ permissions:
 jobs:
   Deploy-Storybook:
     runs-on: ubuntu-latest
+    environment: ci-protected
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v4
@@ -32,7 +33,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup node
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
         with:
           node-version: 22
           cache: "npm"
@@ -54,6 +55,7 @@ jobs:
     needs: Deploy-Storybook
     if: always() && needs.Deploy-Storybook.result == 'failure'
     runs-on: ubuntu-latest
+    environment: ci-protected
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v4

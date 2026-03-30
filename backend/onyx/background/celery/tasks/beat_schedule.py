@@ -9,12 +9,12 @@ from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
-from onyx.configs.app_configs import HOOK_ENABLED
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.hooks.utils import HOOKS_AVAILABLE
 from shared_configs.configs import MULTI_TENANT
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
@@ -362,7 +362,7 @@ if not MULTI_TENANT:
 
     tasks_to_schedule.extend(beat_task_templates)
 
-if not MULTI_TENANT and HOOK_ENABLED:
+if HOOKS_AVAILABLE:
     tasks_to_schedule.append(
         {
             "name": "hook-execution-log-cleanup",

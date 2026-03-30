@@ -522,4 +522,115 @@ export const widgetStyles = css`
     color: var(--text-04);
     font-weight: 400;
   }
+
+  /* Inline citation superscripts */
+  .message-bubble sup {
+    font-size: 0.65em;
+    color: var(--theme-primary-05);
+    font-weight: 700;
+    opacity: 0.5;
+    cursor: default;
+    letter-spacing: -0.02em;
+  }
+
+  /* Citation source row */
+  .citation-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .citation-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px 4px 8px;
+    border-radius: var(--onyx-radius-08);
+    background: var(--background-neutral-00);
+    color: var(--text-04);
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid var(--border-01);
+    transition:
+      border-color 150ms ease,
+      background 150ms ease;
+    line-height: 1.2;
+    font-family: var(--onyx-font-family);
+  }
+
+  .citation-badge .citation-num {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-04);
+    opacity: 0.45;
+    flex-shrink: 0;
+  }
+
+  .citation-badge .citation-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 180px;
+    font-size: 11px;
+    opacity: 0.8;
+    text-decoration: none;
+  }
+
+  a.citation-badge,
+  a.citation-badge:visited,
+  a.citation-badge:active,
+  a.citation-badge:hover {
+    text-decoration: none !important;
+  }
+
+  a.citation-badge:hover {
+    border-color: var(--theme-primary-05);
+    background: var(--background-neutral-03);
+  }
+
+  span.citation-badge {
+    cursor: default;
+  }
+
+  .citation-more {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: var(--onyx-radius-08);
+    background: none;
+    color: var(--text-04);
+    opacity: 0.6;
+    border: 1px dashed var(--border-01);
+    cursor: pointer;
+    font-family: var(--onyx-font-family);
+    transition:
+      opacity 150ms ease,
+      border-color 150ms ease;
+  }
+
+  .citation-more:hover {
+    opacity: 1;
+    border-color: var(--theme-primary-05);
+  }
+
+  .citation-list.expanded .citation-more {
+    display: none;
+  }
+
+  .citation-overflow {
+    display: none;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .citation-list.expanded .citation-overflow {
+    display: flex;
+  }
 `;

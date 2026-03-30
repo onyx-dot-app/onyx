@@ -55,6 +55,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewWebCommand())
 	cmd.AddCommand(NewLatestStableTagCommand())
 	cmd.AddCommand(NewWhoisCommand())
+	cmd.AddCommand(NewTraceCommand())
 
 	return cmd
 }

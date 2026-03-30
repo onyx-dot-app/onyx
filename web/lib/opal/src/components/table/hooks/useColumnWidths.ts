@@ -277,7 +277,7 @@ function createSplitterResizeHandler(
  * const { containerRef, columnWidths, createResizeHandler } = useColumnWidths({
  *   headers: table.getHeaderGroups()[0].headers,
  *   fixedColumnIds: new Set(["actions"]),
- *   columnMinWidths: { name: 120, status: 80 },
+ *   columnMinWidths: { name: 72, status: 80 },
  * });
  * ```
  */

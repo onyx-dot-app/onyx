@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from contextlib import AbstractContextManager
@@ -17,10 +18,13 @@ from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
+from onyx.server.metrics.opensearch_search import observe_opensearch_search
+from onyx.server.metrics.opensearch_search import track_opensearch_search_in_progress
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -255,7 +259,6 @@ class OpenSearchClient(AbstractContextManager):
         """
         return self._client.ping()
 
-    @log_function_time(print_only=True, debug_only=True)
     def close(self) -> None:
         """Closes the client.
 
@@ -303,6 +306,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         verify_certs: bool = False,
         ssl_show_warn: bool = False,
         timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
+        emit_metrics: bool = True,
     ):
         super().__init__(
             host=host,
@@ -314,6 +318,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             timeout=timeout,
         )
         self._index_name = index_name
+        self._emit_metrics = emit_metrics
         logger.debug(
             f"OpenSearch client created successfully for index {self._index_name}."
         )
@@ -833,7 +838,10 @@ class OpenSearchIndexClient(OpenSearchClient):
 
     @log_function_time(print_only=True, debug_only=True)
     def search(
-        self, body: dict[str, Any], search_pipeline_id: str | None
+        self,
+        body: dict[str, Any],
+        search_pipeline_id: str | None,
+        search_type: OpenSearchSearchType = OpenSearchSearchType.UNKNOWN,
     ) -> list[SearchHit[DocumentChunkWithoutVectors]]:
         """Searches the index.
 
@@ -851,6 +859,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 documentation for more information on search request bodies.
             search_pipeline_id: The ID of the search pipeline to use. If None,
                 the default search pipeline will be used.
+            search_type: Label for Prometheus metrics. Does not affect search
+                behavior.
 
         Raises:
             Exception: There was an error searching the index.
@@ -863,21 +873,27 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         result: dict[str, Any]
         params = {"phase_took": "true"}
-        if search_pipeline_id:
-            result = self._client.search(
-                index=self._index_name,
-                search_pipeline=search_pipeline_id,
-                body=body,
-                params=params,
-            )
-        else:
-            result = self._client.search(
-                index=self._index_name, body=body, params=params
-            )
+        ctx = self._get_emit_metrics_context_manager(search_type)
+        t0 = time.perf_counter()
+        with ctx:
+            if search_pipeline_id:
+                result = self._client.search(
+                    index=self._index_name,
+                    search_pipeline=search_pipeline_id,
+                    body=body,
+                    params=params,
+                )
+            else:
+                result = self._client.search(
+                    index=self._index_name, body=body, params=params
+                )
+        client_duration_s = time.perf_counter() - t0
 
         hits, time_took, timed_out, phase_took, profile = (
             self._get_hits_and_profile_from_search_result(result)
         )
+        if self._emit_metrics:
+            observe_opensearch_search(search_type, client_duration_s, time_took)
         self._log_search_result_perf(
             time_took=time_took,
             timed_out=timed_out,
@@ -913,7 +929,11 @@ class OpenSearchIndexClient(OpenSearchClient):
         return search_hits
 
     @log_function_time(print_only=True, debug_only=True)
-    def search_for_document_ids(self, body: dict[str, Any]) -> list[str]:
+    def search_for_document_ids(
+        self,
+        body: dict[str, Any],
+        search_type: OpenSearchSearchType = OpenSearchSearchType.DOCUMENT_IDS,
+    ) -> list[str]:
         """Searches the index and returns only document chunk IDs.
 
         In order to take advantage of the performance benefits of only returning
@@ -930,6 +950,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 documentation for more information on search request bodies.
                 TODO(andrei): Make this a more deep interface; callers shouldn't
                 need to know to set _source: False for example.
+            search_type: Label for Prometheus metrics. Does not affect search
+                behavior.
 
         Raises:
             Exception: There was an error searching the index.
@@ -947,13 +969,19 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
 
         params = {"phase_took": "true"}
-        result: dict[str, Any] = self._client.search(
-            index=self._index_name, body=body, params=params
-        )
+        ctx = self._get_emit_metrics_context_manager(search_type)
+        t0 = time.perf_counter()
+        with ctx:
+            result: dict[str, Any] = self._client.search(
+                index=self._index_name, body=body, params=params
+            )
+        client_duration_s = time.perf_counter() - t0
 
         hits, time_took, timed_out, phase_took, profile = (
             self._get_hits_and_profile_from_search_result(result)
         )
+        if self._emit_metrics:
+            observe_opensearch_search(search_type, client_duration_s, time_took)
         self._log_search_result_perf(
             time_took=time_took,
             timed_out=timed_out,
@@ -1062,13 +1090,27 @@ class OpenSearchIndexClient(OpenSearchClient):
                 f"Body: {get_new_body_without_vectors(body)}\n"
                 f"Search pipeline ID: {search_pipeline_id}\n"
                 f"Phase took: {phase_took}\n"
-                f"Profile: {profile}\n"
+                f"Profile: {json.dumps(profile, indent=2)}\n"
             )
         if timed_out:
             error_str = f"OpenSearch client error: Search timed out for index {self._index_name}."
             logger.error(error_str)
             if raise_on_timeout:
                 raise RuntimeError(error_str)
+
+    def _get_emit_metrics_context_manager(
+        self, search_type: OpenSearchSearchType
+    ) -> AbstractContextManager[None]:
+        """
+        Returns a context manager that tracks in-flight OpenSearch searches via
+        a Gauge if emit_metrics is True, otherwise returns a null context
+        manager.
+        """
+        return (
+            track_opensearch_search_in_progress(search_type)
+            if self._emit_metrics
+            else nullcontext()
+        )
 
 
 def wait_for_opensearch_with_timeout(

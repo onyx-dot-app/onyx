@@ -37,18 +37,20 @@ def test_input_schema_query_is_string() -> None:
 
 def test_input_schema_user_email_is_nullable() -> None:
     props = QueryProcessingSpec().input_schema["properties"]
-    assert "null" in props["user_email"]["type"]
+    # Pydantic v2 emits anyOf for nullable fields
+    assert any(s.get("type") == "null" for s in props["user_email"]["anyOf"])
 
 
-def test_output_schema_query_is_required() -> None:
+def test_output_schema_query_is_optional() -> None:
+    # query defaults to None (absent = reject); not required in the schema
     schema = QueryProcessingSpec().output_schema
-    assert "query" in schema["required"]
+    assert "query" not in schema.get("required", [])
 
 
 def test_output_schema_query_is_nullable() -> None:
-    # null means "reject the query"
+    # null means "reject the query"; Pydantic v2 emits anyOf for nullable fields
     props = QueryProcessingSpec().output_schema["properties"]
-    assert "null" in props["query"]["type"]
+    assert any(s.get("type") == "null" for s in props["query"]["anyOf"])
 
 
 def test_output_schema_rejection_message_is_optional() -> None:

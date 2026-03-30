@@ -10,16 +10,48 @@ import {
   JSX,
 } from "react";
 import useCCPairs from "@/hooks/useCCPairs";
+import {
+  useSettings,
+  useEnterpriseSettings,
+  useCustomAnalyticsScript,
+} from "@/hooks/useSettings";
+import { HOST_URL, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import CloudError from "@/components/errorPages/CloudErrorPage";
+import ErrorPage from "@/components/errorPages/ErrorPage";
+import { FetchError } from "@/lib/fetcher";
 
 export function SettingsProvider({
   children,
-  settings,
 }: {
   children: React.ReactNode | JSX.Element;
-  settings: CombinedSettings;
 }) {
+  const {
+    settings,
+    isLoading: coreSettingsLoading,
+    error: settingsError,
+  } = useSettings();
+
+  // Once core settings load, check if the backend reports EE as enabled.
+  // This handles deployments where NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES is
+  // unset but LICENSE_ENFORCEMENT_ENABLED defaults to true on the server.
+  const eeEnabledRuntime =
+    !coreSettingsLoading &&
+    !settingsError &&
+    settings.ee_features_enabled !== false;
+
+  const {
+    enterpriseSettings,
+    isLoading: enterpriseSettingsLoading,
+    error: enterpriseSettingsError,
+  } = useEnterpriseSettings(eeEnabledRuntime);
+  const customAnalyticsScript = useCustomAnalyticsScript(eeEnabledRuntime);
+
   const [isMobile, setIsMobile] = useState<boolean | undefined>();
-  const vectorDbEnabled = settings.settings.vector_db_enabled !== false;
+  const settingsLoading = coreSettingsLoading || enterpriseSettingsLoading;
+  const vectorDbEnabled =
+    !coreSettingsLoading &&
+    !settingsError &&
+    settings.vector_db_enabled !== false;
   const { ccPairs } = useCCPairs(vectorDbEnabled);
 
   useEffect(() => {
@@ -42,14 +74,46 @@ export function SettingsProvider({
    * consumers don't need to independently verify availability.
    */
   const isSearchModeAvailable = useMemo(
-    () => settings.settings.search_ui_enabled !== false && ccPairs.length > 0,
-    [settings.settings.search_ui_enabled, ccPairs.length]
+    () => settings.search_ui_enabled !== false && ccPairs.length > 0,
+    [settings.search_ui_enabled, ccPairs.length]
   );
 
+  const combinedSettings: CombinedSettings = useMemo(
+    () => ({
+      settings,
+      enterpriseSettings,
+      customAnalyticsScript,
+      webVersion: settings.version ?? null,
+      webDomain: HOST_URL,
+      isMobile,
+      isSearchModeAvailable,
+      settingsLoading,
+    }),
+    [
+      settings,
+      enterpriseSettings,
+      customAnalyticsScript,
+      isMobile,
+      isSearchModeAvailable,
+      settingsLoading,
+    ]
+  );
+
+  // Auth errors (401/403) are expected for unauthenticated users (e.g. login
+  // page). Fall through with default settings so the app can render normally.
+  const isAuthError = (err: Error | undefined) =>
+    err instanceof FetchError && (err.status === 401 || err.status === 403);
+
+  const hasFatalError =
+    (settingsError && !isAuthError(settingsError)) ||
+    (enterpriseSettingsError && !isAuthError(enterpriseSettingsError));
+
+  if (hasFatalError) {
+    return NEXT_PUBLIC_CLOUD_ENABLED ? <CloudError /> : <ErrorPage />;
+  }
+
   return (
-    <SettingsContext.Provider
-      value={{ ...settings, isMobile, isSearchModeAvailable }}
-    >
+    <SettingsContext.Provider value={combinedSettings}>
       {children}
     </SettingsContext.Provider>
   );

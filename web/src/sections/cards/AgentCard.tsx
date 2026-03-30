@@ -117,7 +117,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           userIds={fullAgent?.users?.map((u) => u.id) ?? []}
           groupIds={fullAgent?.groups ?? []}
           isPublic={fullAgent?.is_public ?? false}
-          isFeatured={fullAgent?.featured ?? false}
+          isFeatured={fullAgent?.is_featured ?? false}
           labelIds={fullAgent?.labels?.map((l) => l.id) ?? []}
           onShare={handleShare}
         />
@@ -127,10 +127,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
         {fullAgent && <AgentViewerModal agent={fullAgent} />}
       </agentViewerModal.Provider>
 
-      <Interactive.Stateless
+      <Interactive.Simple
         onClick={() => agentViewerModal.toggle(true)}
         group="group/AgentCard"
-        variant="none"
       >
         <Card
           padding={0}
@@ -232,7 +231,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             </div>
           </div>
         </Card>
-      </Interactive.Stateless>
+      </Interactive.Simple>
     </>
   );
 }

@@ -52,7 +52,7 @@ def _create_test_persona_with_mcp_tool(
         document_sets=[],
         users=[user],
         groups=[],
-        is_visible=True,
+        is_listed=True,
         is_public=True,
         display_priority=None,
         starter_messages=None,
@@ -368,9 +368,10 @@ class TestMCPPassThroughOAuth:
         def mock_call_mcp_tool(
             server_url: str,  # noqa: ARG001
             tool_name: str,  # noqa: ARG001
-            kwargs: dict[str, Any],  # noqa: ARG001
+            arguments: dict[str, Any],  # noqa: ARG001
             connection_headers: dict[str, str],
             transport: MCPTransport,  # noqa: ARG001
+            auth: Any = None,  # noqa: ARG001
         ) -> dict[str, Any]:
             captured_headers.update(connection_headers)
             return mocked_response

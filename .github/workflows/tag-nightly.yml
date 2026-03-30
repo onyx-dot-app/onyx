@@ -11,6 +11,7 @@ permissions:
 jobs:
   create-and-push-tag:
     runs-on: ubuntu-slim
+    environment: ci-protected
     timeout-minutes: 45
 
     steps:

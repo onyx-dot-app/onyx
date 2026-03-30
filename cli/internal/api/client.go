@@ -270,6 +270,17 @@ func (c *Client) UploadFile(ctx context.Context, filePath string) (*models.FileD
 	}, nil
 }
 
+// GetBackendVersion fetches the backend version string from /api/version.
+func (c *Client) GetBackendVersion(ctx context.Context) (string, error) {
+	var resp struct {
+		BackendVersion string `json:"backend_version"`
+	}
+	if err := c.doJSON(ctx, "GET", "/api/version", nil, &resp); err != nil {
+		return "", err
+	}
+	return resp.BackendVersion, nil
+}
+
 // StopChatSession sends a stop signal for a streaming session (best-effort).
 func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
 	req, err := c.newRequest(ctx, "POST", "/api/chat/stop-chat-session/"+sessionID, nil)

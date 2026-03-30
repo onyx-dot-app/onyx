@@ -272,13 +272,13 @@ class TestUpsertVoiceProvider:
 class TestDeleteVoiceProvider:
     """Tests for delete_voice_provider."""
 
-    def test_soft_deletes_provider_when_found(self, mock_db_session: MagicMock) -> None:
+    def test_hard_deletes_provider_when_found(self, mock_db_session: MagicMock) -> None:
         provider = _make_voice_provider(id=1)
         mock_db_session.scalar.return_value = provider
 
         delete_voice_provider(mock_db_session, 1)
 
-        assert provider.deleted is True
+        mock_db_session.delete.assert_called_once_with(provider)
         mock_db_session.flush.assert_called_once()
 
     def test_does_nothing_when_provider_not_found(

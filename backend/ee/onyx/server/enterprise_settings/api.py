@@ -157,7 +157,11 @@ def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
             detail="No logo file found",
         )
     else:
-        return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
+        return Response(
+            content=onyx_file.data,
+            media_type=onyx_file.mime_type,
+            headers={"Cache-Control": "no-cache"},
+        )
 
 
 def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001

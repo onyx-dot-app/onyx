@@ -1,0 +1,93 @@
+# yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+version: 1
+
+reviews:
+  enabled: true
+  sensitivity: medium
+  incremental_commits: true
+  check_drafts: false
+
+  custom_instructions: |
+    Use explicit type annotations for variables to enhance code clarity,
+    especially when moving type hints around in the code.
+
+    Use `contributing_guides/best_practices.md` as core review context.
+    Prefer consistency with existing patterns, fix issues in code you touch,
+    avoid tacking new features onto muddy interfaces, fail loudly instead of
+    silently swallowing errors, keep code strictly typed, preserve clear state
+    boundaries, remove duplicate or dead logic, break up overly long functions,
+    avoid hidden import-time side effects, respect module boundaries, and favor
+    correctness-by-construction over relying on callers to use an API correctly.
+
+    Reference these files for additional context:
+    - `contributing_guides/best_practices.md` — Best practices for contributing to the codebase
+    - `CLAUDE.md` — Project instructions and coding standards
+    - `backend/alembic/README.md` — Migration guidance, including multi-tenant migration behavior
+    - `deployment/helm/charts/onyx/values-lite.yaml` — Lite deployment Helm values and service assumptions
+    - `deployment/docker_compose/docker-compose.onyx-lite.yml` — Lite deployment Docker Compose overlay and disabled service behavior
+
+  ignore:
+    files:
+      - greptile.json
+      - cubic.yaml
+
+  custom_rules:
+    - name: TODO format
+      description: >
+        Whenever a TODO is added, there must always be an associated name or
+        ticket in the style of TODO(name): ... or TODO(1234): ...
+
+    - name: Frontend standards
+      description: >
+        For frontend changes, enforce all standards described in the
+        web/AGENTS.md file.
+      include:
+        - web/**
+        - desktop/**
+
+    - name: No debugging code
+      description: >
+        Remove temporary debugging code before merging to production,
+        especially tenant-specific debugging logs.
+
+    - name: No hardcoded booleans
+      description: >
+        When hardcoding a boolean variable to a constant value, remove the
+        variable entirely and clean up all places where it's used rather than
+        just setting it to a constant.
+
+    - name: Multi-tenant awareness
+      description: >
+        Code changes must consider both multi-tenant and single-tenant
+        deployments. In multi-tenant mode, preserve tenant isolation, ensure
+        tenant context is propagated correctly, and avoid assumptions that only
+        hold for a single shared schema or globally shared state. In
+        single-tenant mode, avoid introducing unnecessary tenant-specific
+        requirements or cloud-only control-plane dependencies.
+
+    - name: Onyx lite compatibility
+      description: >
+        Code changes must consider both regular Onyx deployments and Onyx lite
+        deployments. Lite deployments disable the vector DB, Redis, model
+        servers, and background workers by default, use PostgreSQL-backed
+        cache/auth/file storage, and rely on the API server to handle
+        background work. Do not assume those services are available unless the
+        code path is explicitly limited to full deployments.
+
+    - name: OnyxError over HTTPException
+      description: >
+        Never raise HTTPException directly in business code. Use
+        `raise OnyxError(OnyxErrorCode.XXX, "message")` from
+        `onyx.error_handling.exceptions`. A global FastAPI exception handler
+        converts OnyxError into structured JSON responses with
+        {"error_code": "...", "detail": "..."}. Error codes are defined in
+        `onyx.error_handling.error_codes.OnyxErrorCode`. For upstream errors
+        with dynamic HTTP status codes, use `status_code_override`:
+        `raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=upstream_status)`.
+      include:
+        - backend/**/*.py
+
+issues:
+  fix_with_cubic_buttons: true
+  pr_comment_fixes: true
+  fix_commits_to_pr: true

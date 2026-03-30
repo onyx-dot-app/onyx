@@ -35,8 +35,8 @@ def _create_test_persona(db_session: Session, persona_id: int, name: str) -> Per
         id=persona_id,
         name=name,
         description="Test persona for Discord bot tests",
-        is_visible=True,
-        featured=False,
+        is_listed=True,
+        is_featured=False,
         deleted=False,
         builtin_persona=False,
     )

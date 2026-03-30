@@ -1,11 +1,17 @@
+"use client";
+
 import "@opal/components/buttons/select-button/styles.css";
-import "@opal/components/tooltip.css";
 import {
   Interactive,
   useDisabled,
   type InteractiveStatefulProps,
 } from "@opal/core";
-import type { ContainerSizeVariants, ExtremaSizeVariants } from "@opal/types";
+import type {
+  ContainerSizeVariants,
+  ExtremaSizeVariants,
+  RichStr,
+} from "@opal/types";
+import { Text } from "@opal/components";
 import type { TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -27,19 +33,19 @@ type SelectButtonContentProps =
   | {
       foldable: true;
       icon: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
       rightIcon?: IconFunctionComponent;
     }
   | {
       foldable?: false;
       icon?: IconFunctionComponent;
-      children: string;
+      children: string | RichStr;
       rightIcon?: IconFunctionComponent;
     }
   | {
       foldable?: false;
       icon: IconFunctionComponent;
-      children?: string;
+      children?: string | RichStr;
       rightIcon?: IconFunctionComponent;
     };
 
@@ -49,9 +55,6 @@ type SelectButtonProps = InteractiveStatefulProps &
      * Size preset — controls gap, text size, and Container height/rounding.
      */
     size?: ContainerSizeVariants;
-
-    /** HTML button type. Container renders a `<button>` element. */
-    type?: "submit" | "button" | "reset";
 
     /** Tooltip text shown on hover. */
     tooltip?: string;
@@ -83,14 +86,13 @@ function SelectButton({
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <span
-      className={cn(
-        "opal-select-button-label",
-        isLarge ? "font-main-ui-body" : "font-secondary-body"
-      )}
+    <Text
+      font={isLarge ? "main-ui-body" : "secondary-body"}
+      color="inherit"
+      nowrap
     >
       {children}
-    </span>
+    </Text>
   ) : null;
 
   const button = (
@@ -105,7 +107,7 @@ function SelectButton({
       >
         <div
           className={cn(
-            "opal-select-button interactive-foreground",
+            "opal-select-button",
             foldable && "interactive-foldable-host"
           )}
         >
@@ -141,7 +143,7 @@ function SelectButton({
           side={tooltipSide}
           sideOffset={4}
         >
-          {resolvedTooltip}
+          <Text>{resolvedTooltip}</Text>
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

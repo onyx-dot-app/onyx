@@ -114,7 +114,7 @@ jobs:
           ref: main
 
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # ratchet:astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # ratchet:astral-sh/setup-uv@v7
         with:
           enable-cache: false
           version: "0.9.9"
@@ -183,6 +183,7 @@ jobs:
       - cherry-pick-to-latest-release
     if: needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && needs.resolve-cherry-pick-request.result == 'success' && needs.cherry-pick-to-latest-release.result == 'success'
     runs-on: ubuntu-slim
+    environment: ci-protected
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -232,6 +233,7 @@ jobs:
       - cherry-pick-to-latest-release
     if: always() && needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && (needs.resolve-cherry-pick-request.result == 'failure' || needs.cherry-pick-to-latest-release.result == 'failure')
     runs-on: ubuntu-slim
+    environment: ci-protected
     timeout-minutes: 10
     steps:
       - name: Checkout

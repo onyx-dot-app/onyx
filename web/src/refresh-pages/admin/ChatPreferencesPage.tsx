@@ -1,5 +1,6 @@
 "use client";
 
+import { markdown } from "@opal/utils";
 import React, { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Formik, Form, useFormikContext } from "formik";
@@ -23,6 +24,8 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
+  SvgAlertCircle,
+  SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
@@ -43,9 +46,8 @@ import {
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import { Button } from "@opal/components";
+import { Button, Text, Card as OpalCard } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -53,6 +55,7 @@ import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled } from "@opal/core";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
@@ -80,6 +83,10 @@ interface ChatPreferencesFormValues {
   maximum_chat_retention_days: string;
   anonymous_user_enabled: boolean;
   disable_default_assistant: boolean;
+
+  // File limits
+  user_file_max_upload_size_mb: string;
+  file_token_count_threshold_k: string;
 }
 
 interface MCPServerCardTool {
@@ -114,6 +121,10 @@ function MCPServerCard({
   const allToolIds = tools.map((t) => t.id);
   const serverEnabled =
     tools.length > 0 && tools.some((t) => isToolEnabled(t.id));
+  const needsAuth = !server.is_authenticated;
+  const authTooltip = needsAuth
+    ? "Authenticate this MCP server before enabling its tools."
+    : undefined;
 
   return (
     <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
@@ -122,10 +133,13 @@ function MCPServerCard({
         description={server.description}
         icon={getActionIcon(server.server_url, server.name)}
         rightChildren={
-          <Switch
-            checked={serverEnabled}
-            onCheckedChange={(checked) => onToggleTools(allToolIds, checked)}
-          />
+          <SimpleTooltip tooltip={authTooltip} side="top">
+            <Switch
+              checked={serverEnabled}
+              onCheckedChange={(checked) => onToggleTools(allToolIds, checked)}
+              disabled={needsAuth}
+            />
+          </SimpleTooltip>
         }
       >
         {tools.length > 0 && (
@@ -158,12 +172,15 @@ function MCPServerCard({
                 description={tool.description}
                 icon={tool.icon}
                 rightChildren={
-                  <Switch
-                    checked={isToolEnabled(tool.id)}
-                    onCheckedChange={(checked) =>
-                      onToggleTool(tool.id, checked)
-                    }
-                  />
+                  <SimpleTooltip tooltip={authTooltip} side="top">
+                    <Switch
+                      checked={isToolEnabled(tool.id)}
+                      onCheckedChange={(checked) =>
+                        onToggleTool(tool.id, checked)
+                      }
+                      disabled={needsAuth}
+                    />
+                  </SimpleTooltip>
                 }
               />
             ))}
@@ -171,6 +188,173 @@ function MCPServerCard({
         </ActionsLayouts.Content>
       )}
     </ExpandableCard.Root>
+  );
+}
+
+type FileLimitFieldName =
+  | "user_file_max_upload_size_mb"
+  | "file_token_count_threshold_k";
+
+interface NumericLimitFieldProps {
+  name: FileLimitFieldName;
+  defaultValue: string;
+  saveSettings: (updates: Partial<Settings>) => Promise<void>;
+  maxValue?: number;
+  allowZero?: boolean;
+}
+
+function NumericLimitField({
+  name,
+  defaultValue,
+  saveSettings,
+  maxValue,
+  allowZero = false,
+}: NumericLimitFieldProps) {
+  const { values, setFieldValue } =
+    useFormikContext<ChatPreferencesFormValues>();
+  const initialValue = useRef(values[name]);
+  const restoringRef = useRef(false);
+  const value = values[name];
+
+  const parsed = parseInt(value, 10);
+  const isOverMax =
+    maxValue !== undefined && !isNaN(parsed) && parsed > maxValue;
+
+  const handleRestore = () => {
+    restoringRef.current = true;
+    initialValue.current = defaultValue;
+    void setFieldValue(name, defaultValue);
+    void saveSettings({ [name]: parseInt(defaultValue, 10) });
+  };
+
+  const handleBlur = () => {
+    // The restore button triggers a blur — skip since handleRestore already saved.
+    if (restoringRef.current) {
+      restoringRef.current = false;
+      return;
+    }
+
+    const parsed = parseInt(value, 10);
+    const isValid = !isNaN(parsed) && (allowZero ? parsed >= 0 : parsed > 0);
+
+    // Revert invalid input (empty, NaN, negative).
+    if (!isValid) {
+      if (allowZero) {
+        // Empty/invalid means "no limit" — persist 0 and clear the field.
+        void setFieldValue(name, "");
+        void saveSettings({ [name]: 0 });
+        initialValue.current = "";
+      } else {
+        void setFieldValue(name, initialValue.current);
+      }
+      return;
+    }
+
+    // Block save when the value exceeds the hard ceiling.
+    if (maxValue !== undefined && parsed > maxValue) {
+      return;
+    }
+
+    // For allowZero fields, 0 means "no limit" — clear the display
+    // so the "No limit" placeholder is visible, but still persist 0.
+    if (allowZero && parsed === 0) {
+      void setFieldValue(name, "");
+      if (initialValue.current !== "") {
+        void saveSettings({ [name]: 0 });
+        initialValue.current = "";
+      }
+      return;
+    }
+
+    const normalizedDisplay = String(parsed);
+
+    // Update the display to the canonical form (e.g. strip leading zeros).
+    if (value !== normalizedDisplay) {
+      void setFieldValue(name, normalizedDisplay);
+    }
+
+    // Persist only when the value actually changed.
+    if (normalizedDisplay !== initialValue.current) {
+      void saveSettings({ [name]: parsed });
+      initialValue.current = normalizedDisplay;
+    }
+  };
+
+  return (
+    <div className="group w-full">
+      <InputTypeInField
+        name={name}
+        inputMode="numeric"
+        showClearButton={false}
+        pattern="[0-9]*"
+        placeholder={allowZero ? "No limit" : `Default: ${defaultValue}`}
+        variant={isOverMax ? "error" : undefined}
+        rightSection={
+          (value || "") !== defaultValue ? (
+            <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+              <IconButton
+                icon={SvgRefreshCw}
+                tooltip="Restore default"
+                internal
+                type="button"
+                onClick={handleRestore}
+              />
+            </div>
+          ) : undefined
+        }
+        onBlur={handleBlur}
+      />
+    </div>
+  );
+}
+
+interface FileSizeLimitFieldsProps {
+  saveSettings: (updates: Partial<Settings>) => Promise<void>;
+  defaultUploadSizeMb: string;
+  defaultTokenThresholdK: string;
+  maxAllowedUploadSizeMb?: number;
+}
+
+function FileSizeLimitFields({
+  saveSettings,
+  defaultUploadSizeMb,
+  defaultTokenThresholdK,
+  maxAllowedUploadSizeMb,
+}: FileSizeLimitFieldsProps) {
+  return (
+    <div className="flex gap-4 w-full items-start">
+      <div className="flex-1">
+        <InputLayouts.Vertical
+          title="File Size Limit (MB)"
+          subDescription={
+            maxAllowedUploadSizeMb
+              ? `Max: ${maxAllowedUploadSizeMb} MB`
+              : undefined
+          }
+          nonInteractive
+        >
+          <NumericLimitField
+            name="user_file_max_upload_size_mb"
+            defaultValue={defaultUploadSizeMb}
+            saveSettings={saveSettings}
+            maxValue={maxAllowedUploadSizeMb}
+          />
+        </InputLayouts.Vertical>
+      </div>
+      <div className="flex-1">
+        <InputLayouts.Vertical
+          title="File Token Limit (thousand tokens)"
+          nonInteractive
+        >
+          <NumericLimitField
+            name="file_token_count_threshold_k"
+            defaultValue={defaultTokenThresholdK}
+            saveSettings={saveSettings}
+            allowZero
+          />
+        </InputLayouts.Vertical>
+      </div>
+    </div>
   );
 }
 
@@ -190,6 +374,7 @@ function ChatPreferencesForm() {
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
   const vectorDbEnabled = useVectorDbEnabled();
+
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -294,7 +479,6 @@ function ChatPreferencesForm() {
 
   // System prompt modal state
   const [systemPromptModalOpen, setSystemPromptModalOpen] = useState(false);
-  const [systemPromptValue, setSystemPromptValue] = useState("");
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
@@ -388,14 +572,7 @@ function ChatPreferencesForm() {
             <Button
               prominence="tertiary"
               icon={SvgAddLines}
-              onClick={() => {
-                setSystemPromptValue(
-                  defaultAgentConfig?.system_prompt ??
-                    defaultAgentConfig?.default_system_prompt ??
-                    ""
-                );
-                setSystemPromptModalOpen(true);
-              }}
+              onClick={() => setSystemPromptModalOpen(true)}
             >
               Modify Prompt
             </Button>
@@ -721,6 +898,28 @@ function ChatPreferencesForm() {
                 </Card>
 
                 <Card>
+                  <InputLayouts.Vertical
+                    title="File Attachment Size Limit"
+                    description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
+                  >
+                    <FileSizeLimitFields
+                      saveSettings={saveSettings}
+                      defaultUploadSizeMb={
+                        settings?.settings.default_user_file_max_upload_size_mb?.toString() ??
+                        "100"
+                      }
+                      defaultTokenThresholdK={
+                        settings?.settings.default_file_token_count_threshold_k?.toString() ??
+                        "200"
+                      }
+                      maxAllowedUploadSizeMb={
+                        settings?.settings.max_allowed_upload_size_mb
+                      }
+                    />
+                  </InputLayouts.Vertical>
+                </Card>
+
+                <Card>
                   <InputLayouts.Horizontal
                     title="Allow Anonymous Users"
                     description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
@@ -757,56 +956,83 @@ function ChatPreferencesForm() {
         open={systemPromptModalOpen}
         onOpenChange={setSystemPromptModalOpen}
       >
-        <Modal.Content width="md" height="fit">
-          <Modal.Header
-            icon={SvgAddLines}
-            title="System Prompt"
-            description="This base prompt is prepended to all chats, agents, and projects."
-            onClose={() => setSystemPromptModalOpen(false)}
-          />
-          <Modal.Body>
-            <InputTextArea
-              value={systemPromptValue}
-              onChange={(e) => setSystemPromptValue(e.target.value)}
-              placeholder="Enter your system prompt..."
-              rows={8}
-              maxRows={20}
-              autoResize
-            />
-          </Modal.Body>
-          <Modal.Footer>
-            <Button
-              prominence="secondary"
-              onClick={() => setSystemPromptModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              prominence="primary"
-              onClick={async () => {
-                try {
-                  const response = await fetch("/api/admin/default-assistant", {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      system_prompt: systemPromptValue,
-                    }),
-                  });
-                  if (!response.ok) {
-                    const errorMsg = (await response.json()).detail;
-                    throw new Error(errorMsg);
-                  }
-                  await mutateDefaultAgent();
-                  setSystemPromptModalOpen(false);
-                  toast.success("System prompt updated");
-                } catch {
-                  toast.error("Failed to update system prompt");
+        <Modal.Content width="xl" height="fit">
+          <Formik
+            initialValues={{
+              system_prompt:
+                defaultAgentConfig?.system_prompt ??
+                defaultAgentConfig?.default_system_prompt ??
+                "",
+            }}
+            onSubmit={async ({ system_prompt }) => {
+              try {
+                const response = await fetch("/api/admin/default-assistant", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ system_prompt }),
+                });
+                if (!response.ok) {
+                  const errorMsg = (await response.json()).detail;
+                  throw new Error(errorMsg);
                 }
-              }}
-            >
-              Save
-            </Button>
-          </Modal.Footer>
+                await mutateDefaultAgent();
+                setSystemPromptModalOpen(false);
+                toast.success("System prompt updated");
+              } catch {
+                toast.error("Failed to update system prompt");
+              }
+            }}
+          >
+            {({ dirty, isSubmitting, submitForm }) => (
+              <Form>
+                <Modal.Header
+                  icon={SvgAddLines}
+                  title="System Prompt"
+                  description="This base prompt is prepended to all chats, agents, and projects."
+                  onClose={() => setSystemPromptModalOpen(false)}
+                />
+                <Modal.Body>
+                  <Section gap={0.25} alignItems="start">
+                    <InputTextAreaField
+                      name="system_prompt"
+                      placeholder="Enter your system prompt..."
+                      rows={8}
+                      maxRows={20}
+                      autoResize
+                    />
+                    <Text font="secondary-body" color="text-03">
+                      {markdown(
+                        "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used."
+                      )}
+                    </Text>
+                  </Section>
+                  <OpalCard backgroundVariant="none" borderVariant="solid">
+                    <Content
+                      sizePreset="main-ui"
+                      icon={SvgAlertCircle}
+                      title="Modify with caution."
+                      description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
+                    />
+                  </OpalCard>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button
+                    prominence="secondary"
+                    onClick={() => setSystemPromptModalOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    prominence="primary"
+                    onClick={submitForm}
+                    disabled={!dirty || isSubmitting}
+                  >
+                    Save
+                  </Button>
+                </Modal.Footer>
+              </Form>
+            )}
+          </Formik>
         </Modal.Content>
       </Modal>
     </>
@@ -832,6 +1058,21 @@ export default function ChatPreferencesPage() {
     anonymous_user_enabled: settings.settings.anonymous_user_enabled ?? false,
     disable_default_assistant:
       settings.settings.disable_default_assistant ?? false,
+
+    // File limits — for upload size: 0/null means "use default";
+    // for token threshold: null means "use default", 0 means "no limit".
+    user_file_max_upload_size_mb:
+      (settings.settings.user_file_max_upload_size_mb ?? 0) <= 0
+        ? settings.settings.default_user_file_max_upload_size_mb?.toString() ??
+          "100"
+        : settings.settings.user_file_max_upload_size_mb!.toString(),
+    file_token_count_threshold_k:
+      settings.settings.file_token_count_threshold_k == null
+        ? settings.settings.default_file_token_count_threshold_k?.toString() ??
+          "200"
+        : settings.settings.file_token_count_threshold_k === 0
+          ? ""
+          : settings.settings.file_token_count_threshold_k.toString(),
   };
 
   return (

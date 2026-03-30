@@ -90,8 +90,17 @@ def _patch_task_app(task: Any, mock_app: MagicMock) -> Generator[None, None, Non
     task only.
     """
     task_instance = task.run.__self__
-    with patch.object(
-        type(task_instance), "app", new_callable=PropertyMock, return_value=mock_app
+    with (
+        patch.object(
+            type(task_instance),
+            "app",
+            new_callable=PropertyMock,
+            return_value=mock_app,
+        ),
+        patch(
+            "onyx.background.celery.tasks.user_file_processing.tasks.celery_get_broker_client",
+            return_value=MagicMock(),
+        ),
     ):
         yield
 

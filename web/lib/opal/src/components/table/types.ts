@@ -30,12 +30,7 @@ export type ColumnWidth = DataColumnWidth | FixedColumnWidth;
 // Column kind discriminant
 // ---------------------------------------------------------------------------
 
-export type QualifierContentType =
-  | "icon"
-  | "simple"
-  | "image"
-  | "avatar-icon"
-  | "avatar-user";
+export type QualifierContentType = "simple" | "icon" | "image";
 
 export type OnyxColumnKind = "qualifier" | "data" | "display" | "actions";
 
@@ -56,18 +51,16 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
   kind: "qualifier";
   /** Content type for body-row `<TableQualifier>`. */
   content: QualifierContentType;
-  /** Content type for the header `<TableQualifier>`. @default "simple" */
-  headerContentType?: QualifierContentType;
-  /** Extract initials from a row (for "avatar-user" content). */
-  getInitials?: (row: TData) => string;
-  /** Extract icon from a row (for "icon" / "avatar-icon" content). */
-  getIcon?: (row: TData) => IconFunctionComponent;
-  /** Extract image src from a row (for "image" content). */
+  /** Return the icon component to render for a row (for "icon" content). */
+  getContent?: (row: TData) => IconFunctionComponent;
+  /** Return the image URL to render for a row (for "image" content). */
   getImageSrc?: (row: TData) => string;
-  /** Whether to show selection checkboxes on the qualifier. @default true */
-  selectable?: boolean;
-  /** Whether to render qualifier content in the header. @default true */
-  header?: boolean;
+  /** Return the image alt text for a row (for "image" content). @default "" */
+  getImageAlt?: (row: TData) => string;
+  /** Show a tinted background container behind the content. @default false */
+  background?: boolean;
+  /** Icon size preset. Use `"lg"` for avatars, `"md"` for regular icons. @default "md" */
+  iconSize?: "lg" | "md";
 }
 
 /** Data column — accessor-based column with sorting/resizing. */
@@ -153,6 +146,10 @@ export interface DataTableProps<TData> {
   initialSorting?: SortingState;
   /** Initial column visibility state. */
   initialColumnVisibility?: VisibilityState;
+  /** Initial row selection state. Keys are row IDs (from `getRowId`), values are `true`. */
+  initialRowSelection?: Record<string, boolean>;
+  /** When true AND `initialRowSelection` is non-empty, start in view-selected mode. @default false */
+  initialViewSelected?: boolean;
   /** Enable drag-and-drop row reordering. */
   draggable?: DataTableDraggableConfig;
   /** Footer configuration. */
@@ -174,9 +171,6 @@ export interface DataTableProps<TData> {
    * Accepts a pixel number (e.g. `300`) or a CSS value string (e.g. `"50vh"`).
    */
   height?: number | string;
-  /** Background color for the sticky header row, preventing rows from showing
-   *  through when scrolling. Accepts any CSS color value. */
-  headerBackground?: string;
   /**
    * Enable server-side mode. When provided:
    * - TanStack uses manualPagination/manualSorting/manualFiltering

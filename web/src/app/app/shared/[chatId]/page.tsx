@@ -11,7 +11,7 @@ export function constructMiniFiedPersona(name: string, id: number): Persona {
   return {
     id,
     name,
-    is_visible: true,
+    is_listed: true,
     is_public: true,
     display_priority: 0,
     description: "",
@@ -20,7 +20,7 @@ export function constructMiniFiedPersona(name: string, id: number): Persona {
     owner: null,
     starter_messages: null,
     builtin_persona: false,
-    featured: false,
+    is_featured: false,
     users: [],
     groups: [],
     user_file_ids: [],

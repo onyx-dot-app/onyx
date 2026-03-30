@@ -54,8 +54,10 @@ function MemoryItem({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (shouldFocus) {
-      textareaRef.current?.focus();
+    if (shouldFocus && textareaRef.current) {
+      const el = textareaRef.current;
+      el.focus();
+      el.selectionStart = el.selectionEnd = el.value.length;
       onFocused?.();
     }
   }, [shouldFocus, onFocused]);
@@ -63,8 +65,10 @@ function MemoryItem({
   useEffect(() => {
     if (!shouldHighlight) return;
 
-    wrapperRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    textareaRef.current?.focus();
+    wrapperRef.current?.scrollIntoView({
+      block: "start",
+      behavior: "smooth",
+    });
     setIsHighlighting(true);
 
     const timer = setTimeout(() => {
@@ -79,10 +83,10 @@ function MemoryItem({
     <div
       ref={wrapperRef}
       className={cn(
-        "rounded-08 hover:bg-background-tint-00 w-full p-0.5",
+        "rounded-08 w-full p-0.5 border border-transparent",
         "transition-colors ",
         isHighlighting &&
-          "bg-action-link-01 border border-action-link-05 duration-700"
+          "bg-action-link-01 hover:bg-action-link-01 border-action-link-05 duration-700"
       )}
     >
       <Section gap={0.25} alignItems="start">
@@ -97,10 +101,22 @@ function MemoryItem({
               setIsFocused(false);
               void onBlur(originalIndex);
             }}
-            rows={3}
+            onKeyDown={(e) => {
+              if (
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                !e.nativeEvent.isComposing
+              ) {
+                e.preventDefault();
+                textareaRef.current?.blur();
+              }
+            }}
+            rows={1}
+            autoResize
+            maxRows={3}
             maxLength={MAX_MEMORY_LENGTH}
             resizable={false}
-            className={cn(!isFocused && "bg-transparent")}
+            className="bg-background-tint-01 hover:bg-background-tint-00 focus-within:bg-background-tint-00"
           />
           <Disabled disabled={!memory.content.trim() && memory.isNew}>
             <Button
@@ -122,13 +138,30 @@ function MemoryItem({
   );
 }
 
+function resolveTargetMemoryId(
+  targetMemoryId: number | null | undefined,
+  targetIndex: number | null | undefined,
+  memories: MemoryItem[]
+): number | null {
+  if (targetMemoryId != null) return targetMemoryId;
+
+  if (targetIndex != null && memories.length > 0) {
+    // Backend index is ASC (oldest-first), frontend displays DESC (newest-first)
+    const descIdx = memories.length - 1 - targetIndex;
+    return memories[descIdx]?.id ?? null;
+  }
+
+  return null;
+}
+
 interface MemoriesModalProps {
   memories?: MemoryItem[];
   onSaveMemories?: (memories: MemoryItem[]) => Promise<boolean>;
   onClose?: () => void;
   initialTargetMemoryId?: number | null;
   initialTargetIndex?: number | null;
-  highlightFirstOnOpen?: boolean;
+  highlightOnOpen?: boolean;
+  focusNewLine?: boolean;
 }
 
 export default function MemoriesModal({
@@ -137,7 +170,8 @@ export default function MemoriesModal({
   onClose,
   initialTargetMemoryId,
   initialTargetIndex,
-  highlightFirstOnOpen = false,
+  highlightOnOpen = false,
+  focusNewLine = false,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
@@ -182,24 +216,16 @@ export default function MemoriesModal({
   );
 
   useEffect(() => {
-    if (initialTargetMemoryId != null) {
-      // Direct DB id available — use it
-      setHighlightMemoryId(initialTargetMemoryId);
-    } else if (initialTargetIndex != null && effectiveMemories.length > 0) {
-      // Backend index is ASC (oldest-first), but the frontend displays DESC
-      // (newest-first). Convert: descIdx = totalCount - 1 - ascIdx
-      const descIdx = effectiveMemories.length - 1 - initialTargetIndex;
-      const target = effectiveMemories[descIdx];
-      if (target) {
-        setHighlightMemoryId(target.id);
-      }
-    } else if (
-      highlightFirstOnOpen &&
-      effectiveMemories.length > 0 &&
-      effectiveMemories[0]
-    ) {
-      // Fallback: highlight the first displayed item (newest)
-      setHighlightMemoryId(effectiveMemories[0].id);
+    const targetId = resolveTargetMemoryId(
+      initialTargetMemoryId,
+      initialTargetIndex,
+      effectiveMemories
+    );
+    if (targetId == null) return;
+
+    setFocusMemoryId(targetId);
+    if (highlightOnOpen) {
+      setHighlightMemoryId(targetId);
     }
   }, [initialTargetMemoryId, initialTargetIndex]);
 
@@ -219,6 +245,19 @@ export default function MemoriesModal({
     onNotify: (message, type) => toast[type](message),
   });
 
+  // Always start with an empty card; optionally focus it (View/Add button)
+  const hasAddedEmptyRef = useRef(false);
+  useEffect(() => {
+    if (hasAddedEmptyRef.current) return;
+    hasAddedEmptyRef.current = true;
+
+    const id = handleAddMemory();
+    if (id !== null && focusNewLine) {
+      setFocusMemoryId(id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const onAddLine = () => {
     const id = handleAddMemory();
     if (id !== null) {
@@ -228,7 +267,7 @@ export default function MemoriesModal({
 
   return (
     <Modal open onOpenChange={(open) => !open && close?.()}>
-      <Modal.Content width="sm" height="lg">
+      <Modal.Content width="sm" height="lg" position="top">
         <Modal.Header
           icon={SvgAddLines}
           title="Memory"

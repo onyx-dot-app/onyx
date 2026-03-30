@@ -81,6 +81,7 @@ export default function AzureModal({
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -109,7 +110,11 @@ export default function AzureModal({
         default_model_name: "",
       } as AzureModalValues)
     : {
-        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        ...buildDefaultInitialValues(
+          existingLlmProvider,
+          modelConfigurations,
+          defaultModelName
+        ),
         api_key: existingLlmProvider?.api_key ?? "",
         target_uri: buildTargetUri(existingLlmProvider),
       };

@@ -13,7 +13,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-xl {
-  @apply flex flex-col items-start;
+  @apply flex flex-col items-start text-text-04;
 }
 
 /* ---------------------------------------------------------------------------
@@ -63,15 +63,6 @@
   gap: 0.25rem;
 }
 
-.opal-content-xl-title {
-  @apply text-left overflow-hidden text-text-04;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  padding: 0 0.125rem;
-  min-width: 0.0625rem;
-}
-
 .opal-content-xl-input-sizer {
   display: inline-grid;
   align-items: stretch;
@@ -110,7 +101,6 @@
 
 .opal-content-xl-description {
   @apply text-left w-full;
-  padding: 0 0.125rem;
 }
 
 /* ===========================================================================
@@ -127,7 +117,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-lg {
-  @apply flex flex-row items-start;
+  @apply flex flex-row items-start text-text-04;
 }
 
 /* ---------------------------------------------------------------------------
@@ -160,15 +150,6 @@
 .opal-content-lg-title-row {
   @apply flex items-center w-full;
   gap: 0.25rem;
-}
-
-.opal-content-lg-title {
-  @apply text-left overflow-hidden text-text-04;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  padding: 0 0.125rem;
-  min-width: 0.0625rem;
 }
 
 .opal-content-lg-input-sizer {
@@ -209,7 +190,6 @@
 
 .opal-content-lg-description {
   @apply text-left w-full;
-  padding: 0 0.125rem;
 }
 
 /* ===========================================================================
@@ -224,7 +204,16 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md {
-  @apply flex flex-row items-start;
+  @apply flex flex-col items-start text-text-04;
+}
+
+.opal-content-md-header {
+  @apply flex flex-row items-center w-full;
+}
+
+.opal-content-md-header[data-editing] {
+  @apply rounded-08;
+  box-shadow: inset 0 0 0 1px var(--border-02);
 }
 
 /* ---------------------------------------------------------------------------
@@ -238,15 +227,6 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Body column
-   --------------------------------------------------------------------------- */
-
-.opal-content-md-body {
-  @apply flex flex-1 flex-col items-start;
-  min-width: 0.0625rem;
-}
-
-/* ---------------------------------------------------------------------------
    Title row — title (or input) + edit button
    --------------------------------------------------------------------------- */
 
@@ -255,18 +235,10 @@
   gap: 0.25rem;
 }
 
-.opal-content-md-title {
-  @apply text-left overflow-hidden text-text-04;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  padding: 0 0.125rem;
-  min-width: 0.0625rem;
-}
-
 .opal-content-md-input-sizer {
   display: inline-grid;
   align-items: stretch;
+  width: 100%;
 }
 
 .opal-content-md-input-sizer > * {
@@ -312,7 +284,6 @@
 
 .opal-content-md-description {
   @apply text-left w-full;
-  padding: 0 0.125rem;
 }
 
 /* ===========================================================================
@@ -324,7 +295,7 @@
      reverse : flex-row-reverse — title left, icon right
 
    Icon color is always text-03. Title color varies by prominence
-   (text-04 default, text-03 muted, text-02 muted-2x) via data-prominence.
+   (text-04 default, text-03 muted) via data-prominence.
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -333,7 +304,7 @@
 
 .opal-content-sm {
   /* since `ContentSm` doesn't have a description, it's possible to center-align the icon and text */
-  @apply flex items-center;
+  @apply flex items-center text-text-04;
 }
 
 .opal-content-sm[data-orientation="inline"] {
@@ -366,68 +337,51 @@
   @apply text-text-02;
 }
 
-.opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-icon {
-  @apply text-text-02;
-}
-
 /* ---------------------------------------------------------------------------
    Title
    --------------------------------------------------------------------------- */
 
-.opal-content-sm-title {
-  @apply text-left overflow-hidden text-text-04 truncate;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  padding: 0 0.125rem;
-  min-width: 0.0625rem;
-}
-
-.opal-content-sm[data-prominence="muted"] .opal-content-sm-title {
+.opal-content-sm[data-prominence="muted"] {
   @apply text-text-03;
 }
 
-.opal-content-sm[data-prominence="muted-2x"] .opal-content-sm-title {
-  @apply text-text-02;
-}
-
 /* ===========================================================================
-   Interactive-foreground opt-in
+   Interactive override
 
-   When a Content variant is nested inside an Interactive and
-   `withInteractive` is set, the title and icon delegate their color to the
-   `--interactive-foreground` / `--interactive-foreground-icon` CSS variables
-   controlled by the ancestor Interactive variant.
+   When a Content variant is nested inside an `.interactive` element,
+   the title inherits color from the Interactive's `--interactive-foreground`
+   and icons switch to `--interactive-foreground-icon`. This is automatic —
+   no opt-in prop is required.
    =========================================================================== */
 
-.opal-content-xl[data-interactive] .opal-content-xl-title {
-  color: var(--interactive-foreground);
+.interactive .opal-content-xl {
+  color: inherit;
 }
 
-.opal-content-xl[data-interactive] .opal-content-xl-icon {
+.interactive .opal-content-xl .opal-content-xl-icon {
   color: var(--interactive-foreground-icon);
 }
 
-.opal-content-lg[data-interactive] .opal-content-lg-title {
-  color: var(--interactive-foreground);
+.interactive .opal-content-lg {
+  color: inherit;
 }
 
-.opal-content-lg[data-interactive] .opal-content-lg-icon {
+.interactive .opal-content-lg .opal-content-lg-icon {
   color: var(--interactive-foreground-icon);
 }
 
-.opal-content-md[data-interactive] .opal-content-md-title {
-  color: var(--interactive-foreground);
+.interactive .opal-content-md {
+  color: inherit;
 }
 
-.opal-content-md[data-interactive] .opal-content-md-icon {
+.interactive .opal-content-md .opal-content-md-icon {
   color: var(--interactive-foreground-icon);
 }
 
-.opal-content-sm[data-interactive] .opal-content-sm-title {
-  color: var(--interactive-foreground);
+.interactive .opal-content-sm {
+  color: inherit;
 }
 
-.opal-content-sm[data-interactive] .opal-content-sm-icon {
+.interactive .opal-content-sm .opal-content-sm-icon {
   color: var(--interactive-foreground-icon);
 }

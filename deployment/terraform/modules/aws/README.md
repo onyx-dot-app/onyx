@@ -8,6 +8,7 @@ This directory contains Terraform modules to provision the core AWS infrastructu
 - `postgres`: Creates an Amazon RDS for PostgreSQL instance and returns a connection URL
 - `redis`: Creates an ElastiCache for Redis replication group
 - `s3`: Creates an S3 bucket and locks access to a provided S3 VPC endpoint
+- `opensearch`: Creates an Amazon OpenSearch domain for managed search workloads
 - `onyx`: A higher-level composition that wires the above modules together for a complete, opinionated stack
 
 Use the `onyx` module if you want a working EKS + Postgres + Redis + S3 stack with sane defaults. Use the individual modules if you need more granular control.
@@ -127,6 +128,8 @@ Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
 - `postgres_username`, `postgres_password`
 - `create_vpc` (default true) or existing VPC details and `s3_vpc_endpoint_id`
+- WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention
+- Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
 
 ### `vpc`
 - Builds a VPC sized for EKS with multiple private and public subnets
@@ -157,6 +160,11 @@ Key inputs include:
 
 ### `s3`
 - Creates an S3 bucket for file storage and scopes access to the provided S3 gateway VPC endpoint
+
+### `opensearch`
+- Creates an Amazon OpenSearch domain inside the VPC
+- Supports custom subnets, security groups, fine-grained access control, encryption, and CloudWatch log publishing
+- Outputs domain endpoints, ARN, and the managed security group ID when it creates one
 
 ## Installing the Onyx Helm chart (after Terraform)
 Once the cluster is active, deploy application workloads via Helm. You can use the chart in `deployment/helm/charts/onyx`.

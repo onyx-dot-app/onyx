@@ -2,10 +2,11 @@
 
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
+import { isAfterDate, normalizeDate } from "@/lib/dateUtils";
 import Calendar from "@/refresh-components/Calendar";
 import Popover from "@/refresh-components/Popover";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { SvgCalendar } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 
@@ -15,10 +16,19 @@ export interface InputDatePickerProps {
   setSelectedDate: (date: Date | null) => void;
   startYear?: number;
   disabled?: boolean;
+  maxDate?: Date;
 }
 
 function extractYear(date: Date | null): number {
   return (date ?? new Date()).getFullYear();
+}
+
+function clampToMaxDate(date: Date, maxDate?: Date): Date {
+  if (!maxDate || !isAfterDate(date, maxDate)) {
+    return date;
+  }
+
+  return normalizeDate(maxDate);
 }
 
 export default function InputDatePicker({
@@ -27,16 +37,37 @@ export default function InputDatePicker({
   setSelectedDate,
   startYear = 1970,
   disabled = false,
+  maxDate,
 }: InputDatePickerProps) {
   const validStartYear = Math.max(startYear, 1970);
-  const currYear = extractYear(new Date());
-  const years = Array(currYear - validStartYear + 1)
-    .fill(currYear)
-    .map((currYear, index) => currYear - index);
+  const normalizedMaxDate = useMemo(
+    () => (maxDate ? normalizeDate(maxDate) : undefined),
+    [maxDate]
+  );
+  const currYear = Math.max(
+    validStartYear,
+    extractYear(normalizedMaxDate ?? new Date())
+  );
+  const years = useMemo(
+    () =>
+      Array(currYear - validStartYear + 1)
+        .fill(currYear)
+        .map((year, index) => year - index),
+    [currYear, validStartYear]
+  );
   const [open, setOpen] = useState(false);
   const [displayedMonth, setDisplayedMonth] = useState<Date>(
-    selectedDate ?? new Date()
+    clampToMaxDate(
+      selectedDate ?? normalizedMaxDate ?? new Date(),
+      normalizedMaxDate
+    )
   );
+
+  function handleDateSelection(date: Date) {
+    setSelectedDate(date);
+    setDisplayedMonth(date);
+    setOpen(false);
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -68,7 +99,7 @@ export default function InputDatePicker({
             </InputSelect>
             <Button
               onClick={() => {
-                const now = new Date();
+                const now = normalizedMaxDate ?? new Date();
                 setSelectedDate(now);
                 setDisplayedMonth(now);
                 setOpen(false);
@@ -82,14 +113,16 @@ export default function InputDatePicker({
             selected={selectedDate ?? undefined}
             onSelect={(date) => {
               if (date) {
-                setSelectedDate(date);
-                setOpen(false);
+                handleDateSelection(date);
               }
             }}
             month={displayedMonth}
             onMonthChange={setDisplayedMonth}
-            fromDate={new Date(validStartYear, 0)}
-            toDate={new Date()}
+            disabled={
+              normalizedMaxDate ? [{ after: normalizedMaxDate }] : undefined
+            }
+            startMonth={new Date(validStartYear, 0)}
+            endMonth={normalizedMaxDate ?? new Date()}
             showOutsideDays={false}
           />
         </Section>

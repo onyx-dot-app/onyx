@@ -43,6 +43,9 @@ from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import count_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
+from onyx.db.index_attempt import (
+    get_latest_successful_index_attempt_for_cc_pair_id,
+)
 from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
@@ -190,6 +193,11 @@ def get_cc_pair_full_info(
         only_finished=False,
     )
 
+    latest_successful_attempt = get_latest_successful_index_attempt_for_cc_pair_id(
+        db_session=db_session,
+        connector_credential_pair_id=cc_pair_id,
+    )
+
     # Get latest permission sync attempt for status
     latest_permission_sync_attempt = None
     if cc_pair.access_type == AccessType.SYNC:
@@ -207,6 +215,11 @@ def get_cc_pair_full_info(
             cc_pair_id=cc_pair_id,
         ),
         last_index_attempt=latest_attempt,
+        last_successful_index_time=(
+            latest_successful_attempt.time_started
+            if latest_successful_attempt
+            else None
+        ),
         latest_deletion_attempt=get_deletion_attempt_snapshot(
             connector_id=cc_pair.connector_id,
             credential_id=cc_pair.credential_id,

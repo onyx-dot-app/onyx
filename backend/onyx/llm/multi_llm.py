@@ -185,6 +185,21 @@ def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
+def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
+    """Check if the prompt contains any assistant messages with tool_calls.
+
+    When Anthropic's extended thinking is enabled, the API requires every
+    assistant message to start with a thinking block before any tool_use
+    blocks.  Since we don't preserve thinking_blocks (they carry
+    cryptographic signatures that can't be reconstructed), we must skip
+    the thinking param whenever history contains prior tool-calling turns.
+    """
+    from onyx.llm.models import AssistantMessage
+
+    msgs = prompt if isinstance(prompt, list) else [prompt]
+    return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)
+
+
 def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
     normalized_model_name = model_name.lower()
     return any(
@@ -289,6 +304,17 @@ class LitellmLLM(LLM):
             and VERTEX_LOCATION_KWARG not in model_kwargs
         ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
+
+        # Bifrost: OpenAI-compatible proxy that expects model names in
+        # provider/model format (e.g. "anthropic/claude-sonnet-4-6").
+        # We route through LiteLLM's openai provider with the Bifrost base URL,
+        # and ensure /v1 is appended.
+        if model_provider == LlmProviderNames.BIFROST:
+            self._custom_llm_provider = "openai"
+            if self._api_base is not None:
+                base = self._api_base.rstrip("/")
+                self._api_base = base if base.endswith("/v1") else f"{base}/v1"
+                model_kwargs["api_base"] = self._api_base
 
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
@@ -402,6 +428,7 @@ class LitellmLLM(LLM):
 
         # Model name
         is_avian = self._model_provider == LlmProviderNames.AVIAN
+        is_bifrost = self._model_provider == LlmProviderNames.BIFROST
         model_provider = (
             f"{self.config.model_provider}/responses"
             if is_openai_model  # Uses litellm's completions -> responses bridge
@@ -409,9 +436,14 @@ class LitellmLLM(LLM):
             else "openai" if is_avian
             else self.config.model_provider
         )
-        model = (
-            f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
-        )
+        if is_bifrost:
+            # Bifrost expects model names in provider/model format
+            # (e.g. "anthropic/claude-sonnet-4-6") sent directly to its
+            # OpenAI-compatible endpoint. We use custom_llm_provider="openai"
+            # so LiteLLM doesn't try to route based on the provider prefix.
+            model = self.config.deployment_name or self.config.model_name
+        else:
+            model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
 
         # Tool choice
         if is_claude_model and tool_choice == ToolChoiceOptions.REQUIRED:
@@ -452,7 +484,20 @@ class LitellmLLM(LLM):
                     reasoning_effort
                 )
 
-                if budget_tokens is not None:
+                # Anthropic requires every assistant message with tool_use
+                # blocks to start with a thinking block that carries a
+                # cryptographic signature.  We don't preserve those blocks
+                # across turns, so skip thinking when the history already
+                # contains tool-calling assistant messages.  LiteLLM's
+                # modify_params workaround doesn't cover all providers
+                # (notably Bedrock).
+                can_enable_thinking = (
+                    budget_tokens is not None
+                    and not _prompt_contains_tool_call_history(prompt)
+                )
+
+                if can_enable_thinking:
+                    assert budget_tokens is not None  # mypy
                     if max_tokens is not None:
                         # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
                         # and the minimum budget tokens is 1024
@@ -486,10 +531,11 @@ class LitellmLLM(LLM):
         if structured_response_format:
             optional_kwargs["response_format"] = structured_response_format
 
-        if not (is_claude_model or is_ollama or is_mistral):
+        if not (is_claude_model or is_ollama or is_mistral) or is_bifrost:
             # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
             # However, this param breaks Anthropic and Mistral models,
-            # so it must be conditionally included.
+            # so it must be conditionally included unless the request is
+            # routed through Bifrost's OpenAI-compatible endpoint.
             # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
             # See also, https://github.com/ollama/ollama/issues/11171
             optional_kwargs["allowed_openai_params"] = ["tool_choice"]

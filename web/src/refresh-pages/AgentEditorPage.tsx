@@ -83,6 +83,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,
   updateAgentFeaturedStatus,
@@ -663,7 +664,7 @@ export default function AgentEditorPage({
     shared_group_ids: existingAgent?.groups ?? [],
     is_public: existingAgent?.is_public ?? false,
     label_ids: existingAgent?.labels?.map((l) => l.id) ?? [],
-    featured: existingAgent?.featured ?? false,
+    is_featured: existingAgent?.is_featured ?? false,
   };
 
   const validationSchema = Yup.object().shape({
@@ -699,7 +700,14 @@ export default function AgentEditorPage({
     // Advanced
     llm_model_provider_override: Yup.string().nullable().optional(),
     llm_model_version_override: Yup.string().nullable().optional(),
-    knowledge_cutoff_date: Yup.date().nullable().optional(),
+    knowledge_cutoff_date: Yup.date()
+      .nullable()
+      .optional()
+      .test(
+        "knowledge-cutoff-date-not-in-future",
+        "Knowledge cutoff date must be today or earlier.",
+        (value) => !value || !isDateInFuture(value)
+      ),
     replace_base_system_prompt: Yup.boolean(),
     reminders: Yup.string().optional(),
 
@@ -806,7 +814,7 @@ export default function AgentEditorPage({
         icon_name: values.icon_name,
         search_start_date: values.knowledge_cutoff_date || null,
         label_ids: values.label_ids,
-        featured: values.featured,
+        is_featured: values.is_featured,
         // display_priority: ...,
 
         user_file_ids: values.enable_knowledge ? values.user_file_ids : [],
@@ -967,6 +975,14 @@ export default function AgentEditorPage({
           validateOnChange
           validateOnBlur
           validateOnMount
+          initialTouched={{
+            description:
+              initialValues.description.length >
+              MAX_CHARACTERS_AGENT_DESCRIPTION,
+            starter_messages: initialValues.starter_messages.map(
+              (msg) => msg.length > MAX_CHARACTERS_STARTER_MESSAGE
+            ) as unknown as boolean,
+          }}
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
@@ -1051,7 +1067,7 @@ export default function AgentEditorPage({
                     userIds={values.shared_user_ids}
                     groupIds={values.shared_group_ids}
                     isPublic={values.is_public}
-                    isFeatured={values.featured}
+                    isFeatured={values.is_featured}
                     labelIds={values.label_ids}
                     onShare={async (
                       userIds,
@@ -1065,7 +1081,7 @@ export default function AgentEditorPage({
                         setFieldValue("shared_user_ids", userIds);
                         setFieldValue("shared_group_ids", groupIds);
                         setFieldValue("is_public", isPublic);
-                        setFieldValue("featured", isFeatured);
+                        setFieldValue("is_featured", isFeatured);
                         setFieldValue("label_ids", labelIds);
                         shareAgentModal.toggle(false);
                         return;
@@ -1149,7 +1165,7 @@ export default function AgentEditorPage({
                         }
 
                         applySharingFields();
-                        setFieldValue("featured", isFeatured);
+                        setFieldValue("is_featured", isFeatured);
                         shareAgentModal.toggle(false);
                         await refreshSharedUi();
                         return;
@@ -1201,18 +1217,33 @@ export default function AgentEditorPage({
                           >
                             Cancel
                           </OpalButton>
-                          <Disabled
-                            disabled={
-                              isSubmitting ||
-                              !isValid ||
-                              !dirty ||
-                              hasUploadingFiles
+                          <SimpleTooltip
+                            tooltip={
+                              isSubmitting
+                                ? "Saving changes..."
+                                : !isValid
+                                  ? "Please fix the errors in the form before saving."
+                                  : !dirty
+                                    ? "No changes have been made."
+                                    : hasUploadingFiles
+                                      ? "Please wait for files to finish uploading."
+                                      : undefined
                             }
+                            side="bottom"
                           >
-                            <OpalButton type="submit">
-                              {existingAgent ? "Save" : "Create"}
-                            </OpalButton>
-                          </Disabled>
+                            <Disabled
+                              disabled={
+                                isSubmitting ||
+                                !isValid ||
+                                !dirty ||
+                                hasUploadingFiles
+                              }
+                            >
+                              <OpalButton type="submit">
+                                {existingAgent ? "Save" : "Create"}
+                              </OpalButton>
+                            </Disabled>
+                          </SimpleTooltip>
                         </div>
                       }
                       backButton
@@ -1237,7 +1268,7 @@ export default function AgentEditorPage({
                           <InputLayouts.Vertical
                             name="description"
                             title="Description"
-                            optional
+                            suffix="optional"
                           >
                             <InputTextAreaField
                               name="description"
@@ -1262,7 +1293,7 @@ export default function AgentEditorPage({
                         <InputLayouts.Vertical
                           name="instructions"
                           title="Instructions"
-                          optional
+                          suffix="optional"
                           description="Add instructions to tailor the response for this agent."
                         >
                           <InputTextAreaField
@@ -1275,7 +1306,7 @@ export default function AgentEditorPage({
                           name="starter_messages"
                           title="Conversation Starters"
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
-                          optional
+                          suffix="optional"
                         >
                           <StarterMessages />
                         </InputLayouts.Vertical>
@@ -1476,13 +1507,13 @@ export default function AgentEditorPage({
                               {canUpdateFeaturedStatus && (
                                 <>
                                   <InputLayouts.Horizontal
-                                    name="featured"
+                                    name="is_featured"
                                     title="Feature This Agent"
                                     description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
                                   >
-                                    <SwitchField name="featured" />
+                                    <SwitchField name="is_featured" />
                                   </InputLayouts.Horizontal>
-                                  {values.featured && !isShared && (
+                                  {values.is_featured && !isShared && (
                                     <Message
                                       static
                                       close={false}
@@ -1498,7 +1529,7 @@ export default function AgentEditorPage({
                               <InputLayouts.Horizontal
                                 name="llm_model"
                                 title="Default Model"
-                                description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
+                                description="This model will be used by Onyx by default in your chats."
                               >
                                 <LLMSelector
                                   name="llm_model"
@@ -1515,14 +1546,19 @@ export default function AgentEditorPage({
                               <InputLayouts.Horizontal
                                 name="knowledge_cutoff_date"
                                 title="Knowledge Cutoff Date"
-                                description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
+                                suffix="optional"
+                                description="Documents with a last-updated date prior to this will be ignored."
                               >
-                                <InputDatePickerField name="knowledge_cutoff_date" />
+                                <InputDatePickerField
+                                  name="knowledge_cutoff_date"
+                                  maxDate={new Date()}
+                                />
                               </InputLayouts.Horizontal>
                               <InputLayouts.Horizontal
                                 name="replace_base_system_prompt"
                                 title="Overwrite System Prompt"
-                                description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
+                                suffix="(Not Recommended)"
+                                description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
                               >
                                 <SwitchField name="replace_base_system_prompt" />
                               </InputLayouts.Horizontal>
@@ -1532,6 +1568,7 @@ export default function AgentEditorPage({
                               <InputLayouts.Vertical
                                 name="reminders"
                                 title="Reminders"
+                                suffix="optional"
                               >
                                 <InputTextAreaField
                                   name="reminders"

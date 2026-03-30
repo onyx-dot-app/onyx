@@ -1,8 +1,17 @@
-from typing import Any
+from pydantic import BaseModel
 
 from onyx.db.enums import HookFailStrategy
 from onyx.db.enums import HookPoint
 from onyx.hooks.points.base import HookPointSpec
+
+
+# TODO(@Bo-Onyx): define payload and response fields
+class DocumentIngestionPayload(BaseModel):
+    pass
+
+
+class DocumentIngestionResponse(BaseModel):
+    pass
 
 
 class DocumentIngestionSpec(HookPointSpec):
@@ -17,13 +26,8 @@ class DocumentIngestionSpec(HookPointSpec):
     default_timeout_seconds = 30.0
     fail_hard_description = "The document will not be indexed."
     default_fail_strategy = HookFailStrategy.HARD
+    # TODO(Bo-Onyx): update later
+    docs_url = "https://docs.google.com/document/d/1pGhB8Wcnhhj8rS4baEJL6CX05yFhuIDNk1gbBRiWu94/edit?tab=t.ue263ual5vdi"
 
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        # TODO(@Bo-Onyx): define input schema
-        return {"type": "object", "properties": {}}
-
-    @property
-    def output_schema(self) -> dict[str, Any]:
-        # TODO(@Bo-Onyx): define output schema
-        return {"type": "object", "properties": {}}
+    payload_model = DocumentIngestionPayload
+    response_model = DocumentIngestionResponse

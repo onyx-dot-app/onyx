@@ -53,7 +53,7 @@ class PersonaManager:
             label_ids=label_ids or [],
             user_file_ids=user_file_ids or [],
             display_priority=display_priority,
-            featured=featured,
+            is_featured=featured,
         )
 
         response = requests.post(
@@ -79,7 +79,7 @@ class PersonaManager:
             users=users or [],
             groups=groups or [],
             label_ids=label_ids or [],
-            featured=featured,
+            is_featured=featured,
         )
 
     @staticmethod
@@ -122,7 +122,7 @@ class PersonaManager:
             users=[UUID(user) for user in (users or persona.users)],
             groups=groups or persona.groups,
             label_ids=label_ids or persona.label_ids,
-            featured=featured if featured is not None else persona.featured,
+            is_featured=featured if featured is not None else persona.is_featured,
         )
 
         response = requests.patch(
@@ -152,7 +152,7 @@ class PersonaManager:
             users=[user["email"] for user in updated_persona_data["users"]],
             groups=updated_persona_data["groups"],
             label_ids=[label["id"] for label in updated_persona_data["labels"]],
-            featured=updated_persona_data["featured"],
+            is_featured=updated_persona_data["is_featured"],
         )
 
     @staticmethod
@@ -205,9 +205,13 @@ class PersonaManager:
                     mismatches.append(
                         ("is_public", persona.is_public, fetched_persona.is_public)
                     )
-                if fetched_persona.featured != persona.featured:
+                if fetched_persona.is_featured != persona.is_featured:
                     mismatches.append(
-                        ("featured", persona.featured, fetched_persona.featured)
+                        (
+                            "is_featured",
+                            persona.is_featured,
+                            fetched_persona.is_featured,
+                        )
                     )
                 if (
                     fetched_persona.llm_model_provider_override

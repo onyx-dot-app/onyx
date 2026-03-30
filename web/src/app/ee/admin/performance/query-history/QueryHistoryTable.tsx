@@ -178,7 +178,7 @@ function PreviousQueryHistoryExportsModal({
 
   return (
     <Modal open onOpenChange={() => setShowModal(false)}>
-      <Modal.Content width="lg" height="full">
+      <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgFileText}
           title="Previous Query History Exports"
