@@ -13,7 +13,7 @@ import {
   ImageGenSubmitPayload,
 } from "./types";
 import { ImageProvider } from "../constants";
-import { ImageGenerationCredentials } from "@/lib/configuration/imageConfigurationService";
+import { ImageGenerationCredentials } from "../svc";
 
 const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DEFAULT_LOCATION = "global";

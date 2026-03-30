@@ -1,10 +1,7 @@
 import { FormikProps } from "formik";
 import { ImageProvider } from "../constants";
 import { LLMProviderView } from "@/interfaces/llm";
-import {
-  ImageGenerationConfigView,
-  ImageGenerationCredentials,
-} from "@/lib/configuration/imageConfigurationService";
+import { ImageGenerationConfigView, ImageGenerationCredentials } from "../svc";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 

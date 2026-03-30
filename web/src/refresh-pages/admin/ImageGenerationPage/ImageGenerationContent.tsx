@@ -8,17 +8,14 @@ import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LLMProviderResponse, LLMProviderView } from "@/interfaces/llm";
-import {
-  IMAGE_PROVIDER_GROUPS,
-  ImageProvider,
-} from "@/app/admin/configuration/image-generation/constants";
-import ImageGenerationConnectionModal from "@/app/admin/configuration/image-generation/ImageGenerationConnectionModal";
+import { IMAGE_PROVIDER_GROUPS, ImageProvider } from "./constants";
+import ImageGenerationConnectionModal from "./ImageGenerationConnectionModal";
 import {
   ImageGenerationConfigView,
   setDefaultImageGenerationConfig,
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
-} from "@/lib/configuration/imageConfigurationService";
+} from "./svc";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";

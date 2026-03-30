@@ -13,7 +13,7 @@ import {
   ImageGenFormChildProps,
   ImageGenSubmitPayload,
 } from "./types";
-import { ImageGenerationCredentials } from "@/lib/configuration/imageConfigurationService";
+import { ImageGenerationCredentials } from "../svc";
 import { ImageProvider } from "../constants";
 import {
   parseAzureTargetUri,

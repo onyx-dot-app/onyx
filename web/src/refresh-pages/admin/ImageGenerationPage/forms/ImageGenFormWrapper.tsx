@@ -10,7 +10,7 @@ import {
   createImageGenerationConfig,
   updateImageGenerationConfig,
   fetchImageGenerationCredentials,
-} from "@/lib/configuration/imageConfigurationService";
+} from "../svc";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import {
   ImageGenFormWrapperProps,
