@@ -2,6 +2,7 @@ import pickle
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
+from types import TracebackType
 
 from onyx.indexing.models import IndexChunk
 
@@ -32,8 +33,13 @@ class ChunkBatchStore:
         self._tmpdir = Path(self._tmpdir_ctx.__enter__())
         return self
 
-    def __exit__(self, *exc: object) -> None:
-        self._tmpdir_ctx.__exit__(*exc)
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self._tmpdir_ctx.__exit__(exc_type, exc_val, exc_tb)
         self._tmpdir = None
 
     @property

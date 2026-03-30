@@ -10,6 +10,7 @@ Tests cover:
   - All chunks fail
 """
 
+from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -101,7 +102,7 @@ def _mock_embed_success(
 
 def _mock_embed_fail_doc(
     fail_doc_id: str,
-) -> "callable":
+) -> Callable[..., tuple[list[IndexChunk], list[ConnectorFailure]]]:
     """Return an embed mock that fails all chunks for a specific doc."""
 
     def _embed(
