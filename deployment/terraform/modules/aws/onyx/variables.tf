@@ -263,3 +263,21 @@ variable "postgres_backup_window" {
   description = "Preferred UTC time window for automated RDS backups (hh24:mi-hh24:mi)"
   default     = "03:00-04:00"
 }
+
+# EKS Control Plane Logging
+variable "eks_cluster_enabled_log_types" {
+  type        = list(string)
+  description = "EKS control plane log types to enable (valid: api, audit, authenticator, controllerManager, scheduler)"
+  default     = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+}
+
+variable "eks_cloudwatch_log_group_retention_in_days" {
+  type        = number
+  description = "Number of days to retain EKS control plane logs in CloudWatch (0 = never expire)"
+  default     = 30
+
+  validation {
+    condition     = contains([0, 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653], var.eks_cloudwatch_log_group_retention_in_days)
+    error_message = "Must be a valid CloudWatch retention value (0, 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653)."
+  }
+}
