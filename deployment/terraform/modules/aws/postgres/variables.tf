@@ -89,3 +89,22 @@ variable "backup_window" {
     error_message = "backup_window must be in hh24:mi-hh24:mi format (e.g. \"03:00-04:00\")."
   }
 }
+
+# CloudWatch CPU alarm configuration
+variable "cpu_alarm_threshold" {
+  type        = number
+  description = "CPU utilization percentage threshold for the CloudWatch alarm"
+  default     = 80
+}
+
+variable "cpu_alarm_evaluation_periods" {
+  type        = number
+  description = "Number of consecutive periods the threshold must be breached before alarming"
+  default     = 3
+}
+
+variable "cpu_alarm_period" {
+  type        = number
+  description = "Period in seconds over which the CPU metric is evaluated"
+  default     = 300
+}
