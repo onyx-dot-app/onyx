@@ -1530,17 +1530,13 @@ jobs:
         include:
           - component: web
             registry-image: onyxdotapp/onyx-web-server
-            ecr-prefix: web
           - component: web-cloud
             registry-image: onyxdotapp/onyx-web-server-cloud
-            ecr-prefix: web-cloud
           - component: backend
             registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
-            ecr-prefix: backend
             trivyignore: backend/.trivyignore
           - component: model-server
             registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
-            ecr-prefix: model-server
     steps:
       - name: Check if this scan should run
         id: should-run
@@ -1577,13 +1573,13 @@ jobs:
         id: scan-image
         run: |
           if [ "$IS_TEST_RUN" == "true" ]; then
-            echo "image=${RUNS_ON_ECR_CACHE}:${ECR_PREFIX}-${SANITIZED_TAG}" >> "$GITHUB_OUTPUT"
+            echo "image=${RUNS_ON_ECR_CACHE}:${TAG_PREFIX}-${SANITIZED_TAG}" >> "$GITHUB_OUTPUT"
           else
             echo "image=docker.io/${REGISTRY_IMAGE}:${REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
         env:
           IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
-          ECR_PREFIX: ${{ matrix.ecr-prefix }}
+          TAG_PREFIX: ${{ matrix.component }}
           SANITIZED_TAG: ${{ needs.determine-builds.outputs.sanitized-tag }}
           REGISTRY_IMAGE: ${{ matrix.registry-image }}
           REF_NAME: ${{ github.ref_name }}
@@ -1599,6 +1595,7 @@ jobs:
           trivyignores: ${{ matrix.trivyignore }}
 
       - name: Upload Trivy scan results to GitHub Security tab
+        if: steps.should-run.outputs.run == 'true'
         uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
         with:
           sarif_file: "trivy-results.sarif"
