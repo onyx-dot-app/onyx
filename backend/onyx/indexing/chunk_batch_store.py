@@ -1,8 +1,8 @@
 import pickle
+import shutil
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
-from types import TracebackType
 
 from onyx.indexing.models import IndexChunk
 
@@ -24,23 +24,18 @@ class ChunkBatchStore:
     _EXT = ".pkl"
 
     def __init__(self) -> None:
-        self._tmpdir_ctx = tempfile.TemporaryDirectory(prefix="onyx_embeddings_")
         self._tmpdir: Path | None = None
 
     # -- context manager -----------------------------------------------------
 
     def __enter__(self) -> "ChunkBatchStore":
-        self._tmpdir = Path(self._tmpdir_ctx.__enter__())
+        self._tmpdir = Path(tempfile.mkdtemp(prefix="onyx_embeddings_"))
         return self
 
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        self._tmpdir_ctx.__exit__(exc_type, exc_val, exc_tb)
-        self._tmpdir = None
+    def __exit__(self, *_exc: object) -> None:
+        if self._tmpdir is not None:
+            shutil.rmtree(self._tmpdir, ignore_errors=True)
+            self._tmpdir = None
 
     @property
     def _dir(self) -> Path:
