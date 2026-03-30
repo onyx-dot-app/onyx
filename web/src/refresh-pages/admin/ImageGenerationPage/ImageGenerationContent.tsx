@@ -279,18 +279,16 @@ export default function ImageGenerationContent() {
                             Connect
                           </Button>
                         ) : isConnected ? (
-                          <Hoverable.Item group="image-gen/ProviderCard">
-                            <Button
-                              prominence="tertiary"
-                              rightIcon={SvgArrowRightCircle}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSelect(provider);
-                              }}
-                            >
-                              Set as Default
-                            </Button>
-                          </Hoverable.Item>
+                          <Button
+                            prominence="tertiary"
+                            rightIcon={SvgArrowRightCircle}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelect(provider);
+                            }}
+                          >
+                            Set as Default
+                          </Button>
                         ) : isSelected ? (
                           <div className="p-2">
                             <Content
