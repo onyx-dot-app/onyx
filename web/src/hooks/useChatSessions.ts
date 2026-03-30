@@ -166,6 +166,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       revalidateFirstPage: true,
       revalidateAll: false,
       dedupingInterval: 30000,

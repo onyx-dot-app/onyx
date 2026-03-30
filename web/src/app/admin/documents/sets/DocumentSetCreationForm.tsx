@@ -1,6 +1,8 @@
 "use client";
 
 import { Form, Formik } from "formik";
+import { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import * as Yup from "yup";
 import { toast } from "@/hooks/useToast";
 import {
@@ -119,6 +121,7 @@ export const DocumentSetCreationForm = ({
                 ? "Successfully updated document set!"
                 : "Successfully created document set!"
             );
+            await mutate(SWR_KEYS.documentSets);
             onClose();
           } else {
             const errorMsg = await response.text();

@@ -1,5 +1,6 @@
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface VoiceProviderView {
   id: number;
@@ -14,14 +15,13 @@ export interface VoiceProviderView {
   target_uri: string | null;
 }
 
-const VOICE_PROVIDERS_URL = "/api/admin/voice/providers";
-
 export function useVoiceProviders() {
   const { data, error, isLoading, mutate } = useSWR<VoiceProviderView[]>(
-    VOICE_PROVIDERS_URL,
+    SWR_KEYS.voiceProviders,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );

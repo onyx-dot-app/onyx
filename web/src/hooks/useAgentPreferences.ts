@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   UserSpecificAgentPreference,
   UserSpecificAgentPreferences,
@@ -9,7 +10,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useCallback } from "react";
 
 // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
-const AGENT_PREFERENCES_URL = "/api/user/assistant/preferences";
 
 // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
 const buildUpdateAgentPreferenceUrl = (agentId: number) =>
@@ -21,10 +21,11 @@ const buildUpdateAgentPreferenceUrl = (agentId: number) =>
  */
 export default function useAgentPreferences() {
   const { data, mutate } = useSWR<UserSpecificAgentPreferences>(
-    AGENT_PREFERENCES_URL,
+    SWR_KEYS.agentPreferences,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );

@@ -1,5 +1,6 @@
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 interface VoiceStatus {
   stt_enabled: boolean;
@@ -8,10 +9,11 @@ interface VoiceStatus {
 
 export function useVoiceStatus() {
   const { data, error, isLoading } = useSWR<VoiceStatus>(
-    "/api/voice/status",
+    SWR_KEYS.voiceStatus,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );

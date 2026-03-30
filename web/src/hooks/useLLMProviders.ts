@@ -2,13 +2,13 @@
 
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   LLMProviderDescriptor,
   LLMProviderResponse,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 
 /**
  * Fetches configured LLM providers accessible to the current user.
@@ -45,8 +45,8 @@ import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 export function useLLMProviders(personaId?: number) {
   const url =
     personaId !== undefined
-      ? `/api/llm/persona/${personaId}/providers`
-      : "/api/llm/provider";
+      ? SWR_KEYS.llmProvidersForPersona(personaId)
+      : SWR_KEYS.llmProviders;
 
   const { data, error, mutate } = useSWR<
     LLMProviderResponse<LLMProviderDescriptor>
@@ -88,10 +88,11 @@ export function useLLMProviders(personaId?: number) {
  */
 export function useAdminLLMProviders() {
   const { data, error, mutate } = useSWR<LLMProviderResponse<LLMProviderView>>(
-    LLM_PROVIDERS_ADMIN_URL,
+    SWR_KEYS.adminLlmProviders,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );
@@ -141,12 +142,11 @@ export function useAdminLLMProviders() {
  */
 export function useWellKnownLLMProvider(providerEndpoint: string | null) {
   const { data, error, isLoading } = useSWR<WellKnownLLMProviderDescriptor>(
-    providerEndpoint
-      ? `/api/admin/llm/built-in/options/${providerEndpoint}`
-      : null,
+    providerEndpoint ? SWR_KEYS.wellKnownLlmProvider(providerEndpoint) : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );
@@ -165,10 +165,11 @@ export function useWellKnownLLMProviders() {
     isLoading,
     mutate,
   } = useSWR<WellKnownLLMProviderDescriptor[]>(
-    "/api/admin/llm/built-in/options",
+    SWR_KEYS.wellKnownLlmProviders,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );
