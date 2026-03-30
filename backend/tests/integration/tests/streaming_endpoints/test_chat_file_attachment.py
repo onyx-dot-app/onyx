@@ -128,15 +128,20 @@ def test_csv_over_token_threshold_uploaded_not_indexed(
 
         assert len(result["user_files"]) == 1, "CSV should be accepted"
         assert len(result["rejected_files"]) == 0, "CSV should not be rejected"
+        assert (
+            result["user_files"][0]["status"] == "SKIPPED"
+        ), "CSV over threshold should be SKIPPED (uploaded but not indexed)"
+        assert (
+            result["user_files"][0]["chunk_count"] is None
+        ), "Skipped file should have no chunks"
     finally:
-        # Restore a high threshold so other tests aren't affected
         _set_token_threshold(admin_user, threshold_k=200)
 
 
 def test_csv_under_token_threshold_uploaded_and_indexed(
     admin_user: DATestUser,
 ) -> None:
-    """CSV under token threshold is uploaded and indexed normally."""
+    """CSV under token threshold is uploaded and queued for indexing."""
     _set_token_threshold(admin_user, threshold_k=200)
     try:
         content = "col1,col2\na,b\n"
@@ -146,7 +151,7 @@ def test_csv_under_token_threshold_uploaded_and_indexed(
         assert len(result["rejected_files"]) == 0, "CSV should not be rejected"
         assert (
             result["user_files"][0]["status"] == "PROCESSING"
-        ), "File under threshold should be queued for indexing"
+        ), "CSV under threshold should be PROCESSING (queued for indexing)"
     finally:
         _set_token_threshold(admin_user, threshold_k=200)
 

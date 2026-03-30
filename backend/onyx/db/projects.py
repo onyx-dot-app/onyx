@@ -138,10 +138,10 @@ def upload_files_to_user_files_with_indexing(
     id_to_temp_id = categorized_files_result.id_to_temp_id
     indexable_files = categorized_files_result.indexable_files
 
-    # Skip-indexed files should not be processed — mark them COMPLETED immediately
+    # Skip-indexed files should not be processed — mark them SKIPPED immediately
     for uf in user_files:
         if (uf.name or "") in categorized_files_result.skip_indexing_filenames:
-            uf.status = UserFileStatus.COMPLETED
+            uf.status = UserFileStatus.SKIPPED
     db_session.commit()
 
     # Trigger per-file processing immediately for the current tenant
