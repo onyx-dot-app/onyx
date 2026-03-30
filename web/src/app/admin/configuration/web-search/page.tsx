@@ -4,18 +4,27 @@ import Image from "next/image";
 import { useEffect, useMemo, useState, useReducer } from "react";
 import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
-import { Select } from "@/refresh-components/cards";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Content } from "@opal/layouts";
+import { Content, CardHeaderLayout } from "@opal/layouts";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import { SvgGlobe, SvgOnyxLogo, SvgSlash, SvgUnplug } from "@opal/icons";
-import { Button } from "@opal/components";
+import {
+  SvgArrowExchange,
+  SvgArrowRightCircle,
+  SvgCheckSquare,
+  SvgGlobe,
+  SvgOnyxLogo,
+  SvgSettings,
+  SvgSlash,
+  SvgUnplug,
+} from "@opal/icons";
+import { Button, SelectCard } from "@opal/components";
+import { Hoverable, Interactive } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -218,6 +227,135 @@ function WebSearchDisconnectModal({
         </>
       )}
     </ConfirmationModalLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ProviderCard — uses SelectCard for stateful interactive provider cards
+// ---------------------------------------------------------------------------
+
+type ProviderStatus = "disconnected" | "connected" | "selected";
+
+interface ProviderCardProps {
+  icon: React.FunctionComponent<{ size?: number; className?: string }>;
+  title: string;
+  description: string;
+  status: ProviderStatus;
+  onConnect?: () => void;
+  onSelect?: () => void;
+  onDeselect?: () => void;
+  onEdit?: () => void;
+  onDisconnect?: () => void;
+  selectedLabel?: string;
+}
+
+const STATUS_TO_STATE = {
+  disconnected: "empty",
+  connected: "filled",
+  selected: "selected",
+} as const;
+
+function ProviderCard({
+  icon,
+  title,
+  description,
+  status,
+  onConnect,
+  onSelect,
+  onDeselect,
+  onEdit,
+  onDisconnect,
+  selectedLabel = "Current Default",
+}: ProviderCardProps) {
+  const isDisconnected = status === "disconnected";
+  const isConnected = status === "connected";
+  const isSelected = status === "selected";
+
+  return (
+    <Hoverable.Root group="web-search/ProviderCard">
+      <SelectCard
+        variant="select-card"
+        state={STATUS_TO_STATE[status]}
+        sizeVariant="lg"
+        onClick={isDisconnected && onConnect ? onConnect : undefined}
+      >
+        <CardHeaderLayout
+          sizePreset="main-ui"
+          variant="section"
+          icon={icon}
+          title={title}
+          description={description}
+          rightChildren={
+            isDisconnected && onConnect ? (
+              <Button
+                prominence="tertiary"
+                rightIcon={SvgArrowExchange}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConnect();
+                }}
+              >
+                Connect
+              </Button>
+            ) : isConnected && onSelect ? (
+              <Hoverable.Item group="web-search/ProviderCard">
+                <Button
+                  prominence="tertiary"
+                  rightIcon={SvgArrowRightCircle}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect();
+                  }}
+                >
+                  Set as Default
+                </Button>
+              </Hoverable.Item>
+            ) : isSelected ? (
+              <div className="p-2">
+                <Content
+                  title={selectedLabel}
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgCheckSquare}
+                />
+              </div>
+            ) : undefined
+          }
+          bottomRightChildren={
+            !isDisconnected ? (
+              <div className="flex flex-row px-1 pb-1">
+                {onDisconnect && (
+                  <Hoverable.Item group="web-search/ProviderCard">
+                    <Button
+                      icon={SvgUnplug}
+                      tooltip="Disconnect"
+                      prominence="tertiary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDisconnect();
+                      }}
+                      size="md"
+                    />
+                  </Hoverable.Item>
+                )}
+                {onEdit && (
+                  <Button
+                    icon={SvgSettings}
+                    tooltip="Edit"
+                    prominence="tertiary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit();
+                    }}
+                    size="md"
+                  />
+                )}
+              </div>
+            ) : undefined
+          }
+        />
+      </SelectCard>
+    </Hoverable.Root>
   );
 }
 
@@ -1091,7 +1229,7 @@ export default function Page() {
                         : "connected";
 
                   return (
-                    <Select
+                    <ProviderCard
                       key={`${key}-${providerType}`}
                       icon={() =>
                         logoSrc ? (
@@ -1207,7 +1345,7 @@ export default function Page() {
                   CONTENT_PROVIDER_DETAILS[provider.provider_type]?.logoSrc;
 
                 return (
-                  <Select
+                  <ProviderCard
                     key={`${provider.provider_type}-${provider.id}`}
                     icon={() =>
                       contentLogoSrc ? (

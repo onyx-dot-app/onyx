@@ -13,6 +13,7 @@ import type { ButtonType, WithoutStyles } from "@opal/types";
 type InteractiveStatefulVariant =
   | "select-light"
   | "select-heavy"
+  | "select-card"
   | "select-tinted"
   | "select-filter"
   | "sidebar-heavy"
@@ -32,6 +33,7 @@ interface InteractiveStatefulProps
    *
    * - `"select-light"` — transparent selected background (for inline toggles)
    * - `"select-heavy"` — tinted selected background (for list rows, model pickers)
+   * - `"select-card"` — like select-heavy but filled state has a visible background (for cards/larger surfaces)
    * - `"select-tinted"` — like select-heavy but with a tinted rest background
    * - `"select-filter"` — like select-tinted for empty/filled; selected state uses inverted tint backgrounds and inverted text (for filter buttons)
    * - `"sidebar-heavy"` — sidebar navigation items: muted when unselected (text-03/text-02), bold when selected (text-04/text-03)
