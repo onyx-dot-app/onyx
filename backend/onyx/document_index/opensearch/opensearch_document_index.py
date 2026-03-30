@@ -6,6 +6,7 @@ import httpx
 from opensearchpy import NotFoundError
 
 from onyx.access.models import DocumentAccess
+from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
@@ -737,6 +738,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 if current_chunks:
                     _flush_chunks(current_chunks)
                 current_doc_id = doc_id
+                current_chunks = [chunk]
+            elif len(current_chunks) >= MAX_CHUNKS_PER_DOC_BATCH:
+                _flush_chunks(current_chunks)
                 current_chunks = [chunk]
             else:
                 current_chunks.append(chunk)

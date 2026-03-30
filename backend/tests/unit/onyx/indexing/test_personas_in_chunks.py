@@ -116,7 +116,7 @@ def _run_adapter_build(
     project_ids_map: dict[str, list[int]],
     persona_ids_map: dict[str, list[int]],
 ) -> list[DocMetadataAwareIndexChunk]:
-    """Helper that runs UserFileIndexingAdapter.build_metadata_aware_chunks
+    """Helper that runs UserFileIndexingAdapter.prepare_enrichment + enrich_chunk
     with all external dependencies mocked."""
     from onyx.indexing.adapters.user_file_indexing_adapter import (
         UserFileIndexingAdapter,
@@ -155,14 +155,12 @@ def _run_adapter_build(
             side_effect=Exception("no LLM in tests"),
         ),
     ):
-        result = adapter.build_metadata_aware_chunks(
-            chunks_with_embeddings=[chunk],
-            chunk_content_scores=[1.0],
-            tenant_id="test_tenant",
+        enricher = adapter.prepare_enrichment(
             context=context,
+            tenant_id="test_tenant",
+            chunks=[chunk],
         )
-
-    return result.chunks
+        return [enricher.enrich_chunk(chunk, 1.0)]
 
 
 def test_build_metadata_aware_chunks_includes_persona_ids() -> None:
