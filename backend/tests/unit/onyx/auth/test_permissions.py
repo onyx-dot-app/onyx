@@ -84,9 +84,9 @@ class TestResolveEffectivePermissions:
         result = resolve_effective_permissions({"read:agent_analytics"})
         assert result == {"read:agent_analytics"}
 
-    def test_all_19_permissions_for_admin(self) -> None:
+    def test_all_permissions_for_admin(self) -> None:
         result = resolve_effective_permissions({"admin"})
-        assert len(result) == 19
+        assert len(result) == len(ALL_PERMISSIONS)
 
 
 # ---------------------------------------------------------------------------
