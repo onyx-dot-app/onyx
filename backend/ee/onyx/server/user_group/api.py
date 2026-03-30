@@ -88,6 +88,22 @@ def list_minimal_user_groups(
     ]
 
 
+@router.get("/admin/user-group/{user_group_id}/permissions")
+def get_user_group_permissions(
+    user_group_id: int,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[str]:
+    group = fetch_user_group(db_session, user_group_id)
+    if group is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    return [
+        grant.permission.value
+        for grant in group.permission_grants
+        if not grant.is_deleted
+    ]
+
+
 @router.post("/admin/user-group")
 def create_user_group(
     user_group: UserGroupCreate,
