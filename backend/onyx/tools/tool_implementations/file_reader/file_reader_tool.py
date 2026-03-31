@@ -1,3 +1,4 @@
+import io
 import json
 from typing import Any
 from typing import cast
@@ -9,6 +10,7 @@ from typing_extensions import override
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_chat_file_by_id
@@ -184,7 +186,21 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
             )
 
         try:
-            full_text = chat_file.content.decode("utf-8", errors="replace")
+            if chat_file.file_type == ChatFileType.PLAIN_TEXT:
+                full_text = chat_file.content.decode("utf-8", errors="replace")
+            else:
+                # TABULAR may be CSV (already text) or XLSX (binary OOXML).
+                # Use extract_file_text to handle format conversion correctly.
+                full_text = (
+                    extract_file_text(
+                        file=io.BytesIO(chat_file.content),
+                        file_name=chat_file.filename or "",
+                        break_on_unprocessable=False,
+                    )
+                    or ""
+                )
+        except ToolCallException:
+            raise
         except Exception:
             raise ToolCallException(
                 message=f"Failed to decode file {file_id}",
