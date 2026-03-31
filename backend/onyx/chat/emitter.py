@@ -9,52 +9,32 @@ logger = logging.getLogger(__name__)
 
 
 class Emitter:
-    """Routes packets produced during tool and LLM execution to the drain loop.
+    """Routes packets from LLM/tool execution to the ``_run_models`` drain loop.
 
-    Every packet is tagged with ``model_index`` and placed as a
-    ``(key, packet)`` tuple on ``merged_queue`` for ``_run_models`` to consume
-    and yield downstream.
+    Tags every packet with ``model_index`` and places it on ``merged_queue``
+    as a ``(model_idx, packet)`` tuple for ordered consumption downstream.
 
     Args:
-        merged_queue: Shared queue owned by the ``_run_models`` drain loop.
-        model_idx: Index embedded in packet placements. Defaults to ``0`` for
-            N=1 runs. Each model in a multi-model run receives its own index
-            (0, 1, 2…).
-
-    Example::
-
-        mq: queue.Queue = queue.Queue()
-        emitter = Emitter(merged_queue=mq, model_idx=0)
-        emitter.emit(packet)  # places (0, tagged_packet) on mq
-        key, tagged = mq.get_nowait()
+        merged_queue: Shared queue owned by ``_run_models``.
+        model_idx: Index embedded in packet placements (``0`` for N=1 runs).
     """
 
     def __init__(
         self,
-        merged_queue: "Queue",
+        merged_queue: Queue[tuple[int, Packet]],
         model_idx: int = 0,
     ) -> None:
         self._model_idx = model_idx
         self._merged_queue = merged_queue
 
     def emit(self, packet: Packet) -> None:
-        """Emit a packet, stamping it with ``model_index`` and forwarding to the drain loop.
-
-        Args:
-            packet: The packet to emit.
-        """
-        tagged_placement = Placement(
-            turn_index=packet.placement.turn_index if packet.placement else 0,
-            tab_index=packet.placement.tab_index if packet.placement else 0,
-            sub_turn_index=(
-                packet.placement.sub_turn_index if packet.placement else None
-            ),
-            model_index=self._model_idx,
+        base = packet.placement or Placement(turn_index=0)
+        tagged = Packet(
+            placement=base.model_copy(update={"model_index": self._model_idx}),
+            obj=packet.obj,
         )
-        tagged_packet = Packet(placement=tagged_placement, obj=packet.obj)
-        key = self._model_idx
         try:
-            self._merged_queue.put((key, tagged_packet), timeout=3.0)
+            self._merged_queue.put((self._model_idx, tagged), timeout=3.0)
         except queue.Full:
             # Drain loop is gone (e.g. GeneratorExit on disconnect); discard packet.
             logger.warning(
