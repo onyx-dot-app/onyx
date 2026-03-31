@@ -9,7 +9,7 @@ import { Callout } from "@/components/ui/callout";
 import { toast } from "@/hooks/useToast";
 import { Button, Text } from "@opal/components";
 import { Card } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
+import { Content } from "@opal/layouts";
 import {
   SvgKey,
   SvgMoreHorizontal,
@@ -278,28 +278,24 @@ export default function ServiceAccountsPage() {
             </Table>
           </>
         ) : (
-          <Card
-            sizeVariant="lg"
-            backgroundVariant="light"
-            borderVariant="solid"
-          >
-            <ContentAction
-              title="Create service account API keys with user-level access."
-              sizePreset="main-ui"
-              variant="section"
-              rightChildren={
-                canCreateKeys ? (
-                  <NewServiceAccountButton
-                    onClick={() => {
-                      setSelectedApiKey(undefined);
-                      setShowCreateUpdateForm(true);
-                    }}
-                  />
-                ) : isTrialing ? (
-                  <Button href="/admin/billing">Upgrade to Paid Plan</Button>
-                ) : undefined
-              }
-            />
+          <Card backgroundVariant="light" borderVariant="solid">
+            <div className="flex flex-row items-center gap-3 p-4">
+              <Content
+                title="Create service account API keys with user-level access."
+                sizePreset="secondary"
+                variant="section"
+              />
+              {canCreateKeys ? (
+                <NewServiceAccountButton
+                  onClick={() => {
+                    setSelectedApiKey(undefined);
+                    setShowCreateUpdateForm(true);
+                  }}
+                />
+              ) : isTrialing ? (
+                <Button href="/admin/billing">Upgrade to Paid Plan</Button>
+              ) : undefined}
+            </div>
           </Card>
         )}
       </SettingsLayouts.Body>
