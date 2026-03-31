@@ -90,6 +90,7 @@ from onyx.llm.request_context import reset_llm_mock_response
 from onyx.llm.request_context import set_llm_mock_response
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -303,25 +304,28 @@ def extract_context_files(
     if not user_files:
         return _empty_extracted_context_files()
 
-    # Metadata-only file types don't inject full content, so exclude
-    # their token counts from the context-window fit check.
-    from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
-
+    # Aggregate tokens for the file content that will be added
+    # Skip tokens for those with metadata only
     aggregate_tokens = sum(
         uf.token_count or 0
         for uf in user_files
-        if not mime_type_to_chat_file_type(uf.file_type).is_metadata_only()
+        if not mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
     )
     max_actual_tokens = (
         llm_max_context_window - reserved_token_count
     ) * max_llm_context_percentage
 
     if aggregate_tokens >= max_actual_tokens:
-        tool_metadata = []
         use_as_search_filter = not DISABLE_VECTOR_DB
         if DISABLE_VECTOR_DB:
             tool_metadata = [
                 _build_file_tool_metadata_for_user_file(uf) for uf in user_files
+            ]
+        else:
+            tool_metadata = [
+                _build_file_tool_metadata_for_user_file(uf)
+                for uf in user_files
+                if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
             ]
         return ExtractedContextFiles(
             file_texts=[],
@@ -350,10 +354,9 @@ def extract_context_files(
         uf = user_file_map.get(str(f.file_id))
         filename = f.filename or f"file_{f.file_id}"
 
-        if f.file_type.is_metadata_only():
-            # Metadata-only files are not injected as full text — only
-            # their metadata is provided so the LLM uses tools to access
-            # the data.
+        if f.file_type.use_metadata_only():
+            # Metadata-only files are not injected as full text.
+            # Only the metadata is provided, with LLM using tools
             if not uf:
                 logger.error(
                     f"File with id={f.file_id} in metadata-only path with no associated user file"
@@ -402,7 +405,7 @@ def extract_context_files(
 def _build_file_tool_metadata_for_user_file(
     user_file: UserFile,
 ) -> FileToolMetadata:
-    """Build lightweight FileToolMetadata from a list of UserFile record."""
+    """Build lightweight FileToolMetadata from a UserFile record."""
     return FileToolMetadata(
         file_id=str(user_file.id),
         filename=user_file.name,

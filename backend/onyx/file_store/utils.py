@@ -112,7 +112,7 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
         file_io = file_store.read_file(plaintext_file_name, mode="b")
         # Metadata-only file types preserve their original type so
         # downstream injection paths can route them correctly.
-        if chat_file_type.is_metadata_only():
+        if chat_file_type.use_metadata_only():
             plaintext_chat_file_type = chat_file_type
         elif file_io is not None:
             # if we have plaintext for image (which happens when image

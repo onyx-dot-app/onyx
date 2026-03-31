@@ -67,7 +67,7 @@ def build_file_context_message(
     This is the single place to extend when new file-type handling is
     needed (e.g. search-retrieved documents).
     """
-    if file_type.is_metadata_only():
+    if file_type.use_metadata_only():
         message = (
             f"File: {filename} (id={file_id})\n"
             "Use the file_reader or python tools to access "
@@ -592,6 +592,7 @@ def convert_chat_history(
                         if loaded_file.file_type == ChatFileType.IMAGE:
                             image_files.append(loaded_file)
                         else:
+                            # Text files (DOC, PLAIN_TEXT, CSV) are added as separate messages
                             text_files.append(loaded_file)
 
             # Add text files as separate messages before the user message.
