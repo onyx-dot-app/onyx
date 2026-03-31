@@ -19,6 +19,7 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
 from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
+from onyx.db.enums import AccountType
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__User
 from onyx.db.models import Persona
@@ -27,7 +28,10 @@ from onyx.db.models import SamlAccount
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+
+logger = setup_logger()
 
 
 def validate_user_role_update(
@@ -298,6 +302,7 @@ def _generate_slack_user(email: str) -> User:
         email=email,
         hashed_password=hashed_pass,
         role=UserRole.SLACK_USER,
+        account_type=AccountType.BOT,
     )
 
 
@@ -308,6 +313,7 @@ def add_slack_user_if_not_exists(db_session: Session, email: str) -> User:
         # If the user is an external permissioned user, we update it to a slack user
         if user.role == UserRole.EXT_PERM_USER:
             user.role = UserRole.SLACK_USER
+            user.account_type = AccountType.BOT
             db_session.commit()
         return user
 
@@ -344,6 +350,7 @@ def _generate_ext_permissioned_user(email: str) -> User:
         email=email,
         hashed_password=hashed_pass,
         role=UserRole.EXT_PERM_USER,
+        account_type=AccountType.EXT_PERM_USER,
     )
 
 
@@ -373,6 +380,77 @@ def batch_add_ext_perm_user_if_not_exists(
     # Fetch all users again to ensure we have the most up-to-date list
     all_users, _ = _get_users_by_emails(db_session, lower_emails)
     return all_users
+
+
+def assign_user_to_default_groups__no_commit(
+    db_session: Session,
+    user: User,
+    is_admin: bool = False,
+) -> None:
+    """Assign a newly created user to the appropriate default group.
+
+    Does NOT commit — callers must commit the session themselves so that
+    group assignment can be part of the same transaction as user creation.
+
+    Args:
+        is_admin: If True, assign to Admin default group; otherwise Basic.
+            Callers determine this from their own context (e.g. user_count,
+            admin email list, explicit choice). Defaults to False (Basic).
+    """
+    if user.account_type in (
+        AccountType.BOT,
+        AccountType.EXT_PERM_USER,
+        AccountType.ANONYMOUS,
+    ):
+        return
+
+    target_group_name = "Admin" if is_admin else "Basic"
+
+    default_group = (
+        db_session.query(UserGroup)
+        .filter(
+            UserGroup.name == target_group_name,
+            UserGroup.is_default.is_(True),
+        )
+        .first()
+    )
+
+    if default_group is None:
+        raise RuntimeError(
+            f"Default group '{target_group_name}' not found. "
+            f"Cannot assign user {user.email} to a group. "
+            f"Ensure the seed_default_groups migration has run."
+        )
+
+    # Check if the user is already in the group
+    existing = (
+        db_session.query(User__UserGroup)
+        .filter(
+            User__UserGroup.user_id == user.id,
+            User__UserGroup.user_group_id == default_group.id,
+        )
+        .first()
+    )
+    if existing is not None:
+        return
+
+    savepoint = db_session.begin_nested()
+    try:
+        db_session.add(
+            User__UserGroup(
+                user_id=user.id,
+                user_group_id=default_group.id,
+            )
+        )
+        db_session.flush()
+    except IntegrityError:
+        # Race condition: another transaction inserted this membership
+        # between our SELECT and INSERT. The savepoint isolates the failure
+        # so the outer transaction (user creation) stays intact.
+        savepoint.rollback()
+        return
+
+    logger.info(f"Assigned user {user.email} to default group '{default_group.name}'")
 
 
 def delete_user_from_db(
@@ -421,13 +499,14 @@ def delete_user_from_db(
 def batch_get_user_groups(
     db_session: Session,
     user_ids: list[UUID],
+    include_default: bool = False,
 ) -> dict[UUID, list[tuple[int, str]]]:
     """Fetch group memberships for a batch of users in a single query.
     Returns a mapping of user_id -> list of (group_id, group_name) tuples."""
     if not user_ids:
         return {}
 
-    rows = db_session.execute(
+    stmt = (
         select(
             User__UserGroup.user_id,
             UserGroup.id,
@@ -435,7 +514,11 @@ def batch_get_user_groups(
         )
         .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
         .where(User__UserGroup.user_id.in_(user_ids))
-    ).all()
+    )
+    if not include_default:
+        stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
+
+    rows = db_session.execute(stmt).all()
 
     result: dict[UUID, list[tuple[int, str]]] = {uid: [] for uid in user_ids}
     for user_id, group_id, group_name in rows:

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.enums import AccountType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import User
@@ -52,6 +53,7 @@ def test_user(db_session: Session, tenant_context: None) -> User:  # noqa: ARG00
         is_superuser=False,
         is_verified=True,
         role=UserRole.EXT_PERM_USER,
+        account_type=AccountType.EXT_PERM_USER,
     )
     db_session.add(user)
     db_session.commit()
