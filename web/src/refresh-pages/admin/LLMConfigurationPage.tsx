@@ -8,8 +8,8 @@ import {
   useWellKnownLLMProviders,
 } from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Content, ContentAction } from "@opal/layouts";
-import { Button } from "@opal/components";
+import { Content, CardHeaderLayout } from "@opal/layouts";
+import { Button, SelectCard } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -211,8 +211,13 @@ function ExistingProviderCard({
       )}
 
       <Hoverable.Root group="ExistingProviderCard">
-        <Card padding={0.5}>
-          <ContentAction
+        <SelectCard
+          variant="select-card"
+          state="filled"
+          sizeVariant="lg"
+          onClick={() => setIsOpen(true)}
+        >
+          <CardHeaderLayout
             icon={getProviderIcon(provider.provider)}
             title={provider.name}
             description={getProviderDisplayName(provider.provider)}
@@ -220,7 +225,18 @@ function ExistingProviderCard({
             variant="section"
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
-              <Section flexDirection="row" gap={0} alignItems="start">
+              <Button
+                icon={SvgSettings}
+                prominence="tertiary"
+                aria-label={`Edit ${provider.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen(true);
+                }}
+              />
+            }
+            bottomRightChildren={
+              <div className="flex flex-row px-1 pb-1">
                 <Hoverable.Item
                   group="ExistingProviderCard"
                   variant="opacity-on-hover"
@@ -228,17 +244,15 @@ function ExistingProviderCard({
                   <Button
                     icon={SvgTrash}
                     prominence="tertiary"
-                    aria-label="Delete provider"
-                    onClick={() => deleteModal.toggle(true)}
+                    aria-label={`Delete ${provider.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteModal.toggle(true);
+                    }}
+                    size="md"
                   />
                 </Hoverable.Item>
-                <Button
-                  icon={SvgSettings}
-                  prominence="tertiary"
-                  aria-label="Edit provider"
-                  onClick={() => setIsOpen(true)}
-                />
-              </Section>
+              </div>
             }
           />
           {getModalForExistingProvider(
@@ -247,7 +261,7 @@ function ExistingProviderCard({
             setIsOpen,
             defaultModelName
           )}
-        </Card>
+        </SelectCard>
       </Hoverable.Root>
     </>
   );
@@ -275,8 +289,13 @@ function NewProviderCard({
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <Card variant="secondary" padding={0.5}>
-      <ContentAction
+    <SelectCard
+      variant="select-card"
+      state="empty"
+      sizeVariant="lg"
+      onClick={() => setIsOpen(true)}
+    >
+      <CardHeaderLayout
         icon={getProviderIcon(provider.name)}
         title={getProviderProductName(provider.name)}
         description={getProviderDisplayName(provider.name)}
@@ -286,14 +305,17 @@ function NewProviderCard({
           <Button
             rightIcon={SvgArrowExchange}
             prominence="tertiary"
-            onClick={() => setIsOpen(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(true);
+            }}
           >
             Connect
           </Button>
         }
       />
       {formFn(isFirstProvider, isOpen, setIsOpen)}
-    </Card>
+    </SelectCard>
   );
 }
 
@@ -311,8 +333,13 @@ function NewCustomProviderCard({
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <Card variant="secondary" padding={0.5}>
-      <ContentAction
+    <SelectCard
+      variant="select-card"
+      state="empty"
+      sizeVariant="lg"
+      onClick={() => setIsOpen(true)}
+    >
+      <CardHeaderLayout
         icon={getProviderIcon("custom")}
         title={getProviderProductName("custom")}
         description={getProviderDisplayName("custom")}
@@ -322,7 +349,10 @@ function NewCustomProviderCard({
           <Button
             rightIcon={SvgArrowExchange}
             prominence="tertiary"
-            onClick={() => setIsOpen(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(true);
+            }}
           >
             Set Up
           </Button>
@@ -333,7 +363,7 @@ function NewCustomProviderCard({
         open={isOpen}
         onOpenChange={setIsOpen}
       />
-    </Card>
+    </SelectCard>
   );
 }
 
