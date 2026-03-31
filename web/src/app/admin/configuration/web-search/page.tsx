@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useState, useReducer } from "react";
 import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
-import { Select } from "@/refresh-components/cards";
+import ProviderCard from "@/sections/cards/ProviderCard";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Content } from "@opal/layouts";
@@ -1091,7 +1091,7 @@ export default function Page() {
                         : "connected";
 
                   return (
-                    <Select
+                    <ProviderCard
                       key={`${key}-${providerType}`}
                       icon={() =>
                         logoSrc ? (
@@ -1207,7 +1207,7 @@ export default function Page() {
                   CONTENT_PROVIDER_DETAILS[provider.provider_type]?.logoSrc;
 
                 return (
-                  <Select
+                  <ProviderCard
                     key={`${provider.provider_type}-${provider.id}`}
                     icon={() =>
                       contentLogoSrc ? (
