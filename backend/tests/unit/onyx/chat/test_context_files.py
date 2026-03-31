@@ -300,6 +300,66 @@ class TestExtractContextFiles:
         assert result.file_texts == []
         assert result.total_token_count == 50
 
+    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    def test_tool_metadata_file_id_matches_chat_history_file_id(
+        self, mock_load: MagicMock
+    ) -> None:
+        """The file_id in tool metadata (from extract_context_files) and the
+        file_id in chat history messages (from build_file_context) must
+        agree, otherwise the LLM sees different IDs for the same file across
+        turns.
+
+        In production, UserFile.id (UUID PK) differs from UserFile.file_id
+        (file-store path). Both pathways should produce the same file_id
+        (UserFile.id) for FileReaderTool."""
+        from onyx.chat.chat_utils import build_file_context
+
+        user_file_uuid = uuid4()
+        file_store_path = f"user_files/{user_file_uuid}/data.csv"
+
+        uf = UserFile(
+            id=user_file_uuid,
+            file_id=file_store_path,
+            name="data.csv",
+            token_count=100,
+            file_type="text/csv",
+        )
+
+        in_memory = InMemoryChatFile(
+            file_id=file_store_path,
+            content=b"col1,col2\na,b",
+            file_type=ChatFileType.TABULAR,
+            filename="data.csv",
+        )
+
+        mock_load.return_value = [in_memory]
+
+        # Pathway 1: extract_context_files (project/persona context)
+        result = extract_context_files(
+            user_files=[uf],
+            llm_max_context_window=10000,
+            reserved_token_count=0,
+            db_session=MagicMock(),
+        )
+        assert len(result.file_metadata_for_tool) == 1
+        tool_metadata_file_id = result.file_metadata_for_tool[0].file_id
+
+        # Pathway 2: build_file_context (chat history path)
+        # In convert_chat_history, tool_file_id comes from
+        # file_descriptor["user_file_id"], which is str(UserFile.id)
+        ctx = build_file_context(
+            tool_file_id=str(user_file_uuid),
+            filename="data.csv",
+            file_type=ChatFileType.TABULAR,
+        )
+        chat_history_file_id = ctx.tool_metadata.file_id
+
+        # Both pathways must produce the same ID for the LLM
+        assert tool_metadata_file_id == chat_history_file_id, (
+            f"File ID mismatch: extract_context_files uses '{tool_metadata_file_id}' "
+            f"but build_file_context uses '{chat_history_file_id}'."
+        )
+
     @patch("onyx.chat.process_message.DISABLE_VECTOR_DB", True)
     def test_overflow_with_vector_db_disabled_provides_tool_metadata(self) -> None:
         """When vector DB is disabled, overflow produces FileToolMetadata."""

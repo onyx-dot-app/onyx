@@ -5,6 +5,7 @@ from typing import cast
 from uuid import UUID
 
 from fastapi.datastructures import Headers
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import ChatHistoryResult
@@ -51,47 +52,71 @@ logger = setup_logger()
 IMAGE_GENERATION_TOOL_NAME = "generate_image"
 
 
-def build_file_context_message(
-    file_id: str,
+class FileContextResult(BaseModel):
+    """Result of building a file's LLM context representation.
+
+    Bundles the chat message (for prompt injection) with the tool metadata
+    (for forgotten-file tracking and FileReaderTool routing) so that both
+    use a consistent file ID.
+    """
+
+    message: ChatMessageSimple
+    tool_metadata: FileToolMetadata
+
+
+def build_file_context(
+    tool_file_id: str,
     filename: str,
     file_type: ChatFileType,
     content_text: str | None = None,
     token_count: int = 0,
-) -> ChatMessageSimple:
-    """Build the LLM context message for a single file.
+    approx_char_count: int | None = None,
+) -> FileContextResult:
+    """Build the LLM context representation for a single file.
 
-    Centralises the decision of how a file appears in the LLM prompt.
-    Metadata-only types get a lightweight pointer; all other text files
-    get their full content injected.
+    Centralises the decision of how a file appears in the LLM prompt and
+    ensures that the file ID exposed to the LLM is always ``tool_file_id``
+    — the ID that FileReaderTool accepts (``UserFile.id`` for user files).
 
     This is the single place to extend when new file-type handling is
     needed (e.g. search-retrieved documents).
     """
     if file_type.use_metadata_only():
-        message = (
-            f"File: {filename} (id={file_id})\n"
+        message_text = (
+            f"File: {filename} (id={tool_file_id})\n"
             "Use the file_reader or python tools to access "
             "this file's contents."
         )
-        return ChatMessageSimple(
-            message=message,
+        message = ChatMessageSimple(
+            message=message_text,
             token_count=0,
             message_type=MessageType.USER,
-            file_id=file_id,
+            file_id=tool_file_id,
+        )
+    else:
+        message_text = (
+            f"File: {filename}\n{content_text or ''}\nEnd of File"
+            if filename
+            else content_text or ""
+        )
+        message = ChatMessageSimple(
+            message=message_text,
+            token_count=token_count,
+            message_type=MessageType.USER,
+            file_id=tool_file_id,
         )
 
-    # Full-content injection for regular text files
-    message = (
-        f"File: {filename}\n{content_text or ''}\nEnd of File"
-        if filename
-        else content_text or ""
+    metadata = FileToolMetadata(
+        file_id=tool_file_id,
+        filename=filename,
+        approx_char_count=(
+            approx_char_count
+            if approx_char_count is not None
+            else len(content_text or "")
+        ),
     )
-    return ChatMessageSimple(
-        message=message,
-        token_count=token_count,
-        message_type=MessageType.USER,
-        file_id=file_id,
-    )
+
+    return FileContextResult(message=message, tool_metadata=metadata)
 
 
 def create_chat_session_from_request(
@@ -581,7 +606,7 @@ def convert_chat_history(
     for idx, chat_message in enumerate(chat_history):
         if chat_message.message_type == MessageType.USER:
             # Process files attached to this message
-            text_files: list[ChatLoadedFile] = []
+            text_files: list[tuple[ChatLoadedFile, FileDescriptor]] = []
             image_files: list[ChatLoadedFile] = []
 
             if chat_message.files:
@@ -592,28 +617,26 @@ def convert_chat_history(
                         if loaded_file.file_type == ChatFileType.IMAGE:
                             image_files.append(loaded_file)
                         else:
-                            # Text files (DOC, PLAIN_TEXT, CSV) are added as separate messages
-                            text_files.append(loaded_file)
+                            # Text files (DOC, PLAIN_TEXT, TABULAR) are added as separate messages
+                            text_files.append((loaded_file, file_descriptor))
 
             # Add text files as separate messages before the user message.
             # Each message is tagged with ``file_id`` so that forgotten files
             # can be detected after context-window truncation.
-            for text_file in text_files:
+            for text_file, fd in text_files:
+                # Use user_file_id as the FileReaderTool accepts that.
+                # Fall back to the file-store path id.
+                tool_id = fd.get("user_file_id") or text_file.file_id
                 filename = text_file.filename or "unknown"
-                simple_messages.append(
-                    build_file_context_message(
-                        file_id=text_file.file_id,
-                        filename=filename,
-                        file_type=text_file.file_type,
-                        content_text=text_file.content_text,
-                        token_count=text_file.token_count,
-                    )
-                )
-                all_injected_file_metadata[text_file.file_id] = FileToolMetadata(
-                    file_id=text_file.file_id,
+                ctx = build_file_context(
+                    tool_file_id=tool_id,
                     filename=filename,
-                    approx_char_count=len(text_file.content_text or ""),
+                    file_type=text_file.file_type,
+                    content_text=text_file.content_text,
+                    token_count=text_file.token_count,
                 )
+                simple_messages.append(ctx.message)
+                all_injected_file_metadata[tool_id] = ctx.tool_metadata
 
             # Sum token counts from image files (excluding project image files)
             image_token_count = (

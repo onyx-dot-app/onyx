@@ -18,6 +18,7 @@ from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import set_processing_status
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_state import run_chat_loop_with_state_containers
+from onyx.chat.chat_utils import build_file_context
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_chat_session_from_request
@@ -318,12 +319,10 @@ def extract_context_files(
     if aggregate_tokens >= max_actual_tokens:
         use_as_search_filter = not DISABLE_VECTOR_DB
         if DISABLE_VECTOR_DB:
-            tool_metadata = [
-                _build_file_tool_metadata_for_user_file(uf) for uf in user_files
-            ]
+            tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
         else:
             tool_metadata = [
-                _build_file_tool_metadata_for_user_file(uf)
+                _build_tool_metadata(uf)
                 for uf in user_files
                 if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
             ]
@@ -362,7 +361,7 @@ def extract_context_files(
                     f"File with id={f.file_id} in metadata-only path with no associated user file"
                 )
                 continue
-            tool_metadata.append(_build_file_tool_metadata_for_user_file(uf))
+            tool_metadata.append(_build_tool_metadata(uf))
         elif f.file_type.is_text_file():
             text_content = _extract_text_from_in_memory_file(f)
             if not text_content:
@@ -402,15 +401,18 @@ def extract_context_files(
     )
 
 
-def _build_file_tool_metadata_for_user_file(
-    user_file: UserFile,
-) -> FileToolMetadata:
-    """Build lightweight FileToolMetadata from a UserFile record."""
-    return FileToolMetadata(
-        file_id=str(user_file.id),
+def _build_tool_metadata(user_file: UserFile) -> FileToolMetadata:
+    """Build lightweight FileToolMetadata from a UserFile record.
+
+    Delegates to ``build_file_context`` so that the file ID exposed to the
+    LLM is always consistent with what FileReaderTool expects.
+    """
+    return build_file_context(
+        tool_file_id=str(user_file.id),
         filename=user_file.name,
+        file_type=mime_type_to_chat_file_type(user_file.file_type),
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
-    )
+    ).tool_metadata
 
 
 def determine_search_params(
