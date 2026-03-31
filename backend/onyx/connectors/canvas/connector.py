@@ -3,6 +3,7 @@ from datetime import timezone
 from typing import Any
 from typing import cast
 from typing import Literal
+from typing import NoReturn
 from typing import TypeAlias
 
 from pydantic import BaseModel
@@ -37,7 +38,7 @@ logger = setup_logger()
 
 
 
-def _handle_canvas_api_error(e: OnyxError) -> None:
+def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
     """Map Canvas API errors to connector framework exceptions."""
     if e.status_code == 401:
         raise CredentialExpiredError(

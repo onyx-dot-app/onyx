@@ -203,7 +203,9 @@ class CanvasApiClient:
         next_url from Link headers for subsequent pages.
         """
         response, next_url = self.get(endpoint, params=params)
-        while response:
+        while True:
+            if not response:
+                break
             yield response
             if not next_url:
                 break
