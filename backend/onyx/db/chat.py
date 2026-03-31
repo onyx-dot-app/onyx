@@ -8,7 +8,6 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import desc
-from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import nullsfirst
 from sqlalchemy import or_
@@ -132,32 +131,47 @@ def get_chat_sessions_by_user(
     if before is not None:
         stmt = stmt.where(ChatSession.time_updated < before)
 
-    if limit:
-        stmt = stmt.limit(limit)
-
     if project_id is not None:
         stmt = stmt.where(ChatSession.project_id == project_id)
     elif only_non_project_chats:
         stmt = stmt.where(ChatSession.project_id.is_(None))
 
-    if not include_failed_chats:
-        non_system_message_exists_subq = (
-            exists()
-            .where(ChatMessage.chat_session_id == ChatSession.id)
-            .where(ChatMessage.message_type != MessageType.SYSTEM)
-            .correlate(ChatSession)
-        )
-
-        # Leeway for newly created chats that don't have messages yet
-        time = datetime.now(timezone.utc) - timedelta(minutes=5)
-        recently_created = ChatSession.time_created >= time
-
-        stmt = stmt.where(or_(non_system_message_exists_subq, recently_created))
+    # When filtering out failed chats, we apply the limit in Python after
+    # filtering rather than in SQL, since the post-filter may remove rows.
+    if limit and include_failed_chats:
+        stmt = stmt.limit(limit)
 
     result = db_session.execute(stmt)
-    chat_sessions = result.scalars().all()
+    chat_sessions = list(result.scalars().all())
 
-    return list(chat_sessions)
+    if not include_failed_chats and chat_sessions:
+        # Filter out "failed" sessions (those with only SYSTEM messages)
+        # using a separate efficient query instead of a correlated EXISTS
+        # subquery, which causes full sequential scans of chat_message.
+        leeway = datetime.now(timezone.utc) - timedelta(minutes=5)
+        session_ids = [cs.id for cs in chat_sessions if cs.time_created < leeway]
+
+        if session_ids:
+            valid_session_ids_stmt = (
+                select(ChatMessage.chat_session_id)
+                .where(ChatMessage.chat_session_id.in_(session_ids))
+                .where(ChatMessage.message_type != MessageType.SYSTEM)
+                .distinct()
+            )
+            valid_session_ids = set(
+                db_session.execute(valid_session_ids_stmt).scalars().all()
+            )
+
+            chat_sessions = [
+                cs
+                for cs in chat_sessions
+                if cs.time_created >= leeway or cs.id in valid_session_ids
+            ]
+
+        if limit:
+            chat_sessions = chat_sessions[:limit]
+
+    return chat_sessions
 
 
 def delete_orphaned_search_docs(db_session: Session) -> None:
