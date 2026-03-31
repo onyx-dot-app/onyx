@@ -319,9 +319,11 @@ def monitor_indexing_attempt_progress(
     )
 
     current_db_time = get_db_current_time(db_session)
-    total_batches = coordination_status.total_batches
-    if total_batches is None:
-        total_batches = "?"
+    total_batches: int | str = (
+        coordination_status.total_batches
+        if coordination_status.total_batches is not None
+        else "?"
+    )
     if coordination_status.found:
         task_logger.info(
             f"Indexing attempt progress: "
