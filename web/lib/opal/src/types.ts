@@ -48,7 +48,10 @@ export type ContainerSizeVariants = Exclude<SizeVariants, "full">;
  * | `xs`    | `p-1`   |
  * | `2xs`   | `p-0.5` |
  */
-export type PaddingVariants = "lg" | "md" | "sm" | "xs" | "2xs";
+export type PaddingVariants = Extract<
+  SizeVariants,
+  "lg" | "md" | "sm" | "xs" | "2xs"
+>;
 
 /**
  * Rounding size variants.
@@ -60,7 +63,7 @@ export type PaddingVariants = "lg" | "md" | "sm" | "xs" | "2xs";
  * | `sm`    | `rounded-08` |
  * | `xs`    | `rounded-04` |
  */
-export type RoundingVariants = "lg" | "md" | "sm" | "xs";
+export type RoundingVariants = Extract<SizeVariants, "lg" | "md" | "sm" | "xs">;
 
 /**
  * Extreme size variants ("fit" and "full" only).
