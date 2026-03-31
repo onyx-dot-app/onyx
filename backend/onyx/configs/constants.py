@@ -212,6 +212,7 @@ class DocumentSource(str, Enum):
     PRODUCTBOARD = "productboard"
     FILE = "file"
     CODA = "coda"
+    CANVAS = "canvas"
     NOTION = "notion"
     ZULIP = "zulip"
     LINEAR = "linear"
@@ -672,6 +673,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.SLAB: "slab data",
     DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
     DocumentSource.FILE: "files",
+    DocumentSource.CANVAS: "canvas lms - courses, pages, assignments, and announcements",
     DocumentSource.CODA: "coda - team workspace with docs, tables, and pages",
     DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
 project management, and collaboration tools into a single, customizable platform",

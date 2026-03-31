@@ -34,8 +34,7 @@ class CustomBuildHook(BuildHookInterface):
         # Build the Go binary (always rebuild to ensure correct version injection)
         if not os.path.exists(binary_name):
             print(f"Building Go binary '{binary_name}'...")
-            pkg = "github.com/onyx-dot-app/onyx/cli/cmd"
-            ldflags = f"-X {pkg}.version={tag}" f" -X {pkg}.commit={commit}" " -s -w"
+            ldflags = f"-X main.version={tag} -X main.commit={commit} -s -w"
             subprocess.check_call(  # noqa: S603
                 ["go", "build", f"-ldflags={ldflags}", "-o", binary_name],
             )

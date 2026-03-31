@@ -5,7 +5,7 @@ import { useHookSpecs } from "@/hooks/useHookSpecs";
 import { useHooks } from "@/hooks/useHooks";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Button } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
+import { Content } from "@opal/layouts";
 import InputSearch from "@/refresh-components/inputs/InputSearch";
 import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
@@ -17,6 +17,7 @@ import type {
   HookPointMeta,
   HookResponse,
 } from "@/refresh-pages/admin/HooksPage/interfaces";
+import { markdown } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -145,37 +146,39 @@ export default function HooksContent() {
                     gap={0}
                     className="hover:border-border-02"
                   >
-                    <ContentAction
-                      sizePreset="main-ui"
-                      variant="section"
-                      paddingVariant="sm"
-                      icon={UnconnectedIcon}
-                      title={spec.display_name}
-                      iconClassName="text-text-04"
-                      description={spec.description}
-                      bottomChildren={
-                        spec.docs_url ? (
+                    <div className="w-full flex flex-row">
+                      <div className="flex-1 p-2">
+                        <Content
+                          sizePreset="main-ui"
+                          variant="section"
+                          icon={UnconnectedIcon}
+                          title={spec.display_name}
+                          description={spec.description}
+                        />
+
+                        {spec.docs_url && (
                           <a
                             href={spec.docs_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1 w-fit font-secondary-body text-text-03"
+                            className="pl-6 flex items-center gap-1"
                           >
-                            <span className="underline">Documentation</span>
+                            <span className="underline font-secondary-body text-text-03">
+                              Documentation
+                            </span>
                             <SvgExternalLink size={12} className="shrink-0" />
                           </a>
-                        ) : undefined
-                      }
-                      rightChildren={
-                        <Button
-                          prominence="tertiary"
-                          rightIcon={SvgArrowExchange}
-                          onClick={() => setConnectSpec(spec)}
-                        >
-                          Connect
-                        </Button>
-                      }
-                    />
+                        )}
+                      </div>
+
+                      <Button
+                        prominence="tertiary"
+                        rightIcon={SvgArrowExchange}
+                        onClick={() => setConnectSpec(spec)}
+                      >
+                        Connect
+                      </Button>
+                    </div>
                   </Card>
                 );
               })}

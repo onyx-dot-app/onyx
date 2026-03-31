@@ -1,5 +1,8 @@
 from collections import defaultdict
 from collections.abc import Callable
+from collections.abc import Generator
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Protocol
 
 from pydantic import BaseModel
@@ -9,6 +12,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_NAME
 from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
+from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY
@@ -43,10 +47,12 @@ from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
+from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
+from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexingBatchAdapter
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
@@ -63,6 +69,7 @@ from onyx.natural_language_processing.utils import tokenizer_trim_middle
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT1
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT2
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_PROMPT
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -90,6 +97,20 @@ class IndexingPipelineResult(BaseModel):
     total_chunks: int
 
     failures: list[ConnectorFailure]
+
+    @classmethod
+    def empty(cls, total_docs: int) -> "IndexingPipelineResult":
+        return cls(
+            new_docs=0,
+            total_docs=total_docs,
+            total_chunks=0,
+            failures=[],
+        )
+
+
+class ChunkEmbeddingResult(BaseModel):
+    successful_chunk_ids: list[tuple[int, str]]  # (chunk_id, document_id)
+    connector_failures: list[ConnectorFailure]
 
 
 class IndexingPipelineProtocol(Protocol):
@@ -137,6 +158,110 @@ def _upsert_documents_in_db(
             metadata=doc.metadata,
             db_session=db_session,
         )
+
+
+def _get_failed_doc_ids(failures: list[ConnectorFailure]) -> set[str]:
+    """Extract document IDs from a list of connector failures."""
+    return {f.failed_document.document_id for f in failures if f.failed_document}
+
+
+def _embed_chunks_to_store(
+    chunks: list[DocAwareChunk],
+    embedder: IndexingEmbedder,
+    tenant_id: str,
+    request_id: str | None,
+    store: ChunkBatchStore,
+) -> ChunkEmbeddingResult:
+    """Embed chunks in batches, spilling each batch to *store*.
+
+    If a document fails embedding in any batch, its chunks are excluded from
+    all batches (including earlier ones already written) so that the output
+    is all-or-nothing per document.
+    """
+    successful_chunk_ids: list[tuple[int, str]] = []
+    all_embedding_failures: list[ConnectorFailure] = []
+    # Track failed doc IDs across all batches so that a failure in batch N
+    # causes chunks for that doc to be skipped in batch N+1 and stripped
+    # from earlier batches.
+    all_failed_doc_ids: set[str] = set()
+
+    for batch_idx, chunk_batch in enumerate(
+        batch_generator(chunks, MAX_CHUNKS_PER_DOC_BATCH)
+    ):
+        # Skip chunks belonging to documents that failed in earlier batches.
+        chunk_batch = [
+            c for c in chunk_batch if c.source_document.id not in all_failed_doc_ids
+        ]
+        if not chunk_batch:
+            continue
+
+        logger.debug(f"Embedding batch {batch_idx}: {len(chunk_batch)} chunks")
+
+        chunks_with_embeddings, embedding_failures = embed_chunks_with_failure_handling(
+            chunks=chunk_batch,
+            embedder=embedder,
+            tenant_id=tenant_id,
+            request_id=request_id,
+        )
+        all_embedding_failures.extend(embedding_failures)
+        all_failed_doc_ids.update(_get_failed_doc_ids(embedding_failures))
+
+        # Only keep successfully embedded chunks for non-failed docs.
+        chunks_with_embeddings = [
+            c
+            for c in chunks_with_embeddings
+            if c.source_document.id not in all_failed_doc_ids
+        ]
+
+        successful_chunk_ids.extend(
+            (c.chunk_id, c.source_document.id) for c in chunks_with_embeddings
+        )
+
+        store.save(chunks_with_embeddings, batch_idx)
+        del chunks_with_embeddings
+
+    # Scrub earlier batches for docs that failed in later batches.
+    if all_failed_doc_ids:
+        store.scrub_failed_docs(all_failed_doc_ids)
+        successful_chunk_ids = [
+            (chunk_id, doc_id)
+            for chunk_id, doc_id in successful_chunk_ids
+            if doc_id not in all_failed_doc_ids
+        ]
+
+    return ChunkEmbeddingResult(
+        successful_chunk_ids=successful_chunk_ids,
+        connector_failures=all_embedding_failures,
+    )
+
+
+@contextmanager
+def embed_and_stream(
+    chunks: list[DocAwareChunk],
+    embedder: IndexingEmbedder,
+    tenant_id: str,
+    request_id: str | None,
+) -> Generator[tuple[ChunkEmbeddingResult, ChunkBatchStore], None, None]:
+    """Embed chunks to disk and yield a ``(result, store)`` pair.
+
+    The store owns the temp directory — files are cleaned up when the context
+    manager exits.
+
+    Usage::
+
+        with embed_and_stream(chunks, embedder, tenant_id, req_id) as (result, store):
+            for chunk in store.stream():
+                ...
+    """
+    with ChunkBatchStore() as store:
+        result = _embed_chunks_to_store(
+            chunks=chunks,
+            embedder=embedder,
+            tenant_id=tenant_id,
+            request_id=request_id,
+            store=store,
+        )
+        yield result, store
 
 
 def get_doc_ids_to_update(
@@ -637,6 +762,29 @@ def add_contextual_summaries(
     return chunks
 
 
+def _verify_indexing_completeness(
+    insertion_records: list[DocumentInsertionRecord],
+    write_failures: list[ConnectorFailure],
+    embedding_failed_doc_ids: set[str],
+    updatable_ids: list[str],
+    document_index_name: str,
+) -> None:
+    """Verify that every updatable document was either indexed or reported as failed."""
+    all_returned_doc_ids = (
+        {r.document_id for r in insertion_records}
+        | {f.failed_document.document_id for f in write_failures if f.failed_document}
+        | embedding_failed_doc_ids
+    )
+    if all_returned_doc_ids != set(updatable_ids):
+        raise RuntimeError(
+            f"Some documents were not successfully indexed. "
+            f"Updatable IDs: {updatable_ids}, "
+            f"Returned IDs: {all_returned_doc_ids}. "
+            f"This should never happen. "
+            f"This occured for document index {document_index_name}"
+        )
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
@@ -672,12 +820,7 @@ def index_doc_batch(
     filtered_documents = filter_fnc(document_batch)
     context = adapter.prepare(filtered_documents, ignore_time_skip)
     if not context:
-        return IndexingPipelineResult(
-            new_docs=0,
-            total_docs=len(filtered_documents),
-            total_chunks=0,
-            failures=[],
-        )
+        return IndexingPipelineResult.empty(len(filtered_documents))
 
     # Convert documents to IndexingDocument objects with processed section
     # logger.debug("Processing image sections")
@@ -716,117 +859,99 @@ def index_doc_batch(
         )
 
     logger.debug("Starting embedding")
-    chunks_with_embeddings, embedding_failures = (
-        embed_chunks_with_failure_handling(
-            chunks=chunks,
-            embedder=embedder,
-            tenant_id=tenant_id,
-            request_id=request_id,
-        )
-        if chunks
-        else ([], [])
-    )
+    with embed_and_stream(chunks, embedder, tenant_id, request_id) as (
+        embedding_result,
+        chunk_store,
+    ):
+        updatable_ids = [doc.id for doc in context.updatable_docs]
+        updatable_chunk_data = [
+            UpdatableChunkData(
+                chunk_id=chunk_id,
+                document_id=document_id,
+                boost_score=1.0,
+            )
+            for chunk_id, document_id in embedding_result.successful_chunk_ids
+        ]
 
-    chunk_content_scores = [1.0] * len(chunks_with_embeddings)
-
-    updatable_ids = [doc.id for doc in context.updatable_docs]
-    updatable_chunk_data = [
-        UpdatableChunkData(
-            chunk_id=chunk.chunk_id,
-            document_id=chunk.source_document.id,
-            boost_score=score,
-        )
-        for chunk, score in zip(chunks_with_embeddings, chunk_content_scores)
-    ]
-
-    # Acquires a lock on the documents so that no other process can modify them
-    # NOTE: don't need to acquire till here, since this is when the actual race condition
-    # with Vespa can occur.
-    with adapter.lock_context(context.updatable_docs):
-        # we're concerned about race conditions where multiple simultaneous indexings might result
-        # in one set of metadata overwriting another one in vespa.
-        # we still write data here for the immediate and most likely correct sync, but
-        # to resolve this, an update of the last modified field at the end of this loop
-        # always triggers a final metadata sync via the celery queue
-        result = adapter.build_metadata_aware_chunks(
-            chunks_with_embeddings=chunks_with_embeddings,
-            chunk_content_scores=chunk_content_scores,
-            tenant_id=tenant_id,
-            context=context,
+        embedding_failed_doc_ids = _get_failed_doc_ids(
+            embedding_result.connector_failures
         )
 
-        short_descriptor_list = [chunk.to_short_descriptor() for chunk in result.chunks]
-        short_descriptor_log = str(short_descriptor_list)[:1024]
-        logger.debug(f"Indexing the following chunks: {short_descriptor_log}")
+        # Filter to only successfully embedded chunks so
+        # doc_id_to_new_chunk_cnt reflects what's actually written to Vespa.
+        embedded_chunks = [
+            c for c in chunks if c.source_document.id not in embedding_failed_doc_ids
+        ]
 
-        primary_doc_idx_insertion_records: list[DocumentInsertionRecord] | None = None
-        primary_doc_idx_vector_db_write_failures: list[ConnectorFailure] | None = None
-        for document_index in document_indices:
-            # A document will not be spread across different batches, so all the
-            # documents with chunks in this set, are fully represented by the chunks
-            # in this set
-            (
-                insertion_records,
-                vector_db_write_failures,
-            ) = write_chunks_to_vector_db_with_backoff(
-                document_index=document_index,
-                chunks=result.chunks,
-                index_batch_params=IndexBatchParams(
-                    doc_id_to_previous_chunk_cnt=result.doc_id_to_previous_chunk_cnt,
-                    doc_id_to_new_chunk_cnt=result.doc_id_to_new_chunk_cnt,
-                    tenant_id=tenant_id,
-                    large_chunks_enabled=chunker.enable_large_chunks,
-                ),
+        # Acquires a lock on the documents so that no other process can modify
+        # them.  Not needed until here, since this is when the actual race
+        # condition with vector db can occur.
+        with adapter.lock_context(context.updatable_docs):
+            enricher = adapter.prepare_enrichment(
+                context=context,
+                tenant_id=tenant_id,
+                chunks=embedded_chunks,
             )
 
-            all_returned_doc_ids: set[str] = (
-                {record.document_id for record in insertion_records}
-                .union(
-                    {
-                        record.failed_document.document_id
-                        for record in vector_db_write_failures
-                        if record.failed_document
-                    }
-                )
-                .union(
-                    {
-                        record.failed_document.document_id
-                        for record in embedding_failures
-                        if record.failed_document
-                    }
-                )
+            index_batch_params = IndexBatchParams(
+                doc_id_to_previous_chunk_cnt=enricher.doc_id_to_previous_chunk_cnt,
+                doc_id_to_new_chunk_cnt=enricher.doc_id_to_new_chunk_cnt,
+                tenant_id=tenant_id,
+                large_chunks_enabled=chunker.enable_large_chunks,
             )
-            if all_returned_doc_ids != set(updatable_ids):
-                raise RuntimeError(
-                    f"Some documents were not successfully indexed. "
-                    f"Updatable IDs: {updatable_ids}, "
-                    f"Returned IDs: {all_returned_doc_ids}. "
-                    "This should never happen."
-                    f"This occured for document index {document_index.__class__.__name__}"
-                )
-            # We treat the first document index we got as the primary one used
-            # for reporting the state of indexing.
-            if primary_doc_idx_insertion_records is None:
-                primary_doc_idx_insertion_records = insertion_records
-            if primary_doc_idx_vector_db_write_failures is None:
-                primary_doc_idx_vector_db_write_failures = vector_db_write_failures
 
-        adapter.post_index(
-            context=context,
-            updatable_chunk_data=updatable_chunk_data,
-            filtered_documents=filtered_documents,
-            result=result,
-        )
+            primary_doc_idx_insertion_records: list[DocumentInsertionRecord] | None = (
+                None
+            )
+            primary_doc_idx_vector_db_write_failures: list[ConnectorFailure] | None = (
+                None
+            )
+
+            for document_index in document_indices:
+
+                def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
+                    for chunk in chunk_store.stream():
+                        yield enricher.enrich_chunk(chunk, 1.0)
+
+                insertion_records, write_failures = (
+                    write_chunks_to_vector_db_with_backoff(
+                        document_index=document_index,
+                        make_chunks=_enriched_stream,
+                        index_batch_params=index_batch_params,
+                    )
+                )
+
+                _verify_indexing_completeness(
+                    insertion_records=insertion_records,
+                    write_failures=write_failures,
+                    embedding_failed_doc_ids=embedding_failed_doc_ids,
+                    updatable_ids=updatable_ids,
+                    document_index_name=document_index.__class__.__name__,
+                )
+                # We treat the first document index we got as the primary one used
+                # for reporting the state of indexing.
+                if primary_doc_idx_insertion_records is None:
+                    primary_doc_idx_insertion_records = insertion_records
+                if primary_doc_idx_vector_db_write_failures is None:
+                    primary_doc_idx_vector_db_write_failures = write_failures
+
+            adapter.post_index(
+                context=context,
+                updatable_chunk_data=updatable_chunk_data,
+                filtered_documents=filtered_documents,
+                enrichment=enricher,
+            )
 
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None
     return IndexingPipelineResult(
-        new_docs=len(
-            [r for r in primary_doc_idx_insertion_records if not r.already_existed]
+        new_docs=sum(
+            1 for r in primary_doc_idx_insertion_records if not r.already_existed
         ),
         total_docs=len(filtered_documents),
-        total_chunks=len(chunks_with_embeddings),
-        failures=primary_doc_idx_vector_db_write_failures + embedding_failures,
+        total_chunks=len(embedding_result.successful_chunk_ids),
+        failures=primary_doc_idx_vector_db_write_failures
+        + embedding_result.connector_failures,
     )
 
 

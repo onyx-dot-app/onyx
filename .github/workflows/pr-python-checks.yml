@@ -56,7 +56,7 @@ jobs:
 
       - name: Cache mypy cache
         if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
-        uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
         with:
           path: .mypy_cache
           key: mypy-${{ runner.os }}-${{ github.base_ref || github.event.merge_group.base_ref || 'main' }}-${{ hashFiles('**/*.py', '**/*.pyi', 'pyproject.toml') }}

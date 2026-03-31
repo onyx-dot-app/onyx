@@ -805,6 +805,10 @@ MINI_CHUNK_SIZE = 150
 # This is the number of regular chunks per large chunk
 LARGE_CHUNK_RATIO = 4
 
+# The maximum number of chunks that can be held for 1 document processing batch
+# The purpose of this is to set an upper bound on memory usage
+MAX_CHUNKS_PER_DOC_BATCH = int(os.environ.get("MAX_CHUNKS_PER_DOC_BATCH") or 1000)
+
 # Include the document level metadata in each chunk. If the metadata is too long, then it is thrown out
 # We don't want the metadata to overwhelm the actual contents of the chunk
 SKIP_METADATA_IN_CHUNK = os.environ.get("SKIP_METADATA_IN_CHUNK", "").lower() == "true"

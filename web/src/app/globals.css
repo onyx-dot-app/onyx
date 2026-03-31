@@ -330,6 +330,14 @@
   letter-spacing: 0px;
 }
 
+.font-secondary-mono-label {
+  font-family: var(--font-dm-mono);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0px;
+}
+
 /* FIGURE STYLES */
 
 .font-figure-small-label {

@@ -1,6 +1,7 @@
 import useSWR from "swr";
 import { Tag } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 interface TagsResponse {
   tags: Tag[];
@@ -18,10 +19,11 @@ interface TagsResponse {
  */
 export default function useTags() {
   const { data, error, mutate } = useSWR<TagsResponse>(
-    "/api/query/valid-tags",
+    SWR_KEYS.tags,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );

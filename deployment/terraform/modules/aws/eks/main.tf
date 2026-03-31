@@ -19,6 +19,10 @@ module "eks" {
   cluster_endpoint_public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
   enable_cluster_creator_admin_permissions = true
 
+  # Control plane logging
+  cluster_enabled_log_types              = var.cluster_enabled_log_types
+  cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
+
   eks_managed_node_group_defaults = {
     ami_type = "AL2023_x86_64_STANDARD"
   }

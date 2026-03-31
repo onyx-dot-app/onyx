@@ -18,9 +18,11 @@ export {
 import { InteractiveStateless } from "@opal/core/interactive/stateless/components";
 import { InteractiveStateful } from "@opal/core/interactive/stateful/components";
 import { InteractiveContainer } from "@opal/core/interactive/container/components";
+import { InteractiveSimple } from "@opal/core/interactive/simple/components";
 import { Foldable } from "@opal/core/interactive/foldable/components";
 
 const Interactive = {
+  Simple: InteractiveSimple,
   Stateless: InteractiveStateless,
   Stateful: InteractiveStateful,
   Container: InteractiveContainer,
@@ -50,3 +52,5 @@ export type {
 } from "@opal/core/interactive/container/components";
 
 export type { FoldableProps } from "@opal/core/interactive/foldable/components";
+
+export type { InteractiveSimpleProps } from "@opal/core/interactive/simple/components";

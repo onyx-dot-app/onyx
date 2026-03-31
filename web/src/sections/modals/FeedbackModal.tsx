@@ -80,7 +80,7 @@ export default function FeedbackModal({
                   <InputLayouts.Vertical
                     name="additional_feedback"
                     title="Provide Additional Details"
-                    optional={feedbackType === "like"}
+                    suffix={feedbackType === "like" ? "optional" : undefined}
                   >
                     <InputTextAreaField
                       name="additional_feedback"

@@ -13,15 +13,6 @@ jobs:
     permissions:
       id-token: write
     timeout-minutes: 10
-    strategy:
-      matrix:
-        os-arch:
-          - { goos: "linux", goarch: "amd64" }
-          - { goos: "linux", goarch: "arm64" }
-          - { goos: "windows", goarch: "amd64" }
-          - { goos: "windows", goarch: "arm64" }
-          - { goos: "darwin", goarch: "amd64" }
-          - { goos: "darwin", goarch: "arm64" }
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
@@ -31,9 +22,11 @@ jobs:
           enable-cache: false
           version: "0.9.9"
       - run: |
-          GOOS="${{ matrix.os-arch.goos }}" \
-          GOARCH="${{ matrix.os-arch.goarch }}" \
-          uv build --wheel
+          for goos in linux windows darwin; do
+            for goarch in amd64 arm64; do
+              GOOS="$goos" GOARCH="$goarch" uv build --wheel
+            done
+          done
         working-directory: cli
       - run: uv publish
         working-directory: cli

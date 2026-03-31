@@ -256,6 +256,20 @@ tooling:
     # -- Which client binary to call; change if your image uses a non-default path.
     psqlBinary: psql
 
+monitoring:
+  grafana:
+    dashboards:
+      # -- Set to true to deploy Grafana dashboard ConfigMaps for the Onyx indexing pipeline.
+      # Requires kube-prometheus-stack (or equivalent) with the Grafana sidecar enabled and watching this namespace.
+      # The sidecar must be configured with label selector: grafana_dashboard=1
+      enabled: false
+  serviceMonitors:
+    # -- Set to true to deploy ServiceMonitor resources for Celery worker metrics endpoints.
+    # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
+    # Use `labels` to match your Prometheus CR's serviceMonitorSelector (e.g. release: onyx-monitoring).
+    enabled: false
+    labels: {}
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: false
