@@ -172,7 +172,11 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         # Only PLAIN_TEXT and TABULAR are guaranteed to contain actual text bytes.
         # DOC type in a loaded file means plaintext extraction failed and the
         # content is the original binary (e.g. raw PDF/DOCX bytes).
-        if chat_file.file_type not in (ChatFileType.PLAIN_TEXT, ChatFileType.TABULAR):
+        if chat_file.file_type not in (
+            ChatFileType.PLAIN_TEXT,
+            ChatFileType.CSV,
+            ChatFileType.TABULAR,
+        ):
             raise ToolCallException(
                 message=f"File {file_id} is not a text file (type={chat_file.file_type})",
                 llm_facing_message=(

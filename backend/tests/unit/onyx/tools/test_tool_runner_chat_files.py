@@ -82,7 +82,7 @@ class TestChatFileConversion:
             ChatLoadedFile(
                 file_id="file-2",
                 content=b"csv,data\n1,2",
-                file_type=ChatFileType.TABULAR,
+                file_type=ChatFileType.CSV,
                 filename="data.csv",
                 content_text="csv,data\n1,2",
                 token_count=5,

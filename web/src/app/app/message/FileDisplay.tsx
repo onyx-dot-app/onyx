@@ -39,10 +39,11 @@ export default function FileDisplay({ files }: FileDisplayProps) {
   const textFiles = files.filter(
     (file) =>
       file.type === ChatFileType.PLAIN_TEXT ||
-      file.type === ChatFileType.DOCUMENT
+      file.type === ChatFileType.DOCUMENT ||
+      file.type === ChatFileType.TABULAR
   );
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const csvFiles = files.filter((file) => file.type === ChatFileType.TABULAR);
+  const csvFiles = files.filter((file) => file.type === ChatFileType.CSV);
 
   const presentingDocument: MinimalOnyxDocument = {
     document_id: previewingFile?.id ?? "",

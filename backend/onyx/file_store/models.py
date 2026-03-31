@@ -13,13 +13,16 @@ class ChatFileType(str, Enum):
     DOC = "document"
     # Plain text only contain the text
     PLAIN_TEXT = "plain_text"
-    # Tabular data files (CSV, TSV, XLSX)
+    # CSV/TSV files — already valid text, rendered as a table on the frontend
+    CSV = "csv"
+    # Binary tabular data (XLSX) — needs extraction, rendered as a document
     TABULAR = "tabular"
 
     def is_text_file(self) -> bool:
         return self in (
             ChatFileType.PLAIN_TEXT,
             ChatFileType.DOC,
+            ChatFileType.CSV,
             ChatFileType.TABULAR,
         )
 

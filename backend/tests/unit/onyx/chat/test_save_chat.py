@@ -139,7 +139,7 @@ def test_csv_file_type() -> None:
     result = _extract_referenced_file_descriptors([tool_call], message)
 
     assert len(result) == 1
-    assert result[0]["type"] == ChatFileType.TABULAR
+    assert result[0]["type"] == ChatFileType.CSV
 
 
 def test_unknown_extension_defaults_to_plain_text() -> None:
