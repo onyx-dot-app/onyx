@@ -52,11 +52,13 @@ from ee.onyx.server.scim.schema_definitions import SERVICE_PROVIDER_CONFIG
 from ee.onyx.server.scim.schema_definitions import USER_RESOURCE_TYPE
 from ee.onyx.server.scim.schema_definitions import USER_SCHEMA_DEF
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import AccountType
 from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -486,6 +488,7 @@ def create_user(
         email=email,
         hashed_password=_pw_helper.hash(_pw_helper.generate()),
         role=UserRole.BASIC,
+        account_type=AccountType.STANDARD,
         is_active=user_resource.active,
         is_verified=True,
         personal_name=personal_name,
@@ -506,12 +509,24 @@ def create_user(
             scim_username=scim_username,
             fields=fields,
         )
-        dal.commit()
     except IntegrityError:
         dal.rollback()
         return _scim_error_response(
             409, f"User with email {email} already has a SCIM mapping"
         )
+
+    # Assign user to default group BEFORE commit so everything is atomic.
+    # If this fails, the entire user creation rolls back and IdP can retry.
+    try:
+        assign_user_to_default_groups__no_commit(db_session, user)
+    except Exception:
+        dal.rollback()
+        logger.exception(f"Failed to assign SCIM user {email} to default groups")
+        return _scim_error_response(
+            500, f"Failed to assign user {email} to default group"
+        )
+
+    dal.commit()
 
     return _scim_resource_response(
         provider.build_user_resource(
