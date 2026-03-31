@@ -905,16 +905,7 @@ def _run_models(
     model_succeeded: list[bool] = [False] * n_models
 
     def _run_model(model_idx: int) -> None:
-        """Run one LLM loop inside a worker thread, emitting packets in real-time.
-
-        Opens its own DB session (SQLAlchemy is not thread-safe), builds tools
-        around the model-specific emitter, then delegates to ``run_llm_loop`` or
-        ``run_deep_research_llm_loop`` depending on the request type.
-
-        Args:
-            model_idx: Zero-based index of the model in ``setup.llms``. Determines
-                which LLM and state container this thread operates on.
-        """
+        """Run one LLM loop inside a worker thread, writing packets to ``merged_queue``."""
         model_emitter = Emitter(
             model_idx=model_idx,
             merged_queue=merged_queue,
@@ -954,11 +945,9 @@ def _run_models(
                     allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
                     search_usage_forcing_setting=setup.search_params.search_usage,
                 )
-                model_tools: list[Tool] = []
-                for tool_list in thread_tool_dict.values():
-                    model_tools.extend(tool_list)
+                model_tools = [tool for tool_list in thread_tool_dict.values() for tool in tool_list]
 
-                if setup.forced_tool_id and setup.forced_tool_id not in [tool.id for tool in model_tools]:
+                if setup.forced_tool_id and setup.forced_tool_id not in {tool.id for tool in model_tools}:
                     raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
 
                 # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
@@ -1292,39 +1281,11 @@ def handle_stream_message_objects(
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     bypass_acl: bool = False,
-    # Additional context that should be included in the chat history, for example:
-    # Slack threads where the conversation cannot be represented by a chain of User/Assistant
-    # messages. Both of the below are used for Slack
-    # NOTE: is not stored in the database, only passed in to the LLM as context
     additional_context: str | None = None,
-    # Slack context for federated Slack search
     slack_context: SlackContext | None = None,
-    # Optional external state container for non-streaming access to accumulated state
     external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
-    """Single-model streaming entrypoint.
-
-    Builds the chat turn using the persona's default LLM.
-
-    Args:
-        new_msg_req: The incoming chat request from the user.
-        user: Authenticated user; may be anonymous for public personas.
-        db_session: Database session for this request.
-        litellm_additional_headers: Extra headers forwarded to the LLM provider.
-        custom_tool_additional_headers: Extra headers for custom tool HTTP calls.
-        mcp_headers: Extra headers for MCP tool calls.
-        bypass_acl: If ``True``, document ACL checks are skipped (used by Slack bot).
-        additional_context: Extra context prepended to the LLM's chat history, not
-            stored in the DB (used for Slack thread hydration).
-        slack_context: Federated Slack search context passed through to the search tool.
-        external_state_container: Optional pre-constructed state container. When
-            provided, accumulated state (tool calls, citations, answer tokens) is
-            written into it so the caller can inspect the result after streaming.
-
-    Returns:
-        Generator yielding ``Packet`` objects — answer tokens, tool output, citations —
-        followed by a terminal ``Packet`` containing ``OverallStop``.
-    """
+    """Single-model streaming entrypoint. Delegates to ``_stream_chat_turn``."""
     yield from _stream_chat_turn(
         new_msg_req=new_msg_req,
         user=user,
