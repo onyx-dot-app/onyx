@@ -56,12 +56,12 @@ def recompute_permissions_for_group__no_commit(
     user_ids = (
         db_session.execute(
             select(User__UserGroup.user_id).where(
-                User__UserGroup.user_group_id == group_id
+                User__UserGroup.user_group_id == group_id,
+                User__UserGroup.user_id.isnot(None),
             )
         )
         .scalars()
         .all()
     )
     for uid in user_ids:
-        if uid is not None:
-            recompute_user_permissions__no_commit(uid, db_session)
+        recompute_user_permissions__no_commit(uid, db_session)
