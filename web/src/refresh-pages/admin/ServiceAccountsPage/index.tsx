@@ -160,7 +160,7 @@ export default function ServiceAccountsPage() {
         header: "API Key",
         weight: 30,
         cell: (value) => (
-          <Text font="secondary-body" color="text-03">
+          <Text font="secondary-mono" color="text-03">
             {value}
           </Text>
         ),
