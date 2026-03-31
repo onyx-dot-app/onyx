@@ -56,6 +56,12 @@ export {
   type BorderVariant,
 } from "@opal/components/cards/card/components";
 
+/* SelectCard */
+export {
+  SelectCard,
+  type SelectCardProps,
+} from "@opal/components/cards/select-card/components";
+
 /* EmptyMessageCard */
 export {
   EmptyMessageCard,

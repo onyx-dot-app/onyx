@@ -9,6 +9,7 @@ on:
 jobs:
   sync-foss:
     runs-on: ubuntu-latest
+    environment: ci-protected
     timeout-minutes: 45
     permissions:
       contents: read
