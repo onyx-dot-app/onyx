@@ -305,10 +305,26 @@ class VoiceRecorderSession {
       if (data.type === "transcript") {
         if (data.text) {
           this.transcript = data.text;
-          this.onTranscriptChange(data.text);
+          // Only push live updates to React while actively recording.
+          // After stop(), the final transcript is returned via stopResolver
+          // instead — this prevents stale text from reappearing in the
+          // input box when the user clears it and starts a new recording.
+          if (this.isActive) {
+            this.onTranscriptChange(data.text);
+          }
         }
 
         if (data.is_final && data.text) {
+          // Resolve stop promise if waiting — must run even after stop()
+          // so the caller receives the final transcript.
+          if (this.stopResolver) {
+            this.stopResolver(data.text);
+            this.stopResolver = null;
+          }
+
+          // Skip VAD logic if session is no longer active
+          if (!this.isActive) return;
+
           if (this.autoStopOnSilence) {
             // VAD detected silence — auto-stop and trigger callback
             const now = Date.now();
@@ -336,12 +352,6 @@ class VoiceRecorderSession {
             // Start/reset a 10s fallback timer — if no new speech arrives,
             // force-stop to avoid recording silence indefinitely.
             this.startSilenceFallbackTimer();
-          }
-
-          // Resolve stop promise if waiting
-          if (this.stopResolver) {
-            this.stopResolver(data.text);
-            this.stopResolver = null;
           }
         }
       } else if (data.type === "error") {
