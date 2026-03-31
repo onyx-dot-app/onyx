@@ -261,6 +261,7 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={route.title}
           icon={route.icon}
+          description="Use service accounts to programmatically access Onyx API."
           separator
         />
         <SettingsLayouts.Body>
@@ -278,6 +279,7 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={route.title}
           icon={route.icon}
+          description="Use service accounts to programmatically access Onyx API."
           separator
         />
         <SettingsLayouts.Body>
@@ -291,7 +293,12 @@ export default function ServiceAccountsPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
+      <SettingsLayouts.Header
+        title={route.title}
+        icon={route.icon}
+        description="Use service accounts to programmatically access Onyx API."
+        separator
+      />
 
       <SettingsLayouts.Body>
         {isTrialing && (
