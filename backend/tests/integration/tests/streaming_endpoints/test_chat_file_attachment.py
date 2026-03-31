@@ -156,16 +156,34 @@ def test_csv_under_token_threshold_uploaded_and_indexed(
         _set_token_threshold(admin_user, threshold_k=200)
 
 
+def _make_pdf(text: str) -> bytes:
+    """Generate a minimal valid PDF containing the given text."""
+    stream = f"BT /F1 12 Tf 72 700 Td ({text}) Tj ET"
+    stream_bytes = stream.encode("latin-1")
+    length = len(stream_bytes)
+    pdf = (
+        "%PDF-1.4\n"
+        "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+        "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+        "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]"
+        "/Contents 4 0 R/Resources<</Font<</F1<</Type/Font"
+        "/Subtype/Type1/BaseFont/Helvetica>>>>>>>>endobj\n"
+        f"4 0 obj<</Length {length}>>\nstream\n"
+        f"{stream}\nendstream\nendobj\n"
+        "%%EOF"
+    )
+    return pdf.encode("latin-1")
+
+
 def test_pdf_over_token_threshold_rejected(
     admin_user: DATestUser,
 ) -> None:
     """PDF exceeding token threshold is rejected — not uploaded."""
     _set_token_threshold(admin_user, threshold_k=1)
     try:
-        # Create a text-heavy PDF-like payload. The backend extracts text then
-        # counts tokens; a plain text file named .pdf will be extracted successfully.
-        content = ("x" * 100 + "\n") * 20
-        result = _upload_raw("big.pdf", content.encode(), admin_user)
+        # Generate a real PDF with enough text to exceed the 1K token threshold
+        pdf_bytes = _make_pdf("x " * 1500)
+        result = _upload_raw("big.pdf", pdf_bytes, admin_user)
 
         assert len(result["user_files"]) == 0, "PDF should not be accepted"
         assert len(result["rejected_files"]) == 1, "PDF should be rejected"
