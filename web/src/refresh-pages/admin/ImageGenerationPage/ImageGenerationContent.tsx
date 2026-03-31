@@ -250,6 +250,7 @@ export default function ImageGenerationContent() {
                     variant="select-card"
                     state={STATUS_TO_STATE[status]}
                     sizeVariant="lg"
+                    aria-label={`image-gen-provider-${provider.image_provider_id}`}
                     onClick={
                       isDisconnected
                         ? () => handleConnect(provider)
@@ -310,6 +311,7 @@ export default function ImageGenerationContent() {
                               <Button
                                 icon={SvgUnplug}
                                 tooltip="Disconnect"
+                                aria-label={`Disconnect ${provider.title}`}
                                 prominence="tertiary"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -321,6 +323,7 @@ export default function ImageGenerationContent() {
                             <Button
                               icon={SvgSettings}
                               tooltip="Edit"
+                              aria-label={`Edit ${provider.title}`}
                               prominence="tertiary"
                               onClick={(e) => {
                                 e.stopPropagation();
