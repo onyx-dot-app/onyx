@@ -271,7 +271,7 @@ fastapi-users-db-sqlalchemy==7.0.0
     # via onyx
 fastavro==1.12.1
     # via cohere
-fastmcp==3.0.2
+fastmcp==3.2.0
     # via onyx
 fastuuid==0.14.0
     # via litellm
