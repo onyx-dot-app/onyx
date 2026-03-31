@@ -189,8 +189,6 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
             if chat_file.file_type == ChatFileType.PLAIN_TEXT:
                 full_text = chat_file.content.decode("utf-8", errors="replace")
             else:
-                # TABULAR may be CSV (already text) or XLSX (binary OOXML).
-                # Use extract_file_text to handle format conversion correctly.
                 full_text = (
                     extract_file_text(
                         file=io.BytesIO(chat_file.content),
