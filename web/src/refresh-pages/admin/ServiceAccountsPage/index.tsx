@@ -309,6 +309,7 @@ export default function ServiceAccountsPage() {
           <>
             <div className="flex flex-row gap-3">
               <InputTypeIn
+                variant="internal"
                 leftSearchIcon
                 placeholder="Search service accounts..."
                 value={search}
