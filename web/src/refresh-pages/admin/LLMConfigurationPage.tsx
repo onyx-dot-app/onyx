@@ -225,18 +225,7 @@ function ExistingProviderCard({
             variant="section"
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
-              <Button
-                icon={SvgSettings}
-                prominence="tertiary"
-                aria-label={`Edit ${provider.name}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsOpen(true);
-                }}
-              />
-            }
-            bottomRightChildren={
-              <div className="flex flex-row px-1 pb-1">
+              <div className="flex flex-row">
                 <Hoverable.Item
                   group="ExistingProviderCard"
                   variant="opacity-on-hover"
@@ -249,9 +238,17 @@ function ExistingProviderCard({
                       e.stopPropagation();
                       deleteModal.toggle(true);
                     }}
-                    size="md"
                   />
                 </Hoverable.Item>
+                <Button
+                  icon={SvgSettings}
+                  prominence="tertiary"
+                  aria-label={`Edit ${provider.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsOpen(true);
+                  }}
+                />
               </div>
             }
           />
