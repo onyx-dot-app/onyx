@@ -338,7 +338,7 @@ def extract_context_files(
         )
 
     # Files fit — load them into context
-    user_file_map = {str(uf.id): uf for uf in user_files}
+    user_file_map = {uf.file_id: uf for uf in user_files}
     in_memory_files = load_in_memory_chat_files(
         user_file_ids=[uf.id for uf in user_files],
         db_session=db_session,
