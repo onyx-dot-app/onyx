@@ -41,7 +41,7 @@ echo
 while true; do
   # Use wget to send a request and capture the HTTP status code
   # (curl has DNS resolution issues with Docker's internal resolver on Alpine)
-  status_code=$(wget -S -q -O /dev/null "http://${ONYX_BACKEND_API_HOST}:8080/health" 2>&1 | awk '/HTTP\//{print $2}' | tail -1)
+  status_code=$(wget -S -q -O /dev/null "http://${ONYX_BACKEND_API_HOST}:8080/health" 2>&1 | awk '/HTTP\//{print $2; exit}')
   status_code="${status_code:-000}"
 
   # Check if the status code is 200
