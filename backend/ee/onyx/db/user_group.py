@@ -255,6 +255,7 @@ def fetch_user_groups(
     db_session: Session,
     only_up_to_date: bool = True,
     eager_load_for_snapshot: bool = False,
+    include_default: bool = True,
 ) -> Sequence[UserGroup]:
     """
     Fetches user groups from the database.
@@ -269,6 +270,7 @@ def fetch_user_groups(
             to include only up to date user groups. Defaults to `True`.
         eager_load_for_snapshot: If True, adds eager loading for all relationships
             needed by UserGroup.from_model snapshot creation.
+        include_default: If False, excludes system default groups (is_default=True).
 
     Returns:
         Sequence[UserGroup]: A sequence of `UserGroup` objects matching the query criteria.
@@ -276,6 +278,8 @@ def fetch_user_groups(
     stmt = select(UserGroup)
     if only_up_to_date:
         stmt = stmt.where(UserGroup.is_up_to_date == True)  # noqa: E712
+    if not include_default:
+        stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
     if eager_load_for_snapshot:
         stmt = _add_user_group_snapshot_eager_loads(stmt)
     return db_session.scalars(stmt).unique().all()
@@ -286,6 +290,7 @@ def fetch_user_groups_for_user(
     user_id: UUID,
     only_curator_groups: bool = False,
     eager_load_for_snapshot: bool = False,
+    include_default: bool = True,
 ) -> Sequence[UserGroup]:
     stmt = (
         select(UserGroup)
@@ -295,6 +300,8 @@ def fetch_user_groups_for_user(
     )
     if only_curator_groups:
         stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
+    if not include_default:
+        stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
     if eager_load_for_snapshot:
         stmt = _add_user_group_snapshot_eager_loads(stmt)
     return db_session.scalars(stmt).unique().all()

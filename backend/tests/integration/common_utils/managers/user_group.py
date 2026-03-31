@@ -107,10 +107,15 @@ class UserGroupManager:
     @staticmethod
     def get_all(
         user_performing_action: DATestUser,
+        include_default: bool = False,
     ) -> list[UserGroup]:
+        params: dict[str, str] = {}
+        if include_default:
+            params["include_default"] = "true"
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/user-group",
             headers=user_performing_action.headers,
+            params=params,
         )
         response.raise_for_status()
         return [UserGroup(**ug) for ug in response.json()]
