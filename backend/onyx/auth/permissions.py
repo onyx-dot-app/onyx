@@ -24,7 +24,7 @@ logger = setup_logger()
 ALL_PERMISSIONS: frozenset[str] = frozenset(p.value for p in Permission)
 
 # Implication map: granted permission -> set of permissions it implies.
-IMPLIES: dict[str, set[str]] = {
+IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.ADD_AGENTS.value: {Permission.READ_AGENTS.value},
     Permission.MANAGE_AGENTS.value: {
         Permission.ADD_AGENTS.value,
@@ -61,7 +61,7 @@ def resolve_effective_permissions(granted: set[str]) -> set[str]:
     while changed:
         changed = False
         for perm in list(effective):
-            implied = IMPLIES.get(perm)
+            implied = IMPLIED_PERMISSIONS.get(perm)
             if implied and not implied.issubset(effective):
                 effective |= implied
                 changed = True

@@ -1,8 +1,8 @@
 """grant_basic_to_existing_groups
 
-Grants the "basic" permission to all existing non-default groups that
-don't already have it. Every group should have at least "basic" so that
-its members get basic access when effective_permissions is backfilled.
+Grants the "basic" permission to all existing groups that don't already
+have it. Every group should have at least "basic" so that its members
+get basic access when effective_permissions is backfilled.
 
 Revision ID: b4b7e1028dfd
 Revises: b7bcc991d722
