@@ -8,6 +8,7 @@ Tests the priority logic for OAuth tokens when constructing custom tools:
 All external HTTP calls are mocked, but Postgres and Redis are running.
 """
 
+import queue
 from typing import Any
 from unittest.mock import Mock
 from unittest.mock import patch
@@ -16,7 +17,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import get_default_emitter
+from onyx.chat.emitter import Emitter
 from onyx.db.models import OAuthAccount
 from onyx.db.models import OAuthConfig
 from onyx.db.models import Persona
@@ -174,7 +175,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
-            emitter=get_default_emitter(),
+            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=search_tool_config,
@@ -232,7 +233,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
-            emitter=get_default_emitter(),
+            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
         )
@@ -284,7 +285,7 @@ class TestOAuthToolIntegrationPriority:
             tool_dict = construct_tools(
                 persona=persona,
                 db_session=db_session,
-                emitter=get_default_emitter(),
+                emitter=Emitter(merged_queue=queue.Queue()),
                 user=user,
                 llm=llm,
             )
@@ -345,7 +346,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
-            emitter=get_default_emitter(),
+            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
         )
@@ -416,7 +417,7 @@ class TestOAuthToolIntegrationPriority:
             tool_dict = construct_tools(
                 persona=persona,
                 db_session=db_session,
-                emitter=get_default_emitter(),
+                emitter=Emitter(merged_queue=queue.Queue()),
                 user=user,
                 llm=llm,
             )
@@ -483,7 +484,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
-            emitter=get_default_emitter(),
+            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
         )
@@ -536,7 +537,7 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
-            emitter=get_default_emitter(),
+            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
         )
