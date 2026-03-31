@@ -89,3 +89,43 @@ variable "backup_window" {
     error_message = "backup_window must be in hh24:mi-hh24:mi format (e.g. \"03:00-04:00\")."
   }
 }
+
+# CloudWatch CPU alarm configuration
+variable "cpu_alarm_threshold" {
+  type        = number
+  description = "CPU utilization percentage threshold for the CloudWatch alarm"
+  default     = 80
+
+  validation {
+    condition     = var.cpu_alarm_threshold >= 0 && var.cpu_alarm_threshold <= 100
+    error_message = "cpu_alarm_threshold must be between 0 and 100 (percentage)."
+  }
+}
+
+variable "cpu_alarm_evaluation_periods" {
+  type        = number
+  description = "Number of consecutive periods the threshold must be breached before alarming"
+  default     = 3
+
+  validation {
+    condition     = var.cpu_alarm_evaluation_periods >= 1
+    error_message = "cpu_alarm_evaluation_periods must be at least 1."
+  }
+}
+
+variable "cpu_alarm_period" {
+  type        = number
+  description = "Period in seconds over which the CPU metric is evaluated"
+  default     = 300
+
+  validation {
+    condition     = var.cpu_alarm_period >= 60 && var.cpu_alarm_period % 60 == 0
+    error_message = "cpu_alarm_period must be a multiple of 60 seconds and at least 60 (CloudWatch requirement)."
+  }
+}
+
+variable "alarm_actions" {
+  type        = list(string)
+  description = "List of ARNs to notify when the alarm transitions state (e.g. SNS topic ARNs)"
+  default     = []
+}

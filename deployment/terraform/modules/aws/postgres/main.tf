@@ -51,3 +51,26 @@ resource "aws_db_instance" "this" {
 
   tags = var.tags
 }
+
+# CloudWatch alarm for CPU utilization monitoring
+resource "aws_cloudwatch_metric_alarm" "cpu_utilization" {
+  alarm_name          = "${var.identifier}-cpu-utilization"
+  alarm_description   = "RDS CPU utilization for ${var.identifier}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = var.cpu_alarm_evaluation_periods
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/RDS"
+  period              = var.cpu_alarm_period
+  statistic           = "Average"
+  threshold           = var.cpu_alarm_threshold
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.this.identifier
+  }
+
+  tags = var.tags
+}
