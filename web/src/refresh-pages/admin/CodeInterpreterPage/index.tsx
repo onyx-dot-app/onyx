@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Card, type CardProps } from "@/refresh-components/cards";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
@@ -13,47 +12,21 @@ import {
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
-import { Button } from "@opal/components";
+import { Button, SelectCard } from "@opal/components";
+import { CardHeaderLayout } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import useCodeInterpreter from "@/hooks/useCodeInterpreter";
-import { updateCodeInterpreter } from "@/lib/admin/code-interpreter/svc";
-import { ContentAction } from "@opal/layouts";
+import { updateCodeInterpreter } from "@/refresh-pages/admin/CodeInterpreterPage/svc";
 import { toast } from "@/hooks/useToast";
 
 const route = ADMIN_ROUTES.CODE_INTERPRETER;
 
-interface CodeInterpreterCardProps {
-  variant?: CardProps["variant"];
-  title: string;
-  middleText?: string;
-  strikethrough?: boolean;
-  rightContent: React.ReactNode;
-}
-
-function CodeInterpreterCard({
-  variant,
-  title,
-  middleText,
-  strikethrough,
-  rightContent,
-}: CodeInterpreterCardProps) {
-  return (
-    // TODO (@raunakab): Allow Content to accept strikethrough and middleText
-    <Card variant={variant} padding={0.5}>
-      <ContentAction
-        icon={SvgTerminal}
-        title={middleText ? `${title} ${middleText}` : title}
-        description="Built-in Python runtime"
-        variant="section"
-        sizePreset="main-ui"
-        rightChildren={rightContent}
-      />
-    </Card>
-  );
-}
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
 
 function CheckingStatus() {
   return (
@@ -102,46 +75,9 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
   );
 }
 
-interface ActionButtonsProps {
-  onDisconnect: () => void;
-  onRefresh: () => void;
-  disabled?: boolean;
-}
-
-function ActionButtons({
-  onDisconnect,
-  onRefresh,
-  disabled,
-}: ActionButtonsProps) {
-  return (
-    <Section
-      flexDirection="row"
-      justifyContent="end"
-      alignItems="center"
-      gap={0.25}
-      padding={0.25}
-    >
-      <Disabled disabled={disabled}>
-        <Button
-          prominence="tertiary"
-          size="sm"
-          icon={SvgUnplug}
-          onClick={onDisconnect}
-          tooltip="Disconnect"
-        />
-      </Disabled>
-      <Disabled disabled={disabled}>
-        <Button
-          prominence="tertiary"
-          size="sm"
-          icon={SvgRefreshCw}
-          onClick={onRefresh}
-          tooltip="Refresh"
-        />
-      </Disabled>
-    </Section>
-  );
-}
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function CodeInterpreterPage() {
   const { isHealthy, isEnabled, isLoading, refetch } = useCodeInterpreter();
@@ -175,49 +111,79 @@ export default function CodeInterpreterPage() {
 
       <SettingsLayouts.Body>
         {isEnabled || isLoading ? (
-          <CodeInterpreterCard
-            title="Code Interpreter"
-            variant={isHealthy ? "primary" : "secondary"}
-            strikethrough={!isHealthy}
-            rightContent={
-              <Section
-                flexDirection="column"
-                justifyContent="center"
-                alignItems="end"
-                gap={0}
-                padding={0}
-              >
+          <SelectCard variant="select-card" state="filled" sizeVariant="lg">
+            <CardHeaderLayout
+              sizePreset="main-ui"
+              variant="section"
+              icon={SvgTerminal}
+              title="Code Interpreter"
+              description="Built-in Python runtime"
+              rightChildren={
                 <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
-                <ActionButtons
-                  onDisconnect={() => setShowDisconnectModal(true)}
-                  onRefresh={refetch}
-                  disabled={isLoading}
-                />
-              </Section>
-            }
-          />
+              }
+              bottomRightChildren={
+                <Section
+                  flexDirection="row"
+                  justifyContent="end"
+                  alignItems="center"
+                  gap={0.25}
+                  padding={0.25}
+                >
+                  <Disabled disabled={isLoading}>
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
+                      icon={SvgUnplug}
+                      onClick={() => setShowDisconnectModal(true)}
+                      tooltip="Disconnect"
+                    />
+                  </Disabled>
+                  <Disabled disabled={isLoading}>
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
+                      icon={SvgRefreshCw}
+                      onClick={refetch}
+                      tooltip="Refresh"
+                    />
+                  </Disabled>
+                </Section>
+              }
+            />
+          </SelectCard>
         ) : (
-          <CodeInterpreterCard
-            variant="secondary"
-            title="Code Interpreter"
-            middleText="(Disconnected)"
-            strikethrough={true}
-            rightContent={
-              <Section flexDirection="row" alignItems="center" padding={0.5}>
-                {isReconnecting ? (
-                  <CheckingStatus />
-                ) : (
-                  <Button
-                    prominence="tertiary"
-                    rightIcon={SvgArrowExchange}
-                    onClick={() => handleToggle(true)}
-                  >
-                    Reconnect
-                  </Button>
-                )}
-              </Section>
-            }
-          />
+          <SelectCard
+            variant="select-card"
+            state="empty"
+            sizeVariant="lg"
+            onClick={() => handleToggle(true)}
+          >
+            <CardHeaderLayout
+              sizePreset="main-ui"
+              variant="section"
+              icon={SvgTerminal}
+              title="Code Interpreter (Disconnected)"
+              description="Built-in Python runtime"
+              rightChildren={
+                <Section flexDirection="row" alignItems="center" padding={0.5}>
+                  {isReconnecting ? (
+                    <CheckingStatus />
+                  ) : (
+                    <Button
+                      prominence="tertiary"
+                      rightIcon={SvgArrowExchange}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggle(true);
+                      }}
+                    >
+                      Reconnect
+                    </Button>
+                  )}
+                </Section>
+              }
+            />
+          </SelectCard>
         )}
       </SettingsLayouts.Body>
 
