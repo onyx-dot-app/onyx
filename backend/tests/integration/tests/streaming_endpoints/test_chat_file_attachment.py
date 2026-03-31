@@ -122,8 +122,8 @@ def test_csv_over_token_threshold_uploaded_not_indexed(
     """CSV exceeding token threshold is uploaded (accepted) but skips indexing."""
     _set_token_threshold(admin_user, threshold_k=1)
     try:
-        # 2000 chars ≈ 2000 tokens with default tokenizer, well over 1K threshold
-        content = ("x" * 100 + "\n") * 20
+        # ~2000 tokens with default tokenizer, well over 1K threshold
+        content = ("x " * 100 + "\n") * 20
         result = _upload_raw("large.csv", content.encode(), admin_user)
 
         assert len(result["user_files"]) == 1, "CSV should be accepted"
@@ -156,37 +156,19 @@ def test_csv_under_token_threshold_uploaded_and_indexed(
         _set_token_threshold(admin_user, threshold_k=200)
 
 
-def _make_pdf(text: str) -> bytes:
-    """Generate a minimal valid PDF containing the given text."""
-    stream = f"BT /F1 12 Tf 72 700 Td ({text}) Tj ET"
-    stream_bytes = stream.encode("latin-1")
-    length = len(stream_bytes)
-    pdf = (
-        "%PDF-1.4\n"
-        "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
-        "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
-        "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]"
-        "/Contents 4 0 R/Resources<</Font<</F1<</Type/Font"
-        "/Subtype/Type1/BaseFont/Helvetica>>>>>>>>endobj\n"
-        f"4 0 obj<</Length {length}>>\nstream\n"
-        f"{stream}\nendstream\nendobj\n"
-        "%%EOF"
-    )
-    return pdf.encode("latin-1")
-
-
-def test_pdf_over_token_threshold_rejected(
+def test_txt_over_token_threshold_rejected(
     admin_user: DATestUser,
 ) -> None:
-    """PDF exceeding token threshold is rejected — not uploaded."""
+    """Non-exempt file exceeding token threshold is rejected entirely."""
     _set_token_threshold(admin_user, threshold_k=1)
     try:
-        # Generate a real PDF with enough text to exceed the 1K token threshold
-        pdf_bytes = _make_pdf("x " * 1500)
-        result = _upload_raw("big.pdf", pdf_bytes, admin_user)
+        # ~2000 tokens, well over 1K threshold. Unlike CSV, .txt is not
+        # exempt from the threshold so the file should be rejected.
+        content = ("x " * 100 + "\n") * 20
+        result = _upload_raw("big.txt", content.encode(), admin_user)
 
-        assert len(result["user_files"]) == 0, "PDF should not be accepted"
-        assert len(result["rejected_files"]) == 1, "PDF should be rejected"
+        assert len(result["user_files"]) == 0, "File should not be accepted"
+        assert len(result["rejected_files"]) == 1, "File should be rejected"
         assert "token limit" in result["rejected_files"][0]["reason"].lower()
     finally:
         _set_token_threshold(admin_user, threshold_k=200)
