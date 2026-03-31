@@ -36,6 +36,7 @@ test.describe("Web Search Provider Disconnect", () => {
         name: "web-search-disconnect-non-active-before",
       });
 
+      await braveCard.hover();
       const disconnectButton = braveCard.getByRole("button", {
         name: "Disconnect Brave",
       });
@@ -108,6 +109,7 @@ test.describe("Web Search Provider Disconnect", () => {
       const exaCard = findProviderCard(page, "Exa");
       await exaCard.waitFor({ state: "visible", timeout: 10000 });
 
+      await exaCard.hover();
       const disconnectButton = exaCard.getByRole("button", {
         name: "Disconnect Exa",
       });
@@ -148,6 +150,7 @@ test.describe("Web Search Provider Disconnect", () => {
       const exaCard = findProviderCard(page, "Exa");
       await exaCard.waitFor({ state: "visible", timeout: 10000 });
 
+      await exaCard.hover();
       const disconnectButton = exaCard.getByRole("button", {
         name: "Disconnect Exa",
       });
@@ -211,6 +214,7 @@ test.describe("Web Search Provider Disconnect", () => {
       const firecrawlCard = findProviderCard(page, "Firecrawl");
       await firecrawlCard.waitFor({ state: "visible", timeout: 10000 });
 
+      await firecrawlCard.hover();
       const disconnectButton = firecrawlCard.getByRole("button", {
         name: "Disconnect Firecrawl",
       });
@@ -279,6 +283,7 @@ test.describe("Web Search Provider Disconnect", () => {
       const firecrawlCard = findProviderCard(page, "Firecrawl");
       await firecrawlCard.waitFor({ state: "visible", timeout: 10000 });
 
+      await firecrawlCard.hover();
       const disconnectButton = firecrawlCard.getByRole("button", {
         name: "Disconnect Firecrawl",
       });

@@ -324,6 +324,7 @@ function ProviderCard({
                     <Button
                       icon={SvgUnplug}
                       tooltip="Disconnect"
+                      aria-label={`Disconnect ${title}`}
                       prominence="tertiary"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -337,6 +338,7 @@ function ProviderCard({
                   <Button
                     icon={SvgSettings}
                     tooltip="Edit"
+                    aria-label={`Edit ${title}`}
                     prominence="tertiary"
                     onClick={(e) => {
                       e.stopPropagation();
