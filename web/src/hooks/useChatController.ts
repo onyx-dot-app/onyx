@@ -901,6 +901,11 @@ export default function useChatController({
             });
           }
         }
+        // Surface FIFO errors (e.g. 429 before any packets arrive) so the
+        // catch block replaces the thinking placeholder with an error message.
+        if (stack.error) {
+          throw new Error(stack.error);
+        }
       } catch (e: any) {
         console.log("Error:", e);
         const errorMsg = e.message;
