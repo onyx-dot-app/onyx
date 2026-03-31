@@ -10,14 +10,14 @@ import {
   createImageGenerationConfig,
   updateImageGenerationConfig,
   fetchImageGenerationCredentials,
-} from "@/lib/configuration/imageConfigurationService";
+} from "@/refresh-pages/admin/ImageGenerationPage/svc";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import {
   ImageGenFormWrapperProps,
   ImageGenFormChildProps,
   ImageGenSubmitPayload,
   FormValues,
-} from "./types";
+} from "@/refresh-pages/admin/ImageGenerationPage/forms/types";
 import { toast } from "@/hooks/useToast";
 
 export function ImageGenFormWrapper<T extends FormValues>({
@@ -40,9 +40,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
   const [showApiMessage, setShowApiMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoadingCredentials, setIsLoadingCredentials] = useState(false);
-
-  // Form reset key for re-initialization
-  const [formResetKey, setFormResetKey] = useState(0);
 
   // Track merged initial values with fetched credentials
   const [mergedInitialValues, setMergedInitialValues] =
@@ -73,7 +70,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
               imageProvider
             );
             setMergedInitialValues((prev) => ({ ...prev, ...credValues }));
-            setFormResetKey((k) => k + 1);
           }
         })
         .catch((err) => {
@@ -276,7 +272,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
 
   return (
     <Formik<T>
-      key={formResetKey}
       initialValues={mergedInitialValues}
       onSubmit={handleSubmit}
       validationSchema={validationSchema}

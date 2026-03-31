@@ -1,8 +1,8 @@
 import React from "react";
-import { ImageGenFormBaseProps } from "./types";
-import { OpenAIImageGenForm } from "./OpenAIImageGenForm";
-import { AzureImageGenForm } from "./AzureImageGenForm";
-import { VertexImageGenForm } from "./VertexImageGenForm";
+import { ImageGenFormBaseProps } from "@/refresh-pages/admin/ImageGenerationPage/forms/types";
+import { OpenAIImageGenForm } from "@/refresh-pages/admin/ImageGenerationPage/forms/OpenAIImageGenForm";
+import { AzureImageGenForm } from "@/refresh-pages/admin/ImageGenerationPage/forms/AzureImageGenForm";
+import { VertexImageGenForm } from "@/refresh-pages/admin/ImageGenerationPage/forms/VertexImageGenForm";
 
 /**
  * Factory function that routes to the correct provider-specific form
