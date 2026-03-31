@@ -316,6 +316,128 @@ class TestExtractContextFiles:
         assert len(result.file_metadata_for_tool) == 1
         assert result.file_metadata_for_tool[0].filename == "bigfile.txt"
 
+    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    def test_metadata_only_files_not_counted_in_aggregate_tokens(
+        self, mock_load: MagicMock
+    ) -> None:
+        """Metadata-only files (TABULAR) should not count toward the token budget."""
+        text_file_id = str(uuid4())
+        text_uf = _make_user_file(token_count=100, file_id=text_file_id)
+        # TABULAR file with large token count — should be excluded from aggregate
+        tabular_uf = _make_user_file(
+            token_count=50000, name="huge.xlsx", file_id=str(uuid4())
+        )
+        tabular_uf.file_type = (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        mock_load.return_value = [
+            _make_in_memory_file(file_id=text_file_id, content="text content"),
+            InMemoryChatFile(
+                file_id=str(tabular_uf.id),
+                content=b"binary xlsx",
+                file_type=ChatFileType.TABULAR,
+                filename="huge.xlsx",
+            ),
+        ]
+
+        result = extract_context_files(
+            user_files=[text_uf, tabular_uf],
+            llm_max_context_window=10000,
+            reserved_token_count=0,
+            db_session=MagicMock(),
+        )
+
+        # Text file fits (100 < 6000), so files should be loaded
+        assert result.file_texts == ["text content"]
+        # TABULAR file should appear as tool metadata, not in file_texts
+        assert len(result.file_metadata_for_tool) == 1
+        assert result.file_metadata_for_tool[0].filename == "huge.xlsx"
+
+    @patch("onyx.chat.process_message.load_in_memory_chat_files")
+    def test_metadata_only_files_loaded_as_tool_metadata(
+        self, mock_load: MagicMock
+    ) -> None:
+        """When files fit, metadata-only files appear in file_metadata_for_tool."""
+        text_file_id = str(uuid4())
+        tabular_file_id = str(uuid4())
+        text_uf = _make_user_file(token_count=100, file_id=text_file_id)
+        tabular_uf = _make_user_file(
+            token_count=500, name="data.csv", file_id=tabular_file_id
+        )
+        tabular_uf.file_type = "text/csv"
+
+        mock_load.return_value = [
+            _make_in_memory_file(file_id=text_file_id, content="hello"),
+            InMemoryChatFile(
+                file_id=tabular_file_id,
+                content=b"col1,col2\na,b",
+                file_type=ChatFileType.TABULAR,
+                filename="data.csv",
+            ),
+        ]
+
+        result = extract_context_files(
+            user_files=[text_uf, tabular_uf],
+            llm_max_context_window=10000,
+            reserved_token_count=0,
+            db_session=MagicMock(),
+        )
+
+        assert result.file_texts == ["hello"]
+        assert len(result.file_metadata_for_tool) == 1
+        assert result.file_metadata_for_tool[0].filename == "data.csv"
+        # TABULAR should not appear in file_metadata (that's for citation)
+        assert all(m.filename != "data.csv" for m in result.file_metadata)
+
+    def test_overflow_with_vector_db_preserves_metadata_only_tool_metadata(
+        self,
+    ) -> None:
+        """When text files overflow with vector DB enabled, metadata-only files
+        should still be exposed via file_metadata_for_tool since they aren't
+        in the vector DB and would otherwise be inaccessible."""
+        text_uf = _make_user_file(token_count=7000, name="bigfile.txt")
+        tabular_uf = _make_user_file(token_count=500, name="data.xlsx")
+        tabular_uf.file_type = (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        result = extract_context_files(
+            user_files=[text_uf, tabular_uf],
+            llm_max_context_window=10000,
+            reserved_token_count=0,
+            db_session=MagicMock(),
+        )
+
+        # Text files overflow → search filter enabled
+        assert result.use_as_search_filter is True
+        assert result.file_texts == []
+        # TABULAR file should still be in tool metadata
+        assert len(result.file_metadata_for_tool) == 1
+        assert result.file_metadata_for_tool[0].filename == "data.xlsx"
+
+    @patch("onyx.chat.process_message.DISABLE_VECTOR_DB", True)
+    def test_overflow_no_vector_db_includes_all_files_in_tool_metadata(self) -> None:
+        """When vector DB is disabled and files overflow, all files
+        (both text and metadata-only) appear in file_metadata_for_tool."""
+        text_uf = _make_user_file(token_count=7000, name="bigfile.txt")
+        tabular_uf = _make_user_file(token_count=500, name="data.xlsx")
+        tabular_uf.file_type = (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        result = extract_context_files(
+            user_files=[text_uf, tabular_uf],
+            llm_max_context_window=10000,
+            reserved_token_count=0,
+            db_session=MagicMock(),
+        )
+
+        assert result.use_as_search_filter is False
+        assert len(result.file_metadata_for_tool) == 2
+        filenames = {m.filename for m in result.file_metadata_for_tool}
+        assert filenames == {"bigfile.txt", "data.xlsx"}
+
 
 # ===========================================================================
 # Search filter + search_usage determination
