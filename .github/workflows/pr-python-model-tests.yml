@@ -31,6 +31,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - "run-id=${{ github.run_id }}-model-check"
       - "extras=ecr-cache"
+    environment: ci-protected
     timeout-minutes: 45
 
     env:

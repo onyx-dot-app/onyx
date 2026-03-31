@@ -1,7 +1,7 @@
 """
 External dependency unit tests for UserFileIndexingAdapter metadata writing.
 
-Validates that build_metadata_aware_chunks produces DocMetadataAwareIndexChunk
+Validates that prepare_enrichment produces DocMetadataAwareIndexChunk
 objects with both `user_project` and `personas` fields populated correctly
 based on actual DB associations.
 
@@ -127,7 +127,7 @@ def _make_index_chunk(user_file: UserFile) -> IndexChunk:
 
 
 class TestAdapterWritesBothMetadataFields:
-    """build_metadata_aware_chunks must populate user_project AND personas."""
+    """prepare_enrichment must populate user_project AND personas."""
 
     @patch(
         "onyx.indexing.adapters.user_file_indexing_adapter.get_default_llm",
