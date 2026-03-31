@@ -3,7 +3,8 @@ export type WebSearchProviderType =
   | "serper"
   | "exa"
   | "searxng"
-  | "brave";
+  | "brave"
+  | "tavily";
 
 export const SEARCH_PROVIDERS_URL = "/api/admin/web-search/search-providers";
 
@@ -45,6 +46,12 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     helper: "Connect to Google PSE to set up web search.",
     logoSrc: "/Google.svg",
     apiKeyUrl: "https://programmablesearchengine.google.com/controlpanel/all",
+  },
+  tavily: {
+    label: "Tavily",
+    subtitle: "Tavily Search API",
+    helper: "Connect to Tavily to set up web search.",
+    apiKeyUrl: "https://app.tavily.com",
   },
   searxng: {
     label: "SearXNG",
@@ -107,6 +114,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     requiredConfigKeys: [],
   },
   brave: {
+    requiresApiKey: true,
+    requiredConfigKeys: [],
+  },
+  tavily: {
     requiresApiKey: true,
     requiredConfigKeys: [],
   },
