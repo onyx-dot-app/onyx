@@ -64,6 +64,10 @@ class TestMemoryToolEmitStart:
 
         _key, packet = emitter_queue.get_nowait()
         assert isinstance(packet.obj, MemoryToolStart)
+        assert packet.placement is not None
+        assert packet.placement.turn_index == placement.turn_index
+        assert packet.placement.tab_index == placement.tab_index
+        assert packet.placement.model_index == 0  # emitter stamps model_index=0
 
     def test_emit_start_with_different_placement(
         self,

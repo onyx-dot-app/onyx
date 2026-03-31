@@ -792,7 +792,7 @@ def build_chat_turn(
     ):
         forced_tool_id = None
 
-    # TODO: Once summarization is done, we don't need to load all files from the beginning.
+    # TODO(nmgarza5): Once summarization is done, we don't need to load all files from the beginning.
     # Load all files needed for this chat chain into memory.
     files = load_all_chat_files(chat_history, db_session)
     # Convert loaded files to ChatFile format for tools like PythonTool
