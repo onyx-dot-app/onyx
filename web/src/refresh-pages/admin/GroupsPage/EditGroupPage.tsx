@@ -83,7 +83,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   // Fetch token rate limits for this group
   const { data: tokenRateLimits, isLoading: tokenLimitsLoading } = useSWR<
     TokenRateLimitDisplay[]
-  >(`/api/admin/token-rate-limits/user-group/${groupId}`, errorHandlingFetcher);
+  >(SWR_KEYS.userGroupTokenRateLimit(groupId), errorHandlingFetcher);
 
   // Form state
   const [groupName, setGroupName] = useState("");
@@ -260,7 +260,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       initialDocSetIdsRef.current = selectedDocSetIds;
 
       mutate(SWR_KEYS.adminUserGroups);
-      mutate(`/api/admin/token-rate-limits/user-group/${groupId}`);
+      mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
       toast.success(`Group "${trimmed}" updated`);
       router.push("/admin/groups");
     } catch (e) {

@@ -120,6 +120,8 @@ export const SWR_KEYS = {
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",
   userTokenRateLimits: "/api/admin/token-rate-limits/users",
   userGroupTokenRateLimits: "/api/admin/token-rate-limits/user-groups",
+  userGroupTokenRateLimit: (groupId: number) =>
+    `/api/admin/token-rate-limits/user-group/${groupId}`,
 
   // ── Usage Reports ─────────────────────────────────────────────────────────
   usageReport: "/api/admin/usage-report",

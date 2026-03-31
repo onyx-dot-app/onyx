@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { Select } from "@/refresh-components/cards";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
