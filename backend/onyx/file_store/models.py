@@ -13,7 +13,7 @@ class ChatFileType(str, Enum):
     DOC = "document"
     # Plain text only contain the text
     PLAIN_TEXT = "plain_text"
-    # Tabular data files (CSV, TSV, XLSX) — metadata-only injection
+    # Tabular data files (CSV, TSV, XLSX)
     TABULAR = "tabular"
 
     def is_text_file(self) -> bool:
