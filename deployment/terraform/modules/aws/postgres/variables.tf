@@ -124,6 +124,39 @@ variable "cpu_alarm_period" {
   }
 }
 
+variable "memory_alarm_threshold" {
+  type        = number
+  description = "Freeable memory threshold in bytes. Alarm fires when memory drops below this value."
+  default     = 256000000 # 256 MB
+
+  validation {
+    condition     = var.memory_alarm_threshold > 0
+    error_message = "memory_alarm_threshold must be greater than 0."
+  }
+}
+
+variable "memory_alarm_evaluation_periods" {
+  type        = number
+  description = "Number of consecutive periods the threshold must be breached before alarming"
+  default     = 3
+
+  validation {
+    condition     = var.memory_alarm_evaluation_periods >= 1
+    error_message = "memory_alarm_evaluation_periods must be at least 1."
+  }
+}
+
+variable "memory_alarm_period" {
+  type        = number
+  description = "Period in seconds over which the freeable memory metric is evaluated"
+  default     = 300
+
+  validation {
+    condition     = var.memory_alarm_period >= 60 && var.memory_alarm_period % 60 == 0
+    error_message = "memory_alarm_period must be a multiple of 60 seconds and at least 60 (CloudWatch requirement)."
+  }
+}
+
 variable "alarm_actions" {
   type        = list(string)
   description = "List of ARNs to notify when the alarm transitions state (e.g. SNS topic ARNs)"

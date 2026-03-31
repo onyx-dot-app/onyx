@@ -74,3 +74,26 @@ resource "aws_cloudwatch_metric_alarm" "cpu_utilization" {
 
   tags = var.tags
 }
+
+# CloudWatch alarm for freeable memory monitoring
+resource "aws_cloudwatch_metric_alarm" "freeable_memory" {
+  alarm_name          = "${var.identifier}-freeable-memory"
+  alarm_description   = "RDS freeable memory for ${var.identifier}"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = var.memory_alarm_evaluation_periods
+  metric_name         = "FreeableMemory"
+  namespace           = "AWS/RDS"
+  period              = var.memory_alarm_period
+  statistic           = "Average"
+  threshold           = var.memory_alarm_threshold
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.this.identifier
+  }
+
+  tags = var.tags
+}
