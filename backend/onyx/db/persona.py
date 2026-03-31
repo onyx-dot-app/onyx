@@ -305,7 +305,7 @@ def create_update_persona(
             commit=False,
             hierarchy_node_ids=create_persona_request.hierarchy_node_ids,
             document_ids=create_persona_request.document_ids,
-            is_visible=create_persona_request.is_visible,
+            is_listed=create_persona_request.is_visible,
         )
 
         versioned_update_persona_access = fetch_versioned_implementation(
@@ -912,7 +912,6 @@ def upsert_persona(
     icon_name: str | None = None,
     display_priority: int | None = None,
     is_listed: bool = True,
-    is_visible: bool = True,
     remove_image: bool | None = None,
     search_start_date: datetime | None = None,
     builtin_persona: bool = False,
@@ -1040,7 +1039,6 @@ def upsert_persona(
             existing_persona.uploaded_image_id = uploaded_image_id
         existing_persona.icon_name = icon_name
         existing_persona.is_listed = is_listed
-        existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
         if label_ids is not None:
             existing_persona.labels.clear()
@@ -1113,7 +1111,6 @@ def upsert_persona(
             icon_name=icon_name,
             display_priority=display_priority,
             is_listed=is_listed,
-            is_visible=is_visible,
             search_start_date=search_start_date,
             is_featured=(is_featured if is_featured is not None else False),
             user_files=user_files or [],
