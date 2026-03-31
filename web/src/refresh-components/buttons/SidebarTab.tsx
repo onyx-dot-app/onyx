@@ -64,7 +64,7 @@ export default function SidebarTab({
         group="group/SidebarTab"
       >
         <Interactive.Container
-          roundingVariant="compact"
+          roundingVariant="sm"
           heightVariant="lg"
           widthVariant="full"
           type={type}

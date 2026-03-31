@@ -51,6 +51,18 @@ export type ContainerSizeVariants = Exclude<SizeVariants, "full">;
 export type PaddingVariants = "lg" | "md" | "sm" | "xs" | "2xs";
 
 /**
+ * Rounding size variants.
+ *
+ * | Variant | Class        |
+ * |---------|--------------|
+ * | `lg`    | `rounded-16` |
+ * | `md`    | `rounded-12` |
+ * | `sm`    | `rounded-08` |
+ * | `xs`    | `rounded-04` |
+ */
+export type RoundingVariants = "lg" | "md" | "sm" | "xs";
+
+/**
  * Extreme size variants ("fit" and "full" only).
  *
  * Used for width and height properties that only support extremal values.

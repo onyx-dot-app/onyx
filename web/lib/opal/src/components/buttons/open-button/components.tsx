@@ -127,7 +127,7 @@ function OpenButton({
         widthVariant={width}
         roundingVariant={
           roundingVariantOverride ??
-          (isLarge ? "default" : size === "2xs" ? "mini" : "compact")
+          (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
         }
       >
         <div
