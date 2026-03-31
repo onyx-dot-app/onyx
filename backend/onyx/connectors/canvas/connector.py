@@ -37,7 +37,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-
 def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
     """Map Canvas API errors to connector framework exceptions."""
     if e.status_code == 401:
@@ -51,6 +50,10 @@ def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
     elif e.status_code == 429:
         raise ConnectorValidationError(
             "Canvas rate-limit exceeded (HTTP 429). Please try again later."
+        )
+    elif e.status_code >= 500:
+        raise UnexpectedValidationError(
+            f"Unexpected Canvas HTTP error (status={e.status_code}): {e}"
         )
     else:
         raise ConnectorValidationError(
@@ -86,9 +89,7 @@ class CanvasPage(BaseModel):
     course_id: int
 
     @classmethod
-    def from_api(
-        cls, payload: dict[str, Any], course_id: int
-    ) -> "CanvasPage":
+    def from_api(cls, payload: dict[str, Any], course_id: int) -> "CanvasPage":
         return cls(
             page_id=payload["page_id"],
             url=payload["url"],
@@ -111,9 +112,7 @@ class CanvasAssignment(BaseModel):
     due_at: str | None = None
 
     @classmethod
-    def from_api(
-        cls, payload: dict[str, Any], course_id: int
-    ) -> "CanvasAssignment":
+    def from_api(cls, payload: dict[str, Any], course_id: int) -> "CanvasAssignment":
         return cls(
             id=payload["id"],
             name=payload["name"],
@@ -135,9 +134,7 @@ class CanvasAnnouncement(BaseModel):
     course_id: int
 
     @classmethod
-    def from_api(
-        cls, payload: dict[str, Any], course_id: int
-    ) -> "CanvasAnnouncement":
+    def from_api(cls, payload: dict[str, Any], course_id: int) -> "CanvasAnnouncement":
         return cls(
             id=payload["id"],
             title=payload["title"],
@@ -299,8 +296,9 @@ class CanvasConnector(
             text_parts.append(body_text)
 
         doc_updated_at = (
-            datetime.fromisoformat(page.updated_at.replace("Z", "+00:00"))
-            .astimezone(timezone.utc)
+            datetime.fromisoformat(page.updated_at.replace("Z", "+00:00")).astimezone(
+                timezone.utc
+            )
             if page.updated_at
             else None
         )
@@ -316,9 +314,7 @@ class CanvasConnector(
         )
         return document
 
-    def _convert_assignment_to_document(
-        self, assignment: CanvasAssignment
-    ) -> Document:
+    def _convert_assignment_to_document(self, assignment: CanvasAssignment) -> Document:
         """Convert a Canvas assignment to a Document."""
         text_parts = [assignment.name]
         desc_text = (
@@ -335,8 +331,9 @@ class CanvasConnector(
             text_parts.append(f"Due: {due_dt.strftime('%B %d, %Y %H:%M UTC')}")
 
         doc_updated_at = (
-            datetime.fromisoformat(assignment.updated_at.replace("Z", "+00:00"))
-            .astimezone(timezone.utc)
+            datetime.fromisoformat(
+                assignment.updated_at.replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
             if assignment.updated_at
             else None
         )
@@ -358,16 +355,15 @@ class CanvasConnector(
         """Convert a Canvas announcement to a Document."""
         text_parts = [announcement.title]
         msg_text = (
-            parse_html_page_basic(announcement.message)
-            if announcement.message
-            else ""
+            parse_html_page_basic(announcement.message) if announcement.message else ""
         )
         if msg_text:
             text_parts.append(msg_text)
 
         doc_updated_at = (
-            datetime.fromisoformat(announcement.posted_at.replace("Z", "+00:00"))
-            .astimezone(timezone.utc)
+            datetime.fromisoformat(
+                announcement.posted_at.replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
             if announcement.posted_at
             else None
         )
@@ -376,8 +372,7 @@ class CanvasConnector(
             doc_id=f"canvas-announcement-{announcement.course_id}-{announcement.id}",
             link=announcement.html_url,
             text="\n\n".join(text_parts),
-            semantic_identifier=announcement.title
-            or f"Announcement {announcement.id}",
+            semantic_identifier=announcement.title or f"Announcement {announcement.id}",
             doc_updated_at=doc_updated_at,
             course_id=announcement.course_id,
             doc_type="announcement",
@@ -385,9 +380,7 @@ class CanvasConnector(
         return document
 
     @override
-    def load_credentials(
-        self, credentials: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load and validate Canvas credentials."""
         access_token = credentials.get("canvas_access_token")
         if not access_token:
@@ -400,9 +393,7 @@ class CanvasConnector(
             )
             client.get("courses", params={"per_page": "1"})
         except ValueError as e:
-            raise ConnectorValidationError(
-                f"Invalid Canvas base URL: {e}"
-            )
+            raise ConnectorValidationError(f"Invalid Canvas base URL: {e}")
         except OnyxError as e:
             _handle_canvas_api_error(e)
 

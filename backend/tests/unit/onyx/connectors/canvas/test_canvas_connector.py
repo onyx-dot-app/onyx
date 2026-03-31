@@ -16,9 +16,7 @@ from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
 from onyx.error_handling.exceptions import OnyxError
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -555,7 +553,9 @@ class TestLoadCredentials:
     def test_load_credentials_insufficient_permissions(
         self, mock_requests: MagicMock
     ) -> None:
-        self._assert_load_credentials_raises(403, InsufficientPermissionsError, mock_requests)
+        self._assert_load_credentials_raises(
+            403, InsufficientPermissionsError, mock_requests
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -621,6 +621,7 @@ class TestDocumentConversion:
         assert doc.source == DocumentSource.CANVAS
         assert doc.semantic_identifier == "Syllabus"
         assert doc.metadata == expected_metadata
+        assert doc.sections[0].link is not None
         assert f"{FAKE_BASE_URL}/courses/1/pages/syllabus" in doc.sections[0].link
         assert doc.doc_updated_at == expected_updated_at
 
@@ -639,6 +640,7 @@ class TestDocumentConversion:
 
         doc = self.connector._convert_page_to_document(page)
         section_text = doc.sections[0].text
+        assert section_text is not None
 
         assert "Empty Page" in section_text
         assert "<p>" not in section_text
@@ -665,6 +667,7 @@ class TestDocumentConversion:
         assert doc.id == expected_id
         assert doc.source == DocumentSource.CANVAS
         assert doc.semantic_identifier == "Homework 1"
+        assert doc.sections[0].text is not None
         assert expected_due_text in doc.sections[0].text
 
     def test_convert_assignment_without_description(self) -> None:
@@ -683,6 +686,7 @@ class TestDocumentConversion:
 
         doc = self.connector._convert_assignment_to_document(assignment)
         section_text = doc.sections[0].text
+        assert section_text is not None
 
         assert "Quiz 1" in section_text
         assert "Due:" not in section_text
@@ -759,9 +763,7 @@ class TestValidateConnectorSettings:
         self._assert_validate_raises(401, CredentialExpiredError, mock_requests)
 
     @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_validate_insufficient_permissions(
-        self, mock_requests: MagicMock
-    ) -> None:
+    def test_validate_insufficient_permissions(self, mock_requests: MagicMock) -> None:
         self._assert_validate_raises(403, InsufficientPermissionsError, mock_requests)
 
     @patch("onyx.connectors.canvas.client.rl_requests")
@@ -776,6 +778,7 @@ class TestValidateConnectorSettings:
 # ---------------------------------------------------------------------------
 # _list_* pagination tests
 # ---------------------------------------------------------------------------
+
 
 class TestListCourses:
     @patch("onyx.connectors.canvas.client.rl_requests")
