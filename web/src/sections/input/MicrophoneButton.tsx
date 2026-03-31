@@ -122,7 +122,10 @@ function MicrophoneButton({
     startRecording,
     stopRecording,
     setMuted,
-  } = useVoiceRecorder({ onFinalTranscript: handleFinalTranscript });
+  } = useVoiceRecorder({
+    onFinalTranscript: handleFinalTranscript,
+    autoStopOnSilence: autoSend,
+  });
 
   // Expose stopRecording to parent
   useEffect(() => {
