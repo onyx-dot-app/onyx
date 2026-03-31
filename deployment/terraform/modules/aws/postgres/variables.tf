@@ -157,6 +157,39 @@ variable "memory_alarm_period" {
   }
 }
 
+variable "read_iops_alarm_threshold" {
+  type        = number
+  description = "ReadIOPS threshold. Alarm fires when IOPS exceeds this value."
+  default     = 3000
+
+  validation {
+    condition     = var.read_iops_alarm_threshold > 0
+    error_message = "read_iops_alarm_threshold must be greater than 0."
+  }
+}
+
+variable "iops_alarm_evaluation_periods" {
+  type        = number
+  description = "Number of consecutive periods the IOPS threshold must be breached before alarming"
+  default     = 3
+
+  validation {
+    condition     = var.iops_alarm_evaluation_periods >= 1
+    error_message = "iops_alarm_evaluation_periods must be at least 1."
+  }
+}
+
+variable "iops_alarm_period" {
+  type        = number
+  description = "Period in seconds over which the IOPS metric is evaluated"
+  default     = 300
+
+  validation {
+    condition     = var.iops_alarm_period >= 60 && var.iops_alarm_period % 60 == 0
+    error_message = "iops_alarm_period must be a multiple of 60 seconds and at least 60 (CloudWatch requirement)."
+  }
+}
+
 variable "alarm_actions" {
   type        = list(string)
   description = "List of ARNs to notify when the alarm transitions state (e.g. SNS topic ARNs)"
