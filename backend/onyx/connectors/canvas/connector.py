@@ -60,7 +60,7 @@ def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
             f"Canvas API error (status={e.status_code}): {e}"
         )
 
-def _handle_canvas_api_error(e: OnyxError) -> None:
+def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
     """Map Canvas API errors to connector framework exceptions."""
     if e.status_code == 401:
         raise CredentialExpiredError(
