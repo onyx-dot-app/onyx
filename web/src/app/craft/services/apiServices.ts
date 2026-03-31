@@ -649,6 +649,33 @@ export async function exportDocx(
   return res.blob();
 }
 
+/**
+ * Export a markdown file as ODT (OpenDocument Text).
+ * Returns a Blob of the converted document.
+ */
+export async function exportOdt(
+  sessionId: string,
+  path: string
+): Promise<Blob> {
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  const res = await fetch(
+    `${API_BASE}/sessions/${sessionId}/export-odt/${encodedPath}`
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to export as ODT: ${res.status}`
+    );
+  }
+
+  return res.blob();
+}
+
 // =============================================================================
 // PPTX Preview API
 // =============================================================================

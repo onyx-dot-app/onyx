@@ -11,6 +11,11 @@ WORD_PROCESSING_MIME_TYPE = (
 PDF_MIME_TYPE = "application/pdf"
 PLAIN_TEXT_MIME_TYPE = "text/plain"
 
+# ODF (Open Document Format) MIME types
+ODF_TEXT_MIME_TYPE = "application/vnd.oasis.opendocument.text"
+ODF_SPREADSHEET_MIME_TYPE = "application/vnd.oasis.opendocument.spreadsheet"
+ODF_PRESENTATION_MIME_TYPE = "application/vnd.oasis.opendocument.presentation"
+
 
 class OnyxMimeTypes:
     IMAGE_MIME_TYPES = {"image/jpg", "image/jpeg", "image/png", "image/webp"}
@@ -37,6 +42,9 @@ class OnyxMimeTypes:
         SPREADSHEET_MIME_TYPE,
         "message/rfc822",
         "application/epub+zip",
+        ODF_TEXT_MIME_TYPE,
+        ODF_SPREADSHEET_MIME_TYPE,
+        ODF_PRESENTATION_MIME_TYPE,
     }
 
     ALLOWED_MIME_TYPES = IMAGE_MIME_TYPES.union(
@@ -75,6 +83,9 @@ class OnyxFileExtensions:
         ".eml",
         ".epub",
         ".html",
+        ".odt",
+        ".ods",
+        ".odp",
     }
     IMAGE_EXTENSIONS = {
         ".png",

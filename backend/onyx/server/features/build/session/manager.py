@@ -1663,28 +1663,15 @@ class SessionManager:
 
         return (content, mime_type or "application/octet-stream", filename)
 
-    def export_docx(
+    def _export_markdown_artifact(
         self,
         session_id: UUID,
         user_id: UUID,
         path: str,
+        *,
+        export_format: str,
     ) -> tuple[bytes, str] | None:
-        """
-        Export a markdown file as DOCX.
-
-        Reads the markdown file and converts it to DOCX using pypandoc.
-
-        Args:
-            session_id: The session UUID
-            user_id: The user ID to verify ownership
-            path: Relative path to the markdown file
-
-        Returns:
-            Tuple of (docx_bytes, filename) or None if not found
-
-        Raises:
-            ValueError: If path traversal attempted, file is not markdown, etc.
-        """
+        """Export a markdown artifact to another document format via pandoc."""
         result = self.download_artifact(session_id, user_id, path)
         if result is None:
             return None
@@ -1692,19 +1679,64 @@ class SessionManager:
         content_bytes, _mime_type, filename = result
 
         if not filename.lower().endswith(".md"):
-            raise ValueError("Only markdown (.md) files can be exported as DOCX")
+            raise ValueError(
+                f"Only markdown (.md) files can be exported as {export_format.upper()}"
+            )
 
         import tempfile
+
         import pypandoc  # type: ignore
 
         md_text = content_bytes.decode("utf-8")
+        tmp_path: str | None = None
 
-        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
-            pypandoc.convert_text(md_text, "docx", format="md", outputfile=tmp.name)
-            docx_bytes = tmp.read()
+        try:
+            with tempfile.NamedTemporaryFile(
+                suffix=f".{export_format}", delete=False
+            ) as tmp:
+                tmp_path = tmp.name
 
-        docx_filename = filename.rsplit(".", 1)[0] + ".docx"
-        return (docx_bytes, docx_filename)
+            pypandoc.convert_text(
+                md_text,
+                export_format,
+                format="md",
+                outputfile=tmp_path,
+            )
+            exported_bytes = Path(tmp_path).read_bytes()
+        finally:
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
+
+        exported_filename = filename.rsplit(".", 1)[0] + f".{export_format}"
+        return (exported_bytes, exported_filename)
+
+    def export_docx(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        path: str,
+    ) -> tuple[bytes, str] | None:
+        """Export a markdown file as DOCX."""
+        return self._export_markdown_artifact(
+            session_id,
+            user_id,
+            path,
+            export_format="docx",
+        )
+
+    def export_odt(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        path: str,
+    ) -> tuple[bytes, str] | None:
+        """Export a markdown file as ODT (OpenDocument Text)."""
+        return self._export_markdown_artifact(
+            session_id,
+            user_id,
+            path,
+            export_format="odt",
+        )
 
     def get_pptx_preview(
         self,

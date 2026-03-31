@@ -418,6 +418,57 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
+def _open_document_to_text(
+    file: IO[Any],
+    *,
+    suffix: str,
+    pandoc_format: str,
+    file_name: str = "",
+) -> str:
+    """Extract text from an OpenDocument file via a temporary file path."""
+    import tempfile
+
+    import pypandoc  # type: ignore
+
+    tmp_path: str | None = None
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(file.read())
+            tmp_path = tmp.name
+
+        return pypandoc.convert_file(tmp_path, "plain", format=pandoc_format)
+    except Exception as e:
+        logger.warning(
+            f"Failed to extract text from {file_name or f'{pandoc_format} file'}: {e}"
+        )
+        return ""
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
+
+
+def odt_to_text(file: IO[Any], file_name: str = "") -> str:
+    """Extract text from an ODT (OpenDocument Text) file using pypandoc."""
+    return _open_document_to_text(
+        file, suffix=".odt", pandoc_format="odt", file_name=file_name
+    )
+
+
+def ods_to_text(file: IO[Any], file_name: str = "") -> str:
+    """Extract text from an ODS (OpenDocument Spreadsheet) file using pypandoc."""
+    return _open_document_to_text(
+        file, suffix=".ods", pandoc_format="ods", file_name=file_name
+    )
+
+
+def odp_to_text(file: IO[Any], file_name: str = "") -> str:
+    """Extract text from an ODP (OpenDocument Presentation) file using pypandoc."""
+    return _open_document_to_text(
+        file, suffix=".odp", pandoc_format="odp", file_name=file_name
+    )
+
+
 def eml_to_text(file: IO[Any]) -> str:
     encoding = detect_encoding(file)
     text_file = io.TextIOWrapper(file, encoding=encoding)
@@ -488,6 +539,9 @@ def extract_file_text(
         ".eml": eml_to_text,
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
+        ".odt": lambda f: odt_to_text(f, file_name),
+        ".ods": lambda f: ods_to_text(f, file_name),
+        ".odp": lambda f: odp_to_text(f, file_name),
     }
 
     try:
@@ -662,6 +716,27 @@ def _extract_text_and_images(
         if extension == ".html":
             return ExtractionResult(
                 text_content=parse_html_page_basic(file),
+                embedded_images=[],
+                metadata={},
+            )
+
+        if extension == ".odt":
+            return ExtractionResult(
+                text_content=odt_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
+            )
+
+        if extension == ".ods":
+            return ExtractionResult(
+                text_content=ods_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
+            )
+
+        if extension == ".odp":
+            return ExtractionResult(
+                text_content=odp_to_text(file, file_name=file_name),
                 embedded_images=[],
                 metadata={},
             )

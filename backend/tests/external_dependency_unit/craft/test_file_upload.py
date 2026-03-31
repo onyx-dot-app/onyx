@@ -6,6 +6,9 @@ including limit enforcement and SandboxManager delegation.
 
 from __future__ import annotations
 
+import io
+import sys
+import types
 from collections.abc import Generator
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
@@ -164,6 +167,78 @@ class TestFileUpload:
                 filename="test.txt",
                 content=b"content",
             )
+
+
+class TestSessionExports:
+    """Regression tests for build session export helpers."""
+
+    def test_export_docx_and_odt_return_converted_bytes(
+        self,
+        session_manager_with_mock: "SessionManager",
+    ) -> None:
+        """DOCX/ODT export should return the bytes written by pandoc."""
+
+        def fake_convert_text(
+            text: str,
+            to: str,
+            format: str,
+            outputfile: str,
+        ) -> None:
+            assert text == "# Hello from markdown"
+            assert format == "md"
+            with open(outputfile, "wb") as handle:
+                handle.write(f"converted-{to}".encode("utf-8"))
+
+        fake_pypandoc = types.SimpleNamespace(convert_text=fake_convert_text)
+
+        with (
+            patch.object(
+                session_manager_with_mock,
+                "download_artifact",
+                return_value=(
+                    b"# Hello from markdown",
+                    "text/markdown",
+                    "notes.md",
+                ),
+            ),
+            patch.dict(sys.modules, {"pypandoc": fake_pypandoc}),
+        ):
+            docx_bytes, docx_filename = session_manager_with_mock.export_docx(
+                uuid4(), uuid4(), "notes.md"
+            ) or (b"", "")
+            odt_bytes, odt_filename = session_manager_with_mock.export_odt(
+                uuid4(), uuid4(), "notes.md"
+            ) or (b"", "")
+
+        assert docx_bytes == b"converted-docx"
+        assert docx_filename == "notes.docx"
+        assert odt_bytes == b"converted-odt"
+        assert odt_filename == "notes.odt"
+
+    @pytest.mark.parametrize(
+        ("file_name", "converter"),
+        [("sample.odt", "odt"), ("sheet.ods", "ods"), ("slides.odp", "odp")],
+    )
+    def test_open_document_extractors_read_temp_files(
+        self,
+        file_name: str,
+        converter: str,
+    ) -> None:
+        """ODF text extractors should pass a readable temp path to pandoc."""
+        from onyx.file_processing.extract_file_text import extract_file_text
+
+        def fake_convert_file(file_path: str, to: str, format: str) -> str:
+            assert to == "plain"
+            assert format == converter
+            with open(file_path, "rb") as handle:
+                return handle.read().decode("utf-8")
+
+        fake_pypandoc = types.SimpleNamespace(convert_file=fake_convert_file)
+
+        with patch.dict(sys.modules, {"pypandoc": fake_pypandoc}):
+            text = extract_file_text(io.BytesIO(b"OpenDocument content"), file_name)
+
+        assert text == "OpenDocument content"
 
 
 class TestFileUploadLimits:
