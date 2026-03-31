@@ -82,6 +82,7 @@ def create_user_files(
         )
         if new_temp_id is not None:
             id_to_temp_id[str(new_id)] = new_temp_id
+        should_skip = (file.filename or "") in categorized_files.skip_indexing
         new_file = UserFile(
             id=new_id,
             user_id=user.id,
@@ -93,6 +94,7 @@ def create_user_files(
             link_url=link_url,
             content_type=file.content_type,
             file_type=file.content_type,
+            status=UserFileStatus.SKIPPED if should_skip else UserFileStatus.PROCESSING,
             last_accessed_at=datetime.datetime.now(datetime.timezone.utc),
         )
         # Persist the UserFile first to satisfy FK constraints for association table
@@ -137,12 +139,6 @@ def upload_files_to_user_files_with_indexing(
     rejected_files = categorized_files_result.rejected_files
     id_to_temp_id = categorized_files_result.id_to_temp_id
     indexable_files = categorized_files_result.indexable_files
-
-    # Skip-indexed files should not be processed — mark them SKIPPED immediately
-    for uf in user_files:
-        if (uf.name or "") in categorized_files_result.skip_indexing_filenames:
-            uf.status = UserFileStatus.SKIPPED
-    db_session.commit()
 
     # Trigger per-file processing immediately for the current tenant
     tenant_id = get_current_tenant_id()
