@@ -415,7 +415,7 @@ def check_indexing_completion(
     logger.info(
         f"Indexing status: "
         f"indexing_completed={indexing_completed} "
-        f"batches_processed={batches_processed}/{batches_total or '?'} "
+        f"batches_processed={batches_processed}/{batches_total if batches_total is not None else '?'} "
         f"total_docs={coordination_status.total_docs} "
         f"total_chunks={coordination_status.total_chunks} "
         f"total_failures={coordination_status.total_failures}"
