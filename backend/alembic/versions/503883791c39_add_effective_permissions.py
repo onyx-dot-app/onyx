@@ -27,6 +27,25 @@ down_revision = "b4b7e1028dfd"
 branch_labels: str | None = None
 depends_on: str | Sequence[str] | None = None
 
+user_table = sa.table(
+    "user",
+    sa.column("id", sa.Uuid),
+    sa.column("effective_permissions", postgresql.JSONB),
+)
+
+user_user_group = sa.table(
+    "user__user_group",
+    sa.column("user_id", sa.Uuid),
+    sa.column("user_group_id", sa.Integer),
+)
+
+permission_grant = sa.table(
+    "permission_grant",
+    sa.column("group_id", sa.Integer),
+    sa.column("permission", sa.String),
+    sa.column("is_deleted", sa.Boolean),
+)
+
 
 def upgrade() -> None:
     op.add_column(
@@ -41,26 +60,42 @@ def upgrade() -> None:
 
     conn = op.get_bind()
 
-    conn.execute(
-        sa.text(
-            """
-            UPDATE "user" u
-            SET effective_permissions = sub.perms
-            FROM (
-                SELECT user_id,
-                       jsonb_agg(permission ORDER BY permission) AS perms
-                FROM (
-                    SELECT DISTINCT uug.user_id, pg.permission
-                    FROM user__user_group uug
-                    JOIN permission_grant pg
-                      ON pg.group_id = uug.user_group_id
-                     AND pg.is_deleted = false
-                ) deduped
-                GROUP BY user_id
-            ) sub
-            WHERE u.id = sub.user_id
-            """
+    # Deduplicated permissions per user
+    deduped = (
+        sa.select(
+            user_user_group.c.user_id,
+            permission_grant.c.permission,
         )
+        .select_from(
+            user_user_group.join(
+                permission_grant,
+                sa.and_(
+                    permission_grant.c.group_id == user_user_group.c.user_group_id,
+                    permission_grant.c.is_deleted == sa.false(),
+                ),
+            )
+        )
+        .distinct()
+        .subquery("deduped")
+    )
+
+    # Aggregate into sorted JSONB array per user
+    perms_per_user = (
+        sa.select(
+            deduped.c.user_id,
+            sa.func.jsonb_agg(
+                deduped.c.permission,
+                type_=postgresql.JSONB,
+            ).label("perms"),
+        )
+        .group_by(deduped.c.user_id)
+        .subquery("sub")
+    )
+
+    conn.execute(
+        user_table.update()
+        .where(user_table.c.id == perms_per_user.c.user_id)
+        .values(effective_permissions=perms_per_user.c.perms)
     )
 
 
