@@ -180,7 +180,7 @@ WARM_UP_STRINGS = [
 
 
 def clean_model_name(model_str: str) -> str:
-    return model_str.replace("/", "_").replace("-", "_").replace(".", "_")
+    return model_str.replace("/", "_").replace("-", "_").replace(".", "_").lower()
 
 
 def build_model_server_url(
