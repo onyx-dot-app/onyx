@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { formatTimeOnly } from "@/lib/dateUtils";
 import { Text } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover from "@/refresh-components/Popover";
@@ -26,15 +27,6 @@ interface HookStatusPopoverProps {
   hook: HookResponse;
   spec: HookPointMeta | undefined;
   isBusy: boolean;
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
 }
 
 export default function HookStatusPopover({
@@ -253,7 +245,7 @@ export default function HookStatusPopover({
                       >
                         <span className="text-code-code">
                           <Text font="secondary-mono-label" color="inherit">
-                            {formatTime(log.created_at)}
+                            {formatTimeOnly(log.created_at)}
                           </Text>
                         </span>
                         <CopyIconButton

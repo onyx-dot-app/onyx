@@ -6,6 +6,8 @@ import Modal from "@/refresh-components/Modal";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { useHookExecutionLogs } from "@/hooks/useHookExecutionLogs";
+import { formatDateTimeLog } from "@/lib/dateUtils";
+import { downloadFile } from "@/lib/download";
 import { Section } from "@/layouts/general-layouts";
 import type {
   HookExecutionRecord,
@@ -18,14 +20,6 @@ interface HookLogsModalProps {
   onOpenChange: (open: boolean) => void;
   hook: HookResponse;
   spec: HookPointMeta | undefined;
-}
-
-function formatTimestamp(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 // Section header: "Past Hour ————" or "Older ————"
@@ -58,11 +52,11 @@ function LogRow({ log }: { log: HookExecutionRecord }) {
       {/* 1. Timestamp */}
       <span className="shrink-0 text-code-code">
         <Text font="secondary-mono-label" color="inherit" nowrap>
-          {formatTimestamp(log.created_at)}
+          {formatDateTimeLog(log.created_at)}
         </Text>
       </span>
       {/* 2. Error message */}
-      <span className="flex-1 min-w-0 break-all text-code-code">
+      <span className="flex-1 min-w-0 break-all whitespace-pre-wrap text-code-code">
         <Text font="secondary-mono" color="inherit">
           {log.error_message ?? "Unknown error"}
         </Text>
@@ -93,7 +87,7 @@ export default function HookLogsModal({
     return allLogs
       .map(
         (log) =>
-          `${formatTimestamp(log.created_at)} ${
+          `${formatDateTimeLog(log.created_at)} ${
             log.error_message ?? "Unknown error"
           }`
       )
@@ -101,13 +95,7 @@ export default function HookLogsModal({
   }
 
   function handleDownload() {
-    const blob = new Blob([getLogsText()], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${hook.name}-errors.txt`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 100);
+    downloadFile(`${hook.name}-errors.txt`, { content: getLogsText() });
   }
 
   return (
