@@ -15,7 +15,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { Vertical as VerticalInput } from "@/layouts/input-layouts";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
-import { SvgKey } from "@opal/icons";
+import { SvgKey, SvgLock, SvgUser, SvgUserManage } from "@opal/icons";
 
 interface ApiKeyFormModalProps {
   onClose: () => void;
@@ -121,14 +121,26 @@ export default function ApiKeyFormModal({
                       >
                         <InputSelect.Trigger placeholder="Select permissions" />
                         <InputSelect.Content>
-                          <InputSelect.Item value={UserRole.LIMITED.toString()}>
-                            {USER_ROLE_LABELS[UserRole.LIMITED]}
+                          <InputSelect.Item
+                            value={UserRole.ADMIN.toString()}
+                            icon={SvgUserManage}
+                            description="Unrestricted admin access to all endpoints."
+                          >
+                            {USER_ROLE_LABELS[UserRole.ADMIN]}
                           </InputSelect.Item>
-                          <InputSelect.Item value={UserRole.BASIC.toString()}>
+                          <InputSelect.Item
+                            value={UserRole.BASIC.toString()}
+                            icon={SvgUser}
+                            description="Standard user-level access to non-admin endpoints."
+                          >
                             {USER_ROLE_LABELS[UserRole.BASIC]}
                           </InputSelect.Item>
-                          <InputSelect.Item value={UserRole.ADMIN.toString()}>
-                            {USER_ROLE_LABELS[UserRole.ADMIN]}
+                          <InputSelect.Item
+                            value={UserRole.LIMITED.toString()}
+                            icon={SvgLock}
+                            description="For agents: chat posting and read-only access to other endpoints."
+                          >
+                            {USER_ROLE_LABELS[UserRole.LIMITED]}
                           </InputSelect.Item>
                         </InputSelect.Content>
                       </InputSelect>
