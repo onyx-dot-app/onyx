@@ -168,10 +168,23 @@ def get_default_llm_with_vision(
             if model_supports_image_input(
                 default_model.name, default_model.llm_provider.provider
             ):
+                logger.info(
+                    "Using default vision model: %s (provider=%s)",
+                    default_model.name,
+                    default_model.llm_provider.provider,
+                )
                 return create_vision_llm(
                     LLMProviderView.from_model(default_model.llm_provider),
                     default_model.name,
                 )
+            else:
+                logger.warning(
+                    "Default vision model %s (provider=%s) does not support "
+                    "image input — falling back to searching all providers",
+                    default_model.name,
+                    default_model.llm_provider.provider,
+                )
+
         # Fall back to searching all providers
         models = fetch_existing_models(
             db_session=db_session,
@@ -179,6 +192,10 @@ def get_default_llm_with_vision(
         )
 
         if not models:
+            logger.warning(
+                "No LLM models with VISION or CHAT flow type found — "
+                "image summarization will be disabled"
+            )
             return None
 
         for model in models:
@@ -200,11 +217,25 @@ def get_default_llm_with_vision(
 
     for model in sorted_models:
         if model_supports_image_input(model.name, model.llm_provider.provider):
+            logger.info(
+                "Using fallback vision model: %s (provider=%s)",
+                model.name,
+                model.llm_provider.provider,
+            )
             return create_vision_llm(
                 provider_map[model.llm_provider_id],
                 model.name,
             )
 
+    checked_models = [
+        f"{m.name} (provider={m.llm_provider.provider})" for m in sorted_models
+    ]
+    logger.warning(
+        "No vision-capable model found among %d candidates: %s — "
+        "image summarization will be disabled",
+        len(sorted_models),
+        ", ".join(checked_models),
+    )
     return None
 
 

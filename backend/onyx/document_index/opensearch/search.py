@@ -3,10 +3,12 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Any
-from uuid import UUID
+from typing import TypeAlias
+from typing import TypeVar
 
 from onyx.configs.app_configs import DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S
 from onyx.configs.app_configs import OPENSEARCH_EXPLAIN_ENABLED
+from onyx.configs.app_configs import OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED
 from onyx.configs.app_configs import OPENSEARCH_PROFILING_DISABLED
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
@@ -48,13 +50,21 @@ from onyx.document_index.opensearch.schema import TITLE_FIELD_NAME
 from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
 from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 
-# Normalization pipelines combine document scores from multiple query clauses.
-# The number and ordering of weights should match the query clauses. The values
-# of the weights should sum to 1.
+# See https://docs.opensearch.org/latest/query-dsl/term/terms/.
+MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY = 65_536
+
+
+_T = TypeVar("_T")
+TermsQuery: TypeAlias = dict[str, dict[str, list[_T]]]
+TermQuery: TypeAlias = dict[str, dict[str, dict[str, _T]]]
+
 
 # TODO(andrei): Turn all magic dictionaries to pydantic models.
 
 
+# Normalization pipelines combine document scores from multiple query clauses.
+# The number and ordering of weights should match the query clauses. The values
+# of the weights should sum to 1.
 def _get_hybrid_search_normalization_weights() -> list[float]:
     if (
         HYBRID_SEARCH_SUBQUERY_CONFIGURATION
@@ -218,9 +228,8 @@ class DocumentQuery:
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
-            user_file_ids=index_filters.user_file_ids or [],
-            project_id=index_filters.project_id,
-            persona_id=index_filters.persona_id,
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=min_chunk_index,
             max_chunk_index=max_chunk_index,
@@ -235,9 +244,17 @@ class DocumentQuery:
             # returning some number of results less than the index max allowed
             # return size.
             "size": DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
-            "_source": get_full_document,
+            # By default exclude retrieving the vector fields in order to save
+            # on retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
+        if not get_full_document:
+            # If we explicitly do not want the underlying document, we will only
+            # retrieve IDs.
+            final_get_ids_query["_source"] = False
         if not OPENSEARCH_PROFILING_DISABLED:
             final_get_ids_query["profile"] = True
 
@@ -277,9 +294,8 @@ class DocumentQuery:
             source_types=[],
             tags=[],
             document_sets=[],
-            user_file_ids=[],
-            project_id=None,
-            persona_id=None,
+            project_id_filter=None,
+            persona_id_filter=None,
             time_cutoff=None,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -309,6 +325,9 @@ class DocumentQuery:
         NOTE: This query can be directly supplied to the OpenSearch client, but
         it MUST be supplied in addition to a search pipeline. The results from
         hybrid search are not meaningful without that step.
+
+        TODO(andrei): There is some duplicated logic in this function with
+        others in this file.
 
         Args:
             query_text: The text to query for.
@@ -347,17 +366,13 @@ class DocumentQuery:
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
-            user_file_ids=index_filters.user_file_ids or [],
-            project_id=index_filters.project_id,
-            persona_id=index_filters.persona_id,
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
-        )
-        match_highlights_configuration = (
-            DocumentQuery._get_match_highlights_configuration()
         )
 
         # See https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
@@ -385,15 +400,186 @@ class DocumentQuery:
         final_hybrid_search_body: dict[str, Any] = {
             "query": hybrid_search_query,
             "size": num_hits,
-            "highlight": match_highlights_configuration,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
         }
 
-        # Explain is for scoring breakdowns.
+        if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
+            final_hybrid_search_body["highlight"] = (
+                DocumentQuery._get_match_highlights_configuration()
+            )
+
+        # Explain is for scoring breakdowns. Setting this significantly
+        # increases query latency.
         if OPENSEARCH_EXPLAIN_ENABLED:
             final_hybrid_search_body["explain"] = True
 
         return final_hybrid_search_body
+
+    @staticmethod
+    def get_keyword_search_query(
+        query_text: str,
+        num_hits: int,
+        tenant_state: TenantState,
+        index_filters: IndexFilters,
+        include_hidden: bool,
+    ) -> dict[str, Any]:
+        """Returns a final keyword search query.
+
+        This query can be directly supplied to the OpenSearch client.
+
+        TODO(andrei): There is some duplicated logic in this function with
+        others in this file.
+
+        Args:
+            query_text: The text to query for.
+            num_hits: The final number of hits to return.
+            tenant_state: Tenant state containing the tenant ID.
+            index_filters: Filters for the keyword search query.
+            include_hidden: Whether to include hidden documents.
+
+        Returns:
+            A dictionary representing the final keyword search query.
+        """
+        if num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
+            raise ValueError(
+                f"Bug: num_hits ({num_hits}) is greater than the current maximum allowed "
+                f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
+            )
+
+        keyword_search_filters = DocumentQuery._get_search_filters(
+            tenant_state=tenant_state,
+            include_hidden=include_hidden,
+            # TODO(andrei): We've done no filtering for PUBLIC_DOC_PAT up to
+            # now. This should not cause any issues but it can introduce
+            # redundant filters in queries that may affect performance.
+            access_control_list=index_filters.access_control_list,
+            source_types=index_filters.source_type or [],
+            tags=index_filters.tags or [],
+            document_sets=index_filters.document_set or [],
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
+            time_cutoff=index_filters.time_cutoff,
+            min_chunk_index=None,
+            max_chunk_index=None,
+            attached_document_ids=index_filters.attached_document_ids,
+            hierarchy_node_ids=index_filters.hierarchy_node_ids,
+        )
+
+        keyword_search_query = (
+            DocumentQuery._get_title_content_combined_keyword_search_query(
+                query_text, search_filters=keyword_search_filters
+            )
+        )
+
+        final_keyword_search_query: dict[str, Any] = {
+            "query": keyword_search_query,
+            "size": num_hits,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
+        }
+
+        if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
+            final_keyword_search_query["highlight"] = (
+                DocumentQuery._get_match_highlights_configuration()
+            )
+
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_keyword_search_query["profile"] = True
+
+        # Explain is for scoring breakdowns. Setting this significantly
+        # increases query latency.
+        if OPENSEARCH_EXPLAIN_ENABLED:
+            final_keyword_search_query["explain"] = True
+
+        return final_keyword_search_query
+
+    @staticmethod
+    def get_semantic_search_query(
+        query_embedding: list[float],
+        num_hits: int,
+        tenant_state: TenantState,
+        index_filters: IndexFilters,
+        include_hidden: bool,
+    ) -> dict[str, Any]:
+        """Returns a final semantic search query.
+
+        This query can be directly supplied to the OpenSearch client.
+
+        TODO(andrei): There is some duplicated logic in this function with
+        others in this file.
+
+        Args:
+            query_embedding: The vector embedding of the text to query for.
+            num_hits: The final number of hits to return.
+            tenant_state: Tenant state containing the tenant ID.
+            index_filters: Filters for the semantic search query.
+            include_hidden: Whether to include hidden documents.
+
+        Returns:
+            A dictionary representing the final semantic search query.
+        """
+        if num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
+            raise ValueError(
+                f"Bug: num_hits ({num_hits}) is greater than the current maximum allowed "
+                f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
+            )
+
+        semantic_search_filters = DocumentQuery._get_search_filters(
+            tenant_state=tenant_state,
+            include_hidden=include_hidden,
+            # TODO(andrei): We've done no filtering for PUBLIC_DOC_PAT up to
+            # now. This should not cause any issues but it can introduce
+            # redundant filters in queries that may affect performance.
+            access_control_list=index_filters.access_control_list,
+            source_types=index_filters.source_type or [],
+            tags=index_filters.tags or [],
+            document_sets=index_filters.document_set or [],
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
+            time_cutoff=index_filters.time_cutoff,
+            min_chunk_index=None,
+            max_chunk_index=None,
+            attached_document_ids=index_filters.attached_document_ids,
+            hierarchy_node_ids=index_filters.hierarchy_node_ids,
+        )
+
+        semantic_search_query = (
+            DocumentQuery._get_content_vector_similarity_search_query(
+                query_embedding,
+                vector_candidates=num_hits,
+                search_filters=semantic_search_filters,
+            )
+        )
+
+        final_semantic_search_query: dict[str, Any] = {
+            "query": semantic_search_query,
+            "size": num_hits,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
+        }
+
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_semantic_search_query["profile"] = True
+
+        # Explain is for scoring breakdowns. Setting this significantly
+        # increases query latency.
+        if OPENSEARCH_EXPLAIN_ENABLED:
+            final_semantic_search_query["explain"] = True
+
+        return final_semantic_search_query
 
     @staticmethod
     def get_random_search_query(
@@ -418,9 +604,8 @@ class DocumentQuery:
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
-            user_file_ids=index_filters.user_file_ids or [],
-            project_id=index_filters.project_id,
-            persona_id=index_filters.persona_id,
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -446,6 +631,11 @@ class DocumentQuery:
             },
             "size": num_to_retrieve,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            # Exclude retrieving the vector fields in order to save on
+            # retrieval cost as we don't need them upstream.
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
         }
         if not OPENSEARCH_PROFILING_DISABLED:
             final_random_search_query["profile"] = True
@@ -561,8 +751,9 @@ class DocumentQuery:
     def _get_content_vector_similarity_search_query(
         query_vector: list[float],
         vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
+        search_filters: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        return {
+        query = {
             "knn": {
                 CONTENT_VECTOR_FIELD_NAME: {
                     "vector": query_vector,
@@ -571,11 +762,19 @@ class DocumentQuery:
             }
         }
 
+        if search_filters is not None:
+            query["knn"][CONTENT_VECTOR_FIELD_NAME]["filter"] = {
+                "bool": {"filter": search_filters}
+            }
+
+        return query
+
     @staticmethod
     def _get_title_content_combined_keyword_search_query(
         query_text: str,
+        search_filters: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        return {
+        query = {
             "bool": {
                 "should": [
                     {
@@ -583,8 +782,9 @@ class DocumentQuery:
                             TITLE_FIELD_NAME: {
                                 "query": query_text,
                                 "operator": "or",
-                                # The title fields are strongly discounted as they are included in the content.
-                                # It just acts as a minor boost
+                                # The title fields are strongly discounted as
+                                # they are included in the content. This just
+                                # acts as a minor boost.
                                 "boost": 0.1,
                             }
                         }
@@ -599,6 +799,9 @@ class DocumentQuery:
                         }
                     },
                     {
+                        # Analyzes the query and returns results which match any
+                        # of the query's terms. More matches result in higher
+                        # scores.
                         "match": {
                             CONTENT_FIELD_NAME: {
                                 "query": query_text,
@@ -608,17 +811,29 @@ class DocumentQuery:
                         }
                     },
                     {
+                        # Matches an exact phrase in a specified order.
                         "match_phrase": {
                             CONTENT_FIELD_NAME: {
                                 "query": query_text,
+                                # The number of words permitted between words of
+                                # a query phrase and still result in a match.
                                 "slop": 1,
                                 "boost": 1.5,
                             }
                         }
                     },
-                ]
+                ],
+                # Ensures at least one match subquery from the query is present
+                # in the document. This defaults to 1, unless a filter or must
+                # clause is supplied, in which case it defaults to 0.
+                "minimum_should_match": 1,
             }
         }
+
+        if search_filters is not None:
+            query["bool"]["filter"] = search_filters
+
+        return query
 
     @staticmethod
     def _get_search_filters(
@@ -628,9 +843,8 @@ class DocumentQuery:
         source_types: list[DocumentSource],
         tags: list[Tag],
         document_sets: list[str],
-        user_file_ids: list[UUID],
-        project_id: int | None,
-        persona_id: int | None,
+        project_id_filter: int | None,
+        persona_id_filter: int | None,
         time_cutoff: datetime | None,
         min_chunk_index: int | None,
         max_chunk_index: int | None,
@@ -645,7 +859,14 @@ class DocumentQuery:
         The "filter" key applies a logical AND operator to its elements, so
         every subfilter must evaluate to true in order for the document to be
         retrieved. This function returns a list of such subfilters.
-        See https://docs.opensearch.org/latest/query-dsl/compound/bool/
+        See https://docs.opensearch.org/latest/query-dsl/compound/bool/.
+
+        TODO(ENG-3874): The terms queries returned by this function can be made
+        more performant for large cardinality sets by sorting the values by
+        their UTF-8 byte order.
+
+        TODO(ENG-3875): This function can take even better advantage of filter
+        caching by grouping "static" filters together into one sub-clause.
 
         Args:
             tenant_state: Tenant state containing the tenant ID.
@@ -661,12 +882,12 @@ class DocumentQuery:
                 list corresponding to a tag will be retrieved.
             document_sets: If supplied, only documents with at least one
                 document set ID from this list will be retrieved.
-            user_file_ids: If supplied, only document IDs in this list will be
-                retrieved.
-            project_id: If not None, only documents with this project ID in user
-                projects will be retrieved.
-            persona_id: If not None, only documents whose personas array
-                contains this persona ID will be retrieved.
+            project_id_filter: If not None, only documents with this project ID
+                in user projects will be retrieved. Additive — only applied
+                when a knowledge scope already exists.
+            persona_id_filter: If not None, only documents whose personas array
+                contains this persona ID will be retrieved. Primary — creates
+                a knowledge scope on its own.
             time_cutoff: Time cutoff for the documents to retrieve. If not None,
                 Documents which were last updated before this date will not be
                 returned. For documents which do not have a value for their last
@@ -683,16 +904,20 @@ class DocumentQuery:
                 NOTE: See DocumentChunk.max_chunk_size.
             document_id: The document ID to retrieve. If None, no filter will be
                 applied for this. Defaults to None.
-                WARNING: This filters on the same property as user_file_ids.
-                Although it would never make sense to supply both, note that if
-                user_file_ids is supplied and does not contain document_id, no
-                matches will be retrieved.
             attached_document_ids: Document IDs explicitly attached to the
                 assistant. If provided along with hierarchy_node_ids, documents
                 matching EITHER criteria will be retrieved (OR logic).
             hierarchy_node_ids: Hierarchy node IDs (folders/spaces) attached to
                 the assistant. Matches chunks where ancestor_hierarchy_node_ids
                 contains any of these values.
+
+        Raises:
+            ValueError: document_id and attached_document_ids were supplied
+                together. This is not allowed because they operate on the same
+                schema field, and it does not semantically make sense to use
+                them together.
+            ValueError: Too many of one of the collection arguments was
+                supplied.
 
         Returns:
             A list of filters to be passed into the "filter" key of a search
@@ -701,70 +926,156 @@ class DocumentQuery:
 
         def _get_acl_visibility_filter(
             access_control_list: list[str],
-        ) -> dict[str, Any]:
+        ) -> dict[str, dict[str, list[TermQuery[bool] | TermsQuery[str]] | int]]:
+            """Returns a filter for the access control list.
+
+            Since this returns an isolated bool should clause, it can be cached
+            in OpenSearch independently of other clauses in _get_search_filters.
+
+            Args:
+                access_control_list: The access control list to restrict
+                    documents to.
+
+            Raises:
+                ValueError: The number of access control list entries is greater
+                    than MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+
+            Returns:
+                A filter for the access control list.
+            """
             # Logical OR operator on its elements.
-            acl_visibility_filter: dict[str, Any] = {"bool": {"should": []}}
-            acl_visibility_filter["bool"]["should"].append(
-                {"term": {PUBLIC_FIELD_NAME: {"value": True}}}
-            )
-            for acl in access_control_list:
-                acl_subclause: dict[str, Any] = {
-                    "term": {ACCESS_CONTROL_LIST_FIELD_NAME: {"value": acl}}
+            acl_visibility_filter: dict[str, dict[str, Any]] = {
+                "bool": {
+                    "should": [{"term": {PUBLIC_FIELD_NAME: {"value": True}}}],
+                    "minimum_should_match": 1,
+                }
+            }
+            if access_control_list:
+                if len(access_control_list) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                    raise ValueError(
+                        f"Too many access control list entries: {len(access_control_list)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                    )
+                # Use terms instead of a list of term within a should clause
+                # because Lucene will optimize the filtering for large sets of
+                # terms. Small sets of terms are not expected to perform any
+                # differently than individual term clauses.
+                acl_subclause: TermsQuery[str] = {
+                    "terms": {ACCESS_CONTROL_LIST_FIELD_NAME: list(access_control_list)}
                 }
                 acl_visibility_filter["bool"]["should"].append(acl_subclause)
             return acl_visibility_filter
 
         def _get_source_type_filter(
             source_types: list[DocumentSource],
-        ) -> dict[str, Any]:
-            # Logical OR operator on its elements.
-            source_type_filter: dict[str, Any] = {"bool": {"should": []}}
-            for source_type in source_types:
-                source_type_filter["bool"]["should"].append(
-                    {"term": {SOURCE_TYPE_FIELD_NAME: {"value": source_type.value}}}
+        ) -> TermsQuery[str]:
+            """Returns a filter for the source types.
+
+            Since this returns an isolated terms clause, it can be cached in
+            OpenSearch independently of other clauses in _get_search_filters.
+
+            Args:
+                source_types: The source types to restrict documents to.
+
+            Raises:
+                ValueError: The number of source types is greater than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+                ValueError: An empty list was supplied.
+
+            Returns:
+                A filter for the source types.
+            """
+            if not source_types:
+                raise ValueError(
+                    "source_types cannot be empty if trying to create a source type filter."
                 )
-            return source_type_filter
-
-        def _get_tag_filter(tags: list[Tag]) -> dict[str, Any]:
-            # Logical OR operator on its elements.
-            tag_filter: dict[str, Any] = {"bool": {"should": []}}
-            for tag in tags:
-                # Kind of an abstraction leak, see
-                # convert_metadata_dict_to_list_of_strings for why metadata list
-                # entries are expected to look this way.
-                tag_str = f"{tag.tag_key}{INDEX_SEPARATOR}{tag.tag_value}"
-                tag_filter["bool"]["should"].append(
-                    {"term": {METADATA_LIST_FIELD_NAME: {"value": tag_str}}}
+            if len(source_types) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many source types: {len(source_types)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
                 )
-            return tag_filter
+            # Use terms instead of a list of term within a should clause because
+            # Lucene will optimize the filtering for large sets of terms. Small
+            # sets of terms are not expected to perform any differently than
+            # individual term clauses.
+            return {
+                "terms": {
+                    SOURCE_TYPE_FIELD_NAME: [
+                        source_type.value for source_type in source_types
+                    ]
+                }
+            }
 
-        def _get_document_set_filter(document_sets: list[str]) -> dict[str, Any]:
-            # Logical OR operator on its elements.
-            document_set_filter: dict[str, Any] = {"bool": {"should": []}}
-            for document_set in document_sets:
-                document_set_filter["bool"]["should"].append(
-                    {"term": {DOCUMENT_SETS_FIELD_NAME: {"value": document_set}}}
+        def _get_tag_filter(tags: list[Tag]) -> TermsQuery[str]:
+            """Returns a filter for the tags.
+
+            Since this returns an isolated terms clause, it can be cached in
+            OpenSearch independently of other clauses in _get_search_filters.
+
+            Args:
+                tags: The tags to restrict documents to.
+
+            Raises:
+                ValueError: The number of tags is greater than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+                ValueError: An empty list was supplied.
+
+            Returns:
+                A filter for the tags.
+            """
+            if not tags:
+                raise ValueError(
+                    "tags cannot be empty if trying to create a tag filter."
                 )
-            return document_set_filter
-
-        def _get_user_file_id_filter(user_file_ids: list[UUID]) -> dict[str, Any]:
-            # Logical OR operator on its elements.
-            user_file_id_filter: dict[str, Any] = {"bool": {"should": []}}
-            for user_file_id in user_file_ids:
-                user_file_id_filter["bool"]["should"].append(
-                    {"term": {DOCUMENT_ID_FIELD_NAME: {"value": str(user_file_id)}}}
+            if len(tags) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many tags: {len(tags)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
                 )
-            return user_file_id_filter
+            # Kind of an abstraction leak, see
+            # convert_metadata_dict_to_list_of_strings for why metadata list
+            # entries are expected to look this way.
+            tag_str_list = [
+                f"{tag.tag_key}{INDEX_SEPARATOR}{tag.tag_value}" for tag in tags
+            ]
+            # Use terms instead of a list of term within a should clause because
+            # Lucene will optimize the filtering for large sets of terms. Small
+            # sets of terms are not expected to perform any differently than
+            # individual term clauses.
+            return {"terms": {METADATA_LIST_FIELD_NAME: tag_str_list}}
 
-        def _get_user_project_filter(project_id: int) -> dict[str, Any]:
-            # Logical OR operator on its elements.
-            user_project_filter: dict[str, Any] = {"bool": {"should": []}}
-            user_project_filter["bool"]["should"].append(
-                {"term": {USER_PROJECTS_FIELD_NAME: {"value": project_id}}}
-            )
-            return user_project_filter
+        def _get_document_set_filter(document_sets: list[str]) -> TermsQuery[str]:
+            """Returns a filter for the document sets.
 
-        def _get_persona_filter(persona_id: int) -> dict[str, Any]:
+            Since this returns an isolated terms clause, it can be cached in
+            OpenSearch independently of other clauses in _get_search_filters.
+
+            Args:
+                document_sets: The document sets to restrict documents to.
+
+            Raises:
+                ValueError: The number of document sets is greater than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+                ValueError: An empty list was supplied.
+
+            Returns:
+                A filter for the document sets.
+            """
+            if not document_sets:
+                raise ValueError(
+                    "document_sets cannot be empty if trying to create a document set filter."
+                )
+            if len(document_sets) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many document sets: {len(document_sets)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                )
+            # Use terms instead of a list of term within a should clause because
+            # Lucene will optimize the filtering for large sets of terms. Small
+            # sets of terms are not expected to perform any differently than
+            # individual term clauses.
+            return {"terms": {DOCUMENT_SETS_FIELD_NAME: list(document_sets)}}
+
+        def _get_user_project_filter(project_id: int) -> TermQuery[int]:
+            return {"term": {USER_PROJECTS_FIELD_NAME: {"value": project_id}}}
+
+        def _get_persona_filter(persona_id: int) -> TermQuery[int]:
             return {"term": {PERSONAS_FIELD_NAME: {"value": persona_id}}}
 
         def _get_time_cutoff_filter(time_cutoff: datetime) -> dict[str, Any]:
@@ -772,7 +1083,9 @@ class DocumentQuery:
             # document data.
             time_cutoff = set_or_convert_timezone_to_utc(time_cutoff)
             # Logical OR operator on its elements.
-            time_cutoff_filter: dict[str, Any] = {"bool": {"should": []}}
+            time_cutoff_filter: dict[str, Any] = {
+                "bool": {"should": [], "minimum_should_match": 1}
+            }
             time_cutoff_filter["bool"]["should"].append(
                 {
                     "range": {
@@ -807,25 +1120,77 @@ class DocumentQuery:
 
         def _get_attached_document_id_filter(
             doc_ids: list[str],
-        ) -> dict[str, Any]:
-            """Filter for documents explicitly attached to an assistant."""
-            # Logical OR operator on its elements.
-            doc_id_filter: dict[str, Any] = {"bool": {"should": []}}
-            for doc_id in doc_ids:
-                doc_id_filter["bool"]["should"].append(
-                    {"term": {DOCUMENT_ID_FIELD_NAME: {"value": doc_id}}}
+        ) -> TermsQuery[str]:
+            """
+            Returns a filter for documents explicitly attached to an assistant.
+
+            Since this returns an isolated terms clause, it can be cached in
+            OpenSearch independently of other clauses in _get_search_filters.
+
+            Args:
+                doc_ids: The document IDs to restrict documents to.
+
+            Raises:
+                ValueError: The number of document IDs is greater than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+                ValueError: An empty list was supplied.
+
+            Returns:
+                A filter for the document IDs.
+            """
+            if not doc_ids:
+                raise ValueError(
+                    "doc_ids cannot be empty if trying to create a document ID filter."
                 )
-            return doc_id_filter
+            if len(doc_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many document IDs: {len(doc_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                )
+            # Use terms instead of a list of term within a should clause because
+            # Lucene will optimize the filtering for large sets of terms. Small
+            # sets of terms are not expected to perform any differently than
+            # individual term clauses.
+            return {"terms": {DOCUMENT_ID_FIELD_NAME: list(doc_ids)}}
 
         def _get_hierarchy_node_filter(
             node_ids: list[int],
-        ) -> dict[str, Any]:
-            """Filter for chunks whose ancestors include any of the given hierarchy nodes.
-
-            Uses a terms query to check if ancestor_hierarchy_node_ids contains
-            any of the specified node IDs.
+        ) -> TermsQuery[int]:
             """
-            return {"terms": {ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: node_ids}}
+            Returns a filter for chunks whose ancestors include any of the given
+            hierarchy nodes.
+
+            Since this returns an isolated terms clause, it can be cached in
+            OpenSearch independently of other clauses in _get_search_filters.
+
+            Args:
+                node_ids: The hierarchy node IDs to restrict documents to.
+
+            Raises:
+                ValueError: The number of hierarchy node IDs is greater than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+                ValueError: An empty list was supplied.
+
+            Returns:
+                A filter for the hierarchy node IDs.
+            """
+            if not node_ids:
+                raise ValueError(
+                    "node_ids cannot be empty if trying to create a hierarchy node ID filter."
+                )
+            if len(node_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many hierarchy node IDs: {len(node_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                )
+            # Use terms instead of a list of term within a should clause because
+            # Lucene will optimize the filtering for large sets of terms. Small
+            # sets of terms are not expected to perform any differently than
+            # individual term clauses.
+            return {"terms": {ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: list(node_ids)}}
+
+        if document_id is not None and attached_document_ids is not None:
+            raise ValueError(
+                "document_id and attached_document_ids cannot be used together."
+            )
 
         filter_clauses: list[dict[str, Any]] = []
 
@@ -856,17 +1221,23 @@ class DocumentQuery:
         # assistant can see. When none are set the assistant searches
         # everything.
         #
-        # project_id / persona_id are additive: they make overflowing user files
-        # findable but must NOT trigger the restriction on their own (an agent
-        # with no explicit knowledge should search everything).
+        # persona_id_filter is a primary trigger — a persona with user files IS
+        # explicit knowledge, so it can start a knowledge scope on its own.
+        #
+        # project_id_filter is additive — it widens the scope to also cover
+        # overflowing project files but never restricts on its own (a chat
+        # inside a project should still search team knowledge).
         has_knowledge_scope = (
             attached_document_ids
             or hierarchy_node_ids
-            or user_file_ids
             or document_sets
+            or persona_id_filter is not None
         )
 
         if has_knowledge_scope:
+            # Since this returns an isolated bool should clause, it can be
+            # cached in OpenSearch independently of other clauses in
+            # _get_search_filters.
             knowledge_filter: dict[str, Any] = {
                 "bool": {"should": [], "minimum_should_match": 1}
             }
@@ -878,23 +1249,17 @@ class DocumentQuery:
                 knowledge_filter["bool"]["should"].append(
                     _get_hierarchy_node_filter(hierarchy_node_ids)
                 )
-            if user_file_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_user_file_id_filter(user_file_ids)
-                )
             if document_sets:
                 knowledge_filter["bool"]["should"].append(
                     _get_document_set_filter(document_sets)
                 )
-            # Additive: widen scope to also cover overflowing user files, but
-            # only when an explicit restriction is already in effect.
-            if project_id is not None:
+            if persona_id_filter is not None:
                 knowledge_filter["bool"]["should"].append(
-                    _get_user_project_filter(project_id)
+                    _get_persona_filter(persona_id_filter)
                 )
-            if persona_id is not None:
+            if project_id_filter is not None:
                 knowledge_filter["bool"]["should"].append(
-                    _get_persona_filter(persona_id)
+                    _get_user_project_filter(project_id_filter)
                 )
             filter_clauses.append(knowledge_filter)
 
@@ -912,8 +1277,6 @@ class DocumentQuery:
             )
 
         if document_id is not None:
-            # WARNING: If user_file_ids has elements and if none of them are
-            # document_id, no matches will be retrieved.
             filter_clauses.append(
                 {"term": {DOCUMENT_ID_FIELD_NAME: {"value": document_id}}}
             )

@@ -6,3 +6,4 @@
 
 3134e5f840c12c8f32613ce520101a047c89dcc2  # refactor(whitespace): rm temporary react fragments (#7161)
 ed3f72bc75f3e3a9ae9e4d8cd38278f9c97e78b4  # refactor(whitespace): rm react fragment #7190
+7b927e79c25f4ddfd18a067f489e122acd2c89de  # chore(format): format files where `ruff` and `black` agree (#9339)

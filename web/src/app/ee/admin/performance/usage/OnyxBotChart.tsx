@@ -1,7 +1,7 @@
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList, useOnyxBotAnalytics } from "../lib";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import Text from "@/components/ui/text";
+import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
 import CardSection from "@/components/admin/CardSection";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
@@ -69,7 +69,7 @@ export function OnyxBotChart({
   return (
     <CardSection className="mt-8">
       <Title>Slack Channel</Title>
-      <Text>Total Queries vs Auto Resolved</Text>
+      <Text as="p">Total Queries vs Auto Resolved</Text>
       {chart}
     </CardSection>
   );

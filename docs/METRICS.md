@@ -169,6 +169,21 @@ Engine label values: `sync` (main read-write), `async` (async sessions), `readon
 
 Connections from background tasks (Celery) or boot-time warmup appear as `handler="unknown"`.
 
+## OpenSearch Search Metrics
+
+These metrics track OpenSearch search latency and throughput. Collected via `onyx.server.metrics.opensearch_search`.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `onyx_opensearch_search_client_duration_seconds` | Histogram | `search_type` | Client-side end-to-end latency (network + serialization + server execution) |
+| `onyx_opensearch_search_server_duration_seconds` | Histogram | `search_type` | Server-side execution time from OpenSearch `took` field |
+| `onyx_opensearch_search_total` | Counter | `search_type` | Total search requests sent to OpenSearch |
+| `onyx_opensearch_searches_in_progress` | Gauge | `search_type` | Currently in-flight OpenSearch searches |
+
+Search type label values: See `OpenSearchSearchType`.
+
+---
+
 ## Example PromQL Queries
 
 ### Which endpoints are saturated right now?
@@ -257,4 +272,34 @@ histogram_quantile(0.99, sum by (handler, le) (rate(onyx_db_connection_hold_seco
 ```promql
 # Checkouts per second by engine
 sum by (engine) (rate(onyx_db_pool_checkout_total[5m]))
+```
+
+### OpenSearch P99 search latency by type
+
+```promql
+# P99 client-side latency by search type
+histogram_quantile(0.99, sum by (search_type, le) (rate(onyx_opensearch_search_client_duration_seconds_bucket[5m])))
+```
+
+### OpenSearch search throughput
+
+```promql
+# Searches per second by type
+sum by (search_type) (rate(onyx_opensearch_search_total[5m]))
+```
+
+### OpenSearch concurrent searches
+
+```promql
+# Total in-flight searches across all instances
+sum(onyx_opensearch_searches_in_progress)
+```
+
+### OpenSearch network overhead
+
+```promql
+# Difference between client and server P50 reveals network/serialization cost.
+histogram_quantile(0.5, sum by (le) (rate(onyx_opensearch_search_client_duration_seconds_bucket[5m])))
+  -
+histogram_quantile(0.5, sum by (le) (rate(onyx_opensearch_search_server_duration_seconds_bucket[5m])))
 ```

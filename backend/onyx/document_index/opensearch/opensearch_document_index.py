@@ -1,11 +1,12 @@
 import json
-from collections import defaultdict
+from collections.abc import Iterable
 from typing import Any
 
 import httpx
 from opensearchpy import NotFoundError
 
 from onyx.access.models import DocumentAccess
+from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
@@ -43,10 +44,12 @@ from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
+from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
+from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
@@ -117,7 +120,7 @@ def set_cluster_state(client: OpenSearchClient) -> None:
 
 
 def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
-    chunk: DocumentChunk,
+    chunk: DocumentChunkWithoutVectors,
     score: float | None,
     highlights: dict[str, list[str]],
 ) -> InferenceChunkUncleaned:
@@ -349,7 +352,7 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
 
     def index(
         self,
-        chunks: list[DocMetadataAwareIndexChunk],
+        chunks: Iterable[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[OldDocumentInsertionRecord]:
         """
@@ -645,10 +648,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
     def index(
         self,
-        chunks: list[DocMetadataAwareIndexChunk],
-        indexing_metadata: IndexingMetadata,  # noqa: ARG002
+        chunks: Iterable[DocMetadataAwareIndexChunk],
+        indexing_metadata: IndexingMetadata,
     ) -> list[DocumentInsertionRecord]:
-        """Indexes a list of document chunks into the document index.
+        """Indexes an iterable of document chunks into the document index.
 
         Groups chunks by document ID and for each document, deletes existing
         chunks and indexes the new chunks in bulk.
@@ -671,29 +674,34 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 document is newly indexed or had already existed and was just
                 updated.
         """
-        # Group chunks by document ID.
-        doc_id_to_chunks: dict[str, list[DocMetadataAwareIndexChunk]] = defaultdict(
-            list
+        total_chunks = sum(
+            cc.new_chunk_cnt
+            for cc in indexing_metadata.doc_id_to_chunk_cnt_diff.values()
         )
-        for chunk in chunks:
-            doc_id_to_chunks[chunk.source_document.id].append(chunk)
         logger.debug(
-            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} chunks from {len(doc_id_to_chunks)} "
+            f"[OpenSearchDocumentIndex] Indexing {total_chunks} chunks from {len(indexing_metadata.doc_id_to_chunk_cnt_diff)} "
             f"documents for index {self._index_name}."
         )
 
         document_indexing_results: list[DocumentInsertionRecord] = []
-        # Try to index per-document.
-        for _, chunks in doc_id_to_chunks.items():
+        deleted_doc_ids: set[str] = set()
+        # Buffer chunks per document as they arrive from the iterable.
+        # When the document ID changes flush the buffered chunks.
+        current_doc_id: str | None = None
+        current_chunks: list[DocMetadataAwareIndexChunk] = []
+
+        def _flush_chunks(doc_chunks: list[DocMetadataAwareIndexChunk]) -> None:
+            assert len(doc_chunks) > 0, "doc_chunks is empty"
+
             # Create a batch of OpenSearch-formatted chunks for bulk insertion.
-            # Do this before deleting existing chunks to reduce the amount of
-            # time the document index has no content for a given document, and
-            # to reduce the chance of entering a state where we delete chunks,
-            # then some error happens, and never successfully index new chunks.
+            # Since we are doing this in batches, an error occurring midway
+            # can result in a state where chunks are deleted and not all the
+            # new chunks have been indexed.
             chunk_batch: list[DocumentChunk] = [
-                _convert_onyx_chunk_to_opensearch_document(chunk) for chunk in chunks
+                _convert_onyx_chunk_to_opensearch_document(chunk)
+                for chunk in doc_chunks
             ]
-            onyx_document: Document = chunks[0].source_document
+            onyx_document: Document = doc_chunks[0].source_document
             # First delete the doc's chunks from the index. This is so that
             # there are no dangling chunks in the index, in the event that the
             # new document's content contains fewer chunks than the previous
@@ -702,22 +710,43 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # if the chunk count has actually decreased. This assumes that
             # overlapping chunks are perfectly overwritten. If we can't
             # guarantee that then we need the code as-is.
-            num_chunks_deleted = self.delete(
-                onyx_document.id, onyx_document.chunk_count
-            )
-            # If we see that chunks were deleted we assume the doc already
-            # existed.
-            document_insertion_record = DocumentInsertionRecord(
-                document_id=onyx_document.id,
-                already_existed=num_chunks_deleted > 0,
-            )
+            if onyx_document.id not in deleted_doc_ids:
+                num_chunks_deleted = self.delete(
+                    onyx_document.id, onyx_document.chunk_count
+                )
+                deleted_doc_ids.add(onyx_document.id)
+                # If we see that chunks were deleted we assume the doc already
+                # existed. We record the result before bulk_index_documents
+                # runs. If indexing raises, this entire result list is discarded
+                # by the caller's retry logic, so early recording is safe.
+                document_indexing_results.append(
+                    DocumentInsertionRecord(
+                        document_id=onyx_document.id,
+                        already_existed=num_chunks_deleted > 0,
+                    )
+                )
             # Now index. This will raise if a chunk of the same ID exists, which
             # we do not expect because we should have deleted all chunks.
             self._client.bulk_index_documents(
                 documents=chunk_batch,
                 tenant_state=self._tenant_state,
             )
-            document_indexing_results.append(document_insertion_record)
+
+        for chunk in chunks:
+            doc_id = chunk.source_document.id
+            if doc_id != current_doc_id:
+                if current_chunks:
+                    _flush_chunks(current_chunks)
+                current_doc_id = doc_id
+                current_chunks = [chunk]
+            elif len(current_chunks) >= MAX_CHUNKS_PER_DOC_BATCH:
+                _flush_chunks(current_chunks)
+                current_chunks = [chunk]
+            else:
+                current_chunks.append(chunk)
+
+        if current_chunks:
+            _flush_chunks(current_chunks)
 
         return document_indexing_results
 
@@ -880,7 +909,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
-            search_hits: list[SearchHit[DocumentChunk]] = []
+            search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
             query_body = DocumentQuery.get_from_document_id_query(
                 document_id=chunk_request.document_id,
                 tenant_state=self._tenant_state,
@@ -899,6 +928,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             search_hits = self._client.search(
                 body=query_body,
                 search_pipeline_id=None,
+                search_type=OpenSearchSearchType.ID_RETRIEVAL,
             )
             inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
                 _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
@@ -922,6 +952,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
+        # TODO(andrei): There is some duplicated logic in this function with
+        # others in this file.
         logger.debug(
             f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index {self._index_name}."
         )
@@ -944,12 +976,98 @@ class OpenSearchDocumentIndex(DocumentIndex):
             include_hidden=False,
         )
         normalization_pipeline_name, _ = get_normalization_pipeline_name_and_config()
-        search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
             search_pipeline_id=normalization_pipeline_name,
+            search_type=OpenSearchSearchType.HYBRID,
         )
 
-        # Good place for a breakpoint to inspect the search hits if you have "explain" enabled.
+        # Good place for a breakpoint to inspect the search hits if you have
+        # "explain" enabled.
+        inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
+            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+                search_hit.document_chunk, search_hit.score, search_hit.match_highlights
+            )
+            for search_hit in search_hits
+        ]
+        inference_chunks: list[InferenceChunk] = cleanup_content_for_chunks(
+            inference_chunks_uncleaned
+        )
+
+        return inference_chunks
+
+    def keyword_retrieval(
+        self,
+        query: str,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+    ) -> list[InferenceChunk]:
+        # TODO(andrei): There is some duplicated logic in this function with
+        # others in this file.
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Keyword retrieving {num_to_retrieve} chunks for index {self._index_name}."
+        )
+        query_body = DocumentQuery.get_keyword_search_query(
+            query_text=query,
+            num_hits=num_to_retrieve,
+            tenant_state=self._tenant_state,
+            # NOTE: Index filters includes metadata tags which were filtered
+            # for invalid unicode at indexing time. In theory it would be
+            # ideal to do filtering here as well, in practice we never did
+            # that in the Vespa codepath and have not seen issues in
+            # production, so we deliberately conform to the existing logic
+            # in order to not unknowningly introduce a possible bug.
+            index_filters=filters,
+            include_hidden=False,
+        )
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
+            body=query_body,
+            search_pipeline_id=None,
+            search_type=OpenSearchSearchType.KEYWORD,
+        )
+
+        inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
+            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+                search_hit.document_chunk, search_hit.score, search_hit.match_highlights
+            )
+            for search_hit in search_hits
+        ]
+        inference_chunks: list[InferenceChunk] = cleanup_content_for_chunks(
+            inference_chunks_uncleaned
+        )
+
+        return inference_chunks
+
+    def semantic_retrieval(
+        self,
+        query_embedding: Embedding,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+    ) -> list[InferenceChunk]:
+        # TODO(andrei): There is some duplicated logic in this function with
+        # others in this file.
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Semantic retrieving {num_to_retrieve} chunks for index {self._index_name}."
+        )
+        query_body = DocumentQuery.get_semantic_search_query(
+            query_embedding=query_embedding,
+            num_hits=num_to_retrieve,
+            tenant_state=self._tenant_state,
+            # NOTE: Index filters includes metadata tags which were filtered
+            # for invalid unicode at indexing time. In theory it would be
+            # ideal to do filtering here as well, in practice we never did
+            # that in the Vespa codepath and have not seen issues in
+            # production, so we deliberately conform to the existing logic
+            # in order to not unknowningly introduce a possible bug.
+            index_filters=filters,
+            include_hidden=False,
+        )
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
+            body=query_body,
+            search_pipeline_id=None,
+            search_type=OpenSearchSearchType.SEMANTIC,
+        )
+
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
             _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
@@ -976,9 +1094,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             index_filters=filters,
             num_to_retrieve=num_to_retrieve,
         )
-        search_hits: list[SearchHit[DocumentChunk]] = self._client.search(
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
             search_pipeline_id=None,
+            search_type=OpenSearchSearchType.RANDOM,
         )
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
             _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(

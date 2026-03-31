@@ -30,6 +30,8 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.utils import plaintext_file_name_for_id
+from onyx.file_store.utils import store_plaintext
 from onyx.kg.models import KGException
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
@@ -289,6 +291,33 @@ def process_kg_commands(
         raise KGException("KG setup done")
 
 
+def _get_or_extract_plaintext(
+    file_id: str,
+    extract_fn: Callable[[], str],
+) -> str:
+    """Load cached plaintext for a file, or extract and store it.
+
+    Tries to read pre-stored plaintext from the file store.  On a miss,
+    calls extract_fn to produce the text, then stores the result so
+    future calls skip the expensive extraction.
+    """
+    file_store = get_default_file_store()
+    plaintext_key = plaintext_file_name_for_id(file_id)
+
+    # Try cached plaintext first.
+    try:
+        plaintext_io = file_store.read_file(plaintext_key, mode="b")
+        return plaintext_io.read().decode("utf-8")
+    except Exception:
+        logger.exception(f"Error when reading file, id={file_id}")
+
+    # Cache miss — extract and store.
+    content_text = extract_fn()
+    if content_text:
+        store_plaintext(file_id, content_text)
+    return content_text
+
+
 @log_function_time(print_only=True)
 def load_chat_file(
     file_descriptor: FileDescriptor, db_session: Session
@@ -303,12 +332,23 @@ def load_chat_file(
     file_type = ChatFileType(file_descriptor["type"])
 
     if file_type.is_text_file():
-        try:
-            content_text = extract_file_text(
+        file_id = file_descriptor["id"]
+
+        def _extract() -> str:
+            return extract_file_text(
                 file=file_io,
                 file_name=file_descriptor.get("name") or "",
                 break_on_unprocessable=False,
             )
+
+        # Use the user_file_id as cache key when available (matches what
+        # the celery indexing worker stores), otherwise fall back to the
+        # file store id (covers code-interpreter-generated files, etc.).
+        user_file_id_str = file_descriptor.get("user_file_id")
+        cache_key = user_file_id_str or file_id
+
+        try:
+            content_text = _get_or_extract_plaintext(cache_key, _extract)
         except Exception as e:
             logger.warning(
                 f"Failed to retrieve content for file {file_descriptor['id']}: {str(e)}"

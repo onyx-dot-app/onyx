@@ -1,7 +1,7 @@
 """
 External dependency unit tests for UserFileIndexingAdapter metadata writing.
 
-Validates that build_metadata_aware_chunks produces DocMetadataAwareIndexChunk
+Validates that prepare_enrichment produces DocMetadataAwareIndexChunk
 objects with both `user_project` and `personas` fields populated correctly
 based on actual DB associations.
 
@@ -63,7 +63,7 @@ def _create_persona(db_session: Session, user: User) -> Persona:
         document_sets=[],
         users=[user],
         groups=[],
-        is_visible=True,
+        is_listed=True,
         is_public=True,
         display_priority=None,
         starter_messages=None,
@@ -127,7 +127,7 @@ def _make_index_chunk(user_file: UserFile) -> IndexChunk:
 
 
 class TestAdapterWritesBothMetadataFields:
-    """build_metadata_aware_chunks must populate user_project AND personas."""
+    """prepare_enrichment must populate user_project AND personas."""
 
     @patch(
         "onyx.indexing.adapters.user_file_indexing_adapter.get_default_llm",
@@ -153,15 +153,13 @@ class TestAdapterWritesBothMetadataFields:
         doc = chunk.source_document
         context = DocumentBatchPrepareContext(updatable_docs=[doc], id_to_boost_map={})
 
-        result = adapter.build_metadata_aware_chunks(
-            chunks_with_embeddings=[chunk],
-            chunk_content_scores=[1.0],
-            tenant_id=TEST_TENANT_ID,
+        enricher = adapter.prepare_enrichment(
             context=context,
+            tenant_id=TEST_TENANT_ID,
+            chunks=[chunk],
         )
+        aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 
-        assert len(result.chunks) == 1
-        aware_chunk = result.chunks[0]
         assert persona.id in aware_chunk.personas
         assert aware_chunk.user_project == []
 
@@ -190,15 +188,13 @@ class TestAdapterWritesBothMetadataFields:
             updatable_docs=[chunk.source_document], id_to_boost_map={}
         )
 
-        result = adapter.build_metadata_aware_chunks(
-            chunks_with_embeddings=[chunk],
-            chunk_content_scores=[1.0],
-            tenant_id=TEST_TENANT_ID,
+        enricher = adapter.prepare_enrichment(
             context=context,
+            tenant_id=TEST_TENANT_ID,
+            chunks=[chunk],
         )
+        aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 
-        assert len(result.chunks) == 1
-        aware_chunk = result.chunks[0]
         assert project.id in aware_chunk.user_project
         assert aware_chunk.personas == []
 
@@ -229,14 +225,13 @@ class TestAdapterWritesBothMetadataFields:
             updatable_docs=[chunk.source_document], id_to_boost_map={}
         )
 
-        result = adapter.build_metadata_aware_chunks(
-            chunks_with_embeddings=[chunk],
-            chunk_content_scores=[1.0],
-            tenant_id=TEST_TENANT_ID,
+        enricher = adapter.prepare_enrichment(
             context=context,
+            tenant_id=TEST_TENANT_ID,
+            chunks=[chunk],
         )
+        aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 
-        aware_chunk = result.chunks[0]
         assert persona.id in aware_chunk.personas
         assert project.id in aware_chunk.user_project
 
@@ -261,14 +256,13 @@ class TestAdapterWritesBothMetadataFields:
             updatable_docs=[chunk.source_document], id_to_boost_map={}
         )
 
-        result = adapter.build_metadata_aware_chunks(
-            chunks_with_embeddings=[chunk],
-            chunk_content_scores=[1.0],
-            tenant_id=TEST_TENANT_ID,
+        enricher = adapter.prepare_enrichment(
             context=context,
+            tenant_id=TEST_TENANT_ID,
+            chunks=[chunk],
         )
+        aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 
-        aware_chunk = result.chunks[0]
         assert aware_chunk.personas == []
         assert aware_chunk.user_project == []
 
@@ -300,12 +294,11 @@ class TestAdapterWritesBothMetadataFields:
             updatable_docs=[chunk.source_document], id_to_boost_map={}
         )
 
-        result = adapter.build_metadata_aware_chunks(
-            chunks_with_embeddings=[chunk],
-            chunk_content_scores=[1.0],
-            tenant_id=TEST_TENANT_ID,
+        enricher = adapter.prepare_enrichment(
             context=context,
+            tenant_id=TEST_TENANT_ID,
+            chunks=[chunk],
         )
+        aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 
-        aware_chunk = result.chunks[0]
         assert set(aware_chunk.personas) == {persona_a.id, persona_b.id}

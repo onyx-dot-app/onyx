@@ -40,13 +40,6 @@ export const Open: Story = {
   },
 };
 
-export const Disabled: Story = {
-  args: {
-    disabled: true,
-    children: "Disabled",
-  },
-};
-
 export const Foldable: Story = {
   args: {
     foldable: true,

@@ -15,13 +15,22 @@
   initial-value: transparent;
 }
 
-/* Base interactive surface */
+/* Shared timing tokens — used by .interactive and other surfaces (e.g. table rows) */
+:root {
+  --interactive-duration: 150ms;
+  --interactive-easing: ease-in-out;
+}
+
+/* Base interactive surface — sets color directly so all descendants inherit. */
 .interactive {
   @apply cursor-pointer select-none;
+  color: var(--interactive-foreground);
   transition:
-    background-color 150ms ease-in-out,
-    --interactive-foreground 150ms ease-in-out,
-    --interactive-foreground-icon 150ms ease-in-out;
+    background-color var(--interactive-duration) var(--interactive-easing),
+    --interactive-foreground var(--interactive-duration)
+      var(--interactive-easing),
+    --interactive-foreground-icon var(--interactive-duration)
+      var(--interactive-easing);
 }
 .interactive[data-disabled] {
   @apply cursor-not-allowed;
@@ -35,14 +44,8 @@
   @apply border;
 }
 
-/* Utility classes — descendants opt in to parent-controlled foreground color.
-   No transition here — the parent interpolates the variables directly. */
-.interactive-foreground {
-  color: var(--interactive-foreground);
-}
-
-/* Icon foreground — reads from --interactive-foreground-icon, which defaults
-   to --interactive-foreground via the variant CSS rules. */
+/* Icon foreground — reads from --interactive-foreground-icon, which may differ
+   from --interactive-foreground (e.g. muted icons beside normal text). */
 .interactive-foreground-icon {
   color: var(--interactive-foreground-icon);
 }

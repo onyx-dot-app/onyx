@@ -45,6 +45,7 @@ import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
 import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
@@ -65,6 +66,7 @@ const PROVIDER_DISPLAY_ORDER: string[] = [
   "ollama_chat",
   "openrouter",
   "lm_studio",
+  "bifrost",
 ];
 
 const PROVIDER_MODAL_MAP: Record<
@@ -138,6 +140,13 @@ const PROVIDER_MODAL_MAP: Record<
       onOpenChange={onOpenChange}
     />
   ),
+  bifrost: (d, open, onOpenChange) => (
+    <BifrostModal
+      shouldMarkAsDefault={d}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  ),
 };
 
 // ============================================================================
@@ -148,12 +157,14 @@ interface ExistingProviderCardProps {
   provider: LLMProviderView;
   isDefault: boolean;
   isLastProvider: boolean;
+  defaultModelName?: string;
 }
 
 function ExistingProviderCard({
   provider,
   isDefault,
   isLastProvider,
+  defaultModelName,
 }: ExistingProviderCardProps) {
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
@@ -205,7 +216,7 @@ function ExistingProviderCard({
             icon={getProviderIcon(provider.provider)}
             title={provider.name}
             description={getProviderDisplayName(provider.provider)}
-            sizePreset="main-content"
+            sizePreset="main-ui"
             variant="section"
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
@@ -230,7 +241,12 @@ function ExistingProviderCard({
               </Section>
             }
           />
-          {getModalForExistingProvider(provider, isOpen, setIsOpen)}
+          {getModalForExistingProvider(
+            provider,
+            isOpen,
+            setIsOpen,
+            defaultModelName
+          )}
         </Card>
       </Hoverable.Root>
     </>
@@ -264,7 +280,7 @@ function NewProviderCard({
         icon={getProviderIcon(provider.name)}
         title={getProviderProductName(provider.name)}
         description={getProviderDisplayName(provider.name)}
-        sizePreset="main-content"
+        sizePreset="main-ui"
         variant="section"
         rightChildren={
           <Button
@@ -300,7 +316,7 @@ function NewCustomProviderCard({
         icon={getProviderIcon("custom")}
         title={getProviderProductName("custom")}
         description={getProviderDisplayName("custom")}
-        sizePreset="main-content"
+        sizePreset="main-ui"
         variant="section"
         rightChildren={
           <Button
@@ -446,6 +462,11 @@ export default function LLMConfigurationPage() {
                     provider={provider}
                     isDefault={defaultText?.provider_id === provider.id}
                     isLastProvider={sortedProviders.length === 1}
+                    defaultModelName={
+                      defaultText?.provider_id === provider.id
+                        ? defaultText.model_name
+                        : undefined
+                    }
                   />
                 ))}
               </div>

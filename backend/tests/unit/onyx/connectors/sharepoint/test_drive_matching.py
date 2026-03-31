@@ -211,6 +211,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         include_permissions: bool,  # noqa: ARG001
         parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
         access_token: str | None = None,  # noqa: ARG001
+        treat_sharing_link_as_public: bool = False,  # noqa: ARG001
     ) -> Document:
         captured_drive_names.append(drive_name)
         return Document(

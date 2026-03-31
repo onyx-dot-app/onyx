@@ -1,3 +1,5 @@
+import "@opal/components/tooltip.css";
+
 /* Shared types */
 export type TooltipSide = "top" | "bottom" | "left" | "right";
 
@@ -19,11 +21,25 @@ export {
   type OpenButtonProps,
 } from "@opal/components/buttons/open-button/components";
 
+/* FilterButton */
+export {
+  FilterButton,
+  type FilterButtonProps,
+} from "@opal/components/buttons/filter-button/components";
+
 /* LineItemButton */
 export {
   LineItemButton,
   type LineItemButtonProps,
 } from "@opal/components/buttons/line-item-button/components";
+
+/* Text */
+export {
+  Text,
+  type TextProps,
+  type TextFont,
+  type TextColor,
+} from "@opal/components/text/components";
 
 /* Tag */
 export {
@@ -40,6 +56,12 @@ export {
   type BorderVariant,
 } from "@opal/components/cards/card/components";
 
+/* SelectCard */
+export {
+  SelectCard,
+  type SelectCardProps,
+} from "@opal/components/cards/select-card/components";
+
 /* EmptyMessageCard */
 export {
   EmptyMessageCard,
@@ -52,3 +74,8 @@ export {
   type PaginationProps,
   type PaginationSize,
 } from "@opal/components/pagination/components";
+
+/* Table */
+export { Table } from "@opal/components/table/components";
+export { createTableColumns } from "@opal/components/table/columns";
+export type { DataTableProps } from "@opal/components/table/components";

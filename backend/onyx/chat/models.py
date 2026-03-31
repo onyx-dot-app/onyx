@@ -8,6 +8,7 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import InMemoryChatFile
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -35,7 +36,13 @@ class CreateChatSessionID(BaseModel):
     chat_session_id: UUID
 
 
-AnswerStreamPart = Packet | MessageResponseIDInfo | StreamingError | CreateChatSessionID
+AnswerStreamPart = (
+    Packet
+    | MessageResponseIDInfo
+    | MultiModelMessageResponseIDInfo
+    | StreamingError
+    | CreateChatSessionID
+)
 
 AnswerStream = Iterator[AnswerStreamPart]
 
@@ -177,8 +184,8 @@ class ExtractedContextFiles(BaseModel):
 class SearchParams(BaseModel):
     """Resolved search filter IDs and search-tool usage for a chat turn."""
 
-    search_project_id: int | None
-    search_persona_id: int | None
+    project_id_filter: int | None
+    persona_id_filter: int | None
     search_usage: SearchToolUsage
 
 

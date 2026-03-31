@@ -9,7 +9,6 @@ const VARIANT_PROMINENCE_MAP: Record<string, string[]> = {
   default: ["primary", "secondary", "tertiary", "internal"],
   action: ["primary", "secondary", "tertiary", "internal"],
   danger: ["primary", "secondary", "tertiary", "internal"],
-  none: [],
 };
 
 const SIZE_VARIANTS = ["lg", "md", "sm", "xs", "2xs", "fit"] as const;
@@ -43,7 +42,7 @@ export const Default: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Secondary</span>
+          <span>Secondary</span>
         </Interactive.Container>
       </Interactive.Stateless>
 
@@ -53,7 +52,7 @@ export const Default: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Primary</span>
+          <span>Primary</span>
         </Interactive.Container>
       </Interactive.Stateless>
 
@@ -63,7 +62,7 @@ export const Default: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Tertiary</span>
+          <span>Tertiary</span>
         </Interactive.Container>
       </Interactive.Stateless>
     </div>
@@ -115,9 +114,7 @@ export const VariantMatrix: StoryObj = {
                     onClick={() => {}}
                   >
                     <Interactive.Container border>
-                      <span className="interactive-foreground">
-                        {prominence}
-                      </span>
+                      <span>{prominence}</span>
                     </Interactive.Container>
                   </Interactive.Stateless>
                   <span
@@ -150,7 +147,7 @@ export const Sizes: StoryObj = {
           onClick={() => {}}
         >
           <Interactive.Container border heightVariant={size}>
-            <span className="interactive-foreground">{size}</span>
+            <span>{size}</span>
           </Interactive.Container>
         </Interactive.Stateless>
       ))}
@@ -168,7 +165,7 @@ export const WidthFull: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border widthVariant="full">
-          <span className="interactive-foreground">Full width container</span>
+          <span>Full width container</span>
         </Interactive.Container>
       </Interactive.Stateless>
     </div>
@@ -187,7 +184,7 @@ export const Rounding: StoryObj = {
           onClick={() => {}}
         >
           <Interactive.Container border roundingVariant={rounding}>
-            <span className="interactive-foreground">{rounding}</span>
+            <span>{rounding}</span>
           </Interactive.Container>
         </Interactive.Stateless>
       ))}
@@ -207,7 +204,7 @@ export const DisabledStory: StoryObj = {
           onClick={() => {}}
         >
           <Interactive.Container border>
-            <span className="interactive-foreground">Disabled</span>
+            <span>Disabled</span>
           </Interactive.Container>
         </Interactive.Stateless>
       </Disabled>
@@ -218,7 +215,7 @@ export const DisabledStory: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Enabled</span>
+          <span>Enabled</span>
         </Interactive.Container>
       </Interactive.Stateless>
     </div>
@@ -236,7 +233,7 @@ export const Interaction: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Forced hover</span>
+          <span>Forced hover</span>
         </Interactive.Container>
       </Interactive.Stateless>
 
@@ -247,7 +244,7 @@ export const Interaction: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Forced active</span>
+          <span>Forced active</span>
         </Interactive.Container>
       </Interactive.Stateless>
 
@@ -257,7 +254,7 @@ export const Interaction: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Normal (rest)</span>
+          <span>Normal (rest)</span>
         </Interactive.Container>
       </Interactive.Stateless>
     </div>
@@ -274,7 +271,7 @@ export const WithBorder: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">With border</span>
+          <span>With border</span>
         </Interactive.Container>
       </Interactive.Stateless>
 
@@ -284,7 +281,7 @@ export const WithBorder: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container>
-          <span className="interactive-foreground">Without border</span>
+          <span>Without border</span>
         </Interactive.Container>
       </Interactive.Stateless>
     </div>
@@ -296,7 +293,7 @@ export const AsLink: StoryObj = {
   render: () => (
     <Interactive.Stateless variant="action" href="/settings">
       <Interactive.Container border>
-        <span className="interactive-foreground">Go to Settings</span>
+        <span>Go to Settings</span>
       </Interactive.Container>
     </Interactive.Stateless>
   ),
@@ -312,7 +309,7 @@ export const SelectVariant: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Selected (light)</span>
+          <span>Selected (light)</span>
         </Interactive.Container>
       </Interactive.Stateful>
 
@@ -322,7 +319,7 @@ export const SelectVariant: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Unselected (light)</span>
+          <span>Unselected (light)</span>
         </Interactive.Container>
       </Interactive.Stateful>
 
@@ -332,7 +329,7 @@ export const SelectVariant: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Selected (heavy)</span>
+          <span>Selected (heavy)</span>
         </Interactive.Container>
       </Interactive.Stateful>
 
@@ -342,7 +339,7 @@ export const SelectVariant: StoryObj = {
         onClick={() => {}}
       >
         <Interactive.Container border>
-          <span className="interactive-foreground">Unselected (heavy)</span>
+          <span>Unselected (heavy)</span>
         </Interactive.Container>
       </Interactive.Stateful>
     </div>

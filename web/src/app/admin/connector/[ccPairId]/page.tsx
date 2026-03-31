@@ -158,25 +158,22 @@ function Main({ ccPairId }: { ccPairId: number }) {
     mutate(buildCCPairInfoUrl(ccPairId));
   }, [ccPairId]);
 
-  const shouldConfirmConnectorDeletion = true;
+  const finishConnectorDeletion = useCallback(() => {
+    router.push("/admin/indexing/status");
+  }, [router]);
 
-  const scheduleConnectorDeletion = useCallback(async () => {
+  const scheduleConnectorDeletion = useCallback(() => {
     if (!ccPair) return;
     if (isSchedulingConnectorDeletionRef.current) return;
     isSchedulingConnectorDeletionRef.current = true;
 
-    try {
-      await deleteCCPair(ccPair.connector.id, ccPair.credential.id, () =>
-        mutate(buildCCPairInfoUrl(ccPair.id))
+    deleteCCPair(ccPair.connector.id, ccPair.credential.id).catch((error) => {
+      toast.error(
+        "Failed to schedule deletion of connector - " + error.message
       );
-      refresh();
-    } catch (error) {
-      console.error("Error deleting connector:", error);
-    } finally {
-      setShowDeleteConnectorConfirmModal(false);
-      isSchedulingConnectorDeletionRef.current = false;
-    }
-  }, [ccPair, refresh]);
+    });
+    finishConnectorDeletion();
+  }, [ccPair, finishConnectorDeletion]);
 
   const latestIndexAttempt = indexAttempts?.[0];
   const canManageInlineFileConnectorFiles =
@@ -193,10 +190,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
     !indexAttemptErrors?.items?.some(
       (error) => error.index_attempt_id === latestIndexAttempt?.id
     );
-
-  const finishConnectorDeletion = useCallback(() => {
-    router.push("/admin/indexing/status?message=connector-deleted");
-  }, [router]);
 
   const handleStatusUpdate = async (
     newStatus: ConnectorCredentialPairStatus
@@ -520,13 +513,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 )}
                 {!isDeleting && (
                   <DropdownMenuItemWithTooltip
-                    onClick={async () => {
-                      if (shouldConfirmConnectorDeletion) {
-                        setShowDeleteConnectorConfirmModal(true);
-                        return;
-                      }
-
-                      await scheduleConnectorDeletion();
+                    onClick={() => {
+                      setShowDeleteConnectorConfirmModal(true);
                     }}
                     disabled={!statusIsNotCurrentlyActive(ccPair.status)}
                     className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
@@ -626,10 +614,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <div className="w-[200px]">
             <div className="text-sm font-medium mb-1">Last Indexed</div>
             <div className="text-sm text-text-default">
-              {timeAgo(
-                indexAttempts?.find((attempt) => attempt.status === "success")
-                  ?.time_started
-              ) ?? "-"}
+              {timeAgo(ccPair?.last_indexed) ?? "-"}
             </div>
           </div>
 

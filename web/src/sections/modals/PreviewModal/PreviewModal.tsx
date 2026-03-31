@@ -5,8 +5,8 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
+import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
 import mime from "mime";
 import {
   getCodeLanguage,
@@ -189,30 +189,12 @@ export default function PreviewModal({
           )}
         </div>
 
-        {/* Floating footer */}
         {!isLoading && !loadError && (
-          <div
-            className={cn(
-              "absolute bottom-0 left-0 right-0",
-              "flex items-center justify-between",
-              "p-4 pointer-events-none w-full"
-            )}
-            style={{
-              background: `linear-gradient(to top, var(--background-${
-                variant.codeBackground ? "code-01" : "tint-01"
-              }) 40%, transparent)`,
-            }}
-          >
-            {/* Left slot */}
-            <div className="pointer-events-auto">
-              {variant.renderFooterLeft(ctx)}
-            </div>
-
-            {/* Right slot */}
-            <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
-              {variant.renderFooterRight(ctx)}
-            </div>
-          </div>
+          <FloatingFooter
+            left={variant.renderFooterLeft(ctx)}
+            right={variant.renderFooterRight(ctx)}
+            codeBackground={variant.codeBackground}
+          />
         )}
       </Modal.Content>
     </Modal>

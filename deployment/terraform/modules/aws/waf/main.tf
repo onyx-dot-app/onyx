@@ -1,6 +1,20 @@
 locals {
-  name = var.name
-  tags = var.tags
+  name                  = var.name
+  tags                  = var.tags
+  ip_allowlist_enabled  = length(var.allowed_ip_cidrs) > 0
+  managed_rule_priority = local.ip_allowlist_enabled ? 1 : 0
+}
+
+resource "aws_wafv2_ip_set" "allowed_ips" {
+  count = local.ip_allowlist_enabled ? 1 : 0
+
+  name               = "${local.name}-allowed-ips"
+  description        = "IP allowlist for ${local.name}"
+  scope              = "REGIONAL"
+  ip_address_version = "IPV4"
+  addresses          = var.allowed_ip_cidrs
+
+  tags = local.tags
 }
 
 # AWS WAFv2 Web ACL
@@ -13,10 +27,38 @@ resource "aws_wafv2_web_acl" "main" {
     allow {}
   }
 
+  dynamic "rule" {
+    for_each = local.ip_allowlist_enabled ? [1] : []
+    content {
+      name     = "BlockRequestsOutsideAllowedIPs"
+      priority = 1
+
+      action {
+        block {}
+      }
+
+      statement {
+        not_statement {
+          statement {
+            ip_set_reference_statement {
+              arn = aws_wafv2_ip_set.allowed_ips[0].arn
+            }
+          }
+        }
+      }
+
+      visibility_config {
+        cloudwatch_metrics_enabled = true
+        metric_name                = "BlockRequestsOutsideAllowedIPsMetric"
+        sampled_requests_enabled   = true
+      }
+    }
+  }
+
   # AWS Managed Rules - Core Rule Set
   rule {
     name     = "AWSManagedRulesCommonRuleSet"
-    priority = 1
+    priority = 1 + local.managed_rule_priority
 
     override_action {
       none {}
@@ -26,6 +68,16 @@ resource "aws_wafv2_web_acl" "main" {
       managed_rule_group_statement {
         name        = "AWSManagedRulesCommonRuleSet"
         vendor_name = "AWS"
+
+        dynamic "rule_action_override" {
+          for_each = var.common_rule_set_count_rules
+          content {
+            name = rule_action_override.value
+            action_to_use {
+              count {}
+            }
+          }
+        }
       }
     }
 
@@ -39,7 +91,7 @@ resource "aws_wafv2_web_acl" "main" {
   # AWS Managed Rules - Known Bad Inputs
   rule {
     name     = "AWSManagedRulesKnownBadInputsRuleSet"
-    priority = 2
+    priority = 2 + local.managed_rule_priority
 
     override_action {
       none {}
@@ -62,7 +114,7 @@ resource "aws_wafv2_web_acl" "main" {
   # Rate Limiting Rule
   rule {
     name     = "RateLimitRule"
-    priority = 3
+    priority = 3 + local.managed_rule_priority
 
     action {
       block {}
@@ -87,7 +139,7 @@ resource "aws_wafv2_web_acl" "main" {
     for_each = length(var.geo_restriction_countries) > 0 ? [1] : []
     content {
       name     = "GeoRestrictionRule"
-      priority = 4
+      priority = 4 + local.managed_rule_priority
 
       action {
         block {}
@@ -110,7 +162,7 @@ resource "aws_wafv2_web_acl" "main" {
   # IP Rate Limiting
   rule {
     name     = "APIRateLimitRule"
-    priority = 5
+    priority = 5 + local.managed_rule_priority
 
     action {
       block {}
@@ -133,7 +185,7 @@ resource "aws_wafv2_web_acl" "main" {
   # SQL Injection Protection
   rule {
     name     = "AWSManagedRulesSQLiRuleSet"
-    priority = 6
+    priority = 6 + local.managed_rule_priority
 
     override_action {
       none {}
@@ -156,7 +208,7 @@ resource "aws_wafv2_web_acl" "main" {
   # Anonymous IP Protection
   rule {
     name     = "AWSManagedRulesAnonymousIpList"
-    priority = 7
+    priority = 7 + local.managed_rule_priority
 
     override_action {
       none {}

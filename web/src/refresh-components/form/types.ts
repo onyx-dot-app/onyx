@@ -12,7 +12,7 @@ export interface FieldContextType {
 
 export type FormFieldRootProps = React.HTMLAttributes<HTMLDivElement> & {
   name?: string;
-  state: FormFieldState;
+  state?: FormFieldState;
   required?: boolean;
   id?: string;
 };

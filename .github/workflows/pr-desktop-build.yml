@@ -50,7 +50,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup node
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
         with:
           node-version: 24
           cache: "npm" # zizmor: ignore[cache-poisoning]
@@ -63,7 +63,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache Cargo registry and build
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # zizmor: ignore[cache-poisoning]
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # zizmor: ignore[cache-poisoning]
         with:
           path: |
             ~/.cargo/bin/

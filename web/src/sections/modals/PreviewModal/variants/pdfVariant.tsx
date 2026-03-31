@@ -4,7 +4,7 @@ import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 
 export const pdfVariant: PreviewVariant = {
   matches: (_name, mime) => mime === "application/pdf",
-  width: "lg",
+  width: "full",
   height: "full",
   needsTextContent: false,
   codeBackground: false,

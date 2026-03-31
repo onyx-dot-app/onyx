@@ -17,7 +17,7 @@ import {
   type ContentMdProps,
 } from "@opal/layouts/content/ContentMd";
 import type { TagProps } from "@opal/components/tag/components";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { widthVariants } from "@opal/shared";
 import type { ExtremaSizeVariants } from "@opal/types";
 
@@ -39,10 +39,10 @@ interface ContentBaseProps {
   icon?: IconFunctionComponent;
 
   /** Main title text. */
-  title: string;
+  title: string | RichStr;
 
   /** Optional description below the title. */
-  description?: string;
+  description?: string | RichStr;
 
   /** Enable inline editing of the title. */
   editable?: boolean;
@@ -61,9 +61,6 @@ interface ContentBaseProps {
    * @default "fit"
    */
   widthVariant?: ExtremaSizeVariants;
-
-  /** When `true`, the title color hooks into `Interactive.Stateful`/`Interactive.Stateless`'s `--interactive-foreground` variable. */
-  withInteractive?: boolean;
 
   /** Ref forwarded to the root `<div>` of the resolved layout. */
   ref?: React.Ref<HTMLDivElement>;
@@ -94,8 +91,8 @@ type LgContentProps = ContentBaseProps & {
 type MdContentProps = ContentBaseProps & {
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant?: "section";
-  /** When `true`, renders "(Optional)" beside the title in the muted font variant. */
-  optional?: boolean;
+  /** Muted suffix rendered beside the title. Use `"optional"` for "(Optional)". */
+  suffix?: "optional" | (string & {});
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
   /** Tag rendered beside the title. */
@@ -130,7 +127,6 @@ function Content(props: ContentProps) {
     sizePreset = "headline",
     variant = "heading",
     widthVariant = "full",
-    withInteractive,
     ref,
     ...rest
   } = props;
@@ -143,7 +139,6 @@ function Content(props: ContentProps) {
       layout = (
         <ContentXl
           sizePreset={sizePreset}
-          withInteractive={withInteractive}
           ref={ref}
           {...(rest as Omit<ContentXlProps, "sizePreset">)}
         />
@@ -152,7 +147,6 @@ function Content(props: ContentProps) {
       layout = (
         <ContentLg
           sizePreset={sizePreset}
-          withInteractive={withInteractive}
           ref={ref}
           {...(rest as Omit<ContentLgProps, "sizePreset">)}
         />
@@ -166,7 +160,6 @@ function Content(props: ContentProps) {
     layout = (
       <ContentMd
         sizePreset={sizePreset}
-        withInteractive={withInteractive}
         ref={ref}
         {...(rest as Omit<ContentMdProps, "sizePreset">)}
       />
@@ -178,7 +171,6 @@ function Content(props: ContentProps) {
     layout = (
       <ContentSm
         sizePreset={sizePreset}
-        withInteractive={withInteractive}
         ref={ref}
         {...(rest as Omit<
           React.ComponentProps<typeof ContentSm>,

@@ -321,7 +321,7 @@ export default function ExpandableTextDisplay({
 
       {/* Expanded Modal */}
       <Modal open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <Modal.Content height="lg" width="md-sm" preventAccidentalClose={false}>
+        <Modal.Content height="lg" width="lg" preventAccidentalClose={false}>
           {/* Header */}
           <div className="flex items-start justify-between px-4 py-3">
             <div className="flex flex-col">

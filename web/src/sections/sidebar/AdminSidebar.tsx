@@ -56,7 +56,8 @@ function buildItems(
   settings: CombinedSettings | null,
   kgExposed: boolean,
   customAnalyticsEnabled: boolean,
-  hasSubscription: boolean
+  hasSubscription: boolean,
+  hooksEnabled: boolean
 ): SidebarItemEntry[] {
   const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
   const items: SidebarItemEntry[] = [];
@@ -122,6 +123,9 @@ function buildItems(
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS);
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.SLACK_BOTS);
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.DISCORD_BOTS);
+    if (hooksEnabled) {
+      add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.HOOKS);
+    }
   }
 
   // 5. Permissions
@@ -202,6 +206,7 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
           (billingData && hasActiveSubscription(billingData)) ||
             licenseData?.has_license
         );
+  const hooksEnabled = settings?.settings.hooks_enabled ?? false;
 
   const allItems = buildItems(
     isCurator,
@@ -210,7 +215,8 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
     settings,
     kgExposed,
     customAnalyticsEnabled,
-    hasSubscriptionOrLicense
+    hasSubscriptionOrLicense,
+    hooksEnabled
   );
 
   const itemExtractor = useCallback((item: SidebarItemEntry) => item.name, []);
@@ -223,7 +229,7 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
     <SidebarWrapper>
       <SidebarBody
         scrollKey="admin-sidebar"
-        actionButtons={
+        pinnedContent={
           <div className="flex flex-col w-full">
             <SidebarTab
               icon={({ className }) => <SvgX className={className} size={16} />}

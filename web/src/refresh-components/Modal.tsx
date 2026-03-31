@@ -3,9 +3,10 @@
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Button } from "@opal/components";
 import { Content } from "@opal/layouts";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
@@ -76,10 +77,11 @@ const useModalContext = () => {
 };
 
 const widthClasses = {
-  lg: "w-[80dvw]",
-  md: "w-[60rem]",
-  "md-sm": "w-[50rem]",
-  sm: "w-[32rem]",
+  full: "w-[80dvw]",
+  xl: "w-[60rem]",
+  lg: "w-[50rem]",
+  md: "w-[40rem]",
+  sm: "w-[30rem]",
 };
 
 const heightClasses = {
@@ -97,20 +99,20 @@ const heightClasses = {
  * @example
  * ```tsx
  * // Using width and height props
- * <Modal.Content width="lg" height="full">
- *   {/* Large modal: w-[80dvw] h-[80dvh] *\/}
+ * <Modal.Content width="full" height="full">
+ *   {/* Full modal: w-[80dvw] h-[80dvh] *\/}
  * </Modal.Content>
  *
- * <Modal.Content width="md" height="fit">
- *   {/* Medium modal: w-[60rem] h-fit *\/}
+ * <Modal.Content width="xl" height="fit">
+ *   {/* XL modal: w-[60rem] h-fit *\/}
  * </Modal.Content>
  *
  * <Modal.Content width="sm" height="sm">
- *   {/* Small modal: w-[32rem] max-h-[30rem] *\/}
+ *   {/* Small modal: w-[30rem] max-h-[30rem] *\/}
  * </Modal.Content>
  *
  * <Modal.Content width="sm" height="lg">
- *   {/* Tall modal: w-[32rem] max-h-[calc(100dvh-4rem)] *\/}
+ *   {/* Tall modal: w-[30rem] max-h-[calc(100dvh-4rem)] *\/}
  * </Modal.Content>
  * ```
  */
@@ -120,6 +122,10 @@ export interface ModalContentProps
   > {
   width?: keyof typeof widthClasses;
   height?: keyof typeof heightClasses;
+  /** Vertical placement of the modal. `"center"` (default) centers in the
+   *  viewport/container. `"top"` pins the modal near the top of the viewport,
+   *  matching the position used by CommandMenu. */
+  position?: "center" | "top";
   preventAccidentalClose?: boolean;
   skipOverlay?: boolean;
   background?: "default" | "gray";
@@ -134,8 +140,9 @@ const ModalContent = React.forwardRef<
   (
     {
       children,
-      width = "md",
+      width = "xl",
       height = "fit",
+      position = "center",
       preventAccidentalClose = true,
       skipOverlay = false,
       background = "default",
@@ -267,27 +274,39 @@ const ModalContent = React.forwardRef<
 
     const { centerX, centerY, hasContainerCenter } = useContainerCenter();
 
+    const isTop = position === "top";
+
     const animationClasses = cn(
       "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
       "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
-      "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
+      !isTop &&
+        "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
       "duration-200"
     );
 
-    const containerStyle: React.CSSProperties | undefined = hasContainerCenter
-      ? ({
-          left: centerX,
-          top: centerY,
-          "--tw-enter-translate-x": "-50%",
-          "--tw-exit-translate-x": "-50%",
-          "--tw-enter-translate-y": "-50%",
-          "--tw-exit-translate-y": "-50%",
-        } as React.CSSProperties)
-      : undefined;
+    const containerStyle: React.CSSProperties | undefined =
+      hasContainerCenter && !isTop
+        ? ({
+            left: centerX,
+            top: centerY,
+            "--tw-enter-translate-x": "-50%",
+            "--tw-exit-translate-x": "-50%",
+            "--tw-enter-translate-y": "-50%",
+            "--tw-exit-translate-y": "-50%",
+          } as React.CSSProperties)
+        : hasContainerCenter && isTop
+          ? ({
+              left: centerX,
+              "--tw-enter-translate-x": "-50%",
+              "--tw-exit-translate-x": "-50%",
+            } as React.CSSProperties)
+          : undefined;
 
     const positionClasses = cn(
-      "fixed -translate-x-1/2 -translate-y-1/2",
-      !hasContainerCenter && "left-1/2 top-1/2"
+      "fixed -translate-x-1/2",
+      isTop
+        ? cn("top-[72px]", !hasContainerCenter && "left-1/2")
+        : cn("-translate-y-1/2", !hasContainerCenter && "left-1/2 top-1/2")
     );
 
     const dialogEventHandlers = {
@@ -406,12 +425,12 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * </Modal.Header>
  * ```
  */
-interface ModalHeaderProps extends WithoutStyles<SectionProps> {
+interface ModalHeaderProps extends Omit<WithoutStyles<SectionProps>, "title"> {
   icon?: IconFunctionComponent;
   moreIcon1?: IconFunctionComponent;
   moreIcon2?: IconFunctionComponent;
-  title: string;
-  description?: string;
+  title: string | RichStr;
+  description?: string | RichStr;
   onClose?: () => void;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
@@ -438,6 +457,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       <div
         tabIndex={-1}
         ref={closeButtonRef as React.RefObject<HTMLDivElement>}
+        className="outline-none"
       >
         <DialogPrimitive.Close asChild>
           <Button
@@ -451,13 +471,19 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
     );
 
     return (
-      <Section ref={ref} padding={1} alignItems="start" height="fit" {...props}>
+      <Section
+        ref={ref}
+        padding={0.5}
+        alignItems="start"
+        height="fit"
+        {...props}
+      >
         <Section
           flexDirection="row"
           justifyContent="between"
           alignItems="start"
           gap={0}
-          padding={0}
+          padding={0.5}
         >
           <div className="relative w-full">
             {/* Close button is absolutely positioned because:
@@ -478,14 +504,13 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
                 />
                 {description && (
                   <DialogPrimitive.Description className="hidden">
-                    {description}
+                    {toPlainString(description)}
                   </DialogPrimitive.Description>
                 )}
               </div>
             </DialogPrimitive.Title>
           </div>
         </Section>
-
         {children}
       </Section>
     );

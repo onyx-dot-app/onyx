@@ -44,6 +44,7 @@ class OnyxErrorCode(Enum):
     VALIDATION_ERROR = ("VALIDATION_ERROR", 400)
     INVALID_INPUT = ("INVALID_INPUT", 400)
     MISSING_REQUIRED_FIELD = ("MISSING_REQUIRED_FIELD", 400)
+    QUERY_REJECTED = ("QUERY_REJECTED", 400)
 
     # ------------------------------------------------------------------
     # Not Found (404)
@@ -88,6 +89,7 @@ class OnyxErrorCode(Enum):
     SERVICE_UNAVAILABLE = ("SERVICE_UNAVAILABLE", 503)
     BAD_GATEWAY = ("BAD_GATEWAY", 502)
     LLM_PROVIDER_ERROR = ("LLM_PROVIDER_ERROR", 502)
+    HOOK_EXECUTION_FAILED = ("HOOK_EXECUTION_FAILED", 502)
     GATEWAY_TIMEOUT = ("GATEWAY_TIMEOUT", 504)
 
     def __init__(self, code: str, status_code: int) -> None:

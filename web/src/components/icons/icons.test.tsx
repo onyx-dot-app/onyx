@@ -5,6 +5,7 @@
  * and support various display sizes.
  */
 import React from "react";
+import { SvgBifrost } from "@opal/icons";
 import { render } from "@tests/setup/test-utils";
 import { GithubIcon, GitbookIcon, ConfluenceIcon } from "./icons";
 
@@ -50,5 +51,16 @@ describe("Logo Icons", () => {
     expect(() => {
       render(<GithubIcon size={100} className="custom-class" />);
     }).not.toThrow();
+  });
+
+  test("renders the Bifrost icon with theme-aware colors", () => {
+    const { container } = render(
+      <SvgBifrost size={32} className="custom text-red-500 dark:text-black" />
+    );
+    const icon = container.querySelector("svg");
+
+    expect(icon).toBeInTheDocument();
+    expect(icon).toHaveClass("custom", "text-[#33C19E]", "dark:text-white");
+    expect(icon).not.toHaveClass("text-red-500", "dark:text-black");
   });
 });

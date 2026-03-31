@@ -516,6 +516,8 @@ def _get_all_doc_ids(
     ] = default_msg_filter,
     callback: IndexingHeartbeatInterface | None = None,
     workspace_url: str | None = None,
+    start: SecondsSinceUnixEpoch | None = None,
+    end: SecondsSinceUnixEpoch | None = None,
 ) -> GenerateSlimDocumentOutput:
     """
     Get all document ids in the workspace, channel by channel
@@ -546,6 +548,8 @@ def _get_all_doc_ids(
             client=client,
             channel=channel,
             callback=callback,
+            oldest=str(start) if start else None,  # 0.0 -> None intentionally
+            latest=str(end) if end is not None else None,
         )
 
         for message_batch in channel_message_batches:
@@ -847,8 +851,8 @@ class SlackConnector(
 
     def retrieve_all_slim_docs_perm_sync(
         self,
-        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         if self.client is None:
@@ -861,6 +865,8 @@ class SlackConnector(
             msg_filter_func=self.msg_filter_func,
             callback=callback,
             workspace_url=self._workspace_url,
+            start=start,
+            end=end,
         )
 
     def _load_from_checkpoint(

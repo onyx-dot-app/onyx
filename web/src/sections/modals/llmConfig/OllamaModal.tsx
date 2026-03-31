@@ -212,6 +212,7 @@ export default function OllamaModal({
   shouldMarkAsDefault,
   open,
   onOpenChange,
+  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -244,7 +245,11 @@ export default function OllamaModal({
         },
       } as OllamaModalValues)
     : {
-        ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
+        ...buildDefaultInitialValues(
+          existingLlmProvider,
+          modelConfigurations,
+          defaultModelName
+        ),
         api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
         custom_config: {
           OLLAMA_API_KEY:

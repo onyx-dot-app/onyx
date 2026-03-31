@@ -272,7 +272,7 @@ jobs:
 
       - name: Setup node
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
         with:
           node-version: 22
           cache: "npm" # zizmor: ignore[cache-poisoning]
@@ -284,7 +284,7 @@ jobs:
 
       - name: Cache playwright cache
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
@@ -471,7 +471,7 @@ jobs:
 
       - name: Install the latest version of uv
         if: always()
-        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # ratchet:astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # ratchet:astral-sh/setup-uv@v7
         with:
           enable-cache: false
           version: "0.9.9"
@@ -614,7 +614,7 @@ jobs:
 
       - name: Setup node
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
         with:
           node-version: 22
           cache: "npm" # zizmor: ignore[cache-poisoning]
@@ -626,7 +626,7 @@ jobs:
 
       - name: Cache playwright cache
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}

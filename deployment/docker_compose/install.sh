@@ -96,8 +96,8 @@ fi
 
 # When --lite is passed as a flag, lower resource thresholds early (before the
 # resource check). When lite is chosen interactively, the thresholds are adjusted
-# inside the new-deployment flow, after the resource check has already passed
-# with the standard thresholds — which is the safer direction.
+# after the resource check has already passed with the standard thresholds —
+# which is the safer direction.
 if [[ "$LITE_MODE" = true ]]; then
     EXPECTED_DOCKER_RAM_GB=4
     EXPECTED_DISK_GB=16
@@ -110,9 +110,6 @@ LITE_COMPOSE_FILE="docker-compose.onyx-lite.yml"
 # Build the -f flags for docker compose.
 # Pass "true" as $1 to auto-detect a previously-downloaded lite overlay
 # (used by shutdown/delete-data so users don't need to remember --lite).
-# Without the argument, the lite overlay is only included when --lite was
-# explicitly passed — preventing install/start from silently staying in
-# lite mode just because the file exists on disk from a prior run.
 compose_file_args() {
     local auto_detect="${1:-false}"
     local args="-f docker-compose.yml"
@@ -177,34 +174,52 @@ ensure_file() {
 
 # --- Interactive prompt helpers ---
 is_interactive() {
-    [[ "$NO_PROMPT" = false ]] && [[ -t 0 ]]
+    [[ "$NO_PROMPT" = false ]] && [[ -r /dev/tty ]] && [[ -w /dev/tty ]]
+}
+
+read_prompt_line() {
+    local prompt_text="$1"
+    if ! is_interactive; then
+        REPLY=""
+        return
+    fi
+    [[ -n "$prompt_text" ]] && printf "%s" "$prompt_text" > /dev/tty
+    IFS= read -r REPLY < /dev/tty || REPLY=""
+}
+
+read_prompt_char() {
+    local prompt_text="$1"
+    if ! is_interactive; then
+        REPLY=""
+        return
+    fi
+    [[ -n "$prompt_text" ]] && printf "%s" "$prompt_text" > /dev/tty
+    IFS= read -r -n 1 REPLY < /dev/tty || REPLY=""
+    printf "\n" > /dev/tty
 }
 
 prompt_or_default() {
     local prompt_text="$1"
     local default_value="$2"
-    if is_interactive; then
-        read -p "$prompt_text" -r REPLY
-        if [[ -z "$REPLY" ]]; then
-            REPLY="$default_value"
-        fi
-    else
-        REPLY="$default_value"
-    fi
+    read_prompt_line "$prompt_text"
+    [[ -z "$REPLY" ]] && REPLY="$default_value"
 }
 
 prompt_yn_or_default() {
     local prompt_text="$1"
     local default_value="$2"
-    if is_interactive; then
-        read -p "$prompt_text" -n 1 -r
-        echo ""
-        if [[ -z "$REPLY" ]]; then
-            REPLY="$default_value"
-        fi
-    else
-        REPLY="$default_value"
+    read_prompt_char "$prompt_text"
+    [[ -z "$REPLY" ]] && REPLY="$default_value"
+}
+
+confirm_action() {
+    local description="$1"
+    prompt_yn_or_default "Install ${description}? (Y/n) [default: Y] " "Y"
+    if [[ "$REPLY" =~ ^[Nn] ]]; then
+        print_warning "Skipping: ${description}"
+        return 1
     fi
+    return 0
 }
 
 # Colors for output
@@ -295,8 +310,8 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     echo "  • All user data and documents"
     echo ""
     if is_interactive; then
-        read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
-        echo ""
+        prompt_or_default "Are you sure you want to continue? Type 'DELETE' to confirm: " ""
+        echo "" > /dev/tty
         if [ "$REPLY" != "DELETE" ]; then
             print_info "Operation cancelled."
             exit 0
@@ -395,6 +410,11 @@ fi
 
 if ! command -v docker &> /dev/null; then
     if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+        print_info "Docker is required but not installed."
+        if ! confirm_action "Docker Engine"; then
+            print_error "Docker is required to run Onyx."
+            exit 1
+        fi
         install_docker_linux
         if ! command -v docker &> /dev/null; then
             print_error "Docker installation failed."
@@ -411,7 +431,11 @@ if command -v docker &> /dev/null \
     && ! command -v docker-compose &> /dev/null \
     && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; }; then
 
-    print_info "Docker Compose not found — installing plugin..."
+    print_info "Docker Compose is required but not installed."
+    if ! confirm_action "Docker Compose plugin"; then
+        print_error "Docker Compose is required to run Onyx."
+        exit 1
+    fi
     COMPOSE_ARCH="$(uname -m)"
     COMPOSE_URL="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${COMPOSE_ARCH}"
     COMPOSE_DIR="/usr/local/lib/docker/cli-plugins"
@@ -481,7 +505,7 @@ echo ""
 
 if is_interactive; then
     echo -e "${YELLOW}${BOLD}Please acknowledge and press Enter to continue...${NC}"
-    read -r
+    read_prompt_line ""
     echo ""
 else
     echo -e "${YELLOW}${BOLD}Running in non-interactive mode - proceeding automatically...${NC}"
@@ -562,10 +586,31 @@ version_compare() {
 
 # Check Docker daemon
 if ! docker info &> /dev/null; then
-    print_error "Docker daemon is not running. Please start Docker."
-    exit 1
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        print_info "Docker daemon is not running. Starting Docker Desktop..."
+        open -a Docker
+        # Wait up to 120 seconds for Docker to be ready
+        DOCKER_WAIT=0
+        DOCKER_MAX_WAIT=120
+        while ! docker info &> /dev/null; do
+            if [ $DOCKER_WAIT -ge $DOCKER_MAX_WAIT ]; then
+                print_error "Docker Desktop did not start within ${DOCKER_MAX_WAIT} seconds."
+                print_info "Please start Docker Desktop manually and re-run this script."
+                exit 1
+            fi
+            printf "\r\033[KWaiting for Docker Desktop to start... (%ds)" "$DOCKER_WAIT"
+            sleep 2
+            DOCKER_WAIT=$((DOCKER_WAIT + 2))
+        done
+        echo ""
+        print_success "Docker Desktop is now running"
+    else
+        print_error "Docker daemon is not running. Please start Docker."
+        exit 1
+    fi
+else
+    print_success "Docker daemon is running"
 fi
-print_success "Docker daemon is running"
 
 # Check Docker resources
 print_step "Verifying Docker resources"
@@ -705,25 +750,48 @@ if [ "$COMPOSE_VERSION" != "dev" ] && version_compare "$COMPOSE_VERSION" "2.24.0
     print_info "Proceeding with installation despite Docker Compose version compatibility issues..."
 fi
 
-# Handle lite overlay: ensure it if --lite, clean up stale copies otherwise
+# Ask for deployment mode (standard vs lite) unless already set via --lite flag
+if [[ "$LITE_MODE" = false ]]; then
+    print_info "Which deployment mode would you like?"
+    echo ""
+    echo "  1) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
+    echo "                  LLM chat, tools, file uploads, and Projects still work"
+    echo "  2) Standard  - Full deployment with search, connectors, and RAG"
+    echo ""
+    prompt_or_default "Choose a mode (1 or 2) [default: 1]: " "1"
+    echo ""
+
+    case "$REPLY" in
+        2)
+            print_info "Selected: Standard mode"
+            ;;
+        *)
+            LITE_MODE=true
+            print_info "Selected: Lite mode"
+            ;;
+    esac
+else
+    print_info "Deployment mode: Lite (set via --lite flag)"
+fi
+
+if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
+    print_error "--include-craft cannot be used with Lite mode."
+    print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+    exit 1
+fi
+
+if [[ "$LITE_MODE" = true ]]; then
+    EXPECTED_DOCKER_RAM_GB=4
+    EXPECTED_DISK_GB=16
+fi
+
+# Handle lite overlay file based on selected mode
 if [[ "$LITE_MODE" = true ]]; then
     ensure_file "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" \
         "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "${LITE_COMPOSE_FILE}" || exit 1
 elif [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
-    if [[ -f "${INSTALL_ROOT}/deployment/.env" ]]; then
-        print_warning "Existing lite overlay found but --lite was not passed."
-        prompt_yn_or_default "Remove lite overlay and switch to standard mode? (y/N): " "n"
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Keeping existing lite overlay. Pass --lite to keep using lite mode."
-            LITE_MODE=true
-        else
-            rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
-            print_info "Removed lite overlay (switching to standard mode)"
-        fi
-    else
-        rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
-        print_info "Removed previous lite overlay (switching to standard mode)"
-    fi
+    rm -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}"
+    print_info "Removed previous lite overlay (switching to standard mode)"
 fi
 
 ensure_file "${INSTALL_ROOT}/deployment/env.template" \
@@ -745,6 +813,7 @@ print_success "All configuration files ready"
 # Set up deployment configuration
 print_step "Setting up deployment configs"
 ENV_FILE="${INSTALL_ROOT}/deployment/.env"
+ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 # Check if services are already running
 if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
     # Determine compose command
@@ -785,22 +854,22 @@ if [ -f "$ENV_FILE" ]; then
     if [ "$REPLY" = "update" ]; then
         print_info "Update selected. Which tag would you like to deploy?"
         echo ""
-        echo "• Press Enter for latest (recommended)"
+        echo "• Press Enter for edge (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
         if [ "$INCLUDE_CRAFT" = true ]; then
             prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
             VERSION="$REPLY"
         else
-            prompt_or_default "Enter tag [default: latest]: " "latest"
+            prompt_or_default "Enter tag [default: edge]: " "edge"
             VERSION="$REPLY"
         fi
         echo ""
 
         if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
             print_info "Selected: craft-latest (Craft enabled)"
-        elif [ "$VERSION" = "latest" ]; then
-            print_info "Selected: Latest version"
+        elif [ "$VERSION" = "edge" ]; then
+            print_info "Selected: edge (latest nightly)"
         else
             print_info "Selected: $VERSION"
         fi
@@ -852,45 +921,6 @@ else
     print_info "No existing .env file found. Setting up new deployment..."
     echo ""
 
-    # Ask for deployment mode (standard vs lite) unless already set via --lite flag
-    if [[ "$LITE_MODE" = false ]]; then
-        print_info "Which deployment mode would you like?"
-        echo ""
-        echo "  1) Standard  - Full deployment with search, connectors, and RAG"
-        echo "  2) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
-        echo "                  LLM chat, tools, file uploads, and Projects still work"
-        echo ""
-        prompt_or_default "Choose a mode (1 or 2) [default: 1]: " "1"
-        echo ""
-
-        case "$REPLY" in
-            2)
-                LITE_MODE=true
-                print_info "Selected: Lite mode"
-                ensure_file "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" \
-                    "${GITHUB_RAW_URL}/${LITE_COMPOSE_FILE}" "${LITE_COMPOSE_FILE}" || exit 1
-                ;;
-            *)
-                print_info "Selected: Standard mode"
-                ;;
-        esac
-    else
-        print_info "Deployment mode: Lite (set via --lite flag)"
-    fi
-
-    # Validate lite + craft combination (could now be set interactively)
-    if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
-        print_error "--include-craft cannot be used with Lite mode."
-        print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
-        exit 1
-    fi
-
-    # Adjust resource expectations for lite mode
-    if [[ "$LITE_MODE" = true ]]; then
-        EXPECTED_DOCKER_RAM_GB=4
-        EXPECTED_DISK_GB=16
-    fi
-
     # Ask for version
     print_info "Which tag would you like to deploy?"
     echo ""
@@ -901,18 +931,18 @@ else
         prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
         VERSION="$REPLY"
     else
-        echo "• Press Enter for latest (recommended)"
+        echo "• Press Enter for edge (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        prompt_or_default "Enter tag [default: latest]: " "latest"
+        prompt_or_default "Enter tag [default: edge]: " "edge"
         VERSION="$REPLY"
     fi
     echo ""
 
     if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
         print_info "Selected: craft-latest (Craft enabled)"
-    elif [ "$VERSION" = "latest" ]; then
-        print_info "Selected: Latest tag"
+    elif [ "$VERSION" = "edge" ]; then
+        print_info "Selected: edge (latest nightly)"
     else
         print_info "Selected: $VERSION"
     fi
@@ -1070,18 +1100,37 @@ fi
 export HOST_PORT=$AVAILABLE_PORT
 print_success "Using port $AVAILABLE_PORT for nginx"
 
-# Determine if we're using the latest tag or a craft tag (both should force pull)
+# Determine if we're using a floating tag (edge, latest, craft-*) that should force pull
 # Read IMAGE_TAG from .env file and remove any quotes or whitespace
 CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-if [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
+if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
     USE_LATEST=true
     if [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
         print_info "Using craft tag '$CURRENT_IMAGE_TAG' - will force pull and recreate containers"
     else
-        print_info "Using 'latest' tag - will force pull and recreate containers"
+        print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
     fi
 else
     USE_LATEST=false
+fi
+
+# For pinned version tags, re-download config files from that tag so the
+# compose file matches the images being pulled (the initial download used main).
+if [[ "$USE_LATEST" = false ]] && [[ "$USE_LOCAL_FILES" = false ]]; then
+    PINNED_BASE="https://raw.githubusercontent.com/onyx-dot-app/onyx/${CURRENT_IMAGE_TAG}/deployment"
+    print_info "Fetching config files matching tag ${CURRENT_IMAGE_TAG}..."
+    if download_file "${PINNED_BASE}/docker_compose/docker-compose.yml" "${INSTALL_ROOT}/deployment/docker-compose.yml" 2>/dev/null; then
+        download_file "${PINNED_BASE}/data/nginx/app.conf.template" "${INSTALL_ROOT}/data/nginx/app.conf.template" 2>/dev/null || true
+        download_file "${PINNED_BASE}/data/nginx/run-nginx.sh" "${INSTALL_ROOT}/data/nginx/run-nginx.sh" 2>/dev/null || true
+        chmod +x "${INSTALL_ROOT}/data/nginx/run-nginx.sh"
+        if [[ "$LITE_MODE" = true ]]; then
+            download_file "${PINNED_BASE}/docker_compose/${LITE_COMPOSE_FILE}" \
+                "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" 2>/dev/null || true
+        fi
+        print_success "Config files updated to match ${CURRENT_IMAGE_TAG}"
+    else
+        print_warning "Tag ${CURRENT_IMAGE_TAG} not found on GitHub — using main branch configs"
+    fi
 fi
 
 # Pull Docker images with reduced output

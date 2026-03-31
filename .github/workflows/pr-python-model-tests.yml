@@ -31,6 +31,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - "run-id=${{ github.run_id }}-model-check"
       - "extras=ecr-cache"
+    environment: ci-protected
     timeout-minutes: 45
 
     env:
@@ -73,7 +74,7 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
 
       - name: Build and load
-        uses: docker/bake-action@5be5f02ff8819ecd3092ea6b2e6261c31774f2b4 # ratchet:docker/bake-action@v6
+        uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7 # ratchet:docker/bake-action@v7.0.0
         env:
           TAG: model-server-${{ github.run_id }}
         with:

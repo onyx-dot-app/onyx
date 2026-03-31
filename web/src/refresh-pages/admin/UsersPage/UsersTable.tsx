@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import DataTable from "@/refresh-components/table/DataTable";
-import { createTableColumns } from "@/refresh-components/table/columns";
+import { Table, createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { SvgDownload } from "@opal/icons";
@@ -27,7 +26,8 @@ import type {
   StatusFilter,
   StatusCountMap,
 } from "./interfaces";
-import { getInitials } from "./utils";
+import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import type { User } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Column renderers
@@ -76,20 +76,26 @@ const tc = createTableColumns<UserRow>();
 function buildColumns(onMutate: () => void) {
   return [
     tc.qualifier({
-      content: "avatar-user",
-      getInitials: (row) => getInitials(row.personal_name, row.email),
-      selectable: false,
+      content: "icon",
+      iconSize: "lg",
+      getContent: (row) => {
+        const user = {
+          email: row.email,
+          personalization: row.personal_name
+            ? { name: row.personal_name }
+            : undefined,
+        } as User;
+        return (props) => <UserAvatar user={user} size={props.size} />;
+      },
     }),
     tc.column("email", {
       header: "Name",
       weight: 22,
-      minWidth: 140,
       cell: renderNameColumn,
     }),
     tc.column("groups", {
       header: "Groups",
       weight: 24,
-      minWidth: 200,
       enableSorting: false,
       cell: (value, row) => (
         <GroupsCell groups={value} user={row} onMutate={onMutate} />
@@ -98,19 +104,16 @@ function buildColumns(onMutate: () => void) {
     tc.column("role", {
       header: "Account Type",
       weight: 16,
-      minWidth: 180,
       cell: (_value, row) => <UserRoleCell user={row} onMutate={onMutate} />,
     }),
     tc.column("status", {
       header: "Status",
       weight: 14,
-      minWidth: 100,
       cell: renderStatusColumn,
     }),
     tc.column("updated_at", {
       header: "Last Updated",
       weight: 14,
-      minWidth: 100,
       cell: renderLastUpdatedColumn,
     }),
     tc.actions({
@@ -216,7 +219,7 @@ export default function UsersTable({
         roleCounts={roleCounts}
         statusCounts={statusCounts}
       />
-      <DataTable
+      <Table
         data={filteredUsers}
         columns={columns}
         getRowId={(row) => row.id ?? row.email}
@@ -230,7 +233,6 @@ export default function UsersTable({
           />
         }
         footer={{
-          mode: "summary",
           leftExtra: (
             <Button
               icon={SvgDownload}

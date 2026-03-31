@@ -103,6 +103,11 @@ _EXPECTED_CONFLUENCE_GROUPS = [
         user_emails={"oauth@onyx.app"},
         gives_anyone_access=False,
     ),
+    ExternalUserGroupSet(
+        id="no yuhong allowed",
+        user_emails={"hagen@danswer.ai", "pablo@onyx.app", "chris@onyx.app"},
+        gives_anyone_access=False,
+    ),
 ]
 
 
