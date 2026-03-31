@@ -17,6 +17,8 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DetailedSessionResponse
@@ -657,11 +659,11 @@ def export_docx(
             "path traversal" in error_message.lower()
             or "access denied" in error_message.lower()
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied") from e
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, error_message) from e
 
     if result is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     docx_bytes, filename = result
 
@@ -699,11 +701,11 @@ def export_odt(
             "path traversal" in error_message.lower()
             or "access denied" in error_message.lower()
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied") from e
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, error_message) from e
 
     if result is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     odt_bytes, filename = result
 
