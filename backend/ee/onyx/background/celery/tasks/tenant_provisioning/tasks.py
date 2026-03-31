@@ -13,6 +13,7 @@ from redis.lock import Lock as RedisLock
 from ee.onyx.server.tenants.provisioning import setup_tenant
 from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
 from ee.onyx.server.tenants.schema_management import get_current_alembic_version
+from ee.onyx.server.tenants.schema_management import run_alembic_migrations
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import TARGET_AVAILABLE_TENANTS
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
@@ -91,8 +92,7 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
         batch_size = min(tenants_to_provision, _MAX_TENANTS_PER_RUN)
         if batch_size < tenants_to_provision:
             task_logger.info(
-                f"Capping batch to {batch_size} "
-                f"(need {tenants_to_provision}, will catch up next cycle)"
+                f"Capping batch to {batch_size} (need {tenants_to_provision}, will catch up next cycle)"
             )
 
         provisioned = 0
@@ -103,11 +103,13 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
                     provisioned += 1
             except Exception:
                 task_logger.exception(
-                    f"Failed to provision tenant {i + 1}/{batch_size}, "
-                    "continuing with remaining tenants"
+                    f"Failed to provision tenant {i + 1}/{batch_size}, continuing with remaining tenants"
                 )
 
         task_logger.info(f"Provisioning complete: {provisioned}/{batch_size} succeeded")
+
+        # Migrate any pool tenants that were provisioned before a new migration was deployed
+        _migrate_stale_pool_tenants()
 
     except Exception:
         task_logger.exception("Error in check_available_tenants task")
@@ -118,6 +120,45 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
         except Exception:
             task_logger.warning(
                 "Could not release check lock (likely expired), continuing"
+            )
+
+
+def _migrate_stale_pool_tenants() -> None:
+    """
+    Run alembic upgrade head on any pool tenants whose stored alembic_version
+    doesn't match the current head. This ensures pool tenants are always up to
+    date so that signup doesn't hit schema mismatches (e.g. missing columns).
+    """
+    with get_session_with_shared_schema() as db_session:
+        pool_tenants = db_session.query(AvailableTenant).all()
+        tenant_ids = [t.tenant_id for t in pool_tenants]
+
+    if not tenant_ids:
+        return
+
+    task_logger.info(
+        f"Checking {len(tenant_ids)} pool tenant(s) for pending migrations"
+    )
+
+    for tenant_id in tenant_ids:
+        try:
+            run_alembic_migrations(tenant_id)
+            new_version = get_current_alembic_version(tenant_id)
+            with get_session_with_shared_schema() as db_session:
+                tenant = (
+                    db_session.query(AvailableTenant)
+                    .filter_by(tenant_id=tenant_id)
+                    .first()
+                )
+                if tenant and tenant.alembic_version != new_version:
+                    task_logger.info(
+                        f"Migrated pool tenant {tenant_id}: {tenant.alembic_version} -> {new_version}"
+                    )
+                    tenant.alembic_version = new_version
+                    db_session.commit()
+        except Exception:
+            task_logger.exception(
+                f"Failed to migrate pool tenant {tenant_id}, skipping"
             )
 
 
