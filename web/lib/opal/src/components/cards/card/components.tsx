@@ -1,5 +1,5 @@
 import "@opal/components/cards/card/styles.css";
-import type { PaddingVariants } from "@opal/types";
+import type { PaddingVariants, RoundingVariants } from "@opal/types";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -8,7 +8,6 @@ import { cn } from "@opal/utils";
 
 type BackgroundVariant = "none" | "light" | "heavy";
 type BorderVariant = "none" | "dashed" | "solid";
-type RoundingVariant = "sm" | "md" | "lg";
 
 type CardProps = {
   /**
@@ -37,7 +36,7 @@ type CardProps = {
    *
    * @default "md"
    */
-  roundingVariant?: RoundingVariant;
+  roundingVariant?: RoundingVariants;
 
   /**
    * Background fill intensity.
@@ -77,10 +76,11 @@ const paddingForVariant: Record<PaddingVariants, string> = {
   "2xs": "p-0.5",
 };
 
-const roundingForVariant: Record<RoundingVariant, string> = {
-  sm: "rounded-08",
-  md: "rounded-12",
+const roundingForVariant: Record<RoundingVariants, string> = {
   lg: "rounded-16",
+  md: "rounded-12",
+  sm: "rounded-08",
+  xs: "rounded-04",
 };
 
 // ---------------------------------------------------------------------------
@@ -114,10 +114,4 @@ function Card({
 // Exports
 // ---------------------------------------------------------------------------
 
-export {
-  Card,
-  type CardProps,
-  type BackgroundVariant,
-  type BorderVariant,
-  type RoundingVariant,
-};
+export { Card, type CardProps, type BackgroundVariant, type BorderVariant };
