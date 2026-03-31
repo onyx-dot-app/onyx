@@ -47,6 +47,7 @@ import { DISCORD_SERVICE_API_KEY_NAME } from "@/refresh-pages/admin/ServiceAccou
 import ApiKeyFormModal from "@/refresh-pages/admin/ServiceAccountsPage/ApiKeyFormModal";
 import { Table } from "@opal/components";
 import { createTableColumns } from "@opal/components/table/columns";
+import { Section } from "@/layouts/general-layouts";
 
 const API_KEY_SWR_KEY = "/api/admin/api-key";
 const route = ADMIN_ROUTES.API_KEYS;
@@ -154,7 +155,13 @@ export default function ServiceAccountsPage() {
       tc.column("api_key_name", {
         header: "Name",
         weight: 25,
-        cell: (value) => value || "Unnamed",
+        cell: (value) => (
+          <Content
+            title={value || "Unnamed"}
+            sizePreset="main-ui"
+            variant="body"
+          />
+        ),
       }),
       tc.column("api_key_display", {
         header: "API Key",
@@ -469,18 +476,20 @@ export default function ServiceAccountsPage() {
             </Button>
           }
         >
-          <Text as="p" color="text-03">
-            {markdown(
-              `Any application using the API key of account *${
-                deleteTarget.api_key_name || "Unnamed"
-              }* (\`${
-                deleteTarget.api_key_display
-              }\`) will lose access to Onyx.`
-            )}
-          </Text>
-          <Text as="p" color="text-03">
-            Deletion cannot be undone.
-          </Text>
+          <Section alignItems="start" gap={0.5}>
+            <Text as="p" color="text-03">
+              {markdown(
+                `Any application using the API key of account *${
+                  deleteTarget.api_key_name || "Unnamed"
+                }* (\`${
+                  deleteTarget.api_key_display
+                }\`) will lose access to Onyx.`
+              )}
+            </Text>
+            <Text as="p" color="text-03">
+              Deletion cannot be undone.
+            </Text>
+          </Section>
         </ConfirmationModalLayout>
       )}
     </SettingsLayouts.Root>
