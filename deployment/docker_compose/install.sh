@@ -202,14 +202,14 @@ prompt_or_default() {
     local prompt_text="$1"
     local default_value="$2"
     read_prompt_line "$prompt_text"
-    [[ -z "$REPLY" ]] && REPLY="$default_value"
+    if [[ -z "$REPLY" ]]; then REPLY="$default_value"; fi
 }
 
 prompt_yn_or_default() {
     local prompt_text="$1"
     local default_value="$2"
     read_prompt_char "$prompt_text"
-    [[ -z "$REPLY" ]] && REPLY="$default_value"
+    if [[ -z "$REPLY" ]]; then REPLY="$default_value"; fi
 }
 
 confirm_action() {
