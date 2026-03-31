@@ -215,30 +215,41 @@ class TestSessionExports:
         assert odt_bytes == b"converted-odt"
         assert odt_filename == "notes.odt"
 
-    @pytest.mark.parametrize(
-        ("file_name", "converter"),
-        [("sample.odt", "odt"), ("sheet.ods", "ods"), ("slides.odp", "odp")],
-    )
-    def test_open_document_extractors_read_temp_files(
-        self,
-        file_name: str,
-        converter: str,
-    ) -> None:
-        """ODF text extractors should pass a readable temp path to pandoc."""
+    def test_odt_extractor_reads_temp_file(self) -> None:
+        """ODT text extraction should pass a readable temp path to pandoc."""
         from onyx.file_processing.extract_file_text import extract_file_text
 
         def fake_convert_file(file_path: str, to: str, format: str) -> str:
             assert to == "plain"
-            assert format == converter
+            assert format == "odt"
             with open(file_path, "rb") as handle:
                 return handle.read().decode("utf-8")
 
         fake_pypandoc = types.SimpleNamespace(convert_file=fake_convert_file)
 
         with patch.dict(sys.modules, {"pypandoc": fake_pypandoc}):
-            text = extract_file_text(io.BytesIO(b"OpenDocument content"), file_name)
+            text = extract_file_text(io.BytesIO(b"OpenDocument content"), "sample.odt")
 
         assert text == "OpenDocument content"
+
+    @pytest.mark.parametrize("file_name", ["sheet.ods", "slides.odp"])
+    def test_unsupported_open_document_formats_warn_and_return_empty(
+        self,
+        file_name: str,
+    ) -> None:
+        """Unsupported ODS/ODP files should not be silently indexed as empty content."""
+        from onyx.file_processing import extract_file_text as extract_file_text_module
+
+        with patch.object(extract_file_text_module.logger, "warning") as mock_warning:
+            text = extract_file_text_module.extract_file_text(
+                io.BytesIO(b"OpenDocument content"),
+                file_name,
+                break_on_unprocessable=False,
+            )
+
+        assert text == ""
+        mock_warning.assert_called_once()
+        assert "Only .odt files are currently indexed." in mock_warning.call_args[0][0]
 
 
 class TestFileUploadLimits:

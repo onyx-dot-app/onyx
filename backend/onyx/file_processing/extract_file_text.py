@@ -47,6 +47,8 @@ KNOWN_OPENPYXL_BUGS = [
     "Colors must be aRGB hex values",
 ]
 
+UNSUPPORTED_OPENDOCUMENT_EXTENSIONS = {".ods", ".odp"}
+
 
 def get_markitdown_converter() -> "MarkItDown":
     global _MARKITDOWN_CONVERTER
@@ -422,10 +424,9 @@ def _open_document_to_text(
     file: IO[Any],
     *,
     suffix: str,
-    pandoc_format: str,
     file_name: str = "",
 ) -> str:
-    """Extract text from an OpenDocument file via a temporary file path."""
+    """Extract text from an ODT file via a temporary file path."""
     import tempfile
 
     import pypandoc  # type: ignore
@@ -437,11 +438,9 @@ def _open_document_to_text(
             tmp.write(file.read())
             tmp_path = tmp.name
 
-        return pypandoc.convert_file(tmp_path, "plain", format=pandoc_format)
+        return pypandoc.convert_file(tmp_path, "plain", format="odt")
     except Exception as e:
-        logger.warning(
-            f"Failed to extract text from {file_name or f'{pandoc_format} file'}: {e}"
-        )
+        logger.warning(f"Failed to extract text from {file_name or 'odt file'}: {e}")
         return ""
     finally:
         if tmp_path:
@@ -450,23 +449,7 @@ def _open_document_to_text(
 
 def odt_to_text(file: IO[Any], file_name: str = "") -> str:
     """Extract text from an ODT (OpenDocument Text) file using pypandoc."""
-    return _open_document_to_text(
-        file, suffix=".odt", pandoc_format="odt", file_name=file_name
-    )
-
-
-def ods_to_text(file: IO[Any], file_name: str = "") -> str:
-    """Extract text from an ODS (OpenDocument Spreadsheet) file using pypandoc."""
-    return _open_document_to_text(
-        file, suffix=".ods", pandoc_format="ods", file_name=file_name
-    )
-
-
-def odp_to_text(file: IO[Any], file_name: str = "") -> str:
-    """Extract text from an ODP (OpenDocument Presentation) file using pypandoc."""
-    return _open_document_to_text(
-        file, suffix=".odp", pandoc_format="odp", file_name=file_name
-    )
+    return _open_document_to_text(file, suffix=".odt", file_name=file_name)
 
 
 def eml_to_text(file: IO[Any]) -> str:
@@ -540,8 +523,6 @@ def extract_file_text(
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
         ".odt": lambda f: odt_to_text(f, file_name),
-        ".ods": lambda f: ods_to_text(f, file_name),
-        ".odp": lambda f: odp_to_text(f, file_name),
     }
 
     try:
@@ -554,6 +535,12 @@ def extract_file_text(
                 )
         if extension is None:
             extension = get_file_ext(file_name)
+
+        if extension in UNSUPPORTED_OPENDOCUMENT_EXTENSIONS:
+            raise ValueError(
+                f"Unsupported OpenDocument format '{extension}'. "
+                "Only .odt files are currently indexed."
+            )
 
         if extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
             func = extension_to_function.get(extension, file_io_to_text)
@@ -727,16 +714,15 @@ def _extract_text_and_images(
                 metadata={},
             )
 
-        if extension == ".ods":
-            return ExtractionResult(
-                text_content=ods_to_text(file, file_name=file_name),
-                embedded_images=[],
-                metadata={},
+        if extension in UNSUPPORTED_OPENDOCUMENT_EXTENSIONS:
+            logger.warning(
+                "Skipping text extraction for %s: %s files are not indexed yet. "
+                "Only .odt files are currently supported.",
+                file_name,
+                extension,
             )
-
-        if extension == ".odp":
             return ExtractionResult(
-                text_content=odp_to_text(file, file_name=file_name),
+                text_content="",
                 embedded_images=[],
                 metadata={},
             )

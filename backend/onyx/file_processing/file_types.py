@@ -11,10 +11,8 @@ WORD_PROCESSING_MIME_TYPE = (
 PDF_MIME_TYPE = "application/pdf"
 PLAIN_TEXT_MIME_TYPE = "text/plain"
 
-# ODF (Open Document Format) MIME types
+# Pandoc currently supports ODT ingestion, but not ODS/ODP readers.
 ODF_TEXT_MIME_TYPE = "application/vnd.oasis.opendocument.text"
-ODF_SPREADSHEET_MIME_TYPE = "application/vnd.oasis.opendocument.spreadsheet"
-ODF_PRESENTATION_MIME_TYPE = "application/vnd.oasis.opendocument.presentation"
 
 
 class OnyxMimeTypes:
@@ -43,8 +41,6 @@ class OnyxMimeTypes:
         "message/rfc822",
         "application/epub+zip",
         ODF_TEXT_MIME_TYPE,
-        ODF_SPREADSHEET_MIME_TYPE,
-        ODF_PRESENTATION_MIME_TYPE,
     }
 
     ALLOWED_MIME_TYPES = IMAGE_MIME_TYPES.union(
@@ -84,8 +80,6 @@ class OnyxFileExtensions:
         ".epub",
         ".html",
         ".odt",
-        ".ods",
-        ".odp",
     }
     IMAGE_EXTENSIONS = {
         ".png",
