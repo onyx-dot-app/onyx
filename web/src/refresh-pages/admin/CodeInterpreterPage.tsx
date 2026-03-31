@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Card, type CardProps } from "@/refresh-components/cards";
 import {
@@ -18,10 +18,13 @@ import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import useCodeInterpreter from "@/hooks/useCodeInterpreter";
+import useCodeInterpreter, {
+  type CodeInterpreterHealthStatus,
+} from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/lib/admin/code-interpreter/svc";
-import { ContentAction } from "@opal/layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
+import { cn } from "@opal/utils";
 
 const route = ADMIN_ROUTES.CODE_INTERPRETER;
 
@@ -72,19 +75,44 @@ function CheckingStatus() {
   );
 }
 
+const STATUS_CONFIG: Record<
+  CodeInterpreterHealthStatus,
+  { label: string; icon: typeof SvgCheckCircle; iconColor: string }
+> = {
+  healthy: {
+    label: "Connected",
+    icon: SvgCheckCircle,
+    iconColor: "text-status-success-05",
+  },
+  unhealthy: {
+    label: "Unhealthy",
+    icon: SvgXOctagon,
+    iconColor: "text-status-error-05",
+  },
+  connection_lost: {
+    label: "Connection Lost",
+    icon: SvgXOctagon,
+    iconColor: "text-status-error-05",
+  },
+};
+
 interface ConnectionStatusProps {
-  healthy: boolean;
+  status: CodeInterpreterHealthStatus | undefined;
   isLoading: boolean;
+  onIconHover: (hovered: boolean) => void;
 }
 
-function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
-  if (isLoading) {
+function ConnectionStatus({
+  status,
+  isLoading,
+  onIconHover,
+}: ConnectionStatusProps) {
+  if (isLoading || !status) {
     return <CheckingStatus />;
   }
 
-  const label = healthy ? "Connected" : "Connection Lost";
-  const Icon = healthy ? SvgCheckCircle : SvgXOctagon;
-  const iconColor = healthy ? "text-status-success-05" : "text-status-error-05";
+  const { label, icon: Icon, iconColor } = STATUS_CONFIG[status];
+  const hasError = status !== "healthy";
 
   return (
     <Section
@@ -97,7 +125,13 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
       <Text mainUiAction text03>
         {label}
       </Text>
-      <Icon size={16} className={iconColor} />
+      <div
+        onMouseEnter={() => hasError && onIconHover(true)}
+        onMouseLeave={() => onIconHover(false)}
+        className={cn(hasError && "cursor-pointer")}
+      >
+        <Icon size={16} className={iconColor} />
+      </div>
     </Section>
   );
 }
@@ -144,9 +178,30 @@ function ActionButtons({
 }
 
 export default function CodeInterpreterPage() {
-  const { isHealthy, isEnabled, isLoading, refetch } = useCodeInterpreter();
+  const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
+  const isHealthy = status === "healthy";
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [showErrorMenu, setShowErrorMenu] = useState(false);
+  const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleErrorHover(hovered: boolean) {
+    if (hovered) {
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+        fadeTimeoutRef.current = null;
+      }
+      setShowErrorMenu(true);
+    } else {
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+      }
+      fadeTimeoutRef.current = setTimeout(() => {
+        setShowErrorMenu(false);
+        fadeTimeoutRef.current = null;
+      }, 1000);
+    }
+  }
 
   async function handleToggle(enabled: boolean) {
     const action = enabled ? "reconnect" : "disconnect";
@@ -164,6 +219,14 @@ export default function CodeInterpreterPage() {
     }
   }
 
+  useEffect(() => {
+    return () => {
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -174,51 +237,81 @@ export default function CodeInterpreterPage() {
       />
 
       <SettingsLayouts.Body>
-        {isEnabled || isLoading ? (
-          <CodeInterpreterCard
-            title="Code Interpreter"
-            variant={isHealthy ? "primary" : "secondary"}
-            strikethrough={!isHealthy}
-            rightContent={
-              <Section
-                flexDirection="column"
-                justifyContent="center"
-                alignItems="end"
-                gap={0}
-                padding={0}
-              >
-                <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
-                <ActionButtons
-                  onDisconnect={() => setShowDisconnectModal(true)}
-                  onRefresh={refetch}
-                  disabled={isLoading}
+        <Section flexDirection="column" padding={0} gap={0.2}>
+          {isEnabled || isLoading ? (
+            <CodeInterpreterCard
+              title="Code Interpreter"
+              variant={isHealthy ? "primary" : "secondary"}
+              strikethrough={!isHealthy}
+              rightContent={
+                <Section
+                  flexDirection="column"
+                  justifyContent="center"
+                  alignItems="end"
+                  gap={0}
+                  padding={0}
+                >
+                  <ConnectionStatus
+                    status={status}
+                    isLoading={isLoading}
+                    onIconHover={handleErrorHover}
+                  />
+                  <ActionButtons
+                    onDisconnect={() => setShowDisconnectModal(true)}
+                    onRefresh={refetch}
+                    disabled={isLoading}
+                  />
+                </Section>
+              }
+            />
+          ) : (
+            <CodeInterpreterCard
+              variant="secondary"
+              title="Code Interpreter"
+              middleText="(Disconnected)"
+              strikethrough={true}
+              rightContent={
+                <Section flexDirection="row" alignItems="center" padding={0.5}>
+                  {isReconnecting ? (
+                    <CheckingStatus />
+                  ) : (
+                    <Button
+                      prominence="tertiary"
+                      rightIcon={SvgArrowExchange}
+                      onClick={() => handleToggle(true)}
+                    >
+                      Reconnect
+                    </Button>
+                  )}
+                </Section>
+              }
+            />
+          )}
+          {showErrorMenu && !isHealthy && (
+            <Section
+              flexDirection="row"
+              justifyContent="end"
+              onMouseEnter={() => handleErrorHover(true)}
+              onMouseLeave={() => handleErrorHover(false)}
+            >
+              <Card className="w-[15rem]">
+                <Content
+                  icon={(props) => (
+                    <SvgXOctagon {...props} className="text-status-error-05" />
+                  )}
+                  title={
+                    status === "connection_lost"
+                      ? "Connection Lost Error"
+                      : "Code Interpreter Error"
+                  }
+                  description={error}
+                  variant="section"
+                  sizePreset="main-ui"
                 />
-              </Section>
-            }
-          />
-        ) : (
-          <CodeInterpreterCard
-            variant="secondary"
-            title="Code Interpreter"
-            middleText="(Disconnected)"
-            strikethrough={true}
-            rightContent={
-              <Section flexDirection="row" alignItems="center" padding={0.5}>
-                {isReconnecting ? (
-                  <CheckingStatus />
-                ) : (
-                  <Button
-                    prominence="tertiary"
-                    rightIcon={SvgArrowExchange}
-                    onClick={() => handleToggle(true)}
-                  >
-                    Reconnect
-                  </Button>
-                )}
-              </Section>
-            }
-          />
-        )}
+              </Card>
+            </Section>
+          )}
+        </Section>
       </SettingsLayouts.Body>
 
       {showDisconnectModal && (
