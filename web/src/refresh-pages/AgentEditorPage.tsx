@@ -664,7 +664,7 @@ export default function AgentEditorPage({
     is_public: existingAgent?.is_public ?? false,
     label_ids: existingAgent?.labels?.map((l) => l.id) ?? [],
     is_featured: existingAgent?.is_featured ?? false,
-    is_visible: existingAgent?.is_visible ?? true,
+    is_visible: existingAgent?.is_listed ?? true,
   };
 
   const validationSchema = Yup.object().shape({
