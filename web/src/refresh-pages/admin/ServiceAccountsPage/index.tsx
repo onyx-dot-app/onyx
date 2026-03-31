@@ -278,12 +278,19 @@ export default function ServiceAccountsPage() {
             </Table>
           </>
         ) : (
-          <Card backgroundVariant="light" borderVariant="solid">
-            <div className="flex flex-row items-center gap-3 p-4">
+          <Card
+            paddingVariant="md"
+            roundingVariant="lg"
+            backgroundVariant="light"
+            borderVariant="solid"
+          >
+            <div className="flex flex-row items-center justify-between gap-3">
               <Content
                 title="Create service account API keys with user-level access."
-                sizePreset="secondary"
-                variant="section"
+                sizePreset="main-ui"
+                variant="body"
+                prominence="muted"
+                widthVariant="fit"
               />
               {canCreateKeys ? (
                 <NewServiceAccountButton
