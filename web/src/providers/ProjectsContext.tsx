@@ -644,12 +644,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           return changed ? Array.from(map.values()) : prev;
         });
 
-        // Remove completed/failed from tracking
+        // Remove completed/skipped/failed from tracking
         const remaining = new Set(trackedUploadIds);
         const newlyFailed: ProjectFile[] = [];
         for (const f of statuses) {
           const s = String(f.status).toLowerCase();
-          if (s === "completed") {
+          if (s === "completed" || s === "skipped") {
             remaining.delete(f.id);
           } else if (s === "failed") {
             remaining.delete(f.id);
