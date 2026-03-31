@@ -312,6 +312,8 @@ def monitor_indexing_attempt_progress(
         cc_pair.status = ConnectorCredentialPairStatus.INITIAL_INDEXING
         db_session.commit()
 
+    # Get coordination status to track progress
+
     coordination_status = IndexingCoordination.get_coordination_status(
         db_session, attempt.id
     )
