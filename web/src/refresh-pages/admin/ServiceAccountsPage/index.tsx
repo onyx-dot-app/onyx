@@ -11,6 +11,7 @@ import { Button, Text } from "@opal/components";
 import { Card } from "@opal/components";
 import { Content } from "@opal/layouts";
 import {
+  SvgDownload,
   SvgKey,
   SvgMoreHorizontal,
   SvgPlusCircle,
@@ -21,8 +22,8 @@ import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Modal from "@/refresh-components/Modal";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import Code from "@/refresh-components/Code";
 import Message from "@/refresh-components/messages/Message";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useBillingInformation } from "@/hooks/useBillingInformation";
@@ -310,17 +311,50 @@ export default function ServiceAccountsPage() {
       <Modal open={!!fullApiKey}>
         <Modal.Content width="sm" height="sm">
           <Modal.Header
-            title="New API Key"
+            title="Service Account API Key"
             icon={SvgKey}
             onClose={() => setFullApiKey(null)}
-            description="Make sure you copy your new API key. You won't be able to see this key again."
+            description="Save this key before continuing. It won't be shown again."
           />
           <Modal.Body>
-            <Text as="p" font="main-ui-body">
-              {fullApiKey ?? ""}
-            </Text>
-            <CopyIconButton getCopyText={() => fullApiKey!} />
+            <Code showCopyButton={false}>{fullApiKey ?? ""}</Code>
           </Modal.Body>
+          <Modal.Footer>
+            <BasicModalFooter
+              left={
+                <Button
+                  prominence="secondary"
+                  icon={SvgDownload}
+                  onClick={() => {
+                    if (!fullApiKey) return;
+                    const blob = new Blob([fullApiKey], {
+                      type: "text/plain",
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "onyx-api-key.txt";
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  Download
+                </Button>
+              }
+              submit={
+                <Button
+                  onClick={() => {
+                    if (fullApiKey) {
+                      navigator.clipboard.writeText(fullApiKey);
+                      toast.success("API key copied to clipboard.");
+                    }
+                  }}
+                >
+                  Copy API Key
+                </Button>
+              }
+            />
+          </Modal.Footer>
         </Modal.Content>
       </Modal>
 
