@@ -735,7 +735,7 @@ pyee==13.0.0
     # via playwright
 pygithub==2.5.0
     # via onyx
-pygments==2.19.2
+pygments==2.20.0
     # via rich
 pyjwt==2.12.0
     # via

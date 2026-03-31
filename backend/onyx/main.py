@@ -439,6 +439,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             dsn=SENTRY_DSN,
             integrations=[StarletteIntegration(), FastApiIntegration()],
             traces_sample_rate=0.1,
+            release=__version__,
         )
         logger.info("Sentry initialized")
     else:

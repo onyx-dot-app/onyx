@@ -35,6 +35,7 @@ jobs:
     needs: [provider-chat-test]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-slim
+    environment: ci-protected
     timeout-minutes: 5
     steps:
       - name: Checkout

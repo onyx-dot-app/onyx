@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlparse
 
@@ -190,3 +191,22 @@ class CanvasApiClient:
         if clean_endpoint:
             final_url += "/" + clean_endpoint
         return final_url
+
+    def paginate(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+    ) -> Iterator[list[Any]]:
+        """Yield each page of results, following Link-header pagination.
+
+        Makes the first request with endpoint + params, then follows
+        next_url from Link headers for subsequent pages.
+        """
+        response, next_url = self.get(endpoint, params=params)
+        while True:
+            if not response:
+                break
+            yield response
+            if not next_url:
+                break
+            response, next_url = self.get(full_url=next_url)
