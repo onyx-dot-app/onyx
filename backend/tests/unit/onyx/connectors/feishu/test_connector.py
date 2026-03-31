@@ -93,8 +93,6 @@ def test_oauth_code_to_token_unwraps_nested_feishu_payloads() -> None:
     assert mock_request.call_count == 2
 
 
-
-
 def test_oauth_code_to_token_generates_fallback_email() -> None:
     responses = [
         _MockResponse(
@@ -135,6 +133,8 @@ def test_oauth_code_to_token_generates_fallback_email() -> None:
                         )
 
     assert token["email"] == "feishu@ou_123.local"
+
+
 def test_oauth_code_to_token_raises_on_feishu_application_error() -> None:
     responses = [
         _MockResponse(

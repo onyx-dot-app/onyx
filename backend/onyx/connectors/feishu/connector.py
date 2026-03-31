@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 from onyx.configs.app_configs import FEISHU_CLIENT_ID
 from onyx.configs.app_configs import FEISHU_CLIENT_SECRET
+from onyx.configs.app_configs import FEISHU_OAUTH_EMAIL_FALLBACK
 from onyx.configs.app_configs import FEISHU_OAUTH_SCOPE
 from onyx.configs.app_configs import FEISHU_REDIRECT_URI
 from onyx.configs.constants import DocumentSource
@@ -164,5 +165,4 @@ class FeishuConnector(OAuthConnector):
             delay=0.1,
         )
         self.user_info = _unwrap_feishu_payload(response.json())
-
 
