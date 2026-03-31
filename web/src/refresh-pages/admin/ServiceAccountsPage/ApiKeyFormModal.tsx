@@ -1,6 +1,12 @@
+"use client";
+
 import { Form, Formik } from "formik";
 import { toast } from "@/hooks/useToast";
-import { createApiKey, updateApiKey } from "./lib";
+import {
+  createApiKey,
+  updateApiKey,
+} from "@/refresh-pages/admin/ServiceAccountsPage/svc";
+import type { APIKey } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
@@ -10,20 +16,19 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
-import { APIKey } from "./types";
 import { SvgKey } from "@opal/icons";
 
-export interface OnyxApiKeyFormProps {
+interface ApiKeyFormModalProps {
   onClose: () => void;
   onCreateApiKey: (apiKey: APIKey) => void;
   apiKey?: APIKey;
 }
 
-export default function OnyxApiKeyForm({
+export default function ApiKeyFormModal({
   onClose,
   onCreateApiKey,
   apiKey,
-}: OnyxApiKeyFormProps) {
+}: ApiKeyFormModalProps) {
   const isUpdate = apiKey !== undefined;
 
   return (
@@ -42,10 +47,9 @@ export default function OnyxApiKeyForm({
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
-            // Prepare the payload with the UserRole
             const payload = {
               ...values,
-              role: values.role as UserRole, // Assign the role directly as a UserRole type
+              role: values.role as UserRole,
             };
 
             let response;
