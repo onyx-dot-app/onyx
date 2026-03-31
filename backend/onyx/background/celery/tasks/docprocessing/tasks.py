@@ -312,12 +312,6 @@ def monitor_indexing_attempt_progress(
         cc_pair.status = ConnectorCredentialPairStatus.INITIAL_INDEXING
         db_session.commit()
 
-    # Expire the attempt so the coordination status query reads fresh data
-    # from the DB rather than returning a stale identity-map copy that was
-    # loaded at the start of the check_for_indexing loop (before docfetching
-    # may have committed total_batches).
-    db_session.expire(attempt)
-
     coordination_status = IndexingCoordination.get_coordination_status(
         db_session, attempt.id
     )
