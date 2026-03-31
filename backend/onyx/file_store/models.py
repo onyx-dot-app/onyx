@@ -24,8 +24,8 @@ class ChatFileType(str, Enum):
         )
 
     def use_metadata_only(self) -> bool:
-        """File types where only metadata (filename, file_id) is injected
-        into the LLM context. The LLM uses tools to access the actual data."""
+        """File types where we can ignore the file content
+        and only use the metadata."""
         return self in (ChatFileType.TABULAR,)
 
 

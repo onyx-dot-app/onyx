@@ -53,12 +53,7 @@ IMAGE_GENERATION_TOOL_NAME = "generate_image"
 
 
 class FileContextResult(BaseModel):
-    """Result of building a file's LLM context representation.
-
-    Bundles the chat message (for prompt injection) with the tool metadata
-    (for forgotten-file tracking and FileReaderTool routing) so that both
-    use a consistent file ID.
-    """
+    """Result of building a file's LLM context representation."""
 
     message: ChatMessageSimple
     tool_metadata: FileToolMetadata
@@ -74,12 +69,8 @@ def build_file_context(
 ) -> FileContextResult:
     """Build the LLM context representation for a single file.
 
-    Centralises the decision of how a file appears in the LLM prompt and
-    ensures that the file ID exposed to the LLM is always ``tool_file_id``
+    Centralises how files should appear in the LLM prompt
     — the ID that FileReaderTool accepts (``UserFile.id`` for user files).
-
-    This is the single place to extend when new file-type handling is
-    needed (e.g. search-retrieved documents).
     """
     if file_type.use_metadata_only():
         message_text = (
