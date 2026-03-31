@@ -6,6 +6,7 @@ import requests
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -95,3 +96,63 @@ def test_saml_user_conversion(reset: None) -> None:  # noqa: ARG001
 
     # Verify the user's role was changed in the database
     assert UserManager.is_role(slack_user, UserRole.BASIC)
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="SAML tests are enterprise only",
+)
+def test_saml_user_conversion_sets_account_type_and_group(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """
+    Test that SAML login sets account_type to STANDARD when converting a
+    non-web user (EXT_PERM_USER) and that the user receives the correct role
+    (BASIC) after conversion.
+
+    This validates the permissions-migration-phase2 changes which ensure that:
+    1. account_type is updated to 'standard' on SAML conversion
+    2. The converted user is assigned to the Basic default group
+    """
+    # Create an admin user (first user is automatically admin)
+    admin_user: DATestUser = UserManager.create(email="admin@example.com")
+
+    # Create a user and set them as EXT_PERM_USER
+    test_email = "ext_convert@example.com"
+    test_user = UserManager.create(email=test_email)
+    UserManager.set_role(
+        user_to_set=test_user,
+        target_role=UserRole.EXT_PERM_USER,
+        user_performing_action=admin_user,
+        explicit_override=True,
+    )
+    assert UserManager.is_role(test_user, UserRole.EXT_PERM_USER)
+
+    # Simulate SAML login
+    response = requests.post(
+        f"{API_SERVER_URL}/manage/users/test-upsert-user",
+        json={"email": test_email},
+        headers=admin_user.headers,
+    )
+    response.raise_for_status()
+    user_data = response.json()
+
+    # Verify account_type is set to standard after conversion
+    assert (
+        user_data["account_type"] == "standard"
+    ), f"Expected account_type='standard', got '{user_data['account_type']}'"
+
+    # Verify role is BASIC after conversion
+    assert user_data["role"] == UserRole.BASIC.value
+
+    # Verify the user was assigned to the Basic default group
+    all_groups = UserGroupManager.get_all(admin_user, include_default=True)
+    basic_default = [g for g in all_groups if g.is_default and g.name == "Basic"]
+    assert basic_default, "Basic default group not found"
+
+    basic_group = basic_default[0]
+    member_emails = {u.email for u in basic_group.users}
+    assert test_email in member_emails, (
+        f"Converted user '{test_email}' not found in Basic default group members: "
+        f"{member_emails}"
+    )
