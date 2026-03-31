@@ -17,7 +17,9 @@ import {
   SvgMoreHorizontal,
   SvgPlusCircle,
   SvgRefreshCw,
+  SvgTrash,
   SvgUser,
+  SvgUserEdit,
   SvgUserKey,
   SvgUserManage,
 } from "@opal/icons";
@@ -27,6 +29,10 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Code from "@/refresh-components/Code";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { markdown } from "@opal/utils";
 import Message from "@/refresh-components/messages/Message";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useBillingInformation } from "@/hooks/useBillingInformation";
@@ -82,6 +88,8 @@ export default function ServiceAccountsPage() {
   const [showCreateUpdateForm, setShowCreateUpdateForm] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<APIKey | undefined>();
   const [search, setSearch] = useState("");
+  const [regenerateTarget, setRegenerateTarget] = useState<APIKey | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<APIKey | null>(null);
 
   const filteredApiKeys = (apiKeys ?? [])
     .filter((key) => key.api_key_name !== DISCORD_SERVICE_API_KEY_NAME)
@@ -202,17 +210,37 @@ export default function ServiceAccountsPage() {
               icon={SvgRefreshCw}
               prominence="tertiary"
               tooltip="Regenerate"
-              onClick={() => handleRegenerate(row)}
+              onClick={() => setRegenerateTarget(row)}
             />
-            <Button
-              icon={SvgMoreHorizontal}
-              prominence="tertiary"
-              tooltip="More"
-              onClick={() => {
-                setSelectedApiKey(row);
-                setShowCreateUpdateForm(true);
-              }}
-            />
+            <Popover>
+              <Popover.Trigger asChild>
+                <Button
+                  icon={SvgMoreHorizontal}
+                  prominence="tertiary"
+                  tooltip="More"
+                />
+              </Popover.Trigger>
+              <Popover.Content side="bottom" align="end" width="md">
+                <PopoverMenu>
+                  <LineItem
+                    icon={SvgUserEdit}
+                    onClick={() => {
+                      setSelectedApiKey(row);
+                      setShowCreateUpdateForm(true);
+                    }}
+                  >
+                    Edit Account
+                  </LineItem>
+                  <LineItem
+                    icon={SvgTrash}
+                    danger
+                    onClick={() => setDeleteTarget(row)}
+                  >
+                    Delete Account
+                  </LineItem>
+                </PopoverMenu>
+              </Popover.Content>
+            </Popover>
           </div>
         ),
       }),
@@ -392,6 +420,68 @@ export default function ServiceAccountsPage() {
           }}
           apiKey={selectedApiKey}
         />
+      )}
+
+      {regenerateTarget && (
+        <ConfirmationModalLayout
+          icon={SvgRefreshCw}
+          title="Regenerate API Key"
+          onClose={() => setRegenerateTarget(null)}
+          submit={
+            <Button
+              variant="danger"
+              onClick={async () => {
+                const target = regenerateTarget;
+                setRegenerateTarget(null);
+                await handleRegenerate(target);
+              }}
+            >
+              Regenerate Key
+            </Button>
+          }
+        >
+          <Text as="p" color="text-03">
+            {markdown(
+              `Your current API key *${
+                regenerateTarget.api_key_name || "Unnamed"
+              }* (\`${
+                regenerateTarget.api_key_display
+              }\`) will be revoked and a new key will be generated. You will need to update any applications using this key with the new one.`
+            )}
+          </Text>
+        </ConfirmationModalLayout>
+      )}
+
+      {deleteTarget && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title="Delete Account"
+          onClose={() => setDeleteTarget(null)}
+          submit={
+            <Button
+              variant="danger"
+              onClick={async () => {
+                await handleDelete(deleteTarget);
+                setDeleteTarget(null);
+              }}
+            >
+              Delete
+            </Button>
+          }
+        >
+          <Text as="p" color="text-03">
+            {markdown(
+              `Any application using the API key of account *${
+                deleteTarget.api_key_name || "Unnamed"
+              }* (\`${
+                deleteTarget.api_key_display
+              }\`) will lose access to Onyx.`
+            )}
+          </Text>
+          <Text as="p" color="text-03">
+            Deletion cannot be undone.
+          </Text>
+        </ConfirmationModalLayout>
       )}
     </SettingsLayouts.Root>
   );
