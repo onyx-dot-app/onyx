@@ -30,9 +30,10 @@ from shared_configs.configs import TENANT_ID_PREFIX
 # Each tenant takes ~80s (alembic migrations), so 5 tenants ≈ 7 minutes.
 _MAX_TENANTS_PER_RUN = 5
 
-# Time limits sized for worst-case batch: _MAX_TENANTS_PER_RUN × ~90s + buffer.
-_TENANT_PROVISIONING_SOFT_TIME_LIMIT = 60 * 10  # 10 minutes
-_TENANT_PROVISIONING_TIME_LIMIT = 60 * 15  # 15 minutes
+# Time limits sized for worst-case: provisioning up to _MAX_TENANTS_PER_RUN new tenants
+# (~90s each) plus migrating up to TARGET_AVAILABLE_TENANTS pool tenants (~90s each).
+_TENANT_PROVISIONING_SOFT_TIME_LIMIT = 60 * 20  # 20 minutes
+_TENANT_PROVISIONING_TIME_LIMIT = 60 * 25  # 25 minutes
 
 
 @shared_task(
@@ -125,9 +126,10 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
 
 def _migrate_stale_pool_tenants() -> None:
     """
-    Run alembic upgrade head on any pool tenants whose stored alembic_version
-    doesn't match the current head. This ensures pool tenants are always up to
-    date so that signup doesn't hit schema mismatches (e.g. missing columns).
+    Run alembic upgrade head on all pool tenants. Since alembic upgrade head is
+    idempotent, tenants already at head are a fast no-op. This ensures pool
+    tenants are always current so that signup doesn't hit schema mismatches
+    (e.g. missing columns added after the tenant was pre-provisioned).
     """
     with get_session_with_shared_schema() as db_session:
         pool_tenants = db_session.query(AvailableTenant).all()

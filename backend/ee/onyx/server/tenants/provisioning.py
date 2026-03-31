@@ -103,7 +103,7 @@ async def get_or_provision_tenant(
             # Pool tenants may have been created before a new migration was deployed.
             # Capture as a non-optional local so mypy can type the lambda correctly.
             _tenant_id: str = tenant_id
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, lambda: run_alembic_migrations(_tenant_id))
             # If we have a pre-provisioned tenant, assign it to the user
             await assign_tenant_to_user(tenant_id, email, referral_source)
