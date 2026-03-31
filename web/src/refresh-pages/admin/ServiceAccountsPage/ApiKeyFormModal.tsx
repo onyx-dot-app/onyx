@@ -10,11 +10,10 @@ import type { APIKey } from "@/refresh-pages/admin/ServiceAccountsPage/interface
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
-import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { FormField } from "@/refresh-components/form/FormField";
+import { Vertical as VerticalInput } from "@/layouts/input-layouts";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { SvgKey } from "@opal/icons";
 
@@ -36,7 +35,12 @@ export default function ApiKeyFormModal({
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgKey}
-          title={isUpdate ? "Update API Key" : "Create a new API Key"}
+          title={isUpdate ? "Update Service Account" : "Create Service Account"}
+          description={
+            isUpdate
+              ? undefined
+              : "Use service account API key to programmatically access Onyx API with user-level permissions. You can modify the account details later."
+          }
           onClose={onClose}
         />
         <Formik
@@ -62,8 +66,8 @@ export default function ApiKeyFormModal({
             if (response.ok) {
               toast.success(
                 isUpdate
-                  ? "Successfully updated API key!"
-                  : "Successfully created API key!"
+                  ? "Successfully updated service account!"
+                  : "Successfully created service account!"
               );
               if (!isUpdate) {
                 onCreateApiKey(await response.json());
@@ -74,77 +78,72 @@ export default function ApiKeyFormModal({
               const errorMsg = responseJson.detail || responseJson.message;
               toast.error(
                 isUpdate
-                  ? `Error updating API key - ${errorMsg}`
-                  : `Error creating API key - ${errorMsg}`
+                  ? `Error updating service account - ${errorMsg}`
+                  : `Error creating service account - ${errorMsg}`
               );
             }
           }}
         >
-          {({ isSubmitting }) => (
+          {({ isSubmitting, values }) => (
             <Form className="w-full overflow-visible">
               <Modal.Body>
-                <Text as="p">
-                  Choose a memorable name for your API key. This is optional and
-                  can be added or changed later!
-                </Text>
-
-                <FormikField<string>
+                <VerticalInput
                   name="name"
-                  render={(field, helper, _meta, state) => (
-                    <FormField name="name" state={state} className="w-full">
-                      <FormField.Label>Name (optional):</FormField.Label>
-                      <FormField.Control>
-                        <InputTypeIn
-                          {...field}
-                          placeholder=""
-                          onClear={() => helper.setValue("")}
-                          showClearButton={false}
-                        />
-                      </FormField.Control>
-                    </FormField>
-                  )}
-                />
+                  title="Name"
+                  nonInteractive
+                  sizePreset="main-ui"
+                >
+                  <FormikField<string>
+                    name="name"
+                    render={(field, helper) => (
+                      <InputTypeIn
+                        {...field}
+                        placeholder="Enter a name"
+                        onClear={() => helper.setValue("")}
+                        showClearButton={false}
+                      />
+                    )}
+                  />
+                </VerticalInput>
 
-                <FormikField<string>
+                <VerticalInput
                   name="role"
-                  render={(field, helper, _meta, state) => (
-                    <FormField name="role" state={state} className="w-full">
-                      <FormField.Label>Role:</FormField.Label>
-                      <FormField.Control>
-                        <InputSelect
-                          value={field.value}
-                          onValueChange={(value) => helper.setValue(value)}
-                        >
-                          <InputSelect.Trigger placeholder="Select a role" />
-                          <InputSelect.Content>
-                            <InputSelect.Item
-                              value={UserRole.LIMITED.toString()}
-                            >
-                              {USER_ROLE_LABELS[UserRole.LIMITED]}
-                            </InputSelect.Item>
-                            <InputSelect.Item value={UserRole.BASIC.toString()}>
-                              {USER_ROLE_LABELS[UserRole.BASIC]}
-                            </InputSelect.Item>
-                            <InputSelect.Item value={UserRole.ADMIN.toString()}>
-                              {USER_ROLE_LABELS[UserRole.ADMIN]}
-                            </InputSelect.Item>
-                          </InputSelect.Content>
-                        </InputSelect>
-                      </FormField.Control>
-                      <FormField.Description>
-                        Select the role for this API key. Limited has access to
-                        simple public APIs. Basic has access to regular user
-                        APIs. Admin has access to admin level APIs.
-                      </FormField.Description>
-                    </FormField>
-                  )}
-                />
+                  title="Account Permissions"
+                  nonInteractive
+                  sizePreset="main-ui"
+                >
+                  <FormikField<string>
+                    name="role"
+                    render={(field, helper) => (
+                      <InputSelect
+                        value={field.value}
+                        onValueChange={(value) => helper.setValue(value)}
+                      >
+                        <InputSelect.Trigger placeholder="Select permissions" />
+                        <InputSelect.Content>
+                          <InputSelect.Item value={UserRole.LIMITED.toString()}>
+                            {USER_ROLE_LABELS[UserRole.LIMITED]}
+                          </InputSelect.Item>
+                          <InputSelect.Item value={UserRole.BASIC.toString()}>
+                            {USER_ROLE_LABELS[UserRole.BASIC]}
+                          </InputSelect.Item>
+                          <InputSelect.Item value={UserRole.ADMIN.toString()}>
+                            {USER_ROLE_LABELS[UserRole.ADMIN]}
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
+                    )}
+                  />
+                </VerticalInput>
               </Modal.Body>
 
               <Modal.Footer>
-                <Disabled disabled={isSubmitting}>
+                <Button prominence="secondary" type="button" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Disabled disabled={isSubmitting || !values.name.trim()}>
                   <Button type="submit">
-                    {isUpdate ? "Update" : "Create"}
+                    {isUpdate ? "Update" : "Create Account"}
                   </Button>
                 </Disabled>
               </Modal.Footer>
