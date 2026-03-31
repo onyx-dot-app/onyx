@@ -160,6 +160,31 @@ export const formatDateShort = (dateStr: string | null | undefined): string => {
   });
 };
 
+/**
+ * Format an ISO timestamp as "YYYY/MM/DD HH:MM:SS" (24-hour, local time).
+ * Intended for log displays where full precision is needed.
+ */
+export function formatDateTimeLog(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/**
+ * Format an ISO timestamp as "HH:MM:SS" (24-hour, local time).
+ * Intended for compact time-only displays.
+ */
+export function formatTimeOnly(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 export function formatMmDdYyyy(d: string): string {
   const date = new Date(d);
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
