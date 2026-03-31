@@ -104,7 +104,21 @@ async def get_or_provision_tenant(
             # Capture as a non-optional local so mypy can type the lambda correctly.
             _tenant_id: str = tenant_id
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, lambda: run_alembic_migrations(_tenant_id))
+            try:
+                await loop.run_in_executor(
+                    None, lambda: run_alembic_migrations(_tenant_id)
+                )
+            except Exception:
+                # The tenant was already dequeued from the pool — roll it back so
+                # it doesn't end up orphaned (schema exists, but not assigned to anyone).
+                logger.exception(
+                    f"Migration failed for pre-provisioned tenant {_tenant_id}; rolling back"
+                )
+                try:
+                    await rollback_tenant_provisioning(_tenant_id)
+                except Exception:
+                    logger.exception(f"Failed to rollback orphaned tenant {_tenant_id}")
+                raise
             # If we have a pre-provisioned tenant, assign it to the user
             await assign_tenant_to_user(tenant_id, email, referral_source)
             logger.info(f"Assigned pre-provisioned tenant {tenant_id} to user {email}")
