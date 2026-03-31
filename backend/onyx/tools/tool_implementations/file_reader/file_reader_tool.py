@@ -174,7 +174,6 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         # content is the original binary (e.g. raw PDF/DOCX bytes).
         if chat_file.file_type not in (
             ChatFileType.PLAIN_TEXT,
-            ChatFileType.CSV,
             ChatFileType.TABULAR,
         ):
             raise ToolCallException(

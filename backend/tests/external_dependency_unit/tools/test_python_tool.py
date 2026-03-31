@@ -1175,7 +1175,7 @@ def test_code_interpreter_receives_chat_files(
 
     file_descriptor: FileDescriptor = {
         "id": user_file.file_id,
-        "type": ChatFileType.CSV,
+        "type": ChatFileType.TABULAR,
         "name": "data.csv",
         "user_file_id": str(user_file.id),
     }

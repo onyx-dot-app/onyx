@@ -9,9 +9,6 @@ def mime_type_to_chat_file_type(mime_type: str | None) -> ChatFileType:
     if mime_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
         return ChatFileType.IMAGE
 
-    if mime_type in OnyxMimeTypes.CSV_MIME_TYPES:
-        return ChatFileType.CSV
-
     if mime_type in OnyxMimeTypes.TABULAR_MIME_TYPES:
         return ChatFileType.TABULAR
 

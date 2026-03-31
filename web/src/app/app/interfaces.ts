@@ -75,7 +75,6 @@ export enum ChatFileType {
   IMAGE = "image",
   DOCUMENT = "document",
   PLAIN_TEXT = "plain_text",
-  CSV = "csv",
   TABULAR = "tabular",
   USER_KNOWLEDGE = "user_knowledge",
 }
@@ -83,7 +82,6 @@ export enum ChatFileType {
 export const isTextFile = (fileType: ChatFileType) =>
   [
     ChatFileType.PLAIN_TEXT,
-    ChatFileType.CSV,
     ChatFileType.TABULAR,
     ChatFileType.USER_KNOWLEDGE,
     ChatFileType.DOCUMENT,

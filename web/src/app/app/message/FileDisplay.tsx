@@ -39,11 +39,12 @@ export default function FileDisplay({ files }: FileDisplayProps) {
   const textFiles = files.filter(
     (file) =>
       file.type === ChatFileType.PLAIN_TEXT ||
-      file.type === ChatFileType.DOCUMENT ||
-      file.type === ChatFileType.TABULAR
+      file.type === ChatFileType.DOCUMENT
   );
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const csvFiles = files.filter((file) => file.type === ChatFileType.CSV);
+  const tabularFiles = files.filter(
+    (file) => file.type === ChatFileType.TABULAR
+  );
 
   const presentingDocument: MinimalOnyxDocument = {
     document_id: previewingFile?.id ?? "",
@@ -79,9 +80,9 @@ export default function FileDisplay({ files }: FileDisplayProps) {
         </FileContainer>
       )}
 
-      {csvFiles.length > 0 && (
+      {tabularFiles.length > 0 && (
         <FileContainer className="overflow-auto">
-          {csvFiles.map((file) =>
+          {tabularFiles.map((file) =>
             close ? (
               <ExpandableContentWrapper
                 key={file.id}
