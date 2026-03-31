@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { UserStatus } from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import type { UserRole, InvitedUserSnapshot } from "@/lib/types";
 import type {
   UserRow,
@@ -19,6 +19,7 @@ interface FullUserSnapshot {
   id: string;
   email: string;
   role: UserRole;
+  account_type: AccountType;
   is_active: boolean;
   password_configured: boolean;
   personal_name: string | null;
