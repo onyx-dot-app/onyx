@@ -42,6 +42,9 @@ export default function FileDisplay({ files }: FileDisplayProps) {
       file.type === ChatFileType.DOCUMENT
   );
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
+  // TODO(danelegend): XLSX files are binary (OOXML) and will fail to parse in CsvContent.
+  // The backend should convert XLSX to CSV text before serving via /api/chat/file,
+  // or XLSX should be split into a separate ChatFileType and rendered as an Attachment.
   const tabularFiles = files.filter(
     (file) => file.type === ChatFileType.TABULAR
   );
