@@ -22,23 +22,48 @@ down_revision = "b7bcc991d722"
 branch_labels: str | None = None
 depends_on: str | Sequence[str] | None = None
 
+user_group = sa.table(
+    "user_group",
+    sa.column("id", sa.Integer),
+    sa.column("is_default", sa.Boolean),
+)
+
+permission_grant = sa.table(
+    "permission_grant",
+    sa.column("group_id", sa.Integer),
+    sa.column("permission", sa.String),
+    sa.column("grant_source", sa.String),
+    sa.column("is_deleted", sa.Boolean),
+)
+
 
 def upgrade() -> None:
     conn = op.get_bind()
 
+    already_has_basic = (
+        sa.select(sa.literal(1))
+        .select_from(permission_grant)
+        .where(
+            permission_grant.c.group_id == user_group.c.id,
+            permission_grant.c.permission == "basic",
+        )
+        .exists()
+    )
+
+    groups_needing_basic = sa.select(
+        user_group.c.id,
+        sa.literal("basic").label("permission"),
+        sa.literal("SYSTEM").label("grant_source"),
+        sa.literal(False).label("is_deleted"),
+    ).where(
+        user_group.c.is_default == sa.false(),
+        ~already_has_basic,
+    )
+
     conn.execute(
-        sa.text(
-            """
-            INSERT INTO permission_grant (group_id, permission, grant_source, is_deleted)
-            SELECT g.id, 'basic', 'SYSTEM', false
-            FROM user_group g
-            WHERE g.is_default = false
-              AND NOT EXISTS (
-                  SELECT 1 FROM permission_grant pg
-                  WHERE pg.group_id = g.id
-                    AND pg.permission = 'basic'
-              )
-            """
+        permission_grant.insert().from_select(
+            ["group_id", "permission", "grant_source", "is_deleted"],
+            groups_needing_basic,
         )
     )
 
@@ -46,15 +71,14 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
 
+    non_default_group_ids = sa.select(user_group.c.id).where(
+        user_group.c.is_default == sa.false()
+    )
+
     conn.execute(
-        sa.text(
-            """
-            DELETE FROM permission_grant
-            WHERE permission = 'basic'
-              AND grant_source = 'SYSTEM'
-              AND group_id IN (
-                  SELECT id FROM user_group WHERE is_default = false
-              )
-            """
+        permission_grant.delete().where(
+            permission_grant.c.permission == "basic",
+            permission_grant.c.grant_source == "SYSTEM",
+            permission_grant.c.group_id.in_(non_default_group_ids),
         )
     )
