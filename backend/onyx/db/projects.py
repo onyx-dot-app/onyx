@@ -3,7 +3,6 @@ import uuid
 from typing import List
 from uuid import UUID
 
-from fastapi import HTTPException
 from fastapi import UploadFile
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -17,10 +16,13 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.models import Persona__UserFile
 from onyx.db.models import Project__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.connector import upload_files
 from onyx.server.features.projects.projects_file_utils import categorize_uploaded_files
 from onyx.server.features.projects.projects_file_utils import RejectedFile
@@ -50,7 +52,26 @@ def create_user_files(
     db_session: Session,
     link_url: str | None = None,
     temp_id_map: dict[str, str] | None = None,
+    persona_id: int | None = None,
 ) -> CategorizedFilesResult:
+    # Validate persona access before creating any file associations
+    if persona_id is not None:
+        from fastapi import HTTPException
+
+        from onyx.db.persona import fetch_persona_by_id_for_user
+
+        try:
+            fetch_persona_by_id_for_user(
+                db_session=db_session,
+                persona_id=persona_id,
+                user=user,
+                get_editable=True,
+            )
+        except HTTPException:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "User does not have access to the specified persona",
+            )
 
     # Categorize the files
     categorized_files = categorize_uploaded_files(files, db_session)
@@ -92,7 +113,20 @@ def create_user_files(
                 user_file_id=new_file.id,
             )
             db_session.add(project_to_user_file)
+        if persona_id is not None:
+            persona_to_user_file = Persona__UserFile(
+                persona_id=persona_id,
+                user_file_id=new_file.id,
+            )
+            db_session.add(persona_to_user_file)
         user_files.append(new_file)
+    # Mark files for persona sync before committing, so everything is in one transaction
+    if persona_id is not None and user_files:
+        from onyx.db.persona import _mark_files_need_persona_sync
+
+        _mark_files_need_persona_sync(
+            db_session, [uf.id for uf in user_files]
+        )
     db_session.commit()
     return CategorizedFilesResult(
         user_files=user_files,
@@ -108,17 +142,22 @@ def upload_files_to_user_files_with_indexing(
     temp_id_map: dict[str, str] | None,
     db_session: Session,
     background_tasks: BackgroundTasks | None = None,
+    persona_id: int | None = None,
 ) -> CategorizedFilesResult:
     if project_id is not None and user is not None:
         if not check_project_ownership(project_id, user.id, db_session):
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
+    # Persona access validation and _mark_files_need_persona_sync are both
+    # handled inside create_user_files to avoid duplicate queries and to
+    # keep everything in a single transaction/commit.
     categorized_files_result = create_user_files(
         files,
         project_id,
         user,
         db_session,
         temp_id_map=temp_id_map,
+        persona_id=persona_id,
     )
     user_files = categorized_files_result.user_files
     rejected_files = categorized_files_result.rejected_files

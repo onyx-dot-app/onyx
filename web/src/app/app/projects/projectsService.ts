@@ -84,12 +84,16 @@ export async function createProject(name: string): Promise<Project> {
 export async function uploadFiles(
   files: File[],
   projectId?: number | null,
-  tempIdMap?: Map<string, string>
+  tempIdMap?: Map<string, string>,
+  personaId?: number | null
 ): Promise<CategorizedFiles> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   if (projectId !== undefined && projectId !== null) {
     formData.append("project_id", String(projectId));
+  }
+  if (personaId !== undefined && personaId !== null) {
+    formData.append("persona_id", String(personaId));
   }
   if (tempIdMap !== undefined && tempIdMap !== null) {
     formData.append(
