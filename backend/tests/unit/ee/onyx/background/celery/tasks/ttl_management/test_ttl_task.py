@@ -1,30 +1,29 @@
 """Tests for TTL management task resilience."""
 
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
 
-import pytest
+
+_TASK_MODULE = "ee.onyx.background.celery.tasks.ttl_management.tasks"
 
 
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks"
-    ".get_session_with_current_tenant"
-)
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks.delete_chat_session"
-)
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks.get_chat_sessions_older_than"
-)
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks.mark_task_as_finished_with_id"
-)
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks.register_task"
-)
+def _setup_db_session_mock(mock_get_db_session: MagicMock) -> None:
+    mock_db_session = MagicMock()
+    mock_get_db_session.return_value.__enter__ = MagicMock(
+        return_value=mock_db_session
+    )
+    mock_get_db_session.return_value.__exit__ = MagicMock(return_value=False)
+
+
+@patch(f"{_TASK_MODULE}.get_session_with_current_tenant")
+@patch(f"{_TASK_MODULE}.delete_chat_session")
+@patch(f"{_TASK_MODULE}.get_chat_sessions_older_than")
+@patch(f"{_TASK_MODULE}.mark_task_as_finished_with_id")
+@patch(f"{_TASK_MODULE}.register_task")
 def test_ttl_task_continues_after_session_delete_failure(
-    mock_register: MagicMock,
+    _mock_register: Any,
     mock_mark_finished: MagicMock,
     mock_get_old_sessions: MagicMock,
     mock_delete_session: MagicMock,
@@ -52,11 +51,7 @@ def test_ttl_task_continues_after_session_delete_failure(
         None,
     ]
 
-    mock_db_session = MagicMock()
-    mock_get_db_session.return_value.__enter__ = MagicMock(
-        return_value=mock_db_session
-    )
-    mock_get_db_session.return_value.__exit__ = MagicMock(return_value=False)
+    _setup_db_session_mock(mock_get_db_session)
 
     mock_task = MagicMock()
     mock_task.request.id = "test-task-id"
@@ -75,24 +70,13 @@ def test_ttl_task_continues_after_session_delete_failure(
     assert finish_call_kwargs["success"] is False
 
 
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks"
-    ".get_session_with_current_tenant"
-)
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks.delete_chat_session"
-)
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks.get_chat_sessions_older_than"
-)
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks.mark_task_as_finished_with_id"
-)
-@patch(
-    "ee.onyx.background.celery.tasks.ttl_management.tasks.register_task"
-)
+@patch(f"{_TASK_MODULE}.get_session_with_current_tenant")
+@patch(f"{_TASK_MODULE}.delete_chat_session")
+@patch(f"{_TASK_MODULE}.get_chat_sessions_older_than")
+@patch(f"{_TASK_MODULE}.mark_task_as_finished_with_id")
+@patch(f"{_TASK_MODULE}.register_task")
 def test_ttl_task_reports_success_when_all_deletions_pass(
-    mock_register: MagicMock,
+    _mock_register: Any,
     mock_mark_finished: MagicMock,
     mock_get_old_sessions: MagicMock,
     mock_delete_session: MagicMock,
@@ -109,11 +93,7 @@ def test_ttl_task_reports_success_when_all_deletions_pass(
     ]
     mock_delete_session.side_effect = None
 
-    mock_db_session = MagicMock()
-    mock_get_db_session.return_value.__enter__ = MagicMock(
-        return_value=mock_db_session
-    )
-    mock_get_db_session.return_value.__exit__ = MagicMock(return_value=False)
+    _setup_db_session_mock(mock_get_db_session)
 
     mock_task = MagicMock()
     mock_task.request.id = "test-task-id"

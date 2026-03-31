@@ -1,5 +1,6 @@
 """Tests for chat session and message deletion resilience."""
 
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
@@ -11,7 +12,7 @@ from onyx.db.chat import delete_messages_and_files_from_chat_session
 @patch("onyx.db.chat.get_default_file_store")
 def test_delete_messages_skips_missing_files(
     mock_get_file_store: MagicMock,
-    mock_delete_orphaned: MagicMock,
+    _mock_delete_orphaned: Any,
 ) -> None:
     """Deletion should continue when a referenced file record no longer exists."""
     session_id = uuid4()
@@ -40,7 +41,7 @@ def test_delete_messages_skips_missing_files(
 @patch("onyx.db.chat.get_default_file_store")
 def test_delete_messages_succeeds_with_no_files(
     mock_get_file_store: MagicMock,
-    mock_delete_orphaned: MagicMock,
+    _mock_delete_orphaned: Any,
 ) -> None:
     """Deletion works when messages have no attached files."""
     session_id = uuid4()
