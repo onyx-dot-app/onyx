@@ -13,14 +13,27 @@ from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
+from onyx.db.enums import AccountType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import PublicExternalUserGroup
+from onyx.db.models import User
 from onyx.db.models import User__ExternalUserGroupId
+from onyx.db.models import UserRole
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
+
+
+def _create_ext_perm_user(db_session: Session, name: str) -> User:
+    """Create an external-permission user for group sync tests."""
+    return create_test_user(
+        db_session,
+        name,
+        role=UserRole.EXT_PERM_USER,
+        account_type=AccountType.EXT_PERM_USER,
+    )
 
 
 def _create_test_connector_credential_pair(
@@ -100,9 +113,9 @@ class TestPerformExternalGroupSync:
     def test_initial_group_sync(self, db_session: Session) -> None:
         """Test syncing external groups for the first time (initial sync)"""
         # Create test data
-        user1 = create_test_user(db_session, "user1")
-        user2 = create_test_user(db_session, "user2")
-        user3 = create_test_user(db_session, "user3")
+        user1 = _create_ext_perm_user(db_session, "user1")
+        user2 = _create_ext_perm_user(db_session, "user2")
+        user3 = _create_ext_perm_user(db_session, "user3")
         cc_pair = _create_test_connector_credential_pair(db_session)
 
         # Mock external groups data as a generator that yields the expected groups
@@ -175,9 +188,9 @@ class TestPerformExternalGroupSync:
     def test_update_existing_groups(self, db_session: Session) -> None:
         """Test updating existing groups (adding/removing users)"""
         # Create test data
-        user1 = create_test_user(db_session, "user1")
-        user2 = create_test_user(db_session, "user2")
-        user3 = create_test_user(db_session, "user3")
+        user1 = _create_ext_perm_user(db_session, "user1")
+        user2 = _create_ext_perm_user(db_session, "user2")
+        user3 = _create_ext_perm_user(db_session, "user3")
         cc_pair = _create_test_connector_credential_pair(db_session)
 
         # Initial sync with original groups
@@ -272,8 +285,8 @@ class TestPerformExternalGroupSync:
     def test_remove_groups(self, db_session: Session) -> None:
         """Test removing groups (groups that no longer exist in external system)"""
         # Create test data
-        user1 = create_test_user(db_session, "user1")
-        user2 = create_test_user(db_session, "user2")
+        user1 = _create_ext_perm_user(db_session, "user1")
+        user2 = _create_ext_perm_user(db_session, "user2")
         cc_pair = _create_test_connector_credential_pair(db_session)
 
         # Initial sync with multiple groups
@@ -357,7 +370,7 @@ class TestPerformExternalGroupSync:
     def test_empty_group_sync(self, db_session: Session) -> None:
         """Test syncing when no groups are returned (all groups removed)"""
         # Create test data
-        user1 = create_test_user(db_session, "user1")
+        user1 = _create_ext_perm_user(db_session, "user1")
         cc_pair = _create_test_connector_credential_pair(db_session)
 
         # Initial sync with groups
@@ -413,7 +426,7 @@ class TestPerformExternalGroupSync:
         # Create many test users
         users = []
         for i in range(150):  # More than the batch size of 100
-            users.append(create_test_user(db_session, f"user{i}"))
+            users.append(_create_ext_perm_user(db_session, f"user{i}"))
 
         cc_pair = _create_test_connector_credential_pair(db_session)
 
@@ -452,8 +465,8 @@ class TestPerformExternalGroupSync:
     def test_mixed_regular_and_public_groups(self, db_session: Session) -> None:
         """Test syncing a mix of regular and public groups"""
         # Create test data
-        user1 = create_test_user(db_session, "user1")
-        user2 = create_test_user(db_session, "user2")
+        user1 = _create_ext_perm_user(db_session, "user1")
+        user2 = _create_ext_perm_user(db_session, "user2")
         cc_pair = _create_test_connector_credential_pair(db_session)
 
         def mixed_group_sync_func(

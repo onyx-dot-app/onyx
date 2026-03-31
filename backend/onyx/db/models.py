@@ -305,8 +305,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, native_enum=False, default=UserRole.BASIC)
     )
-    account_type: Mapped[AccountType | None] = mapped_column(
-        Enum(AccountType, native_enum=False), nullable=True
+    account_type: Mapped[AccountType] = mapped_column(
+        Enum(AccountType, native_enum=False),
+        nullable=False,
+        default=AccountType.STANDARD,
+        server_default="STANDARD",
     )
 
     """
