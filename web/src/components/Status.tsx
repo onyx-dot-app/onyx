@@ -208,6 +208,15 @@ export function CCPairStatus({
       );
     } else if (
       lastIndexAttemptStatus &&
+      lastIndexAttemptStatus === "not_started"
+    ) {
+      badge = (
+        <Badge variant="not_started" icon={FiClock}>
+          Scheduled
+        </Badge>
+      );
+    } else if (
+      lastIndexAttemptStatus &&
       lastIndexAttemptStatus === "canceled"
     ) {
       badge = (
