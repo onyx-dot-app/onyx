@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -13,10 +13,13 @@ import { Content } from "@opal/layouts";
 import {
   SvgDownload,
   SvgKey,
+  SvgLock,
   SvgMoreHorizontal,
   SvgPlusCircle,
   SvgRefreshCw,
+  SvgUser,
   SvgUserKey,
+  SvgUserManage,
 } from "@opal/icons";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -36,17 +39,13 @@ import {
 import type { APIKey } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/refresh-pages/admin/ServiceAccountsPage/ApiKeyFormModal";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table } from "@opal/components";
+import { createTableColumns } from "@opal/components/table/columns";
 
 const API_KEY_SWR_KEY = "/api/admin/api-key";
 const route = ADMIN_ROUTES.API_KEYS;
+
+const tc = createTableColumns<APIKey>();
 
 // ---------------------------------------------------------------------------
 // NewServiceAccountButton
@@ -138,6 +137,89 @@ export default function ServiceAccountsPage() {
     mutate(API_KEY_SWR_KEY);
   };
 
+  const columns = useMemo(
+    () => [
+      tc.qualifier({
+        content: "icon",
+        getContent: () => SvgUserKey,
+      }),
+      tc.column("api_key_name", {
+        header: "Name",
+        weight: 25,
+        cell: (value) => value || "Unnamed",
+      }),
+      tc.column("api_key_display", {
+        header: "API Key",
+        weight: 30,
+        cell: (value) => (
+          <Text font="secondary-body" color="text-03">
+            {value}
+          </Text>
+        ),
+      }),
+      tc.displayColumn({
+        id: "account_type",
+        header: "Account Type",
+        width: { weight: 25, minWidth: 160 },
+        cell: (row) => (
+          <InputSelect
+            value={row.api_key_role}
+            onValueChange={(value) => handleRoleChange(row, value as UserRole)}
+          >
+            <InputSelect.Trigger />
+            <InputSelect.Content>
+              <InputSelect.Item
+                value={UserRole.ADMIN.toString()}
+                icon={SvgUserManage}
+                description="Unrestricted admin access to all endpoints."
+              >
+                {USER_ROLE_LABELS[UserRole.ADMIN]}
+              </InputSelect.Item>
+              <InputSelect.Item
+                value={UserRole.BASIC.toString()}
+                icon={SvgUser}
+                description="Standard user-level access to non-admin endpoints."
+              >
+                {USER_ROLE_LABELS[UserRole.BASIC]}
+              </InputSelect.Item>
+              <InputSelect.Item
+                value={UserRole.LIMITED.toString()}
+                icon={SvgLock}
+                description="For agents: chat posting and read-only access to other endpoints."
+              >
+                {USER_ROLE_LABELS[UserRole.LIMITED]}
+              </InputSelect.Item>
+            </InputSelect.Content>
+          </InputSelect>
+        ),
+      }),
+      tc.actions({
+        showColumnVisibility: false,
+        showSorting: false,
+        cell: (row) => (
+          <div className="flex flex-row gap-1">
+            <Button
+              icon={SvgRefreshCw}
+              prominence="tertiary"
+              tooltip="Regenerate"
+              onClick={() => handleRegenerate(row)}
+            />
+            <Button
+              icon={SvgMoreHorizontal}
+              prominence="tertiary"
+              tooltip="More"
+              onClick={() => {
+                setSelectedApiKey(row);
+                setShowCreateUpdateForm(true);
+              }}
+            />
+          </div>
+        ),
+      }),
+    ],
+    [] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   if (error) {
     return (
       <SettingsLayouts.Root>
@@ -211,72 +293,12 @@ export default function ServiceAccountsPage() {
               )}
             </div>
 
-            <Table className="overflow-visible">
-              <TableHeader>
-                <TableRow>
-                  <TableHead />
-                  <TableHead>Name</TableHead>
-                  <TableHead>API Key</TableHead>
-                  <TableHead>Account Type</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredApiKeys.map((apiKey) => (
-                  <TableRow key={apiKey.api_key_id}>
-                    <TableCell>
-                      <SvgUserKey size={16} className="text-text-03" />
-                    </TableCell>
-                    <TableCell>{apiKey.api_key_name || "Unnamed"}</TableCell>
-                    <TableCell className="max-w-64">
-                      <Text font="secondary-body" color="text-03">
-                        {apiKey.api_key_display}
-                      </Text>
-                    </TableCell>
-                    <TableCell>
-                      <InputSelect
-                        value={apiKey.api_key_role}
-                        onValueChange={(value) =>
-                          handleRoleChange(apiKey, value as UserRole)
-                        }
-                      >
-                        <InputSelect.Trigger />
-                        <InputSelect.Content>
-                          <InputSelect.Item value={UserRole.LIMITED.toString()}>
-                            {USER_ROLE_LABELS[UserRole.LIMITED]}
-                          </InputSelect.Item>
-                          <InputSelect.Item value={UserRole.BASIC.toString()}>
-                            {USER_ROLE_LABELS[UserRole.BASIC]}
-                          </InputSelect.Item>
-                          <InputSelect.Item value={UserRole.ADMIN.toString()}>
-                            {USER_ROLE_LABELS[UserRole.ADMIN]}
-                          </InputSelect.Item>
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-row gap-1">
-                        <Button
-                          icon={SvgRefreshCw}
-                          prominence="tertiary"
-                          tooltip="Regenerate"
-                          onClick={() => handleRegenerate(apiKey)}
-                        />
-                        <Button
-                          icon={SvgMoreHorizontal}
-                          prominence="tertiary"
-                          tooltip="More"
-                          onClick={() => {
-                            setSelectedApiKey(apiKey);
-                            setShowCreateUpdateForm(true);
-                          }}
-                        />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <Table
+              data={filteredApiKeys}
+              getRowId={(row) => String(row.api_key_id)}
+              columns={columns}
+              searchTerm={search}
+            />
           </>
         ) : (
           <Card
