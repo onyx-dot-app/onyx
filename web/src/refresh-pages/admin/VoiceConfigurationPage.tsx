@@ -7,7 +7,7 @@ import {
   IconProps,
   OpenAIIcon,
 } from "@/components/icons/icons";
-import ProviderCard from "@/sections/cards/ProviderCard";
+import ProviderCard from "@/sections/admin/ProviderCard";
 import Message from "@/refresh-components/messages/Message";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { FetchError } from "@/lib/fetcher";

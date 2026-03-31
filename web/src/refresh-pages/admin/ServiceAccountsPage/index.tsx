@@ -8,14 +8,12 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import { toast } from "@/hooks/useToast";
 import { Button, Text } from "@opal/components";
-import { Card } from "@opal/components";
 import { Content } from "@opal/layouts";
 import {
   SvgDownload,
   SvgKey,
   SvgLock,
   SvgMoreHorizontal,
-  SvgPlusCircle,
   SvgRefreshCw,
   SvgTrash,
   SvgUser,
@@ -25,8 +23,8 @@ import {
 } from "@opal/icons";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import SimpleAdminSearch from "@/sections/admin/SimpleAdminSearch";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Code from "@/refresh-components/Code";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
@@ -53,18 +51,6 @@ const API_KEY_SWR_KEY = "/api/admin/api-key";
 const route = ADMIN_ROUTES.API_KEYS;
 
 const tc = createTableColumns<APIKey>();
-
-// ---------------------------------------------------------------------------
-// NewServiceAccountButton
-// ---------------------------------------------------------------------------
-
-function NewServiceAccountButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button rightIcon={SvgPlusCircle} onClick={onClick}>
-      New Service Account
-    </Button>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -312,64 +298,26 @@ export default function ServiceAccountsPage() {
           />
         )}
 
-        {hasKeys ? (
-          <>
-            <div className="flex flex-row gap-3">
-              <InputTypeIn
-                variant="internal"
-                leftSearchIcon
-                placeholder="Search service accounts..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                showClearButton={false}
-              />
-              {canCreateKeys && (
-                <NewServiceAccountButton
-                  onClick={() => {
-                    setSelectedApiKey(undefined);
-                    setShowCreateUpdateForm(true);
-                  }}
-                />
-              )}
-              {!canCreateKeys && isTrialing && (
-                <Button href="/admin/billing">Upgrade to Paid Plan</Button>
-              )}
-            </div>
+        <SimpleAdminSearch
+          hasItems={hasKeys}
+          searchQuery={search}
+          onSearchQueryChange={setSearch}
+          placeholder="Search service accounts..."
+          onAction={() => {
+            setSelectedApiKey(undefined);
+            setShowCreateUpdateForm(true);
+          }}
+          actionLabel="New Service Account"
+          emptyStateText="Create service account API keys with user-level access."
+        />
 
-            <Table
-              data={filteredApiKeys}
-              getRowId={(row) => String(row.api_key_id)}
-              columns={columns}
-              searchTerm={search}
-            />
-          </>
-        ) : (
-          <Card
-            paddingVariant="md"
-            roundingVariant="lg"
-            backgroundVariant="light"
-            borderVariant="solid"
-          >
-            <div className="flex flex-row items-center justify-between gap-3">
-              <Content
-                title="Create service account API keys with user-level access."
-                sizePreset="main-ui"
-                variant="body"
-                prominence="muted"
-                widthVariant="fit"
-              />
-              {canCreateKeys ? (
-                <NewServiceAccountButton
-                  onClick={() => {
-                    setSelectedApiKey(undefined);
-                    setShowCreateUpdateForm(true);
-                  }}
-                />
-              ) : isTrialing ? (
-                <Button href="/admin/billing">Upgrade to Paid Plan</Button>
-              ) : undefined}
-            </div>
-          </Card>
+        {hasKeys && (
+          <Table
+            data={filteredApiKeys}
+            getRowId={(row) => String(row.api_key_id)}
+            columns={columns}
+            searchTerm={search}
+          />
         )}
       </SettingsLayouts.Body>
 
