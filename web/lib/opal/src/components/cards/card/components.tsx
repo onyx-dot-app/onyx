@@ -1,6 +1,5 @@
 import "@opal/components/cards/card/styles.css";
-import type { ContainerSizeVariants } from "@opal/types";
-import { containerSizeVariants } from "@opal/shared";
+import type { PaddingVariants } from "@opal/types";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -9,24 +8,36 @@ import { cn } from "@opal/utils";
 
 type BackgroundVariant = "none" | "light" | "heavy";
 type BorderVariant = "none" | "dashed" | "solid";
+type RoundingVariant = "sm" | "md" | "lg";
 
 type CardProps = {
   /**
-   * Size preset — controls padding and border-radius.
+   * Padding preset.
    *
-   * Padding comes from the shared size scale. Rounding follows the same
-   * mapping as `Button` / `Interactive.Container`:
+   * | Value   | Class   |
+   * |---------|---------|
+   * | `"lg"`  | `p-6`   |
+   * | `"md"`  | `p-4`   |
+   * | `"sm"`  | `p-2`   |
+   * | `"xs"`  | `p-1`   |
+   * | `"2xs"` | `p-0.5` |
    *
-   * | Size   | Rounding   |
-   * |--------|------------|
-   * | `lg`   | `default`  |
-   * | `md`–`sm` | `compact` |
-   * | `xs`–`2xs` | `mini`  |
-   * | `fit`  | `default`  |
-   *
-   * @default "lg"
+   * @default "sm"
    */
-  sizeVariant?: ContainerSizeVariants;
+  paddingVariant?: PaddingVariants;
+
+  /**
+   * Border-radius preset.
+   *
+   * | Value  | Class        |
+   * |--------|--------------|
+   * | `"sm"` | `rounded-08` |
+   * | `"md"` | `rounded-12` |
+   * | `"lg"` | `rounded-16` |
+   *
+   * @default "md"
+   */
+  roundingVariant?: RoundingVariant;
 
   /**
    * Background fill intensity.
@@ -55,17 +66,21 @@ type CardProps = {
 };
 
 // ---------------------------------------------------------------------------
-// Rounding
+// Mappings
 // ---------------------------------------------------------------------------
 
-/** Maps a size variant to a rounding class, mirroring the Button pattern. */
-const roundingForSize: Record<ContainerSizeVariants, string> = {
-  lg: "rounded-12",
-  md: "rounded-08",
+const paddingForVariant: Record<PaddingVariants, string> = {
+  lg: "p-6",
+  md: "p-4",
+  sm: "p-2",
+  xs: "p-1",
+  "2xs": "p-0.5",
+};
+
+const roundingForVariant: Record<RoundingVariant, string> = {
   sm: "rounded-08",
-  xs: "rounded-04",
-  "2xs": "rounded-04",
-  fit: "rounded-12",
+  md: "rounded-12",
+  lg: "rounded-16",
 };
 
 // ---------------------------------------------------------------------------
@@ -73,14 +88,15 @@ const roundingForSize: Record<ContainerSizeVariants, string> = {
 // ---------------------------------------------------------------------------
 
 function Card({
-  sizeVariant = "lg",
+  paddingVariant = "sm",
+  roundingVariant = "md",
   backgroundVariant = "light",
   borderVariant = "none",
   ref,
   children,
 }: CardProps) {
-  const { padding } = containerSizeVariants[sizeVariant];
-  const rounding = roundingForSize[sizeVariant];
+  const padding = paddingForVariant[paddingVariant];
+  const rounding = roundingForVariant[roundingVariant];
 
   return (
     <div
@@ -98,4 +114,10 @@ function Card({
 // Exports
 // ---------------------------------------------------------------------------
 
-export { Card, type CardProps, type BackgroundVariant, type BorderVariant };
+export {
+  Card,
+  type CardProps,
+  type BackgroundVariant,
+  type BorderVariant,
+  type RoundingVariant,
+};
