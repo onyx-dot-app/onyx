@@ -26,61 +26,70 @@ _ANONYMOUS = "ANONYMOUS"
 ANONYMOUS_USER_ID = "00000000-0000-0000-0000-000000000002"
 
 # Email pattern for API key virtual users
-
 API_KEY_EMAIL_PATTERN = r"API\_KEY\_\_%"
+
+# Reflect the table structure for use in DML
+user_table = sa.table(
+    "user",
+    sa.column("id", sa.Uuid),
+    sa.column("email", sa.String),
+    sa.column("role", sa.String),
+    sa.column("account_type", sa.String),
+)
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-
     # ------------------------------------------------------------------
     # Step 1: Backfill account_type from role.
     # Order matters — most-specific matches first so the final catch-all
     # only touches rows that haven't been classified yet.
     # ------------------------------------------------------------------
 
-    # 1a. API key virtual users (any role) → SERVICE_ACCOUNT
-    conn.execute(
-        sa.text(
-            'UPDATE "user" SET account_type = :acct_type '
-            "WHERE email ILIKE :pattern AND account_type IS NULL"
-        ),
-        {"acct_type": _SERVICE_ACCOUNT, "pattern": API_KEY_EMAIL_PATTERN},
+    # 1a. API key virtual users → SERVICE_ACCOUNT
+    op.execute(
+        sa.update(user_table)
+        .where(
+            user_table.c.email.ilike(API_KEY_EMAIL_PATTERN),
+            user_table.c.account_type.is_(None),
+        )
+        .values(account_type=_SERVICE_ACCOUNT)
     )
 
     # 1b. Anonymous user → ANONYMOUS
-    conn.execute(
-        sa.text(
-            'UPDATE "user" SET account_type = :acct_type '
-            "WHERE id = :anon_id AND account_type IS NULL"
-        ),
-        {"acct_type": _ANONYMOUS, "anon_id": ANONYMOUS_USER_ID},
+    op.execute(
+        sa.update(user_table)
+        .where(
+            user_table.c.id == ANONYMOUS_USER_ID,
+            user_table.c.account_type.is_(None),
+        )
+        .values(account_type=_ANONYMOUS)
     )
 
-    # 1c. SLACK_USER → BOT
-    conn.execute(
-        sa.text(
-            'UPDATE "user" SET account_type = :acct_type '
-            "WHERE role = 'SLACK_USER' AND account_type IS NULL"
-        ),
-        {"acct_type": _BOT},
+    # 1c. SLACK_USER role → BOT
+    op.execute(
+        sa.update(user_table)
+        .where(
+            user_table.c.role == "SLACK_USER",
+            user_table.c.account_type.is_(None),
+        )
+        .values(account_type=_BOT)
     )
 
-    # 1d. EXT_PERM_USER → EXT_PERM_USER
-    conn.execute(
-        sa.text(
-            'UPDATE "user" SET account_type = :acct_type '
-            "WHERE role = 'EXT_PERM_USER' AND account_type IS NULL"
-        ),
-        {"acct_type": _EXT_PERM_USER},
+    # 1d. EXT_PERM_USER role → EXT_PERM_USER
+    op.execute(
+        sa.update(user_table)
+        .where(
+            user_table.c.role == "EXT_PERM_USER",
+            user_table.c.account_type.is_(None),
+        )
+        .values(account_type=_EXT_PERM_USER)
     )
 
-    # 1e. Remaining (ADMIN, BASIC, CURATOR, GLOBAL_CURATOR) → STANDARD
-    conn.execute(
-        sa.text(
-            'UPDATE "user" SET account_type = :acct_type ' "WHERE account_type IS NULL"
-        ),
-        {"acct_type": _STANDARD},
+    # 1e. Everything else → STANDARD
+    op.execute(
+        sa.update(user_table)
+        .where(user_table.c.account_type.is_(None))
+        .values(account_type=_STANDARD)
     )
 
     # ------------------------------------------------------------------
@@ -95,8 +104,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    conn = op.get_bind()
-
-    # Revert to nullable first, then clear backfilled values
     op.alter_column("user", "account_type", nullable=True, server_default=None)
-    conn.execute(sa.text('UPDATE "user" SET account_type = NULL'))
+    op.execute(sa.update(user_table).values(account_type=None))

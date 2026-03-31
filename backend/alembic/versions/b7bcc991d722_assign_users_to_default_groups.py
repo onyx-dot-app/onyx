@@ -8,6 +8,7 @@ Create Date: 2026-03-25 16:30:39.529301
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 
 # revision identifiers, used by Alembic.
@@ -16,20 +17,44 @@ down_revision = "03d085c5c38d"
 branch_labels = None
 depends_on = None
 
+# Reflect table structures for use in DML
+user_group_table = sa.table(
+    "user_group",
+    sa.column("id", sa.Integer),
+    sa.column("name", sa.String),
+    sa.column("is_default", sa.Boolean),
+)
+
+user_table = sa.table(
+    "user",
+    sa.column("id", sa.Uuid),
+    sa.column("role", sa.String),
+    sa.column("account_type", sa.String),
+    sa.column("is_active", sa.Boolean),
+)
+
+user__user_group_table = sa.table(
+    "user__user_group",
+    sa.column("user_group_id", sa.Integer),
+    sa.column("user_id", sa.Uuid),
+)
+
 
 def upgrade() -> None:
     conn = op.get_bind()
 
     # Look up default group IDs
     admin_row = conn.execute(
-        sa.text(
-            "SELECT id FROM user_group " "WHERE name = 'Admin' AND is_default = true"
+        sa.select(user_group_table.c.id).where(
+            user_group_table.c.name == "Admin",
+            user_group_table.c.is_default == True,  # noqa: E712
         )
     ).fetchone()
 
     basic_row = conn.execute(
-        sa.text(
-            "SELECT id FROM user_group " "WHERE name = 'Basic' AND is_default = true"
+        sa.select(user_group_table.c.id).where(
+            user_group_table.c.name == "Basic",
+            user_group_table.c.is_default == True,  # noqa: E712
         )
     ).fetchone()
 
@@ -47,29 +72,41 @@ def upgrade() -> None:
 
     # Users with role=admin → Admin group
     # Exclude inactive placeholder/anonymous users that are not real users
-    conn.execute(
-        sa.text(
-            "INSERT INTO user__user_group (user_group_id, user_id) "
-            'SELECT :gid, id FROM "user" '
-            "WHERE role = 'ADMIN' AND is_active = true "
-            "ON CONFLICT (user_group_id, user_id) DO NOTHING"
-        ),
-        {"gid": admin_row[0]},
+    admin_users = sa.select(
+        sa.literal(admin_row[0]).label("user_group_id"),
+        user_table.c.id.label("user_id"),
+    ).where(
+        user_table.c.role == "ADMIN",
+        user_table.c.is_active == True,  # noqa: E712
+    )
+    op.execute(
+        pg_insert(user__user_group_table)
+        .from_select(["user_group_id", "user_id"], admin_users)
+        .on_conflict_do_nothing(index_elements=["user_group_id", "user_id"])
     )
 
     # STANDARD users (non-admin) and SERVICE_ACCOUNT users (role=basic) → Basic group
     # Exclude inactive placeholder/anonymous users that are not real users
-    conn.execute(
-        sa.text(
-            "INSERT INTO user__user_group (user_group_id, user_id) "
-            'SELECT :gid, id FROM "user" '
-            "WHERE is_active = true AND ("
-            "(account_type = 'STANDARD' AND role != 'ADMIN') "
-            "OR (account_type = 'SERVICE_ACCOUNT' AND role = 'BASIC')"
-            ") "
-            "ON CONFLICT (user_group_id, user_id) DO NOTHING"
+    basic_users = sa.select(
+        sa.literal(basic_row[0]).label("user_group_id"),
+        user_table.c.id.label("user_id"),
+    ).where(
+        user_table.c.is_active == True,  # noqa: E712
+        sa.or_(
+            sa.and_(
+                user_table.c.account_type == "STANDARD",
+                user_table.c.role != "ADMIN",
+            ),
+            sa.and_(
+                user_table.c.account_type == "SERVICE_ACCOUNT",
+                user_table.c.role == "BASIC",
+            ),
         ),
-        {"gid": basic_row[0]},
+    )
+    op.execute(
+        pg_insert(user__user_group_table)
+        .from_select(["user_group_id", "user_id"], basic_users)
+        .on_conflict_do_nothing(index_elements=["user_group_id", "user_id"])
     )
 
 
