@@ -1096,7 +1096,9 @@ def _run_models(
                     if assistant_message is not None:
                         llm_loop_completion_handle(
                             state_container=state_containers[model_idx],
-                            is_connected=setup.check_is_connected,
+                            # model_succeeded[model_idx] is True here (guard above),
+                            # so treat as connected — avoids "stopped by user" suffix.
+                            is_connected=lambda: model_succeeded[model_idx],
                             db_session=self_complete_db,
                             assistant_message=assistant_message,
                             llm=setup.llms[model_idx],
