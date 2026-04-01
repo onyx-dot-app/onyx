@@ -5,8 +5,8 @@ directly granted permissions (e.g. ["admin"] or ["basic"]). Implied
 permissions are expanded at read time, not stored.
 
 Backfill: joins user__user_group → permission_grant to collect each
-user's granted permissions into a sorted JSON array. Users without
-group memberships keep the default [].
+user's granted permissions into a JSON array. Users without group
+memberships keep the default [].
 
 Revision ID: 503883791c39
 Revises: b4b7e1028dfd
@@ -79,7 +79,8 @@ def upgrade() -> None:
         .subquery("deduped")
     )
 
-    # Aggregate into sorted JSONB array per user
+    # Aggregate into JSONB array per user (order is not guaranteed;
+    # consumers read this as a set so ordering does not matter)
     perms_per_user = (
         sa.select(
             deduped.c.user_id,
