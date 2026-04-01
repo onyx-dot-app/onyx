@@ -103,6 +103,7 @@ from onyx.server.features.user_oauth_token.api import router as user_oauth_token
 from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
 from onyx.server.kg.api import admin_router as kg_admin_router
+from onyx.server.lti.api import router as lti_router
 from onyx.server.manage.administrative import router as admin_router
 from onyx.server.manage.code_interpreter.api import (
     admin_router as code_interpreter_admin_router,
@@ -637,6 +638,16 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             application,
             fastapi_users.get_refresh_router(auth_backend),
             prefix="/auth",
+        )
+
+    # LTI 1.3 endpoints (Canvas / LMS integration) -- registered regardless
+    # of AUTH_TYPE since LTI is an additional auth pathway, not a replacement.
+    from onyx.configs.lti_configs import lti_is_configured
+
+    if lti_is_configured():
+        include_auth_router_with_prefix(
+            application,
+            lti_router,
         )
 
     application.add_exception_handler(

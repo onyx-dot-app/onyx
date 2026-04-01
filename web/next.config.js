@@ -1,12 +1,14 @@
 // Always require withSentryConfig
 const { withSentryConfig } = require("@sentry/nextjs");
 
+const ltiFrameAncestors = process.env.LTI_FRAME_ANCESTORS || "";
 const cspHeader = `
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
     object-src 'none';
     base-uri 'self';
     form-action 'self';
+    ${ltiFrameAncestors ? `frame-ancestors 'self' ${ltiFrameAncestors};` : ""}
     ${
       process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
       process.env.NODE_ENV !== "development"
@@ -106,6 +108,14 @@ const nextConfig = {
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"
         }/openapi.json`,
+      },
+      // LTI 1.3 endpoints -- Canvas redirects the browser here, so we
+      // proxy through to the backend API server.
+      {
+        source: "/auth/lti/:path*",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/auth/lti/:path*`,
       },
     ];
   },

@@ -57,6 +57,10 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/saml/callback", {"POST"}),
     ("/auth/saml/callback", {"GET"}),
     ("/auth/saml/logout", {"POST"}),
+    # lti
+    ("/auth/lti/jwks", {"GET"}),
+    ("/auth/lti/login", {"GET", "POST"}),
+    ("/auth/lti/launch", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),
     ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator
