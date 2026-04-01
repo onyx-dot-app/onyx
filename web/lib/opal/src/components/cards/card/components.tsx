@@ -23,7 +23,7 @@ type CardProps = {
    * | `"2xs"` | `p-0.5` |
    * | `"fit"` | `p-0`   |
    *
-   * @default "sm"
+   * @default "md"
    */
   padding?: PaddingVariants;
 
@@ -72,7 +72,7 @@ type CardProps = {
 // ---------------------------------------------------------------------------
 
 function Card({
-  padding: paddingProp = "sm",
+  padding: paddingProp = "md",
   rounding: roundingProp = "md",
   background = "light",
   border = "none",

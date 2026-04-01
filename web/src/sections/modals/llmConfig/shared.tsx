@@ -262,7 +262,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
               leftSearchIcon
             />
 
-            <Card background="heavy" border="none">
+            <Card background="heavy" border="none" padding="sm">
               <ContentAction
                 icon={SvgUserManage}
                 title="Admin"
@@ -286,7 +286,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none">
+                      <Card background="heavy" border="none" padding="sm">
                         <ContentAction
                           icon={SvgUsers}
                           title={group?.name ?? `Group ${id}`}
@@ -321,7 +321,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none">
+                      <Card background="heavy" border="none" padding="sm">
                         <ContentAction
                           icon={
                             agent
@@ -487,7 +487,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
         </InputLayouts.Horizontal>
 
         {modelConfigurations.length === 0 ? (
-          <EmptyMessageCard title="No models available." />
+          <EmptyMessageCard title="No models available." padding="sm" />
         ) : (
           <Section gap={0.25}>
             {isAutoMode

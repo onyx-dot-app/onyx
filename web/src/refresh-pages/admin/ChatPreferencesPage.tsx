@@ -1008,7 +1008,7 @@ function ChatPreferencesForm() {
                       )}
                     </Text>
                   </Section>
-                  <OpalCard background="none" border="solid">
+                  <OpalCard background="none" border="solid" padding="sm">
                     <Content
                       sizePreset="main-ui"
                       icon={SvgAlertCircle}

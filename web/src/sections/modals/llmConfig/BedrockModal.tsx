@@ -251,7 +251,7 @@ function BedrockModalInternals({
 
       {authMethod === AUTH_METHOD_IAM && (
         <FieldWrapper>
-          <Card background="none" border="solid">
+          <Card background="none" border="solid" padding="sm">
             <Content
               icon={SvgAlertCircle}
               title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."

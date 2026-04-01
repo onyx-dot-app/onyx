@@ -14,7 +14,7 @@ type EmptyMessageCardProps = {
   /** Primary message text. */
   title: string;
 
-  /** Padding preset for the card. @default "sm" */
+  /** Padding preset for the card. @default "md" */
   padding?: PaddingVariants;
 
   /** Ref forwarded to the root Card div. */
@@ -28,11 +28,17 @@ type EmptyMessageCardProps = {
 function EmptyMessageCard({
   icon = SvgEmpty,
   title,
-  padding = "sm",
+  padding = "md",
   ref,
 }: EmptyMessageCardProps) {
   return (
-    <Card ref={ref} background="none" border="dashed" padding={padding}>
+    <Card
+      ref={ref}
+      background="none"
+      border="dashed"
+      padding={padding}
+      rounding="md"
+    >
       <Content
         icon={icon}
         title={title}

@@ -21,7 +21,7 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
    * | `"2xs"` | `p-0.5` |
    * | `"fit"` | `p-0`   |
    *
-   * @default "sm"
+   * @default "md"
    */
   padding?: PaddingVariants;
 
@@ -35,7 +35,7 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
    * | `"md"` | `rounded-12` |
    * | `"lg"` | `rounded-16` |
    *
-   * @default "lg"
+   * @default "md"
    */
   rounding?: RoundingVariants;
 
@@ -72,8 +72,8 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
  * ```
  */
 function SelectCard({
-  padding: paddingProp = "sm",
-  rounding: roundingProp = "lg",
+  padding: paddingProp = "md",
+  rounding: roundingProp = "md",
   ref,
   children,
   ...statefulProps
