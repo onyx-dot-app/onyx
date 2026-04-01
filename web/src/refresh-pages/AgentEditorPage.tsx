@@ -6,7 +6,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Disabled, Hoverable } from "@opal/core";
 import { FullPersona } from "@/app/admin/agents/interfaces";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
@@ -212,22 +212,25 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
 
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <Popover.Trigger asChild>
-          <InputAvatar className="group/InputAvatar relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
-            {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
-            <CustomAgentAvatar
-              size={imageSrc ? 7.5 * 16 : 40}
-              src={imageSrc}
-              iconName={values.icon_name ?? undefined}
-              name={values.name}
-            />
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <Button
-              className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[1.75rem] mb-2 invisible group-hover/InputAvatar:visible"
-              secondary
-            >
-              Edit
-            </Button>
-          </InputAvatar>
+          <Hoverable.Root group="inputAvatar" widthVariant="fit">
+            <InputAvatar className="relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
+              {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
+              <CustomAgentAvatar
+                size={imageSrc ? 7.5 * 16 : 40}
+                src={imageSrc}
+                iconName={values.icon_name ?? undefined}
+                name={values.name}
+              />
+              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 mb-2">
+                <Hoverable.Item group="inputAvatar" variant="opacity-on-hover">
+                  <Button className="h-[1.75rem]" secondary>
+                    Edit
+                  </Button>
+                </Hoverable.Item>
+              </div>
+            </InputAvatar>
+          </Hoverable.Root>
         </Popover.Trigger>
         <Popover.Content>
           <PopoverMenu>
