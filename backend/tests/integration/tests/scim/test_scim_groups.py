@@ -22,6 +22,7 @@ import requests
 
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
+from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
@@ -606,22 +607,39 @@ def test_patch_rename_to_reserved_name(scim_token: str, idp_style: str) -> None:
     assert "reserved" in resp.json()["detail"].lower()
 
 
+def test_delete_reserved_group_rejected(scim_token: str) -> None:
+    """DELETE /Groups/{id} on a reserved group ('Admin') returns 409."""
+    # Look up the reserved 'Admin' group via SCIM filter
+    resp = ScimClient.get('/Groups?filter=displayName eq "Admin"', scim_token)
+    assert resp.status_code == 200
+    resources = resp.json()["Resources"]
+    assert len(resources) >= 1, "Expected reserved 'Admin' group to exist"
+    admin_group_id = resources[0]["id"]
+
+    resp = ScimClient.delete(f"/Groups/{admin_group_id}", scim_token)
+    assert resp.status_code == 409
+    assert "reserved" in resp.json()["detail"].lower()
+
+
 def test_scim_created_group_has_basic_permission(
     scim_token: str, idp_style: str
 ) -> None:
-    """POST /Groups with a member gives that member the basic permission."""
-    # Create a regular user who can log in
-    test_user = UserManager.create(name=f"scim_basic_perm_{idp_style}")
-
-    # Create a SCIM group with this user as a member
+    """POST /Groups assigns the 'basic' permission to the group itself."""
+    # Create a SCIM group (no members needed — we check the group's permissions)
     resp = _create_scim_group(
         scim_token,
         f"Basic Perm Group {idp_style}",
         external_id=f"ext-basic-perm-{idp_style}",
-        members=[{"value": test_user.id}],
     )
     assert resp.status_code == 201
+    group_id = resp.json()["id"]
 
-    # Verify the user gained the basic permission
-    perms = UserManager.get_permissions(test_user)
-    assert "basic" in perms, f"User should have 'basic' from SCIM group, got: {perms}"
+    # Verify the group itself was granted the basic permission
+    admin_user = UserManager.create(name=f"admin_basic_perm_check_{idp_style}")
+    perms_resp = requests.get(
+        f"{API_SERVER_URL}/manage/admin/user-group/{group_id}/permissions",
+        headers=admin_user.headers,
+    )
+    perms_resp.raise_for_status()
+    perms = perms_resp.json()
+    assert "basic" in perms, f"SCIM group should have 'basic' permission, got: {perms}"

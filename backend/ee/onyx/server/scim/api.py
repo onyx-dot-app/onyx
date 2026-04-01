@@ -1071,6 +1071,9 @@ def delete_group(
         return result
     group = result
 
+    if group.name in _RESERVED_GROUP_NAMES:
+        return _scim_error_response(409, f"'{group.name}' is a reserved group name.")
+
     # Capture member IDs before deletion so we can recompute their permissions.
     affected_user_ids = [uid for uid, _ in dal.get_group_members(group.id)]
 
