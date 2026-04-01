@@ -27,7 +27,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_JSM_PAGE_SIZE = 50
 _JSM_ISSUE_TYPES = (
     '"Service Request"',
     '"Incident"',
@@ -160,7 +159,7 @@ class JiraServiceManagementConnector(CheckpointedConnector[JiraServiceManagement
                 issues = self.jira_client.search_issues(
                     jql,
                     startAt=current_start,
-                    maxResults=_JSM_PAGE_SIZE,
+                    maxResults=self.batch_size,
                     fields="summary,description,comment,status,priority,issuetype,reporter,updated",
                 )
             except Exception as e:
@@ -198,7 +197,7 @@ class JiraServiceManagementConnector(CheckpointedConnector[JiraServiceManagement
             fetched = len(issues)
             current_start += fetched
 
-            if fetched < _JSM_PAGE_SIZE:
+            if fetched < self.batch_size:
                 return JiraServiceManagementCheckpoint(
                     start_at=current_start, has_more=False
                 )
