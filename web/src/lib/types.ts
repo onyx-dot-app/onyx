@@ -53,11 +53,11 @@ export interface UserPersonalization {
 }
 
 export enum AccountType {
-  STANDARD = "standard",
-  BOT = "bot",
-  EXT_PERM_USER = "ext_perm_user",
-  SERVICE_ACCOUNT = "service_account",
-  ANONYMOUS = "anonymous",
+  STANDARD = "STANDARD",
+  BOT = "BOT",
+  EXT_PERM_USER = "EXT_PERM_USER",
+  SERVICE_ACCOUNT = "SERVICE_ACCOUNT",
+  ANONYMOUS = "ANONYMOUS",
 }
 
 export enum UserRole {

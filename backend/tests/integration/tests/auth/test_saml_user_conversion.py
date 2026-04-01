@@ -4,6 +4,7 @@ import pytest
 import requests
 
 from onyx.auth.schemas import UserRole
+from onyx.db.enums import AccountType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -139,8 +140,8 @@ def test_saml_user_conversion_sets_account_type_and_group(
 
     # Verify account_type is set to standard after conversion
     assert (
-        user_data["account_type"] == "standard"
-    ), f"Expected account_type='standard', got '{user_data['account_type']}'"
+        user_data["account_type"] == AccountType.STANDARD.value
+    ), f"Expected account_type='{AccountType.STANDARD.value}', got '{user_data['account_type']}'"
 
     # Verify role is BASIC after conversion
     assert user_data["role"] == UserRole.BASIC.value
