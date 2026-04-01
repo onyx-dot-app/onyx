@@ -510,8 +510,7 @@ def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserG
         cc_pair_ids=user_group.cc_pair_ids,
     )
 
-    for uid in user_group.user_ids:
-        recompute_user_permissions__no_commit(uid, db_session)
+    recompute_user_permissions__no_commit(user_group.user_ids, db_session)
 
     db_session.commit()
     return db_user_group
@@ -820,8 +819,9 @@ def update_user_group(
     # update "time_updated" to now
     db_user_group.time_last_modified_by_user = func.now()
 
-    for uid in set(added_user_ids) | set(removed_user_ids):
-        recompute_user_permissions__no_commit(uid, db_session)
+    recompute_user_permissions__no_commit(
+        list(set(added_user_ids) | set(removed_user_ids)), db_session
+    )
 
     db_session.commit()
     return db_user_group
@@ -863,15 +863,17 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
     _check_user_group_is_modifiable(db_user_group)
 
     # Collect affected user IDs before cleanup deletes the relationships
-    affected_user_ids = (
-        db_session.execute(
+    affected_user_ids: list[UUID] = [
+        uid
+        for uid in db_session.execute(
             select(User__UserGroup.user_id).where(
                 User__UserGroup.user_group_id == user_group_id
             )
         )
         .scalars()
         .all()
-    )
+        if uid is not None
+    ]
 
     _mark_user_group__cc_pair_relationships_outdated__no_commit(
         db_session=db_session, user_group_id=user_group_id
@@ -903,8 +905,7 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
 
     # Recompute permissions for affected users now that their
     # membership in this group has been removed
-    for uid in affected_user_ids:
-        recompute_user_permissions__no_commit(uid, db_session)
+    recompute_user_permissions__no_commit(affected_user_ids, db_session)
 
     db_user_group.is_up_to_date = False
     db_user_group.is_up_for_deletion = True
