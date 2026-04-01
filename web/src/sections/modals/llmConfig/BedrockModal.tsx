@@ -226,9 +226,9 @@ function BedrockModalInternals({
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
         <Card
-          paddingVariant="sm"
           backgroundVariant="light"
           borderVariant="none"
+          paddingVariant="sm"
         >
           <Section gap={1}>
             <InputLayouts.Vertical
@@ -268,9 +268,9 @@ function BedrockModalInternals({
 
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
         <Card
-          paddingVariant="lg"
           backgroundVariant="light"
           borderVariant="none"
+          paddingVariant="sm"
         >
           <Section gap={0.5}>
             <InputLayouts.Vertical
