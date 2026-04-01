@@ -567,12 +567,14 @@ class TestRunModels:
         mock_handle.assert_not_called()
 
     def test_http_disconnect_completion_via_generator_exit(self) -> None:
-        """GeneratorExit from HTTP disconnect triggers wait+completion in finally.
+        """GeneratorExit from HTTP disconnect triggers worker self-completion.
 
         When the HTTP client closes the connection, Starlette throws GeneratorExit
-        into the stream generator, which propagates into _run_models.  The finally
-        block must call executor.shutdown(wait=True) to wait for LLM threads to
-        finish, then persist their results via llm_loop_completion_handle.
+        into the stream generator. The finally block sets drain_done (signalling
+        emitters to stop blocking) and calls executor.shutdown(wait=False) so the
+        server thread is never blocked. Worker threads detect drain_done.is_set()
+        after run_llm_loop completes and self-persist the result via
+        llm_loop_completion_handle using their own DB session.
 
         This is the primary regression for test_send_message_disconnect_and_cleanup:
         the integration test disconnects mid-stream and expects the DB message to be
@@ -580,17 +582,24 @@ class TestRunModels:
         """
         import threading
 
-        thread_completed = threading.Event()
+        # Signals the worker to unblock from run_llm_loop after gen.close() returns.
+        # This guarantees drain_done is set BEFORE the worker returns from run_llm_loop,
+        # so the self-completion path (drain_done.is_set() check) is always taken.
+        disconnect_received = threading.Event()
+        # Set by the llm_loop_completion_handle mock when called.
+        completion_called = threading.Event()
 
         def emit_then_complete(**kwargs: Any) -> None:
-            """Emit one packet (to give generator a yield point), then finish."""
+            """Emit one packet (to give the drain loop a yield point), then block
+            until the main thread signals that gen.close() has been called.  This
+            ensures drain_done is set before we return so model_succeeded is checked
+            against a set drain_done — no race condition.
+            """
             emitter = kwargs["emitter"]
             emitter.emit(
                 Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
             )
-            # Small sleep so executor.shutdown(wait=True) in finally actually waits.
-            time.sleep(0.05)
-            thread_completed.set()
+            disconnect_received.wait(timeout=5)
 
         setup = _make_setup(n_models=1)
         # is_connected() always True — HTTP disconnect does NOT set the Redis stop fence.
@@ -605,7 +614,8 @@ class TestRunModels:
             patch("onyx.chat.process_message.construct_tools", return_value={}),
             patch("onyx.chat.process_message.get_session_with_current_tenant"),
             patch(
-                "onyx.chat.process_message.llm_loop_completion_handle"
+                "onyx.chat.process_message.llm_loop_completion_handle",
+                side_effect=lambda *_, **__: completion_called.set(),
             ) as mock_handle,
             patch(
                 "onyx.chat.process_message.get_llm_token_counter",
@@ -623,14 +633,18 @@ class TestRunModels:
             # Simulate Starlette closing the stream on HTTP client disconnect.
             # GeneratorExit is thrown at the `yield item` suspension point.
             gen.close()
+            # Unblock the worker now that drain_done has been set by gen.close().
+            disconnect_received.set()
 
-        # Finally block must have waited for the thread and saved completion.
-        assert (
-            thread_completed.is_set()
-        ), "LLM thread must complete before gen.close() returns"
-        assert (
-            mock_handle.call_count == 1
-        ), "completion handle must be called for the successful model"
+            # Worker self-completes asynchronously (executor.shutdown(wait=False)).
+            # Wait here, inside the patch context, so that get_session_with_current_tenant
+            # and llm_loop_completion_handle mocks are still active when the worker calls them.
+            assert completion_called.wait(
+                timeout=5
+            ), "worker must self-complete via drain_done within 5 seconds"
+            assert (
+                mock_handle.call_count == 1
+            ), "completion handle must be called once for the successful model"
 
     def test_external_state_container_used_for_model_zero(self) -> None:
         """When provided, external_state_container is used as state_containers[0]."""
