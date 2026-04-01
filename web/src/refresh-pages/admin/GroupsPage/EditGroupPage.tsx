@@ -287,7 +287,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   // 404 state
   if (!isLoading && !error && !group) {
     return (
-      <SettingsLayouts.Root width="sm">
+      <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgUsers}
           title="Group Not Found"
@@ -307,7 +307,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const headerActions = (
     <Section flexDirection="row" gap={0.5} width="auto" height="auto">
       <Button
-        prominence="tertiary"
+        prominence="secondary"
         onClick={() => router.push("/admin/groups")}
       >
         Cancel
@@ -328,7 +328,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   return (
     <>
-      <SettingsLayouts.Root width="sm">
+      <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgUsers}
           title="Edit Group"

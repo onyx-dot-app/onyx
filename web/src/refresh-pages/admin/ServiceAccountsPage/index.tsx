@@ -195,8 +195,6 @@ export default function ServiceAccountsPage() {
         ),
       }),
       tc.actions({
-        showColumnVisibility: false,
-        showSorting: false,
         cell: (row) => (
           <div className="flex flex-row gap-1">
             <Button
@@ -298,27 +296,29 @@ export default function ServiceAccountsPage() {
           />
         )}
 
-        <AdminListHeader
-          hasItems={hasKeys}
-          searchQuery={search}
-          onSearchQueryChange={setSearch}
-          placeholder="Search service accounts..."
-          emptyStateText="Create service account API keys with user-level access."
-          onAction={() => {
-            setSelectedApiKey(undefined);
-            setShowCreateUpdateForm(true);
-          }}
-          actionLabel="New Service Account"
-        />
-
-        {hasKeys && (
-          <Table
-            data={filteredApiKeys}
-            getRowId={(row) => String(row.api_key_id)}
-            columns={columns}
-            searchTerm={search}
+        <div className="flex flex-col">
+          <AdminListHeader
+            hasItems={hasKeys}
+            searchQuery={search}
+            onSearchQueryChange={setSearch}
+            placeholder="Search service accounts..."
+            emptyStateText="Create service account API keys with user-level access."
+            onAction={() => {
+              setSelectedApiKey(undefined);
+              setShowCreateUpdateForm(true);
+            }}
+            actionLabel="New Service Account"
           />
-        )}
+
+          {hasKeys && (
+            <Table
+              data={filteredApiKeys}
+              getRowId={(row) => String(row.api_key_id)}
+              columns={columns}
+              searchTerm={search}
+            />
+          )}
+        </div>
       </SettingsLayouts.Body>
 
       <Modal open={!!fullApiKey}>
