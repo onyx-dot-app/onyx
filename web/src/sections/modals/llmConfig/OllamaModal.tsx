@@ -58,6 +58,9 @@ interface OllamaModalInternalsProps {
   isTesting: boolean;
   onClose: () => void;
   isOnboarding: boolean;
+  maxTokenOverrides: Record<string, number | null>;
+  onMaxInputTokensChange: (modelName: string, value: number | null) => void;
+  onClearOverrides: () => void;
 }
 
 function OllamaModalInternals({
@@ -68,6 +71,9 @@ function OllamaModalInternals({
   isTesting,
   onClose,
   isOnboarding,
+  maxTokenOverrides,
+  onMaxInputTokensChange,
+  onClearOverrides,
 }: OllamaModalInternalsProps) {
   const isInitialMount = useRef(true);
 
@@ -105,6 +111,7 @@ function OllamaModalInternals({
     }
 
     if (formikProps.values.api_base) {
+      onClearOverrides();
       const controller = new AbortController();
       debouncedFetchModels(formikProps.values.api_base, controller.signal);
       return () => {
@@ -112,6 +119,7 @@ function OllamaModalInternals({
         controller.abort();
       };
     } else {
+      onClearOverrides();
       setFetchedModels([]);
     }
   }, [
@@ -119,12 +127,19 @@ function OllamaModalInternals({
     debouncedFetchModels,
     setFetchedModels,
     existingLlmProvider,
+    onClearOverrides,
   ]);
 
-  const currentModels =
+  const baseModels =
     fetchedModels.length > 0
       ? fetchedModels
       : existingLlmProvider?.model_configurations || [];
+
+  const currentModels = baseModels.map((m) =>
+    m.name in maxTokenOverrides
+      ? { ...m, max_input_tokens: maxTokenOverrides[m.name] }
+      : m
+  );
 
   const hasApiKey = !!formikProps.values.custom_config?.OLLAMA_API_KEY;
   const defaultTab =
@@ -136,7 +151,7 @@ function OllamaModalInternals({
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
       isFormValid={formikProps.isValid}
-      isDirty={formikProps.dirty}
+      isDirty={formikProps.dirty || Object.values(maxTokenOverrides).some(v => v !== null && v !== undefined)}
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
@@ -193,6 +208,8 @@ function OllamaModalInternals({
           formikProps={formikProps}
           recommendedDefaultModel={null}
           shouldShowAutoUpdateToggle={false}
+          showMaxInputTokens
+          onMaxInputTokensChange={onMaxInputTokensChange}
         />
       )}
 
@@ -218,11 +235,35 @@ export default function OllamaModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
+  const [maxTokenOverrides, setMaxTokenOverrides] = useState<
+    Record<string, number | null>
+  >({});
   const [isTesting, setIsTesting] = useState(false);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } =
     useWellKnownLLMProvider(OLLAMA_PROVIDER_NAME);
+
+  const handleMaxInputTokensChange = useCallback(
+    (modelName: string, value: number | null) => {
+      setMaxTokenOverrides((prev) => ({ ...prev, [modelName]: value }));
+    },
+    []
+  );
+
+  const handleClearOverrides = useCallback(() => {
+    setMaxTokenOverrides({});
+  }, []);
+
+  const applyMaxTokenOverrides = useCallback(
+    (configs: ModelConfiguration[]): ModelConfiguration[] =>
+      configs.map((m) =>
+        m.name in maxTokenOverrides
+          ? { ...m, max_input_tokens: maxTokenOverrides[m.name] }
+          : m
+      ),
+    [maxTokenOverrides]
+  );
 
   if (open === false) return null;
 
@@ -286,8 +327,9 @@ export default function OllamaModal({
         };
 
         if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            fetchedModels.length > 0 ? fetchedModels : [];
+          const modelConfigsToUse = applyMaxTokenOverrides(
+            fetchedModels.length > 0 ? fetchedModels : []
+          );
 
           await submitOnboardingProvider({
             providerName: OLLAMA_PROVIDER_NAME,
@@ -302,12 +344,15 @@ export default function OllamaModal({
             setIsSubmitting: setSubmitting,
           });
         } else {
+          const configsToSubmit = applyMaxTokenOverrides(
+            fetchedModels.length > 0 ? fetchedModels : modelConfigurations
+          );
+
           await submitLLMProvider({
             providerName: OLLAMA_PROVIDER_NAME,
             values: submitValues,
             initialValues,
-            modelConfigurations:
-              fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
+            modelConfigurations: configsToSubmit,
             existingLlmProvider,
             shouldMarkAsDefault,
             setIsTesting,
@@ -327,6 +372,9 @@ export default function OllamaModal({
           isTesting={isTesting}
           onClose={onClose}
           isOnboarding={isOnboarding}
+          maxTokenOverrides={maxTokenOverrides}
+          onMaxInputTokensChange={handleMaxInputTokensChange}
+          onClearOverrides={handleClearOverrides}
         />
       )}
     </Formik>
