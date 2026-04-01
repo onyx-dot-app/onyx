@@ -1601,6 +1601,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
         with:
           sarif_file: "trivy-results.sarif"
+          ref: "refs/heads/main"
 
   notify-slack-on-failure:
     needs:
