@@ -6,8 +6,8 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { useHookSpecs } from "@/hooks/useHookSpecs";
-import { useHooks } from "@/hooks/useHooks";
+import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
+import { useHooks } from "@/ee/hooks/useHooks";
 import useFilter from "@/hooks/useFilter";
 import { toast } from "@/hooks/useToast";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -33,18 +33,18 @@ import {
 import type { IconFunctionComponent } from "@opal/types";
 import SvgNoResult from "@opal/illustrations/no-result";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import HookFormModal from "@/refresh-pages/admin/HooksPage/HookFormModal";
-import HookStatusPopover from "@/refresh-pages/admin/HooksPage/HookStatusPopover";
+import HookFormModal from "@/ee/refresh-pages/admin/HooksPage/HookFormModal";
+import HookStatusPopover from "@/ee/refresh-pages/admin/HooksPage/HookStatusPopover";
 import {
   activateHook,
   deactivateHook,
   deleteHook,
   validateHook,
-} from "@/refresh-pages/admin/HooksPage/svc";
+} from "@/ee/refresh-pages/admin/HooksPage/svc";
 import type {
   HookPointMeta,
   HookResponse,
-} from "@/refresh-pages/admin/HooksPage/interfaces";
+} from "@/ee/refresh-pages/admin/HooksPage/interfaces";
 
 const route = ADMIN_ROUTES.HOOKS;
 
@@ -496,7 +496,8 @@ export default function HooksPage() {
   const hookExtractor = useCallback(
     (hook: HookResponse) =>
       `${hook.name} ${
-        specs?.find((s) => s.hook_point === hook.hook_point)?.display_name ?? ""
+        specs?.find((s: HookPointMeta) => s.hook_point === hook.hook_point)
+          ?.display_name ?? ""
       }`,
     [specs]
   );
@@ -524,13 +525,15 @@ export default function HooksPage() {
     const searchLower = search.toLowerCase();
     return (specs ?? [])
       .filter(
-        (spec) =>
+        (spec: HookPointMeta) =>
           (hooksByPoint[spec.hook_point]?.length ?? 0) === 0 &&
           (!searchLower ||
             spec.display_name.toLowerCase().includes(searchLower) ||
             spec.description.toLowerCase().includes(searchLower))
       )
-      .sort((a, b) => a.display_name.localeCompare(b.display_name));
+      .sort((a: HookPointMeta, b: HookPointMeta) =>
+        a.display_name.localeCompare(b.display_name)
+      );
   }, [specs, hooksByPoint, search]);
 
   useEffect(() => {
@@ -551,9 +554,9 @@ export default function HooksPage() {
   const isLoading = specsLoading || hooksLoading;
 
   function handleHookSuccess(updated: HookResponse) {
-    mutate((prev) => {
+    mutate((prev: HookResponse[] | undefined) => {
       if (!prev) return [updated];
-      const idx = prev.findIndex((h) => h.id === updated.id);
+      const idx = prev.findIndex((h: HookResponse) => h.id === updated.id);
       if (idx >= 0) {
         const next = [...prev];
         next[idx] = updated;
@@ -564,13 +567,16 @@ export default function HooksPage() {
   }
 
   function handleHookDeleted(id: number) {
-    mutate((prev) => prev?.filter((h) => h.id !== id));
+    mutate(
+      (prev: HookResponse[] | undefined) =>
+        prev?.filter((h: HookResponse) => h.id !== id)
+    );
   }
 
   const connectSpec_ =
     connectSpec ??
     (editHook
-      ? specs?.find((s) => s.hook_point === editHook.hook_point)
+      ? specs?.find((s: HookPointMeta) => s.hook_point === editHook.hook_point)
       : undefined);
 
   return (
@@ -586,7 +592,7 @@ export default function HooksPage() {
         {!!connectSpec && (
           <HookFormModal
             key={connectSpec?.hook_point ?? "create"}
-            onOpenChange={(open) => {
+            onOpenChange={(open: boolean) => {
               if (!open) setConnectSpec(null);
             }}
             spec={connectSpec ?? undefined}
@@ -598,7 +604,7 @@ export default function HooksPage() {
         {!!editHook && (
           <HookFormModal
             key={editHook?.id ?? "edit"}
-            onOpenChange={(open) => {
+            onOpenChange={(open: boolean) => {
               if (!open) setEditHook(null);
             }}
             hook={editHook ?? undefined}
@@ -639,7 +645,7 @@ export default function HooksPage() {
               <div className="flex flex-col gap-2">
                 {connectedHooks.map((hook) => {
                   const spec = specs?.find(
-                    (s) => s.hook_point === hook.hook_point
+                    (s: HookPointMeta) => s.hook_point === hook.hook_point
                   );
                   return (
                     <ConnectedHookCard
@@ -653,7 +659,7 @@ export default function HooksPage() {
                   );
                 })}
 
-                {unconnectedSpecs.map((spec) => (
+                {unconnectedSpecs.map((spec: HookPointMeta) => (
                   <UnconnectedHookCard
                     key={spec.hook_point}
                     spec={spec}
