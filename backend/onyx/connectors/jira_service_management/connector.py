@@ -21,6 +21,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -164,7 +165,9 @@ class JiraServiceManagementConnector(CheckpointedConnector[JiraServiceManagement
                 )
             except Exception as e:
                 yield ConnectorFailure(
-                    failed_document=None,
+                    failed_entity=EntityFailure(
+                        entity_id=f"jql:{jql}:page:{current_start}",
+                    ),
                     failure_message=f"Failed to fetch JSM issues: {e}",
                     exception=e,
                 )

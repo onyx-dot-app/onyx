@@ -56,15 +56,12 @@ def test_jsm_connector_load_from_checkpoint_mock(
     """Mock test for load_from_checkpoint."""
     # Mock Jira client search_issues to return empty list
     mock_jira_client.search_issues.return_value = []
-    
+
     checkpoint = jsm_connector.build_dummy_checkpoint()
+    # Generator return values (via StopIteration) are not captured by list()
+    # When issues is empty, the generator yields nothing and returns a final checkpoint
     results = list(jsm_connector.load_from_checkpoint(start=0, end=100, checkpoint=checkpoint))
-    
-    # Should return final checkpoint with has_more=False
-    assert len(results) == 1
-    final_checkpoint = results[0]
-    assert isinstance(final_checkpoint, type(checkpoint))
-    assert final_checkpoint.has_more is False
+    assert results == []
 
 
 def test_jsm_connector_source_enum() -> None:
