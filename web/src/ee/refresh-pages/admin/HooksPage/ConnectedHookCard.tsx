@@ -22,15 +22,15 @@ import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import type {
   HookPointMeta,
   HookResponse,
-} from "@/refresh-pages/admin/HooksPage/interfaces";
+} from "@/ee/refresh-pages/admin/HooksPage/interfaces";
 import {
   activateHook,
   deactivateHook,
   deleteHook,
   validateHook,
-} from "@/refresh-pages/admin/HooksPage/svc";
-import { getHookPointIcon } from "@/refresh-pages/admin/HooksPage/hookPointIcons";
-import HookStatusPopover from "@/refresh-pages/admin/HooksPage/HookStatusPopover";
+} from "@/ee/refresh-pages/admin/HooksPage/svc";
+import { getHookPointIcon } from "@/ee/refresh-pages/admin/HooksPage/hookPointIcons";
+import HookStatusPopover from "@/ee/refresh-pages/admin/HooksPage/HookStatusPopover";
 
 // ---------------------------------------------------------------------------
 // Sub-component: disconnect confirmation modal

@@ -229,7 +229,7 @@ export const ADMIN_ROUTES = {
     sidebarLabel: "Document Index Migration",
   },
   HOOKS: {
-    path: "/admin/hooks",
+    path: "/ee/admin/hooks",
     icon: SvgHookNodes,
     title: "Hook Extensions",
     sidebarLabel: "Hook Extensions",

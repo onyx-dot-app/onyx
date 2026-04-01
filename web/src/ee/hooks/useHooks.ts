@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { HookResponse } from "@/refresh-pages/admin/HooksPage/interfaces";
+import { HookResponse } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export function useHooks() {
