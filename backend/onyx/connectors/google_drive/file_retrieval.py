@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from googleapiclient.discovery import Resource  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
+from googleapiclient.http import BatchHttpRequest  # type: ignore
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
@@ -59,6 +60,8 @@ SLIM_FILE_FIELDS = (
     "permissionIds, webViewLink, owners(emailAddress), modifiedTime)"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
+
+MAX_BATCH_SIZE = 100
 
 HIERARCHY_FIELDS = "id, name, parents, webViewLink, mimeType, driveId"
 
@@ -536,3 +539,61 @@ def get_file_by_web_view_link(
         )
         .execute()
     )
+
+
+def get_files_by_web_view_links_batch(
+    service: GoogleDriveService,
+    web_view_links: list[str],
+    field_type: DriveFileFieldType,
+) -> dict[str, GoogleDriveFileType]:
+    """Retrieve multiple Google Drive files by webViewLink using the batch API.
+
+    Returns a dict mapping web_view_link to file metadata.
+    Automatically splits into chunks of MAX_BATCH_SIZE.
+    """
+    fields = _get_fields_for_file_type(field_type)
+    if len(web_view_links) <= MAX_BATCH_SIZE:
+        return _get_files_by_web_view_links_batch(service, web_view_links, fields)
+
+    result: dict[str, GoogleDriveFileType] = {}
+    for i in range(0, len(web_view_links), MAX_BATCH_SIZE):
+        chunk = web_view_links[i : i + MAX_BATCH_SIZE]
+        result.update(_get_files_by_web_view_links_batch(service, chunk, fields))
+    return result
+
+
+def _get_files_by_web_view_links_batch(
+    service: GoogleDriveService,
+    web_view_links: list[str],
+    fields: str,
+) -> dict[str, GoogleDriveFileType]:
+    """Single-batch implementation. Failed requests are omitted from the result."""
+
+    results: dict[str, GoogleDriveFileType] = {}
+
+    def callback(
+        request_id: str,
+        response: GoogleDriveFileType,
+        exception: Exception | None,
+    ) -> None:
+        if exception:
+            logger.warning(f"Error retrieving file {request_id}: {exception}")
+        else:
+            results[request_id] = response
+
+    batch = cast(BatchHttpRequest, service.new_batch_http_request(callback=callback))
+
+    for web_view_link in web_view_links:
+        try:
+            file_id = _extract_file_id_from_web_view_link(web_view_link)
+            request = service.files().get(
+                fileId=file_id,
+                supportsAllDrives=True,
+                fields=fields,
+            )
+            batch.add(request, request_id=web_view_link)
+        except ValueError as e:
+            logger.warning(f"Failed to extract file ID from {web_view_link}: {e}")
+
+    batch.execute()
+    return results
