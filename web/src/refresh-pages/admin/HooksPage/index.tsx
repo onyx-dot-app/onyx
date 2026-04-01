@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { toast } from "@/hooks/useToast";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import HooksContent from "./HooksContent";
@@ -14,15 +15,20 @@ const route = ADMIN_ROUTES.HOOKS;
 export default function HooksPage() {
   const router = useRouter();
   const { settings, settingsLoading } = useSettingsContext();
+  const isEE = usePaidEnterpriseFeaturesEnabled();
 
   useEffect(() => {
-    if (!settingsLoading && !settings.hooks_enabled) {
+    if (settingsLoading) return;
+    if (!isEE) {
+      toast.info("Hook Extensions require an Enterprise license.");
+      router.replace("/");
+    } else if (!settings.hooks_enabled) {
       toast.info("Hook Extensions are not enabled for this deployment.");
       router.replace("/");
     }
-  }, [settingsLoading, settings.hooks_enabled, router]);
+  }, [settingsLoading, isEE, settings.hooks_enabled, router]);
 
-  if (settingsLoading || !settings.hooks_enabled) {
+  if (settingsLoading || !isEE || !settings.hooks_enabled) {
     return <SimpleLoader />;
   }
 

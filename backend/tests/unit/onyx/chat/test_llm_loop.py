@@ -644,6 +644,92 @@ class TestConstructMessageHistory:
         assert "Project file 0 content" in project_message.message
         assert "Project file 1 content" in project_message.message
 
+    def test_file_metadata_for_tool_produces_message(self) -> None:
+        """When context_files has file_metadata_for_tool, a metadata listing
+        message should be injected into the history."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        user_msg = create_message("Analyze the spreadsheet", MessageType.USER, 5)
+
+        context_files = ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=0,
+            file_metadata_for_tool=[
+                FileToolMetadata(
+                    file_id="xlsx-1",
+                    filename="report.xlsx",
+                    approx_char_count=100000,
+                ),
+            ],
+        )
+
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=None,
+            simple_chat_history=[user_msg],
+            reminder_message=None,
+            context_files=context_files,
+            available_tokens=1000,
+            token_counter=_simple_token_counter,
+        )
+
+        # Should have: system, tool_metadata_message, user
+        assert len(result) == 3
+        metadata_msg = result[1]
+        assert metadata_msg.message_type == MessageType.USER
+        assert "report.xlsx" in metadata_msg.message
+        assert "xlsx-1" in metadata_msg.message
+
+    def test_metadata_only_and_text_files_both_present(self) -> None:
+        """When both text content and tool metadata are present, both messages
+        should appear in the history."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        user_msg = create_message("Summarize everything", MessageType.USER, 5)
+
+        context_files = ExtractedContextFiles(
+            file_texts=["Text file content here"],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=100,
+            file_metadata=[
+                ContextFileMetadata(
+                    file_id="txt-1",
+                    filename="notes.txt",
+                    file_content="Text file content here",
+                ),
+            ],
+            uncapped_token_count=100,
+            file_metadata_for_tool=[
+                FileToolMetadata(
+                    file_id="xlsx-1",
+                    filename="data.xlsx",
+                    approx_char_count=50000,
+                ),
+            ],
+        )
+
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=None,
+            simple_chat_history=[user_msg],
+            reminder_message=None,
+            context_files=context_files,
+            available_tokens=2000,
+            token_counter=_simple_token_counter,
+        )
+
+        # Should have: system, context_files_message, tool_metadata_message, user
+        assert len(result) == 4
+        # Context files message (text content)
+        assert "documents" in result[1].message
+        assert "Text file content here" in result[1].message
+        # Tool metadata message
+        assert "data.xlsx" in result[2].message
+        assert result[3] == user_msg
+
 
 def _simple_token_counter(text: str) -> int:
     """Approximate token counter for tests (~4 chars per token)."""

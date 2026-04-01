@@ -69,5 +69,7 @@ EE_ONLY_PATH_PREFIXES: frozenset[str] = frozenset(
         "/admin/token-rate-limits",
         # Evals
         "/evals",
+        # Hook extensions
+        "/admin/hooks",
     }
 )

@@ -1,5 +1,5 @@
 import { SvgDownload, SvgKey, SvgRefreshCw } from "@opal/icons";
-import { Interactive } from "@opal/core";
+import { Interactive, Hoverable } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
@@ -83,27 +83,30 @@ export default function ScimModal({
               onClose={onClose}
             />
             <Modal.Body>
-              <Interactive.Stateless
-                group="group/token"
-                onClick={() => copyToClipboard(view.rawToken)}
-              >
-                <InputTextArea
-                  value={view.rawToken}
-                  readOnly
-                  autoResize
-                  resizable={false}
-                  rows={2}
-                  className="font-main-ui-mono break-all cursor-pointer [&_textarea]:cursor-pointer"
-                  rightSection={
-                    <div
-                      className="opacity-0 group-hover/token:opacity-100 transition-opacity"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <CopyIconButton getCopyText={() => view.rawToken} />
-                    </div>
-                  }
-                />
-              </Interactive.Stateless>
+              <Hoverable.Root group="token">
+                <Interactive.Stateless
+                  onClick={() => copyToClipboard(view.rawToken)}
+                >
+                  <InputTextArea
+                    value={view.rawToken}
+                    readOnly
+                    autoResize
+                    resizable={false}
+                    rows={2}
+                    className="font-main-ui-mono break-all cursor-pointer [&_textarea]:cursor-pointer"
+                    rightSection={
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Hoverable.Item
+                          group="token"
+                          variant="opacity-on-hover"
+                        >
+                          <CopyIconButton getCopyText={() => view.rawToken} />
+                        </Hoverable.Item>
+                      </div>
+                    }
+                  />
+                </Interactive.Stateless>
+              </Hoverable.Root>
             </Modal.Body>
             <Modal.Footer>
               <BasicModalFooter

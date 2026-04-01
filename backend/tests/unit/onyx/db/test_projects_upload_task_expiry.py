@@ -40,6 +40,8 @@ def test_send_task_includes_expires(
         user_files=user_files,
         rejected_files=[],
         id_to_temp_id={},
+        skip_indexing_filenames=set(),
+        indexable_files=user_files,
     )
 
     mock_user = MagicMock()

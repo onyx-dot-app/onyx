@@ -1,40 +1,6 @@
-import { test, expect, Page, Locator } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-
-const WEB_SEARCH_URL = "/admin/configuration/web-search";
-
-// Helper to find a provider card by its label text
-async function findProviderCard(
-  page: Page,
-  providerLabel: string
-): Promise<Locator> {
-  const card = page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerLabel })
-    .first();
-  return card;
-}
-
-// Helper to open the provider setup modal - clicks Connect if available, otherwise clicks the Edit icon
-async function openProviderModal(
-  page: Page,
-  providerLabel: string
-): Promise<void> {
-  const card = await findProviderCard(page, providerLabel);
-  await card.waitFor({ state: "visible", timeout: 10000 });
-
-  // First try to find the Connect button
-  const connectButton = card.getByRole("button", { name: "Connect" });
-  if (await connectButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await connectButton.click();
-    return;
-  }
-
-  // If no Connect button, click the Edit icon button to update credentials
-  const editButton = card.getByRole("button", { name: /^Edit / });
-  await editButton.waitFor({ state: "visible", timeout: 5000 });
-  await editButton.click();
-}
+import { WEB_SEARCH_URL, findProviderCard, openProviderModal } from "./svc";
 
 test.describe("Web Content Provider Configuration", () => {
   test.beforeEach(async ({ page }) => {
@@ -98,7 +64,7 @@ test.describe("Web Content Provider Configuration", () => {
 
       await page.waitForLoadState("networkidle");
 
-      const firecrawlCard = await findProviderCard(page, "Firecrawl");
+      const firecrawlCard = findProviderCard(page, "Firecrawl");
       await expect(
         firecrawlCard.getByRole("button", { name: "Current Crawler" })
       ).toBeVisible({ timeout: 15000 });
@@ -110,7 +76,7 @@ test.describe("Web Content Provider Configuration", () => {
       page,
     }) => {
       // First, ensure Firecrawl is configured and active
-      const firecrawlCard = await findProviderCard(page, "Firecrawl");
+      const firecrawlCard = findProviderCard(page, "Firecrawl");
       await firecrawlCard.waitFor({ state: "visible", timeout: 10000 });
 
       const connectButton = firecrawlCard.getByRole("button", {
@@ -150,7 +116,7 @@ test.describe("Web Content Provider Configuration", () => {
       }
 
       // Verify Firecrawl is now the current crawler
-      const updatedFirecrawlCard = await findProviderCard(page, "Firecrawl");
+      const updatedFirecrawlCard = findProviderCard(page, "Firecrawl");
       await expect(
         updatedFirecrawlCard.getByRole("button", { name: "Current Crawler" })
       ).toBeVisible({ timeout: 15000 });
@@ -160,7 +126,7 @@ test.describe("Web Content Provider Configuration", () => {
       );
 
       // Switch to Onyx Web Crawler
-      const onyxCrawlerCard = await findProviderCard(page, "Onyx Web Crawler");
+      const onyxCrawlerCard = findProviderCard(page, "Onyx Web Crawler");
       await onyxCrawlerCard.waitFor({ state: "visible", timeout: 10000 });
 
       const onyxSetDefault = onyxCrawlerCard.getByRole("button", {

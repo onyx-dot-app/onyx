@@ -18,6 +18,7 @@ from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import set_processing_status
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_state import run_chat_loop_with_state_containers
+from onyx.chat.chat_utils import build_file_context
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_chat_session_from_request
@@ -90,6 +91,7 @@ from onyx.llm.request_context import reset_llm_mock_response
 from onyx.llm.request_context import set_llm_mock_response
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -116,6 +118,8 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+
+APPROX_CHARS_PER_TOKEN = 4
 
 
 class _AvailableFiles(BaseModel):
@@ -301,16 +305,27 @@ def extract_context_files(
     if not user_files:
         return _empty_extracted_context_files()
 
-    aggregate_tokens = sum(uf.token_count or 0 for uf in user_files)
+    # Aggregate tokens for the file content that will be added
+    # Skip tokens for those with metadata only
+    aggregate_tokens = sum(
+        uf.token_count or 0
+        for uf in user_files
+        if not mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
+    )
     max_actual_tokens = (
         llm_max_context_window - reserved_token_count
     ) * max_llm_context_percentage
 
     if aggregate_tokens >= max_actual_tokens:
-        tool_metadata = []
         use_as_search_filter = not DISABLE_VECTOR_DB
         if DISABLE_VECTOR_DB:
-            tool_metadata = _build_file_tool_metadata_for_user_files(user_files)
+            overflow_tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
+        else:
+            overflow_tool_metadata = [
+                _build_tool_metadata(uf)
+                for uf in user_files
+                if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
+            ]
         return ExtractedContextFiles(
             file_texts=[],
             image_files=[],
@@ -318,11 +333,11 @@ def extract_context_files(
             total_token_count=0,
             file_metadata=[],
             uncapped_token_count=aggregate_tokens,
-            file_metadata_for_tool=tool_metadata,
+            file_metadata_for_tool=overflow_tool_metadata,
         )
 
     # Files fit — load them into context
-    user_file_map = {str(uf.id): uf for uf in user_files}
+    user_file_map = {uf.file_id: uf for uf in user_files}
     in_memory_files = load_in_memory_chat_files(
         user_file_ids=[uf.id for uf in user_files],
         db_session=db_session,
@@ -331,23 +346,38 @@ def extract_context_files(
     file_texts: list[str] = []
     image_files: list[ChatLoadedFile] = []
     file_metadata: list[ContextFileMetadata] = []
+    tool_metadata: list[FileToolMetadata] = []
     total_token_count = 0
 
     for f in in_memory_files:
         uf = user_file_map.get(str(f.file_id))
-        if f.file_type.is_text_file():
+        filename = f.filename or f"file_{f.file_id}"
+
+        if f.file_type.use_metadata_only():
+            # Metadata-only files are not injected as full text.
+            # Only the metadata is provided, with LLM using tools
+            if not uf:
+                logger.error(
+                    f"File with id={f.file_id} in metadata-only path with no associated user file"
+                )
+                continue
+            tool_metadata.append(_build_tool_metadata(uf))
+        elif f.file_type.is_text_file():
             text_content = _extract_text_from_in_memory_file(f)
             if not text_content:
+                continue
+            if not uf:
+                logger.warning(f"No user file for file_id={f.file_id}")
                 continue
             file_texts.append(text_content)
             file_metadata.append(
                 ContextFileMetadata(
-                    file_id=str(f.file_id),
-                    filename=f.filename or f"file_{f.file_id}",
+                    file_id=str(uf.id),
+                    filename=filename,
                     file_content=text_content,
                 )
             )
-            if uf and uf.token_count:
+            if uf.token_count:
                 total_token_count += uf.token_count
         elif f.file_type == ChatFileType.IMAGE:
             token_count = uf.token_count if uf and uf.token_count else 0
@@ -370,24 +400,22 @@ def extract_context_files(
         total_token_count=total_token_count,
         file_metadata=file_metadata,
         uncapped_token_count=aggregate_tokens,
+        file_metadata_for_tool=tool_metadata,
     )
 
 
-APPROX_CHARS_PER_TOKEN = 4
+def _build_tool_metadata(user_file: UserFile) -> FileToolMetadata:
+    """Build lightweight FileToolMetadata from a UserFile record.
 
-
-def _build_file_tool_metadata_for_user_files(
-    user_files: list[UserFile],
-) -> list[FileToolMetadata]:
-    """Build lightweight FileToolMetadata from a list of UserFile records."""
-    return [
-        FileToolMetadata(
-            file_id=str(uf.id),
-            filename=uf.name,
-            approx_char_count=(uf.token_count or 0) * APPROX_CHARS_PER_TOKEN,
-        )
-        for uf in user_files
-    ]
+    Delegates to ``build_file_context`` so that the file ID exposed to the
+    LLM is always consistent with what FileReaderTool expects.
+    """
+    return build_file_context(
+        tool_file_id=str(user_file.id),
+        filename=user_file.name,
+        file_type=mime_type_to_chat_file_type(user_file.file_type),
+        approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
+    ).tool_metadata
 
 
 def determine_search_params(

@@ -4,16 +4,14 @@ import type { Route } from "next";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { SvgPlusCircle, SvgUsers } from "@opal/icons";
-import { Button } from "@opal/components";
+import { SvgUsers } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { USER_GROUP_URL } from "./svc";
 import GroupsList from "./GroupsList";
-import { Section } from "@/layouts/general-layouts";
+import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 
@@ -28,34 +26,22 @@ function GroupsPage() {
   } = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher);
 
   return (
-    <SettingsLayouts.Root width="sm">
-      {/* This is the sticky header for the groups page. It is used to display
-       * the groups page title and search input when scrolling down.
-       */}
-      <div
-        className="sticky top-0 z-settings-header bg-background-tint-01"
-        data-testid="groups-page-heading"
-      >
+    <SettingsLayouts.Root>
+      <div data-testid="groups-page-heading">
         <SettingsLayouts.Header icon={SvgUsers} title="Groups" separator />
-
-        <Section flexDirection="row" padding={1}>
-          <InputTypeIn
-            placeholder="Search groups..."
-            variant="internal"
-            value={searchQuery}
-            leftSearchIcon
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <Button
-            icon={SvgPlusCircle}
-            onClick={() => router.push("/admin/groups/create" as Route)}
-          >
-            New Group
-          </Button>
-        </Section>
       </div>
 
       <SettingsLayouts.Body>
+        <AdminListHeader
+          hasItems={!isLoading && !error && (groups?.length ?? 0) > 0}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          placeholder="Search groups..."
+          emptyStateText="Create groups to organize users and manage access."
+          onAction={() => router.push("/admin/groups/create" as Route)}
+          actionLabel="New Group"
+        />
+
         {isLoading && <SimpleLoader />}
 
         {error && (

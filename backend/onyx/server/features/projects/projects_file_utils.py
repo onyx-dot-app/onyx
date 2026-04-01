@@ -76,9 +76,16 @@ class CategorizedFiles(BaseModel):
     acceptable: list[UploadFile] = Field(default_factory=list)
     rejected: list[RejectedFile] = Field(default_factory=list)
     acceptable_file_to_token_count: dict[str, int] = Field(default_factory=dict)
+    # Filenames within `acceptable` that should be stored but not indexed.
+    skip_indexing: set[str] = Field(default_factory=set)
 
     # Allow FastAPI UploadFile instances
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+def _skip_token_threshold(extension: str) -> bool:
+    """Return True if this file extension should bypass the token limit."""
+    return extension.lower() in OnyxFileExtensions.TABULAR_EXTENSIONS
 
 
 def _apply_long_side_cap(width: int, height: int, cap: int) -> tuple[int, int]:
@@ -264,7 +271,17 @@ def categorize_uploaded_files(
                 token_count = count_tokens(
                     text_content, tokenizer, token_limit=token_threshold
                 )
-                if token_threshold is not None and token_count > token_threshold:
+                exceeds_threshold = (
+                    token_threshold is not None and token_count > token_threshold
+                )
+                if exceeds_threshold and _skip_token_threshold(extension):
+                    # Exempt extensions (e.g. spreadsheets) are accepted
+                    # but flagged to skip indexing — only metadata is
+                    # injected into the LLM context.
+                    results.acceptable.append(upload)
+                    results.acceptable_file_to_token_count[filename] = token_count
+                    results.skip_indexing.add(filename)
+                elif exceeds_threshold:
                     results.rejected.append(
                         RejectedFile(
                             filename=filename,

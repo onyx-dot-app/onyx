@@ -1,13 +1,15 @@
 import useSWR from "swr";
 import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export function useLLMProviderOptions() {
   const { data, error, mutate } = useSWR<
     WellKnownLLMProviderDescriptor[] | undefined
-  >("/api/admin/llm/built-in/options", errorHandlingFetcher, {
+  >(SWR_KEYS.wellKnownLlmProviders, errorHandlingFetcher, {
     revalidateOnFocus: false,
-    dedupingInterval: 60000, // Dedupe requests within 1 minute
+    revalidateIfStale: false,
+    dedupingInterval: 60000,
   });
 
   return {

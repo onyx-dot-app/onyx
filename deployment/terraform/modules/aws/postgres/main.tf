@@ -75,6 +75,29 @@ resource "aws_cloudwatch_metric_alarm" "cpu_utilization" {
   tags = var.tags
 }
 
+# CloudWatch alarm for disk IO monitoring
+resource "aws_cloudwatch_metric_alarm" "read_iops" {
+  alarm_name          = "${var.identifier}-read-iops"
+  alarm_description   = "RDS ReadIOPS for ${var.identifier}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = var.iops_alarm_evaluation_periods
+  metric_name         = "ReadIOPS"
+  namespace           = "AWS/RDS"
+  period              = var.iops_alarm_period
+  statistic           = "Average"
+  threshold           = var.read_iops_alarm_threshold
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.this.identifier
+  }
+
+  tags = var.tags
+}
+
 # CloudWatch alarm for freeable memory monitoring
 resource "aws_cloudwatch_metric_alarm" "freeable_memory" {
   alarm_name          = "${var.identifier}-freeable-memory"

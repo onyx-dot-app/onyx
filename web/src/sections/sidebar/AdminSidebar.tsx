@@ -206,7 +206,8 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
           (billingData && hasActiveSubscription(billingData)) ||
             licenseData?.has_license
         );
-  const hooksEnabled = settings?.settings.hooks_enabled ?? false;
+  const hooksEnabled =
+    enableEnterprise && (settings?.settings.hooks_enabled ?? false);
 
   const allItems = buildItems(
     isCurator,
