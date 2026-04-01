@@ -224,9 +224,6 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
     );
   }
 
-  const hasSelections =
-    selectedGroupIds.length > 0 || selectedAgentIds.length > 0;
-
   return (
     <div className="flex flex-col w-full">
       <FieldWrapper>
@@ -253,7 +250,11 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
       </FieldWrapper>
 
       {!isPublic && (
-        <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
+        <Card
+          backgroundVariant="light"
+          borderVariant="none"
+          paddingVariant="sm"
+        >
           <Section gap={0.5}>
             <InputComboBox
               placeholder="Add groups and agents"
@@ -451,7 +452,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
 
   return (
-    <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
+    <Card backgroundVariant="light" borderVariant="none" paddingVariant="sm">
       <Section gap={0.5}>
         <InputLayouts.Horizontal
           title="Models"

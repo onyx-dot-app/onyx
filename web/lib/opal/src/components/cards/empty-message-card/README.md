@@ -6,12 +6,12 @@ A pre-configured Card for empty states. Renders a transparent card with a dashed
 
 ## Props
 
-| Prop          | Type                       | Default    | Description                                      |
-| ------------- | -------------------------- | ---------- | ------------------------------------------------ |
-| `icon`        | `IconFunctionComponent`    | `SvgEmpty` | Icon displayed alongside the title               |
-| `title`       | `string`                   | —          | Primary message text (required)                  |
-| `sizeVariant` | `SizeVariant`              | `"lg"`     | Size preset controlling padding and rounding     |
-| `ref`         | `React.Ref<HTMLDivElement>` | —          | Ref forwarded to the root div                    |
+| Prop              | Type                        | Default    | Description                                      |
+| ----------------- | --------------------------- | ---------- | ------------------------------------------------ |
+| `icon`            | `IconFunctionComponent`     | `SvgEmpty` | Icon displayed alongside the title               |
+| `title`           | `string`                    | —          | Primary message text (required)                  |
+| `paddingVariant`  | `PaddingVariants`           | `"sm"`     | Padding preset for the card                      |
+| `ref`             | `React.Ref<HTMLDivElement>` | —          | Ref forwarded to the root div                    |
 
 ## Usage
 
@@ -25,6 +25,6 @@ import { SvgSparkle, SvgFileText } from "@opal/icons";
 // With custom icon
 <EmptyMessageCard icon={SvgSparkle} title="No agents selected." />
 
-// With custom size
-<EmptyMessageCard sizeVariant="sm" icon={SvgFileText} title="No documents available." />
+// With custom padding
+<EmptyMessageCard paddingVariant="xs" icon={SvgFileText} title="No documents available." />
 ```

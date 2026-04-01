@@ -100,9 +100,7 @@ function Button({
         border={interactiveProps.prominence === "secondary"}
         heightVariant={size}
         widthVariant={width}
-        roundingVariant={
-          isLarge ? "default" : size === "2xs" ? "mini" : "compact"
-        }
+        roundingVariant={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
       >
         <div className="flex flex-row items-center gap-1">
           {iconWrapper(Icon, size, !!children)}
