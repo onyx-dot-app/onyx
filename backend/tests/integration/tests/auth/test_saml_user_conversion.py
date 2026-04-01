@@ -11,6 +11,25 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
+def _simulate_saml_login(email: str, admin_user: DATestUser) -> dict:
+    """Simulate a SAML login by calling the test upsert endpoint."""
+    response = requests.post(
+        f"{API_SERVER_URL}/manage/users/test-upsert-user",
+        json={"email": email},
+        headers=admin_user.headers,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _get_basic_group_member_emails(admin_user: DATestUser) -> set[str]:
+    """Get the set of emails of all members in the Basic default group."""
+    all_groups = UserGroupManager.get_all(admin_user, include_default=True)
+    basic_default = [g for g in all_groups if g.is_default and g.name == "Basic"]
+    assert basic_default, "Basic default group not found"
+    return {u.email for u in basic_default[0].users}
+
+
 @pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="SAML tests are enterprise only",
@@ -51,15 +70,9 @@ def test_saml_user_conversion(reset: None) -> None:  # noqa: ARG001
     assert UserManager.is_role(test_user, UserRole.EXT_PERM_USER)
 
     # Simulate SAML login by calling the test endpoint
-    response = requests.post(
-        f"{API_SERVER_URL}/manage/users/test-upsert-user",
-        json={"email": test_user_email},
-        headers=admin_user.headers,  # Use admin headers for authorization
-    )
-    response.raise_for_status()
+    user_data = _simulate_saml_login(test_user_email, admin_user)
 
     # Verify the response indicates the role changed to BASIC
-    user_data = response.json()
     assert user_data["role"] == UserRole.BASIC.value
 
     # Verify user role was changed in the database
@@ -84,15 +97,9 @@ def test_saml_user_conversion(reset: None) -> None:  # noqa: ARG001
     assert UserManager.is_role(slack_user, UserRole.SLACK_USER)
 
     # Simulate SAML login again
-    response = requests.post(
-        f"{API_SERVER_URL}/manage/users/test-upsert-user",
-        json={"email": slack_user_email},
-        headers=admin_user.headers,
-    )
-    response.raise_for_status()
+    user_data = _simulate_saml_login(slack_user_email, admin_user)
 
     # Verify the response indicates the role changed to BASIC
-    user_data = response.json()
     assert user_data["role"] == UserRole.BASIC.value
 
     # Verify the user's role was changed in the database
@@ -130,13 +137,7 @@ def test_saml_user_conversion_sets_account_type_and_group(
     assert UserManager.is_role(test_user, UserRole.EXT_PERM_USER)
 
     # Simulate SAML login
-    response = requests.post(
-        f"{API_SERVER_URL}/manage/users/test-upsert-user",
-        json={"email": test_email},
-        headers=admin_user.headers,
-    )
-    response.raise_for_status()
-    user_data = response.json()
+    user_data = _simulate_saml_login(test_email, admin_user)
 
     # Verify account_type is set to standard after conversion
     assert (
@@ -147,13 +148,39 @@ def test_saml_user_conversion_sets_account_type_and_group(
     assert user_data["role"] == UserRole.BASIC.value
 
     # Verify the user was assigned to the Basic default group
-    all_groups = UserGroupManager.get_all(admin_user, include_default=True)
-    basic_default = [g for g in all_groups if g.is_default and g.name == "Basic"]
-    assert basic_default, "Basic default group not found"
+    assert test_email in _get_basic_group_member_emails(
+        admin_user
+    ), f"Converted user '{test_email}' not found in Basic default group"
 
-    basic_group = basic_default[0]
-    member_emails = {u.email for u in basic_group.users}
-    assert test_email in member_emails, (
-        f"Converted user '{test_email}' not found in Basic default group members: "
-        f"{member_emails}"
-    )
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="SAML tests are enterprise only",
+)
+def test_saml_normal_signin_assigns_group(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """
+    Test that a brand-new user signing in via SAML for the first time
+    is created with the correct role, account_type, and group membership.
+
+    This validates that normal SAML sign-in (not an upgrade from
+    SLACK_USER/EXT_PERM_USER) correctly:
+    1. Creates the user with role=BASIC and account_type=STANDARD
+    2. Assigns the user to the Basic default group
+    """
+    # First user becomes admin
+    admin_user: DATestUser = UserManager.create(email="admin@example.com")
+
+    # New user signs in via SAML (no prior account)
+    new_email = "new_saml_user@example.com"
+    user_data = _simulate_saml_login(new_email, admin_user)
+
+    # Verify role and account_type
+    assert user_data["role"] == UserRole.BASIC.value
+    assert user_data["account_type"] == AccountType.STANDARD.value
+
+    # Verify user is in the Basic default group
+    assert new_email in _get_basic_group_member_emails(
+        admin_user
+    ), f"New SAML user '{new_email}' not found in Basic default group"
