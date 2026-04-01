@@ -67,3 +67,131 @@ variable "enable_rds_iam_auth" {
   description = "Enable AWS IAM database authentication for this RDS instance"
   default     = false
 }
+
+variable "backup_retention_period" {
+  type        = number
+  description = "Number of days to retain automated backups (0 to disable)"
+  default     = 7
+
+  validation {
+    condition     = var.backup_retention_period >= 0 && var.backup_retention_period <= 35
+    error_message = "backup_retention_period must be between 0 and 35 (AWS RDS limit)."
+  }
+}
+
+variable "backup_window" {
+  type        = string
+  description = "Preferred UTC time window for automated backups (hh24:mi-hh24:mi)"
+  default     = "03:00-04:00"
+
+  validation {
+    condition     = can(regex("^([01]\\d|2[0-3]):[0-5]\\d-([01]\\d|2[0-3]):[0-5]\\d$", var.backup_window))
+    error_message = "backup_window must be in hh24:mi-hh24:mi format (e.g. \"03:00-04:00\")."
+  }
+}
+
+# CloudWatch CPU alarm configuration
+variable "cpu_alarm_threshold" {
+  type        = number
+  description = "CPU utilization percentage threshold for the CloudWatch alarm"
+  default     = 80
+
+  validation {
+    condition     = var.cpu_alarm_threshold >= 0 && var.cpu_alarm_threshold <= 100
+    error_message = "cpu_alarm_threshold must be between 0 and 100 (percentage)."
+  }
+}
+
+variable "cpu_alarm_evaluation_periods" {
+  type        = number
+  description = "Number of consecutive periods the threshold must be breached before alarming"
+  default     = 3
+
+  validation {
+    condition     = var.cpu_alarm_evaluation_periods >= 1
+    error_message = "cpu_alarm_evaluation_periods must be at least 1."
+  }
+}
+
+variable "cpu_alarm_period" {
+  type        = number
+  description = "Period in seconds over which the CPU metric is evaluated"
+  default     = 300
+
+  validation {
+    condition     = var.cpu_alarm_period >= 60 && var.cpu_alarm_period % 60 == 0
+    error_message = "cpu_alarm_period must be a multiple of 60 seconds and at least 60 (CloudWatch requirement)."
+  }
+}
+
+variable "memory_alarm_threshold" {
+  type        = number
+  description = "Freeable memory threshold in bytes. Alarm fires when memory drops below this value."
+  default     = 256000000 # 256 MB
+
+  validation {
+    condition     = var.memory_alarm_threshold > 0
+    error_message = "memory_alarm_threshold must be greater than 0."
+  }
+}
+
+variable "memory_alarm_evaluation_periods" {
+  type        = number
+  description = "Number of consecutive periods the threshold must be breached before alarming"
+  default     = 3
+
+  validation {
+    condition     = var.memory_alarm_evaluation_periods >= 1
+    error_message = "memory_alarm_evaluation_periods must be at least 1."
+  }
+}
+
+variable "memory_alarm_period" {
+  type        = number
+  description = "Period in seconds over which the freeable memory metric is evaluated"
+  default     = 300
+
+  validation {
+    condition     = var.memory_alarm_period >= 60 && var.memory_alarm_period % 60 == 0
+    error_message = "memory_alarm_period must be a multiple of 60 seconds and at least 60 (CloudWatch requirement)."
+  }
+}
+
+variable "read_iops_alarm_threshold" {
+  type        = number
+  description = "ReadIOPS threshold. Alarm fires when IOPS exceeds this value."
+  default     = 3000
+
+  validation {
+    condition     = var.read_iops_alarm_threshold > 0
+    error_message = "read_iops_alarm_threshold must be greater than 0."
+  }
+}
+
+variable "iops_alarm_evaluation_periods" {
+  type        = number
+  description = "Number of consecutive periods the IOPS threshold must be breached before alarming"
+  default     = 3
+
+  validation {
+    condition     = var.iops_alarm_evaluation_periods >= 1
+    error_message = "iops_alarm_evaluation_periods must be at least 1."
+  }
+}
+
+variable "iops_alarm_period" {
+  type        = number
+  description = "Period in seconds over which the IOPS metric is evaluated"
+  default     = 300
+
+  validation {
+    condition     = var.iops_alarm_period >= 60 && var.iops_alarm_period % 60 == 0
+    error_message = "iops_alarm_period must be a multiple of 60 seconds and at least 60 (CloudWatch requirement)."
+  }
+}
+
+variable "alarm_actions" {
+  type        = list(string)
+  description = "List of ARNs to notify when the alarm transitions state (e.g. SNS topic ARNs)"
+  default     = []
+}

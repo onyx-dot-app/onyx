@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
+from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
@@ -318,6 +319,11 @@ def monitor_indexing_attempt_progress(
     )
 
     current_db_time = get_db_current_time(db_session)
+    total_batches: int | str = (
+        coordination_status.total_batches
+        if coordination_status.total_batches is not None
+        else "?"
+    )
     if coordination_status.found:
         task_logger.info(
             f"Indexing attempt progress: "
@@ -325,7 +331,7 @@ def monitor_indexing_attempt_progress(
             f"cc_pair={attempt.connector_credential_pair_id} "
             f"search_settings={attempt.search_settings_id} "
             f"completed_batches={coordination_status.completed_batches} "
-            f"total_batches={coordination_status.total_batches or '?'} "
+            f"total_batches={total_batches} "
             f"total_docs={coordination_status.total_docs} "
             f"total_failures={coordination_status.total_failures}"
             f"elapsed={(current_db_time - attempt.time_created).seconds}"
@@ -409,7 +415,7 @@ def check_indexing_completion(
     logger.info(
         f"Indexing status: "
         f"indexing_completed={indexing_completed} "
-        f"batches_processed={batches_processed}/{batches_total or '?'} "
+        f"batches_processed={batches_processed}/{batches_total if batches_total is not None else '?'} "
         f"total_docs={coordination_status.total_docs} "
         f"total_chunks={coordination_status.total_chunks} "
         f"total_failures={coordination_status.total_failures}"
@@ -449,7 +455,7 @@ def check_indexing_completion(
             ):
                 # Check if the task exists in the celery queue
                 # This handles the case where Redis dies after task creation but before task execution
-                redis_celery = task.app.broker_connection().channel().client  # type: ignore
+                redis_celery = celery_get_broker_client(task.app)
                 task_exists = celery_find_task(
                     attempt.celery_task_id,
                     OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,

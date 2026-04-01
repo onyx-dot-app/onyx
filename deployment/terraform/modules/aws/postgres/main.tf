@@ -44,5 +44,79 @@ resource "aws_db_instance" "this" {
   publicly_accessible    = false
   deletion_protection    = true
   storage_encrypted      = true
-  tags                   = var.tags
+
+  # Automated backups
+  backup_retention_period = var.backup_retention_period
+  backup_window           = var.backup_window
+
+  tags = var.tags
+}
+
+# CloudWatch alarm for CPU utilization monitoring
+resource "aws_cloudwatch_metric_alarm" "cpu_utilization" {
+  alarm_name          = "${var.identifier}-cpu-utilization"
+  alarm_description   = "RDS CPU utilization for ${var.identifier}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = var.cpu_alarm_evaluation_periods
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/RDS"
+  period              = var.cpu_alarm_period
+  statistic           = "Average"
+  threshold           = var.cpu_alarm_threshold
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.this.identifier
+  }
+
+  tags = var.tags
+}
+
+# CloudWatch alarm for disk IO monitoring
+resource "aws_cloudwatch_metric_alarm" "read_iops" {
+  alarm_name          = "${var.identifier}-read-iops"
+  alarm_description   = "RDS ReadIOPS for ${var.identifier}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = var.iops_alarm_evaluation_periods
+  metric_name         = "ReadIOPS"
+  namespace           = "AWS/RDS"
+  period              = var.iops_alarm_period
+  statistic           = "Average"
+  threshold           = var.read_iops_alarm_threshold
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.this.identifier
+  }
+
+  tags = var.tags
+}
+
+# CloudWatch alarm for freeable memory monitoring
+resource "aws_cloudwatch_metric_alarm" "freeable_memory" {
+  alarm_name          = "${var.identifier}-freeable-memory"
+  alarm_description   = "RDS freeable memory for ${var.identifier}"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = var.memory_alarm_evaluation_periods
+  metric_name         = "FreeableMemory"
+  namespace           = "AWS/RDS"
+  period              = var.memory_alarm_period
+  statistic           = "Average"
+  threshold           = var.memory_alarm_threshold
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.this.identifier
+  }
+
+  tags = var.tags
 }

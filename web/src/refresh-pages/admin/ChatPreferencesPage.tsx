@@ -4,7 +4,8 @@ import { markdown } from "@opal/utils";
 import React, { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Formik, Form, useFormikContext } from "formik";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -500,6 +501,7 @@ function ChatPreferencesForm() {
         }
 
         router.refresh();
+        await mutate(SWR_KEYS.settings);
         toast.success("Settings updated");
       } catch (error) {
         toast.error("Failed to update settings");

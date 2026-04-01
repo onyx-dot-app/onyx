@@ -1,5 +1,4 @@
 import "@opal/components/tag/styles.css";
-
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -46,20 +45,22 @@ function Tag({ icon: Icon, title, color = "gray", size = "sm" }: TagProps) {
   const config = COLOR_CONFIG[color];
 
   return (
-    <div className={cn("opal-auxiliary-tag", config.bg)} data-size={size}>
+    <div
+      className={cn("opal-auxiliary-tag", config.bg, config.text)}
+      data-size={size}
+    >
       {Icon && (
         <div className="opal-auxiliary-tag-icon-container">
           <Icon className={cn("opal-auxiliary-tag-icon", config.text)} />
         </div>
       )}
-      <span className={cn("opal-auxiliary-tag-title px-[2px]", config.text)}>
-        <Text
-          font={size === "md" ? "secondary-body" : "figure-small-value"}
-          color="inherit"
-        >
-          {title}
-        </Text>
-      </span>
+      <Text
+        font={size === "md" ? "secondary-body" : "figure-small-value"}
+        color="inherit"
+        nowrap
+      >
+        {title}
+      </Text>
     </div>
   );
 }

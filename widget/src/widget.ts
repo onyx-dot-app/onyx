@@ -3,12 +3,13 @@
  * Orchestrates launcher/inline modes and manages widget lifecycle
  */
 
-import { LitElement, html } from "lit";
+import { LitElement, html, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { WidgetConfig, ChatMessage } from "./types/widget-types";
+import { SearchDocument, ResolvedCitation } from "./types/api-types";
 import { resolveConfig } from "./config/config";
 import { theme } from "./styles/theme";
 import { widgetStyles } from "./styles/widget-styles";
@@ -47,6 +48,9 @@ export class OnyxChatWidget extends LitElement {
   private config!: WidgetConfig;
   private apiService!: ApiService;
   private abortController?: AbortController;
+  // Citation state — plain fields (not @state) since Map mutations don't trigger Lit re-renders
+  private documentMap = new Map<string, SearchDocument>();
+  private citationMap = new Map<number, string>();
 
   constructor() {
     super();
@@ -182,21 +186,117 @@ export class OnyxChatWidget extends LitElement {
     this.isStreaming = false;
     this.isLoading = false;
     this.streamingStatus = "";
+    this.documentMap.clear();
+    this.citationMap.clear();
     clearSession();
   }
 
   /**
-   * Render markdown content safely
+   * Render markdown content safely.
+   * Strips [[n]](url) citation links before markdown parsing so they render
+   * as plain [n] text references. Citation badges are rendered separately.
+   * Renumbers citations to sequential display numbers (1, 2, 3...).
    */
-  private renderMarkdown(content: string) {
+  private renderMarkdown(content: string, citations?: ResolvedCitation[]) {
     try {
-      const htmlContent = marked.parse(content, { async: false }) as string;
-      const sanitizedHTML = DOMPurify.sanitize(htmlContent);
+      let stripped = content;
+      if (this.config.includeCitations) {
+        if (citations?.length) {
+          // Build a map from backend citation number → sequential display number
+          const displayMap = new Map<number, number>();
+          citations.forEach((c, i) => displayMap.set(c.citation_number, i + 1));
+
+          // Replace [[n]](url) with superscript-style display number
+          stripped = stripped.replace(
+            /\[\[(\d+)\]\]\([^)]*\)/g,
+            (_match, num) => {
+              const displayNum = displayMap.get(Number(num));
+              return displayNum ? `<sup>[${displayNum}]</sup>` : "";
+            },
+          );
+        } else {
+          // Still streaming or no citations resolved yet — strip raw links
+          stripped = stripped.replace(/\[\[(\d+)\]\]\([^)]*\)/g, "");
+        }
+      }
+      const htmlContent = marked.parse(stripped, { async: false }) as string;
+      const sanitizedHTML = DOMPurify.sanitize(htmlContent, {
+        ADD_TAGS: ["sup"],
+      });
       return unsafeHTML(sanitizedHTML);
     } catch (err) {
       console.error("Failed to parse markdown:", err);
       return content; // Fallback to plain text
     }
+  }
+
+  private static readonly CITATIONS_COLLAPSED_COUNT = 1;
+
+  /**
+   * Render a single citation badge.
+   */
+  private renderCitationBadge(
+    c: ResolvedCitation,
+    displayNum: number,
+  ): TemplateResult {
+    const title = c.semantic_identifier || "Source";
+    const safeHref =
+      c.link && /^https?:\/\//i.test(c.link) ? c.link : undefined;
+    return safeHref
+      ? html`<a
+          class="citation-badge"
+          href=${safeHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          title=${title}
+          ><span class="citation-num">${displayNum}</span
+          ><span class="citation-title">${title}</span></a
+        >`
+      : html`<span class="citation-badge" title=${title}
+          ><span class="citation-num">${displayNum}</span
+          ><span class="citation-title">${title}</span></span
+        >`;
+  }
+
+  /**
+   * Toggle expanded state for a citation list.
+   */
+  private toggleCitationExpand(e: Event): void {
+    const container = (e.target as HTMLElement).closest(".citation-list");
+    if (container) {
+      container.classList.toggle("expanded");
+    }
+  }
+
+  /**
+   * Render citation badges for a message.
+   * Shows first 3 inline, collapses the rest behind a "+N more" toggle.
+   */
+  private renderCitations(
+    citations?: ResolvedCitation[],
+  ): string | TemplateResult {
+    if (!citations?.length) return "";
+    const limit = OnyxChatWidget.CITATIONS_COLLAPSED_COUNT;
+    const visible = citations.slice(0, limit);
+    const overflow = citations.slice(limit);
+
+    return html`
+      <div class="citation-list">
+        ${visible.map((c, i) => this.renderCitationBadge(c, i + 1))}
+        ${overflow.length > 0
+          ? html`
+              <button class="citation-more" @click=${this.toggleCitationExpand}>
+                +${overflow.length} more
+              </button>
+              <div class="citation-overflow">
+                ${overflow.map((c, i) =>
+                  this.renderCitationBadge(c, limit + i + 1),
+                )}
+              </div>
+            `
+          : ""}
+      </div>
+    `;
   }
 
   private toggleOpen() {
@@ -301,7 +401,31 @@ export class OnyxChatWidget extends LitElement {
           this.streamingStatus = result.status;
         }
 
+        // Accumulate document metadata for citation resolution
+        if (result.documents) {
+          for (const doc of result.documents) {
+            this.documentMap.set(doc.document_id, doc);
+          }
+        }
+
+        // Accumulate citation mappings for the current message
+        if (result.citation) {
+          this.citationMap.set(
+            result.citation.citation_number,
+            result.citation.document_id,
+          );
+        }
+
         if (result.message) {
+          // Reset per-message citation state when a new message starts
+          if (
+            result.message.isStreaming &&
+            result.message.content === "" &&
+            currentMessage === null
+          ) {
+            this.citationMap.clear();
+          }
+
           currentMessage = result.message;
 
           // Apply the backend message ID if we have it and message doesn't have a numeric ID yet
@@ -310,6 +434,22 @@ export class OnyxChatWidget extends LitElement {
             typeof currentMessage.id !== "number"
           ) {
             currentMessage.id = assistantMessageId;
+          }
+
+          // When message is complete, resolve citations and attach to message
+          if (!currentMessage.isStreaming && this.citationMap.size > 0) {
+            const resolved: ResolvedCitation[] = [];
+            for (const [citNum, docId] of this.citationMap) {
+              const doc = this.documentMap.get(docId);
+              resolved.push({
+                citation_number: citNum,
+                document_id: docId,
+                semantic_identifier: doc?.semantic_identifier,
+                link: doc?.link ?? undefined,
+              });
+            }
+            resolved.sort((a, b) => a.citation_number - b.citation_number);
+            currentMessage = { ...currentMessage, citations: resolved };
           }
 
           // Update or add message
@@ -326,14 +466,12 @@ export class OnyxChatWidget extends LitElement {
             this.messages = [...this.messages, currentMessage];
           }
 
-          // Clear streaming state when message is complete
+          // Clear streaming state and persist when message is complete
           if (!currentMessage.isStreaming) {
             this.isStreaming = false;
             this.streamingStatus = "";
+            saveSession(this.chatSessionId, this.messages);
           }
-
-          // Persist session
-          saveSession(this.chatSessionId, this.messages);
         }
       }
     } catch (err: any) {
@@ -469,7 +607,10 @@ export class OnyxChatWidget extends LitElement {
             <div class="message ${msg.role}">
               <div class="message-bubble">
                 ${msg.role === "assistant"
-                  ? this.renderMarkdown(msg.content)
+                  ? html`${this.renderMarkdown(
+                      msg.content,
+                      msg.citations,
+                    )}${this.renderCitations(msg.citations)}`
                   : msg.content}
               </div>
             </div>

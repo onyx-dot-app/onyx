@@ -984,8 +984,8 @@ function ChatPreferencesSettings() {
         />
         <Card>
           <InputLayouts.Horizontal
-            title="Auto-Send"
-            description="Automatically send voice input when recording stops."
+            title="Auto-Send on Pause"
+            description="Automatically send voice input when you stop speaking."
           >
             <Switch
               checked={user?.preferences.voice_auto_send ?? false}

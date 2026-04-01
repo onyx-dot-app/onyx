@@ -126,7 +126,7 @@ function BifrostModalInternals({
         <InputLayouts.Vertical
           name="api_key"
           title="API Key"
-          optional={true}
+          suffix="optional"
           subDescription={markdown(
             "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
           )}

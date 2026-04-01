@@ -7,8 +7,7 @@ import {
   IconProps,
   OpenAIIcon,
 } from "@/components/icons/icons";
-import Text from "@/refresh-components/texts/Text";
-import { Select } from "@/refresh-components/cards";
+import ProviderCard from "@/sections/cards/ProviderCard";
 import Message from "@/refresh-components/messages/Message";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { FetchError } from "@/lib/fetcher";
@@ -26,7 +25,8 @@ import { toast } from "@/hooks/useToast";
 import { Callout } from "@/components/ui/callout";
 import { Content } from "@opal/layouts";
 import { SvgMicrophone, SvgSlash, SvgUnplug } from "@opal/icons";
-import { Button as OpalButton } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import { markdown } from "@opal/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -205,7 +205,7 @@ function VoiceDisconnectModal({
       description="Voice models"
       onClose={onClose}
       submit={
-        <OpalButton
+        <Button
           variant="danger"
           onClick={onDisconnect}
           disabled={
@@ -213,19 +213,19 @@ function VoiceDisconnectModal({
           }
         >
           Disconnect
-        </OpalButton>
+        </Button>
       }
     >
       {needsReplacement ? (
         hasReplacements ? (
           <Section alignItems="start">
-            <Text as="p" text03>
-              <b>{disconnectTarget.providerLabel}</b> models will no longer be
-              used for speech-to-text or text-to-speech, and it will no longer
-              be your default. Session history will be preserved.
+            <Text as="p" color="text-03">
+              {markdown(
+                `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`
+              )}
             </Text>
             <Section alignItems="start" gap={0.25}>
-              <Text as="p" text04>
+              <Text as="p" color="text-04">
                 Set New Default
               </Text>
               <InputSelect
@@ -256,23 +256,24 @@ function VoiceDisconnectModal({
           </Section>
         ) : (
           <>
-            <Text as="p" text03>
-              <b>{disconnectTarget.providerLabel}</b> models will no longer be
-              used for speech-to-text or text-to-speech, and it will no longer
-              be your default.
+            <Text as="p" color="text-03">
+              {markdown(
+                `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default.`
+              )}
             </Text>
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               Connect another provider to continue using voice.
             </Text>
           </>
         )
       ) : (
         <>
-          <Text as="p" text03>
-            <b>{disconnectTarget.providerLabel}</b> models will no longer be
-            available for voice.
+          <Text as="p" color="text-03">
+            {markdown(
+              `**${disconnectTarget.providerLabel}** models will no longer be available for voice.`
+            )}
           </Text>
-          <Text as="p" text03>
+          <Text as="p" color="text-03">
             Session history will be preserved.
           </Text>
         </>
@@ -487,7 +488,7 @@ export default function VoiceConfigurationPage() {
     const Icon = getProviderIcon(model.providerType);
 
     return (
-      <Select
+      <ProviderCard
         key={`${mode}-${model.id}`}
         aria-label={`voice-${mode}-${model.id}`}
         icon={Icon}
@@ -536,7 +537,7 @@ export default function VoiceConfigurationPage() {
           <Callout type="danger" title="Failed to load voice settings">
             {message}
             {detail && (
-              <Text as="p" mainContentBody text03>
+              <Text as="p" font="main-content-body" color="text-03">
                 {detail}
               </Text>
             )}
@@ -626,7 +627,7 @@ export default function VoiceConfigurationPage() {
 
           {TTS_PROVIDER_GROUPS.map((group) => (
             <div key={group.providerType} className="flex flex-col gap-2">
-              <Text secondaryBody text03>
+              <Text font="secondary-body" color="text-03">
                 {group.providerLabel}
               </Text>
               <div className="flex flex-col gap-2">

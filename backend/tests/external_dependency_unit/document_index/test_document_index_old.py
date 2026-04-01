@@ -5,6 +5,7 @@ These tests assume Vespa and OpenSearch are running.
 
 import time
 from collections.abc import Generator
+from collections.abc import Iterator
 
 import pytest
 
@@ -166,3 +167,29 @@ class TestDocumentIndexOld:
                 batch_retrieval=True,
             )
             assert len(inference_chunks) == 0
+
+    def test_index_accepts_generator(
+        self,
+        document_indices: list[DocumentIndex],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """index() accepts a generator (any iterable), not just a list."""
+        for document_index in document_indices:
+
+            def chunk_gen() -> Iterator[DocMetadataAwareIndexChunk]:
+                for i in range(3):
+                    yield make_chunk("test_doc_gen", chunk_id=i)
+
+            index_batch_params = IndexBatchParams(
+                doc_id_to_previous_chunk_cnt={"test_doc_gen": 0},
+                doc_id_to_new_chunk_cnt={"test_doc_gen": 3},
+                tenant_id=get_current_tenant_id(),
+                large_chunks_enabled=False,
+            )
+
+            results = document_index.index(chunk_gen(), index_batch_params)
+
+            assert len(results) == 1
+            record = results.pop()
+            assert record.document_id == "test_doc_gen"
+            assert record.already_existed is False

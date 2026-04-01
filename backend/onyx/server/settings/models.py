@@ -116,7 +116,7 @@ class UserSettings(Settings):
     # False when DISABLE_VECTOR_DB is set — connectors, RAG search, and
     # document sets are unavailable.
     vector_db_enabled: bool = True
-    # True when hooks are available: single-tenant deployment with HOOK_ENABLED=true.
+    # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
