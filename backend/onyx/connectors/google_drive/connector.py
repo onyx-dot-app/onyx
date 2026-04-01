@@ -1547,12 +1547,14 @@ class GoogleDriveConnector(
             )
             for retrieved_file in files_batch
         ]
-        results = cast(
+        raw_results = cast(
             list[Document | ConnectorFailure | None],
             run_functions_tuples_in_parallel(func_with_args, max_workers=8),
         )
 
-        results = [result for result in results if result is not None]
+        results: list[Document | ConnectorFailure] = [
+            r for r in raw_results if r is not None
+        ]
         logger.debug(f"batch has {len(results)} docs or failures")
         yield from results
 
