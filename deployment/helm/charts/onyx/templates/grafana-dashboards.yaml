@@ -1,0 +1,15 @@
+{{- if .Values.monitoring.grafana.dashboards.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "onyx.fullname" . }}-indexing-pipeline-dashboard
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Onyx"
+data:
+  onyx-indexing-pipeline.json: |
+    {{- .Files.Get "dashboards/indexing-pipeline.json" | nindent 4 }}
+{{- end }}

@@ -161,3 +161,25 @@ variable "rds_db_connect_arn" {
   description = "Full rds-db:connect ARN to allow (required when enable_rds_iam_for_service_account is true)"
   default     = null
 }
+
+variable "cluster_enabled_log_types" {
+  type        = list(string)
+  description = "EKS control plane log types to enable (valid: api, audit, authenticator, controllerManager, scheduler)"
+  default     = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
+  validation {
+    condition     = alltrue([for t in var.cluster_enabled_log_types : contains(["api", "audit", "authenticator", "controllerManager", "scheduler"], t)])
+    error_message = "Each entry must be one of: api, audit, authenticator, controllerManager, scheduler."
+  }
+}
+
+variable "cloudwatch_log_group_retention_in_days" {
+  type        = number
+  description = "Number of days to retain EKS control plane logs in CloudWatch (0 = never expire)"
+  default     = 30
+
+  validation {
+    condition     = contains([0, 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653], var.cloudwatch_log_group_retention_in_days)
+    error_message = "Must be a valid CloudWatch retention value (0, 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653)."
+  }
+}

@@ -24,6 +24,7 @@ type TextFont =
   | "secondary-body"
   | "secondary-action"
   | "secondary-mono"
+  | "secondary-mono-label"
   | "figure-small-label"
   | "figure-small-value"
   | "figure-keystroke";
@@ -88,6 +89,7 @@ const FONT_CONFIG: Record<TextFont, string> = {
   "secondary-body": "font-secondary-body",
   "secondary-action": "font-secondary-action",
   "secondary-mono": "font-secondary-mono",
+  "secondary-mono-label": "font-secondary-mono-label",
   "figure-small-label": "font-figure-small-label",
   "figure-small-value": "font-figure-small-value",
   "figure-keystroke": "font-figure-keystroke",

@@ -1,5 +1,6 @@
 import {
   HookCreateRequest,
+  HookExecutionRecord,
   HookResponse,
   HookUpdateRequest,
   HookValidateResponse,
@@ -24,7 +25,8 @@ async function parseError(res: Response, fallback: string): Promise<Error> {
       );
     }
     return new Error(body?.detail ?? fallback);
-  } catch {
+  } catch (err) {
+    console.error("parseError: failed to parse error response body:", err);
     return new Error(fallback);
   }
 }
@@ -91,6 +93,19 @@ export async function validateHook(id: number): Promise<HookValidateResponse> {
   });
   if (!res.ok) {
     throw await parseError(res, "Failed to validate hook");
+  }
+  return res.json();
+}
+
+export async function fetchExecutionLogs(
+  id: number,
+  limit = 20
+): Promise<HookExecutionRecord[]> {
+  const res = await fetch(
+    `/api/admin/hooks/${id}/execution-logs?limit=${limit}`
+  );
+  if (!res.ok) {
+    throw await parseError(res, "Failed to fetch execution logs");
   }
   return res.json();
 }
