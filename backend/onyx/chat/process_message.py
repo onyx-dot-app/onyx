@@ -319,9 +319,9 @@ def extract_context_files(
     if aggregate_tokens >= max_actual_tokens:
         use_as_search_filter = not DISABLE_VECTOR_DB
         if DISABLE_VECTOR_DB:
-            tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
+            overflow_tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
         else:
-            tool_metadata = [
+            overflow_tool_metadata = [
                 _build_tool_metadata(uf)
                 for uf in user_files
                 if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
@@ -333,7 +333,7 @@ def extract_context_files(
             total_token_count=0,
             file_metadata=[],
             uncapped_token_count=aggregate_tokens,
-            file_metadata_for_tool=tool_metadata,
+            file_metadata_for_tool=overflow_tool_metadata,
         )
 
     # Files fit — load them into context
