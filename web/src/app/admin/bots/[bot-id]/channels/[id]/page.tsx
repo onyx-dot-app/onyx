@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
-import { ErrorCallout } from "@/components/ErrorCallout";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgSlack } from "@opal/icons";
@@ -66,30 +66,36 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
         {isLoading ? (
           <SimpleLoader />
         ) : channelsError || !slackChannelConfigs ? (
-          <ErrorCallout
-            errorTitle="Something went wrong :("
-            errorMsg={`Failed to fetch Slack Channels - ${
-              channelsError?.message ?? "unknown error"
-            }`}
+          <ResourceErrorPage
+            errorType="fetch_error"
+            title="Failed to load Slack channels"
+            description={channelsError?.message}
+            backHref="/admin/bots"
+            backLabel="Back to Slack bots"
           />
         ) : !slackChannelConfig ? (
-          <ErrorCallout
-            errorTitle="Something went wrong :("
-            errorMsg={`Did not find Slack Channel config with ID: ${id}`}
+          <ResourceErrorPage
+            errorType="not_found"
+            title="Channel config not found"
+            description={`Slack channel config with ID ${id} could not be found.`}
+            backHref="/admin/bots"
+            backLabel="Back to Slack bots"
           />
         ) : docSetsError || !documentSets ? (
-          <ErrorCallout
-            errorTitle="Something went wrong :("
-            errorMsg={`Failed to fetch document sets - ${
-              docSetsError?.message ?? "unknown error"
-            }`}
+          <ResourceErrorPage
+            errorType="fetch_error"
+            title="Failed to load document sets"
+            description={docSetsError?.message}
+            backHref="/admin/bots"
+            backLabel="Back to Slack bots"
           />
         ) : agentsError ? (
-          <ErrorCallout
-            errorTitle="Something went wrong :("
-            errorMsg={`Failed to fetch agents - ${
-              agentsError?.message ?? "unknown error"
-            }`}
+          <ResourceErrorPage
+            errorType="fetch_error"
+            title="Failed to load agents"
+            description={agentsError?.message}
+            backHref="/admin/bots"
+            backLabel="Back to Slack bots"
           />
         ) : (
           <SlackChannelConfigCreationForm

@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { ErrorCallout } from "@/components/ErrorCallout";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
@@ -72,9 +72,12 @@ function GuildDetailContent({
 
   if (guildError || !guild) {
     return (
-      <ErrorCallout
-        errorTitle="Failed to load server"
-        errorMsg={guildError?.info?.detail || "Server not found"}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load server"
+        description={guildError?.info?.detail || "Server not found"}
+        backHref="/admin/discord-bot"
+        backLabel="Back to Discord servers"
       />
     );
   }
@@ -128,9 +131,14 @@ function GuildDetailContent({
         ) : channelsLoading ? (
           <ThreeDotsLoader />
         ) : channelsError ? (
-          <ErrorCallout
-            errorTitle="Failed to load channels"
-            errorMsg={channelsError?.info?.detail || "Could not load channels"}
+          <ResourceErrorPage
+            errorType="fetch_error"
+            title="Failed to load channels"
+            description={
+              channelsError?.info?.detail || "Could not load channels"
+            }
+            backHref="/admin/discord-bot"
+            backLabel="Back to Discord servers"
           />
         ) : (
           <DiscordChannelsTable

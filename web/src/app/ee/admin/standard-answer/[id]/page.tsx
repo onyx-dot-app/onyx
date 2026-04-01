@@ -1,6 +1,6 @@
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
-import { ErrorCallout } from "@/components/ErrorCallout";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
@@ -17,18 +17,23 @@ async function Main({ id }: { id: string }) {
 
   if (standardAnswersResponse === undefined) {
     return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answers.`}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load standard answers"
+        backHref="/admin/standard-answer"
+        backLabel="Back to standard answers"
       />
     );
   }
 
   if (!standardAnswersResponse.ok) {
     return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answers - ${await standardAnswersResponse.text()}`}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load standard answers"
+        description={`Server returned an error: ${await standardAnswersResponse.text()}`}
+        backHref="/admin/standard-answer"
+        backLabel="Back to standard answers"
       />
     );
   }
@@ -40,27 +45,35 @@ async function Main({ id }: { id: string }) {
 
   if (!standardAnswer) {
     return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Did not find standard answer with ID: ${id}`}
+      <ResourceErrorPage
+        errorType="not_found"
+        title="Standard answer not found"
+        description={`Standard answer with ID ${id} could not be found.`}
+        backHref="/admin/standard-answer"
+        backLabel="Back to standard answers"
       />
     );
   }
 
   if (standardAnswerCategoriesResponse === undefined) {
     return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories.`}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load standard answer categories"
+        backHref="/admin/standard-answer"
+        backLabel="Back to standard answers"
       />
     );
   }
 
   if (!standardAnswerCategoriesResponse.ok) {
     return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load standard answer categories"
+        description={`Server returned an error: ${await standardAnswerCategoriesResponse.text()}`}
+        backHref="/admin/standard-answer"
+        backLabel="Back to standard answers"
       />
     );
   }

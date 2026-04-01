@@ -1,7 +1,7 @@
 "use client";
 import { use } from "react";
 
-import { ErrorCallout } from "@/components/ErrorCallout";
+import ResourceErrorPage from "@/sections/error/ResourceErrorPage";
 import { refreshDocumentSets, useDocumentSets } from "../hooks";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -47,18 +47,22 @@ function Main({ documentSetId }: { documentSetId: number }) {
 
   if (documentSetsError || !documentSets) {
     return (
-      <ErrorCallout
-        errorTitle="Failed to fetch document sets"
-        errorMsg={documentSetsError}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load document sets"
+        backHref="/admin/documents/sets"
+        backLabel="Back to document sets"
       />
     );
   }
 
   if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return (
-      <ErrorCallout
-        errorTitle="Failed to fetch Connectors"
-        errorMsg={ccPairsError}
+      <ResourceErrorPage
+        errorType="fetch_error"
+        title="Failed to load connectors"
+        backHref="/admin/documents/sets"
+        backLabel="Back to document sets"
       />
     );
   }
@@ -68,9 +72,12 @@ function Main({ documentSetId }: { documentSetId: number }) {
   );
   if (!documentSet) {
     return (
-      <ErrorCallout
-        errorTitle="Document set not found"
-        errorMsg={`Document set with id ${documentSetId} not found`}
+      <ResourceErrorPage
+        errorType="not_found"
+        title="Document set not found"
+        description={`Document set with ID ${documentSetId} could not be found.`}
+        backHref="/admin/documents/sets"
+        backLabel="Back to document sets"
       />
     );
   }
