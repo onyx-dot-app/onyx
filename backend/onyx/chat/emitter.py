@@ -1,5 +1,6 @@
 import logging
 import queue
+import threading
 from queue import Queue
 
 from onyx.server.query_and_chat.placement import Placement
@@ -17,17 +18,24 @@ class Emitter:
     Args:
         merged_queue: Shared queue owned by ``_run_models``.
         model_idx: Index embedded in packet placements (``0`` for N=1 runs).
+        drain_done: Optional event set by ``_run_models`` when the drain loop
+            exits early (e.g. HTTP disconnect). When set, ``emit`` returns
+            immediately without blocking so worker threads can exit fast.
     """
 
     def __init__(
         self,
         merged_queue: Queue[tuple[int, Packet | Exception | object]],
         model_idx: int = 0,
+        drain_done: threading.Event | None = None,
     ) -> None:
         self._model_idx = model_idx
         self._merged_queue = merged_queue
+        self._drain_done = drain_done
 
     def emit(self, packet: Packet) -> None:
+        if self._drain_done is not None and self._drain_done.is_set():
+            return
         base = packet.placement or Placement(turn_index=0)
         tagged = Packet(
             placement=base.model_copy(update={"model_index": self._model_idx}),
