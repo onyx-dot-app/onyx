@@ -9,12 +9,17 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.db.enums import AccountType
 from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import ThemePreference
 from onyx.db.models import AccessToken
 from onyx.db.models import Assistant__UserSpecificConfig
 from onyx.db.models import Memory
 from onyx.db.models import User
+from onyx.db.models import User__UserGroup
+from onyx.db.models import UserGroup
+from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
@@ -23,13 +28,50 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+_ROLE_TO_ACCOUNT_TYPE: dict[UserRole, AccountType] = {
+    UserRole.SLACK_USER: AccountType.BOT,
+    UserRole.EXT_PERM_USER: AccountType.EXT_PERM_USER,
+}
+
+
 def update_user_role(
     user: User,
     new_role: UserRole,
     db_session: Session,
 ) -> None:
-    """Update a user's role in the database."""
+    """Update a user's role in the database.
+    Dual-writes account_type to keep it in sync with role and
+    reconciles default-group membership (Admin / Basic)."""
+    old_role = user.role
     user.role = new_role
+    if new_role in _ROLE_TO_ACCOUNT_TYPE:
+        user.account_type = _ROLE_TO_ACCOUNT_TYPE[new_role]
+    elif user.account_type in (AccountType.BOT, AccountType.EXT_PERM_USER):
+        # Upgrading from a non-web-login account type to a web role
+        user.account_type = AccountType.STANDARD
+
+    # Reconcile default-group membership when the role changes.
+    if old_role != new_role:
+        # Remove from all default groups first.
+        db_session.execute(
+            delete(User__UserGroup).where(
+                User__UserGroup.user_id == user.id,
+                User__UserGroup.user_group_id.in_(
+                    select(UserGroup.id).where(UserGroup.is_default.is_(True))
+                ),
+            )
+        )
+
+        # Re-assign to the correct default group (skip for LIMITED).
+        if new_role != UserRole.LIMITED:
+            assign_user_to_default_groups__no_commit(
+                db_session,
+                user,
+                is_admin=(new_role == UserRole.ADMIN),
+            )
+
+        recompute_user_permissions__no_commit(user.id, db_session)
+
     db_session.commit()
 
 
