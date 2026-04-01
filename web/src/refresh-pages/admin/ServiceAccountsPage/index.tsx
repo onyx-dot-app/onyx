@@ -14,7 +14,6 @@ import {
   SvgKey,
   SvgLock,
   SvgMoreHorizontal,
-  SvgPlusCircle,
   SvgRefreshCw,
   SvgTrash,
   SvgUser,
@@ -305,17 +304,12 @@ export default function ServiceAccountsPage() {
           onSearchQueryChange={setSearch}
           placeholder="Search service accounts..."
           emptyStateText="Create service account API keys with user-level access."
-        >
-          <Button
-            rightIcon={SvgPlusCircle}
-            onClick={() => {
-              setSelectedApiKey(undefined);
-              setShowCreateUpdateForm(true);
-            }}
-          >
-            New Service Account
-          </Button>
-        </AdminListHeader>
+          onAction={() => {
+            setSelectedApiKey(undefined);
+            setShowCreateUpdateForm(true);
+          }}
+          actionLabel="New Service Account"
+        />
 
         {hasKeys && (
           <Table

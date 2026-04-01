@@ -1,7 +1,8 @@
 "use client";
 
-import { Card } from "@opal/components";
+import { Button, Card } from "@opal/components";
 import { Content } from "@opal/layouts";
+import { SvgPlusCircle } from "@opal/icons";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 
 interface AdminListHeaderProps {
@@ -15,8 +16,10 @@ interface AdminListHeaderProps {
   placeholder?: string;
   /** Text shown in the empty-state card when no items exist. */
   emptyStateText: string;
-  /** Action buttons rendered to the right of the search input / empty text. */
-  children?: React.ReactNode;
+  /** Called when the action button is clicked. */
+  onAction: () => void;
+  /** Label for the action button. */
+  actionLabel: string;
 }
 
 /**
@@ -25,9 +28,11 @@ interface AdminListHeaderProps {
  * Handles two states:
  *
  * 1. **Items exist** (`hasItems = true`): renders a search input on the left
- *    with action buttons (children) on the right.
+ *    with a primary action button on the right.
  * 2. **No items** (`hasItems = false`): renders a bordered card with
- *    descriptive text on the left and the same action buttons on the right.
+ *    descriptive text on the left and the same action button on the right.
+ *
+ * The action button always renders with a `SvgPlusCircle` right icon.
  *
  * Used on admin pages that have a flat list of items with no advanced
  * filtering — e.g. Service Accounts, Groups, OpenAPI Actions, MCP Servers.
@@ -40,11 +45,9 @@ interface AdminListHeaderProps {
  *   onSearchQueryChange={setSearch}
  *   placeholder="Search service accounts..."
  *   emptyStateText="Create service account API keys with user-level access."
- * >
- *   <Button rightIcon={SvgPlusCircle} onClick={handleCreate}>
- *     New Service Account
- *   </Button>
- * </AdminListHeader>
+ *   onAction={handleCreate}
+ *   actionLabel="New Service Account"
+ * />
  * ```
  */
 export default function AdminListHeader({
@@ -53,8 +56,15 @@ export default function AdminListHeader({
   onSearchQueryChange,
   placeholder = "Search...",
   emptyStateText,
-  children,
+  onAction,
+  actionLabel,
 }: AdminListHeaderProps) {
+  const actionButton = (
+    <Button rightIcon={SvgPlusCircle} onClick={onAction}>
+      {actionLabel}
+    </Button>
+  );
+
   if (!hasItems) {
     return (
       <Card paddingVariant="md" roundingVariant="lg" borderVariant="solid">
@@ -66,7 +76,7 @@ export default function AdminListHeader({
             prominence="muted"
             widthVariant="fit"
           />
-          {children}
+          {actionButton}
         </div>
       </Card>
     );
@@ -82,7 +92,7 @@ export default function AdminListHeader({
         onChange={(e) => onSearchQueryChange(e.target.value)}
         showClearButton={false}
       />
-      {children}
+      {actionButton}
     </div>
   );
 }
