@@ -469,7 +469,6 @@ Add clear comments:
 ## Release Process
 
 Onyx loosely follows the SemVer versioning standard.
-Major changes are released with a "minor" version bump. Currently we use patch release versions to indicate small feature changes.
 A set of Docker containers will be pushed automatically to DockerHub with every tag.
 You can see the containers [here](https://hub.docker.com/search?q=onyx%2F).
 

@@ -4,8 +4,6 @@
     <a href="https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/OnyxLogoCropped.jpg?raw=true" /></a>
 </h2>
 
-<p align="center">Open Source AI Platform</p>
-
 <p align="center">
     <a href="https://discord.gg/TDJ59cGV2X" target="_blank">
         <img src="https://img.shields.io/badge/discord-join-blue.svg?logo=discord&logoColor=white" alt="Discord" />
@@ -27,12 +25,12 @@
   </a>
 </p>
 
+# Onyx - The Open Source AI Platform
 
-**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the app layer for LLMs -
-bringing a feature-rich and intuitive Chat interface that can be easily hosted by anyone for themselves or their team.
-Onyx enables LLMs through advanced capabilities like RAG, web search, code execution (code interpreter), deep research and more.
+**[Onyx](https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)** is the application layer for LLMs - bringing a feature-rich interface that can be easily hosted by anyone.
+Onyx enables LLMs through advanced capabilities like RAG, web search, code execution, file creation, deep research and more.
 
-Connect your applications with MCP or over 50+ indexing based connectors out of the box.
+Connect your applications with over 50+ indexing based connectors provided out of the box or via MCP.
 
 > [!TIP]
 > Deploy with a single command:
@@ -46,20 +44,20 @@ Connect your applications with MCP or over 50+ indexing based connectors out of 
 
 ## ⭐ Features
 
-- **🔍 Agentic RAG:** Best in class search and answer quality thanks to hybrid index + AI Agents for information retrieval
+- **🔍 Agentic RAG:** Get best in class search and answer quality based on hybrid index + AI Agents for information retrieval
   - Benchmark to release soon!
-- **🔬 Deep Research:** Get in depth answers with an agentic multi-step search.
-  - Top of [leaderboard](https://github.com/onyx-dot-app/onyx_deep_research_bench) as of Feb 2026
+- **🔬 Deep Research:** Get in depth reports with a multi-step research flow.
+  - Top of [leaderboard](https://github.com/onyx-dot-app/onyx_deep_research_bench) as of Feb 2026.
 - **🤖 Custom Agents:** Build AI Agents with unique instructions, knowledge, and actions.
 - **🌍 Web Search:** Browse the web to get up to date information.
-  - Supports Google PSE, Serper, Brave, SearXNG, and Exa.
-  - Comes with an in house web crawler and support for Firecrawl and Exa.
-- **▶️ Actions & MCP:** Connect Onyx and agents to external applications with flexible Auth options.
-- **💻 Code Execution:** Execute code in a sandbox to analyze data, render graphs and create files.
-- **🎙️ Voice Mode:** Both text-to-speech and speech-to-text supported.
+  - Supports Serper, Google PSE, Brave, SearXNG, and others.
+  - Comes with an in house web crawler and support for Firecrawl/Exa.
+- **▶️ Actions & MCP:** Let Onyx agents interact with external applications, comes with flexible Auth options.
+- **💻 Code Execution:** Execute code in a sandbox to analyze data, render graphs, and create files.
+- **🎙️ Voice Mode:** Chat with Onyx via text-to-speech and speech-to-text.
 - **🎨 Image Generation:** Generate images based on user prompts.
 
-Onyx works with all LLMs providers, both self-hosted (like Ollama, LiteLLM, vLLM, etc.) and proprietary (like Anthropic, OpenAI, Gemini, etc.).
+Onyx supports all major LLMs providers, both self-hosted (like Ollama, LiteLLM, vLLM, etc.) and proprietary (like Anthropic, OpenAI, Gemini, etc.).
 
 To learn more - check out our [docs](https://docs.onyx.app/welcome?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)!
 
@@ -79,7 +77,7 @@ It is great for users who want to test out Onyx quickly or for teams who are onl
 
 #### Standard Onyx
 
-The complete feature set of Onyx which is recommended for serious users and larger teams. Additional features from Lite mode:
+The complete feature set of Onyx which is recommended for serious users and larger teams. Additional components not included in Lite mode:
 - Vector + Keyword index for RAG.
 - Background containers to run job queues and workers for sync-ing knowledge from connectors.
 - AI model inference servers to run deep learning models used during indexing and inference.
