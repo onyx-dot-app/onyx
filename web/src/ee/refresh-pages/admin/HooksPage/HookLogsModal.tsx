@@ -5,7 +5,7 @@ import { SvgDownload, SvgTextLines } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import { useHookExecutionLogs } from "@/hooks/useHookExecutionLogs";
+import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import { downloadFile } from "@/lib/download";
 import { Section } from "@/layouts/general-layouts";
@@ -13,7 +13,7 @@ import type {
   HookExecutionRecord,
   HookPointMeta,
   HookResponse,
-} from "@/refresh-pages/admin/HooksPage/interfaces";
+} from "@/ee/refresh-pages/admin/HooksPage/interfaces";
 
 interface HookLogsModalProps {
   open: boolean;
