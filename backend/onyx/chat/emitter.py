@@ -1,12 +1,8 @@
-import logging
-import queue
 import threading
 from queue import Queue
 
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
-
-logger = logging.getLogger(__name__)
 
 
 class Emitter:
@@ -20,7 +16,7 @@ class Emitter:
         model_idx: Index embedded in packet placements (``0`` for N=1 runs).
         drain_done: Optional event set by ``_run_models`` when the drain loop
             exits early (e.g. HTTP disconnect). When set, ``emit`` returns
-            immediately without blocking so worker threads can exit fast.
+            immediately so worker threads can exit fast.
     """
 
     def __init__(
@@ -41,12 +37,4 @@ class Emitter:
             placement=base.model_copy(update={"model_index": self._model_idx}),
             obj=packet.obj,
         )
-        try:
-            self._merged_queue.put((self._model_idx, tagged), timeout=3.0)
-        except queue.Full:
-            # Drain loop is gone (e.g. GeneratorExit on disconnect); discard packet.
-            logger.warning(
-                "Emitter model_idx=%d: queue full after 3s timeout, dropping packet %s",
-                self._model_idx,
-                type(packet.obj).__name__,
-            )
+        self._merged_queue.put((self._model_idx, tagged))
