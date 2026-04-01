@@ -26,30 +26,20 @@ function GroupsPage() {
   } = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher);
 
   return (
-    <SettingsLayouts.Root width="sm">
-      {/* This is the sticky header for the groups page. It is used to display
-       * the groups page title and search input when scrolling down.
-       */}
-      <div
-        className="sticky top-0 z-settings-header bg-background-tint-01"
-        data-testid="groups-page-heading"
-      >
-        <SettingsLayouts.Header icon={SvgUsers} title="Groups" separator />
-
-        <div className="p-1">
-          <AdminListHeader
-            hasItems={!isLoading && !error && (groups?.length ?? 0) > 0}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-            placeholder="Search groups..."
-            emptyStateText="Create groups to organize users and manage access."
-            onAction={() => router.push("/admin/groups/create" as Route)}
-            actionLabel="New Group"
-          />
-        </div>
-      </div>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header icon={SvgUsers} title="Groups" separator />
 
       <SettingsLayouts.Body>
+        <AdminListHeader
+          hasItems={!isLoading && !error && (groups?.length ?? 0) > 0}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          placeholder="Search groups..."
+          emptyStateText="Create groups to organize users and manage access."
+          onAction={() => router.push("/admin/groups/create" as Route)}
+          actionLabel="New Group"
+        />
+
         {isLoading && <SimpleLoader />}
 
         {error && (
