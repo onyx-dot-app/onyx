@@ -83,17 +83,9 @@ class CategorizedFiles(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-# Extensions that bypass the token-count threshold on upload.
-_TOKEN_THRESHOLD_EXEMPT_EXTENSIONS: set[str] = {
-    ".csv",
-    ".tsv",
-    ".xlsx",
-}
-
-
 def _skip_token_threshold(extension: str) -> bool:
     """Return True if this file extension should bypass the token limit."""
-    return extension.lower() in _TOKEN_THRESHOLD_EXEMPT_EXTENSIONS
+    return extension.lower() in OnyxFileExtensions.TABULAR_EXTENSIONS
 
 
 def _apply_long_side_cap(width: int, height: int, cap: int) -> tuple[int, int]:

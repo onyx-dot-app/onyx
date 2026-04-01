@@ -53,6 +53,11 @@ class OnyxMimeTypes:
 
 
 class OnyxFileExtensions:
+    TABULAR_EXTENSIONS = {
+        ".csv",
+        ".tsv",
+        ".xlsx",
+    }
     PLAIN_TEXT_EXTENSIONS = {
         ".txt",
         ".md",
