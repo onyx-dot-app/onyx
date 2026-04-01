@@ -77,7 +77,6 @@ from onyx.server.features.default_assistant.api import (
 )
 from onyx.server.features.document_set.api import router as document_set_router
 from onyx.server.features.hierarchy.api import router as hierarchy_router
-from onyx.server.features.hooks.api import router as hook_router
 from onyx.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
@@ -455,7 +454,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     register_onyx_exception_handlers(application)
 
-    include_router_with_global_prefix_prepended(application, hook_router)
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, query_router)

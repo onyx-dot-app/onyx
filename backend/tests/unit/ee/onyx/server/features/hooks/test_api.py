@@ -1,4 +1,4 @@
-"""Unit tests for onyx.server.features.hooks.api helpers.
+"""Unit tests for ee.onyx.server.features.hooks.api helpers.
 
 Covers:
 - _check_ssrf_safety: scheme enforcement and private-IP blocklist
@@ -16,13 +16,13 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from ee.onyx.server.features.hooks.api import _check_ssrf_safety
+from ee.onyx.server.features.hooks.api import _raise_for_validation_failure
+from ee.onyx.server.features.hooks.api import _validate_endpoint
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.models import HookValidateResponse
 from onyx.hooks.models import HookValidateStatus
-from onyx.server.features.hooks.api import _check_ssrf_safety
-from onyx.server.features.hooks.api import _raise_for_validation_failure
-from onyx.server.features.hooks.api import _validate_endpoint
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -117,28 +117,28 @@ class TestCheckSsrfSafety:
 class TestValidateEndpoint:
     def _call(self, *, api_key: str | None = _API_KEY) -> HookValidateResponse:
         # Bypass SSRF check — tested separately in TestCheckSsrfSafety.
-        with patch("onyx.server.features.hooks.api._check_ssrf_safety"):
+        with patch("ee.onyx.server.features.hooks.api._check_ssrf_safety"):
             return _validate_endpoint(
                 endpoint_url=_URL,
                 api_key=api_key,
                 timeout_seconds=_TIMEOUT,
             )
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     def test_2xx_returns_passed(self, mock_client_cls: MagicMock) -> None:
         mock_client_cls.return_value.__enter__.return_value.post.return_value = (
             _mock_response(200)
         )
         assert self._call().status == HookValidateStatus.passed
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     def test_5xx_returns_passed(self, mock_client_cls: MagicMock) -> None:
         mock_client_cls.return_value.__enter__.return_value.post.return_value = (
             _mock_response(500)
         )
         assert self._call().status == HookValidateStatus.passed
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     @pytest.mark.parametrize("status_code", [401, 403])
     def test_401_403_returns_auth_failed(
         self, mock_client_cls: MagicMock, status_code: int
@@ -150,21 +150,21 @@ class TestValidateEndpoint:
         assert result.status == HookValidateStatus.auth_failed
         assert str(status_code) in (result.error_message or "")
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     def test_4xx_non_auth_returns_passed(self, mock_client_cls: MagicMock) -> None:
         mock_client_cls.return_value.__enter__.return_value.post.return_value = (
             _mock_response(422)
         )
         assert self._call().status == HookValidateStatus.passed
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     def test_connect_timeout_returns_timeout(self, mock_client_cls: MagicMock) -> None:
         mock_client_cls.return_value.__enter__.return_value.post.side_effect = (
             httpx.ConnectTimeout("timed out")
         )
         assert self._call().status == HookValidateStatus.timeout
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     @pytest.mark.parametrize(
         "exc",
         [
@@ -179,7 +179,7 @@ class TestValidateEndpoint:
         mock_client_cls.return_value.__enter__.return_value.post.side_effect = exc
         assert self._call().status == HookValidateStatus.timeout
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     def test_connect_error_returns_cannot_connect(
         self, mock_client_cls: MagicMock
     ) -> None:
@@ -189,7 +189,7 @@ class TestValidateEndpoint:
         )
         assert self._call().status == HookValidateStatus.cannot_connect
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     def test_arbitrary_exception_returns_cannot_connect(
         self, mock_client_cls: MagicMock
     ) -> None:
@@ -198,7 +198,7 @@ class TestValidateEndpoint:
         )
         assert self._call().status == HookValidateStatus.cannot_connect
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     def test_api_key_sent_as_bearer(self, mock_client_cls: MagicMock) -> None:
         mock_post = mock_client_cls.return_value.__enter__.return_value.post
         mock_post.return_value = _mock_response(200)
@@ -206,7 +206,7 @@ class TestValidateEndpoint:
         _, kwargs = mock_post.call_args
         assert kwargs["headers"]["Authorization"] == "Bearer mykey"
 
-    @patch("onyx.server.features.hooks.api.httpx.Client")
+    @patch("ee.onyx.server.features.hooks.api.httpx.Client")
     def test_no_api_key_omits_auth_header(self, mock_client_cls: MagicMock) -> None:
         mock_post = mock_client_cls.return_value.__enter__.return_value.post
         mock_post.return_value = _mock_response(200)
