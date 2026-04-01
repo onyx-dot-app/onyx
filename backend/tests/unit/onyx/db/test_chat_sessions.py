@@ -9,6 +9,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from unittest.mock import MagicMock
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -19,7 +20,7 @@ from onyx.db.models import ChatSession
 
 
 def _make_session(
-    user_id: str,
+    user_id: UUID,
     time_created: datetime | None = None,
     time_updated: datetime | None = None,
     description: str = "",
@@ -38,8 +39,8 @@ def _make_session(
 
 
 @pytest.fixture
-def user_id() -> str:
-    return str(uuid4())
+def user_id() -> UUID:
+    return uuid4()
 
 
 @pytest.fixture
@@ -58,7 +59,7 @@ class TestGetChatSessionsByUser:
     """Tests for the failed chat filtering logic in get_chat_sessions_by_user."""
 
     def test_filters_out_failed_sessions(
-        self, user_id: str, old_time: datetime
+        self, user_id: UUID, old_time: datetime
     ) -> None:
         """Sessions with only SYSTEM messages should be excluded."""
         valid_session = _make_session(user_id, time_created=old_time)
@@ -90,7 +91,7 @@ class TestGetChatSessionsByUser:
         assert result[0].id == valid_session.id
 
     def test_keeps_recent_sessions_without_messages(
-        self, user_id: str, recent_time: datetime
+        self, user_id: UUID, recent_time: datetime
     ) -> None:
         """Recently created sessions should be kept even without messages."""
         recent_session = _make_session(user_id, time_created=recent_time)
@@ -116,7 +117,7 @@ class TestGetChatSessionsByUser:
         assert db_session.execute.call_count == 1
 
     def test_include_failed_chats_skips_filtering(
-        self, user_id: str, old_time: datetime
+        self, user_id: UUID, old_time: datetime
     ) -> None:
         """When include_failed_chats=True, no filtering should occur."""
         session_a = _make_session(user_id, time_created=old_time)
@@ -141,7 +142,7 @@ class TestGetChatSessionsByUser:
         assert db_session.execute.call_count == 1
 
     def test_limit_applied_after_filtering(
-        self, user_id: str, old_time: datetime
+        self, user_id: UUID, old_time: datetime
     ) -> None:
         """Limit should be applied after filtering, not before."""
         sessions = [_make_session(user_id, time_created=old_time) for _ in range(5)]
@@ -171,7 +172,7 @@ class TestGetChatSessionsByUser:
         assert result[1].id == sessions[1].id
 
     def test_mixed_recent_and_old_sessions(
-        self, user_id: str, old_time: datetime, recent_time: datetime
+        self, user_id: UUID, old_time: datetime, recent_time: datetime
     ) -> None:
         """Mix of recent and old sessions should filter correctly."""
         old_valid = _make_session(user_id, time_created=old_time)
@@ -204,7 +205,7 @@ class TestGetChatSessionsByUser:
         assert recent_no_msgs.id in result_ids
         assert old_failed.id not in result_ids
 
-    def test_empty_result(self, user_id: str) -> None:
+    def test_empty_result(self, user_id: UUID) -> None:
         """No sessions should return empty list without errors."""
         db_session = MagicMock(spec=Session)
 
