@@ -53,6 +53,9 @@ from ee.onyx.server.scim.schema_definitions import USER_RESOURCE_TYPE
 from ee.onyx.server.scim.schema_definitions import USER_SCHEMA_DEF
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType
+from onyx.db.enums import GrantSource
+from onyx.db.enums import Permission
+from onyx.db.models import PermissionGrant
 from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
@@ -904,7 +907,20 @@ def create_group(
             409, f"Group with name '{group_resource.displayName}' already exists"
         )
 
+    # Every group gets the "basic" permission by default.
+    db_session.add(
+        PermissionGrant(
+            group_id=db_group.id,
+            permission=Permission.BASIC_ACCESS,
+            grant_source=GrantSource.SYSTEM,
+        )
+    )
+    db_session.flush()
+
     dal.upsert_group_members(db_group.id, member_uuids)
+
+    # Recompute permissions for initial members.
+    recompute_user_permissions__no_commit(member_uuids, db_session)
 
     external_id = group_resource.externalId
     if external_id:
