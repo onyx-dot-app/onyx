@@ -19,6 +19,13 @@ class AccountType(str, PyEnum):
     SERVICE_ACCOUNT = "SERVICE_ACCOUNT"
     ANONYMOUS = "ANONYMOUS"
 
+    def is_web_login(self) -> bool:
+        """Whether this account type supports interactive web login."""
+        return self not in (
+            AccountType.BOT,
+            AccountType.EXT_PERM_USER,
+        )
+
 
 class GrantSource(str, PyEnum):
     """How a permission grant was created."""

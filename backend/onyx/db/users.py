@@ -35,7 +35,10 @@ logger = setup_logger()
 
 
 def validate_user_role_update(
-    requested_role: UserRole, current_role: UserRole, explicit_override: bool = False
+    requested_role: UserRole,
+    current_role: UserRole,
+    current_account_type: AccountType,
+    explicit_override: bool = False,
 ) -> None:
     """
     Validate that a user role update is valid.
@@ -45,19 +48,18 @@ def validate_user_role_update(
     - requested role is a slack user
     - requested role is an external permissioned user
     - requested role is a limited user
-    - current role is a slack user
-    - current role is an external permissioned user
+    - current account type is BOT (slack user)
+    - current account type is EXT_PERM_USER
     - current role is a limited user
     """
 
-    if current_role == UserRole.SLACK_USER:
+    if current_account_type == AccountType.BOT:
         raise HTTPException(
             status_code=400,
             detail="To change a Slack User's role, they must first login to Onyx via the web app.",
         )
 
-    if current_role == UserRole.EXT_PERM_USER:
-        # This shouldn't happen, but just in case
+    if current_account_type == AccountType.EXT_PERM_USER:
         raise HTTPException(
             status_code=400,
             detail="To change an External Permissioned User's role, they must first login to Onyx via the web app.",
@@ -311,7 +313,7 @@ def add_slack_user_if_not_exists(db_session: Session, email: str) -> User:
     user = get_user_by_email(email, db_session)
     if user is not None:
         # If the user is an external permissioned user, we update it to a slack user
-        if user.role == UserRole.EXT_PERM_USER:
+        if user.account_type == AccountType.EXT_PERM_USER:
             user.role = UserRole.SLACK_USER
             user.account_type = AccountType.BOT
             db_session.commit()
