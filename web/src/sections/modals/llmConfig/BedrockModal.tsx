@@ -226,7 +226,7 @@ function BedrockModalInternals({
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
         <Card
-          paddingVariant="lg"
+          paddingVariant="sm"
           backgroundVariant="light"
           borderVariant="none"
         >

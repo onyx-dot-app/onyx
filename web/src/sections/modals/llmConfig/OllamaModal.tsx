@@ -140,7 +140,7 @@ function OllamaModalInternals({
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
-      <Card paddingVariant="lg" backgroundVariant="light" borderVariant="none">
+      <Card backgroundVariant="light" borderVariant="none" paddingVariant="sm">
         <Tabs defaultValue={defaultTab}>
           <Tabs.List>
             <Tabs.Trigger value={TAB_SELF_HOSTED}>
