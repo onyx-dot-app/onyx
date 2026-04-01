@@ -126,6 +126,7 @@ from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
+from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -512,8 +513,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         password=user_create.password,
                         is_verified=user_create.is_verified,
                         role=user_create.role,
+                        account_type=AccountType.STANDARD,
                     )
                     user = await self.update(user_update, user)
+                    self._assign_default_groups_on_upgrade(user)
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -537,8 +540,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         password=user_create.password,
                         is_verified=user_create.is_verified,
                         role=user_create.role,
+                        account_type=AccountType.STANDARD,
                     )
                     user = await self.update(user_update, user)
+                    self._assign_default_groups_on_upgrade(user)
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
                 remove_user_from_invited_users(user_create.email)
@@ -574,6 +579,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             {"pinned_assistants": default_persona_ids},
         )
         user.pinned_assistants = default_persona_ids
+
+    @staticmethod
+    def _assign_default_groups_on_upgrade(user: User) -> None:
+        """Assign a newly-upgraded user to the Basic default group.
+
+        Called when a non-web-login user (BOT / EXT_PERM_USER) is upgraded
+        to STANDARD via create-path (SAML, password signup, etc.).
+        """
+        with get_session_with_current_tenant() as sync_db:
+            sync_user = sync_db.query(User).filter(User.id == user.id).first()
+            if sync_user:
+                assign_user_to_default_groups__no_commit(sync_db, sync_user)
+                recompute_user_permissions__no_commit(sync_user.id, sync_db)
+                sync_db.commit()
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
