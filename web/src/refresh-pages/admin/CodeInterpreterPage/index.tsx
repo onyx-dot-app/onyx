@@ -112,7 +112,7 @@ export default function CodeInterpreterPage() {
       <SettingsLayouts.Body>
         {isEnabled || isLoading ? (
           <Hoverable.Root group="code-interpreter/Card">
-            <SelectCard state="filled">
+            <SelectCard state="filled" padding="sm" rounding="lg">
               <CardHeaderLayout
                 sizePreset="main-ui"
                 variant="section"
@@ -156,7 +156,12 @@ export default function CodeInterpreterPage() {
             </SelectCard>
           </Hoverable.Root>
         ) : (
-          <SelectCard state="empty" onClick={() => handleToggle(true)}>
+          <SelectCard
+            state="empty"
+            padding="sm"
+            rounding="lg"
+            onClick={() => handleToggle(true)}
+          >
             <CardHeaderLayout
               sizePreset="main-ui"
               variant="section"

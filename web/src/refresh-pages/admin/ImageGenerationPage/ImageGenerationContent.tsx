@@ -248,6 +248,8 @@ export default function ImageGenerationContent() {
                 >
                   <SelectCard
                     state={STATUS_TO_STATE[status]}
+                    padding="sm"
+                    rounding="lg"
                     aria-label={`image-gen-provider-${provider.image_provider_id}`}
                     onClick={
                       isDisconnected

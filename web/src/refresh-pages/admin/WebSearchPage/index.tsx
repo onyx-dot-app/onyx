@@ -266,6 +266,8 @@ function ProviderCard({
     <Hoverable.Root group="web-search/ProviderCard">
       <SelectCard
         state={STATUS_TO_STATE[status]}
+        padding="sm"
+        rounding="lg"
         onClick={
           isDisconnected && onConnect
             ? onConnect
