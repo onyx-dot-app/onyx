@@ -181,7 +181,7 @@ export const ADMIN_ROUTES = {
     sidebarLabel: "Users",
   },
   API_KEYS: {
-    path: "/admin/api-key",
+    path: "/admin/service-accounts",
     icon: SvgUserKey,
     title: "Service Accounts",
     sidebarLabel: "Service Accounts",

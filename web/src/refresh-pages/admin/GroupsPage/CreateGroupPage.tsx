@@ -87,7 +87,7 @@ function CreateGroupPage() {
   const headerActions = (
     <Section flexDirection="row" gap={0.5} width="auto" height="auto">
       <Button
-        prominence="tertiary"
+        prominence="secondary"
         onClick={() => router.push("/admin/groups")}
       >
         Cancel
@@ -102,7 +102,7 @@ function CreateGroupPage() {
   );
 
   return (
-    <SettingsLayouts.Root width="sm">
+    <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUsers}
         title="Create Group"
