@@ -11,7 +11,7 @@ import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Disabled, Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -243,31 +243,40 @@ function FormContent({
             `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
           )}
         >
-          <div className="group/DefinitionTextAreaField relative w-full">
-            {values.definition.trim() && (
-              <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
-                <CopyIconButton
-                  prominence="tertiary"
-                  size="sm"
-                  getCopyText={() => values.definition}
-                  tooltip="Copy definition"
-                />
-                <Button
-                  prominence="tertiary"
-                  size="sm"
-                  icon={SvgBracketCurly}
-                  tooltip="Format definition"
-                  onClick={handleFormat}
-                />
-              </div>
-            )}
-            <InputTextAreaField
-              name="definition"
-              rows={14}
-              placeholder="Enter your OpenAPI schema here"
-              className="font-main-ui-mono"
-            />
-          </div>
+          <Hoverable.Root group="definitionField" widthVariant="full">
+            <div className="relative w-full">
+              {values.definition.trim() && (
+                <div className="absolute z-[100000] top-2 right-2 bg-background-tint-00">
+                  <Hoverable.Item
+                    group="definitionField"
+                    variant="opacity-on-hover"
+                  >
+                    <div className="flex">
+                      <CopyIconButton
+                        prominence="tertiary"
+                        size="sm"
+                        getCopyText={() => values.definition}
+                        tooltip="Copy definition"
+                      />
+                      <Button
+                        prominence="tertiary"
+                        size="sm"
+                        icon={SvgBracketCurly}
+                        tooltip="Format definition"
+                        onClick={handleFormat}
+                      />
+                    </div>
+                  </Hoverable.Item>
+                </div>
+              )}
+              <InputTextAreaField
+                name="definition"
+                rows={14}
+                placeholder="Enter your OpenAPI schema here"
+                className="font-main-ui-mono"
+              />
+            </div>
+          </Hoverable.Root>
         </InputLayouts.Vertical>
 
         <Separator noPadding />

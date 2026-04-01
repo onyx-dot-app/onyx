@@ -417,3 +417,57 @@ def test_categorize_text_under_token_limit_accepted(
 
     assert len(result.acceptable) == 1
     assert result.acceptable_file_to_token_count["ok.txt"] == 500
+
+
+# --- skip-indexing vs rejection by file type ---
+
+
+def test_csv_over_token_threshold_accepted_skip_indexing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CSV exceeding token threshold is uploaded but flagged to skip indexing."""
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=1)
+    text = "x" * 2000  # 2000 tokens > 1000 threshold
+    monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: text)
+
+    upload = _make_upload("large.csv", size=2000, content=text.encode())
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.acceptable) == 1
+    assert result.acceptable[0].filename == "large.csv"
+    assert "large.csv" in result.skip_indexing
+    assert len(result.rejected) == 0
+
+
+def test_csv_under_token_threshold_accepted_and_indexed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CSV under token threshold is uploaded and indexed normally."""
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=1)
+    text = "x" * 500  # 500 tokens < 1000 threshold
+    monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: text)
+
+    upload = _make_upload("small.csv", size=500, content=text.encode())
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.acceptable) == 1
+    assert result.acceptable[0].filename == "small.csv"
+    assert "small.csv" not in result.skip_indexing
+    assert len(result.rejected) == 0
+
+
+def test_pdf_over_token_threshold_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PDF exceeding token threshold is rejected entirely (not uploaded)."""
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=1)
+    text = "x" * 2000  # 2000 tokens > 1000 threshold
+    monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: text)
+
+    upload = _make_upload("big.pdf", size=2000, content=text.encode())
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert len(result.rejected) == 1
+    assert result.rejected[0].filename == "big.pdf"
+    assert "1K token limit" in result.rejected[0].reason
+    assert len(result.acceptable) == 0

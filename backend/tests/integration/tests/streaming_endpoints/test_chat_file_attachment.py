@@ -1,3 +1,9 @@
+import mimetypes
+from typing import Any
+
+import requests
+
+from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -79,3 +85,90 @@ def test_send_message_with_text_file_attachment(admin_user: DATestUser) -> None:
     assert (
         "third line" in response.full_message.lower()
     ), "Chat response should contain the contents of the file"
+
+
+def _set_token_threshold(admin_user: DATestUser, threshold_k: int) -> None:
+    """Set the file token count threshold via admin settings API."""
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/settings",
+        json={"file_token_count_threshold_k": threshold_k},
+        headers=admin_user.headers,
+    )
+    response.raise_for_status()
+
+
+def _upload_raw(
+    filename: str,
+    content: bytes,
+    user: DATestUser,
+) -> dict[str, Any]:
+    """Upload a file and return the full JSON response (user_files + rejected_files)."""
+    mime_type, _ = mimetypes.guess_type(filename)
+    headers = user.headers.copy()
+    headers.pop("Content-Type", None)
+
+    response = requests.post(
+        f"{API_SERVER_URL}/user/projects/file/upload",
+        files=[("files", (filename, content, mime_type or "application/octet-stream"))],
+        headers=headers,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def test_csv_over_token_threshold_uploaded_not_indexed(
+    admin_user: DATestUser,
+) -> None:
+    """CSV exceeding token threshold is uploaded (accepted) but skips indexing."""
+    _set_token_threshold(admin_user, threshold_k=1)
+    try:
+        # ~2000 tokens with default tokenizer, well over 1K threshold
+        content = ("x " * 100 + "\n") * 20
+        result = _upload_raw("large.csv", content.encode(), admin_user)
+
+        assert len(result["user_files"]) == 1, "CSV should be accepted"
+        assert len(result["rejected_files"]) == 0, "CSV should not be rejected"
+        assert (
+            result["user_files"][0]["status"] == "SKIPPED"
+        ), "CSV over threshold should be SKIPPED (uploaded but not indexed)"
+        assert (
+            result["user_files"][0]["chunk_count"] is None
+        ), "Skipped file should have no chunks"
+    finally:
+        _set_token_threshold(admin_user, threshold_k=200)
+
+
+def test_csv_under_token_threshold_uploaded_and_indexed(
+    admin_user: DATestUser,
+) -> None:
+    """CSV under token threshold is uploaded and queued for indexing."""
+    _set_token_threshold(admin_user, threshold_k=200)
+    try:
+        content = "col1,col2\na,b\n"
+        result = _upload_raw("small.csv", content.encode(), admin_user)
+
+        assert len(result["user_files"]) == 1, "CSV should be accepted"
+        assert len(result["rejected_files"]) == 0, "CSV should not be rejected"
+        assert (
+            result["user_files"][0]["status"] == "PROCESSING"
+        ), "CSV under threshold should be PROCESSING (queued for indexing)"
+    finally:
+        _set_token_threshold(admin_user, threshold_k=200)
+
+
+def test_txt_over_token_threshold_rejected(
+    admin_user: DATestUser,
+) -> None:
+    """Non-exempt file exceeding token threshold is rejected entirely."""
+    _set_token_threshold(admin_user, threshold_k=1)
+    try:
+        # ~2000 tokens, well over 1K threshold. Unlike CSV, .txt is not
+        # exempt from the threshold so the file should be rejected.
+        content = ("x " * 100 + "\n") * 20
+        result = _upload_raw("big.txt", content.encode(), admin_user)
+
+        assert len(result["user_files"]) == 0, "File should not be accepted"
+        assert len(result["rejected_files"]) == 1, "File should be rejected"
+        assert "token limit" in result["rejected_files"][0]["reason"].lower()
+    finally:
+        _set_token_threshold(admin_user, threshold_k=200)

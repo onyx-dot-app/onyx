@@ -1,8 +1,8 @@
 /* ---------------------------------------------------------------------------
    Foldable — CSS grid collapse/expand animation.
 
-   Expands when an ancestor `.interactive` element is hovered or has
-   `data-interaction="hover"` / `data-interaction="active"`.
+   Expands when an ancestor `.interactive` element is hovered, focused
+   within, or has `data-interaction="hover"` / `data-interaction="active"`.
 
    Structure:
      .interactive-foldable-host   — flex parent, gap transitions 0 → 0.25rem
@@ -19,6 +19,7 @@
 }
 
 .interactive:hover:not([data-disabled]) .interactive-foldable-host,
+.interactive:focus-within:not([data-disabled]) .interactive-foldable-host,
 .interactive[data-interaction="hover"]:not([data-disabled])
   .interactive-foldable-host,
 .interactive[data-interaction="active"]:not([data-disabled])
@@ -43,8 +44,9 @@
   min-width: 0;
 }
 
-/* Expanded: hovered or interaction override */
+/* Expanded: hovered, focused within, or interaction override */
 .interactive:hover:not([data-disabled]) .interactive-foldable,
+.interactive:focus-within:not([data-disabled]) .interactive-foldable,
 .interactive[data-interaction="hover"]:not([data-disabled])
   .interactive-foldable,
 .interactive[data-interaction="active"]:not([data-disabled])

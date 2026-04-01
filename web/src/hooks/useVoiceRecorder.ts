@@ -6,6 +6,8 @@ import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
 const TARGET_SAMPLE_RATE = 24000;
 const CHUNK_INTERVAL_MS = 250;
 const DUPLICATE_FINAL_TRANSCRIPT_WINDOW_MS = 1500;
+// When VAD-based auto-stop is disabled, force-stop after this much silence as a fallback
+const SILENCE_FALLBACK_TIMEOUT_MS = 10000;
 
 interface TranscriptMessage {
   type: "transcript" | "error";
@@ -58,6 +60,8 @@ class VoiceRecorderSession {
   private finalTranscriptDelivered = false;
   private lastDeliveredFinalText: string | null = null;
   private lastDeliveredFinalAtMs = 0;
+  // Fallback timer: force-stop after extended silence when VAD auto-stop is disabled
+  private silenceFallbackTimer: NodeJS.Timeout | null = null;
 
   // Callbacks to update React state
   private onTranscriptChange: (text: string) => void;
@@ -174,6 +178,8 @@ class VoiceRecorderSession {
   async stop(): Promise<string | null> {
     if (!this.isActive) return this.transcript || null;
 
+    this.resetSilenceFallbackTimer();
+
     // Stop audio capture
     if (this.sendInterval) {
       clearInterval(this.sendInterval);
@@ -219,6 +225,7 @@ class VoiceRecorderSession {
   }
 
   cleanup(): void {
+    this.resetSilenceFallbackTimer();
     if (this.sendInterval) clearInterval(this.sendInterval);
     if (this.scriptNode) this.scriptNode.disconnect();
     if (this.sourceNode) this.sourceNode.disconnect();
@@ -274,6 +281,23 @@ class VoiceRecorderSession {
     });
   }
 
+  private resetSilenceFallbackTimer(): void {
+    if (this.silenceFallbackTimer) {
+      clearTimeout(this.silenceFallbackTimer);
+      this.silenceFallbackTimer = null;
+    }
+  }
+
+  private startSilenceFallbackTimer(): void {
+    this.resetSilenceFallbackTimer();
+    this.silenceFallbackTimer = setTimeout(() => {
+      // 10s of silence with no new speech — force-stop as a safety fallback
+      if (this.isActive && this.onVADStop) {
+        this.onVADStop();
+      }
+    }, SILENCE_FALLBACK_TIMEOUT_MS);
+  }
+
   private handleMessage = (event: MessageEvent): void => {
     try {
       const data: TranscriptMessage = JSON.parse(event.data);
@@ -281,47 +305,53 @@ class VoiceRecorderSession {
       if (data.type === "transcript") {
         if (data.text) {
           this.transcript = data.text;
-          this.onTranscriptChange(data.text);
+          // Only push live updates to React while actively recording.
+          // After stop(), the final transcript is returned via stopResolver
+          // instead — this prevents stale text from reappearing in the
+          // input box when the user clears it and starts a new recording.
+          if (this.isActive) {
+            this.onTranscriptChange(data.text);
+          }
         }
 
         if (data.is_final && data.text) {
-          // VAD detected silence - trigger callback (only once per utterance)
-          const now = Date.now();
-          const isLikelyDuplicateFinal =
-            this.autoStopOnSilence &&
-            this.lastDeliveredFinalText === data.text &&
-            now - this.lastDeliveredFinalAtMs <
-              DUPLICATE_FINAL_TRANSCRIPT_WINDOW_MS;
-
-          if (
-            this.onFinalTranscript &&
-            !this.finalTranscriptDelivered &&
-            !isLikelyDuplicateFinal
-          ) {
-            this.finalTranscriptDelivered = true;
-            this.lastDeliveredFinalText = data.text;
-            this.lastDeliveredFinalAtMs = now;
-            this.onFinalTranscript(data.text);
+          // Resolve stop promise if waiting — must run even after stop()
+          // so the caller receives the final transcript.
+          if (this.stopResolver) {
+            this.stopResolver(data.text);
+            this.stopResolver = null;
           }
 
-          // Auto-stop recording if enabled
+          // Skip VAD logic if session is no longer active
+          if (!this.isActive) return;
+
           if (this.autoStopOnSilence) {
-            // Trigger stop callback to update React state
+            // VAD detected silence — auto-stop and trigger callback
+            const now = Date.now();
+            const isLikelyDuplicateFinal =
+              this.lastDeliveredFinalText === data.text &&
+              now - this.lastDeliveredFinalAtMs <
+                DUPLICATE_FINAL_TRANSCRIPT_WINDOW_MS;
+
+            if (
+              this.onFinalTranscript &&
+              !this.finalTranscriptDelivered &&
+              !isLikelyDuplicateFinal
+            ) {
+              this.finalTranscriptDelivered = true;
+              this.lastDeliveredFinalText = data.text;
+              this.lastDeliveredFinalAtMs = now;
+              this.onFinalTranscript(data.text);
+            }
+
             if (this.onVADStop) {
               this.onVADStop();
             }
           } else {
-            // If not auto-stopping, reset for next utterance
-            this.transcript = "";
-            this.finalTranscriptDelivered = false;
-            this.onTranscriptChange("");
-            this.resetBackendTranscript();
-          }
-
-          // Resolve stop promise if waiting
-          if (this.stopResolver) {
-            this.stopResolver(data.text);
-            this.stopResolver = null;
+            // Auto-stop disabled (push-to-talk): ignore VAD, keep recording.
+            // Start/reset a 10s fallback timer — if no new speech arrives,
+            // force-stop to avoid recording silence indefinitely.
+            this.startSilenceFallbackTimer();
           }
         }
       } else if (data.type === "error") {

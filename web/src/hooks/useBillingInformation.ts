@@ -2,6 +2,7 @@ import useSWR from "swr";
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   BillingInformation,
   SubscriptionStatus,
@@ -16,14 +17,15 @@ import {
  */
 export function useBillingInformation() {
   const url = NEXT_PUBLIC_CLOUD_ENABLED
-    ? "/api/tenants/billing-information"
-    : "/api/admin/billing/billing-information";
+    ? SWR_KEYS.billingInformationCloud
+    : SWR_KEYS.billingInformationSelfHosted;
 
   const { data, error, mutate, isLoading } = useSWR<
     BillingInformation | SubscriptionStatus
   >(url, errorHandlingFetcher, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
+    revalidateIfStale: false,
     dedupingInterval: 30000,
     shouldRetryOnError: false,
     keepPreviousData: true,

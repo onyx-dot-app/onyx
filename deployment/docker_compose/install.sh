@@ -203,6 +203,7 @@ prompt_or_default() {
     local default_value="$2"
     read_prompt_line "$prompt_text"
     [[ -z "$REPLY" ]] && REPLY="$default_value"
+    return 0
 }
 
 prompt_yn_or_default() {
@@ -210,6 +211,7 @@ prompt_yn_or_default() {
     local default_value="$2"
     read_prompt_char "$prompt_text"
     [[ -z "$REPLY" ]] && REPLY="$default_value"
+    return 0
 }
 
 confirm_action() {
