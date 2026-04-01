@@ -36,13 +36,13 @@ from ee.onyx.server.scim.filtering import ScimFilter
 from ee.onyx.server.scim.filtering import ScimFilterOperator
 from ee.onyx.server.scim.models import ScimMappingFields
 from onyx.db.dal import DAL
+from onyx.db.enums import AccountType
 from onyx.db.models import ScimGroupMapping
 from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -280,7 +280,9 @@ class ScimDAL(DAL):
         query = (
             select(User)
             .join(ScimUserMapping, ScimUserMapping.user_id == User.id)
-            .where(User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER]))
+            .where(
+                User.account_type.notin_([AccountType.BOT, AccountType.EXT_PERM_USER])
+            )
         )
 
         if scim_filter:
