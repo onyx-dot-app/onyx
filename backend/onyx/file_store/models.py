@@ -23,6 +23,11 @@ class ChatFileType(str, Enum):
             ChatFileType.TABULAR,
         )
 
+    def use_metadata_only(self) -> bool:
+        """File types where we can ignore the file content
+        and only use the metadata."""
+        return self in (ChatFileType.TABULAR,)
+
 
 class FileDescriptor(TypedDict):
     """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column
