@@ -46,6 +46,7 @@ def upgrade() -> None:
         .where(
             permission_grant.c.group_id == user_group.c.id,
             permission_grant.c.permission == "basic",
+            permission_grant.c.is_deleted == sa.false(),
         )
         .exists()
     )
