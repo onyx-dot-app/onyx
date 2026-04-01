@@ -366,10 +366,10 @@ def extract_context_files(
             text_content = _extract_text_from_in_memory_file(f)
             if not text_content:
                 continue
-            file_texts.append(text_content)
             if not uf:
                 logger.warning(f"No user file for file_id={f.file_id}")
                 continue
+            file_texts.append(text_content)
             file_metadata.append(
                 ContextFileMetadata(
                     file_id=str(uf.id),
@@ -377,7 +377,7 @@ def extract_context_files(
                     file_content=text_content,
                 )
             )
-            if uf and uf.token_count:
+            if uf.token_count:
                 total_token_count += uf.token_count
         elif f.file_type == ChatFileType.IMAGE:
             token_count = uf.token_count if uf and uf.token_count else 0
