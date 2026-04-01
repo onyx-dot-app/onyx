@@ -1593,8 +1593,9 @@ jobs:
           format: "sarif"
           output: "trivy-results.sarif"
           trivyignores: ${{ matrix.trivyignore }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          env:
+            TRIVY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+            TRIVY_PASSWORD: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Upload Trivy scan results to GitHub Security tab
         if: steps.should-run.outputs.run == 'true'
