@@ -873,7 +873,13 @@ def build_chat_turn(
     )
 
     # Release any read transaction before the long-running LLM stream.
-    db_session.commit()
+    # If commit fails here, reset the processing status before propagating —
+    # otherwise the chat session appears stuck at "processing" permanently.
+    try:
+        db_session.commit()
+    except Exception:
+        set_processing_status(chat_session_id=chat_session.id, cache=cache, value=False)
+        raise
 
     return ChatTurnSetup(
         new_msg_req=new_msg_req,
@@ -1157,8 +1163,9 @@ def _run_models(
                     yield item
 
         # ── Completion: save each successful model's response ───────────────
-        # All worker threads have exited by this point (queue fully drained),
-        # so using the main-thread db_session is safe.
+        # All model loops have completed (run_llm_loop returned) — no more writes
+        # to state_containers. Worker threads may still be closing their own DB
+        # sessions, but the main-thread db_session is unshared and safe to use.
         for i in range(n_models):
             if not model_succeeded[i]:
                 continue
@@ -1183,50 +1190,10 @@ def _run_models(
             # Threads are done (normal path) or can finish in the background (stop-button).
             executor.shutdown(wait=False)
         else:
-            # Early exit — GeneratorExit from HTTP client disconnect or an unhandled
-            # exception in the drain loop.  Replicate the old
-            # run_chat_loop_with_state_containers behavior: wait for each worker to
-            # finish, then persist whatever state accumulated.
-            executor.shutdown(wait=True)
-            # The caller's db_session is already closed by the time this finally block
-            # runs: GeneratorExit propagates through stream_generator's
-            # `with get_session_with_current_tenant()` __exit__ BEFORE the garbage-
-            # collection chain reaches _run_models.close().  Open a fresh session so
-            # llm_loop_completion_handle can safely write to the DB.
-            try:
-                with get_session_with_current_tenant() as cleanup_db:
-                    for i in range(n_models):
-                        if not model_succeeded[i]:
-                            continue
-                        try:
-                            # Re-load the reserved message in the new session.
-                            # setup.reserved_messages[i] is detached from the closed
-                            # caller session but its .id attribute is still accessible.
-                            assistant_message = cleanup_db.get(
-                                ChatMessage, setup.reserved_messages[i].id
-                            )
-                            if assistant_message is None:
-                                logger.error(
-                                    f"Assistant message not found for model {i} "
-                                    f"during early-exit cleanup ({setup.model_display_names[i]})"
-                                )
-                                continue
-                            llm_loop_completion_handle(
-                                state_container=state_containers[i],
-                                is_connected=setup.check_is_connected,
-                                db_session=cleanup_db,
-                                assistant_message=assistant_message,
-                                llm=setup.llms[i],
-                                reserved_tokens=setup.reserved_token_count,
-                            )
-                        except Exception:
-                            logger.exception(
-                                f"Failed completion for model {i} on early exit ({setup.model_display_names[i]})"
-                            )
-            except Exception:
-                logger.exception(
-                    "Failed to open cleanup session for early-exit completion"
-                )
+            # Early exit (GeneratorExit from raw HTTP disconnect, or unhandled
+            # exception in the drain loop). Don't block the server thread waiting
+            # for workers — they will hit queue.Full timeouts and exit on their own.
+            executor.shutdown(wait=False)
 
 
 def _stream_chat_turn(
