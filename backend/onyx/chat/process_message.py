@@ -316,9 +316,13 @@ def extract_context_files(
     # Aggregate tokens for the file content that will be added
     # Skip tokens for those with metadata only
     aggregate_tokens = sum(
-        uf.token_count or 0 for uf in user_files if not mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
+        uf.token_count or 0
+        for uf in user_files
+        if not mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
     )
-    max_actual_tokens = (llm_max_context_window - reserved_token_count) * max_llm_context_percentage
+    max_actual_tokens = (
+        llm_max_context_window - reserved_token_count
+    ) * max_llm_context_percentage
 
     if aggregate_tokens >= max_actual_tokens:
         use_as_search_filter = not DISABLE_VECTOR_DB
@@ -326,7 +330,9 @@ def extract_context_files(
             overflow_tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
         else:
             overflow_tool_metadata = [
-                _build_tool_metadata(uf) for uf in user_files if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
+                _build_tool_metadata(uf)
+                for uf in user_files
+                if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
             ]
         return ExtractedContextFiles(
             file_texts=[],
@@ -359,7 +365,9 @@ def extract_context_files(
             # Metadata-only files are not injected as full text.
             # Only the metadata is provided, with LLM using tools
             if not uf:
-                logger.error(f"File with id={f.file_id} in metadata-only path with no associated user file")
+                logger.error(
+                    f"File with id={f.file_id} in metadata-only path with no associated user file"
+                )
                 continue
             tool_metadata.append(_build_tool_metadata(uf))
         elif f.file_type.is_text_file():
@@ -548,7 +556,9 @@ def build_chat_turn(
     tenant_id = get_current_tenant_id()
 
     user_id = user.id
-    llm_user_identifier = "anonymous_user" if user.is_anonymous else (user.email or str(user_id))
+    llm_user_identifier = (
+        "anonymous_user" if user.is_anonymous else (user.email or str(user_id))
+    )
 
     # ── Session resolution ───────────────────────────────────────────────────
     if not new_msg_req.chat_session_id:
@@ -577,7 +587,9 @@ def build_chat_turn(
     persona = chat_session.persona
     message_text = new_msg_req.message
 
-    user_identity = LLMUserIdentity(user_id=llm_user_identifier, session_id=str(chat_session.id))
+    user_identity = LLMUserIdentity(
+        user_id=llm_user_identifier, session_id=str(chat_session.id)
+    )
 
     # Milestone tracking, most devs using the API don't need to understand this
     mt_cloud_telemetry(
@@ -624,17 +636,24 @@ def build_chat_turn(
     )
 
     # Re-create linear history of messages
-    chat_history = create_chat_history_chain(chat_session_id=chat_session.id, db_session=db_session)
+    chat_history = create_chat_history_chain(
+        chat_session_id=chat_session.id, db_session=db_session
+    )
 
     # Determine the parent message based on the request:
     # - AUTO_PLACE_AFTER_LATEST_MESSAGE (-1): auto-place after latest message in chain
     # - None or root ID: regeneration from root (first message)
     # - positive int: place after that specific parent message
-    root_message = get_or_create_root_message(chat_session_id=chat_session.id, db_session=db_session)
+    root_message = get_or_create_root_message(
+        chat_session_id=chat_session.id, db_session=db_session
+    )
 
     if new_msg_req.parent_message_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
         parent_message = chat_history[-1] if chat_history else root_message
-    elif new_msg_req.parent_message_id is None or new_msg_req.parent_message_id == root_message.id:
+    elif (
+        new_msg_req.parent_message_id is None
+        or new_msg_req.parent_message_id == root_message.id
+    ):
         # Regeneration from root — clear history so we start fresh
         parent_message = root_message
         chat_history = []
@@ -648,7 +667,9 @@ def build_chat_turn(
                 break
 
     if parent_message is None:
-        raise ValueError("The new message sent is not on the latest mainline of messages")
+        raise ValueError(
+            "The new message sent is not on the latest mainline of messages"
+        )
 
     # ── Query Processing hook + user message ─────────────────────────────────
     # Skipped on regeneration (parent is USER type): message already exists/was accepted.
@@ -673,7 +694,9 @@ def build_chat_turn(
                 ).model_dump(),
                 response_type=QueryProcessingResponse,
             )
-            message_text = _resolve_query_processing_hook_result(hook_result, message_text)
+            message_text = _resolve_query_processing_hook_result(
+                hook_result, message_text
+            )
 
         user_message = create_new_chat_message(
             chat_session_id=chat_session.id,
@@ -735,10 +758,16 @@ def build_chat_turn(
     # When use_memories is disabled, strip memories from the prompt context but keep
     # user info/preferences. The full context is still passed to the LLM loop for
     # memory tool persistence.
-    prompt_memory_context = user_memory_context if user.use_memories else user_memory_context.without_memories()
+    prompt_memory_context = (
+        user_memory_context
+        if user.use_memories
+        else user_memory_context.without_memories()
+    )
 
     # ── Token reservation ────────────────────────────────────────────────────
-    max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (custom_agent_prompt or "")
+    max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (
+        custom_agent_prompt or ""
+    )
     reserved_token_count = calculate_reserved_tokens(
         db_session=db_session,
         persona_system_prompt=max_reserved_system_prompt_tokens_str,
@@ -782,7 +811,9 @@ def build_chat_turn(
     all_tools = get_tools(db_session)
     tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
 
-    search_tool_id = next((tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID), None)
+    search_tool_id = next(
+        (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID), None
+    )
 
     forced_tool_id = new_msg_req.forced_tool_id
     if (
@@ -814,7 +845,9 @@ def build_chat_turn(
 
     # Convert the chat history into a simple format that is free of any DB objects
     # and is easy to parse for the agent loop.
-    has_file_reader_tool = any(tool.in_code_tool_id == FILE_READER_TOOL_ID for tool in persona.tools)
+    has_file_reader_tool = any(
+        tool.in_code_tool_id == FILE_READER_TOOL_ID for tool in persona.tools
+    )
 
     chat_history_result = convert_chat_history(
         chat_history=chat_history,
@@ -843,7 +876,9 @@ def build_chat_turn(
             all_injected_file_metadata.setdefault(fid, meta)
 
     if all_injected_file_metadata:
-        logger.debug(f"FileReader: file metadata for LLM: {[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}")
+        logger.debug(
+            f"FileReader: file metadata for LLM: {[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
+        )
 
     if summary_message is not None:
         summary_simple = ChatMessageSimple(
@@ -948,7 +983,11 @@ def _run_models(
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
     state_containers: list[ChatStateContainer] = [
-        (external_state_container if (external_state_container is not None and i == 0) else ChatStateContainer())
+        (
+            external_state_container
+            if (external_state_container is not None and i == 0)
+            else ChatStateContainer()
+        )
         for i in range(n_models)
     ]
     model_succeeded: list[bool] = [False] * n_models
@@ -984,7 +1023,9 @@ def _run_models(
                         persona_id_filter=setup.search_params.persona_id_filter,
                         bypass_acl=setup.bypass_acl,
                         slack_context=setup.slack_context,
-                        enable_slack_search=_should_enable_slack_search(setup.persona, setup.new_msg_req.internal_search_filters),
+                        enable_slack_search=_should_enable_slack_search(
+                            setup.persona, setup.new_msg_req.internal_search_filters
+                        ),
                     ),
                     custom_tool_config=CustomToolConfig(
                         chat_session_id=setup.chat_session.id,
@@ -999,15 +1040,25 @@ def _run_models(
                     allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
                     search_usage_forcing_setting=setup.search_params.search_usage,
                 )
-                model_tools = [tool for tool_list in thread_tool_dict.values() for tool in tool_list]
+                model_tools = [
+                    tool
+                    for tool_list in thread_tool_dict.values()
+                    for tool in tool_list
+                ]
 
-                if setup.forced_tool_id and setup.forced_tool_id not in {tool.id for tool in model_tools}:
-                    raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
+                if setup.forced_tool_id and setup.forced_tool_id not in {
+                    tool.id for tool in model_tools
+                }:
+                    raise ValueError(
+                        f"Forced tool {setup.forced_tool_id} not found in tools"
+                    )
 
                 # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
                 if n_models == 1 and setup.new_msg_req.deep_research:
                     if setup.chat_session.project_id:
-                        raise RuntimeError("Deep research is not supported for projects")
+                        raise RuntimeError(
+                            "Deep research is not supported for projects"
+                        )
                     run_deep_research_llm_loop(
                         emitter=model_emitter,
                         state_container=sc,
@@ -1058,7 +1109,9 @@ def _run_models(
         if drain_done.is_set() and model_succeeded[model_idx]:
             try:
                 with get_session_with_current_tenant() as self_complete_db:
-                    assistant_message = self_complete_db.get(ChatMessage, setup.reserved_messages[model_idx].id)
+                    assistant_message = self_complete_db.get(
+                        ChatMessage, setup.reserved_messages[model_idx].id
+                    )
                     if assistant_message is not None:
                         llm_loop_completion_handle(
                             state_container=state_containers[model_idx],
@@ -1080,7 +1133,9 @@ def _run_models(
     # Copy contextvars before submitting futures — ThreadPoolExecutor does NOT
     # auto-propagate contextvars in Python 3.11; threads would inherit a blank context.
     ctx = contextvars.copy_context()
-    executor = ThreadPoolExecutor(max_workers=n_models, thread_name_prefix="multi-model")
+    executor = ThreadPoolExecutor(
+        max_workers=n_models, thread_name_prefix="multi-model"
+    )
     _completion_done: bool = False
     try:
         for i in range(n_models):
@@ -1102,14 +1157,18 @@ def _run_models(
                             llm_loop_completion_handle(
                                 state_container=state_containers[i],
                                 # partial captures model_succeeded[i] by value at loop time, not by reference
-                                is_connected=functools.partial(bool, model_succeeded[i]),
+                                is_connected=functools.partial(
+                                    bool, model_succeeded[i]
+                                ),
                                 db_session=db_session,
                                 assistant_message=setup.reserved_messages[i],
                                 llm=setup.llms[i],
                                 reserved_tokens=setup.reserved_token_count,
                             )
                         except Exception:
-                            logger.exception(f"Failed completion for model {i} on disconnect ({setup.model_display_names[i]})")
+                            logger.exception(
+                                f"Failed completion for model {i} on disconnect ({setup.model_display_names[i]})"
+                            )
                     yield Packet(
                         placement=Placement(turn_index=0),
                         obj=OverallStop(type="stop", stop_reason="user_cancelled"),
@@ -1127,11 +1186,17 @@ def _run_models(
                     # Do NOT decrement models_remaining — _run_model's finally always posts
                     # _MODEL_DONE, which is the sole completion signal.
                     error_msg = str(item)
-                    stack_trace = "".join(traceback.format_exception(type(item), item, item.__traceback__))
+                    stack_trace = "".join(
+                        traceback.format_exception(type(item), item, item.__traceback__)
+                    )
                     model_llm = setup.llms[model_idx]
                     if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
-                        error_msg = error_msg.replace(model_llm.config.api_key, "[REDACTED_API_KEY]")
-                        stack_trace = stack_trace.replace(model_llm.config.api_key, "[REDACTED_API_KEY]")
+                        error_msg = error_msg.replace(
+                            model_llm.config.api_key, "[REDACTED_API_KEY]"
+                        )
+                        stack_trace = stack_trace.replace(
+                            model_llm.config.api_key, "[REDACTED_API_KEY]"
+                        )
                     yield StreamingError(
                         error=error_msg,
                         stack_trace=stack_trace,
@@ -1166,7 +1231,9 @@ def _run_models(
                     reserved_tokens=setup.reserved_token_count,
                 )
             except Exception:
-                logger.exception(f"Failed completion for model {i} ({setup.model_display_names[i]})")
+                logger.exception(
+                    f"Failed completion for model {i} ({setup.model_display_names[i]})"
+                )
         _completion_done = True
 
     finally:
@@ -1230,7 +1297,9 @@ def _stream_chat_turn(
         followed by a terminal ``Packet`` containing ``OverallStop``.
     """
     if new_msg_req.mock_llm_response is not None and not INTEGRATION_TESTS_MODE:
-        raise ValueError("mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true")
+        raise ValueError(
+            "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
+        )
 
     mock_response_token: Token[str | None] | None = None
     setup: ChatTurnSetup | None = None
@@ -1283,7 +1352,9 @@ def _stream_chat_turn(
 
     except EmptyLLMResponseError as e:
         stack_trace = traceback.format_exc()
-        logger.warning(f"LLM returned an empty response (provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})")
+        logger.warning(
+            f"LLM returned an empty response (provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})"
+        )
         yield StreamingError(
             error=e.client_error_msg,
             stack_trace=stack_trace,
@@ -1303,10 +1374,16 @@ def _stream_chat_turn(
 
         llm = setup.llms[0] if setup else None
         if llm:
-            client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(e, llm)
+            client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
+                e, llm
+            )
             if llm.config.api_key and len(llm.config.api_key) > 2:
-                client_error_msg = client_error_msg.replace(llm.config.api_key, "[REDACTED_API_KEY]")
-                stack_trace = stack_trace.replace(llm.config.api_key, "[REDACTED_API_KEY]")
+                client_error_msg = client_error_msg.replace(
+                    llm.config.api_key, "[REDACTED_API_KEY]"
+                )
+                stack_trace = stack_trace.replace(
+                    llm.config.api_key, "[REDACTED_API_KEY]"
+                )
             yield StreamingError(
                 error=client_error_msg,
                 stack_trace=stack_trace,
@@ -1392,13 +1469,17 @@ def llm_loop_completion_handle(
     completed_normally = is_connected()
     if completed_normally:
         if answer_tokens is None:
-            raise RuntimeError("LLM run completed normally but did not return an answer.")
+            raise RuntimeError(
+                "LLM run completed normally but did not return an answer."
+            )
         final_answer = answer_tokens
     else:
         # Stopped by user - append stop message
         logger.debug(f"Chat session {chat_session_id} stopped by user")
         if answer_tokens:
-            final_answer = answer_tokens + " ... \n\nGeneration was stopped by the user."
+            final_answer = (
+                answer_tokens + " ... \n\nGeneration was stopped by the user."
+            )
         else:
             final_answer = "The generation was stopped by the user."
 
