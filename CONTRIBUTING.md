@@ -54,7 +54,7 @@ The Onyx team will either provide a design doc and PRD for the feature or reques
 
 ### 3. IP attribution for EE contributions
 
-If you are contributing features to Onyx Enterprise Edition, you are required to sign the [IP Assignment Agreement](contributing_guides/EE_Contributor_IP_Assignment_Agreement.md).
+If you are contributing features to Onyx Enterprise Edition, you are required to sign the [IP Assignment Agreement](contributor_ip_assignment/EE_Contributor_IP_Assignment_Agreement.md).
 
 ### 4. Review and testing
 
@@ -484,4 +484,4 @@ See you there!
 
 ## Enterprise Edition Contributions
 
-If you are contributing features to Onyx Enterprise Edition (code under any `ee/` directory), you are required to sign the [IP Assignment Agreement](contributing_guides/EE_Contributor_IP_Assignment_Agreement.md) ([PDF version](contributing_guides/EE_Contributor_IP_Assignment_Agreement.pdf)).
+If you are contributing features to Onyx Enterprise Edition (code under any `ee/` directory), you are required to sign the [IP Assignment Agreement](contributor_ip_assignment/EE_Contributor_IP_Assignment_Agreement.md) ([PDF version](contributor_ip_assignment/EE_Contributor_IP_Assignment_Agreement.pdf)).
