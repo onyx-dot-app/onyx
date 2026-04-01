@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from fastapi import UploadFile
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTasks
@@ -17,6 +18,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.enums import UserFileStatus
 from onyx.db.models import Project__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
@@ -34,8 +36,18 @@ class CategorizedFilesResult(BaseModel):
     user_files: list[UserFile]
     rejected_files: list[RejectedFile]
     id_to_temp_id: dict[str, str]
+    # Filenames that should be stored but not indexed.
+    skip_indexing_filenames: set[str] = Field(default_factory=set)
     # Allow SQLAlchemy ORM models inside this result container
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @property
+    def indexable_files(self) -> list[UserFile]:
+        return [
+            uf
+            for uf in self.user_files
+            if (uf.name or "") not in self.skip_indexing_filenames
+        ]
 
 
 def build_hashed_file_key(file: UploadFile) -> str:
@@ -70,6 +82,7 @@ def create_user_files(
         )
         if new_temp_id is not None:
             id_to_temp_id[str(new_id)] = new_temp_id
+        should_skip = (file.filename or "") in categorized_files.skip_indexing
         new_file = UserFile(
             id=new_id,
             user_id=user.id,
@@ -81,6 +94,7 @@ def create_user_files(
             link_url=link_url,
             content_type=file.content_type,
             file_type=file.content_type,
+            status=UserFileStatus.SKIPPED if should_skip else UserFileStatus.PROCESSING,
             last_accessed_at=datetime.datetime.now(datetime.timezone.utc),
         )
         # Persist the UserFile first to satisfy FK constraints for association table
@@ -98,6 +112,7 @@ def create_user_files(
         user_files=user_files,
         rejected_files=rejected_files,
         id_to_temp_id=id_to_temp_id,
+        skip_indexing_filenames=categorized_files.skip_indexing,
     )
 
 
@@ -123,6 +138,8 @@ def upload_files_to_user_files_with_indexing(
     user_files = categorized_files_result.user_files
     rejected_files = categorized_files_result.rejected_files
     id_to_temp_id = categorized_files_result.id_to_temp_id
+    indexable_files = categorized_files_result.indexable_files
+
     # Trigger per-file processing immediately for the current tenant
     tenant_id = get_current_tenant_id()
     for rejected_file in rejected_files:
@@ -134,12 +151,12 @@ def upload_files_to_user_files_with_indexing(
         from onyx.background.task_utils import drain_processing_loop
 
         background_tasks.add_task(drain_processing_loop, tenant_id)
-        for user_file in user_files:
+        for user_file in indexable_files:
             logger.info(f"Queued in-process processing for user_file_id={user_file.id}")
     else:
         from onyx.background.celery.versioned_apps.client import app as client_app
 
-        for user_file in user_files:
+        for user_file in indexable_files:
             task = client_app.send_task(
                 OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
                 kwargs={"user_file_id": user_file.id, "tenant_id": tenant_id},
@@ -155,6 +172,7 @@ def upload_files_to_user_files_with_indexing(
         user_files=user_files,
         rejected_files=rejected_files,
         id_to_temp_id=id_to_temp_id,
+        skip_indexing_filenames=categorized_files_result.skip_indexing_filenames,
     )
 
 
