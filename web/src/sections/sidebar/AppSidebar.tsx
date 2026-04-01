@@ -677,8 +677,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
       </SidebarLayouts.Header>
 
       <SidebarLayouts.Body scrollKey="app-sidebar">
-        {/* When folded, all nav buttons are in Header — nothing here */}
-        {folded ? null : isLoadingDynamicContent ? null : (
+        {isLoadingDynamicContent ? null : (
           <>
             {/* Agents */}
             <DndContext

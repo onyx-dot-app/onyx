@@ -1,10 +1,18 @@
 "use client";
 
-import { useCallback, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import * as SidebarLayouts from "@/layouts/sidebar-layouts";
+import { useSidebarFolded } from "@/layouts/sidebar-layouts";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
@@ -14,7 +22,8 @@ import { CombinedSettings } from "@/interfaces/settings";
 import { SidebarTab } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Separator from "@/refresh-components/Separator";
-import { SvgArrowUpCircle, SvgUserManage, SvgX } from "@opal/icons";
+import { Disabled } from "@opal/core";
+import { SvgArrowUpCircle, SvgSearch, SvgUserManage, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
   useLicense,
@@ -194,11 +203,25 @@ interface AdminSidebarProps {
   onFoldChange: Dispatch<SetStateAction<boolean>>;
 }
 
-export default function AdminSidebar({
+interface AdminSidebarInnerProps {
+  enableCloudSS: boolean;
+  onFoldChange: Dispatch<SetStateAction<boolean>>;
+}
+
+function AdminSidebarInner({
   enableCloudSS,
-  folded,
   onFoldChange,
-}: AdminSidebarProps) {
+}: AdminSidebarInnerProps) {
+  const folded = useSidebarFolded();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [focusSearch, setFocusSearch] = useState(false);
+
+  useEffect(() => {
+    if (focusSearch && !folded && searchRef.current) {
+      searchRef.current.focus();
+      setFocusSearch(false);
+    }
+  }, [focusSearch, folded]);
   const { kgExposed } = useIsKGExposed();
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
@@ -242,23 +265,38 @@ export default function AdminSidebar({
   const disabledGroups = groupBySection(disabled);
 
   return (
-    <SidebarLayouts.Root folded={folded} onFoldChange={onFoldChange}>
+    <>
       <SidebarLayouts.Header>
         <div className="flex flex-col w-full">
           <SidebarTab
             icon={({ className }) => <SvgX className={className} size={16} />}
             href="/app"
             variant="sidebar-light"
+            folded={folded}
           >
             Exit Admin Panel
           </SidebarTab>
-          <InputTypeIn
-            variant="internal"
-            leftSearchIcon
-            placeholder="Search..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+          {folded ? (
+            <SidebarTab
+              icon={SvgSearch}
+              folded
+              onClick={() => {
+                onFoldChange(false);
+                setFocusSearch(true);
+              }}
+            >
+              Search
+            </SidebarTab>
+          ) : (
+            <InputTypeIn
+              ref={searchRef}
+              variant="internal"
+              leftSearchIcon
+              placeholder="Search..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
         </div>
       </SidebarLayouts.Header>
 
@@ -304,38 +342,59 @@ export default function AdminSidebar({
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        <Section gap={0} height="fit" alignItems="start">
-          <div className="p-[0.38rem] w-full">
-            <Content
-              icon={SvgUserManage}
-              title={getUserDisplayName(user)}
-              sizePreset="main-ui"
-              variant="body"
-              prominence="muted"
-              widthVariant="full"
-            />
-          </div>
-          <div className="flex flex-row gap-1 p-[0.38rem] w-full">
-            <Text text03 secondaryAction>
-              <a className="underline" href="https://onyx.app" target="_blank">
-                Onyx
-              </a>
-            </Text>
-            <Text text03 secondaryBody>
-              |
-            </Text>
-            {settings.webVersion ? (
-              <Text text03 secondaryBody>
-                {settings.webVersion}
+        {!folded && (
+          <Section gap={0} height="fit" alignItems="start">
+            <div className="p-[0.38rem] w-full">
+              <Content
+                icon={SvgUserManage}
+                title={getUserDisplayName(user)}
+                sizePreset="main-ui"
+                variant="body"
+                prominence="muted"
+                widthVariant="full"
+              />
+            </div>
+            <div className="flex flex-row gap-1 p-[0.38rem] w-full">
+              <Text text03 secondaryAction>
+                <a
+                  className="underline"
+                  href="https://onyx.app"
+                  target="_blank"
+                >
+                  Onyx
+                </a>
               </Text>
-            ) : (
               <Text text03 secondaryBody>
-                {APP_SLOGAN}
+                |
               </Text>
-            )}
-          </div>
-        </Section>
+              {settings.webVersion ? (
+                <Text text03 secondaryBody>
+                  {settings.webVersion}
+                </Text>
+              ) : (
+                <Text text03 secondaryBody>
+                  {APP_SLOGAN}
+                </Text>
+              )}
+            </div>
+          </Section>
+        )}
       </SidebarLayouts.Footer>
+    </>
+  );
+}
+
+export default function AdminSidebar({
+  enableCloudSS,
+  folded,
+  onFoldChange,
+}: AdminSidebarProps) {
+  return (
+    <SidebarLayouts.Root folded={folded} onFoldChange={onFoldChange}>
+      <AdminSidebarInner
+        enableCloudSS={enableCloudSS}
+        onFoldChange={onFoldChange}
+      />
     </SidebarLayouts.Root>
   );
 }

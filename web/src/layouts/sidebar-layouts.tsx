@@ -86,7 +86,7 @@ function SidebarRoot({
   foldable = false,
   children,
 }: SidebarRootProps) {
-  const { isMobile } = useScreenSize();
+  const { isMobile, isMediumScreen } = useScreenSize();
 
   const close = useCallback(() => onFoldChange(true), [onFoldChange]);
   const toggle = useCallback(
@@ -121,6 +121,35 @@ function SidebarRoot({
         <div
           className={cn(
             "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
+            folded
+              ? "opacity-0 pointer-events-none"
+              : "opacity-100 pointer-events-auto"
+          )}
+          onClick={close}
+        />
+      </SidebarFoldedContext.Provider>
+    );
+  }
+
+  // Medium screens: the folded strip stays visible in the layout flow;
+  // expanding overlays content instead of pushing it.
+  if (isMediumScreen) {
+    return (
+      <SidebarFoldedContext.Provider value={folded}>
+        {/* Spacer reserves the folded sidebar width in the flex layout */}
+        <div className="shrink-0 w-[3.25rem]" />
+
+        {/* Sidebar — fixed so it overlays content when expanded */}
+        <div className="fixed inset-y-0 left-0 z-50">
+          <SidebarWrapper folded={folded} onFoldClick={toggle}>
+            {inner}
+          </SidebarWrapper>
+        </div>
+
+        {/* Backdrop when expanded — blur only, no tint */}
+        <div
+          className={cn(
+            "fixed inset-0 z-40 backdrop-blur-03 transition-opacity duration-200",
             folded
               ? "opacity-0 pointer-events-none"
               : "opacity-100 pointer-events-auto"
@@ -170,8 +199,12 @@ interface SidebarBodyProps {
 }
 
 function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
+  const folded = useSidebarFolded();
   return (
-    <OverflowDiv className="gap-3 px-2" scrollKey={scrollKey}>
+    <OverflowDiv
+      className={cn("gap-3 px-2", folded && "hidden")}
+      scrollKey={scrollKey}
+    >
       {children}
     </OverflowDiv>
   );
