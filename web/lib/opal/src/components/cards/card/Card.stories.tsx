@@ -3,8 +3,8 @@ import { Card } from "@opal/components";
 
 const BACKGROUND_VARIANTS = ["none", "light", "heavy"] as const;
 const BORDER_VARIANTS = ["none", "dashed", "solid"] as const;
-const PADDING_VARIANTS = ["none", "sm", "md", "lg"] as const;
-const ROUNDING_VARIANTS = ["sm", "md", "lg"] as const;
+const PADDING_VARIANTS = ["2xs", "xs", "sm", "md", "lg"] as const;
+const ROUNDING_VARIANTS = ["xs", "sm", "md", "lg"] as const;
 
 const meta: Meta<typeof Card> = {
   title: "opal/components/Card",
@@ -19,7 +19,7 @@ export const Default: Story = {
   render: () => (
     <Card>
       <p>
-        Default card with light background, no border, md padding, md rounding.
+        Default card with light background, no border, sm padding, md rounding.
       </p>
     </Card>
   ),

@@ -30,6 +30,7 @@ type CardProps = {
    *
    * | Value  | Class        |
    * |--------|--------------|
+   * | `"xs"` | `rounded-04` |
    * | `"sm"` | `rounded-08` |
    * | `"md"` | `rounded-12` |
    * | `"lg"` | `rounded-16` |
