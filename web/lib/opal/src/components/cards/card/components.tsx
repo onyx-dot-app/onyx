@@ -20,6 +20,7 @@ type CardProps = {
    * | `"sm"`  | `p-2`   |
    * | `"xs"`  | `p-1`   |
    * | `"2xs"` | `p-0.5` |
+   * | `"fit"` | `p-0`   |
    *
    * @default "sm"
    */
@@ -75,6 +76,7 @@ const paddingForVariant: Record<PaddingVariants, string> = {
   sm: "p-2",
   xs: "p-1",
   "2xs": "p-0.5",
+  fit: "p-0",
 };
 
 const roundingForVariant: Record<RoundingVariants, string> = {

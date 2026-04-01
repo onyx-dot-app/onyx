@@ -47,6 +47,7 @@ export type ContainerSizeVariants = Exclude<SizeVariants, "full">;
  * | `sm`    | `p-2`   |
  * | `xs`    | `p-1`   |
  * | `2xs`   | `p-0.5` |
+ * | `fit`   | `p-0`   |
  */
 export type PaddingVariants = Extract<
   SizeVariants,

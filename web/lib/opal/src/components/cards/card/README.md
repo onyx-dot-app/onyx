@@ -15,9 +15,11 @@ Padding and rounding are controlled independently:
 | `"sm"`           | `p-2`   |
 | `"xs"`           | `p-1`   |
 | `"2xs"`          | `p-0.5` |
+| `"fit"`          | `p-0`   |
 
 | `roundingVariant` | Class        |
 |-------------------|--------------|
+| `"xs"`            | `rounded-04` |
 | `"sm"`            | `rounded-08` |
 | `"md"`            | `rounded-12` |
 | `"lg"`            | `rounded-16` |
@@ -27,7 +29,7 @@ Padding and rounding are controlled independently:
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `paddingVariant` | `PaddingVariants` | `"sm"` | Padding preset |
-| `roundingVariant` | `"sm" \| "md" \| "lg"` | `"md"` | Border-radius preset |
+| `roundingVariant` | `RoundingVariants` | `"md"` | Border-radius preset |
 | `backgroundVariant` | `"none" \| "light" \| "heavy"` | `"light"` | Background fill intensity |
 | `borderVariant` | `"none" \| "dashed" \| "solid"` | `"none"` | Border style |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
