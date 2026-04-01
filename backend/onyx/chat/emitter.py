@@ -1,7 +1,6 @@
 import logging
 import queue
 from queue import Queue
-from typing import Any
 
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -22,7 +21,7 @@ class Emitter:
 
     def __init__(
         self,
-        merged_queue: Queue[Any],
+        merged_queue: Queue[tuple[int, Packet | Exception | object]],
         model_idx: int = 0,
     ) -> None:
         self._model_idx = model_idx
