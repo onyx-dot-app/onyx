@@ -23,9 +23,9 @@ class AccountType(str, PyEnum):
 class GrantSource(str, PyEnum):
     """How a permission grant was created."""
 
-    USER = "user"
-    SCIM = "scim"
-    SYSTEM = "system"
+    USER = "USER"
+    SCIM = "SCIM"
+    SYSTEM = "SYSTEM"
 
 
 class IndexingStatus(str, PyEnum):
