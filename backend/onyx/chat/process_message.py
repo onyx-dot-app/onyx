@@ -910,11 +910,16 @@ def _run_models(
     ]
     model_succeeded: list[bool] = [False] * n_models
 
+    # Set when the drain loop exits early (HTTP disconnect / GeneratorExit).
+    # Signals emitters to skip future puts and workers to self-complete.
+    drain_done = threading.Event()
+
     def _run_model(model_idx: int) -> None:
         """Run one LLM loop inside a worker thread, writing packets to ``merged_queue``."""
         model_emitter = Emitter(
             model_idx=model_idx,
             merged_queue=merged_queue,
+            drain_done=drain_done,
         )
         sc = state_containers[model_idx]
         model_llm = setup.llms[model_idx]
@@ -1009,6 +1014,31 @@ def _run_models(
                 merged_queue.put((model_idx, _MODEL_DONE), timeout=3.0)
             except queue.Full:
                 pass  # Drain loop gone (GeneratorExit); thread exits cleanly
+
+        # Self-completion on disconnect: if the drain loop exited early (drain_done is set),
+        # the main thread will not call llm_loop_completion_handle for this model.
+        # Open a fresh session and do it here so the response is persisted.
+        if drain_done.is_set() and model_succeeded[model_idx]:
+            try:
+                with get_session_with_current_tenant() as self_complete_db:
+                    assistant_message = self_complete_db.get(
+                        ChatMessage, setup.reserved_messages[model_idx].id
+                    )
+                    if assistant_message is not None:
+                        llm_loop_completion_handle(
+                            state_container=state_containers[model_idx],
+                            is_connected=setup.check_is_connected,
+                            db_session=self_complete_db,
+                            assistant_message=assistant_message,
+                            llm=setup.llms[model_idx],
+                            reserved_tokens=setup.reserved_token_count,
+                        )
+            except Exception:
+                logger.exception(
+                    "model %d (%s): self-completion after disconnect failed",
+                    model_idx,
+                    setup.model_display_names[model_idx],
+                )
 
     # Copy contextvars before submitting futures — ThreadPoolExecutor does NOT
     # auto-propagate contextvars in Python 3.11; threads would inherit a blank context.
@@ -1109,8 +1139,17 @@ def _run_models(
             executor.shutdown(wait=False)
         else:
             # Early exit (GeneratorExit from raw HTTP disconnect, or unhandled
-            # exception in the drain loop). Don't block the server thread waiting
-            # for workers — they will hit queue.Full timeouts and exit on their own.
+            # exception in the drain loop).
+            # 1. Signal emitters to stop blocking — future emit() calls return immediately.
+            drain_done.set()
+            # 2. Drain the queue so any emit put() already in progress can unblock
+            #    (queue has space again) without waiting for its 3-second timeout.
+            while not merged_queue.empty():
+                try:
+                    merged_queue.get_nowait()
+                except queue.Empty:
+                    break
+            # 3. Don't block the server thread — workers self-complete via drain_done.
             executor.shutdown(wait=False)
 
 
