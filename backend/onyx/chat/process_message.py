@@ -979,10 +979,6 @@ def _run_models(
     ]
     model_succeeded: list[bool] = [False] * n_models
 
-    # Set when the drain loop exits early (HTTP disconnect / GeneratorExit).
-    # Signals emitters to skip future puts and workers to self-complete.
-    drain_done = threading.Event()
-
     def _run_model(model_idx: int) -> None:
         """Run one LLM loop inside a worker thread, writing packets to ``merged_queue``."""
         model_emitter = Emitter(
