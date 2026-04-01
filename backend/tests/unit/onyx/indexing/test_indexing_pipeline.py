@@ -2,6 +2,7 @@ import threading
 from typing import Any
 from typing import cast
 from typing import List
+from unittest.mock import MagicMock
 from unittest.mock import Mock
 from unittest.mock import patch
 
@@ -12,8 +13,13 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
+from onyx.hooks.executor import HookSkipped
+from onyx.hooks.executor import HookSoftFailed
+from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
+from onyx.hooks.points.document_ingestion import DocumentIngestionSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
 from onyx.indexing.indexing_pipeline import add_contextual_summaries
 from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import process_image_sections
@@ -223,3 +229,148 @@ def test_contextual_rag(
             count += 1
         assert chunk.doc_summary == doc_summary
         assert chunk.chunk_context == chunk_context
+
+
+# ---------------------------------------------------------------------------
+# _apply_document_ingestion_hook
+# ---------------------------------------------------------------------------
+
+_PATCH_EXECUTE_HOOK = "onyx.indexing.indexing_pipeline.execute_hook"
+
+
+def _make_doc(
+    doc_id: str = "doc1",
+    sections: list[TextSection | ImageSection] | None = None,
+) -> Document:
+    if sections is None:
+        sections = [TextSection(text="Hello", link="http://example.com")]
+    return Document(
+        id=doc_id,
+        title="Test Doc",
+        semantic_identifier="test-doc",
+        sections=cast(list[TextSection | ImageSection], sections),
+        source=DocumentSource.FILE,
+        metadata={},
+    )
+
+
+def test_document_ingestion_hook_skipped_passes_through() -> None:
+    doc = _make_doc()
+    with patch(_PATCH_EXECUTE_HOOK, return_value=HookSkipped()):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == [doc]
+
+
+def test_document_ingestion_hook_soft_failed_passes_through() -> None:
+    doc = _make_doc()
+    with patch(_PATCH_EXECUTE_HOOK, return_value=HookSoftFailed()):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == [doc]
+
+
+def test_document_ingestion_hook_none_sections_drops_document() -> None:
+    doc = _make_doc()
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(
+            sections=None, rejection_reason="PII detected"
+        ),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == []
+
+
+def test_document_ingestion_hook_all_invalid_sections_drops_document() -> None:
+    """A non-empty list where every section has neither text nor image_file_id drops the doc."""
+    doc = _make_doc()
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(sections=[DocumentIngestionSection()]),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == []
+
+
+def test_document_ingestion_hook_empty_sections_drops_document() -> None:
+    doc = _make_doc()
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(sections=[]),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert result == []
+
+
+def test_document_ingestion_hook_rewrites_text_sections() -> None:
+    doc = _make_doc(sections=[TextSection(text="original", link="http://a.com")])
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(
+            sections=[DocumentIngestionSection(text="rewritten", link="http://b.com")]
+        ),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert len(result) == 1
+    assert len(result[0].sections) == 1
+    section = result[0].sections[0]
+    assert isinstance(section, TextSection)
+    assert section.text == "rewritten"
+    assert section.link == "http://b.com"
+
+
+def test_document_ingestion_hook_preserves_image_section_order() -> None:
+    """Hook receives all sections including images and controls final ordering."""
+    image = ImageSection(image_file_id="img-1", link=None)
+    doc = _make_doc(
+        sections=cast(
+            list[TextSection | ImageSection],
+            [TextSection(text="original", link=None), image],
+        )
+    )
+    # Hook moves the image before the text section
+    with patch(
+        _PATCH_EXECUTE_HOOK,
+        return_value=DocumentIngestionResponse(
+            sections=[
+                DocumentIngestionSection(image_file_id="img-1", link=None),
+                DocumentIngestionSection(text="rewritten", link=None),
+            ]
+        ),
+    ):
+        result = _apply_document_ingestion_hook([doc], MagicMock())
+    assert len(result) == 1
+    sections = result[0].sections
+    assert len(sections) == 2
+    assert (
+        isinstance(sections[0], ImageSection) and sections[0].image_file_id == "img-1"
+    )
+    assert isinstance(sections[1], TextSection) and sections[1].text == "rewritten"
+
+
+def test_document_ingestion_hook_mixed_batch() -> None:
+    """Drop one doc, rewrite another, pass through a third."""
+    doc_drop = _make_doc(doc_id="drop")
+    doc_rewrite = _make_doc(doc_id="rewrite")
+    doc_skip = _make_doc(doc_id="skip")
+
+    def _side_effect(**kwargs: Any) -> Any:
+        doc_id = kwargs["payload"]["document_id"]
+        if doc_id == "drop":
+            return DocumentIngestionResponse(sections=None)
+        if doc_id == "rewrite":
+            return DocumentIngestionResponse(
+                sections=[DocumentIngestionSection(text="new text", link=None)]
+            )
+        return HookSkipped()
+
+    with patch(_PATCH_EXECUTE_HOOK, side_effect=_side_effect):
+        result = _apply_document_ingestion_hook(
+            [doc_drop, doc_rewrite, doc_skip], MagicMock()
+        )
+
+    assert len(result) == 2
+    ids = {d.id for d in result}
+    assert ids == {"rewrite", "skip"}
+    rewritten = next(d for d in result if d.id == "rewrite")
+    assert isinstance(rewritten.sections[0], TextSection)
+    assert rewritten.sections[0].text == "new text"
