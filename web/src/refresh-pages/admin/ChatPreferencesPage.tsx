@@ -55,7 +55,7 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { Disabled } from "@opal/core";
+import { Disabled, Hoverable } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
@@ -282,7 +282,7 @@ function NumericLimitField({
   };
 
   return (
-    <div className="group w-full">
+    <Hoverable.Root group="numericLimit" widthVariant="full">
       <InputTypeInField
         name={name}
         inputMode="numeric"
@@ -292,7 +292,7 @@ function NumericLimitField({
         variant={isOverMax ? "error" : undefined}
         rightSection={
           (value || "") !== defaultValue ? (
-            <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+            <Hoverable.Item group="numericLimit" variant="opacity-on-hover">
               <IconButton
                 icon={SvgRefreshCw}
                 tooltip="Restore default"
@@ -300,12 +300,12 @@ function NumericLimitField({
                 type="button"
                 onClick={handleRestore}
               />
-            </div>
+            </Hoverable.Item>
           ) : undefined
         }
         onBlur={handleBlur}
       />
-    </div>
+    </Hoverable.Root>
   );
 }
 

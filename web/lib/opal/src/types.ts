@@ -38,6 +38,35 @@ export type SizeVariants = "fit" | "full" | "lg" | "md" | "sm" | "xs" | "2xs";
 export type ContainerSizeVariants = Exclude<SizeVariants, "full">;
 
 /**
+ * Padding size variants.
+ *
+ * | Variant | Class   |
+ * |---------|---------|
+ * | `lg`    | `p-6`   |
+ * | `md`    | `p-4`   |
+ * | `sm`    | `p-2`   |
+ * | `xs`    | `p-1`   |
+ * | `2xs`   | `p-0.5` |
+ * | `fit`   | `p-0`   |
+ */
+export type PaddingVariants = Extract<
+  SizeVariants,
+  "fit" | "lg" | "md" | "sm" | "xs" | "2xs"
+>;
+
+/**
+ * Rounding size variants.
+ *
+ * | Variant | Class        |
+ * |---------|--------------|
+ * | `lg`    | `rounded-16` |
+ * | `md`    | `rounded-12` |
+ * | `sm`    | `rounded-08` |
+ * | `xs`    | `rounded-04` |
+ */
+export type RoundingVariants = Extract<SizeVariants, "lg" | "md" | "sm" | "xs">;
+
+/**
  * Extreme size variants ("fit" and "full" only).
  *
  * Used for width and height properties that only support extremal values.
