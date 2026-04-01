@@ -56,31 +56,38 @@ export default function ApiKeyFormModal({
               role: values.role as UserRole,
             };
 
-            let response;
-            if (isUpdate) {
-              response = await updateApiKey(apiKey.api_key_id, payload);
-            } else {
-              response = await createApiKey(payload);
-            }
-            formikHelpers.setSubmitting(false);
-            if (response.ok) {
-              toast.success(
-                isUpdate
-                  ? "Successfully updated service account!"
-                  : "Successfully created service account!"
-              );
-              if (!isUpdate) {
-                onCreateApiKey(await response.json());
+            try {
+              let response;
+              if (isUpdate) {
+                response = await updateApiKey(apiKey.api_key_id, payload);
+              } else {
+                response = await createApiKey(payload);
               }
-              onClose();
-            } else {
-              const responseJson = await response.json();
-              const errorMsg = responseJson.detail || responseJson.message;
+              if (response.ok) {
+                toast.success(
+                  isUpdate
+                    ? "Successfully updated service account!"
+                    : "Successfully created service account!"
+                );
+                if (!isUpdate) {
+                  onCreateApiKey(await response.json());
+                }
+                onClose();
+              } else {
+                const responseJson = await response.json();
+                const errorMsg = responseJson.detail || responseJson.message;
+                toast.error(
+                  isUpdate
+                    ? `Error updating service account - ${errorMsg}`
+                    : `Error creating service account - ${errorMsg}`
+                );
+              }
+            } catch (e) {
               toast.error(
-                isUpdate
-                  ? `Error updating service account - ${errorMsg}`
-                  : `Error creating service account - ${errorMsg}`
+                e instanceof Error ? e.message : "An unexpected error occurred."
               );
+            } finally {
+              formikHelpers.setSubmitting(false);
             }
           }}
         >

@@ -4,11 +4,11 @@ import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { ThreeDotsLoader } from "@/components/Loading";
-import { Callout } from "@/components/ui/callout";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { toast } from "@/hooks/useToast";
 import { Button, Text } from "@opal/components";
-import { Content } from "@opal/layouts";
+import { Content, IllustrationContent } from "@opal/layouts";
+import SvgNoResult from "@opal/illustrations/no-result";
 import {
   SvgDownload,
   SvgKey,
@@ -32,7 +32,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { markdown } from "@opal/utils";
 import Message from "@/refresh-components/messages/Message";
-import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+
 import { useBillingInformation } from "@/hooks/useBillingInformation";
 import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
 import {
@@ -63,7 +63,6 @@ export default function ServiceAccountsPage() {
     error,
   } = useSWR<APIKey[]>(API_KEY_SWR_KEY, errorHandlingFetcher);
 
-  const canCreateKeys = useCloudSubscription();
   const { data: billingData } = useBillingInformation();
   const isTrialing =
     billingData !== undefined &&
@@ -71,21 +70,22 @@ export default function ServiceAccountsPage() {
     billingData.status === BillingStatus.TRIALING;
 
   const [fullApiKey, setFullApiKey] = useState<string | null>(null);
-  const [keyIsGenerating, setKeyIsGenerating] = useState(false);
   const [showCreateUpdateForm, setShowCreateUpdateForm] = useState(false);
   const [selectedApiKey, setSelectedApiKey] = useState<APIKey | undefined>();
   const [search, setSearch] = useState("");
   const [regenerateTarget, setRegenerateTarget] = useState<APIKey | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<APIKey | null>(null);
 
-  const filteredApiKeys = (apiKeys ?? [])
-    .filter((key) => key.api_key_name !== DISCORD_SERVICE_API_KEY_NAME)
-    .filter(
-      (key) =>
-        !search ||
-        (key.api_key_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
-        key.api_key_display.toLowerCase().includes(search.toLowerCase())
-    );
+  const visibleApiKeys = (apiKeys ?? []).filter(
+    (key) => key.api_key_name !== DISCORD_SERVICE_API_KEY_NAME
+  );
+
+  const filteredApiKeys = visibleApiKeys.filter(
+    (key) =>
+      !search ||
+      (key.api_key_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      key.api_key_display.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleRoleChange = async (apiKey: APIKey, newRole: UserRole) => {
     try {
@@ -106,7 +106,6 @@ export default function ServiceAccountsPage() {
   };
 
   const handleRegenerate = async (apiKey: APIKey) => {
-    setKeyIsGenerating(true);
     try {
       const response = await regenerateApiKey(apiKey);
       if (!response.ok) {
@@ -117,19 +116,25 @@ export default function ServiceAccountsPage() {
       const newKey = (await response.json()) as APIKey;
       setFullApiKey(newKey.api_key);
       mutate(API_KEY_SWR_KEY);
-    } finally {
-      setKeyIsGenerating(false);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Failed to regenerate API Key."
+      );
     }
   };
 
   const handleDelete = async (apiKey: APIKey) => {
-    const response = await deleteApiKey(apiKey.api_key_id);
-    if (!response.ok) {
-      const errorMsg = await response.text();
-      toast.error(`Failed to delete API Key: ${errorMsg}`);
-      return;
+    try {
+      const response = await deleteApiKey(apiKey.api_key_id);
+      if (!response.ok) {
+        const errorMsg = await response.text();
+        toast.error(`Failed to delete API Key: ${errorMsg}`);
+        return;
+      }
+      mutate(API_KEY_SWR_KEY);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete API Key.");
     }
-    mutate(API_KEY_SWR_KEY);
   };
 
   const columns = useMemo(
@@ -249,9 +254,11 @@ export default function ServiceAccountsPage() {
           separator
         />
         <SettingsLayouts.Body>
-          <Callout type="danger" title="Failed to fetch API Keys">
-            {error?.info?.detail || error.toString()}
-          </Callout>
+          <IllustrationContent
+            illustration={SvgNoResult}
+            title="Failed to load service accounts."
+            description="Please check the console for more details."
+          />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );
@@ -267,13 +274,13 @@ export default function ServiceAccountsPage() {
           separator
         />
         <SettingsLayouts.Body>
-          <ThreeDotsLoader />
+          <SimpleLoader />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );
   }
 
-  const hasKeys = filteredApiKeys.length > 0;
+  const hasKeys = visibleApiKeys.length > 0;
 
   return (
     <SettingsLayouts.Root>
