@@ -53,8 +53,9 @@ class UserCreate(schemas.BaseUserCreate):
     def create_update_dict(self) -> dict[str, Any]:
         d = super().create_update_dict()
         d.pop("captcha_token", None)
-        # Always include account_type — it's NOT NULL with no DB default
-        d.setdefault("account_type", self.account_type)
+        # Force STANDARD for self-registration; only trusted paths
+        # (SCIM, API key creation) supply a different account_type directly.
+        d["account_type"] = AccountType.STANDARD
         return d
 
     @override
