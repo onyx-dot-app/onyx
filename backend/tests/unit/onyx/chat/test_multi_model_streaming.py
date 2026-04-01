@@ -272,16 +272,6 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     return setup
 
 
-_RUN_MODELS_PATCHES = [
-    patch("onyx.chat.process_message.run_llm_loop"),
-    patch("onyx.chat.process_message.run_deep_research_llm_loop"),
-    patch("onyx.chat.process_message.construct_tools", return_value={}),
-    patch("onyx.chat.process_message.get_session_with_current_tenant"),
-    patch("onyx.chat.process_message.llm_loop_completion_handle"),
-    patch("onyx.chat.process_message.get_llm_token_counter", return_value=lambda _: 0),
-]
-
-
 def _run_models_collect(setup: MagicMock) -> list:
     """Drive _run_models to completion and return all yielded items."""
     from onyx.chat.process_message import _run_models
@@ -417,13 +407,12 @@ class TestRunModels:
 
     def test_one_model_error_does_not_stop_other_models(self) -> None:
         """A failing model yields StreamingError; the surviving model's packets still arrive."""
+        setup = _make_setup(n_models=2)
 
         def fail_model_0_succeed_model_1(**kwargs: Any) -> None:
-            emitter = kwargs["emitter"]
-            # _model_idx is always int (0 for N=1, 0/1/2… for N>1)
-            if emitter._model_idx == 0:
+            if kwargs["llm"] is setup.llms[0]:
                 raise RuntimeError("model 0 failed")
-            emitter.emit(
+            kwargs["emitter"].emit(
                 Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
             )
 
@@ -441,7 +430,7 @@ class TestRunModels:
                 return_value=lambda _: 0,
             ),
         ):
-            packets = _run_models_collect(_make_setup(n_models=2))
+            packets = _run_models_collect(setup)
 
         errors = [p for p in packets if isinstance(p, StreamingError)]
         assert len(errors) == 1
@@ -486,8 +475,8 @@ class TestRunModels:
             for s in stops
         )
 
-    def test_completion_handle_called_on_disconnect(self) -> None:
-        """llm_loop_completion_handle must still be called even when user disconnects.
+    def test_stop_button_calls_completion_for_all_models(self) -> None:
+        """llm_loop_completion_handle must be called for all models when the stop button fires.
 
         Regression test for the disconnect-cleanup bug: the old
         run_chat_loop_with_state_containers always called completion_callback in
@@ -645,6 +634,109 @@ class TestRunModels:
             assert (
                 mock_handle.call_count == 1
             ), "completion handle must be called once for the successful model"
+
+    def test_b1_race_disconnect_handler_completes_already_finished_model(self) -> None:
+        """B1 regression: model finishes BEFORE GeneratorExit fires.
+
+        The worker exits _run_model with drain_done.is_set()=False and skips
+        self-completion.  When gen.close() fires afterward, the finally else-branch
+        must detect model_succeeded=True and call llm_loop_completion_handle itself.
+
+        Contrast with test_http_disconnect_completion_via_generator_exit, which
+        tests the opposite ordering (worker finishes AFTER disconnect).
+        """
+        import threading
+        import time
+
+        completion_called = threading.Event()
+
+        def emit_and_return_immediately(**kwargs: Any) -> None:
+            # Emit one packet so the drain loop has something to yield, then return
+            # immediately — no blocking.  The worker will be done in microseconds.
+            kwargs["emitter"].emit(
+                Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
+            )
+
+        setup = _make_setup(n_models=1)
+        setup.check_is_connected = MagicMock(return_value=True)
+
+        with (
+            patch(
+                "onyx.chat.process_message.run_llm_loop",
+                side_effect=emit_and_return_immediately,
+            ),
+            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch("onyx.chat.process_message.get_session_with_current_tenant"),
+            patch(
+                "onyx.chat.process_message.llm_loop_completion_handle",
+                side_effect=lambda *_, **__: completion_called.set(),
+            ) as mock_handle,
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            from onyx.chat.process_message import _run_models
+
+            gen = cast(Generator, _run_models(setup, MagicMock(), MagicMock()))
+            first = next(gen)
+            assert isinstance(first, Packet)
+
+            # Give the worker thread time to finish completely (emit + return +
+            # finally + self-completion check).  It does almost no work, so 100 ms
+            # is far more than enough while still keeping the test fast.
+            time.sleep(0.1)
+
+            # Now close — worker is already done, so else-branch handles completion.
+            gen.close()
+
+            assert completion_called.wait(
+                timeout=5
+            ), "disconnect handler must call completion for a model that already finished"
+            assert mock_handle.call_count == 1, "completion must be called exactly once"
+
+    def test_stop_button_does_not_call_completion_for_errored_model(self) -> None:
+        """B2 regression: stop-button must NOT call completion for an errored model.
+
+        When model 0 raises an exception, its reserved ChatMessage must not be
+        saved with 'stopped by user' — that message is wrong for a model that
+        errored.  llm_loop_completion_handle must only be called for non-errored
+        models when the stop button fires.
+        """
+
+        def fail_model_0(**kwargs: Any) -> None:
+            if kwargs["llm"] is setup.llms[0]:
+                raise RuntimeError("model 0 errored")
+            # Model 1: run forever (stop button fires before it finishes)
+            time.sleep(10)
+
+        setup = _make_setup(n_models=2)
+        # Return False immediately so the stop-button path fires while model 1
+        # is still sleeping (model 0 has already errored by then).
+        setup.check_is_connected = lambda: False
+
+        with (
+            patch("onyx.chat.process_message.run_llm_loop", side_effect=fail_model_0),
+            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch("onyx.chat.process_message.get_session_with_current_tenant"),
+            patch(
+                "onyx.chat.process_message.llm_loop_completion_handle"
+            ) as mock_handle,
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            _run_models_collect(setup)
+
+        # Completion must NOT be called for model 0 (it errored).
+        # It MAY be called for model 1 (still in-flight when stop fired).
+        for call in mock_handle.call_args_list:
+            assert (
+                call.kwargs.get("llm") is not setup.llms[0]
+            ), "llm_loop_completion_handle must not be called for the errored model"
 
     def test_external_state_container_used_for_model_zero(self) -> None:
         """When provided, external_state_container is used as state_containers[0]."""

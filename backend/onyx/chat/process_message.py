@@ -4,7 +4,6 @@ An overview can be found in the README.md file in this directory.
 """
 
 import contextvars
-import functools
 import io
 import queue
 import re
@@ -15,6 +14,7 @@ from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Token
 from dataclasses import dataclass
+from typing import Final
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -314,7 +314,9 @@ def extract_context_files(
         return _empty_extracted_context_files()
 
     aggregate_tokens = sum(uf.token_count or 0 for uf in user_files)
-    max_actual_tokens = (llm_max_context_window - reserved_token_count) * max_llm_context_percentage
+    max_actual_tokens = (
+        llm_max_context_window - reserved_token_count
+    ) * max_llm_context_percentage
 
     if aggregate_tokens >= max_actual_tokens:
         tool_metadata = []
@@ -537,7 +539,9 @@ def build_chat_turn(
     is_multi = bool(llm_overrides)
 
     user_id = user.id
-    llm_user_identifier = "anonymous_user" if user.is_anonymous else (user.email or str(user_id))
+    llm_user_identifier = (
+        "anonymous_user" if user.is_anonymous else (user.email or str(user_id))
+    )
 
     # ── Session resolution ───────────────────────────────────────────────────
     if not new_msg_req.chat_session_id:
@@ -566,7 +570,9 @@ def build_chat_turn(
     persona = chat_session.persona
     message_text = new_msg_req.message
 
-    user_identity = LLMUserIdentity(user_id=llm_user_identifier, session_id=str(chat_session.id))
+    user_identity = LLMUserIdentity(
+        user_id=llm_user_identifier, session_id=str(chat_session.id)
+    )
 
     # Milestone tracking, most devs using the API don't need to understand this
     mt_cloud_telemetry(
@@ -634,17 +640,24 @@ def build_chat_turn(
     )
 
     # Re-create linear history of messages
-    chat_history = create_chat_history_chain(chat_session_id=chat_session.id, db_session=db_session)
+    chat_history = create_chat_history_chain(
+        chat_session_id=chat_session.id, db_session=db_session
+    )
 
     # Determine the parent message based on the request:
     # - AUTO_PLACE_AFTER_LATEST_MESSAGE (-1): auto-place after latest message in chain
     # - None or root ID: regeneration from root (first message)
     # - positive int: place after that specific parent message
-    root_message = get_or_create_root_message(chat_session_id=chat_session.id, db_session=db_session)
+    root_message = get_or_create_root_message(
+        chat_session_id=chat_session.id, db_session=db_session
+    )
 
     if new_msg_req.parent_message_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
         parent_message = chat_history[-1] if chat_history else root_message
-    elif new_msg_req.parent_message_id is None or new_msg_req.parent_message_id == root_message.id:
+    elif (
+        new_msg_req.parent_message_id is None
+        or new_msg_req.parent_message_id == root_message.id
+    ):
         # Regeneration from root — clear history so we start fresh
         parent_message = root_message
         chat_history = []
@@ -658,7 +671,9 @@ def build_chat_turn(
                 break
 
     if parent_message is None:
-        raise ValueError("The new message sent is not on the latest mainline of messages")
+        raise ValueError(
+            "The new message sent is not on the latest mainline of messages"
+        )
 
     # ── Query Processing hook + user message ─────────────────────────────────
     # Skipped on regeneration (parent is USER type): message already exists/was accepted.
@@ -683,7 +698,9 @@ def build_chat_turn(
                 ).model_dump(),
                 response_type=QueryProcessingResponse,
             )
-            message_text = _resolve_query_processing_hook_result(hook_result, message_text)
+            message_text = _resolve_query_processing_hook_result(
+                hook_result, message_text
+            )
 
         user_message = create_new_chat_message(
             chat_session_id=chat_session.id,
@@ -745,10 +762,16 @@ def build_chat_turn(
     # When use_memories is disabled, strip memories from the prompt context but keep
     # user info/preferences. The full context is still passed to the LLM loop for
     # memory tool persistence.
-    prompt_memory_context = user_memory_context if user.use_memories else user_memory_context.without_memories()
+    prompt_memory_context = (
+        user_memory_context
+        if user.use_memories
+        else user_memory_context.without_memories()
+    )
 
     # ── Token reservation ────────────────────────────────────────────────────
-    max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (custom_agent_prompt or "")
+    max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (
+        custom_agent_prompt or ""
+    )
     reserved_token_count = calculate_reserved_tokens(
         db_session=db_session,
         persona_system_prompt=max_reserved_system_prompt_tokens_str,
@@ -768,7 +791,11 @@ def build_chat_turn(
     )
 
     # For multi-model: use the smallest context window across all models for safety
-    llm_max_context_window = min(llm.config.max_input_tokens for llm in llms) if is_multi else llms[0].config.max_input_tokens
+    llm_max_context_window = (
+        min(llm.config.max_input_tokens for llm in llms)
+        if is_multi
+        else llms[0].config.max_input_tokens
+    )
 
     extracted_context_files = extract_context_files(
         user_files=context_user_files,
@@ -793,7 +820,9 @@ def build_chat_turn(
     all_tools = get_tools(db_session)
     tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
 
-    search_tool_id = next((tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID), None)
+    search_tool_id = next(
+        (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID), None
+    )
 
     forced_tool_id = new_msg_req.forced_tool_id
     if (
@@ -822,7 +851,8 @@ def build_chat_turn(
         yield MultiModelMessageResponseIDInfo(
             user_message_id=user_message.id,
             responses=[
-                ModelResponseSlot(message_id=m.id, model_name=name) for m, name in zip(reserved_messages, model_display_names)
+                ModelResponseSlot(message_id=m.id, model_name=name)
+                for m, name in zip(reserved_messages, model_display_names)
             ],
         )
     else:
@@ -840,7 +870,9 @@ def build_chat_turn(
 
     # Convert the chat history into a simple format that is free of any DB objects
     # and is easy to parse for the agent loop.
-    has_file_reader_tool = any(tool.in_code_tool_id == FILE_READER_TOOL_ID for tool in persona.tools)
+    has_file_reader_tool = any(
+        tool.in_code_tool_id == FILE_READER_TOOL_ID for tool in persona.tools
+    )
 
     chat_history_result = convert_chat_history(
         chat_history=chat_history,
@@ -869,7 +901,9 @@ def build_chat_turn(
             all_injected_file_metadata.setdefault(fid, meta)
 
     if all_injected_file_metadata:
-        logger.debug(f"FileReader: file metadata for LLM: {[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}")
+        logger.debug(
+            f"FileReader: file metadata for LLM: {[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
+        )
 
     if summary_message is not None:
         summary_simple = ChatMessageSimple(
@@ -935,6 +969,9 @@ def build_chat_turn(
 # Sentinel placed on the merged queue when a model thread finishes.
 _MODEL_DONE = object()
 
+# How often the drain loop polls for user-initiated cancellation (stop button).
+_CANCEL_POLL_INTERVAL_S: Final[float] = 0.05
+
 
 def _run_models(
     setup: ChatTurnSetup,
@@ -945,7 +982,7 @@ def _run_models(
     """Stream packets from one or more LLM loops running in parallel worker threads.
 
     Each model gets its own worker thread, DB session, and ``Emitter``. Threads write
-    packets to a shared bounded queue as they are produced; the drain loop yields them
+    packets to a shared unbounded queue as they are produced; the drain loop yields them
     in arrival order so the caller receives a single interleaved stream regardless of
     how many models are running.
 
@@ -974,10 +1011,27 @@ def _run_models(
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
     state_containers: list[ChatStateContainer] = [
-        (external_state_container if (external_state_container is not None and i == 0) else ChatStateContainer())
+        (
+            external_state_container
+            if (external_state_container is not None and i == 0)
+            else ChatStateContainer()
+        )
         for i in range(n_models)
     ]
     model_succeeded: list[bool] = [False] * n_models
+    # Set to True when a model raises an exception (distinct from "still running").
+    # Used in the stop-button path to avoid calling completion for errored models.
+    model_errored: list[bool] = [False] * n_models
+
+    # Set when the drain loop exits early (HTTP disconnect / GeneratorExit).
+    # Signals emitters to skip future puts and workers to self-complete.
+    drain_done = threading.Event()
+
+    # One lock per model. acquire(blocking=False) claims completion responsibility.
+    # Whichever caller (worker self-complete or disconnect handler) acquires first
+    # is the one that calls llm_loop_completion_handle for that model.
+    # Locks are intentionally never released — they serve as permanent "claimed" markers.
+    completion_locks: list[threading.Lock] = [threading.Lock() for _ in range(n_models)]
 
     def _run_model(model_idx: int) -> None:
         """Run one LLM loop inside a worker thread, writing packets to ``merged_queue``."""
@@ -1006,7 +1060,9 @@ def _run_models(
                         persona_id_filter=setup.search_params.persona_id_filter,
                         bypass_acl=setup.bypass_acl,
                         slack_context=setup.slack_context,
-                        enable_slack_search=_should_enable_slack_search(setup.persona, setup.new_msg_req.internal_search_filters),
+                        enable_slack_search=_should_enable_slack_search(
+                            setup.persona, setup.new_msg_req.internal_search_filters
+                        ),
                     ),
                     custom_tool_config=CustomToolConfig(
                         chat_session_id=setup.chat_session.id,
@@ -1021,15 +1077,25 @@ def _run_models(
                     allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
                     search_usage_forcing_setting=setup.search_params.search_usage,
                 )
-                model_tools = [tool for tool_list in thread_tool_dict.values() for tool in tool_list]
+                model_tools = [
+                    tool
+                    for tool_list in thread_tool_dict.values()
+                    for tool in tool_list
+                ]
 
-                if setup.forced_tool_id and setup.forced_tool_id not in {tool.id for tool in model_tools}:
-                    raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
+                if setup.forced_tool_id and setup.forced_tool_id not in {
+                    tool.id for tool in model_tools
+                }:
+                    raise ValueError(
+                        f"Forced tool {setup.forced_tool_id} not found in tools"
+                    )
 
                 # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
                 if n_models == 1 and setup.new_msg_req.deep_research:
                     if setup.chat_session.project_id:
-                        raise RuntimeError("Deep research is not supported for projects")
+                        raise RuntimeError(
+                            "Deep research is not supported for projects"
+                        )
                     run_deep_research_llm_loop(
                         emitter=model_emitter,
                         state_container=sc,
@@ -1069,24 +1135,30 @@ def _run_models(
             model_succeeded[model_idx] = True
 
         except Exception as e:
+            model_errored[model_idx] = True
             merged_queue.put((model_idx, e))
 
         finally:
             merged_queue.put((model_idx, _MODEL_DONE))
 
-        # Self-completion on disconnect: if the drain loop exited early (drain_done is set),
-        # the main thread will not call llm_loop_completion_handle for this model.
-        # Open a fresh session and do it here so the response is persisted.
-        if drain_done.is_set() and model_succeeded[model_idx]:
+        # Self-completion on disconnect: if the drain loop exited early (drain_done is set)
+        # AND we succeeded AND we can claim the completion lock, persist our response.
+        # The lock prevents a double-completion race with the disconnect handler in the
+        # _run_models finally block, which runs concurrently on the main thread.
+        if (
+            drain_done.is_set()
+            and model_succeeded[model_idx]
+            and completion_locks[model_idx].acquire(blocking=False)
+        ):
             try:
                 with get_session_with_current_tenant() as self_complete_db:
-                    assistant_message = self_complete_db.get(ChatMessage, setup.reserved_messages[model_idx].id)
+                    assistant_message = self_complete_db.get(
+                        ChatMessage, setup.reserved_messages[model_idx].id
+                    )
                     if assistant_message is not None:
                         llm_loop_completion_handle(
                             state_container=state_containers[model_idx],
-                            # model_succeeded[model_idx] is True here (guard above),
-                            # so treat as connected — avoids "stopped by user" suffix.
-                            is_connected=lambda: model_succeeded[model_idx],
+                            is_connected=lambda: True,
                             db_session=self_complete_db,
                             assistant_message=assistant_message,
                             llm=setup.llms[model_idx],
@@ -1099,61 +1171,93 @@ def _run_models(
                     setup.model_display_names[model_idx],
                 )
 
+    def _delete_orphaned_message(model_idx: int, context: str) -> None:
+        """Delete a reserved ChatMessage that was never populated due to a model error."""
+        try:
+            orphaned = db_session.get(
+                ChatMessage, setup.reserved_messages[model_idx].id
+            )
+            if orphaned is not None:
+                db_session.delete(orphaned)
+                db_session.commit()
+        except Exception:
+            logger.exception(
+                "%s orphan cleanup failed for model %d (%s)",
+                context,
+                model_idx,
+                setup.model_display_names[model_idx],
+            )
+
     # Copy contextvars before submitting futures — ThreadPoolExecutor does NOT
     # auto-propagate contextvars in Python 3.11; threads would inherit a blank context.
-    ctx = contextvars.copy_context()
-    executor = ThreadPoolExecutor(max_workers=n_models, thread_name_prefix="multi-model")
-    _completion_done: bool = False
+    worker_context = contextvars.copy_context()
+    executor = ThreadPoolExecutor(
+        max_workers=n_models, thread_name_prefix="multi-model"
+    )
+    completion_persisted: bool = False
     try:
         for i in range(n_models):
-            executor.submit(ctx.run, _run_model, i)
+            executor.submit(worker_context.run, _run_model, i)
 
         # ── Main thread: merge and yield packets ────────────────────────────
         models_remaining = n_models
         while models_remaining > 0:
             try:
-                model_idx, item = merged_queue.get(timeout=0.05)
+                model_idx, item = merged_queue.get(timeout=_CANCEL_POLL_INTERVAL_S)
             except queue.Empty:
                 # Check for user-initiated cancellation every 50 ms.
                 if not setup.check_is_connected():
-                    # Save state for every model before exiting. Models that already
-                    # finished (model_succeeded[i]=True) get their full answer saved;
-                    # models still in-flight get partial answer + "stopped by user".
+                    # Save state for every model before exiting.
+                    # - Succeeded models: full answer (is_connected=True).
+                    # - Still-in-flight models: partial answer + "stopped by user".
+                    # - Errored models: delete the orphaned reserved message; do NOT
+                    #   save "stopped by user" for a model that actually threw an exception.
                     for i in range(n_models):
+                        if model_errored[i]:
+                            _delete_orphaned_message(i, "stop-button")
+                            continue
                         try:
+                            succeeded = model_succeeded[i]
                             llm_loop_completion_handle(
                                 state_container=state_containers[i],
-                                # partial captures model_succeeded[i] by value at loop time, not by reference
-                                is_connected=functools.partial(bool, model_succeeded[i]),
+                                is_connected=lambda: succeeded,
                                 db_session=db_session,
                                 assistant_message=setup.reserved_messages[i],
                                 llm=setup.llms[i],
                                 reserved_tokens=setup.reserved_token_count,
                             )
                         except Exception:
-                            logger.exception(f"Failed completion for model {i} on disconnect ({setup.model_display_names[i]})")
+                            logger.exception(
+                                "stop-button completion failed for model %d (%s)",
+                                i,
+                                setup.model_display_names[i],
+                            )
                     yield Packet(
                         placement=Placement(turn_index=0),
                         obj=OverallStop(type="stop", stop_reason="user_cancelled"),
                     )
-                    _completion_done = True
+                    completion_persisted = True
                     return
                 continue
             else:
                 if item is _MODEL_DONE:
                     models_remaining -= 1
-                    continue
-
-                if isinstance(item, Exception):
+                elif isinstance(item, Exception):
                     # Yield a tagged error for this model but keep the other models running.
                     # Do NOT decrement models_remaining — _run_model's finally always posts
                     # _MODEL_DONE, which is the sole completion signal.
                     error_msg = str(item)
-                    stack_trace = "".join(traceback.format_exception(type(item), item, item.__traceback__))
+                    stack_trace = "".join(
+                        traceback.format_exception(type(item), item, item.__traceback__)
+                    )
                     model_llm = setup.llms[model_idx]
                     if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
-                        error_msg = error_msg.replace(model_llm.config.api_key, "[REDACTED_API_KEY]")
-                        stack_trace = stack_trace.replace(model_llm.config.api_key, "[REDACTED_API_KEY]")
+                        error_msg = error_msg.replace(
+                            model_llm.config.api_key, "[REDACTED_API_KEY]"
+                        )
+                        stack_trace = stack_trace.replace(
+                            model_llm.config.api_key, "[REDACTED_API_KEY]"
+                        )
                     yield StreamingError(
                         error=error_msg,
                         stack_trace=stack_trace,
@@ -1165,9 +1269,7 @@ def _run_models(
                             "model_index": model_idx,
                         },
                     )
-                    continue
-
-                if isinstance(item, Packet):
+                elif isinstance(item, Packet):
                     # model_index already embedded by the model's Emitter in _run_model
                     yield item
 
@@ -1177,6 +1279,8 @@ def _run_models(
         # sessions, but the main-thread db_session is unshared and safe to use.
         for i in range(n_models):
             if not model_succeeded[i]:
+                # Model errored — delete its orphaned reserved message.
+                _delete_orphaned_message(i, "normal")
                 continue
             try:
                 llm_loop_completion_handle(
@@ -1188,11 +1292,15 @@ def _run_models(
                     reserved_tokens=setup.reserved_token_count,
                 )
             except Exception:
-                logger.exception(f"Failed completion for model {i} ({setup.model_display_names[i]})")
-        _completion_done = True
+                logger.exception(
+                    "normal completion failed for model %d (%s)",
+                    i,
+                    setup.model_display_names[i],
+                )
+        completion_persisted = True
 
     finally:
-        if _completion_done:
+        if completion_persisted:
             # Normal exit or stop-button exit: completion already persisted.
             # Threads are done (normal path) or can finish in the background (stop-button).
             executor.shutdown(wait=False)
@@ -1201,13 +1309,38 @@ def _run_models(
             # exception in the drain loop).
             # 1. Signal emitters to stop blocking — future emit() calls return immediately.
             drain_done.set()
-            # 2. Drain buffered packets from memory — no consumer is running.
+            # 2. Complete models that already finished before the disconnect fired (B1 fix).
+            #    These workers exited _run_model before drain_done was set and won't
+            #    self-complete. Use completion_locks to prevent double-completion with any
+            #    worker that finishes and self-completes concurrently.
+            for i in range(n_models):
+                if model_succeeded[i] and completion_locks[i].acquire(blocking=False):
+                    try:
+                        llm_loop_completion_handle(
+                            state_container=state_containers[i],
+                            is_connected=lambda: True,
+                            db_session=db_session,
+                            assistant_message=setup.reserved_messages[i],
+                            llm=setup.llms[i],
+                            reserved_tokens=setup.reserved_token_count,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "disconnect completion failed for model %d (%s)",
+                            i,
+                            setup.model_display_names[i],
+                        )
+                elif model_errored[i]:
+                    # Model errored before the disconnect — delete its orphaned message.
+                    _delete_orphaned_message(i, "disconnect")
+            # 3. Drain buffered packets from memory — no consumer is running.
             while not merged_queue.empty():
                 try:
                     merged_queue.get_nowait()
                 except queue.Empty:
                     break
-            # 3. Don't block the server thread — workers self-complete via drain_done.
+            # 4. Don't block the server thread — still-running workers self-complete
+            #    via drain_done, or self-clean on error.
             executor.shutdown(wait=False)
 
 
@@ -1257,7 +1390,9 @@ def _stream_chat_turn(
         followed by a terminal ``Packet`` containing ``OverallStop``.
     """
     if new_msg_req.mock_llm_response is not None and not INTEGRATION_TESTS_MODE:
-        raise ValueError("mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true")
+        raise ValueError(
+            "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
+        )
 
     mock_response_token: Token[str | None] | None = None
     setup: ChatTurnSetup | None = None
@@ -1311,7 +1446,9 @@ def _stream_chat_turn(
 
     except EmptyLLMResponseError as e:
         stack_trace = traceback.format_exc()
-        logger.warning(f"LLM returned an empty response (provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})")
+        logger.warning(
+            f"LLM returned an empty response (provider={e.provider}, model={e.model}, tool_choice={e.tool_choice})"
+        )
         yield StreamingError(
             error=e.client_error_msg,
             stack_trace=stack_trace,
@@ -1331,10 +1468,16 @@ def _stream_chat_turn(
 
         llm = setup.llms[0] if setup else None
         if llm:
-            client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(e, llm)
+            client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
+                e, llm
+            )
             if llm.config.api_key and len(llm.config.api_key) > 2:
-                client_error_msg = client_error_msg.replace(llm.config.api_key, "[REDACTED_API_KEY]")
-                stack_trace = stack_trace.replace(llm.config.api_key, "[REDACTED_API_KEY]")
+                client_error_msg = client_error_msg.replace(
+                    llm.config.api_key, "[REDACTED_API_KEY]"
+                )
+                stack_trace = stack_trace.replace(
+                    llm.config.api_key, "[REDACTED_API_KEY]"
+                )
             yield StreamingError(
                 error=client_error_msg,
                 stack_trace=stack_trace,
@@ -1485,13 +1628,17 @@ def llm_loop_completion_handle(
     completed_normally = is_connected()
     if completed_normally:
         if answer_tokens is None:
-            raise RuntimeError("LLM run completed normally but did not return an answer.")
+            raise RuntimeError(
+                "LLM run completed normally but did not return an answer."
+            )
         final_answer = answer_tokens
     else:
         # Stopped by user - append stop message
         logger.debug(f"Chat session {chat_session_id} stopped by user")
         if answer_tokens:
-            final_answer = answer_tokens + " ... \n\nGeneration was stopped by the user."
+            final_answer = (
+                answer_tokens + " ... \n\nGeneration was stopped by the user."
+            )
         else:
             final_answer = "The generation was stopped by the user."
 
