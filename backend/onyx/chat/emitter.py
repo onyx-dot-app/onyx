@@ -16,7 +16,7 @@ class Emitter:
         model_idx: Index embedded in packet placements (``0`` for N=1 runs).
         drain_done: Optional event set by ``_run_models`` when the drain loop
             exits early (e.g. HTTP disconnect). When set, ``emit`` returns
-            immediately without blocking so worker threads can exit fast.
+            immediately so worker threads can exit fast.
     """
 
     def __init__(
