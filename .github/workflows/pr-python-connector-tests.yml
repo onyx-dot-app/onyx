@@ -148,7 +148,6 @@ jobs:
             HIGHSPOT_KEY, test/highspot-key
             HIGHSPOT_SECRET, test/highspot-secret
             SLACK_BOT_TOKEN, test/slack-bot-token
-            SLACK_WEBHOOK, test/slack-webhook
             DISCORD_CONNECTOR_BOT_TOKEN, test/discord-bot-token
             TEAMS_APPLICATION_ID, test/teams-application-id
             TEAMS_DIRECTORY_ID, test/teams-directory-id
