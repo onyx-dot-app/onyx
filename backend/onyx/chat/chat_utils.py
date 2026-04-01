@@ -80,16 +80,12 @@ def build_file_context(
         )
         message = ChatMessageSimple(
             message=message_text,
-            token_count=0,
+            token_count=max(1, len(message_text) // 4),
             message_type=MessageType.USER,
             file_id=tool_file_id,
         )
     else:
-        message_text = (
-            f"File: {filename}\n{content_text or ''}\nEnd of File"
-            if filename
-            else content_text or ""
-        )
+        message_text = f"File: {filename}\n{content_text or ''}\nEnd of File"
         message = ChatMessageSimple(
             message=message_text,
             token_count=token_count,
