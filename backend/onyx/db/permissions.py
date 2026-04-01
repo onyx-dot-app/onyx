@@ -7,6 +7,7 @@ JSONB column.  Keeping them here avoids circular imports when called from
 other onyx/db/ modules such as users.py.
 """
 
+from collections import defaultdict
 from uuid import UUID
 
 from sqlalchemy import select
@@ -53,7 +54,7 @@ def recompute_permissions_for_group__no_commit(
 
     Does NOT commit — caller must commit the session.
     """
-    user_ids = (
+    user_ids: list[UUID] = list(
         db_session.execute(
             select(User__UserGroup.user_id).where(
                 User__UserGroup.user_group_id == group_id,
@@ -63,5 +64,34 @@ def recompute_permissions_for_group__no_commit(
         .scalars()
         .all()
     )
+
+    if not user_ids:
+        return
+
+    # Single query to fetch ALL permissions for these users across ALL their
+    # groups (a user may belong to multiple groups with different grants).
+    rows = db_session.execute(
+        select(User__UserGroup.user_id, PermissionGrant.permission)
+        .join(
+            PermissionGrant,
+            PermissionGrant.group_id == User__UserGroup.user_group_id,
+        )
+        .where(
+            User__UserGroup.user_id.in_(user_ids),
+            PermissionGrant.is_deleted.is_(False),
+        )
+    ).all()
+
+    # Group permissions by user; users with no grants get an empty set.
+    perms_by_user: dict[UUID, set[str]] = defaultdict(set)
     for uid in user_ids:
-        recompute_user_permissions__no_commit(uid, db_session)
+        perms_by_user[uid]  # ensure every user has an entry
+    for uid, perm in rows:
+        perms_by_user[uid].add(perm.value)
+
+    for uid, perms in perms_by_user.items():
+        db_session.execute(
+            update(User)
+            .where(User.id == uid)
+            .values(effective_permissions=sorted(perms))
+        )
