@@ -27,7 +27,9 @@ function GroupsPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={SvgUsers} title="Groups" separator />
+      <div data-testid="groups-page-heading">
+        <SettingsLayouts.Header icon={SvgUsers} title="Groups" separator />
+      </div>
 
       <SettingsLayouts.Body>
         <AdminListHeader
