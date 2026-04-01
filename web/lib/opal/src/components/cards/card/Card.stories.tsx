@@ -3,7 +3,8 @@ import { Card } from "@opal/components";
 
 const BACKGROUND_VARIANTS = ["none", "light", "heavy"] as const;
 const BORDER_VARIANTS = ["none", "dashed", "solid"] as const;
-const SIZE_VARIANTS = ["lg", "md", "sm", "xs", "2xs", "fit"] as const;
+const PADDING_VARIANTS = ["fit", "2xs", "xs", "sm", "md", "lg"] as const;
+const ROUNDING_VARIANTS = ["xs", "sm", "md", "lg"] as const;
 
 const meta: Meta<typeof Card> = {
   title: "opal/components/Card",
@@ -17,7 +18,9 @@ type Story = StoryObj<typeof Card>;
 export const Default: Story = {
   render: () => (
     <Card>
-      <p>Default card with light background, no border, lg size.</p>
+      <p>
+        Default card with light background, no border, sm padding, md rounding.
+      </p>
     </Card>
   ),
 };
@@ -46,12 +49,24 @@ export const BorderVariants: Story = {
   ),
 };
 
-export const SizeVariants: Story = {
+export const PaddingVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4 w-96">
-      {SIZE_VARIANTS.map((size) => (
-        <Card key={size} sizeVariant={size} borderVariant="solid">
-          <p>sizeVariant: {size}</p>
+      {PADDING_VARIANTS.map((padding) => (
+        <Card key={padding} paddingVariant={padding} borderVariant="solid">
+          <p>paddingVariant: {padding}</p>
+        </Card>
+      ))}
+    </div>
+  ),
+};
+
+export const RoundingVariants: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 w-96">
+      {ROUNDING_VARIANTS.map((rounding) => (
+        <Card key={rounding} roundingVariant={rounding} borderVariant="solid">
+          <p>roundingVariant: {rounding}</p>
         </Card>
       ))}
     </div>
@@ -61,15 +76,15 @@ export const SizeVariants: Story = {
 export const AllCombinations: Story = {
   render: () => (
     <div className="flex flex-col gap-8">
-      {SIZE_VARIANTS.map((size) => (
-        <div key={size}>
-          <p className="font-bold pb-2">sizeVariant: {size}</p>
+      {PADDING_VARIANTS.map((padding) => (
+        <div key={padding}>
+          <p className="font-bold pb-2">paddingVariant: {padding}</p>
           <div className="grid grid-cols-3 gap-4">
             {BACKGROUND_VARIANTS.map((bg) =>
               BORDER_VARIANTS.map((border) => (
                 <Card
-                  key={`${size}-${bg}-${border}`}
-                  sizeVariant={size}
+                  key={`${padding}-${bg}-${border}`}
+                  paddingVariant={padding}
                   backgroundVariant={bg}
                   borderVariant={border}
                 >

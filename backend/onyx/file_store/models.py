@@ -13,13 +13,14 @@ class ChatFileType(str, Enum):
     DOC = "document"
     # Plain text only contain the text
     PLAIN_TEXT = "plain_text"
-    CSV = "csv"
+    # Tabular data files (CSV, XLSX)
+    TABULAR = "tabular"
 
     def is_text_file(self) -> bool:
         return self in (
             ChatFileType.PLAIN_TEXT,
             ChatFileType.DOC,
-            ChatFileType.CSV,
+            ChatFileType.TABULAR,
         )
 
 

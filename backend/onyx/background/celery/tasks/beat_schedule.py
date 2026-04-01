@@ -14,7 +14,6 @@ from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.hooks.utils import HOOKS_AVAILABLE
 from shared_configs.configs import MULTI_TENANT
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
@@ -361,19 +360,6 @@ if not MULTI_TENANT:
     )
 
     tasks_to_schedule.extend(beat_task_templates)
-
-if HOOKS_AVAILABLE:
-    tasks_to_schedule.append(
-        {
-            "name": "hook-execution-log-cleanup",
-            "task": OnyxCeleryTask.HOOK_EXECUTION_LOG_CLEANUP_TASK,
-            "schedule": timedelta(days=1),
-            "options": {
-                "priority": OnyxCeleryPriority.LOW,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        }
-    )
 
 
 def generate_cloud_tasks(

@@ -11,11 +11,13 @@ from discord import Client
 from discord.channel import TextChannel
 from discord.channel import Thread
 from discord.enums import MessageType
+from discord.errors import LoginFailure
 from discord.flags import Intents
 from discord.message import Message as DiscordMessage
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.exceptions import CredentialInvalidError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -209,8 +211,19 @@ def _manage_async_retrieval(
         intents = Intents.default()
         intents.message_content = True
         async with Client(intents=intents) as discord_client:
-            asyncio.create_task(discord_client.start(token))
-            await discord_client.wait_until_ready()
+            start_task = asyncio.create_task(discord_client.start(token))
+            ready_task = asyncio.create_task(discord_client.wait_until_ready())
+
+            done, _ = await asyncio.wait(
+                {start_task, ready_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            # start() runs indefinitely once connected, so it only lands
+            # in `done` when login/connection failed — propagate the error.
+            if start_task in done:
+                ready_task.cancel()
+                start_task.result()
 
             filtered_channels: list[TextChannel] = await _fetch_filtered_channels(
                 discord_client=discord_client,
@@ -275,6 +288,19 @@ class DiscordConnector(PollConnector, LoadConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._discord_bot_token = credentials["discord_bot_token"]
         return None
+
+    def validate_connector_settings(self) -> None:
+        loop = asyncio.new_event_loop()
+        try:
+            client = Client(intents=Intents.default())
+            try:
+                loop.run_until_complete(client.login(self.discord_bot_token))
+            except LoginFailure as e:
+                raise CredentialInvalidError(f"Invalid Discord bot token: {e}")
+            finally:
+                loop.run_until_complete(client.close())
+        finally:
+            loop.close()
 
     def _manage_doc_batching(
         self,

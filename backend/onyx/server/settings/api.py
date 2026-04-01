@@ -21,7 +21,6 @@ from onyx.db.notification import get_notifications
 from onyx.db.notification import update_notification_last_shown
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.hooks.utils import HOOKS_AVAILABLE
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.build.utils import is_onyx_craft_enabled
@@ -38,6 +37,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -98,7 +98,7 @@ def fetch_settings(
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
         vector_db_enabled=not DISABLE_VECTOR_DB,
-        hooks_enabled=HOOKS_AVAILABLE,
+        hooks_enabled=not MULTI_TENANT,
         version=onyx_version,
         max_allowed_upload_size_mb=MAX_ALLOWED_UPLOAD_SIZE_MB,
         default_user_file_max_upload_size_mb=min(

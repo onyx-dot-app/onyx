@@ -9,11 +9,11 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
+from ee.onyx.hooks.executor import _execute_hook_impl as execute_hook
 from onyx.db.enums import HookFailStrategy
 from onyx.db.enums import HookPoint
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.hooks.executor import execute_hook
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingResponse
@@ -118,28 +118,30 @@ def db_session() -> MagicMock:
 
 
 @pytest.mark.parametrize(
-    "hooks_available,hook",
+    "multi_tenant,hook",
     [
-        # HOOKS_AVAILABLE=False exits before the DB lookup — hook is irrelevant.
-        pytest.param(False, None, id="hooks_not_available"),
-        pytest.param(True, None, id="hook_not_found"),
-        pytest.param(True, _make_hook(is_active=False), id="hook_inactive"),
-        pytest.param(True, _make_hook(endpoint_url=None), id="no_endpoint_url"),
+        # MULTI_TENANT=True exits before the DB lookup — hook is irrelevant.
+        pytest.param(True, None, id="multi_tenant"),
+        pytest.param(False, None, id="hook_not_found"),
+        pytest.param(False, _make_hook(is_active=False), id="hook_inactive"),
+        pytest.param(False, _make_hook(endpoint_url=None), id="no_endpoint_url"),
     ],
 )
 def test_early_exit_returns_skipped_with_no_db_writes(
     db_session: MagicMock,
-    hooks_available: bool,
+    multi_tenant: bool,
     hook: MagicMock | None,
 ) -> None:
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", hooks_available),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", multi_tenant),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
-        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
+        patch("ee.onyx.hooks.executor.update_hook__no_commit") as mock_update,
+        patch(
+            "ee.onyx.hooks.executor.create_hook_execution_log__no_commit"
+        ) as mock_log,
     ):
         result = execute_hook(
             db_session=db_session,
@@ -164,14 +166,16 @@ def test_success_returns_validated_model_and_sets_reachable(
     hook = _make_hook()
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
+        patch("ee.onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("ee.onyx.hooks.executor.update_hook__no_commit") as mock_update,
+        patch(
+            "ee.onyx.hooks.executor.create_hook_execution_log__no_commit"
+        ) as mock_log,
         patch("httpx.Client") as mock_client_cls,
     ):
         _setup_client(mock_client_cls, response=_make_response())
@@ -195,14 +199,14 @@ def test_success_skips_reachable_write_when_already_true(db_session: MagicMock) 
     hook = _make_hook(is_reachable=True)
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit"),
+        patch("ee.onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("ee.onyx.hooks.executor.update_hook__no_commit") as mock_update,
+        patch("ee.onyx.hooks.executor.create_hook_execution_log__no_commit"),
         patch("httpx.Client") as mock_client_cls,
     ):
         _setup_client(mock_client_cls, response=_make_response())
@@ -224,14 +228,16 @@ def test_non_dict_json_response_is_a_failure(db_session: MagicMock) -> None:
     hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
+        patch("ee.onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("ee.onyx.hooks.executor.update_hook__no_commit") as mock_update,
+        patch(
+            "ee.onyx.hooks.executor.create_hook_execution_log__no_commit"
+        ) as mock_log,
         patch("httpx.Client") as mock_client_cls,
     ):
         _setup_client(
@@ -258,14 +264,16 @@ def test_json_decode_failure_is_a_failure(db_session: MagicMock) -> None:
     hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
+        patch("ee.onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("ee.onyx.hooks.executor.update_hook__no_commit") as mock_update,
+        patch(
+            "ee.onyx.hooks.executor.create_hook_execution_log__no_commit"
+        ) as mock_log,
         patch("httpx.Client") as mock_client_cls,
     ):
         _setup_client(
@@ -384,14 +392,14 @@ def test_http_failure_paths(
     hook = _make_hook(fail_strategy=fail_strategy)
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit"),
+        patch("ee.onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("ee.onyx.hooks.executor.update_hook__no_commit") as mock_update,
+        patch("ee.onyx.hooks.executor.create_hook_execution_log__no_commit"),
         patch("httpx.Client") as mock_client_cls,
     ):
         _setup_client(mock_client_cls, side_effect=exception)
@@ -443,14 +451,14 @@ def test_authorization_header(
     hook = _make_hook(api_key=api_key)
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit"),
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit"),
+        patch("ee.onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("ee.onyx.hooks.executor.update_hook__no_commit"),
+        patch("ee.onyx.hooks.executor.create_hook_execution_log__no_commit"),
         patch("httpx.Client") as mock_client_cls,
     ):
         mock_client = _setup_client(mock_client_cls, response=_make_response())
@@ -489,13 +497,13 @@ def test_persist_session_failure_is_swallowed(
     hook = _make_hook(fail_strategy=HookFailStrategy.HARD)
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
         patch(
-            "onyx.hooks.executor.get_session_with_current_tenant",
+            "ee.onyx.hooks.executor.get_session_with_current_tenant",
             side_effect=RuntimeError("DB unavailable"),
         ),
         patch("httpx.Client") as mock_client_cls,
@@ -556,14 +564,16 @@ def test_response_validation_failure_respects_fail_strategy(
     hook = _make_hook(fail_strategy=fail_strategy)
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
-        patch("onyx.hooks.executor.update_hook__no_commit") as mock_update,
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
+        patch("ee.onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("ee.onyx.hooks.executor.update_hook__no_commit") as mock_update,
+        patch(
+            "ee.onyx.hooks.executor.create_hook_execution_log__no_commit"
+        ) as mock_log,
         patch("httpx.Client") as mock_client_cls,
     ):
         # Response payload is missing required_field → ValidationError
@@ -619,13 +629,13 @@ def test_unexpected_exception_in_inner_respects_fail_strategy(
     hook = _make_hook(fail_strategy=fail_strategy)
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
         patch(
-            "onyx.hooks.executor._execute_hook_inner",
+            "ee.onyx.hooks.executor._execute_hook_inner",
             side_effect=ValueError("unexpected bug"),
         ),
     ):
@@ -658,17 +668,19 @@ def test_is_reachable_failure_does_not_prevent_log(db_session: MagicMock) -> Non
     hook = _make_hook(fail_strategy=HookFailStrategy.SOFT)
 
     with (
-        patch("onyx.hooks.executor.HOOKS_AVAILABLE", True),
+        patch("ee.onyx.hooks.executor.MULTI_TENANT", False),
         patch(
-            "onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
+            "ee.onyx.hooks.executor.get_non_deleted_hook_by_hook_point",
             return_value=hook,
         ),
-        patch("onyx.hooks.executor.get_session_with_current_tenant"),
+        patch("ee.onyx.hooks.executor.get_session_with_current_tenant"),
         patch(
-            "onyx.hooks.executor.update_hook__no_commit",
+            "ee.onyx.hooks.executor.update_hook__no_commit",
             side_effect=OnyxError(OnyxErrorCode.NOT_FOUND, "hook deleted"),
         ),
-        patch("onyx.hooks.executor.create_hook_execution_log__no_commit") as mock_log,
+        patch(
+            "ee.onyx.hooks.executor.create_hook_execution_log__no_commit"
+        ) as mock_log,
         patch("httpx.Client") as mock_client_cls,
     ):
         _setup_client(mock_client_cls, side_effect=httpx.ConnectError("refused"))

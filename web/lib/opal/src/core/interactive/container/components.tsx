@@ -3,7 +3,7 @@ import type { Route } from "next";
 import "@opal/core/interactive/shared.css";
 import React from "react";
 import { cn } from "@opal/utils";
-import type { ButtonType, WithoutStyles } from "@opal/types";
+import type { ButtonType, RoundingVariants, WithoutStyles } from "@opal/types";
 import {
   containerSizeVariants,
   type ContainerSizeVariants,
@@ -16,19 +16,17 @@ import { useDisabled } from "@opal/core/disabled/components";
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * Border-radius presets for `Interactive.Container`.
- *
- * - `"default"` — Default radius of 0.75rem (12px), matching card rounding
- * - `"compact"` — Smaller radius of 0.5rem (8px), for tighter/inline elements
- * - `"mini"` — Smallest radius of 0.25rem (4px)
- */
-type InteractiveContainerRoundingVariant =
-  keyof typeof interactiveContainerRoundingVariants;
-const interactiveContainerRoundingVariants = {
-  default: "rounded-12",
-  compact: "rounded-08",
-  mini: "rounded-04",
+type InteractiveContainerRoundingVariant = Extract<
+  RoundingVariants,
+  "md" | "sm" | "xs"
+>;
+const interactiveContainerRoundingVariants: Record<
+  InteractiveContainerRoundingVariant,
+  string
+> = {
+  md: "rounded-12",
+  sm: "rounded-08",
+  xs: "rounded-04",
 } as const;
 
 /**
@@ -99,7 +97,7 @@ function InteractiveContainer({
   ref,
   type,
   border,
-  roundingVariant = "default",
+  roundingVariant = "md",
   heightVariant = "lg",
   widthVariant = "fit",
   ...props

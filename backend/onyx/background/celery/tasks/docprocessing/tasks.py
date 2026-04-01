@@ -319,6 +319,11 @@ def monitor_indexing_attempt_progress(
     )
 
     current_db_time = get_db_current_time(db_session)
+    total_batches: int | str = (
+        coordination_status.total_batches
+        if coordination_status.total_batches is not None
+        else "?"
+    )
     if coordination_status.found:
         task_logger.info(
             f"Indexing attempt progress: "
@@ -326,7 +331,7 @@ def monitor_indexing_attempt_progress(
             f"cc_pair={attempt.connector_credential_pair_id} "
             f"search_settings={attempt.search_settings_id} "
             f"completed_batches={coordination_status.completed_batches} "
-            f"total_batches={coordination_status.total_batches or '?'} "
+            f"total_batches={total_batches} "
             f"total_docs={coordination_status.total_docs} "
             f"total_failures={coordination_status.total_failures}"
             f"elapsed={(current_db_time - attempt.time_created).seconds}"
@@ -410,7 +415,7 @@ def check_indexing_completion(
     logger.info(
         f"Indexing status: "
         f"indexing_completed={indexing_completed} "
-        f"batches_processed={batches_processed}/{batches_total or '?'} "
+        f"batches_processed={batches_processed}/{batches_total if batches_total is not None else '?'} "
         f"total_docs={coordination_status.total_docs} "
         f"total_chunks={coordination_status.total_chunks} "
         f"total_failures={coordination_status.total_failures}"
