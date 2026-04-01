@@ -7,7 +7,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import { toast } from "@/hooks/useToast";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import {
   SvgDownload,
@@ -25,7 +25,7 @@ import {
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import AdminSearchBar from "@/sections/admin/AdminSearchBar";
+import AdminListHeader from "@/sections/admin/AdminListHeader";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Code from "@/refresh-components/Code";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
@@ -299,52 +299,31 @@ export default function ServiceAccountsPage() {
           />
         )}
 
-        {hasKeys ? (
-          <>
-            <AdminSearchBar
-              searchQuery={search}
-              onSearchQueryChange={setSearch}
-              placeholder="Search service accounts..."
-            >
-              <Button
-                rightIcon={SvgPlusCircle}
-                onClick={() => {
-                  setSelectedApiKey(undefined);
-                  setShowCreateUpdateForm(true);
-                }}
-              >
-                New Service Account
-              </Button>
-            </AdminSearchBar>
+        <AdminListHeader
+          hasItems={hasKeys}
+          searchQuery={search}
+          onSearchQueryChange={setSearch}
+          placeholder="Search service accounts..."
+          emptyStateText="Create service account API keys with user-level access."
+        >
+          <Button
+            rightIcon={SvgPlusCircle}
+            onClick={() => {
+              setSelectedApiKey(undefined);
+              setShowCreateUpdateForm(true);
+            }}
+          >
+            New Service Account
+          </Button>
+        </AdminListHeader>
 
-            <Table
-              data={filteredApiKeys}
-              getRowId={(row) => String(row.api_key_id)}
-              columns={columns}
-              searchTerm={search}
-            />
-          </>
-        ) : (
-          <Card paddingVariant="md" roundingVariant="lg" borderVariant="solid">
-            <div className="flex flex-row items-center justify-between gap-3">
-              <Content
-                title="Create service account API keys with user-level access."
-                sizePreset="main-ui"
-                variant="body"
-                prominence="muted"
-                widthVariant="fit"
-              />
-              <Button
-                rightIcon={SvgPlusCircle}
-                onClick={() => {
-                  setSelectedApiKey(undefined);
-                  setShowCreateUpdateForm(true);
-                }}
-              >
-                New Service Account
-              </Button>
-            </div>
-          </Card>
+        {hasKeys && (
+          <Table
+            data={filteredApiKeys}
+            getRowId={(row) => String(row.api_key_id)}
+            columns={columns}
+            searchTerm={search}
+          />
         )}
       </SettingsLayouts.Body>
 
