@@ -848,6 +848,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     event=MilestoneRecordType.TENANT_CREATED,
                 )
 
+            # Assign user to the appropriate default group (Admin or Basic).
+            # Must happen inside the try block while tenant context is active,
+            # otherwise get_session_with_current_tenant() targets the wrong schema.
+            is_admin = user_count == 1 or user.email in get_default_admin_user_emails()
+            with get_session_with_current_tenant() as db_session:
+                assign_user_to_default_groups__no_commit(
+                    db_session, user, is_admin=is_admin
+                )
+                db_session.commit()
+
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -901,18 +911,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 event=MilestoneRecordType.USER_SIGNED_UP,
                 properties=properties,
             )
-
-        # Assign user to the appropriate default group (Admin or Basic).
-        # Use the user_count already fetched above to determine admin status
-        # instead of reading user.role — keeps group assignment role-independent.
-        # Let exceptions propagate — a user without a group has no permissions,
-        # so it's better to surface the error than silently create a broken user.
-        is_admin = user_count == 1 or user.email in get_default_admin_user_emails()
-        with get_session_with_current_tenant() as db_session:
-            assign_user_to_default_groups__no_commit(
-                db_session, user, is_admin=is_admin
-            )
-            db_session.commit()
 
         logger.debug(f"User {user.id} has registered.")
         optional_telemetry(
