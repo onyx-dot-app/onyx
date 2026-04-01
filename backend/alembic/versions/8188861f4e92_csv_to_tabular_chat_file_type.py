@@ -1,7 +1,7 @@
 """csv to tabular chat file type
 
 Revision ID: 8188861f4e92
-Revises: 1d78c0ca7853
+Revises: d8cdfee5df80
 Create Date: 2026-03-31 19:23:05.753184
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "8188861f4e92"
-down_revision = "1d78c0ca7853"
+down_revision = "d8cdfee5df80"
 branch_labels = None
 depends_on = None
 
