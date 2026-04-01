@@ -13,9 +13,9 @@ import { toast } from "@/hooks/useToast";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Button, SelectCard } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { Disabled, Hoverable } from "@opal/core";
 import { markdown } from "@opal/utils";
-import { CardHeaderLayout, Content, IllustrationContent } from "@opal/layouts";
+import { Content, IllustrationContent } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import {
@@ -372,79 +372,103 @@ function ConnectedHookCard({
         />
       </deleteModal.Provider>
 
-      <SelectCard
-        state={hook.is_active ? "filled" : "empty"}
-        interaction="hover"
-        paddingVariant="xs"
-        roundingVariant="md"
-      >
-        <CardHeaderLayout
-          sizePreset="main-ui"
-          variant="section"
-          icon={HookIcon}
-          title={!hook.is_active ? markdown(`~~${hook.name}~~`) : hook.name}
-          description={`Hook Point: ${spec?.display_name ?? hook.hook_point}`}
-          rightChildren={
-            <div className="flex items-center gap-1">
-              {hook.is_active ? (
-                <HookStatusPopover hook={hook} spec={spec} isBusy={isBusy} />
-              ) : (
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgPlug}
-                  onClick={handleActivate}
-                  disabled={isBusy}
+      <Hoverable.Root group="connected-hook-card">
+        <SelectCard state="filled" onClick={onEdit}>
+          <div className="w-full flex flex-row">
+            <div className="flex-1 p-2">
+              <Content
+                sizePreset="main-ui"
+                variant="section"
+                icon={HookIcon}
+                title={
+                  !hook.is_active ? markdown(`~~${hook.name}~~`) : hook.name
+                }
+                description={`Hook Point: ${
+                  spec?.display_name ?? hook.hook_point
+                }`}
+              />
+
+              {spec?.docs_url && (
+                <a
+                  href={spec.docs_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-6 flex items-center gap-1 w-min"
                 >
-                  Reconnect
-                </Button>
+                  <span className="underline font-secondary-body text-text-03">
+                    Documentation
+                  </span>
+                  <SvgExternalLink size={12} className="shrink-0" />
+                </a>
               )}
             </div>
-          }
-          bottomRightChildren={
-            <Disabled disabled={isBusy}>
-              <div className="flex items-center">
+
+            <div className="flex flex-col items-end shrink-0">
+              <div className="flex items-center gap-1">
                 {hook.is_active ? (
-                  <>
-                    <Button
-                      prominence="tertiary"
-                      size="sm"
-                      icon={SvgUnplug}
-                      onClick={() => disconnectModal.toggle(true)}
-                      tooltip="Disconnect Hook"
-                      aria-label="Deactivate hook"
-                    />
-                    <Button
-                      prominence="tertiary"
-                      size="sm"
-                      icon={SvgRefreshCw}
-                      onClick={handleValidate}
-                      tooltip="Test Connection"
-                      aria-label="Re-validate hook"
-                    />
-                  </>
+                  <HookStatusPopover hook={hook} spec={spec} isBusy={isBusy} />
                 ) : (
                   <Button
                     prominence="tertiary"
-                    size="sm"
-                    icon={SvgTrash}
-                    onClick={() => deleteModal.toggle(true)}
-                    tooltip="Delete"
-                    aria-label="Delete hook"
-                  />
+                    rightIcon={SvgPlug}
+                    onClick={handleActivate}
+                    disabled={isBusy}
+                  >
+                    Reconnect
+                  </Button>
                 )}
-                <Button
-                  prominence="tertiary"
-                  size="sm"
-                  icon={SvgSettings}
-                  onClick={onEdit}
-                  tooltip="Manage"
-                  aria-label="Configure hook"
-                />
               </div>
-            </Disabled>
-          }
-        />
-      </SelectCard>
+
+              <Disabled disabled={isBusy}>
+                <div className="flex items-center pb-1 px-1 gap-1">
+                  {hook.is_active ? (
+                    <>
+                      <Hoverable.Item
+                        group="connected-hook-card"
+                        variant="opacity-on-hover"
+                      >
+                        <Button
+                          prominence="tertiary"
+                          size="md"
+                          icon={SvgUnplug}
+                          onClick={() => disconnectModal.toggle(true)}
+                          tooltip="Disconnect Hook"
+                          aria-label="Deactivate hook"
+                        />
+                      </Hoverable.Item>
+                      <Button
+                        prominence="tertiary"
+                        size="md"
+                        icon={SvgRefreshCw}
+                        onClick={handleValidate}
+                        tooltip="Test Connection"
+                        aria-label="Re-validate hook"
+                      />
+                    </>
+                  ) : (
+                    <Button
+                      prominence="tertiary"
+                      size="md"
+                      icon={SvgTrash}
+                      onClick={() => deleteModal.toggle(true)}
+                      tooltip="Delete"
+                      aria-label="Delete hook"
+                    />
+                  )}
+                  <Button
+                    prominence="tertiary"
+                    size="md"
+                    icon={SvgSettings}
+                    onClick={onEdit}
+                    tooltip="Manage"
+                    aria-label="Configure hook"
+                  />
+                </div>
+              </Disabled>
+            </div>
+          </div>
+        </SelectCard>
+      </Hoverable.Root>
     </>
   );
 }
