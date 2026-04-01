@@ -355,6 +355,7 @@ export default function ServiceAccountsPage() {
                 </Button>
               }
               submit={
+                // TODO(@raunakab): Create an opalified copy-button and replace it here
                 <Button
                   onClick={() => {
                     if (fullApiKey) {
