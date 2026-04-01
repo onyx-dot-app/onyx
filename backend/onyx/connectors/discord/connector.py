@@ -222,6 +222,7 @@ def _manage_async_retrieval(
             # start() runs indefinitely once connected, so it only lands
             # in `done` when login/connection failed — propagate the error.
             if start_task in done:
+                ready_task.cancel()
                 start_task.result()
 
             filtered_channels: list[TextChannel] = await _fetch_filtered_channels(
