@@ -952,10 +952,7 @@ def _run_models(
     """
     n_models = len(setup.llms)
 
-    # Bounded queue for backpressure — prevents unbounded memory growth if consumer is slow.
-    merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue(
-        maxsize=100
-    )
+    merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
     state_containers: list[ChatStateContainer] = [
         (
@@ -1073,16 +1070,10 @@ def _run_models(
             model_succeeded[model_idx] = True
 
         except Exception as e:
-            try:
-                merged_queue.put((model_idx, e), timeout=3.0)
-            except queue.Full:
-                pass  # Drain loop gone (GeneratorExit); thread exits cleanly
+            merged_queue.put((model_idx, e))
 
         finally:
-            try:
-                merged_queue.put((model_idx, _MODEL_DONE), timeout=3.0)
-            except queue.Full:
-                pass  # Drain loop gone (GeneratorExit); thread exits cleanly
+            merged_queue.put((model_idx, _MODEL_DONE))
 
         # Self-completion on disconnect: if the drain loop exited early (drain_done is set),
         # the main thread will not call llm_loop_completion_handle for this model.
@@ -1117,7 +1108,7 @@ def _run_models(
     executor = ThreadPoolExecutor(
         max_workers=n_models, thread_name_prefix="multi-model"
     )
-    _completion_done = False
+    _completion_done: bool = False
     try:
         for i in range(n_models):
             executor.submit(ctx.run, _run_model, i)
@@ -1227,8 +1218,7 @@ def _run_models(
             # exception in the drain loop).
             # 1. Signal emitters to stop blocking — future emit() calls return immediately.
             drain_done.set()
-            # 2. Drain the queue so any emit put() already in progress can unblock
-            #    (queue has space again) without waiting for its 3-second timeout.
+            # 2. Drain buffered packets from memory — no consumer is running.
             while not merged_queue.empty():
                 try:
                     merged_queue.get_nowait()
