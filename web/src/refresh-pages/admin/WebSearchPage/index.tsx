@@ -9,6 +9,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Content, CardHeaderLayout } from "@opal/layouts";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,6 @@ import { WebProviderSetupModal } from "@/refresh-pages/admin/WebSearchPage/WebPr
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
-  SEARCH_PROVIDERS_URL,
   SEARCH_PROVIDER_DETAILS,
   SEARCH_PROVIDER_ORDER,
   getSearchProviderDisplayLabel,
@@ -43,7 +43,6 @@ import {
   type WebSearchProviderType,
 } from "@/refresh-pages/admin/WebSearchPage/searchProviderUtils";
 import {
-  CONTENT_PROVIDERS_URL,
   CONTENT_PROVIDER_DETAILS,
   CONTENT_PROVIDER_ORDER,
   buildContentProviderConfig,
@@ -384,7 +383,7 @@ export default function WebSearchPage() {
     isLoading: isLoadingSearchProviders,
     mutate: mutateSearchProviders,
   } = useSWR<WebSearchProviderView[]>(
-    SEARCH_PROVIDERS_URL,
+    SWR_KEYS.webSearchSearchProviders,
     errorHandlingFetcher
   );
 
@@ -394,7 +393,7 @@ export default function WebSearchPage() {
     isLoading: isLoadingContentProviders,
     mutate: mutateContentProviders,
   } = useSWR<WebContentProviderView[]>(
-    CONTENT_PROVIDERS_URL,
+    SWR_KEYS.webSearchContentProviders,
     errorHandlingFetcher
   );
 

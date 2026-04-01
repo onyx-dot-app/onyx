@@ -3,6 +3,7 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
  * Fetch MCP servers for non-admin UIs (e.g. agent editor).
@@ -16,7 +17,7 @@ export default function useMcpServersForAgentEditor() {
     error,
     isLoading: isMcpLoading,
     mutate: mutateMcpServers,
-  } = useSWR<MCPServersResponse>("/api/mcp/servers", errorHandlingFetcher);
+  } = useSWR<MCPServersResponse>(SWR_KEYS.mcpServers, errorHandlingFetcher);
 
   return {
     mcpData: mcpData ?? null,

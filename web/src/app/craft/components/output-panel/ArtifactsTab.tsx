@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import {
@@ -40,10 +41,7 @@ export default function ArtifactsTab({
   const filesNeedsRefresh = useFilesNeedsRefresh();
   const { data: outputsListing } = useSWR(
     sessionId
-      ? [
-          `/api/build/sessions/${sessionId}/files?path=outputs`,
-          filesNeedsRefresh,
-        ]
+      ? [SWR_KEYS.buildSessionOutputFiles(sessionId), filesNeedsRefresh]
       : null,
     () => (sessionId ? fetchDirectoryListing(sessionId, "outputs") : null),
     {

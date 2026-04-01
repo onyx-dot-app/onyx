@@ -19,6 +19,7 @@ import {
 } from "@/lib/connectors/credentials";
 import { refreshAllGoogleData } from "@/lib/googleConnector";
 import { ValidSources } from "@/lib/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { FiFile, FiCheck, FiLink, FiAlertTriangle } from "react-icons/fi";
 import { cn, truncateString } from "@/lib/utils";
@@ -76,7 +77,7 @@ export const DriveJsonUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
         );
         if (response.ok) {
           toast.success("Successfully uploaded app credentials");
-          mutate("/api/manage/admin/connector/google-drive/app-credential");
+          mutate(SWR_KEYS.googleConnectorAppCredential("google-drive"));
           if (onSuccess) {
             onSuccess();
           }
@@ -99,9 +100,7 @@ export const DriveJsonUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
         );
         if (response.ok) {
           toast.success("Successfully uploaded service account key");
-          mutate(
-            "/api/manage/admin/connector/google-drive/service-account-key"
-          );
+          mutate(SWR_KEYS.googleConnectorServiceAccountKey("google-drive"));
           if (onSuccess) {
             onSuccess();
           }
@@ -319,8 +318,10 @@ export const DriveJsonUploadSection = ({
                 onClick={async () => {
                   const endpoint =
                     localServiceAccountData?.service_account_email
-                      ? "/api/manage/admin/connector/google-drive/service-account-key"
-                      : "/api/manage/admin/connector/google-drive/app-credential";
+                      ? SWR_KEYS.googleConnectorServiceAccountKey(
+                          "google-drive"
+                        )
+                      : SWR_KEYS.googleConnectorAppCredential("google-drive");
 
                   const response = await fetch(endpoint, {
                     method: "DELETE",
@@ -334,14 +335,14 @@ export const DriveJsonUploadSection = ({
                     );
 
                     // Add additional mutations to refresh all credential-related endpoints
+                    mutate(SWR_KEYS.googleConnectorCredentials("google-drive"));
                     mutate(
-                      "/api/manage/admin/connector/google-drive/credentials"
+                      SWR_KEYS.googleConnectorPublicCredential("google-drive")
                     );
                     mutate(
-                      "/api/manage/admin/connector/google-drive/public-credential"
-                    );
-                    mutate(
-                      "/api/manage/admin/connector/google-drive/service-account-credential"
+                      SWR_KEYS.googleConnectorServiceAccountCredential(
+                        "google-drive"
+                      )
                     );
 
                     toast.success(

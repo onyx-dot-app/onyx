@@ -5,6 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { UserGroup } from "@/lib/types";
 import { useContext } from "react";
 import { SettingsContext } from "@/providers/SettingsProvider";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
  * Fetches all user groups in the organization.
@@ -43,13 +44,12 @@ export default function useGroups() {
     combinedSettings &&
     combinedSettings.enterpriseSettings !== null;
 
-  const GROUPS_URL = "/api/manage/admin/user-group";
   const { data, error, isLoading } = useSWR<UserGroup[]>(
-    isPaidEnterpriseFeaturesEnabled ? GROUPS_URL : null,
+    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,
     errorHandlingFetcher
   );
 
-  const refreshGroups = () => mutate(GROUPS_URL);
+  const refreshGroups = () => mutate(SWR_KEYS.adminUserGroups);
 
   if (settingsLoading) {
     return {
