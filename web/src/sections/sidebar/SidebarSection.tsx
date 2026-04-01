@@ -18,7 +18,10 @@ export default function SidebarSection({
   className,
 }: SidebarSectionProps) {
   return (
-    <div className={cn("flex flex-col group/SidebarSection", className)}>
+    <div
+      className={cn("flex flex-col group/SidebarSection", className)}
+      data-testid={`sidebar-section/${title}`}
+    >
       <div className="pl-2 pr-1.5 py-1 sticky top-[0rem] bg-background-tint-02 z-10 flex flex-row items-center justify-between min-h-[2rem]">
         <Text as="p" secondaryBody text02>
           {title}

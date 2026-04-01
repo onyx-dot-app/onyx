@@ -15,6 +15,19 @@ export async function verifyAgentIsChosen(
   ).toBeVisible({ timeout });
 }
 
+export async function verifyAgentIsChosenInSidebar(
+  page: Page,
+  agentName: string,
+  timeout: number = 5000
+) {
+  const activeAgent = page
+    .locator('[data-testid="sidebar-section/Agents"] [data-interactive-state="selected"]')
+    .first();
+
+  await expect(activeAgent).toBeVisible({ timeout });
+  await expect(activeAgent).toContainText(agentName, { timeout });
+}
+
 export async function navigateToAgentInHistorySidebar(
   page: Page,
   testId: string,

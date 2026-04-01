@@ -4,8 +4,10 @@ import {
   sendMessage,
   startNewChat,
   verifyAgentIsChosen,
+  verifyAgentIsChosenInSidebar,
   verifyDefaultAgentIsChosen,
 } from "@tests/e2e/utils/chatActions";
+import { createAgent } from "../utils/agentUtils";
 
 test("Chat workflow", async ({ page }) => {
   // Clear cookies and log in as a random user
@@ -30,23 +32,35 @@ test("Chat workflow", async ({ page }) => {
   // Verify the presence of the expected text
   await verifyDefaultAgentIsChosen(page);
 
-  // Test creation of a new assistant
+  // Test creation of a new agent
   await page.getByTestId("AppSidebar/more-agents").click();
   await page.getByLabel("AgentsPage/new-agent-button").click();
   await page.locator('input[name="name"]').click();
-  await page.locator('input[name="name"]').fill("Test Assistant");
+  await page.locator('input[name="name"]').fill("Test Agent");
   await page.locator('textarea[name="description"]').click();
   await page
     .locator('textarea[name="description"]')
-    .fill("Test Assistant Description");
+    .fill("Test Agent Description");
   await page.locator('textarea[name="instructions"]').click();
   await page
     .locator('textarea[name="instructions"]')
-    .fill("Test Assistant Instructions");
+    .fill("Test Agent Instructions");
   await page.getByRole("button", { name: "Create" }).click();
 
-  // Verify the successful creation of the new assistant
-  await verifyAgentIsChosen(page, "Test Assistant");
+  // Verify the successful creation of the new agent
+  await verifyAgentIsChosen(page, "Test Agent");
+  await verifyAgentIsChosenInSidebar(page, "Test Agent");
+
+  // Send a message to create a chat session with this agent
+  await sendMessage(page, "Hi");
+
+  // Verify the agent is still selected in the sidebar
+
+  // Hard refresh the page
+  await page.reload({ waitUntil: "networkidle" });
+
+  // The custom agent should still be selected
+  await verifyAgentIsChosenInSidebar(page, "Test Agent");
 
   // Start another new chat session
   await startNewChat(page);
