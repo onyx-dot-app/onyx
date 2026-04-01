@@ -40,7 +40,7 @@ M = 32  # Set relatively high for better accuracy.
 # Defaults to 100 for now. Initially this defaulted to 750 but we were seeing
 # poor search performance.
 DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES = int(
-    os.environ.get("DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES", 100)
+    os.environ.get("DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES", 500)
 )
 
 # Number of vectors to examine to decide the top k neighbors for the HNSW
