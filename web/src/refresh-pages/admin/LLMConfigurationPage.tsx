@@ -212,9 +212,9 @@ function ExistingProviderCard({
 
       <Hoverable.Root group="ExistingProviderCard">
         <SelectCard
-          variant="select-card"
           state="filled"
-          sizeVariant="lg"
+          padding="sm"
+          rounding="lg"
           onClick={() => setIsOpen(true)}
         >
           <CardHeaderLayout
@@ -287,9 +287,9 @@ function NewProviderCard({
 
   return (
     <SelectCard
-      variant="select-card"
       state="empty"
-      sizeVariant="lg"
+      padding="sm"
+      rounding="lg"
       onClick={() => setIsOpen(true)}
     >
       <CardHeaderLayout
@@ -331,9 +331,9 @@ function NewCustomProviderCard({
 
   return (
     <SelectCard
-      variant="select-card"
       state="empty"
-      sizeVariant="lg"
+      padding="sm"
+      rounding="lg"
       onClick={() => setIsOpen(true)}
     >
       <CardHeaderLayout

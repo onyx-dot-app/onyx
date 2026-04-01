@@ -67,7 +67,7 @@ export default function AdminListHeader({
 
   if (!hasItems) {
     return (
-      <Card paddingVariant="md" roundingVariant="lg" borderVariant="solid">
+      <Card rounding="lg" border="solid">
         <div className="flex flex-row items-center justify-between gap-3">
           <Content
             title={emptyStateText}

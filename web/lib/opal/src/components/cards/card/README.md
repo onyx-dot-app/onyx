@@ -8,30 +8,30 @@ A plain container component with configurable background, border, padding, and r
 
 Padding and rounding are controlled independently:
 
-| `paddingVariant` | Class   |
-|------------------|---------|
-| `"lg"`           | `p-6`   |
-| `"md"`           | `p-4`   |
-| `"sm"`           | `p-2`   |
-| `"xs"`           | `p-1`   |
-| `"2xs"`          | `p-0.5` |
-| `"fit"`          | `p-0`   |
+| `padding` | Class   |
+|-----------|---------|
+| `"lg"`    | `p-6`   |
+| `"md"`    | `p-4`   |
+| `"sm"`    | `p-2`   |
+| `"xs"`    | `p-1`   |
+| `"2xs"`   | `p-0.5` |
+| `"fit"`   | `p-0`   |
 
-| `roundingVariant` | Class        |
-|-------------------|--------------|
-| `"xs"`            | `rounded-04` |
-| `"sm"`            | `rounded-08` |
-| `"md"`            | `rounded-12` |
-| `"lg"`            | `rounded-16` |
+| `rounding` | Class        |
+|------------|--------------|
+| `"xs"`     | `rounded-04` |
+| `"sm"`     | `rounded-08` |
+| `"md"`     | `rounded-12` |
+| `"lg"`     | `rounded-16` |
 
 ## Props
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `paddingVariant` | `PaddingVariants` | `"sm"` | Padding preset |
-| `roundingVariant` | `RoundingVariants` | `"md"` | Border-radius preset |
-| `backgroundVariant` | `"none" \| "light" \| "heavy"` | `"light"` | Background fill intensity |
-| `borderVariant` | `"none" \| "dashed" \| "solid"` | `"none"` | Border style |
+| `padding` | `PaddingVariants` | `"sm"` | Padding preset |
+| `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
+| `background` | `"none" \| "light" \| "heavy"` | `"light"` | Background fill intensity |
+| `border` | `"none" \| "dashed" \| "solid"` | `"none"` | Border style |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
 | `children` | `React.ReactNode` | — | Card content |
 
@@ -47,17 +47,17 @@ import { Card } from "@opal/components";
 </Card>
 
 // Large padding + rounding with solid border
-<Card paddingVariant="lg" roundingVariant="lg" borderVariant="solid">
+<Card padding="lg" rounding="lg" border="solid">
   <p>Spacious card</p>
 </Card>
 
 // Compact card with solid border
-<Card paddingVariant="xs" roundingVariant="sm" borderVariant="solid">
+<Card padding="xs" rounding="sm" border="solid">
   <p>Compact card</p>
 </Card>
 
 // Empty state card
-<Card backgroundVariant="none" borderVariant="dashed">
+<Card background="none" border="dashed">
   <p>No items yet</p>
 </Card>
 ```

@@ -166,7 +166,7 @@ function ModelConfigurationList({ formikProps }: ModelConfigurationListProps) {
           ))}
         </div>
       ) : (
-        <EmptyMessageCard title="No models added yet." />
+        <EmptyMessageCard title="No models added yet." padding="sm" />
       )}
 
       <Button
@@ -393,7 +393,7 @@ export default function CustomModal({
               />
             </FieldWrapper>
 
-            <Card>
+            <Card padding="sm">
               <ModelConfigurationList formikProps={formikProps as any} />
             </Card>
           </Section>
