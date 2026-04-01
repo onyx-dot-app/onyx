@@ -229,7 +229,9 @@ def get_memories_for_user(
     user_id: UUID,
     db_session: Session,
 ) -> Sequence[Memory]:
-    return db_session.scalars(select(Memory).where(Memory.user_id == user_id)).all()
+    return db_session.scalars(
+        select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.desc())
+    ).all()
 
 
 def update_user_pinned_assistants(
