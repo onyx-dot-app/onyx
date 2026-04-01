@@ -1,5 +1,6 @@
 import "@opal/components/cards/select-card/styles.css";
 import type { PaddingVariants, RoundingVariants } from "@opal/types";
+import { cardPaddingVariants, cardRoundingVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 
@@ -45,26 +46,6 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
 };
 
 // ---------------------------------------------------------------------------
-// Mappings
-// ---------------------------------------------------------------------------
-
-const paddingForVariant: Record<PaddingVariants, string> = {
-  lg: "p-6",
-  md: "p-4",
-  sm: "p-2",
-  xs: "p-1",
-  "2xs": "p-0.5",
-  fit: "p-0",
-};
-
-const roundingForVariant: Record<RoundingVariants, string> = {
-  lg: "rounded-16",
-  md: "rounded-12",
-  sm: "rounded-08",
-  xs: "rounded-04",
-};
-
-// ---------------------------------------------------------------------------
 // SelectCard
 // ---------------------------------------------------------------------------
 
@@ -97,8 +78,8 @@ function SelectCard({
   children,
   ...statefulProps
 }: SelectCardProps) {
-  const padding = paddingForVariant[paddingVariant];
-  const rounding = roundingForVariant[roundingVariant];
+  const padding = cardPaddingVariants[paddingVariant];
+  const rounding = cardRoundingVariants[roundingVariant];
 
   return (
     <Interactive.Stateful {...statefulProps} variant="select-card">
