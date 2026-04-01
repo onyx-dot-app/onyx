@@ -811,7 +811,7 @@ def _apply_document_ingestion_hook(
             document_id=doc.id or "",
             title=doc.title,
             semantic_identifier=doc.semantic_identifier,
-            source=str(doc.source) if doc.source is not None else "",
+            source=doc.source.value if doc.source is not None else "",
             sections=[
                 DocumentIngestionSection(
                     text=s.text if isinstance(s, TextSection) else None,
@@ -891,10 +891,11 @@ def _apply_document_ingestion_hook(
     # Run the hook for the first document. If it returns HookSkipped the hook
     # is not configured — skip the remaining N-1 DB lookups.
     first_doc = documents[0]
+    first_payload = _build_payload(first_doc).model_dump()
     first_hook_result = execute_hook(
         db_session=db_session,
         hook_point=HookPoint.DOCUMENT_INGESTION,
-        payload=_build_payload(first_doc).model_dump(),
+        payload=first_payload,
         response_type=DocumentIngestionResponse,
     )
     if isinstance(first_hook_result, HookSkipped):
@@ -906,10 +907,11 @@ def _apply_document_ingestion_hook(
         result.append(first_applied)
 
     for doc in documents[1:]:
+        payload = _build_payload(doc).model_dump()
         hook_result = execute_hook(
             db_session=db_session,
             hook_point=HookPoint.DOCUMENT_INGESTION,
-            payload=_build_payload(doc).model_dump(),
+            payload=payload,
             response_type=DocumentIngestionResponse,
         )
         applied = _apply_result(doc, hook_result)
