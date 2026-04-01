@@ -204,7 +204,7 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
   const Icon = getHookPointIcon(spec.hook_point);
 
   return (
-    <SelectCard state="empty" onClick={onConnect}>
+    <SelectCard state="empty" padding="sm" onClick={onConnect}>
       <div className="w-full flex flex-row">
         <div className="flex-1 p-2">
           <Content
@@ -373,7 +373,7 @@ function ConnectedHookCard({
       </deleteModal.Provider>
 
       <Hoverable.Root group="connected-hook-card">
-        <SelectCard state="filled" onClick={onEdit}>
+        <SelectCard state="filled" padding="sm" onClick={onEdit}>
           <div className="w-full flex flex-row">
             <div className="flex-1 p-2">
               <Content
