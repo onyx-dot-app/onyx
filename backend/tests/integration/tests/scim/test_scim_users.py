@@ -35,9 +35,16 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import REDIS_DB_NUMBER
 from onyx.configs.app_configs import REDIS_HOST
 from onyx.configs.app_configs import REDIS_PORT
+from onyx.db.enums import AccountType
 from onyx.server.settings.models import ApplicationStatus
+from tests.integration.common_utils.constants import ADMIN_USER_NAME
+from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
+from tests.integration.common_utils.managers.user import build_email
+from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
+from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.test_models import DATestUser
 
 
 SCIM_USER_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:User"
@@ -209,6 +216,49 @@ def test_create_user(scim_token: str, idp_style: str) -> None:
     if idp_style == "entra":
         _assert_entra_extension(body)
         _assert_entra_emails(body, email)
+
+
+def test_create_user_default_group_and_account_type(
+    scim_token: str, idp_style: str
+) -> None:
+    """SCIM-provisioned users get Basic default group and STANDARD account_type."""
+    email = f"scim_defaults_{idp_style}@example.com"
+    ext_id = f"ext-defaults-{idp_style}"
+    resp = _create_scim_user(scim_token, email, ext_id, idp_style)
+    assert resp.status_code == 201
+    user_id = resp.json()["id"]
+
+    # --- Verify group assignment via SCIM GET ---
+    get_resp = ScimClient.get(f"/Users/{user_id}", scim_token)
+    assert get_resp.status_code == 200
+    groups = get_resp.json().get("groups", [])
+    group_names = {g["display"] for g in groups}
+    assert "Basic" in group_names, f"Expected 'Basic' in groups, got {group_names}"
+    assert "Admin" not in group_names, "SCIM user should not be in Admin group"
+
+    # --- Verify account_type via admin API ---
+    admin = UserManager.login_as_user(
+        DATestUser(
+            id="",
+            email=build_email(ADMIN_USER_NAME),
+            password=DEFAULT_PASSWORD,
+            headers=GENERAL_HEADERS,
+            role=UserRole.ADMIN,
+            is_active=True,
+        )
+    )
+    page = UserManager.get_user_page(
+        user_performing_action=admin,
+        search_query=email,
+    )
+    assert page.total_items >= 1
+    scim_user_snapshot = next((u for u in page.items if u.email == email), None)
+    assert (
+        scim_user_snapshot is not None
+    ), f"SCIM user {email} not found in user listing"
+    assert (
+        scim_user_snapshot.account_type == AccountType.STANDARD
+    ), f"Expected STANDARD, got {scim_user_snapshot.account_type}"
 
 
 def test_get_user(scim_token: str, idp_style: str) -> None:

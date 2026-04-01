@@ -1,10 +1,8 @@
 import type { UserGroup } from "@/lib/types";
 
-/** Groups that are created by the system and cannot be deleted. */
-export const BUILT_IN_GROUP_NAMES = ["Basic", "Admin"] as const;
-
+/** Whether this group is a system default group (Admin, Basic). */
 export function isBuiltInGroup(group: UserGroup): boolean {
-  return (BUILT_IN_GROUP_NAMES as readonly string[]).includes(group.name);
+  return group.is_default;
 }
 
 /** Human-readable description for built-in groups. */
