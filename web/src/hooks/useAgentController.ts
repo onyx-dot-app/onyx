@@ -28,28 +28,36 @@ export default function useAgentController({
   const existingChatSessionAgentId = selectedChatSession?.persona_id;
   const [selectedAgent, setSelectedAssistant] = useState<
     MinimalPersonaSnapshot | undefined
-  >(
-    // NOTE: look through available assistants here, so that even if the user
-    // has hidden this agent it still shows the correct assistant when
-    // going back to an old chat session
-    existingChatSessionAgentId !== undefined
+  >(undefined);
+
+  // NOTE: look through available agents here, so that even if the user
+  // has hidden this agent it still shows the correct agent when
+  // going back to an old chat session.
+  // This is computed reactively (not in useState) to handle race conditions
+  // where availableAgents may be empty on initial mount.
+  const impliedAssistant: MinimalPersonaSnapshot | undefined = useMemo(() => {
+    if (availableAgents.length === 0) return undefined;
+
+    return existingChatSessionAgentId !== undefined
       ? availableAgents.find(
           (assistant) => assistant.id === existingChatSessionAgentId
         )
       : defaultAgentId !== undefined
         ? availableAgents.find((assistant) => assistant.id === defaultAgentId)
-        : undefined
-  );
+        : undefined;
+  }, [existingChatSessionAgentId, defaultAgentId, availableAgents]);
 
   // Current assistant is decided based on this ordering
-  // 1. Alternative assistant (assistant selected explicitly by user)
-  // 2. Selected assistant (assistant default in this chat session)
+  // 1. Explicit user selection (via setSelectedAssistantFromId)
+  // 2. Implied assistant (from chat session or URL params, if no explicit selection)
   // 3. Unified assistant (ID 0) if available (unless disabled)
   // 4. First pinned assistants (ordered list of pinned assistants)
   // 5. Available assistants (ordered list of available assistants)
   // Relevant test: `live_assistant.spec.ts`
   const liveAgent: MinimalPersonaSnapshot | undefined = useMemo(() => {
     if (selectedAgent) return selectedAgent;
+
+    if (impliedAssistant) return impliedAssistant;
 
     const disableDefaultAssistant =
       combinedSettings?.settings?.disable_default_assistant ?? false;
@@ -71,7 +79,13 @@ export default function useAgentController({
 
     // Fall back to pinned or available assistants
     return pinnedAgents[0] || availableAgents[0];
-  }, [selectedAgent, pinnedAgents, availableAgents, combinedSettings]);
+  }, [
+    selectedAgent,
+    impliedAssistant,
+    pinnedAgents,
+    availableAgents,
+    combinedSettings,
+  ]);
 
   const setSelectedAgentFromId = useCallback(
     (agentId: number | null | undefined) => {
