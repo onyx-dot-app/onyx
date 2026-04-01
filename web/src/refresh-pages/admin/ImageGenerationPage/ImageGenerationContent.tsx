@@ -247,9 +247,7 @@ export default function ImageGenerationContent() {
                   group="image-gen/ProviderCard"
                 >
                   <SelectCard
-                    variant="select-card"
                     state={STATUS_TO_STATE[status]}
-                    sizeVariant="lg"
                     aria-label={`image-gen-provider-${provider.image_provider_id}`}
                     onClick={
                       isDisconnected

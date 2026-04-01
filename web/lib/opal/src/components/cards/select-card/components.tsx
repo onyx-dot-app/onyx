@@ -1,6 +1,5 @@
 import "@opal/components/cards/select-card/styles.css";
-import type { ContainerSizeVariants } from "@opal/types";
-import { containerSizeVariants } from "@opal/shared";
+import type { PaddingVariants, RoundingVariants } from "@opal/types";
 import { cn } from "@opal/utils";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 
@@ -8,23 +7,36 @@ import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 // Types
 // ---------------------------------------------------------------------------
 
-type SelectCardProps = InteractiveStatefulProps & {
+type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
   /**
-   * Size preset — controls padding and border-radius.
+   * Padding preset.
    *
-   * Padding comes from the shared size scale. Rounding follows the same
-   * mapping as `Card` / `Button` / `Interactive.Container`:
+   * | Value   | Class   |
+   * |---------|---------|
+   * | `"lg"`  | `p-6`   |
+   * | `"md"`  | `p-4`   |
+   * | `"sm"`  | `p-2`   |
+   * | `"xs"`  | `p-1`   |
+   * | `"2xs"` | `p-0.5` |
+   * | `"fit"` | `p-0`   |
    *
-   * | Size       | Rounding     |
-   * |------------|--------------|
-   * | `lg`       | `rounded-16` |
-   * | `md`–`sm`  | `rounded-12` |
-   * | `xs`–`2xs` | `rounded-08` |
-   * | `fit`      | `rounded-16` |
+   * @default "sm"
+   */
+  paddingVariant?: PaddingVariants;
+
+  /**
+   * Border-radius preset.
+   *
+   * | Value  | Class        |
+   * |--------|--------------|
+   * | `"xs"` | `rounded-04` |
+   * | `"sm"` | `rounded-08` |
+   * | `"md"` | `rounded-12` |
+   * | `"lg"` | `rounded-16` |
    *
    * @default "lg"
    */
-  sizeVariant?: ContainerSizeVariants;
+  roundingVariant?: RoundingVariants;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -33,16 +45,23 @@ type SelectCardProps = InteractiveStatefulProps & {
 };
 
 // ---------------------------------------------------------------------------
-// Rounding
+// Mappings
 // ---------------------------------------------------------------------------
 
-const roundingForSize: Record<ContainerSizeVariants, string> = {
+const paddingForVariant: Record<PaddingVariants, string> = {
+  lg: "p-6",
+  md: "p-4",
+  sm: "p-2",
+  xs: "p-1",
+  "2xs": "p-0.5",
+  fit: "p-0",
+};
+
+const roundingForVariant: Record<RoundingVariants, string> = {
   lg: "rounded-16",
   md: "rounded-12",
-  sm: "rounded-12",
-  xs: "rounded-08",
-  "2xs": "rounded-08",
-  fit: "rounded-16",
+  sm: "rounded-08",
+  xs: "rounded-04",
 };
 
 // ---------------------------------------------------------------------------
@@ -61,7 +80,7 @@ const roundingForSize: Record<ContainerSizeVariants, string> = {
  *
  * @example
  * ```tsx
- * <SelectCard variant="select-card" state="selected" onClick={handleClick}>
+ * <SelectCard state="selected" onClick={handleClick}>
  *   <ContentAction
  *     icon={SvgGlobe}
  *     title="Google"
@@ -72,16 +91,17 @@ const roundingForSize: Record<ContainerSizeVariants, string> = {
  * ```
  */
 function SelectCard({
-  sizeVariant = "lg",
+  paddingVariant = "sm",
+  roundingVariant = "lg",
   ref,
   children,
   ...statefulProps
 }: SelectCardProps) {
-  const { padding } = containerSizeVariants[sizeVariant];
-  const rounding = roundingForSize[sizeVariant];
+  const padding = paddingForVariant[paddingVariant];
+  const rounding = roundingForVariant[roundingVariant];
 
   return (
-    <Interactive.Stateful {...statefulProps}>
+    <Interactive.Stateful {...statefulProps} variant="select-card">
       <div ref={ref} className={cn("opal-select-card", padding, rounding)}>
         {children}
       </div>
