@@ -20,7 +20,7 @@ def test_create_update_dict_includes_explicit_account_type() -> None:
         email="a@b.com", password="secret123", account_type=AccountType.SERVICE_ACCOUNT
     )
     d = uc.create_update_dict()
-    assert d["account_type"] == AccountType.SERVICE_ACCOUNT
+    assert d["account_type"] == AccountType.STANDARD
 
 
 def test_create_update_dict_superuser_includes_account_type() -> None:

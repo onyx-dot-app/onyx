@@ -1,7 +1,7 @@
 """seed_default_groups
 
 Revision ID: 977e834c1427
-Revises: 1d78c0ca7853
+Revises: 8188861f4e92
 Create Date: 2026-03-25 14:59:41.313091
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 # revision identifiers, used by Alembic.
 revision = "977e834c1427"
-down_revision = "1d78c0ca7853"
+down_revision = "8188861f4e92"
 branch_labels = None
 depends_on = None
 
