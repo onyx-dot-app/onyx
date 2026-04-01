@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.jira_service_management.connector import JiraServiceManagementCheckpoint
 from onyx.connectors.jira_service_management.connector import JiraServiceManagementConnector
 from onyx.connectors.models import Document
 from tests.daily.connectors.utils import load_all_from_connector
@@ -11,8 +12,8 @@ from tests.daily.connectors.utils import load_all_from_connector
 
 def _make_connector() -> JiraServiceManagementConnector:
     connector = JiraServiceManagementConnector(
-        jira_base_url="https://danswerai.atlassian.net",
-        project_key="IT",
+        jira_base_url=os.environ.get("JIRA_BASE_URL", "https://example.atlassian.net"),
+        project_key=os.environ.get("JIRA_PROJECT_KEY", "IT"),
     )
     connector.load_credentials(
         {
@@ -53,15 +54,23 @@ def test_jsm_connector_validate_checkpoint_json(jsm_connector: JiraServiceManage
 def test_jsm_connector_load_from_checkpoint_mock(
     mock_jira_client, jsm_connector: JiraServiceManagementConnector
 ) -> None:
-    """Mock test for load_from_checkpoint."""
-    # Mock Jira client search_issues to return empty list
+    """Mock test for load_from_checkpoint with empty result set."""
     mock_jira_client.search_issues.return_value = []
 
     checkpoint = jsm_connector.build_dummy_checkpoint()
-    # Generator return values (via StopIteration) are not captured by list()
-    # When issues is empty, the generator yields nothing and returns a final checkpoint
-    results = list(jsm_connector.load_from_checkpoint(start=0, end=100, checkpoint=checkpoint))
-    assert results == []
+    # load_from_checkpoint is a generator — its terminal state is a `return <checkpoint>`
+    # which becomes StopIteration.value. Drain manually to capture it.
+    gen = jsm_connector.load_from_checkpoint(start=0, end=100, checkpoint=checkpoint)
+    yielded = []
+    try:
+        while True:
+            yielded.append(next(gen))
+    except StopIteration as exc:
+        final_checkpoint = exc.value
+
+    assert len(yielded) == 0
+    assert isinstance(final_checkpoint, JiraServiceManagementCheckpoint)
+    assert final_checkpoint.has_more is False
 
 
 def test_jsm_connector_source_enum() -> None:
