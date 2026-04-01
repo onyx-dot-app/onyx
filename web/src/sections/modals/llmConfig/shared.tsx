@@ -250,11 +250,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
       </FieldWrapper>
 
       {!isPublic && (
-        <Card
-          backgroundVariant="light"
-          borderVariant="none"
-          paddingVariant="sm"
-        >
+        <Card background="light" border="none" padding="sm">
           <Section gap={0.5}>
             <InputComboBox
               placeholder="Add groups and agents"
@@ -266,7 +262,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
               leftSearchIcon
             />
 
-            <Card backgroundVariant="heavy" borderVariant="none">
+            <Card background="heavy" border="none">
               <ContentAction
                 icon={SvgUserManage}
                 title="Admin"
@@ -290,7 +286,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <Card backgroundVariant="heavy" borderVariant="none">
+                      <Card background="heavy" border="none">
                         <ContentAction
                           icon={SvgUsers}
                           title={group?.name ?? `Group ${id}`}
@@ -325,7 +321,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <Card backgroundVariant="heavy" borderVariant="none">
+                      <Card background="heavy" border="none">
                         <ContentAction
                           icon={
                             agent
@@ -452,7 +448,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
 
   return (
-    <Card backgroundVariant="light" borderVariant="none" paddingVariant="sm">
+    <Card background="light" border="none" padding="sm">
       <Section gap={0.5}>
         <InputLayouts.Horizontal
           title="Models"

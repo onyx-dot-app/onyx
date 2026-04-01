@@ -23,7 +23,7 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
    *
    * @default "sm"
    */
-  paddingVariant?: PaddingVariants;
+  padding?: PaddingVariants;
 
   /**
    * Border-radius preset.
@@ -37,7 +37,7 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
    *
    * @default "lg"
    */
-  roundingVariant?: RoundingVariants;
+  rounding?: RoundingVariants;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -72,14 +72,14 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
  * ```
  */
 function SelectCard({
-  paddingVariant = "sm",
-  roundingVariant = "lg",
+  padding: paddingProp = "sm",
+  rounding: roundingProp = "lg",
   ref,
   children,
   ...statefulProps
 }: SelectCardProps) {
-  const padding = cardPaddingVariants[paddingVariant];
-  const rounding = cardRoundingVariants[roundingVariant];
+  const padding = cardPaddingVariants[paddingProp];
+  const rounding = cardRoundingVariants[roundingProp];
 
   return (
     <Interactive.Stateful {...statefulProps} variant="select-card">

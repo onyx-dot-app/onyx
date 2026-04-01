@@ -25,7 +25,7 @@ type CardProps = {
    *
    * @default "sm"
    */
-  paddingVariant?: PaddingVariants;
+  padding?: PaddingVariants;
 
   /**
    * Border-radius preset.
@@ -39,7 +39,7 @@ type CardProps = {
    *
    * @default "md"
    */
-  roundingVariant?: RoundingVariants;
+  rounding?: RoundingVariants;
 
   /**
    * Background fill intensity.
@@ -49,7 +49,7 @@ type CardProps = {
    *
    * @default "light"
    */
-  backgroundVariant?: BackgroundVariant;
+  background?: BackgroundVariant;
 
   /**
    * Border style.
@@ -59,7 +59,7 @@ type CardProps = {
    *
    * @default "none"
    */
-  borderVariant?: BorderVariant;
+  border?: BorderVariant;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -72,22 +72,22 @@ type CardProps = {
 // ---------------------------------------------------------------------------
 
 function Card({
-  paddingVariant = "sm",
-  roundingVariant = "md",
-  backgroundVariant = "light",
-  borderVariant = "none",
+  padding: paddingProp = "sm",
+  rounding: roundingProp = "md",
+  background = "light",
+  border = "none",
   ref,
   children,
 }: CardProps) {
-  const padding = cardPaddingVariants[paddingVariant];
-  const rounding = cardRoundingVariants[roundingVariant];
+  const padding = cardPaddingVariants[paddingProp];
+  const rounding = cardRoundingVariants[roundingProp];
 
   return (
     <div
       ref={ref}
       className={cn("opal-card", padding, rounding)}
-      data-background={backgroundVariant}
-      data-border={borderVariant}
+      data-background={background}
+      data-border={border}
     >
       {children}
     </div>

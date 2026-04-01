@@ -204,7 +204,7 @@ export const PaddingVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4 w-96">
       {PADDING_VARIANTS.map((padding) => (
-        <SelectCard key={padding} state="filled" paddingVariant={padding}>
+        <SelectCard key={padding} state="filled" padding={padding}>
           <Content
             sizePreset="main-ui"
             variant="section"
@@ -222,7 +222,7 @@ export const RoundingVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4 w-96">
       {ROUNDING_VARIANTS.map((rounding) => (
-        <SelectCard key={rounding} state="filled" roundingVariant={rounding}>
+        <SelectCard key={rounding} state="filled" rounding={rounding}>
           <Content
             sizePreset="main-ui"
             variant="section"

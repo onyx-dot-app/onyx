@@ -6,7 +6,7 @@ A stateful interactive card — the card counterpart to [`SelectButton`](../../b
 
 ## Relationship to Card
 
-`Card` is a plain, non-interactive container. `SelectCard` adds stateful interactivity (hover, active, disabled, state-driven colors) by wrapping its root div with `Interactive.Stateful`. Both share the same independent `paddingVariant` / `roundingVariant` API.
+`Card` is a plain, non-interactive container. `SelectCard` adds stateful interactivity (hover, active, disabled, state-driven colors) by wrapping its root div with `Interactive.Stateful`. Both share the same independent `padding` / `rounding` API.
 
 ## Relationship to SelectButton
 
@@ -38,30 +38,30 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `paddingVariant` | `PaddingVariants` | `"sm"` | Padding preset |
-| `roundingVariant` | `RoundingVariants` | `"lg"` | Border-radius preset |
+| `padding` | `PaddingVariants` | `"sm"` | Padding preset |
+| `rounding` | `RoundingVariants` | `"lg"` | Border-radius preset |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
 | `children` | `React.ReactNode` | — | Card content |
 
 ### Padding scale
 
-| `paddingVariant` | Class   |
-|------------------|---------|
-| `"lg"`           | `p-6`   |
-| `"md"`           | `p-4`   |
-| `"sm"`           | `p-2`   |
-| `"xs"`           | `p-1`   |
-| `"2xs"`          | `p-0.5` |
-| `"fit"`          | `p-0`   |
+| `padding` | Class   |
+|-----------|---------|
+| `"lg"`    | `p-6`   |
+| `"md"`    | `p-4`   |
+| `"sm"`    | `p-2`   |
+| `"xs"`    | `p-1`   |
+| `"2xs"`   | `p-0.5` |
+| `"fit"`   | `p-0`   |
 
 ### Rounding scale
 
-| `roundingVariant` | Class        |
-|-------------------|--------------|
-| `"xs"`            | `rounded-04` |
-| `"sm"`            | `rounded-08` |
-| `"md"`            | `rounded-12` |
-| `"lg"`            | `rounded-16` |
+| `rounding` | Class        |
+|------------|--------------|
+| `"xs"`     | `rounded-04` |
+| `"sm"`     | `rounded-08` |
+| `"md"`     | `rounded-12` |
+| `"lg"`     | `rounded-16` |
 
 ### State colors (`select-card` variant)
 
