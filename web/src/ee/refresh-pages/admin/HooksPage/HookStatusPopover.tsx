@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { cn } from "@/lib/utils";
 import { formatTimeOnly } from "@/lib/dateUtils";
 import { Text } from "@opal/components";
@@ -34,7 +35,7 @@ export default function HookStatusPopover({
   spec,
   isBusy,
 }: HookStatusPopoverProps) {
-  const [logsOpen, setLogsOpen] = useState(false);
+  const logsModal = useCreateModal();
   const [open, setOpen] = useState(false);
   // true = opened by click (stays until dismissed); false = opened by hover (closes after 1s)
   const [clickOpened, setClickOpened] = useState(false);
@@ -113,12 +114,14 @@ export default function HookStatusPopover({
 
   return (
     <>
-      <HookLogsModal
-        open={logsOpen}
-        onOpenChange={setLogsOpen}
-        hook={hook}
-        spec={spec}
-      />
+      <logsModal.Provider>
+        <HookLogsModal
+          open
+          onOpenChange={(v) => !v && logsModal.toggle(false)}
+          hook={hook}
+          spec={spec}
+        />
+      </logsModal.Provider>
 
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Anchor asChild>
@@ -268,7 +271,7 @@ export default function HookStatusPopover({
                   icon={SvgMaximize2}
                   onClick={() => {
                     handleOpenChange(false);
-                    setLogsOpen(true);
+                    logsModal.toggle(true);
                   }}
                 >
                   View More Lines
@@ -325,7 +328,7 @@ export default function HookStatusPopover({
                   icon={SvgMaximize2}
                   onClick={() => {
                     handleOpenChange(false);
-                    setLogsOpen(true);
+                    logsModal.toggle(true);
                   }}
                 >
                   View Older Errors

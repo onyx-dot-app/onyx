@@ -23,6 +23,8 @@ interface HookLogsModalProps {
 }
 
 // Section header: "Past Hour ————" or "Older ————"
+//
+// TODO(@raunakab): replace this with a proper, opalified `Separator` component (when it lands).
 function SectionHeader({ label }: { label: string }) {
   return (
     <Section
