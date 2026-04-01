@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -154,15 +155,13 @@ def update_api_key(
     # Reconcile default-group membership when the role changes.
     if old_role != api_key_args.role:
         # Remove from all default groups first.
-        from sqlalchemy import delete as sa_delete
-
-        sa_delete_stmt = sa_delete(User__UserGroup).where(
+        delete_stmt = delete(User__UserGroup).where(
             User__UserGroup.user_id == api_key_user.id,
             User__UserGroup.user_group_id.in_(
                 select(UserGroup.id).where(UserGroup.is_default.is_(True))
             ),
         )
-        db_session.execute(sa_delete_stmt)
+        db_session.execute(delete_stmt)
 
         # Re-assign to the correct default group (skip for LIMITED).
         if api_key_args.role != UserRole.LIMITED:
