@@ -367,9 +367,12 @@ def extract_context_files(
             if not text_content:
                 continue
             file_texts.append(text_content)
+            if not uf:
+                logger.warning(f"No user file for file_id={f.file_id}")
+                continue
             file_metadata.append(
                 ContextFileMetadata(
-                    file_id=str(f.file_id),
+                    file_id=str(uf.id),
                     filename=filename,
                     file_content=text_content,
                 )
