@@ -94,8 +94,7 @@ class FeishuConnector(OAuthConnector):
                 }
             ),
             headers={"Content-Type": "application/json"},
-            backoff=0,
-            delay=0.1,
+            tries=1,
         )
         token_payload = _unwrap_feishu_payload(token_response.json())
         access_token = token_payload.get("access_token")
@@ -108,8 +107,7 @@ class FeishuConnector(OAuthConnector):
             method="GET",
             url=_FEISHU_USERINFO_URL,
             headers={"Authorization": f"Bearer {access_token}"},
-            backoff=0,
-            delay=0.1,
+            tries=1,
         )
         userinfo_payload = _unwrap_feishu_payload(userinfo_response.json())
 
@@ -161,8 +159,7 @@ class FeishuConnector(OAuthConnector):
             method="GET",
             url=_FEISHU_USERINFO_URL,
             headers={"Authorization": f"Bearer {self.access_token}"},
-            backoff=0,
-            delay=0.1,
+            tries=1,
         )
         self.user_info = _unwrap_feishu_payload(response.json())
 
