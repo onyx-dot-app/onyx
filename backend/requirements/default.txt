@@ -14,7 +14,7 @@ aiofiles==25.1.0
     #   unstructured-client
 aiohappyeyeballs==2.6.1
     # via aiohttp
-aiohttp==3.13.3
+aiohttp==3.13.4
     # via
     #   aiobotocore
     #   discord-py
