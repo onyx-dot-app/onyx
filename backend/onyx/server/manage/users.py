@@ -57,6 +57,7 @@ from onyx.db.user_preferences import activate_user
 from onyx.db.user_preferences import deactivate_user
 from onyx.db.user_preferences import get_all_user_assistant_specific_configs
 from onyx.db.user_preferences import get_latest_access_token_for_user
+from onyx.db.user_preferences import get_memories_for_user
 from onyx.db.user_preferences import update_assistant_preferences
 from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
@@ -823,6 +824,11 @@ def verify_user_logged_in(
             [],
         ),
     )
+    memories = [
+        MemoryItem(id=memory.id, content=memory.memory_text)
+        for memory in get_memories_for_user(user.id, db_session)
+    ]
+
     user_info = UserInfo.from_model(
         user,
         current_token_created_at=token_created_at,
@@ -833,6 +839,7 @@ def verify_user_logged_in(
             new_tenant=new_tenant,
             invitation=tenant_invitation,
         ),
+        memories=memories,
     )
 
     return user_info
@@ -930,7 +937,8 @@ def update_user_personalization_api(
         else user.enable_memory_tool
     )
     existing_memories = [
-        MemoryItem(id=memory.id, content=memory.memory_text) for memory in user.memories
+        MemoryItem(id=memory.id, content=memory.memory_text)
+        for memory in get_memories_for_user(user.id, db_session)
     ]
     new_memories = (
         request.memories if request.memories is not None else existing_memories
