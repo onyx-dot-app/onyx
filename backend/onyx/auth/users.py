@@ -502,9 +502,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             user = user_by_session
 
                     if (
-                        user.role.is_web_login()
+                        user.account_type.is_web_login()
                         or not isinstance(user_create, UserCreate)
-                        or not user_create.role.is_web_login()
+                        or not user_create.account_type.is_web_login()
                     ):
                         raise exceptions.UserAlreadyExists()
 
@@ -527,9 +527,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     # Handle case where user has used product outside of web and is now creating an account through web
                     if (
-                        user.role.is_web_login()
+                        user.account_type.is_web_login()
                         or not isinstance(user_create, UserCreate)
-                        or not user_create.role.is_web_login()
+                        or not user_create.account_type.is_web_login()
                     ):
                         raise exceptions.UserAlreadyExists()
 
@@ -729,7 +729,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 )
 
             # Handle case where user has used product outside of web and is now creating an account through web
-            if not user.role.is_web_login():
+            if not user.account_type.is_web_login():
                 # We must use the existing user in the session if it matches
                 # the user we just got by email/oauth. Note that this only applies
                 # to multi-tenant, due to the overwriting of the user_db
@@ -997,7 +997,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 self.password_helper.hash(credentials.password)
                 return None
 
-            if not user.role.is_web_login():
+            if not user.account_type.is_web_login():
                 raise BasicAuthenticationError(
                     detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
                 )
@@ -1493,7 +1493,7 @@ async def _get_or_create_user_from_jwt(
         if not user.is_active:
             logger.warning("Inactive user %s attempted JWT login; skipping", email)
             return None
-        if not user.role.is_web_login():
+        if not user.account_type.is_web_login():
             raise exceptions.UserNotExists()
     except exceptions.UserNotExists:
         logger.info("Provisioning user %s from JWT login", email)
@@ -1514,7 +1514,7 @@ async def _get_or_create_user_from_jwt(
                     email,
                 )
                 return None
-            if not user.role.is_web_login():
+            if not user.account_type.is_web_login():
                 logger.warning(
                     "Non-web-login user %s attempted JWT login during provisioning race; skipping",
                     email,

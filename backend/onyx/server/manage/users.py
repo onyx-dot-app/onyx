@@ -51,6 +51,7 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import AccountType
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import User
 from onyx.db.models import UserFile
@@ -143,6 +144,7 @@ def set_user_role(
     validate_user_role_update(
         requested_role=requested_role,
         current_role=current_role,
+        current_account_type=user_to_update.account_type,
         explicit_override=user_role_update_request.explicit_override,
     )
 
@@ -328,8 +330,8 @@ def list_all_users(
         if (include_api_keys or not is_api_key_email_address(user.email))
     ]
 
-    slack_users = [user for user in users if user.role == UserRole.SLACK_USER]
-    accepted_users = [user for user in users if user.role != UserRole.SLACK_USER]
+    slack_users = [user for user in users if user.account_type == AccountType.BOT]
+    accepted_users = [user for user in users if user.account_type != AccountType.BOT]
 
     accepted_emails = {user.email for user in accepted_users}
     slack_users_emails = {user.email for user in slack_users}
@@ -672,7 +674,7 @@ def list_all_users_basic_info(
     return [
         MinimalUserSnapshot(id=user.id, email=user.email)
         for user in users
-        if user.role != UserRole.SLACK_USER
+        if user.account_type != AccountType.BOT
         and (include_api_keys or not is_api_key_email_address(user.email))
     ]
 
