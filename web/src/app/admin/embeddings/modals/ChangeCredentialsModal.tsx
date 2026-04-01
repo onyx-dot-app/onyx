@@ -11,11 +11,9 @@ import {
   CloudEmbeddingProvider,
   getFormattedProviderName,
 } from "@/components/embedding/interfaces";
-import {
-  EMBEDDING_PROVIDERS_ADMIN_URL,
-  LLM_PROVIDERS_ADMIN_URL,
-} from "@/lib/llmConfig/constants";
+import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { testEmbedding } from "@/app/admin/embeddings/pages/utils";
 import { SvgSettings } from "@opal/icons";
 
@@ -102,7 +100,7 @@ export default function ChangeCredentialsModal({
         return;
       }
 
-      mutate(LLM_PROVIDERS_ADMIN_URL);
+      mutate(SWR_KEYS.adminLlmProviders);
       onDeleted();
     } catch (error) {
       setDeletionError(

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useMemo } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   fetchLibraryTree,
   uploadLibraryFiles,
@@ -94,7 +95,7 @@ export default function UserLibraryModal({
     error,
     isLoading,
     mutate,
-  } = useSWR(open ? "/api/build/user-library/tree" : null, fetchLibraryTree, {
+  } = useSWR(open ? SWR_KEYS.buildUserLibraryTree : null, fetchLibraryTree, {
     revalidateOnFocus: false,
   });
 

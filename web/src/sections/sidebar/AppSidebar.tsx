@@ -2,6 +2,7 @@
 
 import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useRouter } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
@@ -253,7 +254,7 @@ const MemoizedAppSidebarInner = memo(
     // Fetch notifications for build mode intro
     const { data: notifications, mutate: mutateNotifications } = useSWR<
       Notification[]
-    >("/api/notifications", errorHandlingFetcher);
+    >(SWR_KEYS.notifications, errorHandlingFetcher);
 
     // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
     // Only explicit true enables the feature; false or undefined = disabled

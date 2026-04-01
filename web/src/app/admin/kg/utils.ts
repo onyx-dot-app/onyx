@@ -1,6 +1,7 @@
 import { useUser } from "@/providers/UserProvider";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { KGConfig, KGConfigRaw } from "./interfaces";
 
 export type KgExposedStatus = { kgExposed: boolean; isLoading: boolean };
@@ -8,7 +9,7 @@ export type KgExposedStatus = { kgExposed: boolean; isLoading: boolean };
 export function useIsKGExposed(): KgExposedStatus {
   const { isAdmin } = useUser();
   const { data: kgExposedRaw, isLoading } = useSWR<boolean>(
-    isAdmin ? "/api/admin/kg/exposed" : null,
+    isAdmin ? SWR_KEYS.kgExposed : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,

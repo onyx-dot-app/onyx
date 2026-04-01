@@ -12,6 +12,7 @@ import {
 import { Scope, TokenRateLimit } from "./types";
 import { GenericTokenRateLimitTable } from "./TokenRateLimitTables";
 import { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
 import CreateRateLimitModal from "./CreateRateLimitModal";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -21,10 +22,9 @@ import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 const route = ADMIN_ROUTES.TOKEN_RATE_LIMITS;
-const BASE_URL = "/api/admin/token-rate-limits";
-const GLOBAL_TOKEN_FETCH_URL = `${BASE_URL}/global`;
-const USER_TOKEN_FETCH_URL = `${BASE_URL}/users`;
-const USER_GROUP_FETCH_URL = `${BASE_URL}/user-groups`;
+const GLOBAL_TOKEN_FETCH_URL = SWR_KEYS.globalTokenRateLimits;
+const USER_TOKEN_FETCH_URL = SWR_KEYS.userTokenRateLimits;
+const USER_GROUP_FETCH_URL = SWR_KEYS.userGroupTokenRateLimits;
 
 const GLOBAL_DESCRIPTION =
   "Global rate limits apply to all users, user groups, and API keys. When the global \

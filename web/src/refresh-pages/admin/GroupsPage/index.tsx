@@ -9,7 +9,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
-import { USER_GROUP_URL } from "./svc";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
@@ -23,7 +23,7 @@ function GroupsPage() {
     data: groups,
     error,
     isLoading,
-  } = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher);
+  } = useSWR<UserGroup[]>(SWR_KEYS.adminUserGroups, errorHandlingFetcher);
 
   return (
     <SettingsLayouts.Root>

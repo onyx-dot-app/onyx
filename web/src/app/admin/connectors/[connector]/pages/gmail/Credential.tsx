@@ -21,6 +21,7 @@ import {
 } from "@/lib/connectors/credentials";
 import { refreshAllGoogleData } from "@/lib/googleConnector";
 import { ValidSources } from "@/lib/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { FiFile, FiCheck, FiLink, FiAlertTriangle } from "react-icons/fi";
 import { cn, truncateString } from "@/lib/utils";
@@ -79,7 +80,7 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
         );
         if (response.ok) {
           toast.success("Successfully uploaded app credentials");
-          mutate("/api/manage/admin/connector/gmail/app-credential");
+          mutate(SWR_KEYS.googleConnectorAppCredential("gmail"));
           if (onSuccess) {
             onSuccess();
           }
@@ -102,7 +103,7 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
         );
         if (response.ok) {
           toast.success("Successfully uploaded service account key");
-          mutate("/api/manage/admin/connector/gmail/service-account-key");
+          mutate(SWR_KEYS.googleConnectorServiceAccountKey("gmail"));
           if (onSuccess) {
             onSuccess();
           }
@@ -319,8 +320,8 @@ export const GmailJsonUploadSection = ({
                 onClick={async () => {
                   const endpoint =
                     localServiceAccountData?.service_account_email
-                      ? "/api/manage/admin/connector/gmail/service-account-key"
-                      : "/api/manage/admin/connector/gmail/app-credential";
+                      ? SWR_KEYS.googleConnectorServiceAccountKey("gmail")
+                      : SWR_KEYS.googleConnectorAppCredential("gmail");
 
                   const response = await fetch(endpoint, {
                     method: "DELETE",
@@ -332,12 +333,10 @@ export const GmailJsonUploadSection = ({
                     mutate(buildSimilarCredentialInfoURL(ValidSources.Gmail));
 
                     // Add additional mutations to refresh all credential-related endpoints
-                    mutate("/api/manage/admin/connector/gmail/credentials");
+                    mutate(SWR_KEYS.googleConnectorCredentials("gmail"));
+                    mutate(SWR_KEYS.googleConnectorPublicCredential("gmail"));
                     mutate(
-                      "/api/manage/admin/connector/gmail/public-credential"
-                    );
-                    mutate(
-                      "/api/manage/admin/connector/gmail/service-account-credential"
+                      SWR_KEYS.googleConnectorServiceAccountCredential("gmail")
                     );
 
                     toast.success(

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -124,7 +125,7 @@ export default function MCPAuthenticationModal({
 
   // Get the current frontend URL for redirect URI
   const { data: fullServer } = useSWR<MCPServer>(
-    mcpServer ? `/api/admin/mcp/servers/${mcpServer.id}` : null,
+    mcpServer ? SWR_KEYS.adminMcpServer(mcpServer.id) : null,
     errorHandlingFetcher
   );
 
