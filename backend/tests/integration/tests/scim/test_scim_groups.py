@@ -21,8 +21,14 @@ import pytest
 import requests
 
 from onyx.auth.schemas import UserRole
+from tests.integration.common_utils.constants import ADMIN_USER_NAME
+from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
+from tests.integration.common_utils.managers.user import build_email
+from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
+from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.test_models import DATestUser
 
 
 SCIM_GROUP_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Group"
@@ -44,13 +50,6 @@ def scim_token(idp_style: str) -> str:
     per IdP-style run and reuse. Uses UserManager directly to avoid
     fixture-scope conflicts with the function-scoped admin_user fixture.
     """
-    from tests.integration.common_utils.constants import ADMIN_USER_NAME
-    from tests.integration.common_utils.constants import GENERAL_HEADERS
-    from tests.integration.common_utils.managers.user import build_email
-    from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-    from tests.integration.common_utils.managers.user import UserManager
-    from tests.integration.common_utils.test_models import DATestUser
-
     try:
         admin = UserManager.create(name=ADMIN_USER_NAME)
     except Exception:
@@ -550,3 +549,79 @@ def test_patch_add_duplicate_member_is_idempotent(
     )
     assert resp.status_code == 200
     assert len(resp.json()["members"]) == 1  # still just one member
+
+
+def test_create_group_reserved_name_admin(scim_token: str) -> None:
+    """POST /Groups with reserved name 'Admin' returns 409."""
+    resp = _create_scim_group(scim_token, "Admin", external_id="ext-reserved-admin")
+    assert resp.status_code == 409
+    assert "reserved" in resp.json()["detail"].lower()
+
+
+def test_create_group_reserved_name_basic(scim_token: str) -> None:
+    """POST /Groups with reserved name 'Basic' returns 409."""
+    resp = _create_scim_group(scim_token, "Basic", external_id="ext-reserved-basic")
+    assert resp.status_code == 409
+    assert "reserved" in resp.json()["detail"].lower()
+
+
+def test_replace_group_cannot_rename_to_reserved(
+    scim_token: str, idp_style: str
+) -> None:
+    """PUT /Groups/{id} renaming a group to 'Admin' returns 409."""
+    created = _create_scim_group(
+        scim_token,
+        f"Rename To Reserved {idp_style}",
+        external_id=f"ext-rtr-{idp_style}",
+    ).json()
+
+    resp = ScimClient.put(
+        f"/Groups/{created['id']}",
+        scim_token,
+        json=_make_group_resource(
+            display_name="Admin", external_id=f"ext-rtr-{idp_style}"
+        ),
+    )
+    assert resp.status_code == 409
+    assert "reserved" in resp.json()["detail"].lower()
+
+
+def test_patch_rename_to_reserved_name(scim_token: str, idp_style: str) -> None:
+    """PATCH /Groups/{id} renaming a group to 'Basic' returns 409."""
+    created = _create_scim_group(
+        scim_token,
+        f"Patch Rename Reserved {idp_style}",
+        external_id=f"ext-prr-{idp_style}",
+    ).json()
+
+    resp = ScimClient.patch(
+        f"/Groups/{created['id']}",
+        scim_token,
+        json=_make_patch_request(
+            [{"op": "replace", "path": "displayName", "value": "Basic"}],
+            idp_style,
+        ),
+    )
+    assert resp.status_code == 409
+    assert "reserved" in resp.json()["detail"].lower()
+
+
+def test_scim_created_group_has_basic_permission(
+    scim_token: str, idp_style: str
+) -> None:
+    """POST /Groups with a member gives that member the basic permission."""
+    # Create a regular user who can log in
+    test_user = UserManager.create(name=f"scim_basic_perm_{idp_style}")
+
+    # Create a SCIM group with this user as a member
+    resp = _create_scim_group(
+        scim_token,
+        f"Basic Perm Group {idp_style}",
+        external_id=f"ext-basic-perm-{idp_style}",
+        members=[{"value": test_user.id}],
+    )
+    assert resp.status_code == 201
+
+    # Verify the user gained the basic permission
+    perms = UserManager.get_permissions(test_user)
+    assert "basic" in perms, f"User should have 'basic' from SCIM group, got: {perms}"
