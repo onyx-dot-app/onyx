@@ -18,6 +18,9 @@ from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.enums import AccountType
 from onyx.db.models import ApiKey
 from onyx.db.models import User
+from onyx.db.models import User__UserGroup
+from onyx.db.models import UserGroup
+from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -146,7 +149,35 @@ def update_api_key(
 
     email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
     api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
+
+    old_role = api_key_user.role
     api_key_user.role = api_key_args.role
+
+    # Reconcile default-group membership when the role changes.
+    if old_role != api_key_args.role:
+        # Remove from all default groups first.
+        from sqlalchemy import delete as sa_delete
+
+        sa_delete_stmt = sa_delete(User__UserGroup).where(
+            User__UserGroup.user_id == api_key_user.id,
+            User__UserGroup.user_group_id.in_(
+                select(UserGroup.id).where(UserGroup.is_default.is_(True))
+            ),
+        )
+        db_session.execute(sa_delete_stmt)
+
+        # Re-assign to the correct default group (skip for LIMITED).
+        if api_key_args.role != UserRole.LIMITED:
+            from onyx.db.users import assign_user_to_default_groups__no_commit
+
+            assign_user_to_default_groups__no_commit(
+                db_session,
+                api_key_user,
+                is_admin=(api_key_args.role == UserRole.ADMIN),
+            )
+
+        recompute_user_permissions__no_commit(api_key_user.id, db_session)
+
     db_session.commit()
 
     return ApiKeyDescriptor(
