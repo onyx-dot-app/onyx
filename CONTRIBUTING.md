@@ -63,7 +63,7 @@ Your features must pass all tests and all comments must be addressed prior to me
 ### Implicit agreements
 
 If we approve an issue, we are promising you the following:
-- Your work will receive timely attention and we will put aside other high priority items to ensure you are not blocked.
+- Your work will receive timely attention and we will put aside other important items to ensure you are not blocked.
 - You will receive necessary coaching on eng quality, system design, etc. to ensure the feature is completed well.
 - The Onyx team will pull resources and bandwidth from design, PM, and engineering to ensure that you have all the resources to build the feature to the quality required for merging.
 
@@ -78,18 +78,19 @@ Because this is a large investment from our team, we ask that you:
 Onyx being a fully functional app, relies on some external software, specifically:
 
 - [Postgres](https://www.postgresql.org/) (Relational DB)
-- [Vespa](https://vespa.ai/) (Vector DB/Search Engine)
+- [OpenSearch](https://opensearch.org/) (Vector DB/Search Engine)
 - [Redis](https://redis.io/) (Cache)
 - [MinIO](https://min.io/) (File Store)
 - [Nginx](https://nginx.org/) (Not needed for development flows generally)
 
 > **Note:**
-> This guide provides instructions to build and run Onyx locally from source with Docker containers providing the above external software. We believe this combination is easier for development purposes. If you prefer to use pre-built container images, see [Running in Docker](#running-in-docker) below.
+> This guide provides instructions to build and run Onyx locally from source with Docker containers providing the above external software.
+> We believe this combination is easier for development purposes. If you prefer to use pre-built container images, see [Running in Docker](#running-in-docker) below.
 
 ### Prerequisites
 
 - **Python 3.11** — If using a lower version, modifications will have to be made to the code. Higher versions may have library compatibility issues.
-- **Docker** — Required for running external services (Postgres, Vespa, Redis, MinIO).
+- **Docker** — Required for running external services (Postgres, OpenSearch, Redis, MinIO).
 - **Node.js v22** — We recommend using [nvm](https://github.com/nvm-sh/nvm) to manage Node installations.
 
 ### Backend: Python Requirements
@@ -188,7 +189,7 @@ Before starting, make sure the Docker Daemon is running.
 5. Set breakpoints by clicking to the left of line numbers to help debug while the app is running
 6. Use the debug toolbar to step through code, inspect variables, etc.
 
-> **Note:** "Clear and Restart External Volumes and Containers" will reset your Postgres and Vespa (relational-db and index). Only run this if you are okay with wiping your data.
+> **Note:** "Clear and Restart External Volumes and Containers" will reset your Postgres and OpenSearch (relational-db and index). Only run this if you are okay with wiping your data.
 
 **Features:**
 - Hot reload is enabled for the web server and API servers
@@ -202,13 +203,13 @@ Before starting, make sure the Docker Daemon is running.
 
 You will need Docker installed to run these containers.
 
-Navigate to `onyx/deployment/docker_compose`, then start up Postgres/Vespa/Redis/MinIO with:
+Navigate to `onyx/deployment/docker_compose`, then start up Postgres/OpenSearch/Redis/MinIO with:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d index relational_db cache minio
 ```
 
-(index refers to Vespa, relational_db refers to Postgres, and cache refers to Redis)
+(index refers to OpenSearch, relational_db refers to Postgres, and cache refers to Redis)
 
 #### Running Onyx locally
 
@@ -327,6 +328,8 @@ sudo xattr -r -d com.apple.quarantine ~/.cache/pre-commit
 ---
 
 ## Engineering Best Practices
+
+> These are also what we adhere to as a team internally, we love to build in the open and to uplevel our community and each other through being transparent.
 
 ### Principles and Collaboration
 
