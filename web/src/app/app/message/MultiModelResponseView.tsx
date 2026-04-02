@@ -90,16 +90,14 @@ export default function MultiModelResponseView({
   >(null);
   const preferredRoRef = useRef<ResizeObserver | null>(null);
 
-  // Drag-scroll state — all refs to avoid re-renders during pointer move
+  // Drag-scroll state — refs used across handlers
   const trackRef = useRef<HTMLDivElement | null>(null);
   const carouselContainerRef = useRef<HTMLDivElement | null>(null);
-  const dragStartX = useRef<number | null>(null);
-  const baseTranslateX = useRef(0);
-  const dragCurrentDelta = useRef(0);
-  const isDraggingRef = useRef(false);
   const justDraggedRef = useRef(false);
-  // Kept in sync during render so pointer-up handlers can read without stale closure
+  // Kept in sync during render so pointer-up snap-back can read without stale closure
   const preferredCenterRef = useRef(0);
+  // Cleanup fn for native window pointer listeners — called on unmount to prevent leaks
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   const preferredPanelRef = useCallback((el: HTMLDivElement | null) => {
     if (preferredRoRef.current) {
@@ -162,102 +160,110 @@ export default function MultiModelResponseView({
     [isGenerating, responses, onMessageSelection]
   );
 
+  // Unmount safety: remove any active window listeners if the component is torn down mid-drag
+  useEffect(
+    () => () => {
+      dragCleanupRef.current?.();
+    },
+    []
+  );
+
   const handleCarouselPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const track = trackRef.current;
-      if (!track) return;
-      dragStartX.current = e.clientX;
-      dragCurrentDelta.current = 0;
-      isDraggingRef.current = false;
-      // Capture the current rendered translateX in pixels so drag feels anchored
-      const matrix = new DOMMatrix(getComputedStyle(track).transform);
-      baseTranslateX.current = matrix.m41;
-      // Do NOT call setPointerCapture here — that redirects pointerup to the
-      // container even for plain clicks, breaking child onClick handlers.
-      // Capture is set lazily in pointermove once the drag threshold is crossed.
-    },
-    []
-  );
+      const container = carouselContainerRef.current;
+      if (!track || !container) return;
+      // Ignore non-primary pointer (e.g. right-click, secondary touch)
+      if (e.button !== 0) return;
+      // Prevent text-selection drag from interfering with our drag logic
+      e.preventDefault();
+      // Clean up any prior drag that didn't finish (e.g. two fingers)
+      dragCleanupRef.current?.();
 
-  const handleCarouselPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (dragStartX.current === null) return;
-      const delta = e.clientX - dragStartX.current;
-      if (Math.abs(delta) > 5 && !isDraggingRef.current) {
-        // Threshold crossed — capture now so drag stays locked even if cursor
-        // leaves the container, then set visual feedback.
-        e.currentTarget.setPointerCapture(e.pointerId);
-        e.currentTarget.style.cursor = "grabbing";
-        isDraggingRef.current = true;
-      }
-      if (!isDraggingRef.current) return;
-      dragCurrentDelta.current = delta;
-      const track = trackRef.current;
-      if (track) {
-        track.style.transition = "none";
-        track.style.transform = `translateX(${
-          baseTranslateX.current + delta
-        }px)`;
-      }
-    },
-    []
-  );
+      const startX = e.clientX;
+      // Capture current track position so drag feels anchored to the grab point
+      const baseX = new DOMMatrix(getComputedStyle(track).transform).m41;
+      let delta = 0;
+      let isDragging = false;
 
-  const handleCarouselPointerUp = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (dragStartX.current === null) return;
-      const delta = dragCurrentDelta.current;
-      const wasDragging = isDraggingRef.current;
-      dragStartX.current = null;
-      isDraggingRef.current = false;
-      dragCurrentDelta.current = 0;
-      e.currentTarget.style.cursor = "";
-      if (!wasDragging) return;
-      // Block the click event that fires after pointer release from triggering a selection
-      justDraggedRef.current = true;
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          justDraggedRef.current = false;
-        })
-      );
-      if (preferredIndex === null) return;
-      const currentPrefIdx = responses.findIndex(
-        (r) => r.modelIndex === preferredIndex
-      );
-      let nextModelIndex = preferredIndex;
-      if (delta < -80) {
-        // Dragged left — advance to next visible panel
-        for (let i = currentPrefIdx + 1; i < responses.length; i++) {
-          if (!hiddenPanels.has(responses[i]!.modelIndex)) {
-            nextModelIndex = responses[i]!.modelIndex;
-            break;
+      // Capture selection state at press time — these won't change during a drag
+      const capturedPreferredIndex = preferredIndex;
+      const capturedResponses = responses;
+      const capturedHiddenPanels = hiddenPanels;
+
+      function onMove(evt: PointerEvent) {
+        delta = evt.clientX - startX;
+        if (Math.abs(delta) > 5 && !isDragging) {
+          isDragging = true;
+          container!.style.cursor = "grabbing";
+        }
+        if (!isDragging) return;
+        track!.style.transition = "none";
+        track!.style.transform = `translateX(${baseX + delta}px)`;
+      }
+
+      function onUp() {
+        cleanup();
+        container!.style.cursor = "";
+
+        if (!isDragging) return;
+
+        // Block the click event that fires right after pointer-release
+        justDraggedRef.current = true;
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            justDraggedRef.current = false;
+          })
+        );
+
+        if (capturedPreferredIndex === null) return;
+        const currentPrefIdx = capturedResponses.findIndex(
+          (r) => r.modelIndex === capturedPreferredIndex
+        );
+        let nextModelIndex = capturedPreferredIndex;
+        if (delta < -80) {
+          // Dragged left — advance to next visible panel
+          for (let i = currentPrefIdx + 1; i < capturedResponses.length; i++) {
+            if (!capturedHiddenPanels.has(capturedResponses[i]!.modelIndex)) {
+              nextModelIndex = capturedResponses[i]!.modelIndex;
+              break;
+            }
+          }
+        } else if (delta > 80) {
+          // Dragged right — go to previous visible panel
+          for (let i = currentPrefIdx - 1; i >= 0; i--) {
+            if (!capturedHiddenPanels.has(capturedResponses[i]!.modelIndex)) {
+              nextModelIndex = capturedResponses[i]!.modelIndex;
+              break;
+            }
           }
         }
-      } else if (delta > 80) {
-        // Dragged right — go to previous visible panel
-        for (let i = currentPrefIdx - 1; i >= 0; i--) {
-          if (!hiddenPanels.has(responses[i]!.modelIndex)) {
-            nextModelIndex = responses[i]!.modelIndex;
-            break;
-          }
-        }
-      }
-      const track = trackRef.current;
-      if (nextModelIndex !== preferredIndex) {
-        // Let React re-render with the new preferred panel and animate
-        handleSelectPreferred(nextModelIndex, true);
-      } else {
-        // Snap back to current preferred panel
-        if (track) {
-          track.style.transition = "transform 0.45s cubic-bezier(0.2, 0, 0, 1)";
+
+        if (nextModelIndex !== capturedPreferredIndex) {
+          // React will re-render and animate the track to the new preferred center
+          handleSelectPreferred(nextModelIndex, true);
+        } else {
+          // Snap back to current preferred panel center
           const snapX = trackContainerW / 2 - preferredCenterRef.current;
-          track.style.transform = `translateX(${snapX}px)`;
+          track!.style.transition =
+            "transform 0.45s cubic-bezier(0.2, 0, 0, 1)";
+          track!.style.transform = `translateX(${snapX}px)`;
         }
       }
+
+      function cleanup() {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        dragCleanupRef.current = null;
+      }
+
+      dragCleanupRef.current = cleanup;
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
     },
     [
-      responses,
       preferredIndex,
+      responses,
       hiddenPanels,
       handleSelectPreferred,
       trackContainerW,
@@ -380,9 +386,6 @@ export default function MultiModelResponseView({
         ref={trackContainerRef}
         className="w-full overflow-hidden cursor-grab"
         onPointerDown={handleCarouselPointerDown}
-        onPointerMove={handleCarouselPointerMove}
-        onPointerUp={handleCarouselPointerUp}
-        onPointerCancel={handleCarouselPointerUp}
         style={{
           maskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
           WebkitMaskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
