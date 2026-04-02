@@ -554,7 +554,7 @@
    Sidebar-Heavy — Disabled (all states)
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="sidebar-heavy"][data-disabled] {
-  @apply bg-transparent;
+  @apply bg-transparent opacity-50;
   --interactive-foreground: var(--text-01);
   --interactive-foreground-icon: var(--text-01);
 }
@@ -619,7 +619,7 @@
    Sidebar-Light — Disabled (all states)
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="sidebar-light"][data-disabled] {
-  @apply bg-transparent;
+  @apply bg-transparent opacity-50;
   --interactive-foreground: var(--text-01);
   --interactive-foreground-icon: var(--text-01);
 }
