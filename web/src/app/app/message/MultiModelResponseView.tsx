@@ -88,6 +88,11 @@ export default function MultiModelResponseView({
     number | null
   >(null);
   const preferredRoRef = useRef<ResizeObserver | null>(null);
+  // Tracks which non-preferred panels overflow the preferred height cap
+  const [overflowingPanels, setOverflowingPanels] = useState<Set<number>>(
+    new Set()
+  );
+
   const preferredPanelRef = useCallback((el: HTMLDivElement | null) => {
     if (preferredRoRef.current) {
       preferredRoRef.current.disconnect();
@@ -283,10 +288,24 @@ export default function MultiModelResponseView({
             const finalW = selectionWidths[i]!;
             const startW = isHidden ? HIDDEN_PANEL_W : SELECTION_PANEL_W;
             const capped = isNonPref && preferredPanelHeight != null;
+            const overflows = capped && overflowingPanels.has(r.modelIndex);
             return (
               <div
                 key={r.modelIndex}
-                ref={isPref ? preferredPanelRef : undefined}
+                ref={(el) => {
+                  if (isPref) preferredPanelRef(el);
+                  if (capped && el) {
+                    const doesOverflow = el.scrollHeight > el.clientHeight;
+                    setOverflowingPanels((prev) => {
+                      const had = prev.has(r.modelIndex);
+                      if (doesOverflow === had) return prev;
+                      const next = new Set(prev);
+                      if (doesOverflow) next.add(r.modelIndex);
+                      else next.delete(r.modelIndex);
+                      return next;
+                    });
+                  }
+                }}
                 style={{
                   width: `${selectionEntered ? finalW : startW}px`,
                   flexShrink: 0,
@@ -298,10 +317,10 @@ export default function MultiModelResponseView({
                   position: capped ? "relative" : undefined,
                 }}
               >
-                <div className={cn(capped && "opacity-50")}>
+                <div className={cn(isNonPref && "opacity-50")}>
                   <MultiModelPanel {...buildPanelProps(r, isNonPref)} />
                 </div>
-                {capped && (
+                {overflows && (
                   <div
                     className="absolute inset-x-0 bottom-0 h-24 pointer-events-none"
                     style={{
