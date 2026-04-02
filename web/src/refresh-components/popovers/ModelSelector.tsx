@@ -154,27 +154,22 @@ export default function ModelSelector({
                   return (
                     <div
                       key={modelKey(model.provider, model.modelName)}
-                      className="flex items-center gap-1"
+                      className="flex items-center"
                     >
                       {index > 0 && (
-                        <div className="h-9 w-px bg-border-01 shrink-0" />
+                        <div className="h-9 w-px bg-border-01 shrink-0 mx-1" />
                       )}
                       <SelectButton
                         icon={ProviderIcon}
+                        rightIcon={SvgX}
                         state="empty"
                         variant="select-tinted"
                         interaction="hover"
-                        onClick={() => handlePillClick(index)}
+                        size="md"
+                        onClick={() => onRemove(index)}
                       >
                         {model.displayName}
                       </SelectButton>
-                      <Button
-                        prominence="tertiary"
-                        icon={SvgX}
-                        size="2xs"
-                        onClick={() => onRemove(index)}
-                        tooltip="Remove model"
-                      />
                     </div>
                   );
                 })}
