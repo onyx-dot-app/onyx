@@ -55,7 +55,7 @@ def recompute_user_permissions__no_commit(
     ).all()
 
     # Group permissions by user; users with no grants get an empty set.
-    perms_by_user: dict[UUID, set[str]] = defaultdict(set)
+    perms_by_user: dict[UUID | str, set[str]] = defaultdict(set)
     for uid in uid_list:
         perms_by_user[uid]  # ensure every user has an entry
     for uid, perm in rows:

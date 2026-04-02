@@ -6,6 +6,8 @@ Create Date: 2026-03-25 14:59:41.313091
 
 """
 
+from typing import Any
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -56,7 +58,7 @@ def _find_available_name(conn: sa.engine.Connection, base: str) -> str:
     candidate = f"{base} {CUSTOM_SUFFIX}"
     attempt = 1
     while attempt <= MAX_RENAME_ATTEMPTS:
-        exists = conn.execute(
+        exists: Any = conn.execute(
             sa.select(sa.literal(1))
             .select_from(user_group_table)
             .where(user_group_table.c.name == candidate)
@@ -124,12 +126,13 @@ def downgrade() -> None:
     default_group_ids = sa.select(user_group_table.c.id).where(
         user_group_table.c.is_default == True  # noqa: E712
     )
-    op.execute(
+    conn = op.get_bind()
+    conn.execute(
         sa.delete(user__user_group_table).where(
             user__user_group_table.c.user_group_id.in_(default_group_ids)
         )
     )
-    op.execute(
+    conn.execute(
         sa.delete(user_group_table).where(
             user_group_table.c.is_default == True  # noqa: E712
         )

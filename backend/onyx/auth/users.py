@@ -508,7 +508,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserAlreadyExists()
 
                     self._upgrade_user_to_standard__sync(user.id, user_create)
-                    user = await self.user_db.get(user.id)  # type: ignore[arg-type]
+                    user = await self.user_db.get(user.id)  # type: ignore[assignment]
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -529,7 +529,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserAlreadyExists()
 
                     self._upgrade_user_to_standard__sync(user.id, user_create)
-                    user = await self.user_db.get(user.id)  # type: ignore[arg-type]
+                    user = await self.user_db.get(user.id)  # type: ignore[assignment]
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
                 remove_user_from_invited_users(user_create.email)
@@ -577,12 +577,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         update nor the group assignment is visible without the other.
         """
         with get_session_with_current_tenant() as sync_db:
-            sync_user = sync_db.query(User).filter(User.id == user_id).first()
+            sync_user = sync_db.query(User).filter(User.id == user_id).first()  # type: ignore[arg-type]
             if sync_user:
                 sync_user.hashed_password = self.password_helper.hash(
                     user_create.password
                 )
-                sync_user.is_verified = user_create.is_verified
+                sync_user.is_verified = user_create.is_verified or False
                 sync_user.role = user_create.role
                 sync_user.account_type = AccountType.STANDARD
                 assign_user_to_default_groups__no_commit(
@@ -779,7 +779,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                 # Refresh the async user object so downstream code
                 # (e.g. oidc_expiry check) sees the updated fields.
-                user = await self.user_db.get(user.id)  # type: ignore[arg-type]
+                user = await self.user_db.get(user.id)  # type: ignore[assignment]
+                assert user is not None
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login

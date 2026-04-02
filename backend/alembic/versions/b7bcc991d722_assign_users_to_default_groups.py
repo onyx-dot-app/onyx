@@ -17,6 +17,12 @@ down_revision = "03d085c5c38d"
 branch_labels = None
 depends_on = None
 
+# The no-auth placeholder user must NOT be assigned to default groups.
+# A database trigger (migrate_no_auth_data_to_user) will try to DELETE this
+# user when the first real user registers; group membership rows would cause
+# an FK violation on that DELETE.
+NO_AUTH_PLACEHOLDER_USER_UUID = "00000000-0000-0000-0000-000000000001"
+
 # Reflect table structures for use in DML
 user_group_table = sa.table(
     "user_group",
@@ -79,6 +85,7 @@ def upgrade() -> None:
     ).where(
         user_table.c.role == "ADMIN",
         user_table.c.account_type.notin_(["BOT", "EXT_PERM_USER", "ANONYMOUS"]),
+        user_table.c.id != NO_AUTH_PLACEHOLDER_USER_UUID,
     )
     op.execute(
         pg_insert(user__user_group_table)
@@ -93,6 +100,7 @@ def upgrade() -> None:
         user_table.c.id.label("user_id"),
     ).where(
         user_table.c.account_type.notin_(["BOT", "EXT_PERM_USER", "ANONYMOUS"]),
+        user_table.c.id != NO_AUTH_PLACEHOLDER_USER_UUID,
         sa.or_(
             sa.and_(
                 user_table.c.account_type == "STANDARD",
