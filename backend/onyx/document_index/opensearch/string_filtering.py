@@ -1,7 +1,15 @@
 import re
 
+MAX_DOCUMENT_ID_ENCODED_LENGTH: int = 512
 
-def filter_and_validate_document_id(document_id: str) -> str:
+
+class DocumentIDTooLongError(ValueError):
+    """Raised when a document ID is too long for OpenSearch after filtering."""
+
+
+def filter_and_validate_document_id(
+    document_id: str, max_encoded_length: int = MAX_DOCUMENT_ID_ENCODED_LENGTH
+) -> str:
     """
     Filters and validates a document ID such that it can be used as an ID in
     OpenSearch.
@@ -19,9 +27,13 @@ def filter_and_validate_document_id(document_id: str) -> str:
 
     Args:
         document_id: The document ID to filter and validate.
+        max_encoded_length: The maximum length of the document ID after
+            filtering in bytes. Compared with >= for extra resilience, so
+            encoded values of this length will fail.
 
     Raises:
-        ValueError: If the document ID is empty or too long after filtering.
+        DocumentIDTooLongError: If the document ID is too long after filtering.
+        ValueError: If the document ID is empty after filtering.
 
     Returns:
         str: The filtered document ID.
@@ -29,6 +41,8 @@ def filter_and_validate_document_id(document_id: str) -> str:
     filtered_document_id = re.sub(r"[^A-Za-z0-9_.\-~]", "", document_id)
     if not filtered_document_id:
         raise ValueError(f"Document ID {document_id} is empty after filtering.")
-    if len(filtered_document_id.encode("utf-8")) >= 512:
-        raise ValueError(f"Document ID {document_id} is too long after filtering.")
+    if len(filtered_document_id.encode("utf-8")) >= max_encoded_length:
+        raise DocumentIDTooLongError(
+            f"Document ID {document_id} is too long after filtering."
+        )
     return filtered_document_id
