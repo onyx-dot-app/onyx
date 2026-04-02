@@ -350,8 +350,11 @@ function ConnectedHookCard({
                 variant="section"
                 icon={HookIcon}
                 title={
-                  !hook.is_active ? markdown(`~~${hook.name}~~`) : hook.name
+                  !hook.is_active || hook.is_reachable === false
+                    ? markdown(`~~${hook.name}~~`)
+                    : hook.name
                 }
+                suffix={!hook.is_active ? "(Disconnected)" : undefined}
                 description={`Hook Point: ${
                   spec?.display_name ?? hook.hook_point
                 }`}

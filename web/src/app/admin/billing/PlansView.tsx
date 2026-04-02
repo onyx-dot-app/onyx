@@ -64,7 +64,6 @@ const BUSINESS_FEATURES: PlanFeature[] = [
   { icon: SvgKey, text: "Service Account API Keys" },
   { icon: SvgHardDrive, text: "Self-hosting (Optional)" },
   { icon: SvgPaintBrush, text: "Custom Theming" },
-  { icon: SvgShareWebhook, text: "Hook Extensions" },
 ];
 
 const ENTERPRISE_FEATURES: PlanFeature[] = [
@@ -72,6 +71,7 @@ const ENTERPRISE_FEATURES: PlanFeature[] = [
   { icon: SvgDashboard, text: "Full White-labeling" },
   { icon: SvgUserManage, text: "Custom Roles and Permissions" },
   { icon: SvgSliders, text: "Configurable Usage Limits" },
+  { icon: SvgShareWebhook, text: "Hook Extensions" },
   { icon: SvgServer, text: "Custom Deployments" },
   { icon: SvgGlobe, text: "Region-Specific Data Processing" },
   { icon: SvgHeadsetMic, text: "Enterprise SLAs and Priority Support" },
