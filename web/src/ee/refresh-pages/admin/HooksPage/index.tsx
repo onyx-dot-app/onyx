@@ -10,14 +10,16 @@ import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
 import { useHooks } from "@/ee/hooks/useHooks";
 import useFilter from "@/hooks/useFilter";
 import { toast } from "@/hooks/useToast";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import {
+  useCreateModal,
+  useModalClose,
+} from "@/refresh-components/contexts/ModalContext";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { Button, SelectCard } from "@opal/components";
+import { Button, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { markdown } from "@opal/utils";
 import { Content, IllustrationContent } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import Modal from "@/refresh-components/Modal";
 import {
   SvgArrowExchange,
   SvgBubbleText,
@@ -31,7 +33,7 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import SvgNoResult from "@opal/illustrations/no-result";
+import { SvgNoResult, SvgEmpty } from "@opal/illustrations";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import HookFormModal from "@/ee/refresh-pages/admin/HooksPage/HookFormModal";
 import HookStatusPopover from "@/ee/refresh-pages/admin/HooksPage/HookStatusPopover";
@@ -45,6 +47,7 @@ import type {
   HookPointMeta,
   HookResponse,
 } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
+import { noProp } from "@/lib/utils";
 
 const route = ADMIN_ROUTES.HOOKS;
 
@@ -63,69 +66,52 @@ function getHookPointIcon(hookPoint: string): IconFunctionComponent {
 
 interface DisconnectConfirmModalProps {
   hook: HookResponse;
-  onClose: () => void;
   onDisconnect: () => void;
   onDisconnectAndDelete: () => void;
 }
 
 function DisconnectConfirmModal({
   hook,
-  onClose,
   onDisconnect,
   onDisconnectAndDelete,
 }: DisconnectConfirmModalProps) {
+  const onClose = useModalClose();
+
   return (
-    <Modal open onOpenChange={(open) => !open && onClose()}>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="md" height="fit">
         <Modal.Header
-          icon={(props) => (
-            <SvgUnplug {...props} className="text-action-danger-05" />
-          )}
-          title={`Disconnect ${hook.name}`}
+          // TODO(@raunakab): replace the colour of this SVG with red.
+          icon={SvgUnplug}
+          title={markdown(`Disconnect *${hook.name}*`)}
           onClose={onClose}
         />
         <Modal.Body>
-          <div className="flex flex-col gap-4">
-            <Text mainUiBody text03>
-              Onyx will stop calling this endpoint for hook{" "}
-              <strong>
-                <em>{hook.name}</em>
-              </strong>
-              . In-flight requests will continue to run. The external endpoint
-              may still retain data previously sent to it. You can reconnect
-              this hook later if needed.
+          <div className="flex flex-col gap-2">
+            <Text font="main-ui-body" color="text-03">
+              {markdown(
+                `Onyx will stop calling this endpoint for hook ***${hook.name}***. In-flight requests will continue to run. The external endpoint may still retain data previously sent to it. You can reconnect this hook later if needed.`
+              )}
             </Text>
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               You can also delete this hook. Deletion cannot be undone.
             </Text>
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <BasicModalFooter
-            cancel={
-              <Button prominence="secondary" onClick={onClose}>
-                Cancel
-              </Button>
-            }
-            submit={
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="danger"
-                  prominence="secondary"
-                  onClick={onDisconnectAndDelete}
-                >
-                  Disconnect &amp; Delete
-                </Button>
-                <Button
-                  variant="danger"
-                  prominence="primary"
-                  onClick={onDisconnect}
-                >
-                  Disconnect
-                </Button>
-              </div>
-            }
-          />
+          <Button prominence="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            prominence="secondary"
+            onClick={onDisconnectAndDelete}
+          >
+            Disconnect &amp; Delete
+          </Button>
+          <Button variant="danger" prominence="primary" onClick={onDisconnect}>
+            Disconnect
+          </Button>
         </Modal.Footer>
       </Modal.Content>
     </Modal>
@@ -138,53 +124,40 @@ function DisconnectConfirmModal({
 
 interface DeleteConfirmModalProps {
   hook: HookResponse;
-  onClose: () => void;
   onDelete: () => void;
 }
 
-function DeleteConfirmModal({
-  hook,
-  onClose,
-  onDelete,
-}: DeleteConfirmModalProps) {
+function DeleteConfirmModal({ hook, onDelete }: DeleteConfirmModalProps) {
+  const onClose = useModalClose();
+
   return (
-    <Modal open onOpenChange={(open) => !open && onClose()}>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="md" height="fit">
         <Modal.Header
-          icon={(props) => (
-            <SvgTrash {...props} className="text-action-danger-05" />
-          )}
+          // TODO(@raunakab): replace the colour of this SVG with red.
+          icon={SvgTrash}
           title={`Delete ${hook.name}`}
           onClose={onClose}
         />
         <Modal.Body>
-          <div className="flex flex-col gap-4">
-            <Text mainUiBody text03>
-              Hook{" "}
-              <strong>
-                <em>{hook.name}</em>
-              </strong>{" "}
-              will be permanently removed from this hook point. The external
-              endpoint may still retain data previously sent to it.
+          <div className="flex flex-col gap-2">
+            <Text font="main-ui-body" color="text-03">
+              {markdown(
+                `Hook ***${hook.name}*** will be permanently removed from this hook point. The external endpoint may still retain data previously sent to it.`
+              )}
             </Text>
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               Deletion cannot be undone.
             </Text>
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <BasicModalFooter
-            cancel={
-              <Button prominence="secondary" onClick={onClose}>
-                Cancel
-              </Button>
-            }
-            submit={
-              <Button variant="danger" prominence="primary" onClick={onDelete}>
-                Delete
-              </Button>
-            }
-          />
+          <Button prominence="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="danger" prominence="primary" onClick={onDelete}>
+            Delete
+          </Button>
         </Modal.Footer>
       </Modal.Content>
     </Modal>
@@ -233,7 +206,7 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
         <Button
           prominence="tertiary"
           rightIcon={SvgArrowExchange}
-          onClick={onConnect}
+          onClick={noProp(onConnect)}
         >
           Connect
         </Button>
@@ -358,18 +331,13 @@ function ConnectedHookCard({
       <disconnectModal.Provider>
         <DisconnectConfirmModal
           hook={hook}
-          onClose={() => disconnectModal.toggle(false)}
           onDisconnect={handleDeactivate}
           onDisconnectAndDelete={handleDisconnectAndDelete}
         />
       </disconnectModal.Provider>
 
       <deleteModal.Provider>
-        <DeleteConfirmModal
-          hook={hook}
-          onClose={() => deleteModal.toggle(false)}
-          onDelete={handleDelete}
-        />
+        <DeleteConfirmModal hook={hook} onDelete={handleDelete} />
       </deleteModal.Provider>
 
       <Hoverable.Root group="connected-hook-card">
@@ -411,7 +379,7 @@ function ConnectedHookCard({
                   <Button
                     prominence="tertiary"
                     rightIcon={SvgPlug}
-                    onClick={handleActivate}
+                    onClick={noProp(handleActivate)}
                     disabled={isBusy}
                   >
                     Reconnect
@@ -431,7 +399,7 @@ function ConnectedHookCard({
                           prominence="tertiary"
                           size="md"
                           icon={SvgUnplug}
-                          onClick={() => disconnectModal.toggle(true)}
+                          onClick={noProp(() => disconnectModal.toggle(true))}
                           tooltip="Disconnect Hook"
                           aria-label="Deactivate hook"
                         />
@@ -440,7 +408,7 @@ function ConnectedHookCard({
                         prominence="tertiary"
                         size="md"
                         icon={SvgRefreshCw}
-                        onClick={handleValidate}
+                        onClick={noProp(handleValidate)}
                         tooltip="Test Connection"
                         aria-label="Re-validate hook"
                       />
@@ -450,7 +418,7 @@ function ConnectedHookCard({
                       prominence="tertiary"
                       size="md"
                       icon={SvgTrash}
-                      onClick={() => deleteModal.toggle(true)}
+                      onClick={noProp(() => deleteModal.toggle(true))}
                       tooltip="Delete"
                       aria-label="Delete hook"
                     />
@@ -459,7 +427,7 @@ function ConnectedHookCard({
                     prominence="tertiary"
                     size="md"
                     icon={SvgSettings}
-                    onClick={onEdit}
+                    onClick={noProp(onEdit)}
                     tooltip="Manage"
                     aria-label="Configure hook"
                   />
@@ -616,10 +584,10 @@ export default function HooksPage() {
         {isLoading ? (
           <SimpleLoader />
         ) : specsError || hooksError ? (
-          <Text text03 secondaryBody>
-            Failed to load
-            {specsError ? " hook specifications" : " hooks"}. Please refresh the
-            page.
+          <Text font="secondary-body" color="text-03">
+            {`Failed to load${
+              specsError ? " hook specifications" : " hooks"
+            }. Please refresh the page.`}
           </Text>
         ) : (
           <div className="flex flex-col gap-3 h-full">
@@ -634,11 +602,15 @@ export default function HooksPage() {
             </div>
 
             {connectedHooks.length === 0 && unconnectedSpecs.length === 0 ? (
-              <div className="h-full">
+              <div>
                 <IllustrationContent
-                  title="No results found"
-                  description="Try using a different search term."
-                  illustration={SvgNoResult}
+                  title={
+                    search ? "No results found" : "No hook points available"
+                  }
+                  description={
+                    search ? "Try using a different search term." : undefined
+                  }
+                  illustration={search ? SvgNoResult : SvgEmpty}
                 />
               </div>
             ) : (
