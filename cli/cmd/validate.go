@@ -16,17 +16,18 @@ func newValidateConfigCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate-config",
 		Short: "Validate configuration and test server connection",
+		Example: `  onyx-cli validate-config`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Check config file
 			if !config.ConfigExists() {
-				return fmt.Errorf("config file not found at %s\n  Run 'onyx-cli configure' to set up", config.ConfigFilePath())
+				return fmt.Errorf("config file not found at %s\n  Run: onyx-cli configure", config.ConfigFilePath())
 			}
 
 			cfg := config.Load()
 
 			// Check API key
 			if !cfg.IsConfigured() {
-				return fmt.Errorf("API key is missing\n  Run 'onyx-cli configure' to set up")
+				return fmt.Errorf("API key is missing\n  Run: onyx-cli configure")
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Config:  %s\n", config.ConfigFilePath())
@@ -35,7 +36,7 @@ func newValidateConfigCmd() *cobra.Command {
 			// Test connection
 			client := api.NewClient(cfg)
 			if err := client.TestConnection(cmd.Context()); err != nil {
-				return fmt.Errorf("connection failed: %w", err)
+				return fmt.Errorf("connection failed: %w\n  Reconfigure with: onyx-cli configure", err)
 			}
 
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Status:  connected and authenticated")

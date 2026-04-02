@@ -297,9 +297,12 @@ auto-generates an Ed25519 host key on first run if the key file does not
 already exist. The host key path can also be set via the ONYX_SSH_HOST_KEY
 environment variable (the --host-key flag takes precedence).
 
-Example:
+Examples:
   onyx-cli serve --port 2222
   ssh localhost -p 2222`,
+		Example: `  onyx-cli serve --port 2222
+  onyx-cli serve --host 0.0.0.0 --port 2222
+  onyx-cli serve --idle-timeout 30m --max-session-timeout 2h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			serverCfg := config.Load()
 			if serverCfg.ServerURL == "" {

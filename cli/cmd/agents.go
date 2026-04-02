@@ -16,16 +16,19 @@ func newAgentsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agents",
 		Short: "List available agents",
+		Example: `  onyx-cli agents
+  onyx-cli agents --json
+  onyx-cli agents --json | jq '.[].name'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Load()
 			if !cfg.IsConfigured() {
-				return fmt.Errorf("onyx CLI is not configured — run 'onyx-cli configure' first")
+				return fmt.Errorf("onyx CLI is not configured\n  Run: onyx-cli configure")
 			}
 
 			client := api.NewClient(cfg)
 			agents, err := client.ListAgents(cmd.Context())
 			if err != nil {
-				return fmt.Errorf("failed to list agents: %w", err)
+				return fmt.Errorf("failed to list agents: %w\n  Check your connection with: onyx-cli validate-config", err)
 			}
 
 			if agentsJSON {

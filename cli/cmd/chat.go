@@ -13,6 +13,8 @@ func newChatCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "chat",
 		Short: "Launch the interactive chat TUI (default)",
+		Example: `  onyx-cli chat
+  onyx-cli`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Load()
 
