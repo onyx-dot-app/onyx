@@ -1,6 +1,8 @@
 import io
+from typing import cast
 
 import openpyxl
+from openpyxl.worksheet.worksheet import Worksheet
 
 from onyx.file_processing.extract_file_text import xlsx_to_text
 
@@ -9,7 +11,7 @@ def _make_xlsx(sheets: dict[str, list[list[str]]]) -> io.BytesIO:
     """Create an in-memory xlsx file from a dict of sheet_name -> matrix of strings."""
     wb = openpyxl.Workbook()
     if wb.active is not None:
-        wb.remove(wb.active)
+        wb.remove(cast(Worksheet, wb.active))
     for sheet_name, rows in sheets.items():
         ws = wb.create_sheet(title=sheet_name)
         for row in rows:
