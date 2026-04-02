@@ -515,7 +515,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         account_type=AccountType.STANDARD,
                     )
                     user = await self.update(user_update, user)
-                    self._assign_default_groups_on_upgrade(user)
+                    self._assign_default_groups_on_upgrade(
+                        user, is_admin=(user_create.role == UserRole.ADMIN)
+                    )
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -542,7 +544,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         account_type=AccountType.STANDARD,
                     )
                     user = await self.update(user_update, user)
-                    self._assign_default_groups_on_upgrade(user)
+                    self._assign_default_groups_on_upgrade(
+                        user, is_admin=(user_create.role == UserRole.ADMIN)
+                    )
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
                 remove_user_from_invited_users(user_create.email)
@@ -580,18 +584,30 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user.pinned_assistants = default_persona_ids
 
     @staticmethod
-    def _assign_default_groups_on_upgrade(user: User) -> None:
-        """Assign a newly-upgraded user to the Basic default group.
+    def _assign_default_groups_on_upgrade(user: User, is_admin: bool = False) -> None:
+        """Assign a newly-upgraded user to the correct default group.
 
         Called when a non-web-login user (BOT / EXT_PERM_USER) is upgraded
         to STANDARD via create-path (SAML, password signup, etc.).
+
+        Args:
+            is_admin: If True, assign to Admin default group; otherwise Basic.
         """
-        with get_session_with_current_tenant() as sync_db:
-            sync_user = sync_db.query(User).filter(User.id == user.id).first()
-            if sync_user:
-                sync_user.account_type = AccountType.STANDARD
-                assign_user_to_default_groups__no_commit(sync_db, sync_user)
-                sync_db.commit()
+        try:
+            with get_session_with_current_tenant() as sync_db:
+                sync_user = sync_db.query(User).filter(User.id == user.id).first()
+                if sync_user:
+                    sync_user.account_type = AccountType.STANDARD
+                    assign_user_to_default_groups__no_commit(
+                        sync_db, sync_user, is_admin=is_admin
+                    )
+                    sync_db.commit()
+        except Exception:
+            logger.exception(
+                "Failed to assign default group for upgraded user %s. "
+                "Group will be reconciled on next login.",
+                user.email,
+            )
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)

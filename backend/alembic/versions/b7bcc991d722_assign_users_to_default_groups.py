@@ -71,13 +71,14 @@ def upgrade() -> None:
         )
 
     # Users with role=admin → Admin group
-    # Exclude inactive placeholder/anonymous users that are not real users
+    # Include inactive users so reactivation doesn't require reconciliation.
+    # Exclude non-human account types (mirrors assign_user_to_default_groups logic).
     admin_users = sa.select(
         sa.literal(admin_row[0]).label("user_group_id"),
         user_table.c.id.label("user_id"),
     ).where(
         user_table.c.role == "ADMIN",
-        user_table.c.is_active == True,  # noqa: E712
+        user_table.c.account_type.notin_(["BOT", "EXT_PERM_USER", "ANONYMOUS"]),
     )
     op.execute(
         pg_insert(user__user_group_table)
@@ -86,12 +87,12 @@ def upgrade() -> None:
     )
 
     # STANDARD users (non-admin) and SERVICE_ACCOUNT users (role=basic) → Basic group
-    # Exclude inactive placeholder/anonymous users that are not real users
+    # Include inactive users so reactivation doesn't require reconciliation.
     basic_users = sa.select(
         sa.literal(basic_row[0]).label("user_group_id"),
         user_table.c.id.label("user_id"),
     ).where(
-        user_table.c.is_active == True,  # noqa: E712
+        user_table.c.account_type.notin_(["BOT", "EXT_PERM_USER", "ANONYMOUS"]),
         sa.or_(
             sa.and_(
                 user_table.c.account_type == "STANDARD",

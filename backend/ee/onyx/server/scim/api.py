@@ -564,7 +564,8 @@ def replace_user(
     user = result
 
     # Handle activation (need seat check) / deactivation
-    if user_resource.active and not user.is_active:
+    is_reactivation = user_resource.active and not user.is_active
+    if is_reactivation:
         seat_error = _check_seat_availability(dal)
         if seat_error:
             return _scim_error_response(403, seat_error)
@@ -577,6 +578,12 @@ def replace_user(
         is_active=user_resource.active,
         personal_name=personal_name,
     )
+
+    # Reconcile default-group membership on reactivation
+    if is_reactivation:
+        assign_user_to_default_groups__no_commit(
+            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+        )
 
     new_external_id = user_resource.externalId
     scim_username = user_resource.userName.strip()
@@ -643,6 +650,7 @@ def patch_user(
         return _scim_error_response(e.status, e.detail)
 
     # Apply changes back to the DB model
+    is_reactivation = patched.active and not user.is_active
     if patched.active != user.is_active:
         if patched.active:
             seat_error = _check_seat_availability(dal)
@@ -670,6 +678,12 @@ def patch_user(
         is_active=patched.active if patched.active != user.is_active else None,
         personal_name=personal_name,
     )
+
+    # Reconcile default-group membership on reactivation
+    if is_reactivation:
+        assign_user_to_default_groups__no_commit(
+            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+        )
 
     # Build updated fields by merging PATCH enterprise data with current values
     cf = current_fields or ScimMappingFields()

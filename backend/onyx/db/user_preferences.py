@@ -92,8 +92,15 @@ def activate_user(
     user: User,
     db_session: Session,
 ) -> None:
-    """Activate a user by setting is_active to True."""
+    """Activate a user by setting is_active to True.
+
+    Also reconciles default-group membership — the user may have been
+    created while inactive or deactivated before the backfill migration.
+    """
     user.is_active = True
+    assign_user_to_default_groups__no_commit(
+        db_session, user, is_admin=(user.role == UserRole.ADMIN)
+    )
     db_session.add(user)
     db_session.commit()
 
