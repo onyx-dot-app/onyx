@@ -68,7 +68,7 @@ class UserCreate(schemas.BaseUserCreate):
 
 class UserUpdateWithRole(schemas.BaseUserUpdate):
     role: UserRole
-    account_type: AccountType | None = None
+    account_type: AccountType
 
 
 class UserUpdate(schemas.BaseUserUpdate):

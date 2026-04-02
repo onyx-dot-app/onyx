@@ -44,6 +44,9 @@ def update_user_role(
     reconciles default-group membership (Admin / Basic)."""
     old_role = user.role
     user.role = new_role
+    # Note: setting account_type to BOT or EXT_PERM_USER causes
+    # assign_user_to_default_groups__no_commit to early-return, which is
+    # intentional — these account types should not be in default groups.
     if new_role in _ROLE_TO_ACCOUNT_TYPE:
         user.account_type = _ROLE_TO_ACCOUNT_TYPE[new_role]
     elif user.account_type in (AccountType.BOT, AccountType.EXT_PERM_USER):
