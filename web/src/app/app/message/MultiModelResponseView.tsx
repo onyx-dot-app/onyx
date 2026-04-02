@@ -139,7 +139,7 @@ export default function MultiModelResponseView({
     (modelIndex: number) => {
       if (isGenerating) return;
       setPreferredIndex(modelIndex);
-      const response = responses[modelIndex];
+      const response = responses.find((r) => r.modelIndex === modelIndex);
       if (!response) return;
       if (onMessageSelection) {
         onMessageSelection(response.nodeId);
@@ -155,9 +155,17 @@ export default function MultiModelResponseView({
     }
   }, [isGenerating]);
 
-  // Selection mode when preferred is set, not generating, and at least 2 visible panels
+  // Find preferred panel position — used for both the selection guard and carousel layout
+  const preferredIdx = responses.findIndex(
+    (r) => r.modelIndex === preferredIndex
+  );
+
+  // Selection mode when preferred is set, found in responses, not generating, and at least 2 visible panels
   const showSelectionMode =
-    preferredIndex !== null && !isGenerating && visibleResponses.length > 1;
+    preferredIndex !== null &&
+    preferredIdx !== -1 &&
+    !isGenerating &&
+    visibleResponses.length > 1;
 
   // Trigger the slide-out animation one frame after entering selection mode
   useEffect(() => {
@@ -172,7 +180,6 @@ export default function MultiModelResponseView({
   // Build panel props — isHidden reflects actual hidden state
   const buildPanelProps = useCallback(
     (response: MultiModelResponse, isNonPreferred: boolean) => ({
-      modelIndex: response.modelIndex,
       provider: response.provider,
       modelName: response.modelName,
       displayName: response.displayName,
@@ -215,9 +222,6 @@ export default function MultiModelResponseView({
     // All panels (including hidden) sit in the track at their original A/B/C positions.
     // Hidden panels use HIDDEN_PANEL_W; non-preferred use SELECTION_PANEL_W;
     // preferred uses dynamicPrefW (up to GEN_PANEL_W_2).
-    const preferredIdx = responses.findIndex(
-      (r) => r.modelIndex === preferredIndex
-    );
     const n = responses.length;
 
     const dynamicPrefW =
