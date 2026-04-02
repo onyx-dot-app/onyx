@@ -8,7 +8,7 @@ import OpenAPIAuthenticationModal, {
   OpenAPIAuthFormValues,
 } from "./modals/OpenAPIAuthenticationModal";
 import AddOpenAPIActionModal from "./modals/AddOpenAPIActionModal";
-import Actionbar from "./Actionbar";
+import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { toast } from "@/hooks/useToast";
 import OpenApiActionCard from "./OpenApiActionCard";
 import { createOAuthConfig, updateOAuthConfig } from "@/lib/oauth/api";
@@ -350,13 +350,13 @@ export default function OpenApiPageContent() {
       )}
 
       <div className="flex-shrink-0 mb-4">
-        <Actionbar
-          hasActions={isOpenApiLoading || (openApiTools?.length ?? 0) > 0}
+        <AdminListHeader
+          hasItems={isOpenApiLoading || (openApiTools?.length ?? 0) > 0}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          onAddAction={handleAddAction}
-          buttonText="Add OpenAPI Action"
-          barText="Add custom actions from OpenAPI schemas."
+          onAction={handleAddAction}
+          actionLabel="Add OpenAPI Action"
+          emptyStateText="Add custom actions from OpenAPI schemas."
         />
       </div>
 

@@ -20,6 +20,7 @@ from onyx.background.celery.tasks.opensearch_migration.transformer import (
 from onyx.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
 from onyx.configs.app_configs import VESPA_LANGUAGE_OVERRIDE
 from onyx.configs.app_configs import VESPA_MIGRATION_REQUEST_TIMEOUT_S
+from onyx.configs.app_configs import VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -335,6 +336,11 @@ def get_all_chunks_paginated(
             "format.tensors": "short-value",
             "slices": total_slices,
             "sliceId": slice_id,
+            # When exceeded, Vespa should return gracefully with partial
+            # results. Even if no hits are returned, Vespa should still return a
+            # new continuation token representing a new spot in the linear
+            # traversal.
+            "timeout": VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT,
         }
         if continuation_token is not None:
             params["continuation"] = continuation_token
@@ -343,6 +349,9 @@ def get_all_chunks_paginated(
         start_time = time.monotonic()
         try:
             with get_vespa_http_client(
+                # When exceeded, an exception is raised in our code. No progress
+                # is saved, and the task will retry this spot in the traversal
+                # later.
                 timeout=VESPA_MIGRATION_REQUEST_TIMEOUT_S
             ) as http_client:
                 response = http_client.get(url, params=params)

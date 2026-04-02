@@ -16,6 +16,7 @@ import Separator from "@/refresh-components/Separator";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useAdminUsers from "@/hooks/useAdminUsers";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 import {
   createGroup,
@@ -47,7 +48,7 @@ function CreateGroupPage() {
     data: apiKeys,
     isLoading: apiKeysLoading,
     error: apiKeysError,
-  } = useSWR<ApiKeyDescriptor[]>("/api/admin/api-key", errorHandlingFetcher);
+  } = useSWR<ApiKeyDescriptor[]>(SWR_KEYS.adminApiKeys, errorHandlingFetcher);
 
   const isLoading = usersLoading || apiKeysLoading;
   const error = usersError ?? apiKeysError;
@@ -87,7 +88,7 @@ function CreateGroupPage() {
   const headerActions = (
     <Section flexDirection="row" gap={0.5} width="auto" height="auto">
       <Button
-        prominence="tertiary"
+        prominence="secondary"
         onClick={() => router.push("/admin/groups")}
       >
         Cancel
@@ -102,7 +103,7 @@ function CreateGroupPage() {
   );
 
   return (
-    <SettingsLayouts.Root width="sm">
+    <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUsers}
         title="Create Group"

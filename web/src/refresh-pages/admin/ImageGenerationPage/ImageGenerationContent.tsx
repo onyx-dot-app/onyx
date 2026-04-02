@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
@@ -49,7 +50,7 @@ export default function ImageGenerationContent() {
     error: llmError,
     mutate: refetchProviders,
   } = useSWR<LLMProviderResponse<LLMProviderView>>(
-    "/api/admin/llm/provider?include_image_gen=true",
+    SWR_KEYS.llmProvidersWithImageGen,
     errorHandlingFetcher
   );
   const llmProviders = llmProviderResponse?.providers ?? [];
@@ -59,7 +60,7 @@ export default function ImageGenerationContent() {
     error: configError,
     mutate: refetchConfigs,
   } = useSWR<ImageGenerationConfigView[]>(
-    "/api/admin/image-generation/config",
+    SWR_KEYS.imageGenConfig,
     errorHandlingFetcher
   );
 
@@ -247,9 +248,9 @@ export default function ImageGenerationContent() {
                   group="image-gen/ProviderCard"
                 >
                   <SelectCard
-                    variant="select-card"
                     state={STATUS_TO_STATE[status]}
-                    sizeVariant="lg"
+                    padding="sm"
+                    rounding="lg"
                     aria-label={`image-gen-provider-${provider.image_provider_id}`}
                     onClick={
                       isDisconnected

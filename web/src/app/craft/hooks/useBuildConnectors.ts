@@ -1,5 +1,6 @@
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   BuildConnectorConfig,
   ConnectorStatus,
@@ -23,7 +24,7 @@ interface BuildConnectorListResponse {
  */
 export function useBuildConnectors() {
   const { data, isLoading, mutate } = useSWR<BuildConnectorListResponse>(
-    "/api/build/connectors",
+    SWR_KEYS.buildConnectors,
     errorHandlingFetcher,
     { refreshInterval: 30000 } // 30 seconds - matches configure page
   );

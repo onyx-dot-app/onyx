@@ -1,6 +1,5 @@
 import { UserRole } from "@/lib/types";
 
-// Discord bot service API key name - should match backend constant
 export const DISCORD_SERVICE_API_KEY_NAME = "discord-bot-service";
 
 export interface APIKey {

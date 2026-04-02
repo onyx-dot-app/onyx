@@ -33,6 +33,7 @@ from onyx.connectors.models import TextSection
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
+from onyx.db.enums import HookPoint
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
@@ -47,6 +48,13 @@ from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
+from onyx.hooks.executor import execute_hook
+from onyx.hooks.executor import HookSkipped
+from onyx.hooks.executor import HookSoftFailed
+from onyx.hooks.points.document_ingestion import DocumentIngestionOwner
+from onyx.hooks.points.document_ingestion import DocumentIngestionPayload
+from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
+from onyx.hooks.points.document_ingestion import DocumentIngestionSection
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
@@ -297,6 +305,7 @@ def index_doc_batch_with_handler(
     document_batch: list[Document],
     request_id: str | None,
     tenant_id: str,
+    db_session: Session,
     adapter: IndexingBatchAdapter,
     ignore_time_skip: bool = False,
     enable_contextual_rag: bool = False,
@@ -310,6 +319,7 @@ def index_doc_batch_with_handler(
             document_batch=document_batch,
             request_id=request_id,
             tenant_id=tenant_id,
+            db_session=db_session,
             adapter=adapter,
             ignore_time_skip=ignore_time_skip,
             enable_contextual_rag=enable_contextual_rag,
@@ -785,6 +795,132 @@ def _verify_indexing_completeness(
         )
 
 
+def _apply_document_ingestion_hook(
+    documents: list[Document],
+    db_session: Session,
+) -> list[Document]:
+    """Apply the Document Ingestion hook to each document in the batch.
+
+    - HookSkipped / HookSoftFailed → document passes through unchanged.
+    - Response with sections=None → document is dropped (logged).
+    - Response with sections → document sections are replaced with the hook's output.
+    """
+
+    def _build_payload(doc: Document) -> DocumentIngestionPayload:
+        return DocumentIngestionPayload(
+            document_id=doc.id or "",
+            title=doc.title,
+            semantic_identifier=doc.semantic_identifier,
+            source=doc.source.value if doc.source is not None else "",
+            sections=[
+                DocumentIngestionSection(
+                    text=s.text if isinstance(s, TextSection) else None,
+                    link=s.link,
+                    image_file_id=(
+                        s.image_file_id if isinstance(s, ImageSection) else None
+                    ),
+                )
+                for s in doc.sections
+            ],
+            metadata={
+                k: v if isinstance(v, list) else [v] for k, v in doc.metadata.items()
+            },
+            doc_updated_at=(
+                doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
+            ),
+            primary_owners=(
+                [
+                    DocumentIngestionOwner(
+                        display_name=o.get_semantic_name() or None,
+                        email=o.email,
+                    )
+                    for o in doc.primary_owners
+                ]
+                if doc.primary_owners
+                else None
+            ),
+            secondary_owners=(
+                [
+                    DocumentIngestionOwner(
+                        display_name=o.get_semantic_name() or None,
+                        email=o.email,
+                    )
+                    for o in doc.secondary_owners
+                ]
+                if doc.secondary_owners
+                else None
+            ),
+        )
+
+    def _apply_result(
+        doc: Document,
+        hook_result: DocumentIngestionResponse | HookSkipped | HookSoftFailed,
+    ) -> Document | None:
+        """Return the modified doc, original doc (skip/soft-fail), or None (drop)."""
+        if isinstance(hook_result, (HookSkipped, HookSoftFailed)):
+            return doc
+        if not hook_result.sections:
+            reason = hook_result.rejection_reason or "Document rejected by hook"
+            logger.info(
+                f"Document ingestion hook dropped document doc_id={doc.id!r}: {reason}"
+            )
+            return None
+        new_sections: list[TextSection | ImageSection] = []
+        for s in hook_result.sections:
+            if s.image_file_id is not None:
+                new_sections.append(
+                    ImageSection(image_file_id=s.image_file_id, link=s.link)
+                )
+            elif s.text is not None:
+                new_sections.append(TextSection(text=s.text, link=s.link))
+            else:
+                logger.warning(
+                    f"Document ingestion hook returned a section with neither text nor "
+                    f"image_file_id for doc_id={doc.id!r} — skipping section."
+                )
+        if not new_sections:
+            logger.info(
+                f"Document ingestion hook produced no valid sections for doc_id={doc.id!r} — dropping document."
+            )
+            return None
+        return doc.model_copy(update={"sections": new_sections})
+
+    if not documents:
+        return documents
+
+    # Run the hook for the first document. If it returns HookSkipped the hook
+    # is not configured — skip the remaining N-1 DB lookups.
+    first_doc = documents[0]
+    first_payload = _build_payload(first_doc).model_dump()
+    first_hook_result = execute_hook(
+        db_session=db_session,
+        hook_point=HookPoint.DOCUMENT_INGESTION,
+        payload=first_payload,
+        response_type=DocumentIngestionResponse,
+    )
+    if isinstance(first_hook_result, HookSkipped):
+        return documents
+
+    result: list[Document] = []
+    first_applied = _apply_result(first_doc, first_hook_result)
+    if first_applied is not None:
+        result.append(first_applied)
+
+    for doc in documents[1:]:
+        payload = _build_payload(doc).model_dump()
+        hook_result = execute_hook(
+            db_session=db_session,
+            hook_point=HookPoint.DOCUMENT_INGESTION,
+            payload=payload,
+            response_type=DocumentIngestionResponse,
+        )
+        applied = _apply_result(doc, hook_result)
+        if applied is not None:
+            result.append(applied)
+
+    return result
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
@@ -794,6 +930,7 @@ def index_doc_batch(
     document_indices: list[DocumentIndex],
     request_id: str | None,
     tenant_id: str,
+    db_session: Session,
     adapter: IndexingBatchAdapter,
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
@@ -818,6 +955,7 @@ def index_doc_batch(
     )
 
     filtered_documents = filter_fnc(document_batch)
+    filtered_documents = _apply_document_ingestion_hook(filtered_documents, db_session)
     context = adapter.prepare(filtered_documents, ignore_time_skip)
     if not context:
         return IndexingPipelineResult.empty(len(filtered_documents))
@@ -1005,6 +1143,7 @@ def run_indexing_pipeline(
         document_batch=document_batch,
         request_id=request_id,
         tenant_id=tenant_id,
+        db_session=db_session,
         adapter=adapter,
         enable_contextual_rag=enable_contextual_rag,
         llm=llm,

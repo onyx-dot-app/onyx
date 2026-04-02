@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useHookSpecs } from "@/hooks/useHookSpecs";
-import { useHooks } from "@/hooks/useHooks";
+import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
+import { useHooks } from "@/ee/hooks/useHooks";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Button } from "@opal/components";
 import { Content } from "@opal/layouts";
@@ -10,13 +10,13 @@ import InputSearch from "@/refresh-components/inputs/InputSearch";
 import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
 import { SvgArrowExchange, SvgExternalLink } from "@opal/icons";
-import HookFormModal from "@/refresh-pages/admin/HooksPage/HookFormModal";
-import ConnectedHookCard from "@/refresh-pages/admin/HooksPage/ConnectedHookCard";
-import { getHookPointIcon } from "@/refresh-pages/admin/HooksPage/hookPointIcons";
+import HookFormModal from "@/ee/refresh-pages/admin/HooksPage/HookFormModal";
+import ConnectedHookCard from "@/ee/refresh-pages/admin/HooksPage/ConnectedHookCard";
+import { getHookPointIcon } from "@/ee/refresh-pages/admin/HooksPage/hookPointIcons";
 import type {
   HookPointMeta,
   HookResponse,
-} from "@/refresh-pages/admin/HooksPage/interfaces";
+} from "@/ee/refresh-pages/admin/HooksPage/interfaces";
 import { markdown } from "@opal/utils";
 
 // ---------------------------------------------------------------------------

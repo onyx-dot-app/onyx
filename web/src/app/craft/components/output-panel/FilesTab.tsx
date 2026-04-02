@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useBuildSessionStore,
   useFilesTabState,
@@ -86,7 +87,7 @@ export default function FilesTab({
     error,
     mutate,
   } = useSWR(
-    sessionId ? `/api/build/sessions/${sessionId}/files?path=` : null,
+    sessionId ? SWR_KEYS.buildSessionFiles(sessionId) : null,
     () => (sessionId ? fetchDirectoryListing(sessionId, "") : null),
     {
       revalidateOnFocus: false,

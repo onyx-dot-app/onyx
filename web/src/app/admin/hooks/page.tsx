@@ -1,1 +1,1 @@
-export { default } from "@/refresh-pages/admin/HooksPage";
+export { default } from "@/ee/refresh-pages/admin/HooksPage";

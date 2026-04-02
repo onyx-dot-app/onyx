@@ -16,12 +16,12 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import { useHookExecutionLogs } from "@/hooks/useHookExecutionLogs";
-import HookLogsModal from "@/refresh-pages/admin/HooksPage/HookLogsModal";
+import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
+import HookLogsModal from "@/ee/refresh-pages/admin/HooksPage/HookLogsModal";
 import type {
   HookPointMeta,
   HookResponse,
-} from "@/refresh-pages/admin/HooksPage/interfaces";
+} from "@/ee/refresh-pages/admin/HooksPage/interfaces";
 
 interface HookStatusPopoverProps {
   hook: HookResponse;

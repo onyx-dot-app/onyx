@@ -11,6 +11,40 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 
+/**
+ * ProviderCard — a stateful card for selecting / connecting / disconnecting
+ * an external service provider (LLM, search engine, voice model, etc.).
+ *
+ * Built on opal `SelectCard` + `CardHeaderLayout`. Maps a three-state
+ * status model to the `SelectCard` state system:
+ *
+ * | Status         | SelectCard state | Right action           |
+ * |----------------|------------------|------------------------|
+ * | `disconnected` | `empty`          | "Connect" button       |
+ * | `connected`    | `filled`         | "Set as Default" button|
+ * | `selected`     | `selected`       | "Current Default" label|
+ *
+ * Bottom-right actions (Disconnect, Edit) are always visible when the
+ * provider is connected or selected.
+ *
+ * Used on admin configuration pages: Web Search, Image Generation,
+ * Voice, and LLM Configuration.
+ *
+ * @example
+ * ```tsx
+ * <ProviderCard
+ *   icon={SvgGlobe}
+ *   title="Exa"
+ *   description="Exa.ai"
+ *   status="connected"
+ *   onConnect={() => openModal()}
+ *   onSelect={() => setDefault(id)}
+ *   onEdit={() => openEditModal()}
+ *   onDisconnect={() => confirmDisconnect(id)}
+ * />
+ * ```
+ */
+
 type ProviderStatus = "disconnected" | "connected" | "selected";
 
 interface ProviderCardProps {
@@ -52,9 +86,9 @@ export default function ProviderCard({
 
   return (
     <SelectCard
-      variant="select-card"
       state={STATUS_TO_STATE[status]}
-      sizeVariant="lg"
+      padding="sm"
+      rounding="lg"
       aria-label={ariaLabel}
       onClick={isDisconnected && onConnect ? onConnect : undefined}
     >

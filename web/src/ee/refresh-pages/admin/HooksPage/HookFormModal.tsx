@@ -23,14 +23,14 @@ import {
   HookAuthError,
   HookTimeoutError,
   HookConnectError,
-} from "@/refresh-pages/admin/HooksPage/svc";
+} from "@/ee/refresh-pages/admin/HooksPage/svc";
 import type {
   HookFailStrategy,
   HookFormState,
   HookPointMeta,
   HookResponse,
   HookUpdateRequest,
-} from "@/refresh-pages/admin/HooksPage/interfaces";
+} from "@/ee/refresh-pages/admin/HooksPage/interfaces";
 
 // ---------------------------------------------------------------------------
 // Types

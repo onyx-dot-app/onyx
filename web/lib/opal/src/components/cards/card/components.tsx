@@ -1,5 +1,6 @@
 import "@opal/components/cards/card/styles.css";
 import type { PaddingVariants, RoundingVariants } from "@opal/types";
+import { cardPaddingVariants, cardRoundingVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -22,9 +23,9 @@ type CardProps = {
    * | `"2xs"` | `p-0.5` |
    * | `"fit"` | `p-0`   |
    *
-   * @default "sm"
+   * @default "md"
    */
-  paddingVariant?: PaddingVariants;
+  padding?: PaddingVariants;
 
   /**
    * Border-radius preset.
@@ -38,7 +39,7 @@ type CardProps = {
    *
    * @default "md"
    */
-  roundingVariant?: RoundingVariants;
+  rounding?: RoundingVariants;
 
   /**
    * Background fill intensity.
@@ -48,7 +49,7 @@ type CardProps = {
    *
    * @default "light"
    */
-  backgroundVariant?: BackgroundVariant;
+  background?: BackgroundVariant;
 
   /**
    * Border style.
@@ -58,7 +59,7 @@ type CardProps = {
    *
    * @default "none"
    */
-  borderVariant?: BorderVariant;
+  border?: BorderVariant;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -67,46 +68,26 @@ type CardProps = {
 };
 
 // ---------------------------------------------------------------------------
-// Mappings
-// ---------------------------------------------------------------------------
-
-const paddingForVariant: Record<PaddingVariants, string> = {
-  lg: "p-6",
-  md: "p-4",
-  sm: "p-2",
-  xs: "p-1",
-  "2xs": "p-0.5",
-  fit: "p-0",
-};
-
-const roundingForVariant: Record<RoundingVariants, string> = {
-  lg: "rounded-16",
-  md: "rounded-12",
-  sm: "rounded-08",
-  xs: "rounded-04",
-};
-
-// ---------------------------------------------------------------------------
 // Card
 // ---------------------------------------------------------------------------
 
 function Card({
-  paddingVariant = "sm",
-  roundingVariant = "md",
-  backgroundVariant = "light",
-  borderVariant = "none",
+  padding: paddingProp = "md",
+  rounding: roundingProp = "md",
+  background = "light",
+  border = "none",
   ref,
   children,
 }: CardProps) {
-  const padding = paddingForVariant[paddingVariant];
-  const rounding = roundingForVariant[roundingVariant];
+  const padding = cardPaddingVariants[paddingProp];
+  const rounding = cardRoundingVariants[roundingProp];
 
   return (
     <div
       ref={ref}
       className={cn("opal-card", padding, rounding)}
-      data-background={backgroundVariant}
-      data-border={borderVariant}
+      data-background={background}
+      data-border={border}
     >
       {children}
     </div>
