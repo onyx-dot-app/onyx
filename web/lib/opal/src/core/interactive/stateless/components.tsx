@@ -3,7 +3,6 @@ import "@opal/core/interactive/stateless/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
-import { useDisabled } from "@opal/core/disabled/components";
 import { guardPortalClick } from "@opal/core/interactive/utils";
 import type { ButtonType, WithoutStyles } from "@opal/types";
 
@@ -72,9 +71,7 @@ interface InteractiveStatelessProps
   target?: string;
 
   /**
-   * Directly sets disabled state on this element, applying variant-specific
-   * disabled colors and suppressing clicks. Takes priority over the
-   * `<Disabled>` context when provided.
+   * Applies variant-specific disabled colors and suppresses clicks.
    */
   disabled?: boolean;
 }
@@ -91,8 +88,7 @@ interface InteractiveStatelessProps
  * color styling via CSS data-attributes and merges onto a single child
  * element via Radix `Slot`.
  *
- * Disabled state is consumed from the nearest `<Disabled>` ancestor via
- * context — there is no `disabled` prop on this component.
+ * Disabled state is controlled via the `disabled` prop.
  */
 function InteractiveStateless({
   ref,
@@ -103,12 +99,10 @@ function InteractiveStateless({
   type,
   href,
   target,
-  disabled: disabledProp,
+  disabled,
   ...props
 }: InteractiveStatelessProps) {
-  const ctx = useDisabled();
-  const isDisabled = disabledProp ?? ctx.isDisabled;
-  const allowClick = disabledProp === undefined ? ctx.allowClick : false;
+  const isDisabled = !!disabled;
 
   // onClick/href are always passed directly — Stateless is the outermost Slot,
   // so Radix Slot-injected handlers don't bypass this guard.
@@ -144,7 +138,7 @@ function InteractiveStateless({
       {...linkAttrs}
       {...slotProps}
       onClick={
-        isDisabled && !allowClick
+        isDisabled
           ? href
             ? (e: React.MouseEvent) => e.preventDefault()
             : undefined
