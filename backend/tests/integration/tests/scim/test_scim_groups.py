@@ -634,12 +634,61 @@ def test_scim_created_group_has_basic_permission(
     assert resp.status_code == 201
     group_id = resp.json()["id"]
 
+    # Log in as the admin user (created by the scim_token fixture).
+    admin = DATestUser(
+        id="",
+        email=build_email(ADMIN_USER_NAME),
+        password=DEFAULT_PASSWORD,
+        headers=GENERAL_HEADERS,
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+    admin = UserManager.login_as_user(admin)
+
     # Verify the group itself was granted the basic permission
-    admin_user = UserManager.create(name=f"admin_basic_perm_check_{idp_style}")
     perms_resp = requests.get(
         f"{API_SERVER_URL}/manage/admin/user-group/{group_id}/permissions",
-        headers=admin_user.headers,
+        headers=admin.headers,
     )
     perms_resp.raise_for_status()
     perms = perms_resp.json()
     assert "basic" in perms, f"SCIM group should have 'basic' permission, got: {perms}"
+
+
+def test_replace_group_cannot_rename_from_reserved(scim_token: str) -> None:
+    """PUT /Groups/{id} renaming a reserved group ('Admin') to a non-reserved name returns 409."""
+    resp = ScimClient.get('/Groups?filter=displayName eq "Admin"', scim_token)
+    assert resp.status_code == 200
+    resources = resp.json()["Resources"]
+    assert len(resources) >= 1, "Expected reserved 'Admin' group to exist"
+    admin_group_id = resources[0]["id"]
+
+    resp = ScimClient.put(
+        f"/Groups/{admin_group_id}",
+        scim_token,
+        json=_make_group_resource(
+            display_name="RenamedAdmin", external_id="ext-rename-from-reserved"
+        ),
+    )
+    assert resp.status_code == 409
+    assert "reserved" in resp.json()["detail"].lower()
+
+
+def test_patch_rename_from_reserved_name(scim_token: str, idp_style: str) -> None:
+    """PATCH /Groups/{id} renaming a reserved group ('Admin') returns 409."""
+    resp = ScimClient.get('/Groups?filter=displayName eq "Admin"', scim_token)
+    assert resp.status_code == 200
+    resources = resp.json()["Resources"]
+    assert len(resources) >= 1, "Expected reserved 'Admin' group to exist"
+    admin_group_id = resources[0]["id"]
+
+    resp = ScimClient.patch(
+        f"/Groups/{admin_group_id}",
+        scim_token,
+        json=_make_patch_request(
+            [{"op": "replace", "path": "displayName", "value": "RenamedAdmin"}],
+            idp_style,
+        ),
+    )
+    assert resp.status_code == 409
+    assert "reserved" in resp.json()["detail"].lower()

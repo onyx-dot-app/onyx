@@ -55,7 +55,6 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType
 from onyx.db.enums import GrantSource
 from onyx.db.enums import Permission
-from onyx.db.models import PermissionGrant
 from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
@@ -908,14 +907,11 @@ def create_group(
         )
 
     # Every group gets the "basic" permission by default.
-    db_session.add(
-        PermissionGrant(
-            group_id=db_group.id,
-            permission=Permission.BASIC_ACCESS,
-            grant_source=GrantSource.SYSTEM,
-        )
+    dal.add_permission_grant_to_group(
+        group_id=db_group.id,
+        permission=Permission.BASIC_ACCESS,
+        grant_source=GrantSource.SYSTEM,
     )
-    db_session.flush()
 
     dal.upsert_group_members(db_group.id, member_uuids)
 
@@ -951,6 +947,11 @@ def replace_group(
     if isinstance(result, ScimJSONResponse):
         return result
     group = result
+
+    if group.name in _RESERVED_GROUP_NAMES and group_resource.displayName != group.name:
+        return _scim_error_response(
+            409, f"'{group.name}' is a reserved group name and cannot be renamed."
+        )
 
     if (
         group_resource.displayName in _RESERVED_GROUP_NAMES
@@ -1019,6 +1020,11 @@ def patch_group(
         return _scim_error_response(e.status, e.detail)
 
     new_name = patched.displayName if patched.displayName != group.name else None
+
+    if group.name in _RESERVED_GROUP_NAMES and new_name:
+        return _scim_error_response(
+            409, f"'{group.name}' is a reserved group name and cannot be renamed."
+        )
 
     if new_name and new_name in _RESERVED_GROUP_NAMES:
         return _scim_error_response(409, f"'{new_name}' is a reserved group name.")
