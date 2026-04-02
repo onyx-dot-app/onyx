@@ -1,0 +1,202 @@
+"use client";
+
+/**
+ * Sidebar Layout Components
+ *
+ * Provides composable layout primitives for app and admin sidebars with mobile
+ * overlay support and optional desktop folding.
+ *
+ * @example
+ * ```tsx
+ * import * as SidebarLayouts from "@/layouts/sidebar-layouts";
+ * import { useSidebarFolded } from "@/layouts/sidebar-layouts";
+ *
+ * function MySidebar() {
+ *   const { folded, setFolded } = useSidebarState();
+ *   const contentFolded = useSidebarFolded();
+ *
+ *   return (
+ *     <SidebarLayouts.Root folded={folded} onFoldChange={setFolded} foldable>
+ *       <SidebarLayouts.Header>
+ *         <NewSessionButton folded={contentFolded} />
+ *       </SidebarLayouts.Header>
+ *       <SidebarLayouts.Body scrollKey="my-sidebar">
+ *         {contentFolded ? null : <SectionContent />}
+ *       </SidebarLayouts.Body>
+ *       <SidebarLayouts.Footer>
+ *         <UserAvatar />
+ *       </SidebarLayouts.Footer>
+ *     </SidebarLayouts.Root>
+ *   );
+ * }
+ * ```
+ */
+
+import {
+  createContext,
+  useContext,
+  useCallback,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
+import { cn } from "@/lib/utils";
+import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
+import OverflowDiv from "@/refresh-components/OverflowDiv";
+import useScreenSize from "@/hooks/useScreenSize";
+
+// ---------------------------------------------------------------------------
+// Fold context
+// ---------------------------------------------------------------------------
+
+const SidebarFoldedContext = createContext(false);
+
+/**
+ * Returns whether the sidebar content should render in its folded (narrow)
+ * state. On mobile, this is always `false` because the overlay pattern handles
+ * visibility — the sidebar content itself is always fully expanded.
+ */
+export function useSidebarFolded(): boolean {
+  return useContext(SidebarFoldedContext);
+}
+
+// ---------------------------------------------------------------------------
+// Root
+// ---------------------------------------------------------------------------
+
+interface SidebarRootProps {
+  /**
+   * Whether the sidebar is currently folded (desktop) or off-screen (mobile).
+   */
+  folded: boolean;
+  /** Callback to update the fold state. Compatible with `useState` setters. */
+  onFoldChange: Dispatch<SetStateAction<boolean>>;
+  /**
+   * Whether the sidebar supports folding on desktop.
+   * When `false` (the default), the sidebar is always expanded on desktop and
+   * the fold button is hidden. Mobile overlay behavior is always enabled
+   * regardless of this prop.
+   */
+  foldable?: boolean;
+  children: React.ReactNode;
+}
+
+function SidebarRoot({
+  folded,
+  onFoldChange,
+  foldable = false,
+  children,
+}: SidebarRootProps) {
+  const { isMobile } = useScreenSize();
+
+  const close = useCallback(() => onFoldChange(true), [onFoldChange]);
+  const toggle = useCallback(
+    () => onFoldChange((prev) => !prev),
+    [onFoldChange]
+  );
+
+  // On mobile the sidebar content is always visually expanded — the overlay
+  // transform handles visibility. On desktop, only foldable sidebars honour
+  // the fold state.
+  const contentFolded = !isMobile && foldable ? folded : false;
+
+  const inner = (
+    <div className="flex flex-col min-h-0 h-full gap-3">{children}</div>
+  );
+
+  if (isMobile) {
+    return (
+      <SidebarFoldedContext.Provider value={false}>
+        <div
+          className={cn(
+            "fixed inset-y-0 left-0 z-50 transition-transform duration-200",
+            folded ? "-translate-x-full" : "translate-x-0"
+          )}
+        >
+          <SidebarWrapper folded={false} onFoldClick={close}>
+            {inner}
+          </SidebarWrapper>
+        </div>
+
+        {/* Backdrop — closes the sidebar when anything outside it is tapped */}
+        <div
+          className={cn(
+            "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
+            folded
+              ? "opacity-0 pointer-events-none"
+              : "opacity-100 pointer-events-auto"
+          )}
+          onClick={close}
+        />
+      </SidebarFoldedContext.Provider>
+    );
+  }
+
+  return (
+    <SidebarFoldedContext.Provider value={contentFolded}>
+      <SidebarWrapper
+        folded={foldable ? folded : undefined}
+        onFoldClick={foldable ? toggle : undefined}
+      >
+        {inner}
+      </SidebarWrapper>
+    </SidebarFoldedContext.Provider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Header — pinned content above the scroll area
+// ---------------------------------------------------------------------------
+
+interface SidebarHeaderProps {
+  children?: React.ReactNode;
+}
+
+function SidebarHeader({ children }: SidebarHeaderProps) {
+  if (!children) return null;
+  return <div className="px-2">{children}</div>;
+}
+
+// ---------------------------------------------------------------------------
+// Body — scrollable content area
+// ---------------------------------------------------------------------------
+
+interface SidebarBodyProps {
+  /**
+   * Unique key to enable scroll position persistence across navigation.
+   * (e.g., "admin-sidebar", "app-sidebar").
+   */
+  scrollKey: string;
+  children?: React.ReactNode;
+}
+
+function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
+  return (
+    <OverflowDiv className="gap-3 px-2" scrollKey={scrollKey}>
+      {children}
+    </OverflowDiv>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Footer — pinned content below the scroll area
+// ---------------------------------------------------------------------------
+
+interface SidebarFooterProps {
+  children?: React.ReactNode;
+}
+
+function SidebarFooter({ children }: SidebarFooterProps) {
+  if (!children) return null;
+  return <div className="px-2">{children}</div>;
+}
+
+// ---------------------------------------------------------------------------
+// Exports
+// ---------------------------------------------------------------------------
+
+export {
+  SidebarRoot as Root,
+  SidebarHeader as Header,
+  SidebarBody as Body,
+  SidebarFooter as Footer,
+};
