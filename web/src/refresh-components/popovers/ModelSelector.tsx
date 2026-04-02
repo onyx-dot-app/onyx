@@ -115,8 +115,8 @@ export default function ModelSelector({
   };
 
   return (
-    <div className="flex items-center justify-end gap-1 p-1">
-      <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <div className="flex items-center justify-end gap-1 p-1">
         {!atMax && (
           <Popover.Trigger asChild>
             <Button
@@ -128,60 +128,70 @@ export default function ModelSelector({
           </Popover.Trigger>
         )}
 
-        <Popover.Content side="top" align="start" width="lg">
-          <ModelListContent
-            llmProviders={llmManager.llmProviders}
-            onSelect={handleSelect}
-            isSelected={isSelected}
-            isDisabled={isDisabled}
-          />
-        </Popover.Content>
-      </Popover>
+        {selectedModels.length > 0 && (
+          <>
+            {!atMax && <div className="h-9 w-px bg-border-01 shrink-0" />}
+            <Popover.Anchor asChild>
+              <div className="flex items-center">
+                {selectedModels.map((model, index) => {
+                  const ProviderIcon = getProviderIcon(
+                    model.provider,
+                    model.modelName
+                  );
 
-      {selectedModels.length > 0 && isMultiModel && (
-        <div className="h-9 w-px bg-border-01 shrink-0" />
-      )}
+                  if (!isMultiModel) {
+                    return (
+                      <OpenButton
+                        key={modelKey(model.provider, model.modelName)}
+                        icon={ProviderIcon}
+                        onClick={() => handlePillClick(index)}
+                      >
+                        {model.displayName}
+                      </OpenButton>
+                    );
+                  }
 
-      {selectedModels.map((model, index) => {
-        const ProviderIcon = getProviderIcon(model.provider, model.modelName);
+                  return (
+                    <div
+                      key={modelKey(model.provider, model.modelName)}
+                      className="flex items-center gap-1"
+                    >
+                      {index > 0 && (
+                        <div className="h-9 w-px bg-border-01 shrink-0" />
+                      )}
+                      <SelectButton
+                        icon={ProviderIcon}
+                        state="empty"
+                        variant="select-tinted"
+                        interaction="hover"
+                        onClick={() => handlePillClick(index)}
+                      >
+                        {model.displayName}
+                      </SelectButton>
+                      <Button
+                        prominence="tertiary"
+                        icon={SvgX}
+                        size="2xs"
+                        onClick={() => onRemove(index)}
+                        tooltip="Remove model"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </Popover.Anchor>
+          </>
+        )}
+      </div>
 
-        if (!isMultiModel) {
-          return (
-            <OpenButton
-              key={modelKey(model.provider, model.modelName)}
-              icon={ProviderIcon}
-              onClick={() => handlePillClick(index)}
-            >
-              {model.displayName}
-            </OpenButton>
-          );
-        }
-
-        return (
-          <div
-            key={modelKey(model.provider, model.modelName)}
-            className="flex items-center gap-1"
-          >
-            {index > 0 && <div className="h-9 w-px bg-border-01 shrink-0" />}
-            <SelectButton
-              icon={ProviderIcon}
-              state="empty"
-              variant="select-tinted"
-              interaction="hover"
-              onClick={() => handlePillClick(index)}
-            >
-              {model.displayName}
-            </SelectButton>
-            <Button
-              prominence="tertiary"
-              icon={SvgX}
-              size="2xs"
-              onClick={() => onRemove(index)}
-              tooltip="Remove model"
-            />
-          </div>
-        );
-      })}
-    </div>
+      <Popover.Content side="top" align="start" width="lg">
+        <ModelListContent
+          llmProviders={llmManager.llmProviders}
+          onSelect={handleSelect}
+          isSelected={isSelected}
+          isDisabled={isDisabled}
+        />
+      </Popover.Content>
+    </Popover>
   );
 }
