@@ -9,7 +9,7 @@ import { PHProvider } from "./providers";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
-import { Hanken_Grotesk } from "next/font/google";
+import { DM_Mono, Hanken_Grotesk } from "next/font/google";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -32,6 +32,22 @@ const hankenGrotesk = Hanken_Grotesk({
   ],
 });
 
+const dmMono = DM_Mono({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-dm-mono",
+  display: "swap",
+  fallback: [
+    "SF Mono",
+    "Monaco",
+    "Cascadia Code",
+    "Roboto Mono",
+    "Consolas",
+    "Courier New",
+    "monospace",
+  ],
+});
+
 export const metadata: Metadata = {
   title: "Onyx",
   description: "Question answering for your documents",
@@ -49,7 +65,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={hankenGrotesk.variable} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${hankenGrotesk.variable} ${dmMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <meta
           name="viewport"
