@@ -14,7 +14,6 @@ import { CombinedSettings } from "@/interfaces/settings";
 import { SidebarTab } from "@opal/components";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Disabled } from "@opal/core";
 import { SvgArrowUpCircle, SvgUserManage, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
@@ -224,7 +223,10 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
 
   const { query, setQuery, filtered } = useFilter(allItems, itemExtractor);
 
-  const groups = groupBySection(filtered);
+  const enabled = filtered.filter((item) => !item.disabled);
+  const disabled = filtered.filter((item) => item.disabled);
+  const enabledGroups = groupBySection(enabled);
+  const disabledGroups = groupBySection(disabled);
 
   return (
     <SidebarWrapper>
@@ -286,26 +288,16 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
           </Section>
         }
       >
-        {groups.map((group, groupIndex) => {
-          const tabs = group.items.map(({ link, icon, name, disabled }) => (
-            <Disabled key={link} disabled={disabled}>
-              {/*
-                # NOTE (@raunakab)
-                We intentionally add a `div` intermediary here.
-                Without it, the disabled styling that is default provided by the `Disabled` component (which we want here) would be overridden by the custom disabled styling provided by the `SidebarTab`.
-                Therefore, in order to avoid that overriding, we add a layer of indirection.
-              */}
-              <div>
-                <SidebarTab
-                  disabled={disabled}
-                  icon={icon}
-                  href={disabled ? undefined : link}
-                  selected={pathname.startsWith(link)}
-                >
-                  {name}
-                </SidebarTab>
-              </div>
-            </Disabled>
+        {enabledGroups.map((group, groupIndex) => {
+          const tabs = group.items.map(({ link, icon, name }) => (
+            <SidebarTab
+              key={link}
+              icon={icon}
+              href={link}
+              selected={pathname.startsWith(link)}
+            >
+              {name}
+            </SidebarTab>
           ));
 
           if (!group.section) {
@@ -318,6 +310,16 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
             </SidebarSection>
           );
         })}
+
+        {disabledGroups.map((group, groupIndex) => (
+          <SidebarSection key={`disabled-${groupIndex}`} title={group.section}>
+            {group.items.map(({ link, icon, name }) => (
+              <SidebarTab key={link} disabled icon={icon}>
+                {name}
+              </SidebarTab>
+            ))}
+          </SidebarSection>
+        ))}
       </SidebarBody>
     </SidebarWrapper>
   );
