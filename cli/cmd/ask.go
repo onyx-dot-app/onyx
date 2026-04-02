@@ -53,6 +53,10 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				return exitcodes.New(exitcodes.NotConfigured, "onyx CLI is not configured\n  Run: onyx-cli configure")
 			}
 
+			if askJSON && askQuiet {
+				return exitcodes.New(exitcodes.BadRequest, "--json and --quiet cannot be used together")
+			}
+
 			question, err := resolveQuestion(args, askPrompt)
 			if err != nil {
 				return err
@@ -110,9 +114,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					if err != nil {
 						return fmt.Errorf("error marshaling event: %w", err)
 					}
-					if !askQuiet {
-						fmt.Println(string(data))
-					}
+					fmt.Println(string(data))
 					if _, ok := event.(models.ErrorEvent); ok {
 						lastErr = fmt.Errorf("%s", event.(models.ErrorEvent).Error)
 					}
