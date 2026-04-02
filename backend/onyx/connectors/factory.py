@@ -18,7 +18,6 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import backend_update_credential_json
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.enums import AccessType
 from onyx.db.models import Credential
@@ -101,12 +100,36 @@ def identify_connector_class(
     return connector
 
 
+def extract_credential_json(credential: Credential) -> dict[str, Any]:
+    """Extract the plain credential dict from a Credential ORM object.
+    Safe to call while the session is still open; the returned dict
+    is independent of the ORM and can be used after session close."""
+    if credential.credential_json is None:
+        return {}
+    return credential.credential_json.get_value(apply_mask=False)
+
+
+def _refresh_credential_json(
+    credential_id: int, new_credential_json: dict[str, Any]
+) -> None:
+    """Write back refreshed OAuth tokens in a short-lived session.
+    Called only when a connector's load_credentials returns new data."""
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+
+    with get_session_with_current_tenant() as db_session:
+        credential = db_session.get(Credential, credential_id)
+        if credential is None:
+            return
+        credential.credential_json = new_credential_json  # type: ignore[assignment]
+        db_session.commit()
+
+
 def instantiate_connector(
-    db_session: Session,
     source: DocumentSource,
     input_type: InputType,
     connector_specific_config: dict[str, Any],
-    credential: Credential,
+    credential_json: dict[str, Any],
+    credential_id: int,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
@@ -114,19 +137,14 @@ def instantiate_connector(
 
     if isinstance(connector, CredentialsConnector):
         provider = OnyxDBCredentialsProvider(
-            get_current_tenant_id(), str(source), credential.id
+            get_current_tenant_id(), str(source), credential_id
         )
         connector.set_credentials_provider(provider)
     else:
-        credential_json = (
-            credential.credential_json.get_value(apply_mask=False)
-            if credential.credential_json
-            else {}
-        )
         new_credentials = connector.load_credentials(credential_json)
 
         if new_credentials is not None:
-            backend_update_credential_json(credential, new_credentials, db_session)
+            _refresh_credential_json(credential_id, new_credentials)
 
     connector.set_allow_images(get_image_extraction_and_analysis_enabled())
 
@@ -164,11 +182,11 @@ def validate_ccpair_for_user(
 
     try:
         runnable_connector = instantiate_connector(
-            db_session=db_session,
             source=connector.source,
             input_type=connector.input_type,
             connector_specific_config=connector.connector_specific_config,
-            credential=credential,
+            credential_json=extract_credential_json(credential),
+            credential_id=credential.id,
         )
     except ConnectorValidationError as e:
         raise e
