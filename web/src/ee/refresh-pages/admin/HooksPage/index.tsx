@@ -548,101 +548,103 @@ export default function HooksPage() {
       : undefined);
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={route.icon}
-        title={route.title}
-        description="Extend Onyx pipelines by registering external API endpoints as callbacks at predefined hook points."
-        separator
-      />
-      <SettingsLayouts.Body>
-        {/* Create modal */}
-        {!!connectSpec && (
-          <HookFormModal
-            key={connectSpec?.hook_point ?? "create"}
-            onOpenChange={(open: boolean) => {
-              if (!open) setConnectSpec(null);
-            }}
-            spec={connectSpec ?? undefined}
-            onSuccess={handleHookSuccess}
-          />
-        )}
+    <>
+      {/* Create modal */}
+      {!!connectSpec && (
+        <HookFormModal
+          key={connectSpec?.hook_point ?? "create"}
+          onOpenChange={(open: boolean) => {
+            if (!open) setConnectSpec(null);
+          }}
+          spec={connectSpec ?? undefined}
+          onSuccess={handleHookSuccess}
+        />
+      )}
 
-        {/* Edit modal */}
-        {!!editHook && (
-          <HookFormModal
-            key={editHook?.id ?? "edit"}
-            onOpenChange={(open: boolean) => {
-              if (!open) setEditHook(null);
-            }}
-            hook={editHook ?? undefined}
-            spec={connectSpec_ ?? undefined}
-            onSuccess={handleHookSuccess}
-          />
-        )}
+      {/* Edit modal */}
+      {!!editHook && (
+        <HookFormModal
+          key={editHook?.id ?? "edit"}
+          onOpenChange={(open: boolean) => {
+            if (!open) setEditHook(null);
+          }}
+          hook={editHook ?? undefined}
+          spec={connectSpec_ ?? undefined}
+          onSuccess={handleHookSuccess}
+        />
+      )}
 
-        {isLoading ? (
-          <SimpleLoader />
-        ) : specsError || hooksError ? (
-          <Text font="secondary-body" color="text-03">
-            {`Failed to load${
-              specsError ? " hook specifications" : " hooks"
-            }. Please refresh the page.`}
-          </Text>
-        ) : (
-          <div className="flex flex-col gap-3 h-full">
-            <div className="pb-3">
-              <InputTypeIn
-                placeholder="Search hooks..."
-                value={search}
-                variant="internal"
-                leftSearchIcon
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-
-            {connectedHooks.length === 0 && unconnectedSpecs.length === 0 ? (
-              <div>
-                <IllustrationContent
-                  title={
-                    search ? "No results found" : "No hook points available"
-                  }
-                  description={
-                    search ? "Try using a different search term." : undefined
-                  }
-                  illustration={search ? SvgNoResult : SvgEmpty}
+      <SettingsLayouts.Root>
+        <SettingsLayouts.Header
+          icon={route.icon}
+          title={route.title}
+          description="Extend Onyx pipelines by registering external API endpoints as callbacks at predefined hook points."
+          separator
+        />
+        <SettingsLayouts.Body>
+          {isLoading ? (
+            <SimpleLoader />
+          ) : specsError || hooksError ? (
+            <Text font="secondary-body" color="text-03">
+              {`Failed to load${
+                specsError ? " hook specifications" : " hooks"
+              }. Please refresh the page.`}
+            </Text>
+          ) : (
+            <div className="flex flex-col gap-3 h-full">
+              <div className="pb-3">
+                <InputTypeIn
+                  placeholder="Search hooks..."
+                  value={search}
+                  variant="internal"
+                  leftSearchIcon
+                  onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {connectedHooks.map((hook) => {
-                  const spec = specs?.find(
-                    (s: HookPointMeta) => s.hook_point === hook.hook_point
-                  );
-                  return (
-                    <ConnectedHookCard
-                      key={hook.id}
-                      hook={hook}
-                      spec={spec}
-                      onEdit={() => setEditHook(hook)}
-                      onDeleted={() => handleHookDeleted(hook.id)}
-                      onToggled={handleHookSuccess}
-                    />
-                  );
-                })}
 
-                {unconnectedSpecs.map((spec: HookPointMeta) => (
-                  <UnconnectedHookCard
-                    key={spec.hook_point}
-                    spec={spec}
-                    onConnect={() => setConnectSpec(spec)}
+              {connectedHooks.length === 0 && unconnectedSpecs.length === 0 ? (
+                <div>
+                  <IllustrationContent
+                    title={
+                      search ? "No results found" : "No hook points available"
+                    }
+                    description={
+                      search ? "Try using a different search term." : undefined
+                    }
+                    illustration={search ? SvgNoResult : SvgEmpty}
                   />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {connectedHooks.map((hook) => {
+                    const spec = specs?.find(
+                      (s: HookPointMeta) => s.hook_point === hook.hook_point
+                    );
+                    return (
+                      <ConnectedHookCard
+                        key={hook.id}
+                        hook={hook}
+                        spec={spec}
+                        onEdit={() => setEditHook(hook)}
+                        onDeleted={() => handleHookDeleted(hook.id)}
+                        onToggled={handleHookSuccess}
+                      />
+                    );
+                  })}
+
+                  {unconnectedSpecs.map((spec: HookPointMeta) => (
+                    <UnconnectedHookCard
+                      key={spec.hook_point}
+                      spec={spec}
+                      onConnect={() => setConnectSpec(spec)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
+    </>
   );
 }

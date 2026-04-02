@@ -14,7 +14,6 @@ import type {
   HookPointMeta,
   HookResponse,
 } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
-
 interface HookLogsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -77,6 +76,8 @@ export default function HookLogsModal({
   hook,
   spec,
 }: HookLogsModalProps) {
+  const onClose = () => onOpenChange(false);
+
   const { recentErrors, olderErrors, isLoading, error } = useHookExecutionLogs(
     hook.id,
     10
@@ -101,7 +102,7 @@ export default function HookLogsModal({
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange}>
+    <Modal open={open} onOpenChange={onClose}>
       <Modal.Content width="md" height="fit">
         <Modal.Header
           icon={(props) => <SvgTextLines {...props} />}
@@ -109,7 +110,7 @@ export default function HookLogsModal({
           description={`Hook: ${hook.name} • Hook Point: ${
             spec?.display_name ?? hook.hook_point
           }`}
-          onClose={() => onOpenChange(false)}
+          onClose={onClose}
         />
         <Modal.Body>
           {isLoading ? (
