@@ -30,7 +30,7 @@ class Emitter:
         self._drain_done = drain_done
 
     def emit(self, packet: Packet) -> None:
-        if self._drain_done and self._drain_done.is_set():
+        if self._drain_done is not None and self._drain_done.is_set():
             return
         base = packet.placement or Placement(turn_index=0)
         tagged = Packet(

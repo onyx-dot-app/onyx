@@ -3,7 +3,7 @@ IMPORTANT: familiarize yourself with the design concepts prior to contributing t
 An overview can be found in the README.md file in this directory.
 """
 
-import functools
+import contextvars
 import io
 import queue
 import re
@@ -11,7 +11,9 @@ import threading
 import traceback
 from collections.abc import Callable
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from contextvars import Token
+from typing import Final
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -64,6 +66,7 @@ from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
+from onyx.db.chat import reserve_multi_model_message_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint
 from onyx.db.memory import get_memories
@@ -91,6 +94,7 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.override_models import LLMOverride
 from onyx.llm.request_context import reset_llm_mock_response
 from onyx.llm.request_context import set_llm_mock_response
 from onyx.llm.utils import litellm_exception_to_error_msg
@@ -98,6 +102,8 @@ from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.models import ModelResponseSlot
+from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
@@ -116,13 +122,11 @@ from onyx.tools.tool_constructor import FileReaderToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
-from onyx.utils.threadpool_concurrency import run_multiple_in_background
 from onyx.utils.timing import log_function_time
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
-
 APPROX_CHARS_PER_TOKEN = 4
 
 
@@ -482,6 +486,8 @@ def build_chat_turn(
     new_msg_req: SendMessageRequest,
     user: User,
     db_session: Session,
+    # None → single-model (persona default LLM); non-empty list → multi-model (one LLM per override)
+    llm_overrides: list[LLMOverride] | None,
     *,
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
@@ -494,21 +500,23 @@ def build_chat_turn(
     # NOTE: not stored in the database, only passed in to the LLM as context
     additional_context: str | None = None,
 ) -> Generator[AnswerStreamPart, None, ChatTurnSetup]:
-    """Setup generator for a single-model chat turn.
+    """Shared setup generator for both single-model and multi-model chat turns.
 
     Yields the packet(s) the frontend needs for request tracking, then returns an
     immutable ``ChatTurnSetup`` containing everything the execution strategy needs.
 
     Callers use::
 
-        setup = yield from build_chat_turn(new_msg_req, ...)
+        setup = yield from build_chat_turn(new_msg_req, ..., llm_overrides=...)
 
     to forward yielded packets upstream while receiving the return value locally.
+
+    Args:
+        llm_overrides: ``None`` → single-model (persona default LLM).
+                       Non-empty list → multi-model (one LLM per override).
     """
-    # TODO(nmgarza5): Consider refactoring so that yields move to handle_stream_message_objects
-    # and build_chat_turn becomes a plain function returning ChatTurnSetup. This would make
-    # the generator pattern (yield from build_chat_turn) unnecessary and easier to reason about.
     tenant_id = get_current_tenant_id()
+    is_multi = bool(llm_overrides)
 
     user_id = user.id
     llm_user_identifier = (
@@ -519,22 +527,25 @@ def build_chat_turn(
     if not new_msg_req.chat_session_id:
         if not new_msg_req.chat_session_info:
             raise RuntimeError("Must specify a chat session id or chat session info")
-        new_session = create_chat_session_from_request(
+        chat_session = create_chat_session_from_request(
             chat_session_request=new_msg_req.chat_session_info,
             user_id=user_id,
             db_session=db_session,
         )
-        session_id = new_session.id
-        yield CreateChatSessionID(chat_session_id=session_id)
+        yield CreateChatSessionID(chat_session_id=chat_session.id)
+        chat_session = get_chat_session_by_id(
+            chat_session_id=chat_session.id,
+            user_id=user_id,
+            db_session=db_session,
+            eager_load_persona=True,
+        )
     else:
-        session_id = new_msg_req.chat_session_id
-
-    chat_session = get_chat_session_by_id(
-        chat_session_id=session_id,
-        user_id=user_id,
-        db_session=db_session,
-        eager_load_persona=True,
-    )
+        chat_session = get_chat_session_by_id(
+            chat_session_id=new_msg_req.chat_session_id,
+            user_id=user_id,
+            db_session=db_session,
+            eager_load_persona=True,
+        )
 
     persona = chat_session.persona
     message_text = new_msg_req.message
@@ -563,21 +574,33 @@ def build_chat_turn(
     )
 
     # Check LLM cost limits before using the LLM (only for Onyx-managed keys),
-    # then build the LLM instance.
-    primary_llm = get_llm_for_persona(
-        persona=persona,
-        user=user,
-        llm_override=new_msg_req.llm_override or chat_session.llm_override,
-        additional_headers=litellm_additional_headers,
+    # then build the LLM instance(s).
+    llms: list[LLM] = []
+    model_display_names: list[str] = []
+    selected_overrides: list[LLMOverride | None] = (
+        list(llm_overrides or [])
+        if is_multi
+        else [new_msg_req.llm_override or chat_session.llm_override]
     )
-    check_llm_cost_limit_for_provider(
-        db_session=db_session,
-        tenant_id=tenant_id,
-        llm_provider_api_key=primary_llm.config.api_key,
-    )
-    llms = [primary_llm]
-    model_display_names = [""]
-    token_counter = get_llm_token_counter(primary_llm)
+    for override in selected_overrides:
+        llm = get_llm_for_persona(
+            persona=persona,
+            user=user,
+            llm_override=override,
+            additional_headers=litellm_additional_headers,
+        )
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=tenant_id,
+            llm_provider_api_key=llm.config.api_key,
+        )
+        llms.append(llm)
+        model_display_names.append(_build_model_display_name(override))
+    token_counter = get_llm_token_counter(llms[0])
+
+    # not sure why we do this, but to maintain parity with previous code:
+    if not is_multi:
+        model_display_names = [""]
 
     # Verify that the user-specified files actually belong to the user
     verify_user_files(
@@ -738,7 +761,8 @@ def build_chat_turn(
         db_session=db_session,
     )
 
-    llm_max_context_window = llms[0].config.max_input_tokens
+    # Use the smallest context window across models for safety (harmless for N=1).
+    llm_max_context_window = min(llm.config.max_input_tokens for llm in llms)
 
     extracted_context_files = extract_context_files(
         user_files=context_user_files,
@@ -782,18 +806,34 @@ def build_chat_turn(
     # Convert loaded files to ChatFile format for tools like PythonTool
     chat_files_for_tools = _convert_loaded_files_to_chat_files(files)
 
-    # ── Reserve assistant message ID → yield to frontend ─────────────────────
-    assistant_response = reserve_message_id(
-        db_session=db_session,
-        chat_session_id=chat_session.id,
-        parent_message=user_message.id,
-        message_type=MessageType.ASSISTANT,
-    )
-    reserved_messages = [assistant_response]
-    yield MessageResponseIDInfo(
-        user_message_id=user_message.id,
-        reserved_assistant_message_id=assistant_response.id,
-    )
+    # ── Reserve assistant message ID(s) → yield to frontend ──────────────────
+    if is_multi:
+        assert llm_overrides is not None
+        reserved_messages = reserve_multi_model_message_ids(
+            db_session=db_session,
+            chat_session_id=chat_session.id,
+            parent_message_id=user_message.id,
+            model_display_names=model_display_names,
+        )
+        yield MultiModelMessageResponseIDInfo(
+            user_message_id=user_message.id,
+            responses=[
+                ModelResponseSlot(message_id=m.id, model_name=name)
+                for m, name in zip(reserved_messages, model_display_names)
+            ],
+        )
+    else:
+        assistant_response = reserve_message_id(
+            db_session=db_session,
+            chat_session_id=chat_session.id,
+            parent_message=user_message.id,
+            message_type=MessageType.ASSISTANT,
+        )
+        reserved_messages = [assistant_response]
+        yield MessageResponseIDInfo(
+            user_message_id=user_message.id,
+            reserved_assistant_message_id=assistant_response.id,
+        )
 
     # Convert the chat history into a simple format that is free of any DB objects
     # and is easy to parse for the agent loop.
@@ -896,6 +936,9 @@ def build_chat_turn(
 # Sentinel placed on the merged queue when a model thread finishes.
 _MODEL_DONE = object()
 
+# How often the drain loop polls for user-initiated cancellation (stop button).
+_CANCEL_POLL_INTERVAL_S: Final[float] = 0.05
+
 
 def _run_models(
     setup: ChatTurnSetup,
@@ -906,7 +949,7 @@ def _run_models(
     """Stream packets from one or more LLM loops running in parallel worker threads.
 
     Each model gets its own worker thread, DB session, and ``Emitter``. Threads write
-    packets to a shared bounded queue as they are produced; the drain loop yields them
+    packets to a shared unbounded queue as they are produced; the drain loop yields them
     in arrival order so the caller receives a single interleaved stream regardless of
     how many models are running.
 
@@ -934,8 +977,6 @@ def _run_models(
 
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
-    # external_state_container is only non-None for single-model turns (n_models == 1),
-    # so only index 0 can receive it. Multi-model turns always create fresh containers.
     state_containers: list[ChatStateContainer] = [
         (
             external_state_container
@@ -945,9 +986,12 @@ def _run_models(
         for i in range(n_models)
     ]
     model_succeeded: list[bool] = [False] * n_models
+    # Set to True when a model raises an exception (distinct from "still running").
+    # Used in the stop-button path to avoid calling completion for errored models.
+    model_errored: list[bool] = [False] * n_models
 
     # Set when the drain loop exits early (HTTP disconnect / GeneratorExit).
-    # Signals emitters to skip future puts and workers to self-complete.
+    # Signals emitters to skip future puts so workers exit promptly.
     drain_done = threading.Event()
 
     def _run_model(model_idx: int) -> None:
@@ -1052,85 +1096,84 @@ def _run_models(
             model_succeeded[model_idx] = True
 
         except Exception as e:
+            model_errored[model_idx] = True
             merged_queue.put((model_idx, e))
 
         finally:
             merged_queue.put((model_idx, _MODEL_DONE))
 
-        # Self-completion on disconnect: _MODEL_DONE was already posted in the finally
-        # block above, so the drain loop has counted this model. If drain_done is set,
-        # the main thread exited early and will NOT call llm_loop_completion_handle for
-        # this model — open a fresh session and persist the response here instead.
-        if drain_done.is_set() and model_succeeded[model_idx]:
-            try:
-                with get_session_with_current_tenant() as self_complete_db:
-                    assistant_message = self_complete_db.get(
-                        ChatMessage, setup.reserved_messages[model_idx].id
-                    )
-                    if assistant_message is not None:
-                        llm_loop_completion_handle(
-                            state_container=state_containers[model_idx],
-                            # Guard on line above already ensures model_succeeded is True.
-                            is_connected=lambda: True,
-                            db_session=self_complete_db,
-                            assistant_message=assistant_message,
-                            llm=setup.llms[model_idx],
-                            reserved_tokens=setup.reserved_token_count,
-                        )
-            except Exception:
-                logger.exception(
-                    "model %d (%s): self-completion after disconnect failed",
-                    model_idx,
-                    setup.model_display_names[model_idx],
-                )
+    def _delete_orphaned_message(model_idx: int, context: str) -> None:
+        """Delete a reserved ChatMessage that was never populated due to a model error."""
+        try:
+            orphaned = db_session.get(
+                ChatMessage, setup.reserved_messages[model_idx].id
+            )
+            if orphaned is not None:
+                db_session.delete(orphaned)
+                db_session.commit()
+        except Exception:
+            logger.exception(
+                "%s orphan cleanup failed for model %d (%s)",
+                context,
+                model_idx,
+                setup.model_display_names[model_idx],
+            )
 
-    executor = run_multiple_in_background(
-        [functools.partial(_run_model, i) for i in range(n_models)],
-        thread_name_prefix="multi-model",
+    # Copy contextvars before submitting futures — ThreadPoolExecutor does NOT
+    # auto-propagate contextvars in Python 3.11; threads would inherit a blank context.
+    worker_context = contextvars.copy_context()
+    executor = ThreadPoolExecutor(
+        max_workers=n_models, thread_name_prefix="multi-model"
     )
-    _completion_done: bool = False
+    completion_persisted: bool = False
     try:
+        for i in range(n_models):
+            executor.submit(worker_context.run, _run_model, i)
+
         # ── Main thread: merge and yield packets ────────────────────────────
         models_remaining = n_models
-        last_turn_index = 0
         while models_remaining > 0:
             try:
-                model_idx, item = merged_queue.get(timeout=0.05)
+                model_idx, item = merged_queue.get(timeout=_CANCEL_POLL_INTERVAL_S)
             except queue.Empty:
                 # Check for user-initiated cancellation every 50 ms.
-                if setup.check_is_connected():
-                    continue
-
-                # Save state for every model before exiting. Models that already
-                # finished (model_succeeded[i]=True) get their full answer saved;
-                # models still in-flight get partial answer + "stopped by user".
-                for i in range(n_models):
-                    try:
-                        llm_loop_completion_handle(
-                            state_container=state_containers[i],
-                            # partial captures model_succeeded[i] by value at loop time, not by reference
-                            is_connected=functools.partial(bool, model_succeeded[i]),
-                            db_session=db_session,
-                            assistant_message=setup.reserved_messages[i],
-                            llm=setup.llms[i],
-                            reserved_tokens=setup.reserved_token_count,
-                        )
-                    except Exception:
-                        logger.exception(
-                            f"Failed completion for model {i} on disconnect ({setup.model_display_names[i]})"
-                        )
-                yield Packet(
-                    placement=Placement(turn_index=last_turn_index + 1),
-                    obj=OverallStop(type="stop", stop_reason="user_cancelled"),
-                )
-                _completion_done = True
-                return
+                if not setup.check_is_connected():
+                    # Save state for every model before exiting.
+                    # - Succeeded models: full answer (is_connected=True).
+                    # - Still-in-flight models: partial answer + "stopped by user".
+                    # - Errored models: delete the orphaned reserved message; do NOT
+                    #   save "stopped by user" for a model that actually threw an exception.
+                    for i in range(n_models):
+                        if model_errored[i]:
+                            _delete_orphaned_message(i, "stop-button")
+                            continue
+                        try:
+                            succeeded = model_succeeded[i]
+                            llm_loop_completion_handle(
+                                state_container=state_containers[i],
+                                is_connected=lambda: succeeded,
+                                db_session=db_session,
+                                assistant_message=setup.reserved_messages[i],
+                                llm=setup.llms[i],
+                                reserved_tokens=setup.reserved_token_count,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "stop-button completion failed for model %d (%s)",
+                                i,
+                                setup.model_display_names[i],
+                            )
+                    yield Packet(
+                        placement=Placement(turn_index=0),
+                        obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+                    )
+                    completion_persisted = True
+                    return
+                continue
             else:
                 if item is _MODEL_DONE:
                     models_remaining -= 1
-                    continue
-
-                if isinstance(item, Exception):
+                elif isinstance(item, Exception):
                     # Yield a tagged error for this model but keep the other models running.
                     # Do NOT decrement models_remaining — _run_model's finally always posts
                     # _MODEL_DONE, which is the sole completion signal.
@@ -1157,14 +1200,7 @@ def _run_models(
                             "model_index": model_idx,
                         },
                     )
-                    continue
-
-                if isinstance(item, Packet):
-                    # Track the highest turn_index seen so OverallStop can follow it.
-                    if item.placement:
-                        last_turn_index = max(
-                            last_turn_index, item.placement.turn_index
-                        )
+                elif isinstance(item, Packet):
                     # model_index already embedded by the model's Emitter in _run_model
                     yield item
 
@@ -1174,6 +1210,8 @@ def _run_models(
         # sessions, but the main-thread db_session is unshared and safe to use.
         for i in range(n_models):
             if not model_succeeded[i]:
+                # Model errored — delete its orphaned reserved message.
+                _delete_orphaned_message(i, "normal")
                 continue
             try:
                 llm_loop_completion_handle(
@@ -1186,34 +1224,60 @@ def _run_models(
                 )
             except Exception:
                 logger.exception(
-                    f"Failed completion for model {i} ({setup.model_display_names[i]})"
+                    "normal completion failed for model %d (%s)",
+                    i,
+                    setup.model_display_names[i],
                 )
-        _completion_done = True
+        completion_persisted = True
 
     finally:
-        if _completion_done:
+        if completion_persisted:
             # Normal exit or stop-button exit: completion already persisted.
             # Threads are done (normal path) or can finish in the background (stop-button).
             executor.shutdown(wait=False)
         else:
             # Early exit (GeneratorExit from raw HTTP disconnect, or unhandled
             # exception in the drain loop).
-            # 1. Signal emitters to stop blocking — future emit() calls return immediately.
+            # 1. Signal emitters to stop — future emit() calls return immediately,
+            #    so workers exit their LLM loops promptly.
             drain_done.set()
-            # 2. Drain buffered packets from memory — no consumer is running.
+            # 2. Wait for all workers to finish. Once drain_done is set the Emitter
+            #    short-circuits, so workers should exit quickly.
+            executor.shutdown(wait=True)
+            # 3. All workers are done — complete from the main thread only.
+            for i in range(n_models):
+                if model_succeeded[i]:
+                    try:
+                        llm_loop_completion_handle(
+                            state_container=state_containers[i],
+                            # Model already finished — persist full response.
+                            is_connected=lambda: True,
+                            db_session=db_session,
+                            assistant_message=setup.reserved_messages[i],
+                            llm=setup.llms[i],
+                            reserved_tokens=setup.reserved_token_count,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "disconnect completion failed for model %d (%s)",
+                            i,
+                            setup.model_display_names[i],
+                        )
+                elif model_errored[i]:
+                    _delete_orphaned_message(i, "disconnect")
+            # 4. Drain buffered packets from memory — no consumer is running.
             while not merged_queue.empty():
                 try:
                     merged_queue.get_nowait()
                 except queue.Empty:
                     break
-            # 3. Don't block the server thread — workers self-complete via drain_done.
-            executor.shutdown(wait=False)
 
 
-def handle_stream_message_objects(
+def _stream_chat_turn(
     new_msg_req: SendMessageRequest,
     user: User,
     db_session: Session,
+    llm_overrides: list[LLMOverride] | None = None,
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
@@ -1222,17 +1286,23 @@ def handle_stream_message_objects(
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
-    """Single-model streaming entrypoint.
+    """Private implementation for single-model and multi-model chat turn streaming.
 
     Builds the turn context via ``build_chat_turn``, then streams packets from
     ``_run_models`` back to the caller. Handles setup errors, LLM errors, and
     cancellation uniformly, saving whatever partial state has been accumulated
     before re-raising or yielding a terminal error packet.
 
+    Not called directly — use the public wrappers:
+    - ``handle_stream_message_objects`` for single-model (N=1) requests.
+    - ``handle_multi_model_stream`` for side-by-side multi-model comparison (N>1).
+
     Args:
         new_msg_req: The incoming chat request from the user.
         user: Authenticated user; may be anonymous for public personas.
         db_session: Database session for this request.
+        llm_overrides: ``None`` → single-model (persona default LLM).
+            Non-empty list → multi-model (one LLM per override, 2–3 items).
         litellm_additional_headers: Extra headers forwarded to the LLM provider.
         custom_tool_additional_headers: Extra headers for custom tool HTTP calls.
         mcp_headers: Extra headers for MCP tool calls.
@@ -1261,6 +1331,7 @@ def handle_stream_message_objects(
             new_msg_req=new_msg_req,
             user=user,
             db_session=db_session,
+            llm_overrides=llm_overrides,
             litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
             mcp_headers=mcp_headers,
@@ -1367,6 +1438,94 @@ def handle_stream_message_objects(
                 )
         except Exception:
             logger.exception("Error in setting processing status")
+
+
+def handle_stream_message_objects(
+    new_msg_req: SendMessageRequest,
+    user: User,
+    db_session: Session,
+    litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
+    mcp_headers: dict[str, str] | None = None,
+    bypass_acl: bool = False,
+    additional_context: str | None = None,
+    slack_context: SlackContext | None = None,
+    external_state_container: ChatStateContainer | None = None,
+) -> AnswerStream:
+    """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``."""
+    yield from _stream_chat_turn(
+        new_msg_req=new_msg_req,
+        user=user,
+        db_session=db_session,
+        llm_overrides=None,
+        litellm_additional_headers=litellm_additional_headers,
+        custom_tool_additional_headers=custom_tool_additional_headers,
+        mcp_headers=mcp_headers,
+        bypass_acl=bypass_acl,
+        additional_context=additional_context,
+        slack_context=slack_context,
+        external_state_container=external_state_container,
+    )
+
+
+def _build_model_display_name(override: LLMOverride | None) -> str:
+    """Build a human-readable display name from an LLM override."""
+    if override is None:
+        return "unknown"
+    return override.display_name or override.model_version or "unknown"
+
+
+def handle_multi_model_stream(
+    new_msg_req: SendMessageRequest,
+    user: User,
+    db_session: Session,
+    llm_overrides: list[LLMOverride],
+    litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
+    mcp_headers: dict[str, str] | None = None,
+) -> AnswerStream:
+    """Thin wrapper for side-by-side multi-model comparison (2–3 models).
+
+    Validates the override list and delegates to ``_stream_chat_turn``,
+    which handles both single-model and multi-model execution via the same path.
+
+    Args:
+        new_msg_req: The incoming chat request. ``deep_research`` must be ``False``.
+        user: Authenticated user making the request.
+        db_session: Database session for this request.
+        llm_overrides: Exactly 2 or 3 ``LLMOverride`` objects — one per model to run.
+        litellm_additional_headers: Extra headers forwarded to each LLM provider.
+        custom_tool_additional_headers: Extra headers for custom tool HTTP calls.
+        mcp_headers: Extra headers for MCP tool calls.
+
+    Returns:
+        Generator yielding interleaved ``Packet`` objects from all models, each tagged
+        with ``model_index`` in its placement.
+    """
+    n_models = len(llm_overrides)
+    if n_models < 2 or n_models > 3:
+        yield StreamingError(
+            error=f"Multi-model requires 2-3 overrides, got {n_models}",
+            error_code="VALIDATION_ERROR",
+            is_retryable=False,
+        )
+        return
+    if new_msg_req.deep_research:
+        yield StreamingError(
+            error="Multi-model is not supported with deep research",
+            error_code="VALIDATION_ERROR",
+            is_retryable=False,
+        )
+        return
+    yield from _stream_chat_turn(
+        new_msg_req=new_msg_req,
+        user=user,
+        db_session=db_session,
+        llm_overrides=llm_overrides,
+        litellm_additional_headers=litellm_additional_headers,
+        custom_tool_additional_headers=custom_tool_additional_headers,
+        mcp_headers=mcp_headers,
+    )
 
 
 def llm_loop_completion_handle(
