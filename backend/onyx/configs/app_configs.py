@@ -286,11 +286,9 @@ USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
 # Profiling adds some overhead to OpenSearch operations. This overhead is
-# unknown right now. It is enabled by default so we can get useful logs for
-# investigating slow queries. We may never disable it if the overhead is
-# minimal.
+# unknown right now. Defaults to True.
 OPENSEARCH_PROFILING_DISABLED = (
-    os.environ.get("OPENSEARCH_PROFILING_DISABLED", "").lower() == "true"
+    os.environ.get("OPENSEARCH_PROFILING_DISABLED", "true").lower() == "true"
 )
 # Whether to disable match highlights for OpenSearch. Defaults to True for now
 # as we investigate query performance.
