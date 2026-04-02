@@ -12,6 +12,11 @@ SLACK_USER_TOKEN_PREFIX = "xoxp-"
 SLACK_BOT_TOKEN_PREFIX = "xoxb-"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
+# The mask_string() function in encryption.py uses "•" (U+2022 BULLET) to mask secrets.
+MASK_CREDENTIAL_CHAR = "\u2022"
+# Pattern produced by mask_string for strings >= 14 chars: "abcd...wxyz" (exactly 11 chars)
+MASK_CREDENTIAL_LONG_RE = re.compile(r"^.{4}\.{3}.{4}$")
+
 SOURCE_TYPE = "source_type"
 # stored in the `metadata` of a chunk. Used to signify that this chunk should
 # not be used for QA. For example, Google Drive file types which can't be parsed

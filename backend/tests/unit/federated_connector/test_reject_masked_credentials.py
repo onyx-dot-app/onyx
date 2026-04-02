@@ -1,27 +1,28 @@
 import pytest
 
+from onyx.configs.constants import MASK_CREDENTIAL_CHAR
 from onyx.db.federated import _reject_masked_credentials
-from onyx.db.federated import MASK_CHAR
 
 
 class TestRejectMaskedCredentials:
     """Verify that masked credential values are never accepted for DB writes.
 
-    The mask_string() utility replaces secrets with "••••••••••••" (U+2022 BULLET).
-    If these masked placeholders reach create/update, the real secret is permanently
-    lost. _reject_masked_credentials is a backend safety-net for this.
+    mask_string() has two output formats:
+    - Short strings (< 14 chars): "••••••••••••" (U+2022 BULLET)
+    - Long strings (>= 14 chars): "abcd...wxyz" (first4 + "..." + last4)
+    _reject_masked_credentials must catch both.
     """
 
     def test_rejects_fully_masked_value(self) -> None:
-        masked = MASK_CHAR * 12  # "••••••••••••"
+        masked = MASK_CREDENTIAL_CHAR * 12  # "••••••••••••"
         with pytest.raises(ValueError, match="masked placeholder"):
             _reject_masked_credentials({"client_id": masked})
 
-    def test_rejects_partially_masked_value(self) -> None:
-        """mask_string returns 'first4...last4' for long strings — but the
-        short-string branch returns pure bullets. Both must be caught."""
+    def test_rejects_long_string_masked_value(self) -> None:
+        """mask_string returns 'first4...last4' for long strings — the real
+        format used for OAuth credentials like client_id and client_secret."""
         with pytest.raises(ValueError, match="masked placeholder"):
-            _reject_masked_credentials({"client_id": f"abcd{MASK_CHAR * 6}wxyz"})
+            _reject_masked_credentials({"client_id": "1234...7890"})
 
     def test_rejects_when_any_field_is_masked(self) -> None:
         """Even if client_id is real, a masked client_secret must be caught."""
@@ -29,7 +30,7 @@ class TestRejectMaskedCredentials:
             _reject_masked_credentials(
                 {
                     "client_id": "1234567890.1234567890",
-                    "client_secret": MASK_CHAR * 12,
+                    "client_secret": MASK_CREDENTIAL_CHAR * 12,
                 }
             )
 
@@ -51,7 +52,7 @@ class TestRejectMaskedCredentials:
         _reject_masked_credentials(
             {
                 "client_id": "real_value",
-                "redirect_uri": None,  # type: ignore[dict-item]
-                "some_flag": True,  # type: ignore[dict-item]
+                "redirect_uri": None,
+                "some_flag": True,
             }
         )

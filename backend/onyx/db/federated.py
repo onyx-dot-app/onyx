@@ -8,6 +8,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
+from onyx.configs.constants import MASK_CREDENTIAL_CHAR
+from onyx.configs.constants import MASK_CREDENTIAL_LONG_RE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector
@@ -45,16 +47,18 @@ def fetch_all_federated_connectors_parallel() -> list[FederatedConnector]:
         return fetch_all_federated_connectors(db_session)
 
 
-# The mask_string() function in encryption.py uses "•" (U+2022 BULLET) to mask secrets.
-# If any credential value contains this character, it's a masked placeholder that must
-# never be persisted — doing so permanently corrupts the real secret.
-MASK_CHAR = "\u2022"
-
-
 def _reject_masked_credentials(credentials: dict[str, Any]) -> None:
-    """Raise if any credential string value contains mask placeholder characters."""
+    """Raise if any credential string value contains mask placeholder characters.
+
+    mask_string() has two output formats:
+    - Short strings (< 14 chars): "••••••••••••" (U+2022 BULLET)
+    - Long strings (>= 14 chars): "abcd...wxyz" (first4 + "..." + last4)
+    Both must be rejected.
+    """
     for key, val in credentials.items():
-        if isinstance(val, str) and MASK_CHAR in val:
+        if isinstance(val, str) and (
+            MASK_CREDENTIAL_CHAR in val or MASK_CREDENTIAL_LONG_RE.match(val)
+        ):
             raise ValueError(
                 f"Credential field '{key}' contains masked placeholder characters. Please provide the actual credential value."
             )

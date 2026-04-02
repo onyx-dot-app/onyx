@@ -358,6 +358,11 @@ export function FederatedConnectorForm({
 
   const handleValidateCredentials = async () => {
     if (!formState.schema) return;
+    if (isEditMode && !credentialsModified) {
+      setSubmitMessage("Enter new credential values before validating.");
+      setSubmitSuccess(false);
+      return;
+    }
 
     setIsValidating(true);
     setSubmitMessage(null);
