@@ -14,6 +14,7 @@ import { CombinedSettings } from "@/interfaces/settings";
 import { SidebarTab } from "@opal/components";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import Separator from "@/refresh-components/Separator";
 import { SvgArrowUpCircle, SvgUserManage, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
@@ -310,6 +311,8 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
             </SidebarSection>
           );
         })}
+
+        {disabledGroups.length > 0 && <Separator noPadding />}
 
         {disabledGroups.map((group, groupIndex) => (
           <SidebarSection key={`disabled-${groupIndex}`} title={group.section}>
