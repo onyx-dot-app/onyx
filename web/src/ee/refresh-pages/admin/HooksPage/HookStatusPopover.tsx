@@ -125,7 +125,12 @@ export default function HookStatusPopover({
           <Button
             prominence="tertiary"
             rightIcon={({ className, ...props }) =>
-              hasRecentErrors ? (
+              hook.is_reachable === false ? (
+                <SvgXOctagon
+                  {...props}
+                  className={cn("text-status-error-05", className)}
+                />
+              ) : hasRecentErrors ? (
                 <SvgAlertTriangle
                   {...props}
                   className={cn("text-status-warning-05", className)}
@@ -142,7 +147,7 @@ export default function HookStatusPopover({
             onClick={noProp(handleTriggerClick)}
             disabled={isBusy}
           >
-            Connected
+            {hook.is_reachable === false ? "Connection Lost" : "Connected"}
           </Button>
         </Popover.Anchor>
 
