@@ -32,7 +32,11 @@ func New(code int, msg string) *ExitError {
 }
 
 // Wrap creates an ExitError wrapping an existing error.
+// If err is nil, a generic message is used to avoid a nil-pointer panic in Error().
 func Wrap(code int, err error) *ExitError {
+	if err == nil {
+		err = fmt.Errorf("exit code %d", code)
+	}
 	return &ExitError{Code: code, Err: err}
 }
 

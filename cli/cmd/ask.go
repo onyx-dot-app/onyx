@@ -242,7 +242,17 @@ func (w *overflowWriter) Write(s string) {
 		}
 		w.tmpFile = f
 	}
-	_, _ = w.tmpFile.WriteString(s)
+	if _, err := w.tmpFile.WriteString(s); err != nil {
+		// Disk write failed — abandon truncation, stream directly to stdout
+		fmt.Fprintf(os.Stderr, "warning: temp file write failed: %v\n", err)
+		_ = w.tmpFile.Close()
+		_ = os.Remove(w.tmpFile.Name())
+		w.tmpFile = nil
+		w.limit = 0
+		w.truncated = false
+		fmt.Print(s)
+		return
+	}
 
 	if w.truncated {
 		return
