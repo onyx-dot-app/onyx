@@ -59,7 +59,10 @@ for (const theme of THEMES) {
 
           await expectScreenshot(page, {
             name: `admin-${theme}-${slug}`,
-            mask: ['[data-testid="admin-date-range-selector-button"]'],
+            mask: [
+              '[data-testid="admin-date-range-selector-button"]',
+              '[data-column-id="updated_at"]',
+            ],
           });
         },
         { box: true }
