@@ -7,7 +7,7 @@ import {
   SvgGlobe,
   SvgHardDrive,
   SvgHeadsetMic,
-  SvgHookNodes,
+  SvgShareWebhook,
   SvgKey,
   SvgLock,
   SvgPaintBrush,
@@ -64,7 +64,7 @@ const BUSINESS_FEATURES: PlanFeature[] = [
   { icon: SvgKey, text: "Service Account API Keys" },
   { icon: SvgHardDrive, text: "Self-hosting (Optional)" },
   { icon: SvgPaintBrush, text: "Custom Theming" },
-  { icon: SvgHookNodes, text: "Hook Extensions" },
+  { icon: SvgShareWebhook, text: "Hook Extensions" },
 ];
 
 const ENTERPRISE_FEATURES: PlanFeature[] = [

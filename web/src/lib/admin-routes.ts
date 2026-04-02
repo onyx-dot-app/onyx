@@ -4,7 +4,7 @@ import {
   SvgActivity,
   SvgArrowExchange,
   SvgAudio,
-  SvgHookNodes,
+  SvgShareWebhook,
   SvgBarChart,
   SvgBookOpen,
   SvgBubbleText,
@@ -230,7 +230,7 @@ export const ADMIN_ROUTES = {
   },
   HOOKS: {
     path: "/admin/hooks",
-    icon: SvgHookNodes,
+    icon: SvgShareWebhook,
     title: "Hook Extensions",
     sidebarLabel: "Hook Extensions",
   },

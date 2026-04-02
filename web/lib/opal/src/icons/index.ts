@@ -92,7 +92,7 @@ export { default as SvgHashSmall } from "@opal/icons/hash-small";
 export { default as SvgHash } from "@opal/icons/hash";
 export { default as SvgHeadsetMic } from "@opal/icons/headset-mic";
 export { default as SvgHistory } from "@opal/icons/history";
-export { default as SvgHookNodes } from "@opal/icons/hook-nodes";
+export { default as SvgShareWebhook } from "@opal/icons/share-webhook";
 export { default as SvgHourglass } from "@opal/icons/hourglass";
 export { default as SvgImage } from "@opal/icons/image";
 export { default as SvgImageSmall } from "@opal/icons/image-small";

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { noProp } from "@/lib/utils";
 import { formatTimeOnly } from "@/lib/dateUtils";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import { Content } from "@opal/layouts";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -22,6 +24,7 @@ import type {
   HookPointMeta,
   HookResponse,
 } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
+import { cn } from "@opal/utils";
 
 interface HookStatusPopoverProps {
   hook: HookResponse;
@@ -34,7 +37,7 @@ export default function HookStatusPopover({
   spec,
   isBusy,
 }: HookStatusPopoverProps) {
-  const [logsOpen, setLogsOpen] = useState(false);
+  const logsModal = useCreateModal();
   const [open, setOpen] = useState(false);
   // true = opened by click (stays until dismissed); false = opened by hover (closes after 1s)
   const [clickOpened, setClickOpened] = useState(false);
@@ -113,39 +116,34 @@ export default function HookStatusPopover({
 
   return (
     <>
-      <HookLogsModal
-        open={logsOpen}
-        onOpenChange={setLogsOpen}
-        hook={hook}
-        spec={spec}
-      />
+      <logsModal.Provider>
+        <HookLogsModal hook={hook} spec={spec} />
+      </logsModal.Provider>
 
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Anchor asChild>
-          <div
+          <Button
+            prominence="tertiary"
+            rightIcon={({ className, ...props }) =>
+              hasRecentErrors ? (
+                <SvgAlertTriangle
+                  {...props}
+                  className={cn("text-status-warning-05", className)}
+                />
+              ) : (
+                <SvgCheckCircle
+                  {...props}
+                  className={cn("text-status-success-05", className)}
+                />
+              )
+            }
             onMouseEnter={handleTriggerMouseEnter}
             onMouseLeave={handleTriggerMouseLeave}
-            onClick={handleTriggerClick}
-            className={cn(
-              "flex items-center gap-1 cursor-pointer rounded-xl p-2 transition-colors hover:bg-background-neutral-02",
-              isBusy && "opacity-50 pointer-events-none"
-            )}
+            onClick={noProp(handleTriggerClick)}
+            disabled={isBusy}
           >
-            <Text font="main-ui-action" color="text-03">
-              Connected
-            </Text>
-            {hasRecentErrors ? (
-              <SvgAlertTriangle
-                size={16}
-                className="text-status-warning-05 shrink-0"
-              />
-            ) : (
-              <SvgCheckCircle
-                size={16}
-                className="text-status-success-05 shrink-0"
-              />
-            )}
-          </div>
+            Connected
+          </Button>
         </Popover.Anchor>
 
         <Popover.Content
@@ -160,62 +158,36 @@ export default function HookStatusPopover({
             alignItems="start"
             height="fit"
             width={hasRecentErrors ? 20 : 12.5}
+            padding={0.125}
+            gap={0.25}
           >
             {isLoading ? (
-              <Section justifyContent="center" height="fit" className="p-3">
+              <Section justifyContent="center">
                 <SimpleLoader />
               </Section>
             ) : error ? (
-              <Section justifyContent="center" height="fit" className="p-3">
-                <Text font="secondary-body" color="text-03">
-                  Failed to load logs.
-                </Text>
-              </Section>
+              <Text font="secondary-body" color="text-03">
+                Failed to load logs.
+              </Text>
             ) : hasRecentErrors ? (
-              // Errors state
               <>
-                {/* Header: "N Errors" (≤3) or "Most Recent Errors" (>3) */}
-                <Section
-                  flexDirection="row"
-                  justifyContent="start"
-                  alignItems="start"
-                  gap={0.25}
-                  padding={0.375}
-                  height="fit"
-                  className="rounded-lg"
-                >
-                  <Section
-                    justifyContent="center"
-                    alignItems="center"
-                    width={1.25}
-                    height={1.25}
-                    className="shrink-0"
-                  >
-                    <SvgXOctagon size={16} className="text-status-error-05" />
-                  </Section>
-                  <Section
-                    flexDirection="column"
-                    justifyContent="start"
-                    alignItems="start"
-                    width="fit"
-                    height="fit"
-                    gap={0}
-                    className="px-0.5"
-                  >
-                    <Text font="main-ui-action" color="text-04">
-                      {recentErrors.length <= 3
+                <div className="p-1">
+                  <Content
+                    sizePreset="secondary"
+                    variant="section"
+                    icon={SvgXOctagon}
+                    title={
+                      recentErrors.length <= 3
                         ? `${recentErrors.length} ${
                             recentErrors.length === 1 ? "Error" : "Errors"
                           }`
-                        : "Most Recent Errors"}
-                    </Text>
-                    <Text font="secondary-body" color="text-03">
-                      in the past hour
-                    </Text>
-                  </Section>
-                </Section>
+                        : "Most Recent Errors"
+                    }
+                    description="in the past hour"
+                  />
+                </div>
 
-                <Separator noPadding className="py-1" />
+                <Separator noPadding className="px-2" />
 
                 {/* Log rows — at most 3, timestamp first then error message */}
                 <Section
@@ -266,10 +238,10 @@ export default function HookStatusPopover({
                 <LineItem
                   muted
                   icon={SvgMaximize2}
-                  onClick={() => {
+                  onClick={noProp(() => {
                     handleOpenChange(false);
-                    setLogsOpen(true);
-                  }}
+                    logsModal.toggle(true);
+                  })}
                 >
                   View More Lines
                 </LineItem>
@@ -277,56 +249,26 @@ export default function HookStatusPopover({
             ) : (
               // No errors state
               <>
-                {/* No Error / in the past hour */}
-                <Section
-                  flexDirection="row"
-                  justifyContent="start"
-                  alignItems="start"
-                  gap={0.25}
-                  padding={0.375}
-                  height="fit"
-                  className="rounded-lg"
-                >
-                  <Section
-                    justifyContent="center"
-                    alignItems="center"
-                    width={1.25}
-                    height={1.25}
-                    className="shrink-0"
-                  >
-                    <SvgCheckCircle
-                      size={16}
-                      className="text-status-success-05"
-                    />
-                  </Section>
-                  <Section
-                    flexDirection="column"
-                    justifyContent="start"
-                    alignItems="start"
-                    width="fit"
-                    height="fit"
-                    gap={0}
-                    className="px-0.5"
-                  >
-                    <Text font="main-ui-action" color="text-04">
-                      No Error
-                    </Text>
-                    <Text font="secondary-body" color="text-03">
-                      in the past hour
-                    </Text>
-                  </Section>
-                </Section>
+                <div className="p-1">
+                  <Content
+                    sizePreset="secondary"
+                    variant="section"
+                    icon={SvgCheckCircle}
+                    title="No Error"
+                    description="in the past hour"
+                  />
+                </div>
 
-                <Separator noPadding className="py-1" />
+                <Separator noPadding className="px-2" />
 
                 {/* View Older Errors */}
                 <LineItem
                   muted
                   icon={SvgMaximize2}
-                  onClick={() => {
+                  onClick={noProp(() => {
                     handleOpenChange(false);
-                    setLogsOpen(true);
-                  }}
+                    logsModal.toggle(true);
+                  })}
                 >
                   View Older Errors
                 </LineItem>

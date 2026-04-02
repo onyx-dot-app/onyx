@@ -1,6 +1,6 @@
 import type { IconProps } from "@opal/types";
 
-const SvgHookNodes = ({ size, ...props }: IconProps) => (
+const SvgShareWebhook = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -18,4 +18,4 @@ const SvgHookNodes = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgHookNodes;
+export default SvgShareWebhook;
