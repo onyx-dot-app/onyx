@@ -70,6 +70,7 @@ export default function MultiModelResponseView({
   const [trackContainerW, setTrackContainerW] = useState(0);
   const roRef = useRef<ResizeObserver | null>(null);
   const trackContainerRef = useCallback((el: HTMLDivElement | null) => {
+    carouselContainerRef.current = el;
     if (roRef.current) {
       roRef.current.disconnect();
       roRef.current = null;
@@ -88,6 +89,18 @@ export default function MultiModelResponseView({
     number | null
   >(null);
   const preferredRoRef = useRef<ResizeObserver | null>(null);
+
+  // Drag-scroll state — all refs to avoid re-renders during pointer move
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const carouselContainerRef = useRef<HTMLDivElement | null>(null);
+  const dragStartX = useRef<number | null>(null);
+  const baseTranslateX = useRef(0);
+  const dragCurrentDelta = useRef(0);
+  const isDraggingRef = useRef(false);
+  const justDraggedRef = useRef(false);
+  // Kept in sync during render so pointer-up handlers can read without stale closure
+  const preferredCenterRef = useRef(0);
+
   const preferredPanelRef = useCallback((el: HTMLDivElement | null) => {
     if (preferredRoRef.current) {
       preferredRoRef.current.disconnect();
@@ -136,8 +149,9 @@ export default function MultiModelResponseView({
   );
 
   const handleSelectPreferred = useCallback(
-    (modelIndex: number) => {
+    (modelIndex: number, fromDrag = false) => {
       if (isGenerating) return;
+      if (!fromDrag && justDraggedRef.current) return;
       setPreferredIndex(modelIndex);
       const response = responses[modelIndex];
       if (!response) return;
@@ -146,6 +160,101 @@ export default function MultiModelResponseView({
       }
     },
     [isGenerating, responses, onMessageSelection]
+  );
+
+  const handleCarouselPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const track = trackRef.current;
+      if (!track) return;
+      dragStartX.current = e.clientX;
+      dragCurrentDelta.current = 0;
+      isDraggingRef.current = false;
+      // Capture the current rendered translateX in pixels so drag feels anchored
+      const matrix = new DOMMatrix(getComputedStyle(track).transform);
+      baseTranslateX.current = matrix.m41;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.currentTarget.style.cursor = "grabbing";
+    },
+    []
+  );
+
+  const handleCarouselPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (dragStartX.current === null) return;
+      const delta = e.clientX - dragStartX.current;
+      if (Math.abs(delta) > 5) isDraggingRef.current = true;
+      if (!isDraggingRef.current) return;
+      dragCurrentDelta.current = delta;
+      const track = trackRef.current;
+      if (track) {
+        track.style.transition = "none";
+        track.style.transform = `translateX(${
+          baseTranslateX.current + delta
+        }px)`;
+      }
+    },
+    []
+  );
+
+  const handleCarouselPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (dragStartX.current === null) return;
+      const delta = dragCurrentDelta.current;
+      const wasDragging = isDraggingRef.current;
+      dragStartX.current = null;
+      isDraggingRef.current = false;
+      dragCurrentDelta.current = 0;
+      e.currentTarget.style.cursor = "";
+      if (!wasDragging) return;
+      // Block the click event that fires after pointer release from triggering a selection
+      justDraggedRef.current = true;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          justDraggedRef.current = false;
+        })
+      );
+      if (preferredIndex === null) return;
+      const currentPrefIdx = responses.findIndex(
+        (r) => r.modelIndex === preferredIndex
+      );
+      let nextModelIndex = preferredIndex;
+      if (delta < -80) {
+        // Dragged left — advance to next visible panel
+        for (let i = currentPrefIdx + 1; i < responses.length; i++) {
+          if (!hiddenPanels.has(responses[i]!.modelIndex)) {
+            nextModelIndex = responses[i]!.modelIndex;
+            break;
+          }
+        }
+      } else if (delta > 80) {
+        // Dragged right — go to previous visible panel
+        for (let i = currentPrefIdx - 1; i >= 0; i--) {
+          if (!hiddenPanels.has(responses[i]!.modelIndex)) {
+            nextModelIndex = responses[i]!.modelIndex;
+            break;
+          }
+        }
+      }
+      const track = trackRef.current;
+      if (nextModelIndex !== preferredIndex) {
+        // Let React re-render with the new preferred panel and animate
+        handleSelectPreferred(nextModelIndex, true);
+      } else {
+        // Snap back to current preferred panel
+        if (track) {
+          track.style.transition = "transform 0.45s cubic-bezier(0.2, 0, 0, 1)";
+          const snapX = trackContainerW / 2 - preferredCenterRef.current;
+          track.style.transform = `translateX(${snapX}px)`;
+        }
+      }
+    },
+    [
+      responses,
+      preferredIndex,
+      hiddenPanels,
+      handleSelectPreferred,
+      trackContainerW,
+    ]
   );
 
   // Clear preferred selection when generation starts
@@ -238,6 +347,8 @@ export default function MultiModelResponseView({
 
     const preferredCenterInTrack =
       panelLeftEdges[preferredIdx]! + selectionWidths[preferredIdx]! / 2;
+    // Keep in sync for pointer-up snap-back without stale closures
+    preferredCenterRef.current = preferredCenterInTrack;
 
     // Start position: hidden panels at HIDDEN_PANEL_W, visible at SELECTION_PANEL_W
     const uniformTrackW =
@@ -256,13 +367,18 @@ export default function MultiModelResponseView({
     return (
       <div
         ref={trackContainerRef}
-        className="w-full overflow-hidden"
+        className="w-full overflow-hidden cursor-grab"
+        onPointerDown={handleCarouselPointerDown}
+        onPointerMove={handleCarouselPointerMove}
+        onPointerUp={handleCarouselPointerUp}
+        onPointerCancel={handleCarouselPointerUp}
         style={{
           maskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
           WebkitMaskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
         }}
       >
         <div
+          ref={trackRef}
           className="flex items-start"
           style={{
             gap: `${PANEL_GAP}px`,
