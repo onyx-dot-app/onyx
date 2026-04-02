@@ -429,7 +429,7 @@ const ChatButton = memo(
           <SidebarTab
             href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
             onClick={handleClick}
-            state={active ? "selected" : "empty"}
+            selected={active}
             rightChildren={rightMenu}
             nested={!!project}
           >

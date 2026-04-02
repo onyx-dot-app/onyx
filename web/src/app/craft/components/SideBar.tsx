@@ -225,7 +225,7 @@ function BuildSessionButton({
         <Popover.Anchor>
           <SidebarTab
             onClick={onLoad}
-            state={isActive ? "selected" : "empty"}
+            selected={isActive}
             rightChildren={rightMenu}
           >
             {renaming ? (
@@ -379,9 +379,7 @@ const MemoizedBuildSidebarInner = memo(
           icon={SvgSettings}
           folded={folded}
           href={CRAFT_CONFIGURE_PATH}
-          state={
-            pathname.startsWith(CRAFT_CONFIGURE_PATH) ? "selected" : "empty"
-          }
+          selected={pathname.startsWith(CRAFT_CONFIGURE_PATH)}
         >
           Configure
         </SidebarTab>

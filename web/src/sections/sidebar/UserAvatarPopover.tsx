@@ -197,9 +197,7 @@ export default function UserAvatarPopover({
               ) : undefined
             }
             type="button"
-            state={
-              !!popupState || appFocus.isUserSettings() ? "selected" : "empty"
-            }
+            selected={!!popupState || appFocus.isUserSettings()}
             folded={folded}
           >
             {userDisplayName}

@@ -3,11 +3,7 @@
 import React from "react";
 import type { ButtonType, IconFunctionComponent } from "@opal/types";
 import type { Route } from "next";
-import {
-  Interactive,
-  type InteractiveStatefulState,
-  type InteractiveStatefulVariant,
-} from "@opal/core";
+import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
 import { Text } from "@opal/components";
 import Link from "next/link";
@@ -22,11 +18,8 @@ interface SidebarTabProps {
   /** Collapses the label, showing only the icon. */
   folded?: boolean;
 
-  /**
-   * Value state of this tab.
-   * @default "empty"
-   */
-  state?: Extract<InteractiveStatefulState, "empty" | "selected">;
+  /** Marks this tab as the currently active/selected item. */
+  selected?: boolean;
 
   /**
    * Sidebar color variant.
@@ -66,7 +59,7 @@ interface SidebarTabProps {
  */
 function SidebarTab({
   folded,
-  state = "empty",
+  selected,
   variant = "sidebar-heavy",
   nested,
   disabled,
@@ -96,7 +89,7 @@ function SidebarTab({
     <div className="relative">
       <Interactive.Stateful
         variant={variant}
-        state={state}
+        state={selected ? "selected" : "empty"}
         disabled={disabled}
         onClick={onClick}
         type="button"

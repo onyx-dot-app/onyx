@@ -147,11 +147,9 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
                 onClick={noProp(handleIconClick)}
               />
             )}
-            state={
+            selected={
               activeSidebar.isProject() &&
               activeSidebar.getId() === String(project.id)
-                ? "selected"
-                : "empty"
             }
             onClick={noProp(handleTextClick)}
             rightChildren={

@@ -300,11 +300,7 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
                   variant={disabled ? "sidebar-light" : "sidebar-heavy"}
                   icon={icon}
                   href={disabled ? undefined : link}
-                  state={
-                    !disabled && pathname.startsWith(link)
-                      ? "selected"
-                      : "empty"
-                  }
+                  selected={!disabled && pathname.startsWith(link)}
                 >
                   {name}
                 </SidebarTab>

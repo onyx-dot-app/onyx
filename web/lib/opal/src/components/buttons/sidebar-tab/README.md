@@ -25,7 +25,7 @@ div.relative
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `variant` | `"sidebar-heavy" \| "sidebar-light"` | `"sidebar-heavy"` | Sidebar color variant |
-| `state` | `"empty" \| "selected"` | `"empty"` | Value state |
+| `selected` | `boolean` | `false` | Active/selected state |
 | `icon` | `IconFunctionComponent` | — | Left icon |
 | `children` | `ReactNode` | — | Label text or custom content |
 | `disabled` | `boolean` | `false` | Disables the tab |
@@ -43,7 +43,7 @@ import { SidebarTab } from "@opal/components";
 import { SvgSettings, SvgLock } from "@opal/icons";
 
 // Active tab
-<SidebarTab icon={SvgSettings} href="/admin/settings" state="selected">
+<SidebarTab icon={SvgSettings} href="/admin/settings" selected>
   Settings
 </SidebarTab>
 

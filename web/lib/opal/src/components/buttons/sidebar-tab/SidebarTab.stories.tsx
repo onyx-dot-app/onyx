@@ -35,7 +35,7 @@ export const Selected: Story = {
   args: {
     icon: SvgSettings,
     children: "Settings",
-    state: "selected",
+    selected: true,
   },
 };
 
@@ -73,7 +73,7 @@ export const WithRightChildren: Story = {
 export const SidebarExample: Story = {
   render: () => (
     <div className="flex flex-col">
-      <SidebarTab icon={SvgSettings} state="selected">
+      <SidebarTab icon={SvgSettings} selected>
         LLM Models
       </SidebarTab>
       <SidebarTab icon={SvgSettings}>Web Search</SidebarTab>
