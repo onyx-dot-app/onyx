@@ -25,7 +25,6 @@ import { CredentialFieldsRenderer } from "./CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import { SvgPlusCircle } from "@opal/icons";
-import { Disabled } from "@opal/core";
 const CreateButton = ({
   onClick,
   isSubmitting,
@@ -37,11 +36,13 @@ const CreateButton = ({
   isAdmin: boolean;
   groups: number[];
 }) => (
-  <Disabled disabled={isSubmitting || (!isAdmin && groups.length === 0)}>
-    <OpalButton onClick={onClick} icon={SvgPlusCircle}>
-      Create
-    </OpalButton>
-  </Disabled>
+  <OpalButton
+    disabled={isSubmitting || (!isAdmin && groups.length === 0)}
+    onClick={onClick}
+    icon={SvgPlusCircle}
+  >
+    Create
+  </OpalButton>
 );
 
 type formType = IsPublicGroupSelectorFormType & {

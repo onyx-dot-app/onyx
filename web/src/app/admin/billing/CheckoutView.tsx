@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect } from "react";
 import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import Separator from "@/refresh-components/Separator";
@@ -263,11 +262,9 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           // Empty div to maintain space-between alignment
           <div></div>
         )}
-        <Disabled disabled={isSubmitting}>
-          <Button onClick={handleSubmit}>
-            {isSubmitting ? "Loading..." : "Continue to Payment"}
-          </Button>
-        </Disabled>
+        <Button disabled={isSubmitting} onClick={handleSubmit}>
+          {isSubmitting ? "Loading..." : "Continue to Payment"}
+        </Button>
       </Section>
     </Card>
   );

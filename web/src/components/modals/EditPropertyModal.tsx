@@ -3,7 +3,6 @@ import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { TextFormField } from "@/components/Field";
 import { SvgEdit } from "@opal/icons";
-import { Disabled } from "@opal/core";
 export interface EditPropertyModalProps {
   propertyTitle: string;
   propertyDetails?: string;
@@ -53,17 +52,16 @@ export default function EditPropertyModal({
                 />
 
                 <Modal.Footer>
-                  <Disabled
+                  <Button
                     disabled={
                       isSubmitting ||
                       !isValid ||
                       values.propertyValue === propertyValue
                     }
+                    type="submit"
                   >
-                    <Button type="submit">
-                      {isSubmitting ? "Updating..." : "Update property"}
-                    </Button>
-                  </Disabled>
+                    {isSubmitting ? "Updating..." : "Update property"}
+                  </Button>
                 </Modal.Footer>
               </Form>
             )}

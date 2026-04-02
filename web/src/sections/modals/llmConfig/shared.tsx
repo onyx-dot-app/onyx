@@ -20,7 +20,7 @@ import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";
 import { WithoutStyles } from "@opal/types";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
-import { Disabled, Hoverable } from "@opal/core";
+import { Hoverable } from "@opal/core";
 import { Content } from "@opal/layouts";
 import {
   SvgArrowExchange,
@@ -463,15 +463,14 @@ export function ModelsField<T extends BaseLLMFormValues>({
           center
         >
           <Section flexDirection="row" gap={0}>
-            <Disabled disabled={isAutoMode || modelConfigurations.length === 0}>
-              <Button
-                prominence="tertiary"
-                size="md"
-                onClick={handleToggleSelectAll}
-              >
-                {allSelected ? "Unselect All" : "Select All"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isAutoMode || modelConfigurations.length === 0}
+              prominence="tertiary"
+              size="md"
+              onClick={handleToggleSelectAll}
+            >
+              {allSelected ? "Unselect All" : "Select All"}
+            </Button>
             {onRefetch && (
               <Button
                 prominence="tertiary"
@@ -697,21 +696,21 @@ export function LLMConfigurationModalWrapper({
             <Button prominence="secondary" onClick={onClose} type="button">
               Cancel
             </Button>
-            <Disabled
+            <Button
               disabled={
                 !isFormValid || busy || (!!existingProviderName && !isDirty)
               }
+              type="submit"
+              icon={busy ? SimpleLoader : undefined}
             >
-              <Button type="submit" icon={busy ? SimpleLoader : undefined}>
-                {existingProviderName
-                  ? busy
-                    ? "Updating"
-                    : "Update"
-                  : busy
-                    ? "Connecting"
-                    : "Connect"}
-              </Button>
-            </Disabled>
+              {existingProviderName
+                ? busy
+                  ? "Updating"
+                  : "Update"
+                : busy
+                  ? "Connecting"
+                  : "Connect"}
+            </Button>
           </Modal.Footer>
         </Form>
       </Modal.Content>

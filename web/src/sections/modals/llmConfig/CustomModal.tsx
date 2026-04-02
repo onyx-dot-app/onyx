@@ -29,7 +29,6 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Card, EmptyMessageCard } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { toast } from "@/hooks/useToast";
 import { Content } from "@opal/layouts";
@@ -98,13 +97,12 @@ function ModelConfigurationItem({
         showClearButton={false}
         type="number"
       />
-      <Disabled disabled={!canRemove}>
-        <Button
-          prominence="tertiary"
-          icon={SvgMinusCircle}
-          onClick={onRemove}
-        />
-      </Disabled>
+      <Button
+        disabled={!canRemove}
+        prominence="tertiary"
+        icon={SvgMinusCircle}
+        onClick={onRemove}
+      />
     </>
   );
 }

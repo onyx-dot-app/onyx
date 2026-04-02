@@ -341,6 +341,7 @@ function ConnectedHookCard({
       </deleteModal.Provider>
 
       <Hoverable.Root group="connected-hook-card">
+        {/* TODO(@raunakab): Modify the background colour (by using `SelectCard disabled={...}` [when it lands]) to indicate when the card is "disconnected". */}
         <SelectCard state="filled" padding="sm" rounding="lg" onClick={onEdit}>
           <div className="w-full flex flex-row">
             <div className="flex-1 p-2">

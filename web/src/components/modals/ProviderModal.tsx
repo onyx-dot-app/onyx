@@ -3,7 +3,6 @@ import { Button } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import Modal from "@/refresh-components/Modal";
 import { SvgLoader } from "@opal/icons";
-import { Disabled } from "@opal/core";
 export interface ProviderModalProps {
   // Modal configurations
   clickOutsideToClose?: boolean;
@@ -84,15 +83,14 @@ export default function ProviderModal({
             >
               {cancelLabel}
             </Button>
-            <Disabled disabled={submitDisabled || isSubmitting}>
-              <Button
-                type="button"
-                onClick={onSubmit}
-                icon={isSubmitting ? SpinningLoader : undefined}
-              >
-                {submitLabel}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={submitDisabled || isSubmitting}
+              type="button"
+              onClick={onSubmit}
+              icon={isSubmitting ? SpinningLoader : undefined}
+            >
+              {submitLabel}
+            </Button>
           </Modal.Footer>
         )}
       </Modal.Content>

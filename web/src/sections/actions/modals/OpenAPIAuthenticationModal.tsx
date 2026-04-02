@@ -5,7 +5,6 @@ import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
@@ -671,15 +670,14 @@ export default function OpenAPIAuthenticationModal({
                 >
                   Cancel
                 </Button>
-                <Disabled
+                <Button
                   disabled={
                     !isValid || isSubmitting || shouldDisableForm || !dirty
                   }
+                  type="submit"
                 >
-                  <Button type="submit">
-                    {isSubmitting ? "Connecting..." : "Connect"}
-                  </Button>
-                </Disabled>
+                  {isSubmitting ? "Connecting..." : "Connect"}
+                </Button>
               </Modal.Footer>
             </Form>
           )}
