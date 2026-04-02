@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { cn } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
 import { formatTimeOnly } from "@/lib/dateUtils";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -23,6 +23,7 @@ import type {
   HookPointMeta,
   HookResponse,
 } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
+import { cn } from "@opal/utils";
 
 interface HookStatusPopoverProps {
   hook: HookResponse;
@@ -125,30 +126,28 @@ export default function HookStatusPopover({
 
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Anchor asChild>
-          <div
+          <Button
+            prominence="tertiary"
+            rightIcon={({ className, ...props }) =>
+              hasRecentErrors ? (
+                <SvgAlertTriangle
+                  {...props}
+                  className={cn("text-status-warning-05", className)}
+                />
+              ) : (
+                <SvgCheckCircle
+                  {...props}
+                  className={cn("text-status-success-05", className)}
+                />
+              )
+            }
             onMouseEnter={handleTriggerMouseEnter}
             onMouseLeave={handleTriggerMouseLeave}
-            onClick={handleTriggerClick}
-            className={cn(
-              "flex items-center gap-1 cursor-pointer rounded-xl p-2 transition-colors hover:bg-background-neutral-02",
-              isBusy && "opacity-50 pointer-events-none"
-            )}
+            onClick={noProp(handleTriggerClick)}
+            disabled={isBusy}
           >
-            <Text font="main-ui-action" color="text-03">
-              Connected
-            </Text>
-            {hasRecentErrors ? (
-              <SvgAlertTriangle
-                size={16}
-                className="text-status-warning-05 shrink-0"
-              />
-            ) : (
-              <SvgCheckCircle
-                size={16}
-                className="text-status-success-05 shrink-0"
-              />
-            )}
-          </div>
+            Connected
+          </Button>
         </Popover.Anchor>
 
         <Popover.Content
@@ -269,10 +268,10 @@ export default function HookStatusPopover({
                 <LineItem
                   muted
                   icon={SvgMaximize2}
-                  onClick={() => {
+                  onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
-                  }}
+                  })}
                 >
                   View More Lines
                 </LineItem>
@@ -326,10 +325,10 @@ export default function HookStatusPopover({
                 <LineItem
                   muted
                   icon={SvgMaximize2}
-                  onClick={() => {
+                  onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
-                  }}
+                  })}
                 >
                   View Older Errors
                 </LineItem>
