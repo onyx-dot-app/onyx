@@ -3,66 +3,32 @@
 import React from "react";
 import type { ButtonType, IconFunctionComponent } from "@opal/types";
 import type { Route } from "next";
-import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
+import { Interactive } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
-import { Text } from "@opal/components";
 import Link from "next/link";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import "@opal/components/tooltip.css";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface SidebarTabProps {
-  /** Collapses the label, showing only the icon. */
+export interface SidebarTabProps {
+  // Button states:
   folded?: boolean;
-
-  /** Marks this tab as the currently active/selected item. */
   selected?: boolean;
-
-  /**
-   * Sidebar color variant.
-   * @default "sidebar-heavy"
-   */
-  variant?: Extract<
-    InteractiveStatefulVariant,
-    "sidebar-light" | "sidebar-heavy"
-  >;
-
-  /** Renders an empty spacer in place of the icon for nested items. */
+  lowlight?: boolean;
   nested?: boolean;
 
-  /** Disables the tab — applies muted colors and suppresses clicks. */
-  disabled?: boolean;
-
+  // Button properties:
   onClick?: React.MouseEventHandler<HTMLElement>;
   href?: string;
   type?: ButtonType;
   icon?: IconFunctionComponent;
   children?: React.ReactNode;
-
-  /** Content rendered on the right side (e.g. action buttons). */
   rightChildren?: React.ReactNode;
 }
 
-// ---------------------------------------------------------------------------
-// SidebarTab
-// ---------------------------------------------------------------------------
-
-/**
- * Sidebar navigation tab built on `Interactive.Stateful` > `Interactive.Container`.
- *
- * Uses `sidebar-heavy` (default) or `sidebar-light` (via `variant`) variants
- * for color styling. Supports an overlay `Link` for client-side navigation,
- * `rightChildren` for inline actions, and folded mode with an auto-tooltip.
- */
-function SidebarTab({
+export default function SidebarTab({
   folded,
   selected,
-  variant = "sidebar-heavy",
+  lowlight,
   nested,
-  disabled,
 
   onClick,
   href,
@@ -79,8 +45,11 @@ function SidebarTab({
         )) as IconFunctionComponent)
       : null);
 
-  // The `rightChildren` node is absolutely positioned to sit on top of the
-  // overlay Link. A zero-width spacer reserves truncation space for the title.
+  // NOTE (@raunakab)
+  //
+  // The `rightChildren` node NEEDS to be absolutely positioned since it needs to live on top of the absolutely positioned `Link`.
+  // However, having the `rightChildren` be absolutely positioned means that it cannot appropriately truncate the title.
+  // Therefore, we add a dummy node solely for the truncation effects that we obtain.
   const truncationSpacer = rightChildren && (
     <div className="w-0 group-hover/SidebarTab:w-6" />
   );
@@ -88,9 +57,8 @@ function SidebarTab({
   const content = (
     <div className="relative">
       <Interactive.Stateful
-        variant={variant}
+        variant={lowlight ? "sidebar-light" : "sidebar-heavy"}
         state={selected ? "selected" : "empty"}
-        disabled={disabled}
         onClick={onClick}
         type="button"
         group="group/SidebarTab"
@@ -101,7 +69,7 @@ function SidebarTab({
           widthVariant="full"
           type={type}
         >
-          {href && !disabled && (
+          {href && (
             <Link
               href={href as Route}
               scroll={false}
@@ -134,7 +102,12 @@ function SidebarTab({
                 </div>
               )}
               {children}
-              {truncationSpacer}
+              {
+                // NOTE (@raunakab)
+                //
+                // Adding the `truncationSpacer` here for the same reason as above.
+                truncationSpacer
+              }
             </div>
           )}
         </Interactive.Container>
@@ -143,23 +116,7 @@ function SidebarTab({
   );
 
   if (typeof children !== "string") return content;
-  if (folded) {
-    return (
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>{content}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content
-            className="opal-tooltip"
-            side="right"
-            sideOffset={4}
-          >
-            <Text>{children}</Text>
-          </TooltipPrimitive.Content>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
-    );
-  }
+  if (folded)
+    return <SimpleTooltip tooltip={children}>{content}</SimpleTooltip>;
   return content;
 }
-
-export { SidebarTab, type SidebarTabProps };

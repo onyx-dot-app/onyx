@@ -550,14 +550,6 @@
   ) {
   @apply bg-background-tint-03;
 }
-/* ---------------------------------------------------------------------------
-   Sidebar-Heavy — Disabled (all states)
-   --------------------------------------------------------------------------- */
-.interactive[data-interactive-variant="sidebar-heavy"][data-disabled] {
-  @apply bg-transparent opacity-50;
-  --interactive-foreground: var(--text-03);
-  --interactive-foreground-icon: var(--text-03);
-}
 
 /* ===========================================================================
    Sidebar-Light
@@ -614,12 +606,4 @@
     [data-disabled]
   ) {
   @apply bg-background-tint-03;
-}
-/* ---------------------------------------------------------------------------
-   Sidebar-Light — Disabled (all states)
-   --------------------------------------------------------------------------- */
-.interactive[data-interactive-variant="sidebar-light"][data-disabled] {
-  @apply bg-transparent opacity-50;
-  --interactive-foreground: var(--text-03);
-  --interactive-foreground-icon: var(--text-03);
 }

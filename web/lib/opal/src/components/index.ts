@@ -33,12 +33,6 @@ export {
   type LineItemButtonProps,
 } from "@opal/components/buttons/line-item-button/components";
 
-/* SidebarTab */
-export {
-  SidebarTab,
-  type SidebarTabProps,
-} from "@opal/components/buttons/sidebar-tab/components";
-
 /* Text */
 export {
   Text,
