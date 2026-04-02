@@ -420,8 +420,9 @@ def _remove_empty_runs(
 ) -> list[list[str]]:
     """Removes entire runs of empty rows when the run length exceeds max_empty.
 
-    Leading and trailing empty rows are always dropped regardless of run length,
-    since there is no adjacent non-empty row to bound the run.
+    Leading empty runs are capped to max_empty, just like interior runs.
+    Trailing empty rows are always dropped since there is no subsequent
+    non-empty row to flush them.
     """
     result: list[list[str]] = []
     empty_buffer: list[list[str]] = []
@@ -429,7 +430,8 @@ def _remove_empty_runs(
     for row in rows:
         # Check if empty
         if not any(row):
-            empty_buffer.append(row)
+            if len(empty_buffer) < max_empty:
+                empty_buffer.append(row)
         else:
             # Add upto max empty rows onto the result - that's what we allow
             result.extend(empty_buffer[:max_empty])
