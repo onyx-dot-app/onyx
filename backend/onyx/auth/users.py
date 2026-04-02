@@ -507,8 +507,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     ):
                         raise exceptions.UserAlreadyExists()
 
+                    # Cache id before expire — accessing attrs on an expired
+                    # object triggers a sync lazy-load which raises MissingGreenlet
+                    # in this async context.
                     user_id = user.id
                     self._upgrade_user_to_standard__sync(user_id, user_create)
+                    # Expire so the async session re-fetches the row updated by
+                    # the sync session above.
                     self.user_db.session.expire(user)
                     user = await self.user_db.get(user_id)  # type: ignore[assignment]
                 except exceptions.UserAlreadyExists:
@@ -530,8 +535,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     ):
                         raise exceptions.UserAlreadyExists()
 
+                    # Cache id before expire — accessing attrs on an expired
+                    # object triggers a sync lazy-load which raises MissingGreenlet
+                    # in this async context.
                     user_id = user.id
                     self._upgrade_user_to_standard__sync(user_id, user_create)
+                    # Expire so the async session re-fetches the row updated by
+                    # the sync session above.
                     self.user_db.session.expire(user)
                     user = await self.user_db.get(user_id)  # type: ignore[assignment]
                 if user_created:
