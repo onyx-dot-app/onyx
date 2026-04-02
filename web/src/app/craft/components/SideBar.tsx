@@ -238,7 +238,7 @@ function BuildSessionButton({
               <Text
                 as="p"
                 data-state={isActive ? "active" : "inactive"}
-                className={cn("line-clamp-1 break-all text-left")}
+                className="line-clamp-1 break-all text-left"
                 mainUiBody
               >
                 <TypewriterText
