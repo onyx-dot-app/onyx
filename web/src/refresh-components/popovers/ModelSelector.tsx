@@ -8,6 +8,7 @@ import { Button, SelectButton, OpenButton } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { LLMOption } from "@/refresh-components/popovers/interfaces";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
+import Separator from "@/refresh-components/Separator";
 
 export const MAX_MODELS = 3;
 
@@ -130,7 +131,13 @@ export default function ModelSelector({
 
         {selectedModels.length > 0 && (
           <>
-            {!atMax && <div className="h-9 w-px bg-border-01 shrink-0" />}
+            {!atMax && (
+              <Separator
+                orientation="vertical"
+                paddingXRem={0.5}
+                paddingYRem={0.5}
+              />
+            )}
             <Popover.Anchor asChild>
               <div className="flex items-center">
                 {selectedModels.map((model, index) => {
@@ -157,7 +164,11 @@ export default function ModelSelector({
                       className="flex items-center"
                     >
                       {index > 0 && (
-                        <div className="h-9 w-px bg-border-01 shrink-0 mx-1" />
+                        <Separator
+                          orientation="vertical"
+                          paddingXRem={0.5}
+                          className="h-5"
+                        />
                       )}
                       <SelectButton
                         icon={ProviderIcon}
@@ -165,8 +176,20 @@ export default function ModelSelector({
                         state="empty"
                         variant="select-tinted"
                         interaction="hover"
-                        size="md"
-                        onClick={() => onRemove(index)}
+                        size="lg"
+                        onClick={(e: React.MouseEvent) => {
+                          const target = e.target as HTMLElement;
+                          const btn = e.currentTarget as HTMLElement;
+                          const icons = btn.querySelectorAll(
+                            ".interactive-foreground-icon"
+                          );
+                          const lastIcon = icons[icons.length - 1];
+                          if (lastIcon && lastIcon.contains(target)) {
+                            onRemove(index);
+                          } else {
+                            handlePillClick(index);
+                          }
+                        }}
                       >
                         {model.displayName}
                       </SelectButton>
