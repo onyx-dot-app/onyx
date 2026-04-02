@@ -14,6 +14,7 @@ import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
+import { cn } from "@/lib/utils";
 import AppHealthBanner from "@/sections/AppHealthBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
@@ -67,7 +68,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${hankenGrotesk.variable} ${dmMono.variable}`}
+      className={cn(hankenGrotesk.variable, dmMono.variable)}
       suppressHydrationWarning
     >
       <head>
