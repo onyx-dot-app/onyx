@@ -17,6 +17,8 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DetailedSessionResponse
@@ -657,11 +659,11 @@ def export_docx(
             "path traversal" in error_message.lower()
             or "access denied" in error_message.lower()
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied") from e
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, error_message) from e
 
     if result is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     docx_bytes, filename = result
 
@@ -677,6 +679,48 @@ def export_docx(
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": content_disposition},
+    )
+
+
+@router.get("/{session_id}/export-odt/{path:path}")
+def export_odt(
+    session_id: UUID,
+    path: str,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Export a markdown file as ODT (OpenDocument Text)."""
+    session_manager = SessionManager(db_session)
+
+    try:
+        result = session_manager.export_odt(session_id, user.id, path)
+    except ValueError as e:
+        error_message = str(e)
+        if (
+            "path traversal" in error_message.lower()
+            or "access denied" in error_message.lower()
+        ):
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied") from e
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, error_message) from e
+
+    if result is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
+
+    odt_bytes, filename = result
+
+    try:
+        filename.encode("latin-1")
+        content_disposition = f'attachment; filename="{filename}"'
+    except UnicodeEncodeError:
+        from urllib.parse import quote
+
+        encoded_filename = quote(filename, safe="")
+        content_disposition = f"attachment; filename*=UTF-8''{encoded_filename}"
+
+    return Response(
+        content=odt_bytes,
+        media_type="application/vnd.oasis.opendocument.text",
         headers={"Content-Disposition": content_disposition},
     )
 

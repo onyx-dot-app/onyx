@@ -19,6 +19,7 @@ import {
   fetchWebappInfo,
   fetchArtifacts,
   exportDocx,
+  exportOdt,
 } from "@/app/craft/services/apiServices";
 import { cn, getFileIcon } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -305,6 +306,30 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       console.error("Failed to export as DOCX:", err);
     } finally {
       setIsExportingDocx(false);
+    }
+  }, [session?.id, activeFilePreviewPath]);
+
+  const [isExportingOdt, setIsExportingOdt] = useState(false);
+
+  const handleOdtDownload = useCallback(async () => {
+    if (!session?.id || !activeFilePreviewPath) return;
+    setIsExportingOdt(true);
+    try {
+      const blob = await exportOdt(session.id, activeFilePreviewPath);
+      const fileName =
+        activeFilePreviewPath.split("/").pop() || activeFilePreviewPath;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName.replace(/\.md$/i, ".odt");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to export as ODT:", err);
+    } finally {
+      setIsExportingOdt(false);
     }
   }, [session?.id, activeFilePreviewPath]);
 
@@ -615,6 +640,8 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
         }
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
+        onDownloadAlt={isMarkdownPreview ? handleOdtDownload : undefined}
+        isDownloadingAlt={isExportingOdt}
         onRefresh={handleRefresh}
         sessionId={
           !isFilePreviewActive &&

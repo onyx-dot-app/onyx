@@ -215,7 +215,7 @@ export default function UserLibraryModal({
 
   return (
     <>
-      <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <Modal open={open} onOpenChange={(isOpen: boolean) => !isOpen && onClose()}>
         <Modal.Content width="xl" height="fit">
           <Modal.Header
             icon={SvgFileText}
@@ -260,7 +260,7 @@ export default function UserLibraryModal({
                     style={{ display: "none" }}
                     onChange={handleFileUpload}
                     disabled={isUploading}
-                    accept=".xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.json,.txt,.pdf,.zip"
+                    accept=".xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.json,.txt,.pdf,.zip,.odt"
                   />
                   <Disabled disabled={isUploading}>
                     <Button
@@ -340,7 +340,7 @@ export default function UserLibraryModal({
       {/* New folder modal */}
       <Modal
         open={showNewFolderModal}
-        onOpenChange={(isOpen) => {
+        onOpenChange={(isOpen: boolean) => {
           if (!isOpen) {
             setShowNewFolderModal(false);
             setNewFolderName("");

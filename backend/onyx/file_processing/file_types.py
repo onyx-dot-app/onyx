@@ -11,6 +11,9 @@ WORD_PROCESSING_MIME_TYPE = (
 PDF_MIME_TYPE = "application/pdf"
 PLAIN_TEXT_MIME_TYPE = "text/plain"
 
+# Pandoc currently supports ODT ingestion, but not ODS/ODP readers.
+ODF_TEXT_MIME_TYPE = "application/vnd.oasis.opendocument.text"
+
 
 class OnyxMimeTypes:
     IMAGE_MIME_TYPES = {"image/jpg", "image/jpeg", "image/png", "image/webp"}
@@ -37,6 +40,7 @@ class OnyxMimeTypes:
         PRESENTATION_MIME_TYPE,
         "message/rfc822",
         "application/epub+zip",
+        ODF_TEXT_MIME_TYPE,
     }
 
     ALLOWED_MIME_TYPES = IMAGE_MIME_TYPES.union(
@@ -80,6 +84,7 @@ class OnyxFileExtensions:
         ".eml",
         ".epub",
         ".html",
+        ".odt",
     }
     IMAGE_EXTENSIONS = {
         ".png",

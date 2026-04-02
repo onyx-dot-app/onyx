@@ -37,8 +37,16 @@ export interface UrlBarProps {
   downloadRawTooltip?: string;
   /** Optional download callback — shows an export button in the URL bar when provided */
   onDownload?: () => void;
+  /** Label for the primary export button (defaults to "Export to .docx") */
+  downloadLabel?: string;
   /** Whether a download/export is currently in progress */
   isDownloading?: boolean;
+  /** Optional secondary download callback (e.g. export to ODT) */
+  onDownloadAlt?: () => void;
+  /** Label for the secondary export button */
+  downloadAltLabel?: string;
+  /** Whether the secondary download is in progress */
+  isDownloadingAlt?: boolean;
   /** Optional refresh callback — shows a refresh icon at the right edge of the URL pill */
   onRefresh?: () => void;
   /** Session ID — when present with previewUrl, shows share button for webapp */
@@ -67,7 +75,11 @@ export default function UrlBar({
   onDownloadRaw,
   downloadRawTooltip = "Download file",
   onDownload,
+  downloadLabel = "Export to .docx",
   isDownloading = false,
+  onDownloadAlt,
+  downloadAltLabel = "Export to .odt",
+  isDownloadingAlt = false,
   onRefresh,
   sessionId,
   sharingScope = "private",
@@ -161,7 +173,20 @@ export default function UrlBar({
               icon={isDownloading ? SpinningLoader : SvgExternalLink}
               onClick={onDownload}
             >
-              {isDownloading ? "Exporting..." : "Export to .docx"}
+              {isDownloading ? "Exporting..." : downloadLabel}
+            </Button>
+          </Disabled>
+        )}
+        {/* Secondary export button (e.g. markdown → odt) */}
+        {onDownloadAlt && (
+          <Disabled disabled={isDownloadingAlt}>
+            <Button
+              variant="action"
+              prominence="tertiary"
+              icon={isDownloadingAlt ? SpinningLoader : SvgExternalLink}
+              onClick={onDownloadAlt}
+            >
+              {isDownloadingAlt ? "Exporting..." : downloadAltLabel}
             </Button>
           </Disabled>
         )}
