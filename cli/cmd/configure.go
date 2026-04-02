@@ -16,6 +16,7 @@ func newConfigureCmd() *cobra.Command {
 	var (
 		serverURL string
 		apiKey    string
+		dryRun    bool
 	)
 
 	cmd := &cobra.Command{
@@ -25,12 +26,20 @@ func newConfigureCmd() *cobra.Command {
 
 When --server-url and --api-key are both provided, the configuration is saved
 non-interactively (useful for scripts and AI agents). Otherwise, an interactive
-setup wizard is launched.`,
+setup wizard is launched.
+
+Use --dry-run with --server-url and --api-key to test the connection without
+saving the configuration.`,
 		Example: `  onyx-cli configure
-  onyx-cli configure --server-url https://my-onyx.com --api-key sk-...`,
+  onyx-cli configure --server-url https://my-onyx.com --api-key sk-...
+  onyx-cli configure --server-url https://my-onyx.com --api-key sk-... --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if serverURL != "" && apiKey != "" {
-				return configureNonInteractive(serverURL, apiKey)
+				return configureNonInteractive(serverURL, apiKey, dryRun)
+			}
+
+			if dryRun {
+				return exitcodes.New(exitcodes.BadRequest, "--dry-run requires --server-url and --api-key")
 			}
 
 			if serverURL != "" || apiKey != "" {
@@ -45,11 +54,12 @@ setup wizard is launched.`,
 
 	cmd.Flags().StringVar(&serverURL, "server-url", "", "Onyx server URL (e.g., https://cloud.onyx.app)")
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key for authentication")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Test connection without saving config (requires --server-url and --api-key)")
 
 	return cmd
 }
 
-func configureNonInteractive(serverURL, apiKey string) error {
+func configureNonInteractive(serverURL, apiKey string, dryRun bool) error {
 	cfg := config.OnyxCliConfig{
 		ServerURL:      serverURL,
 		APIKey:         apiKey,
@@ -61,13 +71,20 @@ func configureNonInteractive(serverURL, apiKey string) error {
 		cfg.DefaultAgentID = existing.DefaultAgentID
 	}
 
-	// Test connection before saving
+	// Test connection
 	client := api.NewClient(cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	if err := client.TestConnection(ctx); err != nil {
 		return exitcodes.Newf(exitcodes.Unreachable, "connection test failed: %v\n  Check your server URL and API key", err)
+	}
+
+	if dryRun {
+		fmt.Printf("Server:  %s\n", serverURL)
+		fmt.Println("Status:  connected and authenticated")
+		fmt.Println("Dry run: config was NOT saved")
+		return nil
 	}
 
 	if err := config.Save(cfg); err != nil {
