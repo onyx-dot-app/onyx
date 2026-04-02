@@ -431,7 +431,9 @@ export default function HookFormModal({
                     submit={
                       <Disabled
                         disabled={
-                          isSubmitting || !isValid || (!dirty && isEdit)
+                          isSubmitting ||
+                          !isValid ||
+                          (!dirty && !apiKeyCleared && isEdit)
                         }
                       >
                         <Button
