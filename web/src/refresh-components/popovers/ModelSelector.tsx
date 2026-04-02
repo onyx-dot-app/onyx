@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import Popover from "@/refresh-components/Popover";
 import { LlmManager } from "@/lib/hooks";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
@@ -41,6 +41,8 @@ export default function ModelSelector({
   const [open, setOpen] = useState(false);
   // null = add mode (via + button), number = replace mode (via pill click)
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
+  // Virtual anchor ref — points to the clicked pill so the popover positions above it
+  const anchorRef = useRef<HTMLElement | null>(null);
 
   const isMultiModel = selectedModels.length > 1;
   const atMax = selectedModels.length >= MAX_MODELS;
@@ -110,7 +112,8 @@ export default function ModelSelector({
     if (!nextOpen) setReplacingIndex(null);
   };
 
-  const handlePillClick = (index: number) => {
+  const handlePillClick = (index: number, element: HTMLElement) => {
+    anchorRef.current = element;
     setReplacingIndex(index);
     setOpen(true);
   };
@@ -119,16 +122,22 @@ export default function ModelSelector({
     <Popover open={open} onOpenChange={handleOpenChange}>
       <div className="flex items-center justify-end gap-1 p-1">
         {!atMax && (
-          <Popover.Trigger asChild>
-            <Button
-              prominence="tertiary"
-              icon={SvgPlusCircle}
-              size="sm"
-              tooltip="Add Model"
-            />
-          </Popover.Trigger>
+          <Button
+            prominence="tertiary"
+            icon={SvgPlusCircle}
+            size="sm"
+            tooltip="Add Model"
+            onClick={(e: React.MouseEvent) => {
+              anchorRef.current = e.currentTarget as HTMLElement;
+              setReplacingIndex(null);
+              setOpen(true);
+            }}
+          />
         )}
 
+        <Popover.Anchor
+          virtualRef={anchorRef as React.RefObject<HTMLElement>}
+        />
         {selectedModels.length > 0 && (
           <>
             {!atMax && (
@@ -138,71 +147,76 @@ export default function ModelSelector({
                 paddingYRem={0.5}
               />
             )}
-            <Popover.Anchor asChild>
-              <div className="flex items-center">
-                {selectedModels.map((model, index) => {
-                  const ProviderIcon = getProviderIcon(
-                    model.provider,
-                    model.modelName
-                  );
+            <div className="flex items-center">
+              {selectedModels.map((model, index) => {
+                const ProviderIcon = getProviderIcon(
+                  model.provider,
+                  model.modelName
+                );
 
-                  if (!isMultiModel) {
-                    return (
-                      <OpenButton
-                        key={modelKey(model.provider, model.modelName)}
-                        icon={ProviderIcon}
-                        onClick={() => handlePillClick(index)}
-                      >
-                        {model.displayName}
-                      </OpenButton>
-                    );
-                  }
-
+                if (!isMultiModel) {
                   return (
-                    <div
+                    <OpenButton
                       key={modelKey(model.provider, model.modelName)}
-                      className="flex items-center"
+                      icon={ProviderIcon}
+                      onClick={(e: React.MouseEvent) =>
+                        handlePillClick(index, e.currentTarget as HTMLElement)
+                      }
                     >
-                      {index > 0 && (
-                        <Separator
-                          orientation="vertical"
-                          paddingXRem={0.5}
-                          className="h-5"
-                        />
-                      )}
-                      <SelectButton
-                        icon={ProviderIcon}
-                        rightIcon={SvgX}
-                        state="empty"
-                        variant="select-tinted"
-                        interaction="hover"
-                        size="lg"
-                        onClick={(e: React.MouseEvent) => {
-                          const target = e.target as HTMLElement;
-                          const btn = e.currentTarget as HTMLElement;
-                          const icons = btn.querySelectorAll(
-                            ".interactive-foreground-icon"
-                          );
-                          const lastIcon = icons[icons.length - 1];
-                          if (lastIcon && lastIcon.contains(target)) {
-                            onRemove(index);
-                          } else {
-                            handlePillClick(index);
-                          }
-                        }}
-                      >
-                        {model.displayName}
-                      </SelectButton>
-                    </div>
+                      {model.displayName}
+                    </OpenButton>
                   );
-                })}
-              </div>
-            </Popover.Anchor>
+                }
+
+                return (
+                  <div
+                    key={modelKey(model.provider, model.modelName)}
+                    className="flex items-center"
+                  >
+                    {index > 0 && (
+                      <Separator
+                        orientation="vertical"
+                        paddingXRem={0.5}
+                        className="h-5"
+                      />
+                    )}
+                    <SelectButton
+                      icon={ProviderIcon}
+                      rightIcon={SvgX}
+                      state="empty"
+                      variant="select-tinted"
+                      interaction="hover"
+                      size="lg"
+                      onClick={(e: React.MouseEvent) => {
+                        const target = e.target as HTMLElement;
+                        const btn = e.currentTarget as HTMLElement;
+                        const icons = btn.querySelectorAll(
+                          ".interactive-foreground-icon"
+                        );
+                        const lastIcon = icons[icons.length - 1];
+                        if (lastIcon && lastIcon.contains(target)) {
+                          onRemove(index);
+                        } else {
+                          handlePillClick(index, btn);
+                        }
+                      }}
+                    >
+                      {model.displayName}
+                    </SelectButton>
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
       </div>
 
-      <Popover.Content side="top" align="start" width="lg">
+      <Popover.Content
+        side="top"
+        align="start"
+        width="lg"
+        avoidCollisions={false}
+      >
         <ModelListContent
           llmProviders={llmManager.llmProviders}
           isLoading={llmManager.isLoadingProviders}
