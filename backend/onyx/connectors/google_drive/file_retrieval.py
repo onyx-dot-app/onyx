@@ -219,13 +219,32 @@ def get_external_access_for_folder(
 
 
 def _get_fields_for_file_type(field_type: DriveFileFieldType) -> str:
-    """Get the appropriate fields string based on the field type enum"""
+    """Get the appropriate fields string for files().list() based on the field type enum."""
     if field_type == DriveFileFieldType.SLIM:
         return SLIM_FILE_FIELDS
     elif field_type == DriveFileFieldType.WITH_PERMISSIONS:
         return FILE_FIELDS_WITH_PERMISSIONS
     else:  # DriveFileFieldType.STANDARD
         return FILE_FIELDS
+
+
+def _extract_single_file_fields(list_fields: str) -> str:
+    """Convert a files().list() fields string to one suitable for files().get().
+
+    List fields look like "nextPageToken, files(field1, field2, ...)"
+    Single-file fields should be just "field1, field2, ..."
+    """
+    start = list_fields.find("files(")
+    if start == -1:
+        return list_fields
+    inner_start = start + len("files(")
+    inner_end = list_fields.rfind(")")
+    return list_fields[inner_start:inner_end]
+
+
+def _get_single_file_fields(field_type: DriveFileFieldType) -> str:
+    """Get the appropriate fields string for files().get() based on the field type enum."""
+    return _extract_single_file_fields(_get_fields_for_file_type(field_type))
 
 
 def _get_files_in_parent(
@@ -551,7 +570,7 @@ def get_files_by_web_view_links_batch(
     Returns a dict mapping web_view_link to file metadata.
     Automatically splits into chunks of MAX_BATCH_SIZE.
     """
-    fields = _get_fields_for_file_type(field_type)
+    fields = _get_single_file_fields(field_type)
     if len(web_view_links) <= MAX_BATCH_SIZE:
         return _get_files_by_web_view_links_batch(service, web_view_links, fields)
 
