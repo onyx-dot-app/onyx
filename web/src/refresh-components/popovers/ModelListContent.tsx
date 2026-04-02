@@ -1,16 +1,20 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { PopoverMenu } from "@/refresh-components/Popover";
-import Separator from "@/refresh-components/Separator";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Text } from "@opal/components";
-import { SvgCheck } from "@opal/icons";
+import { SvgCheck, SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { LLMOption } from "./interfaces";
 import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/refresh-components/Collapsible";
 
 export interface ModelListContentProps {
   llmProviders: LLMProviderDescriptor[] | undefined;
@@ -66,6 +70,39 @@ export default function ModelListContent({
     [filteredOptions]
   );
 
+  // Find which group contains a currently-selected model (for auto-expand)
+  const defaultGroupKey = useMemo(() => {
+    for (const group of groupedOptions) {
+      if (group.options.some((opt) => isSelected(opt))) {
+        return group.key;
+      }
+    }
+    return groupedOptions[0]?.key ?? "";
+  }, [groupedOptions, isSelected]);
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    new Set([defaultGroupKey])
+  );
+
+  // Reset expanded groups when default changes (e.g. popover re-opens)
+  useEffect(() => {
+    setExpandedGroups(new Set([defaultGroupKey]));
+  }, [defaultGroupKey]);
+
+  const isSearching = searchQuery.trim().length > 0;
+
+  const toggleGroup = (key: string) => {
+    if (isSearching) return;
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const isGroupOpen = (key: string) => isSearching || expandedGroups.has(key);
+
   const renderModelItem = (option: LLMOption) => {
     const selected = isSelected(option);
     const disabled = isDisabled?.(option) ?? false;
@@ -107,7 +144,7 @@ export default function ModelListContent({
       <PopoverMenu scrollContainerRef={scrollContainerRef}>
         {isLoading
           ? [
-              <div key="loading" className="py-3 px-2">
+              <div key="loading" className="flex items-center gap-2 py-3">
                 <Text font="secondary-body" color="text-03">
                   Loading models...
                 </Text>
@@ -115,42 +152,55 @@ export default function ModelListContent({
             ]
           : groupedOptions.length === 0
             ? [
-                <div key="empty" className="py-3 px-2">
+                <div key="empty" className="py-3">
                   <Text font="secondary-body" color="text-03">
                     No models found
                   </Text>
                 </div>,
               ]
-            : groupedOptions.map((group) => (
-                <div key={group.key}>
-                  {groupedOptions.length > 1 && (
-                    <Section
-                      flexDirection="row"
-                      gap={0.25}
-                      padding={0}
-                      height="auto"
-                      alignItems="center"
-                      justifyContent="start"
-                      className="px-2 pt-2 pb-1"
+            : groupedOptions.length === 1
+              ? [
+                  <div key="single-provider" className="flex flex-col gap-1">
+                    {groupedOptions[0]!.options.map(renderModelItem)}
+                  </div>,
+                ]
+              : groupedOptions.map((group) => {
+                  const open = isGroupOpen(group.key);
+                  return (
+                    <Collapsible
+                      key={group.key}
+                      open={open}
+                      onOpenChange={() => toggleGroup(group.key)}
                     >
-                      <div className="flex items-center gap-1 shrink-0">
-                        <group.Icon size={16} />
-                        <Text font="secondary-body" color="text-03" nowrap>
-                          {group.displayName}
-                        </Text>
-                      </div>
-                      <Separator noPadding className="flex-1" />
-                    </Section>
-                  )}
-                  <Section
-                    gap={0.25}
-                    alignItems="stretch"
-                    justifyContent="start"
-                  >
-                    {group.options.map(renderModelItem)}
-                  </Section>
-                </div>
-              ))}
+                      <CollapsibleTrigger asChild>
+                        <button className="flex items-center rounded-08 hover:bg-background-tint-02 w-full py-1 pt-1 cursor-pointer">
+                          <div className="flex items-center gap-1 shrink-0">
+                            <div className="flex items-center justify-center size-5 shrink-0">
+                              <group.Icon size={16} />
+                            </div>
+                            <Text font="secondary-body" color="text-03" nowrap>
+                              {group.displayName}
+                            </Text>
+                          </div>
+                          <div className="flex-1" />
+                          <div className="flex items-center justify-center size-6 shrink-0">
+                            {open ? (
+                              <SvgChevronDown className="h-4 w-4 stroke-text-04 shrink-0" />
+                            ) : (
+                              <SvgChevronRight className="h-4 w-4 stroke-text-04 shrink-0" />
+                            )}
+                          </div>
+                        </button>
+                      </CollapsibleTrigger>
+
+                      <CollapsibleContent>
+                        <div className="flex flex-col gap-1">
+                          {group.options.map(renderModelItem)}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })}
       </PopoverMenu>
 
       {footer}
