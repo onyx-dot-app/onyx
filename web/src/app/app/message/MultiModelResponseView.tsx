@@ -164,12 +164,12 @@ export default function MultiModelResponseView({
     }
   }, [isGenerating]);
 
-  // Find preferred panel position — used for both the selection guard and carousel layout
+  // Index of the preferred panel in the responses array (-1 if not found)
   const preferredIdx = responses.findIndex(
     (r) => r.modelIndex === preferredIndex
   );
 
-  // Selection mode when preferred is set, found in responses, not generating, and at least 2 visible panels
+  // Selection mode when preferred is set, not generating, and at least 2 visible panels
   const showSelectionMode =
     preferredIndex !== null &&
     preferredIdx !== -1 &&
