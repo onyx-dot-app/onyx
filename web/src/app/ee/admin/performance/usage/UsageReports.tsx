@@ -17,7 +17,6 @@ import Title from "@/components/ui/title";
 import Spacer from "@/refresh-components/Spacer";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
-import { Disabled } from "@opal/core";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import React, { useState } from "react";
@@ -202,15 +201,14 @@ function GenerateReportInput({
           </Popover.Content>
         </Popover>
       </div>
-      <Disabled disabled={isLoading || isWaitingForReport}>
-        <OpalButton
-          color={"blue"}
-          icon={SvgDownloadCloud}
-          onClick={() => requestReport()}
-        >
-          {isWaitingForReport ? "Generating..." : "Generate Report"}
-        </OpalButton>
-      </Disabled>
+      <OpalButton
+        disabled={isLoading || isWaitingForReport}
+        color={"blue"}
+        icon={SvgDownloadCloud}
+        onClick={() => requestReport()}
+      >
+        {isWaitingForReport ? "Generating..." : "Generate Report"}
+      </OpalButton>
       <p className="mt-1 text-xs">
         {isWaitingForReport
           ? "A report is currently being generated. Please wait..."

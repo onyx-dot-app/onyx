@@ -8,7 +8,6 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
-import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import Message from "@/refresh-components/messages/Message";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
@@ -246,15 +245,14 @@ function SubscriptionCard({
               to make changes.
             </Text>
           ) : disabled ? (
-            <Disabled disabled={isReconnecting}>
-              <OpalButton
-                prominence="secondary"
-                onClick={handleReconnect}
-                rightIcon={SvgArrowRight}
-              >
-                {isReconnecting ? "Connecting..." : "Connect to Stripe"}
-              </OpalButton>
-            </Disabled>
+            <OpalButton
+              disabled={isReconnecting}
+              prominence="secondary"
+              onClick={handleReconnect}
+              rightIcon={SvgArrowRight}
+            >
+              {isReconnecting ? "Connecting..." : "Connect to Stripe"}
+            </OpalButton>
           ) : (
             <OpalButton onClick={handleManagePlan} rightIcon={SvgExternalLink}>
               Manage Plan
@@ -377,11 +375,13 @@ function SeatsCard({
             sizePreset="main-content"
             variant="section"
           />
-          <Disabled disabled={isSubmitting}>
-            <OpalButton prominence="secondary" onClick={handleCancel}>
-              Cancel
-            </OpalButton>
-          </Disabled>
+          <OpalButton
+            disabled={isSubmitting}
+            prominence="secondary"
+            onClick={handleCancel}
+          >
+            Cancel
+          </OpalButton>
         </Section>
 
         <div className="billing-content-area">
@@ -463,15 +463,14 @@ function SeatsCard({
               No changes to your billing.
             </Text>
           )}
-          <Disabled
+          <OpalButton
             disabled={
               isSubmitting || newSeatCount === totalSeats || isBelowMinimum
             }
+            onClick={handleConfirm}
           >
-            <OpalButton onClick={handleConfirm}>
-              {isSubmitting ? "Saving..." : "Confirm Change"}
-            </OpalButton>
-          </Disabled>
+            {isSubmitting ? "Saving..." : "Confirm Change"}
+          </OpalButton>
         </Section>
       </Card>
     );
@@ -509,15 +508,14 @@ function SeatsCard({
             View Users
           </OpalButton>
           {!hideUpdateSeats && (
-            <Disabled disabled={isLoadingUsers || disabled || !billing}>
-              <OpalButton
-                prominence="secondary"
-                onClick={handleStartEdit}
-                icon={SvgPlus}
-              >
-                Update Seats
-              </OpalButton>
-            </Disabled>
+            <OpalButton
+              disabled={isLoadingUsers || disabled || !billing}
+              prominence="secondary"
+              onClick={handleStartEdit}
+              icon={SvgPlus}
+            >
+              Update Seats
+            </OpalButton>
           )}
         </Section>
       </Section>
