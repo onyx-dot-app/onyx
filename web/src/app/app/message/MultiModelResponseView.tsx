@@ -90,14 +90,8 @@ export default function MultiModelResponseView({
   >(null);
   const preferredRoRef = useRef<ResizeObserver | null>(null);
 
-  // Drag-scroll state — refs used across handlers
   const trackRef = useRef<HTMLDivElement | null>(null);
   const carouselContainerRef = useRef<HTMLDivElement | null>(null);
-  const justDraggedRef = useRef(false);
-  // Kept in sync during render so pointer-up snap-back can read without stale closure
-  const preferredCenterRef = useRef(0);
-  // Cleanup fn for native window pointer listeners — called on unmount to prevent leaks
-  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   const preferredPanelRef = useCallback((el: HTMLDivElement | null) => {
     if (preferredRoRef.current) {
@@ -147,9 +141,8 @@ export default function MultiModelResponseView({
   );
 
   const handleSelectPreferred = useCallback(
-    (modelIndex: number, fromDrag = false) => {
+    (modelIndex: number) => {
       if (isGenerating) return;
-      if (!fromDrag && justDraggedRef.current) return;
       setPreferredIndex(modelIndex);
       const response = responses.find((r) => r.modelIndex === modelIndex);
       if (!response) return;
@@ -158,116 +151,6 @@ export default function MultiModelResponseView({
       }
     },
     [isGenerating, responses, onMessageSelection]
-  );
-
-  // Unmount safety: remove any active window listeners if the component is torn down mid-drag
-  useEffect(
-    () => () => {
-      dragCleanupRef.current?.();
-    },
-    []
-  );
-
-  const handleCarouselPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      const track = trackRef.current;
-      const container = carouselContainerRef.current;
-      if (!track || !container) return;
-      // Ignore non-primary pointer (e.g. right-click, secondary touch)
-      if (e.button !== 0) return;
-      // Prevent text-selection drag from interfering with our drag logic
-      e.preventDefault();
-      // Clean up any prior drag that didn't finish (e.g. two fingers)
-      dragCleanupRef.current?.();
-
-      const startX = e.clientX;
-      // Capture current track position so drag feels anchored to the grab point
-      const baseX = new DOMMatrix(getComputedStyle(track).transform).m41;
-      let delta = 0;
-      let isDragging = false;
-
-      // Capture selection state at press time — these won't change during a drag
-      const capturedPreferredIndex = preferredIndex;
-      const capturedResponses = responses;
-      const capturedHiddenPanels = hiddenPanels;
-
-      function onMove(evt: PointerEvent) {
-        delta = evt.clientX - startX;
-        if (Math.abs(delta) > 5 && !isDragging) {
-          isDragging = true;
-          container!.style.cursor = "grabbing";
-        }
-        if (!isDragging) return;
-        track!.style.transition = "none";
-        track!.style.transform = `translateX(${baseX + delta}px)`;
-      }
-
-      function onUp() {
-        cleanup();
-        container!.style.cursor = "";
-
-        if (!isDragging) return;
-
-        // Block the click event that fires right after pointer-release
-        justDraggedRef.current = true;
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            justDraggedRef.current = false;
-          })
-        );
-
-        if (capturedPreferredIndex === null) return;
-        const currentPrefIdx = capturedResponses.findIndex(
-          (r) => r.modelIndex === capturedPreferredIndex
-        );
-        let nextModelIndex = capturedPreferredIndex;
-        if (delta < -80) {
-          // Dragged left — advance to next visible panel
-          for (let i = currentPrefIdx + 1; i < capturedResponses.length; i++) {
-            if (!capturedHiddenPanels.has(capturedResponses[i]!.modelIndex)) {
-              nextModelIndex = capturedResponses[i]!.modelIndex;
-              break;
-            }
-          }
-        } else if (delta > 80) {
-          // Dragged right — go to previous visible panel
-          for (let i = currentPrefIdx - 1; i >= 0; i--) {
-            if (!capturedHiddenPanels.has(capturedResponses[i]!.modelIndex)) {
-              nextModelIndex = capturedResponses[i]!.modelIndex;
-              break;
-            }
-          }
-        }
-
-        if (nextModelIndex !== capturedPreferredIndex) {
-          // React will re-render and animate the track to the new preferred center
-          handleSelectPreferred(nextModelIndex, true);
-        } else {
-          // Snap back to current preferred panel center
-          const snapX = trackContainerW / 2 - preferredCenterRef.current;
-          track!.style.transition =
-            "transform 0.45s cubic-bezier(0.2, 0, 0, 1)";
-          track!.style.transform = `translateX(${snapX}px)`;
-        }
-      }
-
-      function cleanup() {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        dragCleanupRef.current = null;
-      }
-
-      dragCleanupRef.current = cleanup;
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-    },
-    [
-      preferredIndex,
-      responses,
-      hiddenPanels,
-      handleSelectPreferred,
-      trackContainerW,
-    ]
   );
 
   // Clear preferred selection when generation starts
@@ -364,8 +247,6 @@ export default function MultiModelResponseView({
 
     const preferredCenterInTrack =
       panelLeftEdges[preferredIdx]! + selectionWidths[preferredIdx]! / 2;
-    // Keep in sync for pointer-up snap-back without stale closures
-    preferredCenterRef.current = preferredCenterInTrack;
 
     // Start position: hidden panels at HIDDEN_PANEL_W, visible at SELECTION_PANEL_W
     const uniformTrackW =
@@ -384,8 +265,7 @@ export default function MultiModelResponseView({
     return (
       <div
         ref={trackContainerRef}
-        className="w-full overflow-hidden cursor-grab"
-        onPointerDown={handleCarouselPointerDown}
+        className="w-full overflow-hidden"
         style={{
           maskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
           WebkitMaskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
