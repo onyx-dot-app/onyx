@@ -942,8 +942,19 @@ CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
 )
 
 VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
+# This is the timeout for the client side of the Vespa migration task. When
+# exceeded, an exception is raised in our code. This value should be higher than
+# VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT.
 VESPA_MIGRATION_REQUEST_TIMEOUT_S = int(
     os.environ.get("VESPA_MIGRATION_REQUEST_TIMEOUT_S") or "120"
+)
+# This is the timeout Vespa uses on the server side to know when to wrap up its
+# traversal and try to report partial results. This differs from the client
+# timeout above which raises an exception in our code when exceeded. This
+# timeout allows Vespa to return gracefully. This value should be lower than
+# VESPA_MIGRATION_REQUEST_TIMEOUT_S. Formatted as <number of seconds>s.
+VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = os.environ.get(
+    "VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT", "110s"
 )
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
