@@ -222,12 +222,23 @@ class PostgresBackedFileStore(FileStore):
             logger.warning(f"Error getting file size for {file_id}: {e}")
             return None
 
-    def delete_file(self, file_id: str, db_session: Session | None = None) -> None:
+    def delete_file(
+        self,
+        file_id: str,
+        error_on_missing: bool = True,
+        db_session: Session | None = None,
+    ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as session:
             try:
-                file_content = get_file_content_by_file_id(
+                file_content = get_file_content_by_file_id_optional(
                     file_id=file_id, db_session=session
                 )
+                if file_content is None:
+                    if error_on_missing:
+                        raise RuntimeError(
+                            f"File content for file_id {file_id} does not exist or was deleted"
+                        )
+                    return
                 raw_conn = _get_raw_connection(session)
 
                 try:
