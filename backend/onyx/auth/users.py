@@ -80,7 +80,6 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserUpdateWithRole
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
@@ -508,16 +507,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     ):
                         raise exceptions.UserAlreadyExists()
 
-                    user_update = UserUpdateWithRole(
-                        password=user_create.password,
-                        is_verified=user_create.is_verified,
-                        role=user_create.role,
-                        account_type=AccountType.STANDARD,
-                    )
-                    user = await self.update(user_update, user)
-                    self._assign_default_groups_on_upgrade(
-                        user, is_admin=(user_create.role == UserRole.ADMIN)
-                    )
+                    self._upgrade_user_to_standard__sync(user.id, user_create)
+                    user = await self.user_db.get(user.id)  # type: ignore[arg-type]
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -537,16 +528,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     ):
                         raise exceptions.UserAlreadyExists()
 
-                    user_update = UserUpdateWithRole(
-                        password=user_create.password,
-                        is_verified=user_create.is_verified,
-                        role=user_create.role,
-                        account_type=AccountType.STANDARD,
-                    )
-                    user = await self.update(user_update, user)
-                    self._assign_default_groups_on_upgrade(
-                        user, is_admin=(user_create.role == UserRole.ADMIN)
-                    )
+                    self._upgrade_user_to_standard__sync(user.id, user_create)
+                    user = await self.user_db.get(user.id)  # type: ignore[arg-type]
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
                 remove_user_from_invited_users(user_create.email)
@@ -583,31 +566,31 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         user.pinned_assistants = default_persona_ids
 
-    @staticmethod
-    def _assign_default_groups_on_upgrade(user: User, is_admin: bool = False) -> None:
-        """Assign a newly-upgraded user to the correct default group.
+    def _upgrade_user_to_standard__sync(
+        self,
+        user_id: uuid.UUID,
+        user_create: UserCreate,
+    ) -> None:
+        """Upgrade a non-web user to STANDARD and assign default groups atomically.
 
-        Called when a non-web-login user (BOT / EXT_PERM_USER) is upgraded
-        to STANDARD via create-path (SAML, password signup, etc.).
-
-        Args:
-            is_admin: If True, assign to Admin default group; otherwise Basic.
+        All writes happen in a single sync transaction so neither the field
+        update nor the group assignment is visible without the other.
         """
-        try:
-            with get_session_with_current_tenant() as sync_db:
-                sync_user = sync_db.query(User).filter(User.id == user.id).first()
-                if sync_user:
-                    sync_user.account_type = AccountType.STANDARD
-                    assign_user_to_default_groups__no_commit(
-                        sync_db, sync_user, is_admin=is_admin
-                    )
-                    sync_db.commit()
-        except Exception:
-            logger.exception(
-                "Failed to assign default group for upgraded user %s. "
-                "Group will be reconciled on next login.",
-                user.email,
-            )
+        with get_session_with_current_tenant() as sync_db:
+            sync_user = sync_db.query(User).filter(User.id == user_id).first()
+            if sync_user:
+                sync_user.hashed_password = self.password_helper.hash(
+                    user_create.password
+                )
+                sync_user.is_verified = user_create.is_verified
+                sync_user.role = user_create.role
+                sync_user.account_type = AccountType.STANDARD
+                assign_user_to_default_groups__no_commit(
+                    sync_db,
+                    sync_user,
+                    is_admin=(user_create.role == UserRole.ADMIN),
+                )
+                sync_db.commit()
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)

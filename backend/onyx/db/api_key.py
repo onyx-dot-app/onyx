@@ -168,8 +168,10 @@ def update_api_key(
                 api_key_user,
                 is_admin=(api_key_args.role == UserRole.ADMIN),
             )
-
-        recompute_user_permissions__no_commit(api_key_user.id, db_session)
+        else:
+            # No group assigned for LIMITED, but we still need to recompute
+            # since we just removed the old default-group membership above.
+            recompute_user_permissions__no_commit(api_key_user.id, db_session)
 
     db_session.commit()
 

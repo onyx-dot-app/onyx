@@ -42,6 +42,7 @@ const E2E_IMAGE_GEN_API_KEY =
  * - `deleteProvider(id)` - Deletes an LLM provider
  *
  * **User Groups:**
+ * - `getUserGroups()` - Lists all user groups (including default system groups)
  * - `createUserGroup(name)` - Creates a user group
  * - `deleteUserGroup(id)` - Deletes a user group
  *

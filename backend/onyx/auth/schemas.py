@@ -66,11 +66,6 @@ class UserCreate(schemas.BaseUserCreate):
         return d
 
 
-class UserUpdateWithRole(schemas.BaseUserUpdate):
-    role: UserRole
-    account_type: AccountType
-
-
 class UserUpdate(schemas.BaseUserUpdate):
     """
     Role updates are not allowed through the user update endpoint for security reasons
