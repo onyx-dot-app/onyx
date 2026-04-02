@@ -87,6 +87,14 @@ export async function deactivateHook(id: number): Promise<HookResponse> {
   return res.json();
 }
 
+export async function getHook(id: number): Promise<HookResponse> {
+  const res = await fetch(`/api/admin/hooks/${id}`);
+  if (!res.ok) {
+    throw await parseError(res, "Failed to fetch hook");
+  }
+  return res.json();
+}
+
 export async function validateHook(id: number): Promise<HookValidateResponse> {
   const res = await fetch(`/api/admin/hooks/${id}/validate`, {
     method: "POST",
