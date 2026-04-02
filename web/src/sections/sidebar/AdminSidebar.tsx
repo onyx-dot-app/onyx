@@ -297,10 +297,10 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
               */}
               <div>
                 <SidebarTab
-                  variant={disabled ? "sidebar-light" : "sidebar-heavy"}
+                  disabled={disabled}
                   icon={icon}
                   href={disabled ? undefined : link}
-                  selected={!disabled && pathname.startsWith(link)}
+                  selected={pathname.startsWith(link)}
                 >
                   {name}
                 </SidebarTab>

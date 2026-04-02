@@ -562,7 +562,7 @@ const MemoizedAppSidebarInner = memo(
             href="/app/agents"
             folded={folded}
             selected={activeSidebarTab.isMoreAgents()}
-            variant={!folded ? "sidebar-light" : "sidebar-heavy"}
+            variant={folded ? "sidebar-heavy" : "sidebar-light"}
           >
             {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
           </SidebarTab>
@@ -577,7 +577,7 @@ const MemoizedAppSidebarInner = memo(
           onClick={() => createProjectModal.toggle(true)}
           selected={createProjectModal.isOpen}
           folded={folded}
-          variant={!folded ? "sidebar-light" : "sidebar-heavy"}
+          variant={folded ? "sidebar-heavy" : "sidebar-light"}
         >
           New Project
         </SidebarTab>
