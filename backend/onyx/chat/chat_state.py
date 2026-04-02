@@ -1,7 +1,27 @@
 import threading
+from collections.abc import Callable
+from dataclasses import dataclass
+from uuid import UUID
 
+from pydantic import BaseModel
+
+from onyx.cache.interface import CacheBackend
 from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.models import ChatLoadedFile
+from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import ExtractedContextFiles
+from onyx.chat.models import FileToolMetadata
+from onyx.chat.models import SearchParams
 from onyx.context.search.models import SearchDoc
+from onyx.db.memory import UserMemoryContext
+from onyx.db.models import ChatMessage
+from onyx.db.models import ChatSession
+from onyx.db.models import Persona
+from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMUserIdentity
+from onyx.onyxbot.slack.models import SlackContext
+from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.tools.models import ChatFile
 from onyx.tools.models import ToolCallInfo
 
 # Type alias for search doc deduplication key
@@ -148,3 +168,47 @@ class ChatStateContainer:
         """Thread-safe getter for emitted citations (returns a copy)."""
         with self._lock:
             return self._emitted_citations.copy()
+
+
+class AvailableFiles(BaseModel):
+    """Separated file IDs for the FileReaderTool so it knows which loader to use."""
+
+    # IDs from the ``user_file`` table (project / persona-attached files).
+    user_file_ids: list[UUID] = []
+    # IDs from the ``file_record`` table (chat-attached files).
+    chat_file_ids: list[UUID] = []
+
+
+@dataclass(frozen=True)
+class ChatTurnSetup:
+    """Immutable context produced by ``build_chat_turn`` and consumed by ``_run_models``."""
+
+    new_msg_req: SendMessageRequest
+    chat_session: ChatSession
+    persona: Persona
+    user_message: ChatMessage
+    user_identity: LLMUserIdentity
+    llms: list[LLM]  # length 1 for single-model, N for multi-model
+    model_display_names: list[str]  # parallel to llms
+    simple_chat_history: list[ChatMessageSimple]
+    extracted_context_files: ExtractedContextFiles
+    reserved_messages: list[ChatMessage]  # length 1 for single, N for multi
+    reserved_token_count: int
+    search_params: SearchParams
+    all_injected_file_metadata: dict[str, FileToolMetadata]
+    available_files: AvailableFiles
+    tool_id_to_name_map: dict[int, str]
+    forced_tool_id: int | None
+    files: list[ChatLoadedFile]
+    chat_files_for_tools: list[ChatFile]
+    custom_agent_prompt: str | None
+    user_memory_context: UserMemoryContext
+    # For deep research: was the last assistant message a clarification request?
+    skip_clarification: bool
+    check_is_connected: Callable[[], bool]
+    cache: CacheBackend
+    # Execution params forwarded to per-model tool construction
+    bypass_acl: bool
+    slack_context: SlackContext | None
+    custom_tool_additional_headers: dict[str, str] | None
+    mcp_headers: dict[str, str] | None
