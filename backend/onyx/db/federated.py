@@ -45,6 +45,21 @@ def fetch_all_federated_connectors_parallel() -> list[FederatedConnector]:
         return fetch_all_federated_connectors(db_session)
 
 
+# The mask_string() function in encryption.py uses "•" (U+2022 BULLET) to mask secrets.
+# If any credential value contains this character, it's a masked placeholder that must
+# never be persisted — doing so permanently corrupts the real secret.
+MASK_CHAR = "\u2022"
+
+
+def _reject_masked_credentials(credentials: dict[str, Any]) -> None:
+    """Raise if any credential string value contains mask placeholder characters."""
+    for key, val in credentials.items():
+        if isinstance(val, str) and MASK_CHAR in val:
+            raise ValueError(
+                f"Credential field '{key}' contains masked placeholder characters. Please provide the actual credential value."
+            )
+
+
 def validate_federated_connector_credentials(
     source: FederatedConnectorSource,
     credentials: dict[str, Any],
@@ -66,6 +81,8 @@ def create_federated_connector(
     config: dict[str, Any] | None = None,
 ) -> FederatedConnector:
     """Create a new federated connector with credential and config validation."""
+    _reject_masked_credentials(credentials)
+
     # Validate credentials before creating
     if not validate_federated_connector_credentials(source, credentials):
         raise ValueError(
@@ -277,6 +294,8 @@ def update_federated_connector(
     )
 
     if credentials is not None:
+        _reject_masked_credentials(credentials)
+
         # Validate credentials before updating
         if not validate_federated_connector_credentials(
             federated_connector.source, credentials
