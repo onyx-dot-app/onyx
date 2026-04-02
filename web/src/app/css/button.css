@@ -1,0 +1,399 @@
+/* ============================================================================
+   Main Variant - Primary
+   ============================================================================ */
+
+.button-main-primary {
+  background-color: var(--theme-primary-05);
+}
+.button-main-primary:hover {
+  background-color: var(--theme-primary-04);
+}
+.button-main-primary[data-state="transient"] {
+  background-color: var(--theme-primary-06);
+}
+.button-main-primary:active {
+  background-color: var(--theme-primary-06);
+}
+.button-main-primary:disabled {
+  background-color: var(--background-neutral-04);
+}
+
+.button-main-primary-text {
+  color: var(--text-inverted-05) !important;
+}
+.button-main-primary:disabled .button-main-primary-text {
+  color: var(--text-inverted-04) !important;
+}
+
+.button-main-primary-icon {
+  stroke: var(--text-inverted-05);
+}
+.button-main-primary:disabled .button-main-primary-icon {
+  stroke: var(--text-inverted-04);
+}
+
+/* ============================================================================
+   Main Variant - Secondary
+   ============================================================================ */
+
+.button-main-secondary {
+  background-color: var(--background-tint-01);
+  border: 1px solid var(--border-01);
+}
+.button-main-secondary:hover {
+  background-color: var(--background-tint-02);
+}
+.button-main-secondary[data-state="transient"] {
+  background-color: var(--background-tint-00);
+}
+.button-main-secondary:active {
+  background-color: var(--background-tint-00);
+}
+.button-main-secondary:disabled {
+  background-color: var(--background-neutral-03);
+  border: 1px solid var(--border-01);
+}
+
+.button-main-secondary-text {
+  color: var(--text-03) !important;
+}
+.button-main-secondary:hover .button-main-secondary-text {
+  color: var(--text-04) !important;
+}
+.button-main-secondary[data-state="transient"] .button-main-secondary-text {
+  color: var(--text-05) !important;
+}
+.button-main-secondary:active .button-main-secondary-text {
+  color: var(--text-05) !important;
+}
+.button-main-secondary:disabled .button-main-secondary-text {
+  color: var(--text-01) !important;
+}
+
+.button-main-secondary-icon {
+  stroke: var(--text-03);
+}
+.button-main-secondary:hover .button-main-secondary-icon {
+  stroke: var(--text-04);
+}
+.button-main-secondary[data-state="transient"] .button-main-secondary-icon {
+  stroke: var(--text-05);
+}
+.button-main-secondary:active .button-main-secondary-icon {
+  stroke: var(--text-05);
+}
+.button-main-secondary:disabled .button-main-secondary-icon {
+  stroke: var(--text-01);
+}
+
+/* ============================================================================
+   Main Variant - Tertiary
+   ============================================================================ */
+
+.button-main-tertiary {
+  background-color: transparent;
+}
+.button-main-tertiary:hover {
+  background-color: var(--background-tint-02);
+}
+.button-main-tertiary[data-state="transient"] {
+  background-color: var(--background-tint-00);
+}
+.button-main-tertiary:active {
+  background-color: var(--background-tint-00);
+}
+.button-main-tertiary:disabled {
+  background-color: transparent;
+}
+
+.button-main-tertiary-text {
+  color: var(--text-03) !important;
+}
+.button-main-tertiary:hover .button-main-tertiary-text {
+  color: var(--text-04) !important;
+}
+.button-main-tertiary[data-state="transient"] .button-main-tertiary-text {
+  color: var(--text-05) !important;
+}
+.button-main-tertiary:active .button-main-tertiary-text {
+  color: var(--text-05) !important;
+}
+.button-main-tertiary:disabled .button-main-tertiary-text {
+  color: var(--text-01) !important;
+}
+
+.button-main-tertiary-icon {
+  stroke: var(--text-03);
+}
+.button-main-tertiary:hover .button-main-tertiary-icon {
+  stroke: var(--text-04);
+}
+.button-main-tertiary[data-state="transient"] .button-main-tertiary-icon {
+  stroke: var(--text-05);
+}
+.button-main-tertiary:active .button-main-tertiary-icon {
+  stroke: var(--text-05);
+}
+.button-main-tertiary:disabled .button-main-tertiary-icon {
+  stroke: var(--text-01);
+}
+
+/* ============================================================================
+   Main Variant - Internal
+   ============================================================================ */
+
+.button-main-internal {
+  background-color: transparent;
+}
+.button-main-internal:hover {
+  background-color: var(--background-tint-02);
+}
+.button-main-internal[data-state="transient"] {
+  background-color: var(--background-tint-00);
+}
+.button-main-internal:active {
+  background-color: var(--background-tint-00);
+}
+.button-main-internal:disabled {
+  background-color: transparent;
+}
+
+.button-main-internal-text {
+  color: var(--text-03) !important;
+}
+.button-main-internal:hover .button-main-internal-text {
+  color: var(--text-04) !important;
+}
+.button-main-internal[data-state="transient"] .button-main-internal-text {
+  color: var(--text-05) !important;
+}
+.button-main-internal:active .button-main-internal-text {
+  color: var(--text-05) !important;
+}
+.button-main-internal:disabled .button-main-internal-text {
+  color: var(--text-01) !important;
+}
+
+.button-main-internal-icon {
+  stroke: var(--text-03);
+}
+.button-main-internal:hover .button-main-internal-icon {
+  stroke: var(--text-04);
+}
+.button-main-internal[data-state="transient"] .button-main-internal-icon {
+  stroke: var(--text-05);
+}
+.button-main-internal:active .button-main-internal-icon {
+  stroke: var(--text-05);
+}
+.button-main-internal:disabled .button-main-internal-icon {
+  stroke: var(--text-01);
+}
+
+/* ============================================================================
+   Action Variant - Primary
+   ============================================================================ */
+
+.button-action-primary {
+  background-color: var(--action-link-05);
+}
+.button-action-primary:hover {
+  background-color: var(--action-link-04);
+}
+.button-action-primary[data-state="transient"] {
+  background-color: var(--action-link-06);
+}
+.button-action-primary:active {
+  background-color: var(--action-link-06);
+}
+.button-action-primary:disabled {
+  background-color: var(--action-link-02);
+}
+
+.button-action-primary-text {
+  color: var(--text-light-05) !important;
+}
+.button-action-primary:disabled .button-action-primary-text {
+  color: var(--text-01) !important;
+}
+
+.button-action-primary-icon {
+  stroke: var(--text-light-05);
+}
+.button-action-primary:disabled .button-action-primary-icon {
+  stroke: var(--text-01);
+}
+
+/* ============================================================================
+   Action Variant - Secondary
+   ============================================================================ */
+
+.button-action-secondary {
+  background-color: var(--background-tint-01);
+  border: 1px solid var(--border-01);
+}
+.button-action-secondary:hover {
+  background-color: var(--background-tint-02);
+}
+.button-action-secondary[data-state="transient"] {
+  background-color: var(--background-tint-00);
+}
+.button-action-secondary:active {
+  background-color: var(--background-tint-00);
+}
+.button-action-secondary:disabled {
+  background-color: var(--background-neutral-02);
+  border: 1px solid var(--border-01);
+}
+
+.button-action-secondary-text {
+  color: var(--action-text-link-05) !important;
+}
+.button-action-secondary:disabled .button-action-secondary-text {
+  color: var(--action-link-03) !important;
+}
+
+.button-action-secondary-icon {
+  stroke: var(--action-text-link-05);
+}
+.button-action-secondary:disabled .button-action-secondary-icon {
+  stroke: var(--action-link-03);
+}
+
+/* ============================================================================
+   Action Variant - Tertiary
+   ============================================================================ */
+
+.button-action-tertiary {
+  background-color: transparent;
+}
+.button-action-tertiary:hover {
+  background-color: var(--background-tint-02);
+}
+.button-action-tertiary[data-state="transient"] {
+  background-color: var(--background-tint-00);
+}
+.button-action-tertiary:active {
+  background-color: var(--background-tint-00);
+}
+.button-action-tertiary:disabled {
+  background-color: transparent;
+}
+
+.button-action-tertiary-text {
+  color: var(--action-text-link-05) !important;
+}
+.button-action-tertiary:disabled .button-action-tertiary-text {
+  color: var(--action-link-03) !important;
+}
+
+.button-action-tertiary-icon {
+  stroke: var(--action-text-link-05);
+}
+.button-action-tertiary:disabled .button-action-tertiary-icon {
+  stroke: var(--action-link-03);
+}
+
+/* ============================================================================
+   Danger Variant - Primary
+   ============================================================================ */
+
+.button-danger-primary {
+  background-color: var(--action-danger-05);
+}
+.button-danger-primary:hover {
+  background-color: var(--action-danger-04);
+}
+.button-danger-primary[data-state="transient"] {
+  background-color: var(--action-danger-06);
+}
+.button-danger-primary:active {
+  background-color: var(--action-danger-06);
+}
+.button-danger-primary:disabled {
+  background-color: var(--action-danger-02);
+}
+
+.button-danger-primary-text {
+  color: var(--text-light-05) !important;
+}
+.button-danger-primary:disabled .button-danger-primary-text {
+  color: var(--text-01) !important;
+}
+
+.button-danger-primary-icon {
+  stroke: var(--text-light-05);
+}
+.button-danger-primary:disabled .button-danger-primary-icon {
+  stroke: var(--text-01);
+}
+
+/* ============================================================================
+   Danger Variant - Secondary
+   ============================================================================ */
+
+.button-danger-secondary {
+  background-color: var(--background-tint-01);
+  border: 1px solid var(--border-01);
+}
+.button-danger-secondary:hover {
+  background-color: var(--background-tint-02);
+}
+.button-danger-secondary[data-state="transient"] {
+  background-color: var(--background-tint-00);
+}
+.button-danger-secondary:active {
+  background-color: var(--background-tint-00);
+}
+.button-danger-secondary:disabled {
+  background-color: var(--background-neutral-02);
+  border: 1px solid var(--border-01);
+}
+
+.button-danger-secondary-text {
+  color: var(--action-text-danger-05) !important;
+}
+.button-danger-secondary:disabled .button-danger-secondary-text {
+  color: var(--action-danger-03) !important;
+}
+
+.button-danger-secondary-icon {
+  stroke: var(--action-text-danger-05);
+}
+.button-danger-secondary:disabled .button-danger-secondary-icon {
+  stroke: var(--action-danger-03);
+}
+
+/* ============================================================================
+   Danger Variant - Tertiary
+   ============================================================================ */
+
+.button-danger-tertiary {
+  background-color: transparent;
+}
+.button-danger-tertiary:hover {
+  background-color: var(--background-tint-02);
+}
+.button-danger-tertiary[data-state="transient"] {
+  background-color: var(--background-tint-00);
+}
+.button-danger-tertiary:active {
+  background-color: var(--background-tint-00);
+}
+.button-danger-tertiary:disabled {
+  background-color: transparent;
+}
+
+.button-danger-tertiary-text {
+  color: var(--action-text-danger-05) !important;
+}
+.button-danger-tertiary:disabled .button-danger-tertiary-text {
+  color: var(--action-danger-03) !important;
+}
+
+.button-danger-tertiary-icon {
+  stroke: var(--action-text-danger-05);
+}
+.button-danger-tertiary:disabled .button-danger-tertiary-icon {
+  stroke: var(--action-danger-03);
+}
