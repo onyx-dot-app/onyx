@@ -250,8 +250,8 @@ export default function MultiModelResponseView({
       (n - 1) * PANEL_GAP;
 
     const trackTransform = selectionEntered
-      ? `translateX(calc(50% - ${preferredCenterInTrack}px))`
-      : `translateX(calc(50% - ${uniformTrackW / 2}px))`;
+      ? `translateX(${trackContainerW / 2 - preferredCenterInTrack}px)`
+      : `translateX(${(trackContainerW - uniformTrackW) / 2}px)`;
 
     return (
       <div
