@@ -556,14 +556,13 @@ class TestRunModels:
         mock_handle.assert_not_called()
 
     def test_http_disconnect_completion_via_generator_exit(self) -> None:
-        """GeneratorExit from HTTP disconnect triggers worker self-completion.
+        """GeneratorExit from HTTP disconnect triggers main-thread completion.
 
         When the HTTP client closes the connection, Starlette throws GeneratorExit
         into the stream generator. The finally block sets drain_done (signalling
-        emitters to stop blocking) and calls executor.shutdown(wait=False) so the
-        server thread is never blocked. Worker threads detect drain_done.is_set()
-        after run_llm_loop completes and self-persist the result via
-        llm_loop_completion_handle using their own DB session.
+        emitters to stop blocking), waits for workers via executor.shutdown(wait=True),
+        then calls llm_loop_completion_handle for each successful model from the main
+        thread.
 
         This is the primary regression for test_send_message_disconnect_and_cleanup:
         the integration test disconnects mid-stream and expects the DB message to be
@@ -571,24 +570,20 @@ class TestRunModels:
         """
         import threading
 
-        # Signals the worker to unblock from run_llm_loop after gen.close() returns.
-        # This guarantees drain_done is set BEFORE the worker returns from run_llm_loop,
-        # so the self-completion path (drain_done.is_set() check) is always taken.
-        disconnect_received = threading.Event()
-        # Set by the llm_loop_completion_handle mock when called.
         completion_called = threading.Event()
 
-        def emit_then_complete(**kwargs: Any) -> None:
+        def emit_then_block_until_drain(**kwargs: Any) -> None:
             """Emit one packet (to give the drain loop a yield point), then block
-            until the main thread signals that gen.close() has been called.  This
-            ensures drain_done is set before we return so model_succeeded is checked
-            against a set drain_done — no race condition.
+            until drain_done is set — simulating a mid-stream LLM call that exits
+            promptly once the emitter signals shutdown.
             """
             emitter = kwargs["emitter"]
             emitter.emit(
                 Packet(placement=Placement(turn_index=0), obj=ReasoningStart())
             )
-            disconnect_received.wait(timeout=5)
+            # Block until drain_done is set by gen.close(). The Emitter's _drain_done
+            # is the same Event that _run_models sets, so this unblocks promptly.
+            emitter._drain_done.wait(timeout=5)
 
         setup = _make_setup(n_models=1)
         # is_connected() always True — HTTP disconnect does NOT set the Redis stop fence.
@@ -597,7 +592,7 @@ class TestRunModels:
         with (
             patch(
                 "onyx.chat.process_message.run_llm_loop",
-                side_effect=emit_then_complete,
+                side_effect=emit_then_block_until_drain,
             ),
             patch("onyx.chat.process_message.run_deep_research_llm_loop"),
             patch("onyx.chat.process_message.construct_tools", return_value={}),
@@ -613,34 +608,25 @@ class TestRunModels:
         ):
             from onyx.chat.process_message import _run_models
 
-            # cast to Generator so .close() is available; _run_models returns
-            # AnswerStream (= Iterator) but the actual object is always a generator.
             gen = cast(Generator, _run_models(setup, MagicMock(), MagicMock()))
-            # Advance to the first yielded packet — generator suspends at `yield item`.
             first = next(gen)
             assert isinstance(first, Packet)
             # Simulate Starlette closing the stream on HTTP client disconnect.
-            # GeneratorExit is thrown at the `yield item` suspension point.
+            # gen.close() → GeneratorExit → finally → drain_done.set() →
+            # executor.shutdown(wait=True) → main thread completes models.
             gen.close()
-            # Unblock the worker now that drain_done has been set by gen.close().
-            disconnect_received.set()
 
-            # Worker self-completes asynchronously (executor.shutdown(wait=False)).
-            # Wait here, inside the patch context, so that get_session_with_current_tenant
-            # and llm_loop_completion_handle mocks are still active when the worker calls them.
-            assert completion_called.wait(
-                timeout=5
-            ), "worker must self-complete via drain_done within 5 seconds"
             assert (
-                mock_handle.call_count == 1
-            ), "completion handle must be called once for the successful model"
+                completion_called.is_set()
+            ), "main thread must call completion for the successful model"
+            assert mock_handle.call_count == 1
 
     def test_b1_race_disconnect_handler_completes_already_finished_model(self) -> None:
         """B1 regression: model finishes BEFORE GeneratorExit fires.
 
-        The worker exits _run_model with drain_done.is_set()=False and skips
-        self-completion.  When gen.close() fires afterward, the finally else-branch
-        must detect model_succeeded=True and call llm_loop_completion_handle itself.
+        The worker exits _run_model before drain_done is set. When gen.close()
+        fires afterward, the finally block sets drain_done, waits for workers
+        (already done), then the main thread calls llm_loop_completion_handle.
 
         Contrast with test_http_disconnect_completion_via_generator_exit, which
         tests the opposite ordering (worker finishes AFTER disconnect).
