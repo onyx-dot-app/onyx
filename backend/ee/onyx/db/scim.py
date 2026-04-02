@@ -37,6 +37,9 @@ from ee.onyx.server.scim.filtering import ScimFilterOperator
 from ee.onyx.server.scim.models import ScimMappingFields
 from onyx.db.dal import DAL
 from onyx.db.enums import AccountType
+from onyx.db.enums import GrantSource
+from onyx.db.enums import Permission
+from onyx.db.models import PermissionGrant
 from onyx.db.models import ScimGroupMapping
 from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
@@ -521,6 +524,22 @@ class ScimDAL(DAL):
     def add_group(self, group: UserGroup) -> None:
         """Add a new group to the session and flush to assign an ID."""
         self._session.add(group)
+        self._session.flush()
+
+    def add_permission_grant_to_group(
+        self,
+        group_id: int,
+        permission: Permission,
+        grant_source: GrantSource,
+    ) -> None:
+        """Grant a permission to a group and flush."""
+        self._session.add(
+            PermissionGrant(
+                group_id=group_id,
+                permission=permission,
+                grant_source=grant_source,
+            )
+        )
         self._session.flush()
 
     def update_group(

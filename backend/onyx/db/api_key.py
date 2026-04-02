@@ -21,6 +21,7 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -110,10 +111,7 @@ def insert_api_key(
     # Assign the API key virtual user to the appropriate default group
     # before commit so everything is atomic.
     # LIMITED role service accounts should have no group membership.
-    # Late import to avoid circular dependency (api_key <- users <- api_key).
     if api_key_args.role != UserRole.LIMITED:
-        from onyx.db.users import assign_user_to_default_groups__no_commit
-
         assign_user_to_default_groups__no_commit(
             db_session,
             api_key_user_row,
@@ -165,8 +163,6 @@ def update_api_key(
 
         # Re-assign to the correct default group (skip for LIMITED).
         if api_key_args.role != UserRole.LIMITED:
-            from onyx.db.users import assign_user_to_default_groups__no_commit
-
             assign_user_to_default_groups__no_commit(
                 db_session,
                 api_key_user,

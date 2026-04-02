@@ -17,8 +17,8 @@ from sqlalchemy.sql.expression import or_
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
-from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.db.enums import AccountType
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__User
