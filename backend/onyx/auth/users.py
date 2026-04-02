@@ -507,9 +507,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     ):
                         raise exceptions.UserAlreadyExists()
 
-                    self._upgrade_user_to_standard__sync(user.id, user_create)
+                    user_id = user.id
+                    self._upgrade_user_to_standard__sync(user_id, user_create)
                     self.user_db.session.expire(user)
-                    user = await self.user_db.get(user.id)  # type: ignore[assignment]
+                    user = await self.user_db.get(user_id)  # type: ignore[assignment]
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -529,9 +530,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     ):
                         raise exceptions.UserAlreadyExists()
 
-                    self._upgrade_user_to_standard__sync(user.id, user_create)
+                    user_id = user.id
+                    self._upgrade_user_to_standard__sync(user_id, user_create)
                     self.user_db.session.expire(user)
-                    user = await self.user_db.get(user.id)  # type: ignore[assignment]
+                    user = await self.user_db.get(user_id)  # type: ignore[assignment]
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
                 remove_user_from_invited_users(user_create.email)
