@@ -2,6 +2,7 @@ import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import { useDisabled } from "@opal/core/disabled/components";
+import { guardPortalClick } from "@opal/core/interactive/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,7 +92,7 @@ function InteractiveSimple({
           ? href
             ? (e: React.MouseEvent) => e.preventDefault()
             : undefined
-          : onClick
+          : guardPortalClick(onClick)
       }
     />
   );

@@ -4,6 +4,7 @@ import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import { useDisabled } from "@opal/core/disabled/components";
+import { guardPortalClick } from "@opal/core/interactive/utils";
 import type { ButtonType, WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -137,7 +138,7 @@ function InteractiveStateless({
           ? href
             ? (e: React.MouseEvent) => e.preventDefault()
             : undefined
-          : onClick
+          : guardPortalClick(onClick)
       }
     />
   );
