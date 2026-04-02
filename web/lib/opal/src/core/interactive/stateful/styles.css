@@ -555,8 +555,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="sidebar-heavy"][data-disabled] {
   @apply bg-transparent;
-  --interactive-foreground: var(--text-02);
-  --interactive-foreground-icon: var(--text-02);
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
 }
 
 /* ===========================================================================
@@ -620,6 +620,6 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-variant="sidebar-light"][data-disabled] {
   @apply bg-transparent;
-  --interactive-foreground: var(--text-02);
-  --interactive-foreground-icon: var(--text-02);
+  --interactive-foreground: var(--text-01);
+  --interactive-foreground-icon: var(--text-01);
 }
