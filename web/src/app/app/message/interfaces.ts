@@ -1,0 +1,16 @@
+import { Packet } from "@/app/app/services/streamingModels";
+import { FeedbackType } from "@/app/app/interfaces";
+
+export interface MultiModelResponse {
+  modelIndex: number;
+  provider: string;
+  modelName: string;
+  displayName: string;
+  packets: Packet[];
+  packetCount: number;
+  nodeId: number;
+  messageId?: number;
+  isHighlighted?: boolean;
+  currentFeedback?: FeedbackType | null;
+  isGenerating?: boolean;
+}
