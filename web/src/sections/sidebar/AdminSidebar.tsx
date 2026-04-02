@@ -312,10 +312,14 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
           );
         })}
 
-        {disabledGroups.length > 0 && <Separator noPadding />}
+        {disabledGroups.length > 0 && <Separator noPadding className="px-2" />}
 
         {disabledGroups.map((group, groupIndex) => (
-          <SidebarSection key={`disabled-${groupIndex}`} title={group.section}>
+          <SidebarSection
+            key={`disabled-${groupIndex}`}
+            title={group.section}
+            disabled
+          >
             {group.items.map(({ link, icon, name }) => (
               <SidebarTab key={link} disabled icon={icon}>
                 {name}
