@@ -160,6 +160,7 @@ export default function HookFormModal({
 }: HookFormModalProps) {
   const isEdit = !!hook;
   const [isConnected, setIsConnected] = useState(false);
+  const [apiKeyCleared, setApiKeyCleared] = useState(false);
 
   const initialValues = buildInitialValues(hook, spec);
   const validationSchema = buildValidationSchema(isEdit);
@@ -195,12 +196,7 @@ export default function HookFormModal({
                   req.timeout_seconds = timeoutNum;
                 if (values.api_key.trim().length > 0) {
                   req.api_key = values.api_key;
-                } else if (
-                  values.api_key === "" &&
-                  hook.api_key_masked &&
-                  initialValues.api_key !== values.api_key
-                ) {
-                  // User explicitly cleared the key field
+                } else if (apiKeyCleared) {
                   req.api_key = null;
                 }
                 if (Object.keys(req).length === 0) {
@@ -384,6 +380,11 @@ export default function HookFormModal({
                           : undefined
                       }
                       disabled={isSubmitting}
+                      onChange={(e) => {
+                        if (isEdit && hook?.api_key_masked) {
+                          setApiKeyCleared(e.target.value === "");
+                        }
+                      }}
                     />
                   </InputLayouts.Vertical>
 
