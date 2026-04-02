@@ -29,6 +29,7 @@ _JSM_ISSUE_TYPES = (
     "Incident",
     "Problem",
     "Change",
+    "Service Task",
 )
 
 # Dynamic field name patterns for discovery via /rest/api/2/field
@@ -276,7 +277,7 @@ class JiraServiceManagementConnector(JiraConnector):
         if self.service_desk_id and not self.jira_project and not self.jql_query:
             # service_desk_id is treated as a Jira project key (JSM project
             # keys are valid JQL project identifiers).
-            clauses.append(f"project = {self.service_desk_id}")
+            clauses.append(f'project = "{self.service_desk_id}"')
 
         # Always restrict to JSM issue types so we don't pull regular Jira
         # issues when no project scoping is present.
