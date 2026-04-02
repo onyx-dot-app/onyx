@@ -27,12 +27,8 @@ export default function SharedAppInputBar() {
         <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
           {/* Left side controls */}
           <div className="flex flex-row items-center">
-            <Disabled disabled>
-              <Button icon={SvgPlusCircle} prominence="tertiary" />
-            </Disabled>
-            <Disabled disabled>
-              <Button icon={SvgSliders} prominence="tertiary" />
-            </Disabled>
+            <Button disabled icon={SvgPlusCircle} prominence="tertiary" />
+            <Button disabled icon={SvgSliders} prominence="tertiary" />
             <Disabled disabled>
               <SelectButton icon={SvgHourglass} />
             </Disabled>
@@ -43,9 +39,7 @@ export default function SharedAppInputBar() {
             <Disabled disabled>
               <OpenButton icon={OpenAISVG}>GPT-4o</OpenButton>
             </Disabled>
-            <Disabled disabled>
-              <Button icon={SvgArrowUp} />
-            </Disabled>
+            <Button disabled icon={SvgArrowUp} />
           </div>
         </div>
       </div>

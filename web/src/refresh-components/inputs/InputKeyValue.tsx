@@ -79,7 +79,6 @@ import React, {
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
 import { Button, EmptyMessageCard } from "@opal/components";
-import { Disabled } from "@opal/core";
 import type { WithoutStyles } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
@@ -182,16 +181,13 @@ function KeyValueInputItem({
           </FieldMessage>
         )}
       </div>
-      <Disabled disabled={disabled || !canRemove}>
-        <Button
-          prominence="tertiary"
-          icon={SvgMinusCircle}
-          onClick={onRemove}
-          aria-label={`Remove ${keyPlaceholder || "key-value"} pair ${
-            index + 1
-          }`}
-        />
-      </Disabled>
+      <Button
+        disabled={disabled || !canRemove}
+        prominence="tertiary"
+        icon={SvgMinusCircle}
+        onClick={onRemove}
+        aria-label={`Remove ${keyPlaceholder || "key-value"} pair ${index + 1}`}
+      />
     </>
   );
 }
@@ -479,17 +475,16 @@ export default function KeyValueInput({
         <EmptyMessageCard title="No items added yet." />
       )}
 
-      <Disabled disabled={disabled}>
-        <Button
-          prominence="secondary"
-          onClick={handleAdd}
-          icon={SvgPlusCircle}
-          aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
-          type="button"
-        >
-          {addButtonLabel}
-        </Button>
-      </Disabled>
+      <Button
+        disabled={disabled}
+        prominence="secondary"
+        onClick={handleAdd}
+        icon={SvgPlusCircle}
+        aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
+        type="button"
+      >
+        {addButtonLabel}
+      </Button>
     </div>
   );
 }

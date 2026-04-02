@@ -141,15 +141,14 @@ export default function CodeInterpreterPage() {
                         />
                       </Hoverable.Item>
                     </Disabled>
-                    <Disabled disabled={isLoading}>
-                      <Button
-                        prominence="tertiary"
-                        size="sm"
-                        icon={SvgRefreshCw}
-                        onClick={refetch}
-                        tooltip="Refresh"
-                      />
-                    </Disabled>
+                    <Button
+                      disabled={isLoading}
+                      prominence="tertiary"
+                      size="sm"
+                      icon={SvgRefreshCw}
+                      onClick={refetch}
+                      tooltip="Refresh"
+                    />
                   </Section>
                 }
               />

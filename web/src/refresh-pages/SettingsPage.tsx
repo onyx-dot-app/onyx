@@ -58,7 +58,7 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { Disabled, Interactive } from "@opal/core";
+import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -110,11 +110,12 @@ function PATModal({
         !!createdToken?.token ? (
           <Button onClick={onClose}>Done</Button>
         ) : (
-          <Disabled disabled={isCreating || !newTokenName.trim()}>
-            <Button onClick={onCreate}>
-              {isCreating ? "Creating Token..." : "Create Token"}
-            </Button>
-          </Disabled>
+          <Button
+            disabled={isCreating || !newTokenName.trim()}
+            onClick={onCreate}
+          >
+            {isCreating ? "Creating Token..." : "Create Token"}
+          </Button>
         )
       }
       hideCancel={!!createdToken}
@@ -236,16 +237,15 @@ function GeneralSettings() {
           title="Delete All Chats"
           onClose={() => setShowDeleteConfirmation(false)}
           submit={
-            <Disabled disabled={isDeleting}>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  void handleDeleteAllChats();
-                }}
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isDeleting}
+              variant="danger"
+              onClick={() => {
+                void handleDeleteAllChats();
+              }}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -698,21 +698,18 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <Disabled
+                  <Button
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
-                  >
-                    <Button
-                      icon={SvgMinusCircle}
-                      onClick={() => void handleRemoveShortcut(index)}
-                      prominence="tertiary"
-                      aria-label="Remove shortcut"
-                      tooltip={
-                        shortcut.is_public
-                          ? "Cannot delete public prompt-shortcuts."
-                          : undefined
-                      }
-                    />
-                  </Disabled>
+                    icon={SvgMinusCircle}
+                    onClick={() => void handleRemoveShortcut(index)}
+                    prominence="tertiary"
+                    aria-label="Remove shortcut"
+                    tooltip={
+                      shortcut.is_public
+                        ? "Cannot delete public prompt-shortcuts."
+                        : undefined
+                    }
+                  />
                 </Section>
                 <InputTextArea
                   placeholder="Provide a concise 1–2 sentence summary of the following:"
@@ -1275,20 +1272,19 @@ function AccountsAccessSettings() {
                 icon={SvgLock}
                 title="Change Password"
                 submit={
-                  <Disabled disabled={isSubmitting || !dirty || !isValid}>
-                    <Button
-                      onClick={async () => {
-                        setSubmitting(true);
-                        try {
-                          await handleChangePassword(values);
-                        } finally {
-                          setSubmitting(false);
-                        }
-                      }}
-                    >
-                      {isSubmitting ? "Updating..." : "Update"}
-                    </Button>
-                  </Disabled>
+                  <Button
+                    disabled={isSubmitting || !dirty || !isValid}
+                    onClick={async () => {
+                      setSubmitting(true);
+                      try {
+                        await handleChangePassword(values);
+                      } finally {
+                        setSubmitting(false);
+                      }
+                    }}
+                  >
+                    {isSubmitting ? "Updating..." : "Update"}
+                  </Button>
                 }
                 onClose={() => {
                   setShowPasswordModal(false);
@@ -1563,11 +1559,13 @@ function FederatedConnectorCard({
           title={`Disconnect ${sourceMetadata.displayName}`}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
-            <Disabled disabled={isDisconnecting}>
-              <Button variant="danger" onClick={() => void handleDisconnect()}>
-                {isDisconnecting ? "Disconnecting..." : "Disconnect"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isDisconnecting}
+              variant="danger"
+              onClick={() => void handleDisconnect()}
+            >
+              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+            </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -1596,14 +1594,13 @@ function FederatedConnectorCard({
           paddingVariant="sm"
           rightChildren={
             connector.has_oauth_token ? (
-              <Disabled disabled={isDisconnecting}>
-                <Button
-                  icon={SvgUnplug}
-                  prominence="tertiary"
-                  size="sm"
-                  onClick={() => setShowDisconnectConfirmation(true)}
-                />
-              </Disabled>
+              <Button
+                disabled={isDisconnecting}
+                icon={SvgUnplug}
+                prominence="tertiary"
+                size="sm"
+                onClick={() => setShowDisconnectConfirmation(true)}
+              />
             ) : connector.authorize_url ? (
               <Button
                 prominence="internal"

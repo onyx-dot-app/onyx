@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { Button, Text } from "@opal/components";
-import { Disabled } from "@opal/core";
 import {
   SvgCheckCircle,
   SvgShareWebhook,
@@ -422,36 +421,32 @@ export default function HookFormModal({
                 <Modal.Footer>
                   <BasicModalFooter
                     cancel={
-                      <Disabled disabled={isSubmitting}>
-                        <Button prominence="secondary" onClick={handleClose}>
-                          Cancel
-                        </Button>
-                      </Disabled>
+                      <Button
+                        disabled={isSubmitting}
+                        prominence="secondary"
+                        onClick={handleClose}
+                      >
+                        Cancel
+                      </Button>
                     }
                     submit={
-                      <Disabled
+                      <Button
                         disabled={
                           isSubmitting ||
                           !isValid ||
                           (!dirty && !apiKeyCleared && isEdit)
                         }
+                        type="submit"
+                        icon={
+                          isSubmitting && !isEdit
+                            ? () => (
+                                <SvgLoader size={16} className="animate-spin" />
+                              )
+                            : undefined
+                        }
                       >
-                        <Button
-                          type="submit"
-                          icon={
-                            isSubmitting && !isEdit
-                              ? () => (
-                                  <SvgLoader
-                                    size={16}
-                                    className="animate-spin"
-                                  />
-                                )
-                              : undefined
-                          }
-                        >
-                          {isEdit ? "Save Changes" : "Connect"}
-                        </Button>
-                      </Disabled>
+                        {isEdit ? "Save Changes" : "Connect"}
+                      </Button>
                     }
                   />
                 </Modal.Footer>

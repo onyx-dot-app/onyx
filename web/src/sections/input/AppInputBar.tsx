@@ -511,14 +511,13 @@ const AppInputBar = React.memo(
             }}
             handleUploadChange={handleUploadChange}
             trigger={(open) => (
-              <Disabled disabled={disabled}>
-                <Button
-                  icon={SvgPlusCircle}
-                  tooltip="Attach Files"
-                  interaction={open ? "hover" : "rest"}
-                  prominence="tertiary"
-                />
-              </Disabled>
+              <Button
+                disabled={disabled}
+                icon={SvgPlusCircle}
+                tooltip="Attach Files"
+                interaction={open ? "hover" : "rest"}
+                prominence="tertiary"
+              />
             )}
             selectedFileIds={currentMessageFiles.map((f) => f.id)}
           />
@@ -637,17 +636,16 @@ const AppInputBar = React.memo(
                 onAudioLevel={setAudioLevel}
               />
             ) : (
-              <Disabled disabled>
-                <Button
-                  icon={SvgMicrophone}
-                  aria-label="Set up voice"
-                  prominence="tertiary"
-                  tooltip="Voice not configured. Set up in admin settings."
-                />
-              </Disabled>
+              <Button
+                disabled
+                icon={SvgMicrophone}
+                aria-label="Set up voice"
+                prominence="tertiary"
+                tooltip="Voice not configured. Set up in admin settings."
+              />
             ))}
 
-          <Disabled
+          <Button
             disabled={
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
@@ -655,28 +653,25 @@ const AppInputBar = React.memo(
               hasUploadingFiles ||
               isClassifying
             }
-          >
-            <Button
-              id="onyx-chat-input-send-button"
-              icon={
-                isClassifying
-                  ? SimpleLoader
-                  : chatState === "streaming" || isVoicePlaybackControllable
-                    ? SvgStop
-                    : SvgArrowUp
+            id="onyx-chat-input-send-button"
+            icon={
+              isClassifying
+                ? SimpleLoader
+                : chatState === "streaming" || isVoicePlaybackControllable
+                  ? SvgStop
+                  : SvgArrowUp
+            }
+            onClick={() => {
+              if (chatState == "streaming") {
+                stopTTS({ manual: true });
+                stopGenerating();
+              } else if (isVoicePlaybackControllable) {
+                stopTTS({ manual: true });
+              } else if (message) {
+                submitMessage(message);
               }
-              onClick={() => {
-                if (chatState == "streaming") {
-                  stopTTS({ manual: true });
-                  stopGenerating();
-                } else if (isVoicePlaybackControllable) {
-                  stopTTS({ manual: true });
-                } else if (message) {
-                  submitMessage(message);
-                }
-              }}
-            />
-          </Disabled>
+            }}
+          />
         </div>
       </div>
     );
@@ -850,29 +845,25 @@ const AppInputBar = React.memo(
 
             {isSearchMode && (
               <Section flexDirection="row" width="fit" gap={0}>
-                <Disabled disabled={!message || isClassifying}>
-                  <Button
-                    icon={SvgX}
-                    onClick={() => setMessage("")}
-                    prominence="tertiary"
-                  />
-                </Disabled>
-                <Disabled
+                <Button
+                  disabled={!message || isClassifying}
+                  icon={SvgX}
+                  onClick={() => setMessage("")}
+                  prominence="tertiary"
+                />
+                <Button
                   disabled={!message || isClassifying || hasUploadingFiles}
-                >
-                  <Button
-                    id="onyx-chat-input-send-button"
-                    icon={isClassifying ? SimpleLoader : SvgSearch}
-                    onClick={() => {
-                      if (chatState == "streaming") {
-                        stopGenerating();
-                      } else if (message) {
-                        submitMessage(message);
-                      }
-                    }}
-                    prominence="tertiary"
-                  />
-                </Disabled>
+                  id="onyx-chat-input-send-button"
+                  icon={isClassifying ? SimpleLoader : SvgSearch}
+                  onClick={() => {
+                    if (chatState == "streaming") {
+                      stopGenerating();
+                    } else if (message) {
+                      submitMessage(message);
+                    }
+                  }}
+                  prominence="tertiary"
+                />
                 <Spacer horizontal rem={0.25} />
               </Section>
             )}

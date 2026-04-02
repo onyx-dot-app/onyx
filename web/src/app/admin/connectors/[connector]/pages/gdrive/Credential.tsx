@@ -11,7 +11,6 @@ import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import {
   Credential,
   GoogleDriveCredentialJson,
@@ -563,11 +562,9 @@ export const DriveAuthSection = ({
                   subtext="Enter the email of an admin/owner of the Google Organization that owns the Google Drive(s) you want to index."
                 />
                 <div className="flex">
-                  <Disabled disabled={isSubmitting}>
-                    <Button type="submit">
-                      {isSubmitting ? "Creating..." : "Create Credential"}
-                    </Button>
-                  </Disabled>
+                  <Button disabled={isSubmitting} type="submit">
+                    {isSubmitting ? "Creating..." : "Create Credential"}
+                  </Button>
                 </div>
               </Form>
             )}
@@ -587,35 +584,34 @@ export const DriveAuthSection = ({
             Google Drive account.
           </p>
         </div>
-        <Disabled disabled={isAuthenticating}>
-          <Button
-            onClick={async () => {
-              setIsAuthenticating(true);
-              try {
-                const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
-                  isAdmin: true,
-                  name: "OAuth (uploaded)",
-                });
+        <Button
+          disabled={isAuthenticating}
+          onClick={async () => {
+            setIsAuthenticating(true);
+            try {
+              const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
+                isAdmin: true,
+                name: "OAuth (uploaded)",
+              });
 
-                if (authUrl) {
-                  router.push(authUrl as Route);
-                } else {
-                  toast.error(errorMsg);
-                  setIsAuthenticating(false);
-                }
-              } catch (error) {
-                toast.error(
-                  `Failed to authenticate with Google Drive - ${error}`
-                );
+              if (authUrl) {
+                router.push(authUrl as Route);
+              } else {
+                toast.error(errorMsg);
                 setIsAuthenticating(false);
               }
-            }}
-          >
-            {isAuthenticating
-              ? "Authenticating..."
-              : "Authenticate with Google Drive"}
-          </Button>
-        </Disabled>
+            } catch (error) {
+              toast.error(
+                `Failed to authenticate with Google Drive - ${error}`
+              );
+              setIsAuthenticating(false);
+            }
+          }}
+        >
+          {isAuthenticating
+            ? "Authenticating..."
+            : "Authenticate with Google Drive"}
+        </Button>
       </div>
     );
   }

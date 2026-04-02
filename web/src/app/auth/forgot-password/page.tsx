@@ -8,7 +8,6 @@ import { markdown } from "@opal/utils";
 import Spacer from "@/refresh-components/Spacer";
 import Link from "next/link";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
@@ -66,11 +65,9 @@ const ForgotPasswordPage: React.FC = () => {
               />
 
               <div className="flex">
-                <Disabled disabled={isSubmitting}>
-                  <Button type="submit" width="full">
-                    Reset Password
-                  </Button>
-                </Disabled>
+                <Button disabled={isSubmitting} type="submit" width="full">
+                  Reset Password
+                </Button>
               </div>
             </Form>
           )}
