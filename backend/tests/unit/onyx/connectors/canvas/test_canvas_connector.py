@@ -8,14 +8,18 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.canvas.connector import CanvasConnector
+from onyx.connectors.canvas.connector import CanvasConnectorCheckpoint
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
 from onyx.error_handling.exceptions import OnyxError
 
 # ---------------------------------------------------------------------------
@@ -109,6 +113,52 @@ def _mock_response(
     resp.json.return_value = json_data if json_data is not None else []
     resp.headers = {"Link": link_header}
     return resp
+
+
+def _make_url_dispatcher(
+    courses: list[dict[str, Any]] | None = None,
+    pages: list[dict[str, Any]] | None = None,
+    assignments: list[dict[str, Any]] | None = None,
+    announcements: list[dict[str, Any]] | None = None,
+    page_error: bool = False,
+) -> Any:
+    """Return a callable that dispatches mock responses based on the request URL.
+
+    Meant to be assigned to ``mock_requests.get.side_effect``.
+    """
+    api_prefix = f"{FAKE_BASE_URL}/api/v1"
+
+    def _dispatcher(url: str, **kwargs: Any) -> MagicMock:
+        if page_error:
+            return _mock_response(500, {})
+        if url == f"{api_prefix}/courses":
+            return _mock_response(json_data=courses or [])
+        if "/pages" in url:
+            return _mock_response(json_data=pages or [])
+        if "/assignments" in url:
+            return _mock_response(json_data=assignments or [])
+        if "announcements" in url:
+            return _mock_response(json_data=announcements or [])
+        return _mock_response(json_data=[])
+
+    return _dispatcher
+
+
+def _run_checkpoint(
+    connector: CanvasConnector,
+    checkpoint: CanvasConnectorCheckpoint,
+    start: float = 0.0,
+    end: float = datetime(2099, 1, 1, tzinfo=timezone.utc).timestamp(),
+) -> tuple[list[Document | ConnectorFailure], CanvasConnectorCheckpoint]:
+    """Run load_from_checkpoint once and collect yielded items + returned checkpoint."""
+    gen = connector.load_from_checkpoint(start, end, checkpoint)
+    items: list[Document | ConnectorFailure] = []
+    try:
+        while True:
+            items.append(next(gen))
+    except StopIteration as e:
+        new_checkpoint = e.value
+    return items, new_checkpoint
 
 
 # ---------------------------------------------------------------------------
@@ -735,37 +785,6 @@ class TestConnectorUrlNormalization:
 
 
 # ---------------------------------------------------------------------------
-# CanvasConnector — URL normalization
-# ---------------------------------------------------------------------------
-
-
-class TestConnectorUrlNormalization:
-    def test_strips_api_v1_suffix(self) -> None:
-        connector = _build_connector(base_url=f"{FAKE_BASE_URL}/api/v1")
-
-        result = connector.canvas_base_url
-        expected = FAKE_BASE_URL
-
-        assert result == expected
-
-    def test_strips_trailing_slash(self) -> None:
-        connector = _build_connector(base_url=f"{FAKE_BASE_URL}/")
-
-        result = connector.canvas_base_url
-        expected = FAKE_BASE_URL
-
-        assert result == expected
-
-    def test_no_change_for_clean_url(self) -> None:
-        connector = _build_connector(base_url=FAKE_BASE_URL)
-
-        result = connector.canvas_base_url
-        expected = FAKE_BASE_URL
-
-        assert result == expected
-
-
-# ---------------------------------------------------------------------------
 # CanvasConnector — document conversion
 # ---------------------------------------------------------------------------
 
@@ -941,19 +960,6 @@ class TestValidateConnectorSettings:
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_validate_insufficient_permissions(self, mock_requests: MagicMock) -> None:
         self._assert_validate_raises(403, InsufficientPermissionsError, mock_requests)
-
-    @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_validate_insufficient_permissions(
-        self, mock_requests: MagicMock
-    ) -> None:
-        success_resp = _mock_response(json_data=[_mock_course()])
-        fail_resp = _mock_response(403, {})
-        mock_requests.get.side_effect = [success_resp, fail_resp]
-        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
-        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
-
-        with pytest.raises(InsufficientPermissionsError):
-            connector.validate_connector_settings()
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_validate_rate_limited(self, mock_requests: MagicMock) -> None:

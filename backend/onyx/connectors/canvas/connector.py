@@ -62,25 +62,6 @@ def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
             f"Canvas API error (status={e.status_code}): {e}"
         )
 
-def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
-    """Map Canvas API errors to connector framework exceptions."""
-    if e.status_code == 401:
-        raise CredentialExpiredError(
-            "Canvas API token is invalid or expired (HTTP 401)."
-        )
-    elif e.status_code == 403:
-        raise InsufficientPermissionsError(
-            "Canvas API token does not have sufficient permissions (HTTP 403)."
-        )
-    elif e.status_code == 429:
-        raise ConnectorValidationError(
-            "Canvas rate-limit exceeded (HTTP 429). Please try again later."
-        )
-    else:
-        raise ConnectorValidationError(
-            f"Canvas API error (status={e.status_code}): {e}"
-        )
-
 
 class CanvasCourse(BaseModel):
     id: int
@@ -519,6 +500,8 @@ class CanvasConnector(
             is_api_error = oe._status_code_override is not None
             if not is_api_error:
                 raise
+            if oe.status_code in (401, 403):
+                _handle_canvas_api_error(oe)
             logger.warning(
                 f"Failed to fetch {stage} for course {course_id}: {oe}"
             )
