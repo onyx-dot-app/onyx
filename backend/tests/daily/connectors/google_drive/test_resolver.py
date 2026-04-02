@@ -14,6 +14,8 @@ from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import (
     ALL_EXPECTED_HIERARCHY_NODES,
 )
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_ID
+from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_ID
 
 _DRIVE_ID_MAPPING_PATH = os.path.join(
     os.path.dirname(__file__), "drive_id_mapping.json"
@@ -131,17 +133,29 @@ def test_resolve_hierarchy_nodes_are_valid(
     results = list(connector.resolve_errors(failures))
 
     hierarchy_nodes = [r for r in results if isinstance(r, HierarchyNode)]
+    node_ids = {node.raw_node_id for node in hierarchy_nodes}
+
+    # File 25 is in folder_1 which is inside shared_drive_1.
+    # The parent walk must yield at least these two ancestors.
+    assert (
+        FOLDER_1_ID in node_ids
+    ), f"Expected folder_1 ({FOLDER_1_ID}) in hierarchy nodes, got: {node_ids}"
+    assert (
+        SHARED_DRIVE_1_ID in node_ids
+    ), f"Expected shared_drive_1 ({SHARED_DRIVE_1_ID}) in hierarchy nodes, got: {node_ids}"
+
     for node in hierarchy_nodes:
-        if node.raw_node_id in ALL_EXPECTED_HIERARCHY_NODES:
-            expected = ALL_EXPECTED_HIERARCHY_NODES[node.raw_node_id]
-            assert node.display_name == expected.display_name, (
-                f"Display name mismatch for {node.raw_node_id}: "
-                f"expected '{expected.display_name}', got '{node.display_name}'"
-            )
-            assert node.node_type == expected.node_type, (
-                f"Node type mismatch for {node.raw_node_id}: "
-                f"expected '{expected.node_type}', got '{node.node_type}'"
-            )
+        if node.raw_node_id not in ALL_EXPECTED_HIERARCHY_NODES:
+            continue
+        expected = ALL_EXPECTED_HIERARCHY_NODES[node.raw_node_id]
+        assert node.display_name == expected.display_name, (
+            f"Display name mismatch for {node.raw_node_id}: "
+            f"expected '{expected.display_name}', got '{node.display_name}'"
+        )
+        assert node.node_type == expected.node_type, (
+            f"Node type mismatch for {node.raw_node_id}: "
+            f"expected '{expected.node_type}', got '{node.node_type}'"
+        )
 
 
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
@@ -149,7 +163,7 @@ def test_resolve_with_invalid_link(
     mock_api_key: None,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
-    """Resolve with a mix of valid and invalid links — invalid ones are silently skipped."""
+    """Resolve with a mix of valid and invalid links — invalid ones yield ConnectorFailure."""
     connector = google_drive_service_acct_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=True,
@@ -167,11 +181,13 @@ def test_resolve_with_invalid_link(
     results = list(connector.resolve_errors(failures))
 
     docs = [r for r in results if isinstance(r, Document)]
-    [r for r in results if isinstance(r, ConnectorFailure)]
+    new_failures = [r for r in results if isinstance(r, ConnectorFailure)]
 
-    # The valid file should resolve; the invalid one is dropped by the batch API
     assert len(docs) == 1
     assert docs[0].semantic_identifier == "file_0.txt"
+    assert len(new_failures) == 1
+    assert new_failures[0].failed_document is not None
+    assert new_failures[0].failed_document.document_id == invalid_link
 
 
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")

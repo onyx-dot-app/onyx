@@ -560,35 +560,46 @@ def get_file_by_web_view_link(
     )
 
 
+class BatchRetrievalResult:
+    """Result of a batch file retrieval, separating successes from errors."""
+
+    def __init__(self) -> None:
+        self.files: dict[str, GoogleDriveFileType] = {}
+        self.errors: dict[str, Exception] = {}
+
+
 def get_files_by_web_view_links_batch(
     service: GoogleDriveService,
     web_view_links: list[str],
     field_type: DriveFileFieldType,
-) -> dict[str, GoogleDriveFileType]:
+) -> BatchRetrievalResult:
     """Retrieve multiple Google Drive files by webViewLink using the batch API.
 
-    Returns a dict mapping web_view_link to file metadata.
+    Returns a BatchRetrievalResult containing successful file retrievals
+    and errors for any files that could not be fetched.
     Automatically splits into chunks of MAX_BATCH_SIZE.
     """
     fields = _get_single_file_fields(field_type)
     if len(web_view_links) <= MAX_BATCH_SIZE:
         return _get_files_by_web_view_links_batch(service, web_view_links, fields)
 
-    result: dict[str, GoogleDriveFileType] = {}
+    combined = BatchRetrievalResult()
     for i in range(0, len(web_view_links), MAX_BATCH_SIZE):
         chunk = web_view_links[i : i + MAX_BATCH_SIZE]
-        result.update(_get_files_by_web_view_links_batch(service, chunk, fields))
-    return result
+        chunk_result = _get_files_by_web_view_links_batch(service, chunk, fields)
+        combined.files.update(chunk_result.files)
+        combined.errors.update(chunk_result.errors)
+    return combined
 
 
 def _get_files_by_web_view_links_batch(
     service: GoogleDriveService,
     web_view_links: list[str],
     fields: str,
-) -> dict[str, GoogleDriveFileType]:
-    """Single-batch implementation. Failed requests are omitted from the result."""
+) -> BatchRetrievalResult:
+    """Single-batch implementation."""
 
-    results: dict[str, GoogleDriveFileType] = {}
+    result = BatchRetrievalResult()
 
     def callback(
         request_id: str,
@@ -597,8 +608,9 @@ def _get_files_by_web_view_links_batch(
     ) -> None:
         if exception:
             logger.warning(f"Error retrieving file {request_id}: {exception}")
+            result.errors[request_id] = exception
         else:
-            results[request_id] = response
+            result.files[request_id] = response
 
     batch = cast(BatchHttpRequest, service.new_batch_http_request(callback=callback))
 
@@ -613,6 +625,7 @@ def _get_files_by_web_view_links_batch(
             batch.add(request, request_id=web_view_link)
         except ValueError as e:
             logger.warning(f"Failed to extract file ID from {web_view_link}: {e}")
+            result.errors[web_view_link] = e
 
     batch.execute()
-    return results
+    return result

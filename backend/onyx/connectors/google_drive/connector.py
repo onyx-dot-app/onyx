@@ -79,6 +79,7 @@ from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
@@ -1694,7 +1695,17 @@ class GoogleDriveConnector(
             if include_permissions or self.exclude_domain_link_only
             else DriveFileFieldType.STANDARD
         )
-        files = get_files_by_web_view_links_batch(service, doc_ids, field_type)
+        batch_result = get_files_by_web_view_links_batch(service, doc_ids, field_type)
+
+        for doc_id, error in batch_result.errors.items():
+            yield ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=doc_id,
+                    document_link=doc_id,
+                ),
+                failure_message=f"Failed to retrieve file during error resolution: {error}",
+                exception=error,
+            )
 
         permission_sync_context = (
             PermissionSyncContext(
@@ -1711,7 +1722,7 @@ class GoogleDriveConnector(
                 user_email=self.primary_admin_email,
                 completion_stage=DriveRetrievalStage.DONE,
             )
-            for file in files.values()
+            for file in batch_result.files.values()
         ]
 
         yield from self._get_new_ancestors_for_files(
