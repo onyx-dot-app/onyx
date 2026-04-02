@@ -70,6 +70,13 @@ interface InteractiveStatelessProps
    * Link target (e.g. `"_blank"`). Only used when `href` is provided.
    */
   target?: string;
+
+  /**
+   * Directly sets disabled state on this element, applying variant-specific
+   * disabled colors and suppressing clicks. Takes priority over the
+   * `<Disabled>` context when provided.
+   */
+  disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,9 +103,12 @@ function InteractiveStateless({
   type,
   href,
   target,
+  disabled: disabledProp,
   ...props
 }: InteractiveStatelessProps) {
-  const { isDisabled, allowClick } = useDisabled();
+  const ctx = useDisabled();
+  const isDisabled = disabledProp ?? ctx.isDisabled;
+  const allowClick = ctx.allowClick;
 
   // onClick/href are always passed directly — Stateless is the outermost Slot,
   // so Radix Slot-injected handlers don't bypass this guard.
