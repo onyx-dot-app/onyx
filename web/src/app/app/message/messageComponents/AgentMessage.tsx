@@ -49,6 +49,8 @@ export interface AgentMessageProps {
   parentMessage?: Message | null;
   // Duration in seconds for processing this message (agent messages only)
   processingDurationSeconds?: number;
+  /** Hide the feedback/toolbar footer (used in multi-model non-preferred panels) */
+  hideFooter?: boolean;
 }
 
 // TODO: Consider more robust comparisons:
@@ -76,7 +78,8 @@ function arePropsEqual(
     prev.parentMessage?.messageId === next.parentMessage?.messageId &&
     prev.llmManager?.isLoadingProviders ===
       next.llmManager?.isLoadingProviders &&
-    prev.processingDurationSeconds === next.processingDurationSeconds
+    prev.processingDurationSeconds === next.processingDurationSeconds &&
+    prev.hideFooter === next.hideFooter
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
     //       most of llmManager, onMessageSelection (function/object props)
   );
@@ -95,6 +98,7 @@ const AgentMessage = React.memo(function AgentMessage({
   onRegenerate,
   parentMessage,
   processingDurationSeconds,
+  hideFooter,
 }: AgentMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
@@ -326,7 +330,7 @@ const AgentMessage = React.memo(function AgentMessage({
       </div>
 
       {/* Feedback buttons - only show when streaming and rendering complete */}
-      {isComplete && (
+      {isComplete && !hideFooter && (
         <MessageToolbar
           nodeId={nodeId}
           messageId={messageId}
