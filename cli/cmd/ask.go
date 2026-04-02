@@ -199,21 +199,23 @@ func resolveQuestion(args []string, prompt string) (string, error) {
 }
 
 // overflowWriter handles streaming output with optional truncation.
-// When limit > 0, it tees all content to a temp file and stops writing
-// to stdout after limit bytes. When limit == 0, it writes directly to stdout.
+// When limit > 0, it streams to a temp file on disk (not memory) and stops
+// writing to stdout after limit bytes. When limit == 0, it writes directly
+// to stdout. In quiet mode, it buffers in memory and prints once at the end.
 type overflowWriter struct {
 	limit      int
 	quiet      bool
 	written    int
 	totalBytes int
 	truncated  bool
-	buf        strings.Builder // accumulates content for temp file or quiet mode
+	buf        strings.Builder // used only in quiet mode
+	tmpFile    *os.File        // used only in truncation mode (limit > 0)
 }
 
 func (w *overflowWriter) Write(s string) {
 	w.totalBytes += len(s)
 
-	// Quiet mode: buffer everything, print nothing
+	// Quiet mode: buffer in memory, print nothing
 	if w.quiet {
 		w.buf.WriteString(s)
 		return
@@ -224,8 +226,19 @@ func (w *overflowWriter) Write(s string) {
 		return
 	}
 
-	// Always accumulate for the temp file
-	w.buf.WriteString(s)
+	// Truncation mode: stream all content to temp file on disk
+	if w.tmpFile == nil {
+		f, err := os.CreateTemp("", "onyx-ask-*.txt")
+		if err != nil {
+			// Fall back to no-truncation if we can't create the file
+			fmt.Fprintf(os.Stderr, "warning: could not create temp file: %v\n", err)
+			w.limit = 0
+			fmt.Print(s)
+			return
+		}
+		w.tmpFile = f
+	}
+	_, _ = w.tmpFile.WriteString(s)
 
 	if w.truncated {
 		return
@@ -236,7 +249,6 @@ func (w *overflowWriter) Write(s string) {
 		fmt.Print(s)
 		w.written += len(s)
 	} else {
-		// Print up to the limit, then stop
 		if remaining > 0 {
 			fmt.Print(s[:remaining])
 			w.written += remaining
@@ -253,29 +265,21 @@ func (w *overflowWriter) Finish() {
 	}
 
 	if !w.truncated {
+		if w.tmpFile != nil {
+			_ = w.tmpFile.Close()
+			_ = os.Remove(w.tmpFile.Name())
+		}
 		fmt.Println()
 		return
 	}
 
-	// Write full content to temp file
-	tmpFile, err := os.CreateTemp("", "onyx-ask-*.txt")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "\nwarning: could not create temp file: %v\n", err)
-		fmt.Println()
-		return
-	}
-
-	_, writeErr := tmpFile.WriteString(w.buf.String())
-	_ = tmpFile.Close()
-	if writeErr != nil {
-		fmt.Fprintf(os.Stderr, "\nwarning: could not write temp file: %v\n", writeErr)
-		fmt.Println()
-		return
-	}
+	// Close the temp file so it's readable
+	tmpPath := w.tmpFile.Name()
+	_ = w.tmpFile.Close()
 
 	fmt.Printf("\n\n--- response truncated (%d bytes total) ---\n", w.totalBytes)
-	fmt.Printf("Full response: %s\n", tmpFile.Name())
+	fmt.Printf("Full response: %s\n", tmpPath)
 	fmt.Printf("Explore:\n")
-	fmt.Printf("  cat %s | grep \"<pattern>\"\n", tmpFile.Name())
-	fmt.Printf("  cat %s | tail -50\n", tmpFile.Name())
+	fmt.Printf("  cat %s | grep \"<pattern>\"\n", tmpPath)
+	fmt.Printf("  cat %s | tail -50\n", tmpPath)
 }
