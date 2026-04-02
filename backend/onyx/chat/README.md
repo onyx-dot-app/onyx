@@ -1,5 +1,10 @@
 # Overview of Context Management
 
+This document reviews some design decisions around the main agent-loop powering Onyx's chat flow.
+It is highly recommended for all engineers contributing to this flow to be familiar with the concepts here.
+
+> Note: it is assumed the reader is familiar with the Onyx product and features such as Projects, User files, Citations, etc. 
+
 ## System Prompt
 
 The system prompt is a default prompt that comes packaged with the system. Users can edit the default prompt and it will be persisted in the database.
@@ -41,9 +46,9 @@ the system can RAG over the project files.
 
 ## How documents are represented
 
-Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it. It is represented with a prefix to make the
-context clearer to the LLM. Note that for search results (whether web or internal, it will just be the json) and it will be a Tool Call type of message
-rather than a user message.
+Documents from search or uploaded Project files are represented as a json so that the LLM can easily understand it. It is represented with a prefix string to
+make the context clearer to the LLM. Note that for search results (whether web or internal, it will just be the json) and it will be a Tool Call type of
+message rather than a user message.
 
 ```
 Here are some documents provided for context, they may not all be relevant:
@@ -55,12 +60,12 @@ Here are some documents provided for context, they may not all be relevant:
 }
 ```
 
-Documents are represented with document so that the LLM can easily cite them with a single number. The tool returns have to be richer to be able to
+Documents are represented with the `document` key so that the LLM can easily cite them with a single number. The tool returns have to be richer to be able to
 translate this into links and other UI elements. What the LLM sees is far simpler to reduce noise/hallucinations.
 
 Note that documents included in a single turn should be collapsed into a single user message.
 
-Search tools give URLs to the LLM though so that open_url (a separate tool) can be called on them.
+Search tools also give URLs to the LLM so that open_url (a separate tool) can be called on them.
 
 ## Reminders
 
@@ -72,9 +77,12 @@ If a search related tool is called at any point during the turn, the reminder wi
 
 ## Tool Calls
 
-As tool call responses can get very long (like an internal search can be many thousands of tokens), tool responses are today replaced with a hardcoded
+As tool call responses can get very long (like an internal search can be many thousands of tokens), tool responses are current replaced with a hardcoded
 string saying it is no longer available. Tool Call details like the search query and other arguments are kept in the history as this is information
 rich and generally very few tokens.
+
+> Note: in the Internal Search flow with query expansion, the Tool Call which was actually run differs from what the LLM provided as arguments.
+> What the LLM sees in the history (to be most informative for future calls) is the full set of expanded queries.
 
 **Possible Future Extension**:
 Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,
@@ -103,7 +111,7 @@ Flow with Project and File Upload
 S, CA, P, F, U1, A1 -- user sends another message -> S, F, U1, A1, CA, P, U2, A2
 - File stays in place, above the user message
 - Project files move along the chain as new messages are sent
-- Custom Agent prompt comes before project files which comes before user uploaded files in each turn
+- Custom Agent prompt comes before project files which come before user uploaded files in each turn
 
 Reminders during a single Turn
 S, U1, TC, TR, R -- agent calls another tool -> S, U1, TC, TR, TC, TR, R, A1
@@ -124,7 +132,7 @@ and should be very targetted for it to work reliably and also not interfere with
 
 ## Reasons / Experiments
 
-Custom Agent instructions being placed in the system prompt is poorly followed. It also degrade performance of the system especially when the instructions
+Custom Agent instructions being placed in the system prompt is poorly followed. It also degrades performance of the system especially when the instructions
 are orthogonal (or even possibly contradictory) to the system prompt. For weaker models, it causes strange artifacts in tool calls and final responses
 that completely ruins the user experience. Empirically, this way works better across a range of models especially when the history gets longer.
 Having the Custom Agent instructions not move means it fades more as the chat gets long which is also not ok from a UX perspective.
@@ -151,7 +159,7 @@ In a similar concept, LLM instructions in the system prompt are structured speci
 fairly surprising actually but if there is a line of instructions effectively saying "If you try to use some tools and find that you need more information or
 need to call additional tools, you are encouraged to do this", having this in the Tool section of the System prompt makes all the LLMs follow it well but if it's
 even just a paragraph away like near the beginning of the prompt, it is often ignored. The difference is as drastic as a 30% follow rate to a 90% follow
-rate even just moving the same statement a few sentences.
+rate by even just moving the same statement a few sentences.
 
 ## Other related pointers
 
@@ -235,8 +243,9 @@ tool calls and returns that to the LLM Loop to execute.
   concept of a turn. The turn_index for the frontend is which block does this packet belong to. So while a reasoning + tool call
   comes from the same LLM inference (same backend LLM step), they are 2 turns to the frontend because that's how it's rendered.
 
-- There are 3 representations of "message". The first is the database model ChatMessage, this one should be translated away and
-  not used deep into the flow. The second is ChatMessageSimple which is the data model which should be used throughout the code
-  as much as possible. If modifications/additions are needed, it should be to this object. This is the rich representation of a
-  message for the code. Finally there is the LanguageModelInput representation of a message. This one is for the LLM interface
-  layer and is as stripped down as possible so that the LLM interface can be clean and easy to maintain/extend.
+- There are 3 representations of a message, each scoped to a different layer:
+  1. **ChatMessage** — The database model. Should be converted into ChatMessageSimple early and never passed deep into the flow.
+  2. **ChatMessageSimple** — The canonical data model used throughout the codebase. This is the rich, full-featured representation
+     of a message. Any modifications or additions to message structure should be made here.
+  3. **LanguageModelInput** — The LLM-facing representation. Intentionally minimal so the LLM interface layer stays clean and
+     easy to maintain/extend.
