@@ -20,7 +20,7 @@ from onyx.db.models import User__UserGroup
 
 
 def recompute_user_permissions__no_commit(
-    user_ids: UUID | list[UUID], db_session: Session
+    user_ids: UUID | str | list[UUID] | list[str], db_session: Session
 ) -> None:
     """Recompute granted permissions for one or more users.
 
@@ -32,7 +32,7 @@ def recompute_user_permissions__no_commit(
 
     Does NOT commit — caller must commit the session.
     """
-    if isinstance(user_ids, UUID):
+    if isinstance(user_ids, (UUID, str)):
         uid_list = [user_ids]
     else:
         uid_list = list(user_ids)

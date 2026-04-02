@@ -50,6 +50,8 @@ async function withApiContext(
 test.describe("Groups page — layout", () => {
   let adminGroupId: number;
   let basicGroupId: number;
+  let layoutGroupId: number;
+  const layoutGroupName = uniqueGroupName("layout");
 
   test.beforeAll(async ({ browser }) => {
     await withApiContext(browser, async (api) => {
@@ -61,10 +63,19 @@ test.describe("Groups page — layout", () => {
       }
       adminGroupId = adminGroup.id;
       basicGroupId = basicGroup.id;
+
+      // Create a custom group so the list is non-empty (default groups are
+      // excluded from the API response by default).
+      layoutGroupId = await api.createUserGroup(layoutGroupName);
+      await api.waitForGroupSync(layoutGroupId);
     });
   });
 
-  // No afterAll — these are built-in default groups and must not be deleted
+  test.afterAll(async ({ browser }) => {
+    await withApiContext(browser, async (api) => {
+      await softCleanup(() => api.deleteUserGroup(layoutGroupId));
+    });
+  });
 
   test("renders page title, search, and new group button", async ({
     groupsPage,
