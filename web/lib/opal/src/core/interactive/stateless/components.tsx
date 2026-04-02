@@ -108,7 +108,7 @@ function InteractiveStateless({
 }: InteractiveStatelessProps) {
   const ctx = useDisabled();
   const isDisabled = disabledProp ?? ctx.isDisabled;
-  const allowClick = ctx.allowClick;
+  const allowClick = disabledProp === undefined ? ctx.allowClick : false;
 
   // onClick/href are always passed directly — Stateless is the outermost Slot,
   // so Radix Slot-injected handlers don't bypass this guard.
