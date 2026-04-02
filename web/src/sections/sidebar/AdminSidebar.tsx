@@ -141,15 +141,12 @@ function buildItems(
   if (!isCurator) {
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
-    } else {
-      items.push({
-        section: SECTIONS.ORGANIZATION,
-        name: "Upgrade Plan",
-        icon: SvgArrowUpCircle,
-        link: ADMIN_ROUTES.BILLING.path,
-      });
     }
-    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.TOKEN_RATE_LIMITS);
+    addDisabled(
+      SECTIONS.ORGANIZATION,
+      ADMIN_ROUTES.TOKEN_RATE_LIMITS,
+      !enableEnterprise
+    );
     addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
   }
 
@@ -163,6 +160,16 @@ function buildItems(
         !enableEnterprise
       );
     }
+  }
+
+  // 8. Upgrade Plan (admin only, no subscription)
+  if (!isCurator && !hasSubscription) {
+    items.push({
+      section: SECTIONS.UNLABELED,
+      name: "Upgrade Plan",
+      icon: SvgArrowUpCircle,
+      link: ADMIN_ROUTES.BILLING.path,
+    });
   }
 
   return items;
