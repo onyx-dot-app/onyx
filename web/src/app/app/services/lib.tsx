@@ -182,7 +182,8 @@ export async function* sendMessage({
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
   yield* handleSSEStream<PacketType>(response, signal);
