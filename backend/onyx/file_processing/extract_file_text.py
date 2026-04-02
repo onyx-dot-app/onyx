@@ -379,12 +379,39 @@ def _clean_worksheet_matrix(matrix: list[list[str]]) -> list[list[str]]:
     # Row cleanup
     matrix = _remove_empty_runs(matrix, max_empty=MAX_EMPTY_ROWS)
 
-    # Column cleanup (transpose, clean, transpose back)
-    transposed = list(map(list, zip(*matrix))) if matrix else []
-    transposed = _remove_empty_runs(transposed, max_empty=MAX_EMPTY_COLS)
-    matrix = list(map(list, zip(*transposed))) if transposed else []
+    if not matrix:
+        return matrix
+
+    # Column cleanup — determine which columns to keep without transposing.
+    num_cols = len(matrix[0])
+    keep_cols = _columns_to_keep(matrix, num_cols, max_empty=MAX_EMPTY_COLS)
+    if len(keep_cols) < num_cols:
+        matrix = [[row[c] for c in keep_cols] for row in matrix]
 
     return matrix
+
+
+def _columns_to_keep(
+    matrix: list[list[str]], num_cols: int, max_empty: int
+) -> list[int]:
+    """Return the indices of columns to keep after removing empty-column runs.
+
+    Uses the same logic as ``_remove_empty_runs`` but operates on column
+    indices so no transpose is needed.
+    """
+    kept: list[int] = []
+    empty_buffer: list[int] = []
+
+    for col_idx in range(num_cols):
+        col_is_empty = all(not row[col_idx] for row in matrix)
+        if col_is_empty:
+            empty_buffer.append(col_idx)
+        else:
+            kept.extend(empty_buffer[:max_empty])
+            kept.append(col_idx)
+            empty_buffer = []
+
+    return kept
 
 
 def _remove_empty_runs(
