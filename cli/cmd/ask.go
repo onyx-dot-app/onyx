@@ -170,7 +170,8 @@ func resolveQuestion(args []string, prompt string) (string, error) {
 
 	var stdinContent string
 	if hasStdin {
-		data, err := io.ReadAll(os.Stdin)
+		const maxStdinBytes = 10 * 1024 * 1024 // 10MB
+		data, err := io.ReadAll(io.LimitReader(os.Stdin, maxStdinBytes))
 		if err != nil {
 			return "", fmt.Errorf("failed to read stdin: %w", err)
 		}
