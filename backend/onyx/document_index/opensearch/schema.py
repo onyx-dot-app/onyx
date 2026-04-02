@@ -88,10 +88,17 @@ def get_opensearch_doc_chunk_id(
     max_encoded_permissible_doc_id_length: int = (
         MAX_DOCUMENT_ID_ENCODED_LENGTH - encoded_suffix_length
     )
+    opensearch_doc_chunk_id_tenant_prefix: str = ""
     if tenant_state.multitenant:
         short_tenant_id: str = get_tenant_id_short_string(tenant_state.tenant_id)
-        encoded_tenant_id_length: int = len(short_tenant_id.encode("utf-8"))
-        max_encoded_permissible_doc_id_length -= encoded_tenant_id_length
+        # Use tenant ID because in multitenant mode each tenant has its own
+        # Documents table, so there is a very small chance that doc IDs are not
+        # actually unique across all tenants.
+        opensearch_doc_chunk_id_tenant_prefix = f"{short_tenant_id}__"
+        encoded_prefix_length: int = len(
+            opensearch_doc_chunk_id_tenant_prefix.encode("utf-8")
+        )
+        max_encoded_permissible_doc_id_length -= encoded_prefix_length
 
     try:
         sanitized_document_id: str = filter_and_validate_document_id(
@@ -114,14 +121,8 @@ def get_opensearch_doc_chunk_id(
         ).hexdigest()
 
     opensearch_doc_chunk_id: str = (
-        f"{sanitized_document_id}{opensearch_doc_chunk_id_suffix}"
+        f"{opensearch_doc_chunk_id_tenant_prefix}{sanitized_document_id}{opensearch_doc_chunk_id_suffix}"
     )
-    if tenant_state.multitenant:
-        # Use tenant ID because in multitenant mode each tenant has its own
-        # Documents table, so there is a very small chance that doc IDs are not
-        # actually unique across all tenants.
-        short_tenant_id = get_tenant_id_short_string(tenant_state.tenant_id)
-        opensearch_doc_chunk_id = f"{short_tenant_id}__{opensearch_doc_chunk_id}"
 
     # Do one more validation to ensure we haven't exceeded the max length.
     opensearch_doc_chunk_id = filter_and_validate_document_id(opensearch_doc_chunk_id)
