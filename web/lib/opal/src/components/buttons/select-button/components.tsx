@@ -1,11 +1,7 @@
 "use client";
 
 import "@opal/components/buttons/select-button/styles.css";
-import {
-  Interactive,
-  useDisabled,
-  type InteractiveStatefulProps,
-} from "@opal/core";
+import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
@@ -64,6 +60,9 @@ type SelectButtonProps = InteractiveStatefulProps &
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
+
+    /** Applies disabled styling and suppresses clicks. */
+    disabled?: boolean;
   };
 
 // ---------------------------------------------------------------------------
@@ -80,9 +79,9 @@ function SelectButton({
   width,
   tooltip,
   tooltipSide = "top",
+  disabled,
   ...statefulProps
 }: SelectButtonProps) {
-  const { isDisabled } = useDisabled();
   const isLarge = size === "lg";
 
   const labelEl = children ? (
@@ -96,7 +95,7 @@ function SelectButton({
   ) : null;
 
   const button = (
-    <Interactive.Stateful {...statefulProps}>
+    <Interactive.Stateful disabled={disabled} {...statefulProps}>
       <Interactive.Container
         type={type}
         heightVariant={size}
@@ -128,7 +127,7 @@ function SelectButton({
   );
 
   const resolvedTooltip =
-    tooltip ?? (foldable && isDisabled && children ? children : undefined);
+    tooltip ?? (foldable && disabled && children ? children : undefined);
 
   if (!resolvedTooltip) return button;
 
