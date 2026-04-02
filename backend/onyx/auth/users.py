@@ -508,6 +508,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserAlreadyExists()
 
                     self._upgrade_user_to_standard__sync(user.id, user_create)
+                    self.user_db.session.expire(user)
                     user = await self.user_db.get(user.id)  # type: ignore[assignment]
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
@@ -529,6 +530,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserAlreadyExists()
 
                     self._upgrade_user_to_standard__sync(user.id, user_create)
+                    self.user_db.session.expire(user)
                     user = await self.user_db.get(user.id)  # type: ignore[assignment]
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
@@ -779,7 +781,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                 # Refresh the async user object so downstream code
                 # (e.g. oidc_expiry check) sees the updated fields.
-                user = await self.user_db.get(user.id)  # type: ignore[assignment]
+                self.user_db.session.expire(user)
+                user = await self.user_db.get(user.id)
                 assert user is not None
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
