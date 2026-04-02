@@ -184,3 +184,150 @@ def test_saml_normal_signin_assigns_group(
     assert new_email in _get_basic_group_member_emails(
         admin_user
     ), f"New SAML user '{new_email}' not found in Basic default group"
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="SAML tests are enterprise only",
+)
+def test_saml_user_conversion_restores_group_membership(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """
+    Test that SAML login restores Basic group membership when converting
+    a non-authenticated user (EXT_PERM_USER or SLACK_USER) to BASIC.
+
+    Group membership implies 'basic' permission (verified by
+    test_new_group_gets_basic_permission).
+    """
+    admin_user: DATestUser = UserManager.create(email="admin@example.com")
+
+    # --- EXT_PERM_USER path ---
+    ext_email = "ext_perm_perms@example.com"
+    ext_user = UserManager.create(email=ext_email)
+    assert ext_email in _get_basic_group_member_emails(admin_user)
+
+    UserManager.set_role(
+        user_to_set=ext_user,
+        target_role=UserRole.EXT_PERM_USER,
+        user_performing_action=admin_user,
+        explicit_override=True,
+    )
+    assert ext_email not in _get_basic_group_member_emails(admin_user)
+
+    user_data = _simulate_saml_login(ext_email, admin_user)
+    assert user_data["role"] == UserRole.BASIC.value
+    assert ext_email in _get_basic_group_member_emails(
+        admin_user
+    ), "EXT_PERM_USER should be back in Basic group after SAML conversion"
+
+    # --- SLACK_USER path ---
+    slack_email = "slack_perms@example.com"
+    slack_user = UserManager.create(email=slack_email)
+
+    UserManager.set_role(
+        user_to_set=slack_user,
+        target_role=UserRole.SLACK_USER,
+        user_performing_action=admin_user,
+        explicit_override=True,
+    )
+    assert slack_email not in _get_basic_group_member_emails(admin_user)
+
+    user_data = _simulate_saml_login(slack_email, admin_user)
+    assert user_data["role"] == UserRole.BASIC.value
+    assert slack_email in _get_basic_group_member_emails(
+        admin_user
+    ), "SLACK_USER should be back in Basic group after SAML conversion"
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="SAML tests are enterprise only",
+)
+def test_saml_round_trip_group_lifecycle(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """
+    Test the full round-trip: BASIC -> EXT_PERM -> SAML(BASIC) -> EXT_PERM -> SAML(BASIC).
+
+    Verifies group membership is correctly removed and restored at each transition.
+    """
+    admin_user: DATestUser = UserManager.create(email="admin@example.com")
+
+    test_email = "roundtrip@example.com"
+    test_user = UserManager.create(email=test_email)
+
+    # Step 1: BASIC user is in Basic group
+    assert test_email in _get_basic_group_member_emails(admin_user)
+
+    # Step 2: Downgrade to EXT_PERM_USER — loses Basic group
+    UserManager.set_role(
+        user_to_set=test_user,
+        target_role=UserRole.EXT_PERM_USER,
+        user_performing_action=admin_user,
+        explicit_override=True,
+    )
+    assert test_email not in _get_basic_group_member_emails(admin_user)
+
+    # Step 3: SAML login — converts back to BASIC, regains Basic group
+    _simulate_saml_login(test_email, admin_user)
+    assert test_email in _get_basic_group_member_emails(
+        admin_user
+    ), "Should be in Basic group after first SAML conversion"
+
+    # Step 4: Downgrade again
+    UserManager.set_role(
+        user_to_set=test_user,
+        target_role=UserRole.EXT_PERM_USER,
+        user_performing_action=admin_user,
+        explicit_override=True,
+    )
+    assert test_email not in _get_basic_group_member_emails(admin_user)
+
+    # Step 5: SAML login again — should still restore correctly
+    _simulate_saml_login(test_email, admin_user)
+    assert test_email in _get_basic_group_member_emails(
+        admin_user
+    ), "Should be in Basic group after second SAML conversion"
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="SAML tests are enterprise only",
+)
+def test_saml_slack_user_conversion_sets_account_type_and_group(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """
+    Test that SAML login sets account_type to STANDARD and assigns Basic group
+    when converting a SLACK_USER (BOT account_type).
+
+    Mirrors test_saml_user_conversion_sets_account_type_and_group but for
+    SLACK_USER instead of EXT_PERM_USER, and additionally verifies permissions.
+    """
+    admin_user: DATestUser = UserManager.create(email="admin@example.com")
+
+    test_email = "slack_convert@example.com"
+    test_user = UserManager.create(email=test_email)
+
+    UserManager.set_role(
+        user_to_set=test_user,
+        target_role=UserRole.SLACK_USER,
+        user_performing_action=admin_user,
+        explicit_override=True,
+    )
+    assert UserManager.is_role(test_user, UserRole.SLACK_USER)
+
+    # SAML login
+    user_data = _simulate_saml_login(test_email, admin_user)
+
+    # Verify account_type and role
+    assert (
+        user_data["account_type"] == AccountType.STANDARD.value
+    ), f"Expected STANDARD, got {user_data['account_type']}"
+    assert user_data["role"] == UserRole.BASIC.value
+
+    # Verify Basic group membership (implies 'basic' permission)
+    assert test_email in _get_basic_group_member_emails(
+        admin_user
+    ), f"Converted SLACK_USER '{test_email}' not found in Basic default group"
