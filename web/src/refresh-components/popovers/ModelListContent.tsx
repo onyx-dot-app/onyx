@@ -144,25 +144,21 @@ export default function ModelListContent({
       <PopoverMenu scrollContainerRef={scrollContainerRef}>
         {isLoading
           ? [
-              <div key="loading" className="flex items-center gap-2 py-3">
-                <Text font="secondary-body" color="text-03">
-                  Loading models...
-                </Text>
-              </div>,
+              <Text key="loading" font="secondary-body" color="text-03">
+                Loading models...
+              </Text>,
             ]
           : groupedOptions.length === 0
             ? [
-                <div key="empty" className="py-3">
-                  <Text font="secondary-body" color="text-03">
-                    No models found
-                  </Text>
-                </div>,
+                <Text key="empty" font="secondary-body" color="text-03">
+                  No models found
+                </Text>,
               ]
             : groupedOptions.length === 1
               ? [
-                  <div key="single-provider" className="flex flex-col gap-1">
+                  <Section key="single-provider" gap={0.25}>
                     {groupedOptions[0]!.options.map(renderModelItem)}
-                  </div>,
+                  </Section>,
                 ]
               : groupedOptions.map((group) => {
                   const open = isGroupOpen(group.key);
@@ -173,30 +169,25 @@ export default function ModelListContent({
                       onOpenChange={() => toggleGroup(group.key)}
                     >
                       <CollapsibleTrigger asChild>
-                        <button className="flex items-center rounded-08 hover:bg-background-tint-02 w-full py-1 pt-1 cursor-pointer">
-                          <div className="flex items-center gap-1 shrink-0">
-                            <div className="flex items-center justify-center size-5 shrink-0">
-                              <group.Icon size={16} />
-                            </div>
-                            <Text font="secondary-body" color="text-03" nowrap>
-                              {group.displayName}
-                            </Text>
-                          </div>
-                          <div className="flex-1" />
-                          <div className="flex items-center justify-center size-6 shrink-0">
-                            {open ? (
+                        <LineItem
+                          muted
+                          icon={group.Icon}
+                          rightChildren={
+                            open ? (
                               <SvgChevronDown className="h-4 w-4 stroke-text-04 shrink-0" />
                             ) : (
                               <SvgChevronRight className="h-4 w-4 stroke-text-04 shrink-0" />
-                            )}
-                          </div>
-                        </button>
+                            )
+                          }
+                        >
+                          {group.displayName}
+                        </LineItem>
                       </CollapsibleTrigger>
 
                       <CollapsibleContent>
-                        <div className="flex flex-col gap-1">
+                        <Section gap={0.25}>
                           {group.options.map(renderModelItem)}
-                        </div>
+                        </Section>
                       </CollapsibleContent>
                     </Collapsible>
                   );
