@@ -66,8 +66,8 @@ func configureNonInteractive(serverURL, apiKey string, dryRun bool) error {
 		DefaultAgentID: 0,
 	}
 
-	// Preserve existing default agent ID if config exists
-	if existing := config.Load(); existing.DefaultAgentID != 0 {
+	// Preserve existing default agent ID from disk (not env overrides)
+	if existing := config.LoadFromDisk(); existing.DefaultAgentID != 0 {
 		cfg.DefaultAgentID = existing.DefaultAgentID
 	}
 
