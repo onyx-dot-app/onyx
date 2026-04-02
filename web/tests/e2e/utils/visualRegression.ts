@@ -136,6 +136,41 @@ export async function waitForAnimations(page: Page): Promise<void> {
 }
 
 /**
+ * Wait for every visible `<img>` on the page to finish loading (or error out).
+ *
+ * This prevents screenshot flakiness caused by images that have been added to
+ * the DOM but haven't been decoded yet — `networkidle` only guarantees that
+ * fewer than 2 connections are in flight, not that every image is painted.
+ *
+ * The implementation:
+ *   1. Collects all `<img>` elements currently in the DOM.
+ *   2. For each image that isn't already `complete`, attaches one-shot
+ *      `load` / `error` listeners and waits for whichever fires first.
+ *   3. Times out after `timeoutMs` (default 5 000 ms) so a single broken
+ *      image doesn't block the entire test forever.
+ */
+export async function waitForImages(
+  page: Page,
+  timeoutMs: number = 5_000
+): Promise<void> {
+  await page.evaluate(async (timeout) => {
+    const images = Array.from(document.querySelectorAll("img"));
+    await Promise.race([
+      Promise.allSettled(
+        images.map((img) => {
+          if (img.complete) return Promise.resolve();
+          return new Promise<void>((resolve) => {
+            img.addEventListener("load", () => resolve(), { once: true });
+            img.addEventListener("error", () => resolve(), { once: true });
+          });
+        })
+      ),
+      new Promise<void>((resolve) => setTimeout(resolve, timeout)),
+    ]);
+  }, timeoutMs);
+}
+
+/**
  * Take a screenshot and optionally assert it matches the stored baseline.
  *
  * Behavior depends on the `VISUAL_REGRESSION` environment variable:
@@ -187,6 +222,10 @@ export async function expectScreenshot(
     const maskLocators = allMaskSelectors.map((selector) =>
       page.locator(selector)
     );
+
+    // Wait for images to finish loading / decoding so that logo icons
+    // and other <img> elements are fully painted before the screenshot.
+    await waitForImages(page);
 
     // Wait for any in-flight CSS animations / transitions to settle so that
     // screenshots are deterministic (e.g. slide-in card animations on the
@@ -278,6 +317,9 @@ export async function expectElementScreenshot(
     const maskLocators = allMaskSelectors.map((selector) =>
       page.locator(selector)
     );
+
+    // Wait for images to finish loading / decoding.
+    await waitForImages(page);
 
     // Wait for any in-flight CSS animations / transitions to settle so that
     // element screenshots are deterministic (same reasoning as expectScreenshot).
