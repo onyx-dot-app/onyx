@@ -58,6 +58,8 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import increment_usage
+from onyx.db.usage import increment_user_counter
+from onyx.db.usage import track_user_activity
 from onyx.db.usage import UsageType
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.file_store.file_store import get_default_file_store
@@ -570,6 +572,25 @@ def handle_send_chat_message(
     if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
         chat_message_req.origin = MessageOrigin.API
 
+    # Track per-user activity counters
+    if not user.is_anonymous:
+        try:
+            with get_session_with_current_tenant() as counter_db_session:
+                track_user_activity(
+                    db_session=counter_db_session,
+                    user_id=user.id,
+                    persona_id=(
+                        chat_message_req.chat_session_info.persona_id
+                        if chat_message_req.chat_session_info
+                        else None
+                    ),
+                    deep_research=chat_message_req.deep_research,
+                    has_web_search=False,
+                )
+                counter_db_session.commit()
+        except Exception:
+            logger.debug("Failed to track user activity counters")
+
     # Non-streaming path: consume all packets and return complete response
     if not chat_message_req.stream:
         with get_session_with_current_tenant() as db_session:
@@ -676,6 +697,14 @@ def create_chat_feedback(
         user_id=user_id,
         db_session=db_session,
     )
+
+    # Track feedback counter
+    if not user.is_anonymous:
+        try:
+            increment_user_counter(db_session, user.id, "fb", 50)
+            db_session.commit()
+        except Exception:
+            logger.debug("Failed to track feedback counter")
 
 
 @router.delete("/remove-chat-message-feedback")

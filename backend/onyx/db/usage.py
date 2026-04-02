@@ -1,19 +1,271 @@
-"""Database interactions for tenant usage tracking (cloud usage limits)."""
+"""Database interactions for usage tracking (tenant limits + per-user counters)."""
 
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
+from uuid import UUID
 
 from pydantic import BaseModel
+from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from onyx.db.models import ChatSession
 from onyx.db.models import TenantUsage
+from onyx.db.models import UserUsageCounter
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 logger = setup_logger()
+
+
+# ---------------------------------------------------------------------------
+# Per-user activity counter definitions
+# ---------------------------------------------------------------------------
+
+_COUNTER_REGISTRY: dict[str, dict] = {
+    "ws": {
+        "t": 100,
+        "n": "Web Surfer",
+        "d": "Performed 100 web searches",
+        "h": "Search the web... a lot.",
+        "i": "web-surfer.svg",
+    },
+    "dr": {
+        "t": 100,
+        "n": "Mad Scientist",
+        "d": "Launched 100 deep research sessions",
+        "h": "Go deep. Very deep.",
+        "i": "mad-scientist.svg",
+    },
+    "msg": {
+        "t": 1000,
+        "n": "Chatterbox",
+        "d": "Sent 1,000 messages",
+        "h": "Talk until you can't talk anymore.",
+        "i": "chatterbox.svg",
+    },
+    "nm": {
+        "t": 50,
+        "n": "Night Owl",
+        "d": "Sent 50 messages between midnight and 5 AM",
+        "h": "The best ideas come at night.",
+        "i": "night-owl.svg",
+    },
+    "pa": {
+        "t": 10,
+        "n": "Explorer",
+        "d": "Used 10 different agents",
+        "h": "Try them all.",
+        "i": "explorer.svg",
+    },
+    "cc": {
+        "t": 10,
+        "n": "Connector King",
+        "d": "Connected 10 data sources",
+        "h": "Plug everything in.",
+        "i": "connector-king.svg",
+    },
+    "ca": {
+        "t": 5,
+        "n": "Prompt Engineer",
+        "d": "Created 5 custom agents",
+        "h": "Build your own crew.",
+        "i": "prompt-engineer.svg",
+    },
+    "fb": {
+        "t": 50,
+        "n": "Feedback Loop",
+        "d": "Gave 50 thumbs up or down",
+        "h": "Your opinion matters.",
+        "i": "feedback-loop.svg",
+    },
+    "di": {
+        "t": 10000,
+        "n": "Knowledge Builder",
+        "d": "Indexed 10,000 documents",
+        "h": "Feed the machine.",
+        "i": "knowledge-builder.svg",
+    },
+    "ss": {
+        "t": 10,
+        "n": "Team Player",
+        "d": "Shared 10 chat sessions",
+        "h": "Sharing is caring.",
+        "i": "team-player.svg",
+    },
+}
+
+
+def get_counter_definitions() -> list[dict]:
+    """Return the full list of counter definitions with display metadata."""
+    return [
+        {
+            "key": k,
+            "title": v["n"],
+            "description": v["d"],
+            "hint": v["h"],
+            "icon": v["i"],
+            "target": v["t"],
+        }
+        for k, v in _COUNTER_REGISTRY.items()
+    ]
+
+
+def increment_user_counter(
+    db_session: Session,
+    user_id: UUID,
+    counter_key: str,
+    target_value: int,
+) -> None:
+    """Atomically increment a per-user counter. Sets completed_at on threshold crossing."""
+    stmt = (
+        pg_insert(UserUsageCounter)
+        .values(
+            user_id=user_id,
+            counter_key=counter_key,
+            current_value=1,
+            target_value=target_value,
+            completed_at=None,
+            acknowledged=False,
+        )
+        .on_conflict_do_update(
+            constraint="uq_user_usage_counter",
+            set_={
+                "current_value": UserUsageCounter.current_value + 1,
+            },
+        )
+    )
+    db_session.execute(stmt)
+    db_session.flush()
+
+    # Check if we just crossed the threshold
+    row = db_session.execute(
+        select(UserUsageCounter).where(
+            UserUsageCounter.user_id == user_id,
+            UserUsageCounter.counter_key == counter_key,
+        )
+    ).scalar_one()
+
+    if row.current_value >= row.target_value and row.completed_at is None:
+        row.completed_at = datetime.now(timezone.utc)
+        db_session.flush()
+
+
+def set_user_counter(
+    db_session: Session,
+    user_id: UUID,
+    counter_key: str,
+    target_value: int,
+    value: int,
+) -> None:
+    """Set a per-user counter to a specific value (for distinct-count metrics)."""
+    stmt = (
+        pg_insert(UserUsageCounter)
+        .values(
+            user_id=user_id,
+            counter_key=counter_key,
+            current_value=value,
+            target_value=target_value,
+            completed_at=None,
+            acknowledged=False,
+        )
+        .on_conflict_do_update(
+            constraint="uq_user_usage_counter",
+            set_={
+                "current_value": value,
+            },
+        )
+    )
+    db_session.execute(stmt)
+    db_session.flush()
+
+    row = db_session.execute(
+        select(UserUsageCounter).where(
+            UserUsageCounter.user_id == user_id,
+            UserUsageCounter.counter_key == counter_key,
+        )
+    ).scalar_one()
+
+    if row.current_value >= row.target_value and row.completed_at is None:
+        row.completed_at = datetime.now(timezone.utc)
+        db_session.flush()
+
+
+def get_user_counters(
+    db_session: Session,
+    user_id: UUID,
+) -> list[UserUsageCounter]:
+    """Return all counter rows for a user."""
+    return list(
+        db_session.execute(
+            select(UserUsageCounter).where(UserUsageCounter.user_id == user_id)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def acknowledge_user_counters(
+    db_session: Session,
+    user_id: UUID,
+    keys: list[str],
+) -> None:
+    """Mark counters as acknowledged so notifications are not re-shown."""
+    rows = (
+        db_session.execute(
+            select(UserUsageCounter).where(
+                UserUsageCounter.user_id == user_id,
+                UserUsageCounter.counter_key.in_(keys),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in rows:
+        row.acknowledged = True
+    db_session.flush()
+
+
+def track_user_activity(
+    db_session: Session,
+    user_id: UUID,
+    persona_id: int | None = None,
+    deep_research: bool = False,
+    has_web_search: bool = False,
+) -> None:
+    """Track user activity and increment relevant counters.
+
+    Called from the chat message flow after a message is processed.
+    """
+    reg = _COUNTER_REGISTRY
+
+    # Always increment message count
+    increment_user_counter(db_session, user_id, "msg", reg["msg"]["t"])
+
+    # Night messages (midnight to 5 AM UTC)
+    hour = datetime.now(timezone.utc).hour
+    if hour < 5:
+        increment_user_counter(db_session, user_id, "nm", reg["nm"]["t"])
+
+    # Deep research
+    if deep_research:
+        increment_user_counter(db_session, user_id, "dr", reg["dr"]["t"])
+
+    # Web search
+    if has_web_search:
+        increment_user_counter(db_session, user_id, "ws", reg["ws"]["t"])
+
+    # Distinct persona count (explorer)
+    if persona_id is not None:
+        distinct_count = db_session.execute(
+            select(sa_func.count(sa_func.distinct(ChatSession.persona_id))).where(
+                ChatSession.user_id == user_id,
+                ChatSession.persona_id.isnot(None),
+            )
+        ).scalar_one()
+        set_user_counter(db_session, user_id, "pa", reg["pa"]["t"], distinct_count)
 
 
 class UsageType(str, Enum):

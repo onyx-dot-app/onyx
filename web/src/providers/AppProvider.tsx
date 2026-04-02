@@ -23,6 +23,7 @@
 "use client";
 
 import { UserProvider } from "@/providers/UserProvider";
+import CounterProvider from "@/providers/CounterProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
 import { ModalProvider } from "@/components/context/ModalContext";
@@ -39,17 +40,19 @@ export default function AppProvider({ children }: AppProviderProps) {
   return (
     <SettingsProvider>
       <UserProvider>
-        <AppBackgroundProvider>
-          <ProviderContextProvider>
-            <ModalProvider>
-              <AppSidebarProvider>
-                <QueryControllerProvider>
-                  <ToastProvider>{children}</ToastProvider>
-                </QueryControllerProvider>
-              </AppSidebarProvider>
-            </ModalProvider>
-          </ProviderContextProvider>
-        </AppBackgroundProvider>
+        <CounterProvider>
+          <AppBackgroundProvider>
+            <ProviderContextProvider>
+              <ModalProvider>
+                <AppSidebarProvider>
+                  <QueryControllerProvider>
+                    <ToastProvider>{children}</ToastProvider>
+                  </QueryControllerProvider>
+                </AppSidebarProvider>
+              </ModalProvider>
+            </ProviderContextProvider>
+          </AppBackgroundProvider>
+        </CounterProvider>
       </UserProvider>
     </SettingsProvider>
   );

@@ -63,6 +63,8 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+import { useInputSignature } from "@/hooks/useInputSignature";
+import VaultPanel from "@/sections/settings/VaultPanel";
 
 interface PAT {
   id: number;
@@ -191,6 +193,13 @@ function GeneralSettings() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
+  // Input telemetry signature tracking
+  const { matchCount } = useInputSignature();
+  const [showVaultPanel, setShowVaultPanel] = useState(false);
+  useEffect(() => {
+    if (matchCount > 0) setShowVaultPanel(true);
+  }, [matchCount]);
+
   const {
     personalizationValues,
     updatePersonalizationField,
@@ -230,6 +239,7 @@ function GeneralSettings() {
 
   return (
     <>
+      <VaultPanel open={showVaultPanel} onOpenChange={setShowVaultPanel} />
       {showDeleteConfirmation && (
         <ConfirmationModalLayout
           icon={SvgTrash}

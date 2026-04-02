@@ -4916,6 +4916,37 @@ class TenantUsage(Base):
     )
 
 
+class UserUsageCounter(Base):
+    """Tracks per-user usage counters for activity metrics."""
+
+    __tablename__ = "user_usage_counter"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    counter_key: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    current_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    target_value: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "counter_key", name="uq_user_usage_counter"),
+        Index("ix_user_usage_counter_user_id", "user_id"),
+    )
+
+
 """Tables related to Build Mode (CLI Agent Platform)"""
 
 
