@@ -170,6 +170,10 @@ func resolveQuestion(args []string, prompt string) (string, error) {
 	hasPrompt := prompt != ""
 	hasStdin := !term.IsTerminal(int(os.Stdin.Fd()))
 
+	if hasArg && hasPrompt {
+		return "", exitcodes.New(exitcodes.BadRequest, "specify the question as an argument or --prompt, not both")
+	}
+
 	var stdinContent string
 	if hasStdin {
 		const maxStdinBytes = 10 * 1024 * 1024 // 10MB
