@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
-import { SvgEyeClosed, SvgEyeOff, SvgX } from "@opal/icons";
+import { SvgEyeOff, SvgX } from "@opal/icons";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import AgentMessage, {
   AgentMessageProps,
@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils";
 import { markdown } from "@opal/utils";
 
 export interface MultiModelPanelProps {
-  modelIndex: number;
   /** Provider name for icon lookup */
   provider: string;
   /** Model name for icon lookup and display */
@@ -46,7 +45,6 @@ export interface MultiModelPanelProps {
  * hides the footer so the panel acts as a passive comparison surface.
  */
 export default function MultiModelPanel({
-  modelIndex,
   provider,
   modelName,
   displayName,
