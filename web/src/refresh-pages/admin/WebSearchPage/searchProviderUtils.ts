@@ -5,8 +5,6 @@ export type WebSearchProviderType =
   | "searxng"
   | "brave";
 
-export const SEARCH_PROVIDERS_URL = "/api/admin/web-search/search-providers";
-
 export const SEARCH_PROVIDER_DETAILS: Record<
   WebSearchProviderType,
   {

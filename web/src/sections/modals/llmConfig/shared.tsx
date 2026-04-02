@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Form, FormikProps } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
@@ -9,6 +9,7 @@ import { ModelConfiguration, SimpleKnownModel } from "@/interfaces/llm";
 import * as InputLayouts from "@/layouts/input-layouts";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
@@ -25,6 +26,7 @@ import {
   SvgArrowExchange,
   SvgOnyxOctagon,
   SvgOrganization,
+  SvgPlusCircle,
   SvgRefreshCw,
   SvgSparkle,
   SvgUserManage,
@@ -250,11 +252,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
       </FieldWrapper>
 
       {!isPublic && (
-        <Card
-          backgroundVariant="light"
-          borderVariant="none"
-          paddingVariant="sm"
-        >
+        <Card background="light" border="none" padding="sm">
           <Section gap={0.5}>
             <InputComboBox
               placeholder="Add groups and agents"
@@ -266,7 +264,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
               leftSearchIcon
             />
 
-            <Card backgroundVariant="heavy" borderVariant="none">
+            <Card background="heavy" border="none" padding="sm">
               <ContentAction
                 icon={SvgUserManage}
                 title="Admin"
@@ -290,7 +288,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <Card backgroundVariant="heavy" borderVariant="none">
+                      <Card background="heavy" border="none" padding="sm">
                         <ContentAction
                           icon={SvgUsers}
                           title={group?.name ?? `Group ${id}`}
@@ -325,7 +323,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <Card backgroundVariant="heavy" borderVariant="none">
+                      <Card background="heavy" border="none" padding="sm">
                         <ContentAction
                           icon={
                             agent
@@ -379,6 +377,8 @@ export interface ModelsFieldProps<T> {
   shouldShowAutoUpdateToggle: boolean;
   /** Called when the user clicks the refresh button to re-fetch models. */
   onRefetch?: () => Promise<void> | void;
+  /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
+  onAddModel?: (modelName: string) => void;
 }
 
 export function ModelsField<T extends BaseLLMFormValues>({
@@ -387,7 +387,9 @@ export function ModelsField<T extends BaseLLMFormValues>({
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
   onRefetch,
+  onAddModel,
 }: ModelsFieldProps<T>) {
+  const [newModelName, setNewModelName] = useState("");
   const isAutoMode = formikProps.values.is_auto_mode;
   const selectedModels = formikProps.values.selected_model_names ?? [];
   const defaultModel = formikProps.values.default_model_name;
@@ -452,7 +454,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
 
   return (
-    <Card backgroundVariant="light" borderVariant="none" paddingVariant="sm">
+    <Card background="light" border="none" padding="sm">
       <Section gap={0.5}>
         <InputLayouts.Horizontal
           title="Models"
@@ -491,7 +493,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
         </InputLayouts.Horizontal>
 
         {modelConfigurations.length === 0 ? (
-          <EmptyMessageCard title="No models available." />
+          <EmptyMessageCard title="No models available." padding="sm" />
         ) : (
           <Section gap={0.25}>
             {isAutoMode
@@ -575,6 +577,50 @@ export function ModelsField<T extends BaseLLMFormValues>({
                     </Hoverable.Root>
                   );
                 })}
+          </Section>
+        )}
+
+        {onAddModel && !isAutoMode && (
+          <Section flexDirection="row" gap={0.5}>
+            <div className="flex-1">
+              <InputTypeIn
+                placeholder="Enter model name"
+                value={newModelName}
+                onChange={(e) => setNewModelName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newModelName.trim()) {
+                    e.preventDefault();
+                    const trimmed = newModelName.trim();
+                    if (!modelConfigurations.some((m) => m.name === trimmed)) {
+                      onAddModel(trimmed);
+                      setNewModelName("");
+                    }
+                  }
+                }}
+                showClearButton={false}
+              />
+            </div>
+            <Button
+              prominence="secondary"
+              icon={SvgPlusCircle}
+              type="button"
+              disabled={
+                !newModelName.trim() ||
+                modelConfigurations.some((m) => m.name === newModelName.trim())
+              }
+              onClick={() => {
+                const trimmed = newModelName.trim();
+                if (
+                  trimmed &&
+                  !modelConfigurations.some((m) => m.name === trimmed)
+                ) {
+                  onAddModel(trimmed);
+                  setNewModelName("");
+                }
+              }}
+            >
+              Add Model
+            </Button>
           </Section>
         )}
 

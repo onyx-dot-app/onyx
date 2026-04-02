@@ -231,6 +231,23 @@ import { Hoverable } from "@opal/core";
 
 # Best Practices
 
+## 0. Size Variant Defaults
+
+**When using `SizeVariants` (or any subset like `PaddingVariants`, `RoundingVariants`) as a prop
+type, always default to `"md"`.**
+
+**Reason:** `"md"` is the standard middle-of-the-road preset across the design system. Consistent
+defaults make components predictable — callers only need to specify a size when they want something
+other than the norm.
+
+```typescript
+// ✅ Good — default to "md"
+function MyCard({ padding = "md", rounding = "md" }: MyCardProps) { ... }
+
+// ❌ Bad — arbitrary or inconsistent defaults
+function MyCard({ padding = "sm", rounding = "lg" }: MyCardProps) { ... }
+```
+
 ## 1. Tailwind Dark Mode
 
 **Strictly forbid using the `dark:` modifier in Tailwind classes, except for logo icon handling.**

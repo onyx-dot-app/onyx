@@ -5,7 +5,11 @@ import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { LLMProviderFormProps, LLMProviderView } from "@/interfaces/llm";
+import {
+  LLMProviderFormProps,
+  LLMProviderView,
+  ModelConfiguration,
+} from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
@@ -91,14 +95,26 @@ export default function AzureModal({
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(AZURE_PROVIDER_NAME);
 
+  const [addedModels, setAddedModels] = useState<ModelConfiguration[]>([]);
+
   if (open === false) return null;
 
-  const onClose = () => onOpenChange?.(false);
+  const onClose = () => {
+    setAddedModels([]);
+    onOpenChange?.(false);
+  };
 
-  const modelConfigurations = buildAvailableModelConfigurations(
+  const baseModelConfigurations = buildAvailableModelConfigurations(
     existingLlmProvider,
     wellKnownLLMProvider ?? llmDescriptor
   );
+
+  // Merge base models with any user-added models (dedup by name)
+  const existingNames = new Set(baseModelConfigurations.map((m) => m.name));
+  const modelConfigurations = [
+    ...baseModelConfigurations,
+    ...addedModels.filter((m) => !existingNames.has(m.name)),
+  ];
 
   const initialValues: AzureModalValues = isOnboarding
     ? ({
@@ -224,6 +240,25 @@ export default function AzureModal({
               formikProps={formikProps}
               recommendedDefaultModel={null}
               shouldShowAutoUpdateToggle={false}
+              onAddModel={(modelName) => {
+                const newModel: ModelConfiguration = {
+                  name: modelName,
+                  is_visible: true,
+                  max_input_tokens: null,
+                  supports_image_input: false,
+                  supports_reasoning: false,
+                };
+                setAddedModels((prev) => [...prev, newModel]);
+                const currentSelected =
+                  formikProps.values.selected_model_names ?? [];
+                formikProps.setFieldValue("selected_model_names", [
+                  ...currentSelected,
+                  modelName,
+                ]);
+                if (!formikProps.values.default_model_name) {
+                  formikProps.setFieldValue("default_model_name", modelName);
+                }
+              }}
             />
           )}
 

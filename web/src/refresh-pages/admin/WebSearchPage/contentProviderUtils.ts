@@ -4,8 +4,6 @@ export type WebContentProviderType =
   | "exa"
   | (string & {});
 
-export const CONTENT_PROVIDERS_URL = "/api/admin/web-search/content-providers";
-
 export const CONTENT_PROVIDER_DETAILS: Record<
   string,
   { label: string; subtitle: string; description: string; logoSrc?: string }

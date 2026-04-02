@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { toast } from "@/hooks/useToast";
@@ -47,7 +48,7 @@ import { Table } from "@opal/components";
 import { createTableColumns } from "@opal/components/table/columns";
 import { Section } from "@/layouts/general-layouts";
 
-const API_KEY_SWR_KEY = "/api/admin/api-key";
+const API_KEY_SWR_KEY = SWR_KEYS.adminApiKeys;
 const route = ADMIN_ROUTES.API_KEYS;
 
 const tc = createTableColumns<APIKey>();

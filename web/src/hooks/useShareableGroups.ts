@@ -4,6 +4,7 @@ import useSWR, { mutate } from "swr";
 import { useContext } from "react";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SettingsContext } from "@/providers/SettingsProvider";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface MinimalUserGroupSnapshot {
   id: number;
@@ -21,13 +22,12 @@ export default function useShareableGroups() {
     combinedSettings &&
     combinedSettings.enterpriseSettings !== null;
 
-  const SHAREABLE_GROUPS_URL = "/api/manage/user-groups/minimal";
   const { data, error, isLoading } = useSWR<MinimalUserGroupSnapshot[]>(
-    isPaidEnterpriseFeaturesEnabled ? SHAREABLE_GROUPS_URL : null,
+    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.shareableGroups : null,
     errorHandlingFetcher
   );
 
-  const refreshShareableGroups = () => mutate(SHAREABLE_GROUPS_URL);
+  const refreshShareableGroups = () => mutate(SWR_KEYS.shareableGroups);
 
   if (settingsLoading) {
     return {

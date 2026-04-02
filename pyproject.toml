@@ -31,7 +31,7 @@ dependencies = [
 [project.optional-dependencies]
 # Main backend application dependencies
 backend = [
-    "aiohttp==3.13.3",
+    "aiohttp==3.13.4",
     "alembic==1.10.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==3.41.16",
@@ -49,7 +49,7 @@ backend = [
     "fastapi-users==15.0.4",
     "fastapi-users-db-sqlalchemy==7.0.0",
     "fastapi-limiter==0.1.6",
-    "fastmcp==3.0.2",
+    "fastmcp==3.2.0",
     "filelock==3.20.3",
     "google-api-python-client==2.86.0",
     "google-auth-httplib2==0.1.0",

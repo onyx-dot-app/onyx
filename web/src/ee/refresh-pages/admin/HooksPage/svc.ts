@@ -4,7 +4,7 @@ import {
   HookResponse,
   HookUpdateRequest,
   HookValidateResponse,
-} from "@/refresh-pages/admin/HooksPage/interfaces";
+} from "@/ee/refresh-pages/admin/HooksPage/interfaces";
 
 export class HookAuthError extends Error {}
 export class HookTimeoutError extends Error {}
