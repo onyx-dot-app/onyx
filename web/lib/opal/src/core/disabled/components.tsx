@@ -1,5 +1,3 @@
-"use client";
-
 import "@opal/core/disabled/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";

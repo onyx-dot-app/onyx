@@ -42,8 +42,8 @@ interface InteractiveSimpleProps
 /**
  * Minimal interactive surface primitive.
  *
- * Provides cursor styling, click handling, disabled integration, and
- * optional link/group support — but **no color or background styling**.
+ * Provides cursor styling, click handling, and optional link/group
+ * support — but **no color or background styling**.
  *
  * Use this for elements that need interactivity (click, cursor, disabled)
  * without participating in the Interactive color system.
