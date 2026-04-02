@@ -17,6 +17,9 @@ func newValidateConfigCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate-config",
 		Short: "Validate configuration and test server connection",
+		Long: `Check that the CLI is configured, the server is reachable, and the API key
+is valid. Also reports the server version and warns if it is below the
+minimum required.`,
 		Example: `  onyx-cli validate-config`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Check config file

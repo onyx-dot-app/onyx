@@ -17,6 +17,10 @@ func newAgentsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agents",
 		Short: "List available agents",
+		Long: `List all visible agents configured on the Onyx server.
+
+By default, output is a human-readable table with ID, name, and description.
+Use --json for machine-readable output.`,
 		Example: `  onyx-cli agents
   onyx-cli agents --json
   onyx-cli agents --json | jq '.[].name'`,

@@ -13,6 +13,9 @@ func newChatCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "chat",
 		Short: "Launch the interactive chat TUI (default)",
+		Long: `Launch the interactive terminal UI for chatting with your Onyx agent.
+This is the default command when no subcommand is specified. On first run,
+an interactive setup wizard will guide you through configuration.`,
 		Example: `  onyx-cli chat
   onyx-cli`,
 		RunE: func(cmd *cobra.Command, args []string) error {
