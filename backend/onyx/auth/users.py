@@ -126,7 +126,6 @@ from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
-from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -590,8 +589,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         with get_session_with_current_tenant() as sync_db:
             sync_user = sync_db.query(User).filter(User.id == user.id).first()
             if sync_user:
+                sync_user.account_type = AccountType.STANDARD
                 assign_user_to_default_groups__no_commit(sync_db, sync_user)
-                recompute_user_permissions__no_commit(sync_user.id, sync_db)
                 sync_db.commit()
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
