@@ -175,6 +175,22 @@ class TestGetOpensearchDocChunkIdEdgeCases:
         result = get_opensearch_doc_chunk_id(SINGLE_TENANT_STATE, doc_id, chunk_index=0)
         assert doc_id in result
 
+    def test_doc_id_at_boundary_length_multitenant(self) -> None:
+        """
+        Tests that a doc ID right at the boundary should not be hashed in
+        multitenant mode.
+        """
+        suffix = f"__{DEFAULT_MAX_CHUNK_SIZE}__0"
+        suffix_len = len(suffix.encode("utf-8"))
+        prefix = f"{EXPECTED_SHORT_TENANT}__"
+        prefix_len = len(prefix.encode("utf-8"))
+        # Max doc ID length that won't trigger hashing (must be <
+        # max_encoded_length).
+        max_doc_len = MAX_DOCUMENT_ID_ENCODED_LENGTH - suffix_len - prefix_len - 1
+        doc_id = "a" * max_doc_len
+        result = get_opensearch_doc_chunk_id(MULTI_TENANT_STATE, doc_id, chunk_index=0)
+        assert doc_id in result
+
     def test_doc_id_one_over_boundary_is_hashed(self) -> None:
         """
         Tests that a doc ID one byte over the boundary should be hashed.
