@@ -11,7 +11,7 @@ import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { CombinedSettings } from "@/interfaces/settings";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Disabled } from "@opal/core";
@@ -235,7 +235,7 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
             <SidebarTab
               icon={({ className }) => <SvgX className={className} size={16} />}
               href="/app"
-              lowlight
+              variant="sidebar-light"
             >
               Exit Admin Panel
             </SidebarTab>
@@ -297,10 +297,14 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
               */}
               <div>
                 <SidebarTab
-                  lowlight={disabled}
+                  variant={disabled ? "sidebar-light" : "sidebar-heavy"}
                   icon={icon}
                   href={disabled ? undefined : link}
-                  selected={!disabled && pathname.startsWith(link)}
+                  state={
+                    !disabled && pathname.startsWith(link)
+                      ? "selected"
+                      : "empty"
+                  }
                 >
                   {name}
                 </SidebarTab>

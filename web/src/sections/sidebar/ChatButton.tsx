@@ -18,7 +18,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -429,7 +429,7 @@ const ChatButton = memo(
           <SidebarTab
             href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
             onClick={handleClick}
-            selected={active}
+            state={active ? "selected" : "empty"}
             rightChildren={rightMenu}
             nested={!!project}
           >

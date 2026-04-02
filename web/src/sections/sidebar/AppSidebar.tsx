@@ -51,7 +51,7 @@ import {
   LOCAL_STORAGE_KEYS,
 } from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/providers/UserProvider";
@@ -503,7 +503,7 @@ const MemoizedAppSidebarInner = memo(
             icon={SvgEditBig}
             folded={folded}
             href={href}
-            selected={activeSidebarTab.isNewSession()}
+            state={activeSidebarTab.isNewSession() ? "selected" : "empty"}
             onClick={() => {
               if (!activeSidebarTab.isNewSession()) return;
               setAppMode(defaultAppMode);
@@ -561,8 +561,8 @@ const MemoizedAppSidebarInner = memo(
             }
             href="/app/agents"
             folded={folded}
-            selected={activeSidebarTab.isMoreAgents()}
-            lowlight={!folded}
+            state={activeSidebarTab.isMoreAgents() ? "selected" : "empty"}
+            variant={!folded ? "sidebar-light" : "sidebar-heavy"}
           >
             {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
           </SidebarTab>
@@ -575,9 +575,9 @@ const MemoizedAppSidebarInner = memo(
         <SidebarTab
           icon={SvgFolderPlus}
           onClick={() => createProjectModal.toggle(true)}
-          selected={createProjectModal.isOpen}
+          state={createProjectModal.isOpen ? "selected" : "empty"}
           folded={folded}
-          lowlight={!folded}
+          variant={!folded ? "sidebar-light" : "sidebar-heavy"}
         >
           New Project
         </SidebarTab>

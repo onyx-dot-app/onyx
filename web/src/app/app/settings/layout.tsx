@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import * as AppLayouts from "@/layouts/app-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
 import { useAuthType } from "@/lib/hooks";
@@ -41,27 +41,39 @@ export default function Layout({ children }: LayoutProps) {
             >
               <SidebarTab
                 href="/app/settings/general"
-                selected={pathname === "/app/settings/general"}
+                state={
+                  pathname === "/app/settings/general" ? "selected" : "empty"
+                }
               >
                 General
               </SidebarTab>
               <SidebarTab
                 href="/app/settings/chat-preferences"
-                selected={pathname === "/app/settings/chat-preferences"}
+                state={
+                  pathname === "/app/settings/chat-preferences"
+                    ? "selected"
+                    : "empty"
+                }
               >
                 Chat Preferences
               </SidebarTab>
               {showAccountsAccessTab && (
                 <SidebarTab
                   href="/app/settings/accounts-access"
-                  selected={pathname === "/app/settings/accounts-access"}
+                  state={
+                    pathname === "/app/settings/accounts-access"
+                      ? "selected"
+                      : "empty"
+                  }
                 >
                   Accounts & Access
                 </SidebarTab>
               )}
               <SidebarTab
                 href="/app/settings/connectors"
-                selected={pathname === "/app/settings/connectors"}
+                state={
+                  pathname === "/app/settings/connectors" ? "selected" : "empty"
+                }
               >
                 Connectors
               </SidebarTab>

@@ -4,7 +4,7 @@ import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { usePinnedAgents, useCurrentAgent } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -66,7 +66,7 @@ const AgentButton = memo(({ agent }: AgentButtonProps) => {
           icon={() => <AgentAvatar agent={agent} />}
           href={`/app?agentId=${agent.id}`}
           onClick={handleClick}
-          selected={isCurrentAgent}
+          state={isCurrentAgent ? "selected" : "empty"}
           rightChildren={
             // Hide unpin button for current agent since auto-pin would immediately re-pin
             isCurrentAgent ? null : (
