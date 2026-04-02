@@ -32,7 +32,6 @@ from onyx.background.celery.tasks.pruning.tasks import (
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
-from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
@@ -125,6 +124,8 @@ from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.documents.mock_connector_data import get_mock_indexing_statuses
+from onyx.server.documents.mock_connector_data import load_mock_data
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
 from onyx.server.documents.models import ConnectorBase
@@ -1115,28 +1116,27 @@ def get_connector_indexing_status(
     # sqlalchemy-method-connection-for-bind-is-already-in-progress
     # for why we can't pass in the current db_session to these functions
 
-    if MOCK_CONNECTOR_FILE_PATH:
-        import json
-
-        with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
-            raw_data = json.load(f)
+    mock_data = load_mock_data()
+    if mock_data is not None:
+        mock_statuses = get_mock_indexing_statuses(mock_data)
+        if mock_statuses is not None:
             connector_indexing_statuses = [
-                ConnectorIndexingStatusLite(**status) for status in raw_data
+                ConnectorIndexingStatusLite(**status) for status in mock_statuses
             ]
-        return [
-            ConnectorIndexingStatusLiteResponse(
-                source=DocumentSource.FILE,
-                summary=SourceSummary(
-                    total_connectors=100,
-                    active_connectors=100,
-                    public_connectors=100,
-                    total_docs_indexed=100000,
-                ),
-                current_page=1,
-                total_pages=1,
-                indexing_statuses=connector_indexing_statuses,
-            )
-        ]
+            return [
+                ConnectorIndexingStatusLiteResponse(
+                    source=DocumentSource.FILE,
+                    summary=SourceSummary(
+                        total_connectors=100,
+                        active_connectors=100,
+                        public_connectors=100,
+                        total_docs_indexed=100000,
+                    ),
+                    current_page=1,
+                    total_pages=1,
+                    indexing_statuses=connector_indexing_statuses,
+                )
+            ]
 
     parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
         # Get editable connector/credential pairs

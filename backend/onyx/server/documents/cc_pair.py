@@ -59,6 +59,9 @@ from onyx.db.permission_sync_attempt import (
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.documents.mock_connector_data import get_mock_cc_pair_full_info
+from onyx.server.documents.mock_connector_data import get_mock_index_attempts
+from onyx.server.documents.mock_connector_data import load_mock_data
 from onyx.server.documents.models import CCPairFullInfo
 from onyx.server.documents.models import CCPropertyUpdateRequest
 from onyx.server.documents.models import CCStatusUpdateRequest
@@ -85,6 +88,18 @@ def get_cc_pair_index_attempts(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
+    mock_data = load_mock_data()
+    if mock_data is not None:
+        mock_attempts = get_mock_index_attempts(mock_data, cc_pair_id)
+        if mock_attempts is not None:
+            all_items = [IndexAttemptSnapshot(**a) for a in mock_attempts]
+            start = page_num * page_size
+            page_items = all_items[start : start + page_size]
+            return PaginatedReturn(
+                items=page_items,
+                total_items=len(all_items),
+            )
+
     if user:
         user_has_access = verify_user_has_access_to_cc_pair(
             cc_pair_id, db_session, user, get_editable=False
@@ -157,6 +172,12 @@ def get_cc_pair_full_info(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CCPairFullInfo:
+    mock_data = load_mock_data()
+    if mock_data is not None:
+        mock_info = get_mock_cc_pair_full_info(mock_data, cc_pair_id)
+        if mock_info is not None:
+            return CCPairFullInfo(**mock_info)
+
     tenant_id = get_current_tenant_id()
 
     cc_pair = get_connector_credential_pair_from_id_for_user(
