@@ -14,9 +14,9 @@ import type {
   HookPointMeta,
   HookResponse,
 } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
+import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+
 interface HookLogsModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   hook: HookResponse;
   spec: HookPointMeta | undefined;
 }
@@ -70,13 +70,8 @@ function LogRow({ log }: { log: HookExecutionRecord }) {
   );
 }
 
-export default function HookLogsModal({
-  open,
-  onOpenChange,
-  hook,
-  spec,
-}: HookLogsModalProps) {
-  const onClose = () => onOpenChange(false);
+export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
+  const onClose = useModalClose();
 
   const { recentErrors, olderErrors, isLoading, error } = useHookExecutionLogs(
     hook.id,
@@ -102,7 +97,7 @@ export default function HookLogsModal({
   }
 
   return (
-    <Modal open={open} onOpenChange={onClose}>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="md" height="fit">
         <Modal.Header
           icon={(props) => <SvgTextLines {...props} />}
