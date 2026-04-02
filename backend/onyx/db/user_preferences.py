@@ -98,9 +98,10 @@ def activate_user(
     created while inactive or deactivated before the backfill migration.
     """
     user.is_active = True
-    assign_user_to_default_groups__no_commit(
-        db_session, user, is_admin=(user.role == UserRole.ADMIN)
-    )
+    if user.role != UserRole.LIMITED:
+        assign_user_to_default_groups__no_commit(
+            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+        )
     db_session.add(user)
     db_session.commit()
 

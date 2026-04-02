@@ -605,6 +605,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     is_admin=(user_create.role == UserRole.ADMIN),
                 )
                 sync_db.commit()
+            else:
+                logger.warning(
+                    "User %s not found in sync session during upgrade to standard; "
+                    "skipping upgrade",
+                    user_id,
+                )
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
