@@ -23,6 +23,7 @@ import (
 	"github.com/charmbracelet/wish/ratelimiter"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/time/rate"
@@ -306,7 +307,7 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			serverCfg := config.Load()
 			if serverCfg.ServerURL == "" {
-				return fmt.Errorf("server URL is not configured; run 'onyx-cli configure' first")
+				return exitcodes.New(exitcodes.NotConfigured, "server URL is not configured\n  Run: onyx-cli configure")
 			}
 			if !cmd.Flags().Changed("host-key") {
 				if v := os.Getenv(config.EnvSSHHostKey); v != "" {

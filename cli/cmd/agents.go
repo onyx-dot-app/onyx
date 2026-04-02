@@ -7,6 +7,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +23,7 @@ func newAgentsCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Load()
 			if !cfg.IsConfigured() {
-				return fmt.Errorf("onyx CLI is not configured\n  Run: onyx-cli configure")
+				return exitcodes.New(exitcodes.NotConfigured, "onyx CLI is not configured\n  Run: onyx-cli configure")
 			}
 
 			client := api.NewClient(cfg)

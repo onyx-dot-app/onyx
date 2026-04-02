@@ -7,6 +7,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/version"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -20,14 +21,14 @@ func newValidateConfigCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Check config file
 			if !config.ConfigExists() {
-				return fmt.Errorf("config file not found at %s\n  Run: onyx-cli configure", config.ConfigFilePath())
+				return exitcodes.Newf(exitcodes.NotConfigured, "config file not found at %s\n  Run: onyx-cli configure", config.ConfigFilePath())
 			}
 
 			cfg := config.Load()
 
 			// Check API key
 			if !cfg.IsConfigured() {
-				return fmt.Errorf("API key is missing\n  Run: onyx-cli configure")
+				return exitcodes.New(exitcodes.NotConfigured, "API key is missing\n  Run: onyx-cli configure")
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Config:  %s\n", config.ConfigFilePath())
@@ -36,7 +37,7 @@ func newValidateConfigCmd() *cobra.Command {
 			// Test connection
 			client := api.NewClient(cfg)
 			if err := client.TestConnection(cmd.Context()); err != nil {
-				return fmt.Errorf("connection failed: %w\n  Reconfigure with: onyx-cli configure", err)
+				return exitcodes.Newf(exitcodes.Unreachable, "connection failed: %v\n  Reconfigure with: onyx-cli configure", err)
 			}
 
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Status:  connected and authenticated")

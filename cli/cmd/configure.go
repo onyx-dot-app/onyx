@@ -7,6 +7,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/onboarding"
 	"github.com/spf13/cobra"
 )
@@ -33,7 +34,7 @@ setup wizard is launched.`,
 			}
 
 			if serverURL != "" || apiKey != "" {
-				return fmt.Errorf("both --server-url and --api-key are required for non-interactive setup\n  Run 'onyx-cli configure' without flags for interactive setup")
+				return exitcodes.New(exitcodes.BadRequest, "both --server-url and --api-key are required for non-interactive setup\n  Run 'onyx-cli configure' without flags for interactive setup")
 			}
 
 			cfg := config.Load()
@@ -66,7 +67,7 @@ func configureNonInteractive(serverURL, apiKey string) error {
 	defer cancel()
 
 	if err := client.TestConnection(ctx); err != nil {
-		return fmt.Errorf("connection test failed: %w\n  Check your server URL and API key", err)
+		return exitcodes.Newf(exitcodes.Unreachable, "connection test failed: %v\n  Check your server URL and API key", err)
 	}
 
 	if err := config.Save(cfg); err != nil {

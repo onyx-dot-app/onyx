@@ -12,6 +12,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -23,6 +24,7 @@ func newAskCmd() *cobra.Command {
 	var (
 		askAgentID int
 		askJSON    bool
+		askQuiet   bool
 		askPrompt  string
 		maxOutput  int
 	)
@@ -48,7 +50,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Load()
 			if !cfg.IsConfigured() {
-				return fmt.Errorf("onyx CLI is not configured\n  Run: onyx-cli configure")
+				return exitcodes.New(exitcodes.NotConfigured, "onyx CLI is not configured\n  Run: onyx-cli configure")
 			}
 
 			question, err := resolveQuestion(args, askPrompt)
@@ -88,7 +90,8 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			gotStop := false
 
 			// Overflow writer: tees to stdout and optionally to a temp file.
-			ow := &overflowWriter{limit: truncateAt}
+			// In quiet mode, buffer everything and print once at the end.
+			ow := &overflowWriter{limit: truncateAt, quiet: askQuiet}
 
 			for event := range ch {
 				if e, ok := event.(models.SessionCreatedEvent); ok {
@@ -107,7 +110,9 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					if err != nil {
 						return fmt.Errorf("error marshaling event: %w", err)
 					}
-					fmt.Println(string(data))
+					if !askQuiet {
+						fmt.Println(string(data))
+					}
 					if _, ok := event.(models.ErrorEvent); ok {
 						lastErr = fmt.Errorf("%s", event.(models.ErrorEvent).Error)
 					}
@@ -150,6 +155,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 
 	cmd.Flags().IntVar(&askAgentID, "agent-id", 0, "Agent ID to use")
 	cmd.Flags().BoolVar(&askJSON, "json", false, "Output raw JSON events")
+	cmd.Flags().BoolVarP(&askQuiet, "quiet", "q", false, "Buffer output and print once at end (no streaming)")
 	cmd.Flags().StringVar(&askPrompt, "prompt", "", "Question text (use with piped stdin context)")
 	cmd.Flags().IntVar(&maxOutput, "max-output", defaultMaxOutputBytes,
 		"Max bytes to print before truncating (0 to disable, auto-enabled for non-TTY)")
@@ -185,7 +191,7 @@ func resolveQuestion(args []string, prompt string) (string, error) {
 	case stdinContent != "":
 		return stdinContent, nil
 	default:
-		return "", fmt.Errorf("no question provided\n  Usage: onyx-cli ask \"your question\"\n  Or:    echo \"context\" | onyx-cli ask --prompt \"your question\"")
+		return "", exitcodes.New(exitcodes.BadRequest, "no question provided\n  Usage: onyx-cli ask \"your question\"\n  Or:    echo \"context\" | onyx-cli ask --prompt \"your question\"")
 	}
 }
 
@@ -194,14 +200,21 @@ func resolveQuestion(args []string, prompt string) (string, error) {
 // to stdout after limit bytes. When limit == 0, it writes directly to stdout.
 type overflowWriter struct {
 	limit      int
+	quiet      bool
 	written    int
 	totalBytes int
 	truncated  bool
-	buf        strings.Builder // accumulates full content for temp file
+	buf        strings.Builder // accumulates content for temp file or quiet mode
 }
 
 func (w *overflowWriter) Write(s string) {
 	w.totalBytes += len(s)
+
+	// Quiet mode: buffer everything, print nothing
+	if w.quiet {
+		w.buf.WriteString(s)
+		return
+	}
 
 	if w.limit <= 0 {
 		fmt.Print(s)
@@ -230,6 +243,12 @@ func (w *overflowWriter) Write(s string) {
 }
 
 func (w *overflowWriter) Finish() {
+	// Quiet mode: print buffered content at once
+	if w.quiet {
+		fmt.Println(w.buf.String())
+		return
+	}
+
 	if !w.truncated {
 		fmt.Println()
 		return
