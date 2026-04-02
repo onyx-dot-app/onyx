@@ -53,7 +53,7 @@ interface SidebarTabProps {
 /**
  * Sidebar navigation tab built on `Interactive.Stateful` > `Interactive.Container`.
  *
- * Uses `sidebar-heavy` (default) or `sidebar-light` (when `lowlight`) variants
+ * Uses `sidebar-heavy` (default) or `sidebar-light` (via `variant`) variants
  * for color styling. Supports an overlay `Link` for client-side navigation,
  * `rightChildren` for inline actions, and folded mode with an auto-tooltip.
  */
