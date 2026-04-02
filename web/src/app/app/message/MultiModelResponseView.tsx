@@ -35,6 +35,23 @@ const PANEL_GAP = 24;
 // Minimum panel width before horizontal scroll kicks in
 const MIN_PANEL_W = 300;
 
+/**
+ * Renders N model responses side-by-side with two layout modes:
+ *
+ * **Generation mode** — equal-width panels in a horizontally-scrollable row.
+ * Panel width is determined by the number of visible (non-hidden) panels.
+ *
+ * **Selection mode** — activated when the user clicks a panel to mark it as
+ * preferred. All panels (including hidden ones) sit in a fixed-width carousel
+ * track. A CSS `translateX` transform slides the track so the preferred panel
+ * is centered in the viewport; the other panels peek in from the edges through
+ * a mask gradient. Non-preferred visible panels are height-capped to the
+ * preferred panel's measured height, dimmed at 50% opacity, and receive a
+ * bottom fade-out overlay.
+ *
+ * Hidden panels render as a compact header-only strip at `HIDDEN_PANEL_W` in
+ * both modes and are excluded from layout width calculations.
+ */
 export default function MultiModelResponseView({
   responses,
   chatState,

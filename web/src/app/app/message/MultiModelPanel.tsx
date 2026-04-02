@@ -34,6 +34,17 @@ export interface MultiModelPanelProps {
   agentMessageProps: AgentMessageProps;
 }
 
+/**
+ * A single model's response panel within the multi-model view.
+ *
+ * Renders in two states:
+ * - **Hidden** — compact header strip only (provider icon + strikethrough name + show button).
+ * - **Visible** — full header plus `AgentMessage` body. Clicking anywhere on a
+ *   visible non-preferred panel marks it as preferred.
+ *
+ * The `isNonPreferredInSelection` flag disables pointer events on the body and
+ * hides the footer so the panel acts as a passive comparison surface.
+ */
 export default function MultiModelPanel({
   modelIndex,
   provider,
