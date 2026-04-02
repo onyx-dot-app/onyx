@@ -51,7 +51,7 @@ import {
   LOCAL_STORAGE_KEYS,
 } from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/providers/UserProvider";
@@ -562,7 +562,7 @@ const MemoizedAppSidebarInner = memo(
             href="/app/agents"
             folded={folded}
             selected={activeSidebarTab.isMoreAgents()}
-            lowlight={!folded}
+            variant={folded ? "sidebar-heavy" : "sidebar-light"}
           >
             {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
           </SidebarTab>
@@ -577,7 +577,7 @@ const MemoizedAppSidebarInner = memo(
           onClick={() => createProjectModal.toggle(true)}
           selected={createProjectModal.isOpen}
           folded={folded}
-          lowlight={!folded}
+          variant={folded ? "sidebar-heavy" : "sidebar-light"}
         >
           New Project
         </SidebarTab>
