@@ -172,8 +172,9 @@ export default function MultiModelResponseView({
       // Capture the current rendered translateX in pixels so drag feels anchored
       const matrix = new DOMMatrix(getComputedStyle(track).transform);
       baseTranslateX.current = matrix.m41;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      e.currentTarget.style.cursor = "grabbing";
+      // Do NOT call setPointerCapture here — that redirects pointerup to the
+      // container even for plain clicks, breaking child onClick handlers.
+      // Capture is set lazily in pointermove once the drag threshold is crossed.
     },
     []
   );
@@ -182,7 +183,13 @@ export default function MultiModelResponseView({
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (dragStartX.current === null) return;
       const delta = e.clientX - dragStartX.current;
-      if (Math.abs(delta) > 5) isDraggingRef.current = true;
+      if (Math.abs(delta) > 5 && !isDraggingRef.current) {
+        // Threshold crossed — capture now so drag stays locked even if cursor
+        // leaves the container, then set visual feedback.
+        e.currentTarget.setPointerCapture(e.pointerId);
+        e.currentTarget.style.cursor = "grabbing";
+        isDraggingRef.current = true;
+      }
       if (!isDraggingRef.current) return;
       dragCurrentDelta.current = delta;
       const track = trackRef.current;
