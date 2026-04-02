@@ -378,18 +378,17 @@ const InputBar = memo(
                     side="top"
                   >
                     <span>
-                      <Disabled disabled={disabled}>
-                        <SelectButton
-                          leftIcon={SvgOrganization}
-                          engaged={demoDataEnabled}
-                          action
-                          folded
-                          onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
-                          className="bg-action-link-01"
-                        >
-                          Demo Data Active
-                        </SelectButton>
-                      </Disabled>
+                      <SelectButton
+                        disabled={disabled}
+                        leftIcon={SvgOrganization}
+                        engaged={demoDataEnabled}
+                        action
+                        folded
+                        onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
+                        className="bg-action-link-01"
+                      >
+                        Demo Data Active
+                      </SelectButton>
                     </span>
                   </SimpleTooltip>
                 )}

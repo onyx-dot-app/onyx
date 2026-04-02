@@ -539,38 +539,36 @@ const AppInputBar = React.memo(
               />
             )}
             {onToggleTabReading ? (
-              <Disabled disabled={disabled}>
-                <SelectButton
-                  icon={SvgGlobe}
-                  onClick={onToggleTabReading}
-                  state={tabReadingEnabled ? "selected" : "empty"}
-                >
-                  {tabReadingEnabled
-                    ? currentTabUrl
-                      ? (() => {
-                          try {
-                            return new URL(currentTabUrl).hostname;
-                          } catch {
-                            return currentTabUrl;
-                          }
-                        })()
-                      : "Reading tab..."
-                    : "Read this tab"}
-                </SelectButton>
-              </Disabled>
+              <SelectButton
+                disabled={disabled}
+                icon={SvgGlobe}
+                onClick={onToggleTabReading}
+                state={tabReadingEnabled ? "selected" : "empty"}
+              >
+                {tabReadingEnabled
+                  ? currentTabUrl
+                    ? (() => {
+                        try {
+                          return new URL(currentTabUrl).hostname;
+                        } catch {
+                          return currentTabUrl;
+                        }
+                      })()
+                    : "Reading tab..."
+                  : "Read this tab"}
+              </SelectButton>
             ) : (
               showDeepResearch && (
-                <Disabled disabled={disabled}>
-                  <SelectButton
-                    variant="select-light"
-                    icon={SvgHourglass}
-                    onClick={toggleDeepResearch}
-                    state={deepResearchEnabled ? "selected" : "empty"}
-                    foldable={!deepResearchEnabled}
-                  >
-                    Deep Research
-                  </SelectButton>
-                </Disabled>
+                <SelectButton
+                  disabled={disabled}
+                  variant="select-light"
+                  icon={SvgHourglass}
+                  onClick={toggleDeepResearch}
+                  state={deepResearchEnabled ? "selected" : "empty"}
+                  foldable={!deepResearchEnabled}
+                >
+                  Deep Research
+                </SelectButton>
               )
             )}
 

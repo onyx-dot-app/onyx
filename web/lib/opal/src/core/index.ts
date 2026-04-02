@@ -1,10 +1,5 @@
 /* Disabled */
-export {
-  Disabled,
-  useDisabled,
-  type DisabledProps,
-  type DisabledContextValue,
-} from "@opal/core/disabled/components";
+export { Disabled, type DisabledProps } from "@opal/core/disabled/components";
 
 /* Animations (formerly Hoverable) */
 export {
