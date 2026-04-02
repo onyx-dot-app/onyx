@@ -11,7 +11,7 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
@@ -238,9 +238,7 @@ function BuildSessionButton({
               <Text
                 as="p"
                 data-state={isActive ? "active" : "inactive"}
-                className={cn(
-                  "sidebar-tab-text-defaulted line-clamp-1 break-all text-left"
-                )}
+                className="line-clamp-1 break-all text-left"
                 mainUiBody
               >
                 <TypewriterText
