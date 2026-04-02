@@ -153,7 +153,7 @@ function SidebarTab({
             side="right"
             sideOffset={4}
           >
-            <Text>{children}</Text>
+            {children}
           </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
       </TooltipPrimitive.Root>
