@@ -182,6 +182,7 @@ export default function ModelSelector({
       <Popover.Content side="top" align="start" width="lg">
         <ModelListContent
           llmProviders={llmManager.llmProviders}
+          isLoading={llmManager.isLoadingProviders}
           onSelect={handleSelect}
           isSelected={isSelected}
           isDisabled={isDisabled}

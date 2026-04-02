@@ -71,7 +71,7 @@ export default function useMultiModelChat(
       ]);
       setDefaultInitialized(true);
     }
-  }, [llmOptions, llmManager.currentLlm, defaultInitialized, llmManager]);
+  }, [llmOptions, llmManager.currentLlm, defaultInitialized]);
 
   const isMultiModelActive = selectedModels.length > 1;
 
@@ -140,7 +140,7 @@ export default function useMultiModelChat(
         }
       }
       if (restored.length >= 2) {
-        setSelectedModels(restored);
+        setSelectedModels(restored.slice(0, MAX_MODELS));
         setDefaultInitialized(true);
       }
     },
@@ -172,7 +172,7 @@ export default function useMultiModelChat(
 
   const buildLlmOverrides = useCallback((): LLMOverride[] => {
     return selectedModels.map((m) => ({
-      model_provider: m.name,
+      model_provider: m.provider,
       model_version: m.modelName,
       display_name: m.displayName,
     }));
