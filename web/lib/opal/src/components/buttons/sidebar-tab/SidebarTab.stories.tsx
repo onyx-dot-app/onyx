@@ -1,9 +1,13 @@
-import React from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { SidebarTab } from "@opal/components/buttons/sidebar-tab/components";
-import { SvgSettings, SvgUsers, SvgLock, SvgArrowUpCircle } from "@opal/icons";
+import {
+  SvgSettings,
+  SvgUsers,
+  SvgLock,
+  SvgArrowUpCircle,
+  SvgTrash,
+} from "@opal/icons";
 import { Button } from "@opal/components";
-import { SvgTrash } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof SidebarTab> = {
