@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { noProp } from "@/lib/utils";
-import { formatTimeOnly } from "@/lib/dateUtils";
+import { formatDateTimeLog } from "@/lib/dateUtils";
 import { Button, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -18,6 +18,7 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import HookLogsModal from "@/ee/refresh-pages/admin/HooksPage/HookLogsModal";
 import type {
@@ -25,6 +26,52 @@ import type {
   HookResponse,
 } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
 import { cn } from "@opal/utils";
+
+function ErrorLogRow({
+  log,
+  group,
+}: {
+  log: { created_at: string; error_message: string | null };
+  group: string;
+}) {
+  return (
+    <Hoverable.Root group={group}>
+      <Section
+        flexDirection="column"
+        justifyContent="start"
+        alignItems="start"
+        gap={0.25}
+        padding={0.25}
+        height="fit"
+      >
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="center"
+          gap={0}
+          height="fit"
+        >
+          <span className="text-code-code">
+            <Text font="secondary-mono-label" color="inherit">
+              {formatDateTimeLog(log.created_at)}
+            </Text>
+          </span>
+          <Hoverable.Item group={group} variant="opacity-on-hover">
+            <CopyIconButton
+              size="xs"
+              getCopyText={() => log.error_message ?? ""}
+            />
+          </Hoverable.Item>
+        </Section>
+        <span className="break-all">
+          <Text font="secondary-mono" color="text-03">
+            {log.error_message ?? "Unknown error"}
+          </Text>
+        </span>
+      </Section>
+    </Hoverable.Root>
+  );
+}
 
 interface HookStatusPopoverProps {
   hook: HookResponse;
@@ -43,8 +90,15 @@ export default function HookStatusPopover({
   const [clickOpened, setClickOpened] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { hasRecentErrors, recentErrors, isLoading, error } =
+  const { hasRecentErrors, recentErrors, olderErrors, isLoading, error } =
     useHookExecutionLogs(hook.id);
+
+  const topErrors = [...recentErrors, ...olderErrors]
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    .slice(0, 3);
 
   useEffect(() => {
     return () => {
@@ -162,7 +216,15 @@ export default function HookStatusPopover({
             justifyContent="start"
             alignItems="start"
             height="fit"
-            width={hasRecentErrors ? 20 : 12.5}
+            width={
+              hook.is_reachable === false
+                ? topErrors.length > 0
+                  ? 20
+                  : 12.5
+                : hasRecentErrors
+                  ? 20
+                  : 12.5
+            }
             padding={0.125}
             gap={0.25}
           >
@@ -174,13 +236,70 @@ export default function HookStatusPopover({
               <Text font="secondary-body" color="text-03">
                 Failed to load logs.
               </Text>
+            ) : hook.is_reachable === false ? (
+              <>
+                <div className="p-1">
+                  <Content
+                    sizePreset="secondary"
+                    variant="section"
+                    icon={(props) => (
+                      <SvgXOctagon
+                        {...props}
+                        className="text-status-error-05"
+                      />
+                    )}
+                    title="Most Recent Errors"
+                  />
+                </div>
+
+                {topErrors.length > 0 ? (
+                  <>
+                    <Separator noPadding className="px-2" />
+
+                    <Section
+                      flexDirection="column"
+                      justifyContent="start"
+                      alignItems="start"
+                      gap={0.25}
+                      padding={0.25}
+                      height="fit"
+                    >
+                      {topErrors.map((log, idx) => (
+                        <ErrorLogRow
+                          key={log.created_at + String(idx)}
+                          log={log}
+                          group={log.created_at + String(idx)}
+                        />
+                      ))}
+                    </Section>
+                  </>
+                ) : (
+                  <Separator noPadding className="px-2" />
+                )}
+
+                <LineItem
+                  muted
+                  icon={SvgMaximize2}
+                  onClick={noProp(() => {
+                    handleOpenChange(false);
+                    logsModal.toggle(true);
+                  })}
+                >
+                  View More Lines
+                </LineItem>
+              </>
             ) : hasRecentErrors ? (
               <>
                 <div className="p-1">
                   <Content
                     sizePreset="secondary"
                     variant="section"
-                    icon={SvgXOctagon}
+                    icon={(props) => (
+                      <SvgXOctagon
+                        {...props}
+                        className="text-status-error-05"
+                      />
+                    )}
                     title={
                       recentErrors.length <= 3
                         ? `${recentErrors.length} ${
@@ -204,38 +323,11 @@ export default function HookStatusPopover({
                   height="fit"
                 >
                   {recentErrors.slice(0, 3).map((log, idx) => (
-                    <Section
+                    <ErrorLogRow
                       key={log.created_at + String(idx)}
-                      flexDirection="column"
-                      justifyContent="start"
-                      alignItems="start"
-                      gap={0.25}
-                      padding={0.25}
-                      height="fit"
-                    >
-                      <Section
-                        flexDirection="row"
-                        justifyContent="between"
-                        alignItems="center"
-                        gap={0}
-                        height="fit"
-                      >
-                        <span className="text-code-code">
-                          <Text font="secondary-mono-label" color="inherit">
-                            {formatTimeOnly(log.created_at)}
-                          </Text>
-                        </span>
-                        <CopyIconButton
-                          size="xs"
-                          getCopyText={() => log.error_message ?? ""}
-                        />
-                      </Section>
-                      <span className="break-all">
-                        <Text font="secondary-mono" color="text-03">
-                          {log.error_message ?? "Unknown error"}
-                        </Text>
-                      </span>
-                    </Section>
+                      log={log}
+                      group={log.created_at + String(idx)}
+                    />
                   ))}
                 </Section>
 
