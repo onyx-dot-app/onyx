@@ -4,7 +4,6 @@
  * Tests logo icons to ensure they render correctly with proper accessibility
  * and support various display sizes.
  */
-import React from "react";
 import { SvgBifrost } from "@opal/icons";
 import { render } from "@tests/setup/test-utils";
 import { GithubIcon, GitbookIcon, ConfluenceIcon } from "./icons";
