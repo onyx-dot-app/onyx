@@ -29,7 +29,7 @@ type OnyxCliConfig struct {
 	ServerURL      string   `json:"server_url"`
 	APIKey         string   `json:"api_key"`
 	DefaultAgentID int      `json:"default_persona_id"`
-	Features       Features `json:"features,omitzero"`
+	Features       *Features `json:"features,omitempty"`
 }
 
 // DefaultConfig returns a config with default values.
