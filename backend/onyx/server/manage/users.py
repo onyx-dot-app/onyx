@@ -143,7 +143,6 @@ def set_user_role(
     # This will raise an exception if the role update is invalid
     validate_user_role_update(
         requested_role=requested_role,
-        current_role=current_role,
         current_account_type=user_to_update.account_type,
         explicit_override=user_role_update_request.explicit_override,
     )
