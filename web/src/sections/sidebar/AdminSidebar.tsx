@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
+import * as SidebarLayouts from "@/layouts/sidebar-layouts";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
@@ -12,7 +12,6 @@ import { UserRole } from "@/lib/types";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { CombinedSettings } from "@/interfaces/settings";
 import { SidebarTab } from "@opal/components";
-import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Separator from "@/refresh-components/Separator";
 import { SvgArrowUpCircle, SvgUserManage, SvgX } from "@opal/icons";
@@ -191,9 +190,15 @@ function groupBySection(items: SidebarItemEntry[]) {
 
 interface AdminSidebarProps {
   enableCloudSS: boolean;
+  folded: boolean;
+  onFoldChange: Dispatch<SetStateAction<boolean>>;
 }
 
-export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
+export default function AdminSidebar({
+  enableCloudSS,
+  folded,
+  onFoldChange,
+}: AdminSidebarProps) {
   const { kgExposed } = useIsKGExposed();
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
@@ -237,65 +242,27 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
   const disabledGroups = groupBySection(disabled);
 
   return (
-    <SidebarWrapper>
-      <SidebarBody
-        scrollKey="admin-sidebar"
-        pinnedContent={
-          <div className="flex flex-col w-full">
-            <SidebarTab
-              icon={({ className }) => <SvgX className={className} size={16} />}
-              href="/app"
-              variant="sidebar-light"
-            >
-              Exit Admin Panel
-            </SidebarTab>
-            <InputTypeIn
-              variant="internal"
-              leftSearchIcon
-              placeholder="Search..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        }
-        footer={
-          <Section gap={0} height="fit" alignItems="start">
-            <div className="p-[0.38rem] w-full">
-              <Content
-                icon={SvgUserManage}
-                title={getUserDisplayName(user)}
-                sizePreset="main-ui"
-                variant="body"
-                prominence="muted"
-                widthVariant="full"
-              />
-            </div>
-            <div className="flex flex-row gap-1 p-[0.38rem] w-full">
-              <Text text03 secondaryAction>
-                <a
-                  className="underline"
-                  href="https://onyx.app"
-                  target="_blank"
-                >
-                  Onyx
-                </a>
-              </Text>
-              <Text text03 secondaryBody>
-                |
-              </Text>
-              {settings.webVersion ? (
-                <Text text03 secondaryBody>
-                  {settings.webVersion}
-                </Text>
-              ) : (
-                <Text text03 secondaryBody>
-                  {APP_SLOGAN}
-                </Text>
-              )}
-            </div>
-          </Section>
-        }
-      >
+    <SidebarLayouts.Root folded={folded} onFoldChange={onFoldChange}>
+      <SidebarLayouts.Header>
+        <div className="flex flex-col w-full">
+          <SidebarTab
+            icon={({ className }) => <SvgX className={className} size={16} />}
+            href="/app"
+            variant="sidebar-light"
+          >
+            Exit Admin Panel
+          </SidebarTab>
+          <InputTypeIn
+            variant="internal"
+            leftSearchIcon
+            placeholder="Search..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      </SidebarLayouts.Header>
+
+      <SidebarLayouts.Body scrollKey="admin-sidebar">
         {enabledGroups.map((group, groupIndex) => {
           const tabs = group.items.map(({ link, icon, name }) => (
             <SidebarTab
@@ -334,7 +301,41 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
             ))}
           </SidebarSection>
         ))}
-      </SidebarBody>
-    </SidebarWrapper>
+      </SidebarLayouts.Body>
+
+      <SidebarLayouts.Footer>
+        <Section gap={0} height="fit" alignItems="start">
+          <div className="p-[0.38rem] w-full">
+            <Content
+              icon={SvgUserManage}
+              title={getUserDisplayName(user)}
+              sizePreset="main-ui"
+              variant="body"
+              prominence="muted"
+              widthVariant="full"
+            />
+          </div>
+          <div className="flex flex-row gap-1 p-[0.38rem] w-full">
+            <Text text03 secondaryAction>
+              <a className="underline" href="https://onyx.app" target="_blank">
+                Onyx
+              </a>
+            </Text>
+            <Text text03 secondaryBody>
+              |
+            </Text>
+            {settings.webVersion ? (
+              <Text text03 secondaryBody>
+                {settings.webVersion}
+              </Text>
+            ) : (
+              <Text text03 secondaryBody>
+                {APP_SLOGAN}
+              </Text>
+            )}
+          </div>
+        </Section>
+      </SidebarLayouts.Footer>
+    </SidebarLayouts.Root>
   );
 }
