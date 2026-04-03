@@ -14,7 +14,7 @@ import { CombinedSettings } from "@/interfaces/settings";
 import { SidebarTab } from "@opal/components";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Disabled } from "@opal/core";
+import Separator from "@/refresh-components/Separator";
 import { SvgArrowUpCircle, SvgUserManage, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
@@ -141,15 +141,12 @@ function buildItems(
   if (!isCurator) {
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
-    } else {
-      items.push({
-        section: SECTIONS.ORGANIZATION,
-        name: "Upgrade Plan",
-        icon: SvgArrowUpCircle,
-        link: ADMIN_ROUTES.BILLING.path,
-      });
     }
-    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.TOKEN_RATE_LIMITS);
+    addDisabled(
+      SECTIONS.ORGANIZATION,
+      ADMIN_ROUTES.TOKEN_RATE_LIMITS,
+      !enableEnterprise
+    );
     addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
   }
 
@@ -163,6 +160,16 @@ function buildItems(
         !enableEnterprise
       );
     }
+  }
+
+  // 8. Upgrade Plan (admin only, no subscription)
+  if (!isCurator && !hasSubscription) {
+    items.push({
+      section: SECTIONS.UNLABELED,
+      name: "Upgrade Plan",
+      icon: SvgArrowUpCircle,
+      link: ADMIN_ROUTES.BILLING.path,
+    });
   }
 
   return items;
@@ -224,7 +231,10 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
 
   const { query, setQuery, filtered } = useFilter(allItems, itemExtractor);
 
-  const groups = groupBySection(filtered);
+  const enabled = filtered.filter((item) => !item.disabled);
+  const disabled = filtered.filter((item) => item.disabled);
+  const enabledGroups = groupBySection(enabled);
+  const disabledGroups = groupBySection(disabled);
 
   return (
     <SidebarWrapper>
@@ -286,26 +296,16 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
           </Section>
         }
       >
-        {groups.map((group, groupIndex) => {
-          const tabs = group.items.map(({ link, icon, name, disabled }) => (
-            <Disabled key={link} disabled={disabled}>
-              {/*
-                # NOTE (@raunakab)
-                We intentionally add a `div` intermediary here.
-                Without it, the disabled styling that is default provided by the `Disabled` component (which we want here) would be overridden by the custom disabled styling provided by the `SidebarTab`.
-                Therefore, in order to avoid that overriding, we add a layer of indirection.
-              */}
-              <div>
-                <SidebarTab
-                  disabled={disabled}
-                  icon={icon}
-                  href={disabled ? undefined : link}
-                  selected={pathname.startsWith(link)}
-                >
-                  {name}
-                </SidebarTab>
-              </div>
-            </Disabled>
+        {enabledGroups.map((group, groupIndex) => {
+          const tabs = group.items.map(({ link, icon, name }) => (
+            <SidebarTab
+              key={link}
+              icon={icon}
+              href={link}
+              selected={pathname.startsWith(link)}
+            >
+              {name}
+            </SidebarTab>
           ));
 
           if (!group.section) {
@@ -318,6 +318,22 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
             </SidebarSection>
           );
         })}
+
+        {disabledGroups.length > 0 && <Separator noPadding className="px-2" />}
+
+        {disabledGroups.map((group, groupIndex) => (
+          <SidebarSection
+            key={`disabled-${groupIndex}`}
+            title={group.section}
+            disabled
+          >
+            {group.items.map(({ link, icon, name }) => (
+              <SidebarTab key={link} disabled icon={icon}>
+                {name}
+              </SidebarTab>
+            ))}
+          </SidebarSection>
+        ))}
       </SidebarBody>
     </SidebarWrapper>
   );
