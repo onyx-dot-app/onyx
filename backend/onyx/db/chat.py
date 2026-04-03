@@ -190,7 +190,7 @@ def delete_messages_and_files_from_chat_session(
     chat_session_id: UUID, db_session: Session
 ) -> None:
     # Select messages older than cutoff_time with files
-    messages_with_files: list[tuple[int, list[FileDescriptor] | None]] = (
+    messages_with_files = (
         db_session.execute(
             select(ChatMessage.id, ChatMessage.files).where(
                 ChatMessage.chat_session_id == chat_session_id,
@@ -206,7 +206,7 @@ def delete_messages_and_files_from_chat_session(
             if file_info.get("user_file_id"):
                 # user files are managed by the user file lifecycle
                 continue
-            file_store.delete_file(file_id=file_info.get("id"), error_on_missing=False)
+            file_store.delete_file(file_id=file_info["id"], error_on_missing=False)
 
     # Delete ChatMessage records - CASCADE constraints will automatically handle:
     # - ChatMessage__StandardAnswer relationship records
