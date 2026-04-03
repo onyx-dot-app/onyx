@@ -13,6 +13,7 @@ from sqlalchemy.engine import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.configs.app_configs import DB_READONLY_PASSWORD
 from onyx.configs.app_configs import DB_READONLY_USER
 from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
@@ -23,10 +24,10 @@ from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
 from onyx.configs.app_configs import POSTGRES_PORT
+from onyx.configs.app_configs import POSTGRES_REQUIRE_SSL
 from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
-from onyx.db.engine.iam_auth import provide_iam_token
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -80,6 +81,40 @@ def build_connection_string(
         else:
             return f"{base_conn_str}?application_name={app_name}"
     return base_conn_str
+
+
+def configure_connection_for_psycopg2(
+    dialect: Any,  # noqa: ARG001
+    conn_rec: Any,  # noqa: ARG001
+    cargs: Any,  # noqa: ARG001
+    cparams: Any,
+) -> None:
+    """
+    SQLAlchemy event listener for 'do_connect' event on sync (psycopg2) engine.
+
+    Configures connection parameters for both IAM authentication and SSL-only scenarios.
+
+    - When USE_IAM_AUTH=true: Generates IAM token and requires SSL
+    - When POSTGRES_REQUIRE_SSL=true: Requires SSL for password authentication
+    - Otherwise: No special configuration (allows non-SSL local connections)
+    """
+    if USE_IAM_AUTH:
+        # IAM authentication (AWS RDS) - token generation and SSL required
+        try:
+            from onyx.db.engine.iam_auth import configure_psycopg2_iam_auth
+
+            host = POSTGRES_HOST
+            port = POSTGRES_PORT
+            user = POSTGRES_USER
+            region = AWS_REGION_NAME
+
+            configure_psycopg2_iam_auth(cparams, host, port, user, region)
+        except Exception as e:
+            logger.error(f"Failed to configure IAM auth: {e}")
+            raise
+    elif POSTGRES_REQUIRE_SSL:
+        # SSL required without IAM auth (e.g., cloud databases with password auth)
+        cparams["sslmode"] = "require"
 
 
 if LOG_POSTGRES_LATENCY:
@@ -202,8 +237,9 @@ class SqlEngine:
             # echo=True here for inspecting all emitted db queries
             engine = create_engine(connection_string, **final_engine_kwargs)
 
-            if use_iam:
-                event.listen(engine, "do_connect", provide_iam_token)
+            # Configure connection for IAM auth and/or SSL requirement
+            if use_iam or POSTGRES_REQUIRE_SSL:
+                event.listen(engine, "do_connect", configure_connection_for_psycopg2)
 
             cls._engine = engine
 
@@ -262,8 +298,10 @@ class SqlEngine:
             # echo=True here for inspecting all emitted db queries
             engine = create_engine(connection_string, **final_engine_kwargs)
 
-            if USE_IAM_AUTH:
-                event.listen(engine, "do_connect", provide_iam_token)
+            # Configure connection for IAM auth and/or SSL requirement
+            # Note: Readonly engine typically uses password auth, but may need SSL
+            if USE_IAM_AUTH or POSTGRES_REQUIRE_SSL:
+                event.listen(engine, "do_connect", configure_connection_for_psycopg2)
 
             cls._readonly_engine = engine
 

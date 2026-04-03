@@ -1,34 +1,33 @@
-from typing import Any, Literal
-from onyx.db.engine.iam_auth import get_iam_auth_token
-from onyx.configs.app_configs import USE_IAM_AUTH
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_USER
-from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.engine.tenant_utils import get_all_tenant_ids
+import asyncio
+import logging
+import ssl
+from logging.config import fileConfig
+from typing import Any
+from typing import Literal
+
+from celery.backends.database.session import ResultModelBase  # type: ignore
 from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy import text
 from sqlalchemy.engine.base import Connection
-import os
-import ssl
-import asyncio
-import logging
-from logging.config import fileConfig
-
-from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.sql.schema import SchemaItem
-from onyx.configs.constants import SSL_CERT_FILE
-from shared_configs.configs import (
-    MULTI_TENANT,
-    POSTGRES_DEFAULT_SCHEMA,
-    TENANT_ID_PREFIX,
-)
-from onyx.db.models import Base
-from celery.backends.database.session import ResultModelBase  # type: ignore
+
+from alembic import context
+from onyx.configs.app_configs import AWS_REGION_NAME
+from onyx.configs.app_configs import POSTGRES_HOST
+from onyx.configs.app_configs import POSTGRES_PORT
+from onyx.configs.app_configs import POSTGRES_REQUIRE_SSL
+from onyx.configs.app_configs import POSTGRES_USER
+from onyx.configs.app_configs import USE_IAM_AUTH
+from onyx.db.engine.iam_auth import get_iam_auth_token
+from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
+from onyx.db.models import Base
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import TENANT_ID_PREFIX
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
@@ -49,11 +48,10 @@ EXCLUDE_TABLES = {"kombu_queue", "kombu_message"}
 
 logger = logging.getLogger(__name__)
 
+# For psycopg2 connections, we use sslmode=require in connection params
+# rather than an SSL context object. This delegates SSL handling to psycopg2.
+# The ssl_context variable is kept for potential future use but currently unused.
 ssl_context: ssl.SSLContext | None = None
-if USE_IAM_AUTH:
-    if not os.path.exists(SSL_CERT_FILE):
-        raise FileNotFoundError(f"Expected {SSL_CERT_FILE} when USE_IAM_AUTH is true.")
-    ssl_context = ssl.create_default_context(cafile=SSL_CERT_FILE)
 
 
 def include_object(
@@ -243,25 +241,43 @@ def do_run_migrations(
         context.run_migrations()
 
 
-def provide_iam_token_for_alembic(
+def configure_connection_for_alembic(
     dialect: Any,  # noqa: ARG001
     conn_rec: Any,  # noqa: ARG001
     cargs: Any,  # noqa: ARG001
     cparams: Any,
 ) -> None:
+    """
+    SQLAlchemy event listener for Alembic migrations.
+
+    Configures connection parameters for both IAM authentication and SSL-only scenarios.
+
+    - When USE_IAM_AUTH=true: Generates IAM token and requires SSL
+    - When POSTGRES_REQUIRE_SSL=true: Requires SSL for password authentication
+    - Otherwise: No special configuration (allows non-SSL local connections)
+    """
     if USE_IAM_AUTH:
-        # Database connection settings
+        # IAM authentication (AWS RDS) - token generation and SSL required
         region = AWS_REGION_NAME
         host = POSTGRES_HOST
         port = POSTGRES_PORT
         user = POSTGRES_USER
 
-        # Get IAM authentication token
-        token = get_iam_auth_token(host, port, user, region)
+        try:
+            token = get_iam_auth_token(host, port, user, region)
 
-        # For Alembic / SQLAlchemy in this context, set SSL and password
-        cparams["password"] = token
-        cparams["ssl"] = ssl_context
+            if not token:
+                raise RuntimeError("IAM token is None after generation")
+
+            cparams["password"] = token
+            cparams["ssl"] = "require"
+
+        except Exception as e:
+            logger.error(f"Alembic: Failed to generate IAM token: {e}")
+            raise
+    elif POSTGRES_REQUIRE_SSL:
+        # SSL required without IAM auth (e.g., cloud databases with password auth)
+        cparams["ssl"] = "require"
 
 
 async def run_async_migrations() -> None:
@@ -285,13 +301,14 @@ async def run_async_migrations() -> None:
         poolclass=pool.NullPool,
     )
 
-    if USE_IAM_AUTH:
+    # Configure connection for IAM auth and/or SSL requirement
+    if USE_IAM_AUTH or POSTGRES_REQUIRE_SSL:
 
         @event.listens_for(engine.sync_engine, "do_connect")
-        def event_provide_iam_token_for_alembic(
+        def event_configure_connection_for_alembic(
             dialect: Any, conn_rec: Any, cargs: Any, cparams: Any
         ) -> None:
-            provide_iam_token_for_alembic(dialect, conn_rec, cargs, cparams)
+            configure_connection_for_alembic(dialect, conn_rec, cargs, cparams)
 
     if schemas:
         # Use specific schema names directly without fetching all tenants
@@ -418,13 +435,14 @@ def run_migrations_offline() -> None:
     elif upgrade_all_tenants:
         engine = create_async_engine(url)
 
-        if USE_IAM_AUTH:
+        # Configure connection for IAM auth and/or SSL requirement
+        if USE_IAM_AUTH or POSTGRES_REQUIRE_SSL:
 
             @event.listens_for(engine.sync_engine, "do_connect")
-            def event_provide_iam_token_for_alembic_offline(
+            def event_configure_connection_for_alembic_offline(
                 dialect: Any, conn_rec: Any, cargs: Any, cparams: Any
             ) -> None:
-                provide_iam_token_for_alembic(dialect, conn_rec, cargs, cparams)
+                configure_connection_for_alembic(dialect, conn_rec, cargs, cparams)
 
         tenant_schemas = get_all_tenant_ids()
         engine.sync_engine.dispose()
