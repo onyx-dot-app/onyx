@@ -29,7 +29,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
           icon={SvgSidebar}
           prominence="tertiary"
           tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
-          tooltipSide="right"
+          tooltipSide={folded ? "right" : "bottom"}
           size="md"
           onClick={onFoldClick}
         />
