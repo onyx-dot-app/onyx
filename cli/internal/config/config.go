@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	EnvServerURL       = "ONYX_SERVER_URL"
-	EnvAPIKey          = "ONYX_API_KEY"
-	EnvAgentID         = "ONYX_PERSONA_ID"
-	EnvSSHHostKey      = "ONYX_SSH_HOST_KEY"
-	EnvStreamMarkdown  = "ONYX_STREAM_MARKDOWN"
+	EnvServerURL      = "ONYX_SERVER_URL"
+	EnvAPIKey         = "ONYX_API_KEY"
+	EnvAgentID        = "ONYX_PERSONA_ID"
+	EnvSSHHostKey     = "ONYX_SSH_HOST_KEY"
+	EnvStreamMarkdown = "ONYX_STREAM_MARKDOWN"
 )
 
 // Features holds experimental feature flags for the CLI.
@@ -29,7 +29,7 @@ type OnyxCliConfig struct {
 	ServerURL      string   `json:"server_url"`
 	APIKey         string   `json:"api_key"`
 	DefaultAgentID int      `json:"default_persona_id"`
-	Features       *Features `json:"features,omitempty"`
+	Features       Features `json:"features,omitempty"`
 }
 
 // DefaultConfig returns a config with default values.
