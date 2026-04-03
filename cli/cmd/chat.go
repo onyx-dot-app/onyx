@@ -10,7 +10,9 @@ import (
 )
 
 func newChatCmd() *cobra.Command {
-	return &cobra.Command{
+	var streamMarkdown bool
+
+	cmd := &cobra.Command{
 		Use:   "chat",
 		Short: "Launch the interactive chat TUI (default)",
 		Long: `Launch the interactive terminal UI for chatting with your Onyx agent.
@@ -30,6 +32,11 @@ an interactive setup wizard will guide you through configuration.`,
 				cfg = *result
 			}
 
+			// CLI flag overrides config/env
+			if cmd.Flags().Changed("stream-markdown") {
+				cfg.Features.StreamMarkdown = streamMarkdown
+			}
+
 			starprompt.MaybePrompt()
 
 			m := tui.NewModel(cfg)
@@ -38,4 +45,9 @@ an interactive setup wizard will guide you through configuration.`,
 			return err
 		},
 	}
+
+	cmd.Flags().BoolVar(&streamMarkdown, "stream-markdown", false, "Enable progressive markdown rendering during streaming (experimental)")
+	_ = cmd.Flags().MarkHidden("stream-markdown")
+
+	return cmd
 }
