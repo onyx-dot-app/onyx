@@ -18,9 +18,10 @@ import (
 
 func newConfigureCmd() *cobra.Command {
 	var (
-		serverURL string
-		apiKey    string
-		dryRun    bool
+		serverURL   string
+		apiKey      string
+		apiKeyStdin bool
+		dryRun      bool
 	)
 
 	cmd := &cobra.Command{
@@ -33,16 +34,21 @@ non-interactively (useful for scripts and AI agents). Otherwise, an interactive
 setup wizard is launched.
 
 If --api-key is omitted but stdin has piped data, the API key is read from
-stdin. This avoids leaking the key in shell history.
+stdin automatically. You can also use --api-key-stdin to make this explicit.
+This avoids leaking the key in shell history.
 
 Use --dry-run to test the connection without saving the configuration.`,
 		Example: `  onyx-cli configure
   onyx-cli configure --server-url https://my-onyx.com --api-key sk-...
   echo "$ONYX_API_KEY" | onyx-cli configure --server-url https://my-onyx.com
+  echo "$ONYX_API_KEY" | onyx-cli configure --server-url https://my-onyx.com --api-key-stdin
   onyx-cli configure --server-url https://my-onyx.com --api-key sk-... --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// If --api-key not provided, try reading from stdin pipe
-			if apiKey == "" && !term.IsTerminal(int(os.Stdin.Fd())) {
+			// Read API key from stdin if piped (implicit) or --api-key-stdin (explicit)
+			if apiKeyStdin && apiKey != "" {
+				return exitcodes.New(exitcodes.BadRequest, "--api-key and --api-key-stdin cannot be used together")
+			}
+			if (apiKey == "" && !term.IsTerminal(int(os.Stdin.Fd()))) || apiKeyStdin {
 				data, err := io.ReadAll(os.Stdin)
 				if err != nil {
 					return fmt.Errorf("failed to read API key from stdin: %w", err)
@@ -70,6 +76,7 @@ Use --dry-run to test the connection without saving the configuration.`,
 
 	cmd.Flags().StringVar(&serverURL, "server-url", "", "Onyx server URL (e.g., https://cloud.onyx.app)")
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key for authentication (or pipe via stdin)")
+	cmd.Flags().BoolVar(&apiKeyStdin, "api-key-stdin", false, "Read API key from stdin (explicit; also happens automatically when stdin is piped)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Test connection without saving config (requires --server-url and --api-key)")
 
 	return cmd
