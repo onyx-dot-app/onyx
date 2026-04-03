@@ -28,13 +28,14 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
         <Button
           icon={SvgSidebar}
           prominence="tertiary"
-          tooltip="Close Sidebar"
+          tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
+          tooltipSide={folded ? "right" : "bottom"}
           size="md"
           onClick={onFoldClick}
         />
       </div>
     ),
-    [onFoldClick]
+    [folded, onFoldClick]
   );
 
   return (

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
@@ -10,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar } from "@opal/icons";
+import { useSidebarState } from "@/layouts/sidebar-layouts";
 
 export interface ClientLayoutProps {
   children: React.ReactNode;
@@ -52,7 +52,8 @@ const SETTINGS_LAYOUT_PREFIXES = [
 ];
 
 export function ClientLayout({ children, enableCloud }: ClientLayoutProps) {
-  const [sidebarFolded, setSidebarFolded] = useState(true);
+  const { folded: sidebarFolded, setFolded: setSidebarFolded } =
+    useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
   const settings = useSettingsContext();
