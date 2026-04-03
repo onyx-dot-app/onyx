@@ -324,6 +324,15 @@ def mark_migration_completed_time_if_not_set_with_commit(
     db_session.commit()
 
 
+def is_migration_completed(db_session: Session) -> bool:
+    """Returns True if the migration is completed.
+
+    Can be run even if the migration record does not exist.
+    """
+    record = db_session.query(OpenSearchTenantMigrationRecord).first()
+    return record is not None and record.migration_completed_at is not None
+
+
 def build_sanitized_to_original_doc_id_mapping(
     db_session: Session,
 ) -> dict[str, str]:

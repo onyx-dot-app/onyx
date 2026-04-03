@@ -5,7 +5,6 @@ import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { SvgMinusCircle } from "@opal/icons";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 import { Section } from "@/layouts/general-layouts";
@@ -51,14 +50,13 @@ export default function InputTypeInElementField({
         }
         showClearButton={false}
       />
-      <Disabled disabled={!onRemove || isEmpty}>
-        <Button
-          icon={SvgMinusCircle}
-          prominence="tertiary"
-          onClick={onRemove}
-          tooltip="Remove"
-        />
-      </Disabled>
+      <Button
+        disabled={!onRemove || isEmpty}
+        icon={SvgMinusCircle}
+        prominence="tertiary"
+        onClick={onRemove}
+        tooltip="Remove"
+      />
     </Section>
   );
 }

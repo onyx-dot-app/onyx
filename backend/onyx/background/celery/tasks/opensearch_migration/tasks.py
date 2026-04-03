@@ -36,6 +36,7 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.opensearch_migration import build_sanitized_to_original_doc_id_mapping
 from onyx.db.opensearch_migration import get_vespa_visit_state
+from onyx.db.opensearch_migration import is_migration_completed
 from onyx.db.opensearch_migration import (
     mark_migration_completed_time_if_not_set_with_commit,
 )
@@ -106,14 +107,19 @@ def migrate_chunks_from_vespa_to_opensearch_task(
             acquired; effectively a no-op. True if the task completed
             successfully. False if the task errored.
     """
+    # 1. Check if we should run the task.
+    # 1.a. If OpenSearch indexing is disabled, we don't run the task.
     if not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         task_logger.warning(
             "OpenSearch migration is not enabled, skipping chunk migration task."
         )
         return None
-
     task_logger.info("Starting chunk-level migration from Vespa to OpenSearch.")
     task_start_time = time.monotonic()
+
+    # 1.b. Only one instance per tenant of this task may run concurrently at
+    # once. If we fail to acquire a lock, we assume it is because another task
+    # has one and we exit.
     r = get_redis_client()
     lock: RedisLock = r.lock(
         name=OnyxRedisLocks.OPENSEARCH_MIGRATION_BEAT_LOCK,
@@ -136,10 +142,11 @@ def migrate_chunks_from_vespa_to_opensearch_task(
             f"Token: {lock.local.token}"
         )
 
+    # 2. Prepare to migrate.
     total_chunks_migrated_this_task = 0
     total_chunks_errored_this_task = 0
     try:
-        # Double check that tenant info is correct.
+        # 2.a. Double-check that tenant info is correct.
         if tenant_id != get_current_tenant_id():
             err_str = (
                 f"Tenant ID mismatch in the OpenSearch migration task: "
@@ -148,16 +155,62 @@ def migrate_chunks_from_vespa_to_opensearch_task(
             task_logger.error(err_str)
             return False
 
-        with (
-            get_session_with_current_tenant() as db_session,
-            get_vespa_http_client(
-                timeout=VESPA_MIGRATION_REQUEST_TIMEOUT_S
-            ) as vespa_client,
-        ):
+        # Do as much as we can with a DB session in one spot to not hold a
+        # session during a migration batch.
+        with get_session_with_current_tenant() as db_session:
+            # 2.b. Immediately check to see if this tenant is done, to save
+            # having to do any other work. This function does not require a
+            # migration record to necessarily exist.
+            if is_migration_completed(db_session):
+                return True
+
+            # 2.c. Try to insert the OpenSearchTenantMigrationRecord table if it
+            # does not exist.
             try_insert_opensearch_tenant_migration_record_with_commit(db_session)
+
+            # 2.d. Get search settings.
             search_settings = get_current_search_settings(db_session)
-            tenant_state = TenantState(tenant_id=tenant_id, multitenant=MULTI_TENANT)
             indexing_setting = IndexingSetting.from_db_model(search_settings)
+
+            # 2.e. Build sanitized to original doc ID mapping to check for
+            # conflicts in the event we sanitize a doc ID to an
+            # already-existing doc ID.
+            # We reconstruct this mapping for every task invocation because
+            # a document may have been added in the time between two tasks.
+            sanitized_doc_start_time = time.monotonic()
+            sanitized_to_original_doc_id_mapping = (
+                build_sanitized_to_original_doc_id_mapping(db_session)
+            )
+            task_logger.debug(
+                f"Built sanitized_to_original_doc_id_mapping with {len(sanitized_to_original_doc_id_mapping)} entries "
+                f"in {time.monotonic() - sanitized_doc_start_time:.3f} seconds."
+            )
+
+            # 2.f. Get the current migration state.
+            continuation_token_map, total_chunks_migrated = get_vespa_visit_state(
+                db_session
+            )
+            # 2.f.1. Double-check that the migration state does not imply
+            # completion. Really we should never have to enter this block as we
+            # would expect is_migration_completed to return True, but in the
+            # strange event that the migration is complete but the migration
+            # completed time was never stamped, we do so here.
+            if is_continuation_token_done_for_all_slices(continuation_token_map):
+                task_logger.info(
+                    f"OpenSearch migration COMPLETED for tenant {tenant_id}. Total chunks migrated: {total_chunks_migrated}."
+                )
+                mark_migration_completed_time_if_not_set_with_commit(db_session)
+                return True
+        task_logger.debug(
+            f"Read the tenant migration record. Total chunks migrated: {total_chunks_migrated}. "
+            f"Continuation token map: {continuation_token_map}"
+        )
+
+        with get_vespa_http_client(
+            timeout=VESPA_MIGRATION_REQUEST_TIMEOUT_S
+        ) as vespa_client:
+            # 2.g. Create the OpenSearch and Vespa document indexes.
+            tenant_state = TenantState(tenant_id=tenant_id, multitenant=MULTI_TENANT)
             opensearch_document_index = OpenSearchDocumentIndex(
                 tenant_state=tenant_state,
                 index_name=search_settings.index_name,
@@ -171,22 +224,14 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 httpx_client=vespa_client,
             )
 
-            sanitized_doc_start_time = time.monotonic()
-            # We reconstruct this mapping for every task invocation because a
-            # document may have been added in the time between two tasks.
-            sanitized_to_original_doc_id_mapping = (
-                build_sanitized_to_original_doc_id_mapping(db_session)
-            )
-            task_logger.debug(
-                f"Built sanitized_to_original_doc_id_mapping with {len(sanitized_to_original_doc_id_mapping)} entries "
-                f"in {time.monotonic() - sanitized_doc_start_time:.3f} seconds."
-            )
-
+            # 2.h. Get the approximate chunk count in Vespa as of this time to
+            # update the migration record.
             approx_chunk_count_in_vespa: int | None = None
             get_chunk_count_start_time = time.monotonic()
             try:
                 approx_chunk_count_in_vespa = vespa_document_index.get_chunk_count()
             except Exception:
+                # This failure should not be blocking.
                 task_logger.exception(
                     "Error getting approximate chunk count in Vespa. Moving on..."
                 )
@@ -195,25 +240,12 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 f"approximate chunk count in Vespa. Got {approx_chunk_count_in_vespa}."
             )
 
+            # 3. Do the actual migration in batches until we run out of time.
             while (
                 time.monotonic() - task_start_time < MIGRATION_TASK_SOFT_TIME_LIMIT_S
                 and lock.owned()
             ):
-                (
-                    continuation_token_map,
-                    total_chunks_migrated,
-                ) = get_vespa_visit_state(db_session)
-                if is_continuation_token_done_for_all_slices(continuation_token_map):
-                    task_logger.info(
-                        f"OpenSearch migration COMPLETED for tenant {tenant_id}. Total chunks migrated: {total_chunks_migrated}."
-                    )
-                    mark_migration_completed_time_if_not_set_with_commit(db_session)
-                    break
-                task_logger.debug(
-                    f"Read the tenant migration record. Total chunks migrated: {total_chunks_migrated}. "
-                    f"Continuation token map: {continuation_token_map}"
-                )
-
+                # 3.a. Get the next batch of raw chunks from Vespa.
                 get_vespa_chunks_start_time = time.monotonic()
                 raw_vespa_chunks, next_continuation_token_map = (
                     vespa_document_index.get_all_raw_document_chunks_paginated(
@@ -226,6 +258,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     f"seconds. Next continuation token map: {next_continuation_token_map}"
                 )
 
+                # 3.b. Transform the raw chunks to OpenSearch chunks in memory.
                 opensearch_document_chunks, errored_chunks = (
                     transform_vespa_chunks_to_opensearch_chunks(
                         raw_vespa_chunks,
@@ -240,6 +273,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                         "errored."
                     )
 
+                # 3.c. Index the OpenSearch chunks into OpenSearch.
                 index_opensearch_chunks_start_time = time.monotonic()
                 opensearch_document_index.index_raw_chunks(
                     chunks=opensearch_document_chunks
@@ -251,12 +285,38 @@ def migrate_chunks_from_vespa_to_opensearch_task(
 
                 total_chunks_migrated_this_task += len(opensearch_document_chunks)
                 total_chunks_errored_this_task += len(errored_chunks)
-                update_vespa_visit_progress_with_commit(
-                    db_session,
-                    continuation_token_map=next_continuation_token_map,
-                    chunks_processed=len(opensearch_document_chunks),
-                    chunks_errored=len(errored_chunks),
-                    approx_chunk_count_in_vespa=approx_chunk_count_in_vespa,
+
+                # Do as much as we can with a DB session in one spot to not hold a
+                # session during a migration batch.
+                with get_session_with_current_tenant() as db_session:
+                    # 3.d. Update the migration state.
+                    update_vespa_visit_progress_with_commit(
+                        db_session,
+                        continuation_token_map=next_continuation_token_map,
+                        chunks_processed=len(opensearch_document_chunks),
+                        chunks_errored=len(errored_chunks),
+                        approx_chunk_count_in_vespa=approx_chunk_count_in_vespa,
+                    )
+
+                    # 3.e. Get the current migration state. Even thought we
+                    # technically have it in-memory since we just wrote it, we
+                    # want to reference the DB as the source of truth at all
+                    # times.
+                    continuation_token_map, total_chunks_migrated = (
+                        get_vespa_visit_state(db_session)
+                    )
+                    # 3.e.1. Check if the migration is done.
+                    if is_continuation_token_done_for_all_slices(
+                        continuation_token_map
+                    ):
+                        task_logger.info(
+                            f"OpenSearch migration COMPLETED for tenant {tenant_id}. Total chunks migrated: {total_chunks_migrated}."
+                        )
+                        mark_migration_completed_time_if_not_set_with_commit(db_session)
+                        return True
+                task_logger.debug(
+                    f"Read the tenant migration record. Total chunks migrated: {total_chunks_migrated}. "
+                    f"Continuation token map: {continuation_token_map}"
                 )
     except Exception:
         traceback.print_exc()

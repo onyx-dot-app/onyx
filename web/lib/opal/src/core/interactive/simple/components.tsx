@@ -1,7 +1,7 @@
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
-import { useDisabled } from "@opal/core/disabled/components";
+import { guardPortalClick } from "@opal/core/interactive/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,6 +28,11 @@ interface InteractiveSimpleProps
    * Link target (e.g. `"_blank"`). Only used when `href` is provided.
    */
   target?: string;
+
+  /**
+   * Applies disabled cursor and suppresses clicks.
+   */
+  disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,8 +42,8 @@ interface InteractiveSimpleProps
 /**
  * Minimal interactive surface primitive.
  *
- * Provides cursor styling, click handling, disabled integration, and
- * optional link/group support — but **no color or background styling**.
+ * Provides cursor styling, click handling, and optional link/group
+ * support — but **no color or background styling**.
  *
  * Use this for elements that need interactivity (click, cursor, disabled)
  * without participating in the Interactive color system.
@@ -58,9 +63,10 @@ function InteractiveSimple({
   group,
   href,
   target,
+  disabled,
   ...props
 }: InteractiveSimpleProps) {
-  const { isDisabled, allowClick } = useDisabled();
+  const isDisabled = !!disabled;
 
   const classes = cn(
     "cursor-pointer select-none",
@@ -87,11 +93,11 @@ function InteractiveSimple({
       {...linkAttrs}
       {...slotProps}
       onClick={
-        isDisabled && !allowClick
+        isDisabled
           ? href
             ? (e: React.MouseEvent) => e.preventDefault()
             : undefined
-          : onClick
+          : guardPortalClick(onClick)
       }
     />
   );

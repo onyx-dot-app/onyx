@@ -14,15 +14,16 @@ import type {
   HookPointMeta,
   HookResponse,
 } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
+import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 
 interface HookLogsModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   hook: HookResponse;
   spec: HookPointMeta | undefined;
 }
 
 // Section header: "Past Hour ————" or "Older ————"
+//
+// TODO(@raunakab): replace this with a proper, opalified `Separator` component (when it lands).
 function SectionHeader({ label }: { label: string }) {
   return (
     <Section
@@ -69,12 +70,9 @@ function LogRow({ log }: { log: HookExecutionRecord }) {
   );
 }
 
-export default function HookLogsModal({
-  open,
-  onOpenChange,
-  hook,
-  spec,
-}: HookLogsModalProps) {
+export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
+  const onClose = useModalClose();
+
   const { recentErrors, olderErrors, isLoading, error } = useHookExecutionLogs(
     hook.id,
     10
@@ -99,7 +97,7 @@ export default function HookLogsModal({
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange}>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="md" height="fit">
         <Modal.Header
           icon={(props) => <SvgTextLines {...props} />}
@@ -107,7 +105,7 @@ export default function HookLogsModal({
           description={`Hook: ${hook.name} • Hook Point: ${
             spec?.display_name ?? hook.hook_point
           }`}
-          onClose={() => onOpenChange(false)}
+          onClose={onClose}
         />
         <Modal.Body>
           {isLoading ? (

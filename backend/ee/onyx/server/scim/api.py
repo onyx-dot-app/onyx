@@ -52,15 +52,24 @@ from ee.onyx.server.scim.schema_definitions import SERVICE_PROVIDER_CONFIG
 from ee.onyx.server.scim.schema_definitions import USER_RESOURCE_TYPE
 from ee.onyx.server.scim.schema_definitions import USER_SCHEMA_DEF
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import AccountType
+from onyx.db.enums import GrantSource
+from onyx.db.enums import Permission
 from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
+from onyx.db.permissions import recompute_permissions_for_group__no_commit
+from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
+
+# Group names reserved for system default groups (seeded by migration).
+_RESERVED_GROUP_NAMES = frozenset({"Admin", "Basic"})
 
 
 class ScimJSONResponse(JSONResponse):
@@ -486,6 +495,7 @@ def create_user(
         email=email,
         hashed_password=_pw_helper.hash(_pw_helper.generate()),
         role=UserRole.BASIC,
+        account_type=AccountType.STANDARD,
         is_active=user_resource.active,
         is_verified=True,
         personal_name=personal_name,
@@ -506,12 +516,24 @@ def create_user(
             scim_username=scim_username,
             fields=fields,
         )
-        dal.commit()
     except IntegrityError:
         dal.rollback()
         return _scim_error_response(
             409, f"User with email {email} already has a SCIM mapping"
         )
+
+    # Assign user to default group BEFORE commit so everything is atomic.
+    # If this fails, the entire user creation rolls back and IdP can retry.
+    try:
+        assign_user_to_default_groups__no_commit(db_session, user)
+    except Exception:
+        dal.rollback()
+        logger.exception(f"Failed to assign SCIM user {email} to default groups")
+        return _scim_error_response(
+            500, f"Failed to assign user {email} to default group"
+        )
+
+    dal.commit()
 
     return _scim_resource_response(
         provider.build_user_resource(
@@ -542,7 +564,8 @@ def replace_user(
     user = result
 
     # Handle activation (need seat check) / deactivation
-    if user_resource.active and not user.is_active:
+    is_reactivation = user_resource.active and not user.is_active
+    if is_reactivation:
         seat_error = _check_seat_availability(dal)
         if seat_error:
             return _scim_error_response(403, seat_error)
@@ -555,6 +578,12 @@ def replace_user(
         is_active=user_resource.active,
         personal_name=personal_name,
     )
+
+    # Reconcile default-group membership on reactivation
+    if is_reactivation:
+        assign_user_to_default_groups__no_commit(
+            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+        )
 
     new_external_id = user_resource.externalId
     scim_username = user_resource.userName.strip()
@@ -621,6 +650,7 @@ def patch_user(
         return _scim_error_response(e.status, e.detail)
 
     # Apply changes back to the DB model
+    is_reactivation = patched.active and not user.is_active
     if patched.active != user.is_active:
         if patched.active:
             seat_error = _check_seat_availability(dal)
@@ -648,6 +678,12 @@ def patch_user(
         is_active=patched.active if patched.active != user.is_active else None,
         personal_name=personal_name,
     )
+
+    # Reconcile default-group membership on reactivation
+    if is_reactivation:
+        assign_user_to_default_groups__no_commit(
+            db_session, user, is_admin=(user.role == UserRole.ADMIN)
+        )
 
     # Build updated fields by merging PATCH enterprise data with current values
     cf = current_fields or ScimMappingFields()
@@ -857,6 +893,11 @@ def create_group(
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
+    if group_resource.displayName in _RESERVED_GROUP_NAMES:
+        return _scim_error_response(
+            409, f"'{group_resource.displayName}' is a reserved group name."
+        )
+
     if dal.get_group_by_name(group_resource.displayName):
         return _scim_error_response(
             409, f"Group with name '{group_resource.displayName}' already exists"
@@ -879,7 +920,17 @@ def create_group(
             409, f"Group with name '{group_resource.displayName}' already exists"
         )
 
+    # Every group gets the "basic" permission by default.
+    dal.add_permission_grant_to_group(
+        group_id=db_group.id,
+        permission=Permission.BASIC_ACCESS,
+        grant_source=GrantSource.SYSTEM,
+    )
+
     dal.upsert_group_members(db_group.id, member_uuids)
+
+    # Recompute permissions for initial members.
+    recompute_user_permissions__no_commit(member_uuids, db_session)
 
     external_id = group_resource.externalId
     if external_id:
@@ -911,13 +962,35 @@ def replace_group(
         return result
     group = result
 
+    if group.name in _RESERVED_GROUP_NAMES and group_resource.displayName != group.name:
+        return _scim_error_response(
+            409, f"'{group.name}' is a reserved group name and cannot be renamed."
+        )
+
+    if (
+        group_resource.displayName in _RESERVED_GROUP_NAMES
+        and group_resource.displayName != group.name
+    ):
+        return _scim_error_response(
+            409, f"'{group_resource.displayName}' is a reserved group name."
+        )
+
     member_uuids, err = _validate_and_parse_members(group_resource.members, dal)
     if err:
         return _scim_error_response(400, err)
 
+    # Capture old member IDs before replacing so we can recompute their
+    # permissions after they are removed from the group.
+    old_member_ids = {uid for uid, _ in dal.get_group_members(group.id)}
+
     dal.update_group(group, name=group_resource.displayName)
     dal.replace_group_members(group.id, member_uuids)
     dal.sync_group_external_id(group.id, group_resource.externalId)
+
+    # Recompute permissions for current members (batch) and removed members.
+    recompute_permissions_for_group__no_commit(group.id, db_session)
+    removed_ids = list(old_member_ids - set(member_uuids))
+    recompute_user_permissions__no_commit(removed_ids, db_session)
 
     dal.commit()
 
@@ -961,7 +1034,18 @@ def patch_group(
         return _scim_error_response(e.status, e.detail)
 
     new_name = patched.displayName if patched.displayName != group.name else None
+
+    if group.name in _RESERVED_GROUP_NAMES and new_name:
+        return _scim_error_response(
+            409, f"'{group.name}' is a reserved group name and cannot be renamed."
+        )
+
+    if new_name and new_name in _RESERVED_GROUP_NAMES:
+        return _scim_error_response(409, f"'{new_name}' is a reserved group name.")
+
     dal.update_group(group, name=new_name)
+
+    affected_uuids: list[UUID] = []
 
     if added_ids:
         add_uuids = [UUID(mid) for mid in added_ids if _is_valid_uuid(mid)]
@@ -973,10 +1057,15 @@ def patch_group(
                     f"Member(s) not found: {', '.join(str(u) for u in missing)}",
                 )
             dal.upsert_group_members(group.id, add_uuids)
+            affected_uuids.extend(add_uuids)
 
     if removed_ids:
         remove_uuids = [UUID(mid) for mid in removed_ids if _is_valid_uuid(mid)]
         dal.remove_group_members(group.id, remove_uuids)
+        affected_uuids.extend(remove_uuids)
+
+    # Recompute permissions for all users whose group membership changed.
+    recompute_user_permissions__no_commit(affected_uuids, db_session)
 
     dal.sync_group_external_id(group.id, patched.externalId)
     dal.commit()
@@ -1002,11 +1091,21 @@ def delete_group(
         return result
     group = result
 
+    if group.name in _RESERVED_GROUP_NAMES:
+        return _scim_error_response(409, f"'{group.name}' is a reserved group name.")
+
+    # Capture member IDs before deletion so we can recompute their permissions.
+    affected_user_ids = [uid for uid, _ in dal.get_group_members(group.id)]
+
     mapping = dal.get_group_mapping_by_group_id(group.id)
     if mapping:
         dal.delete_group_mapping(mapping.id)
 
     dal.delete_group_with_members(group)
+
+    # Recompute permissions for users who lost this group membership.
+    recompute_user_permissions__no_commit(affected_user_ids, db_session)
+
     dal.commit()
 
     return Response(status_code=204)

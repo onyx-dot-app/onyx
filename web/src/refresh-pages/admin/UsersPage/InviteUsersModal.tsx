@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react";
 import { Button } from "@opal/components";
 import { SvgUsers, SvgAlertTriangle } from "@opal/icons";
-import { Disabled } from "@opal/core";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
@@ -165,22 +164,25 @@ export default function InviteUsersModal({
         <Modal.Footer>
           <BasicModalFooter
             cancel={
-              <Disabled disabled={isSubmitting}>
-                <Button prominence="tertiary" onClick={handleClose}>
-                  Cancel
-                </Button>
-              </Disabled>
+              <Button
+                disabled={isSubmitting}
+                prominence="tertiary"
+                onClick={handleClose}
+              >
+                Cancel
+              </Button>
             }
             submit={
-              <Disabled
+              <Button
                 disabled={
                   isSubmitting ||
                   chips.length === 0 ||
                   chips.every((c) => c.error)
                 }
+                onClick={handleInvite}
               >
-                <Button onClick={handleInvite}>Invite</Button>
-              </Disabled>
+                Invite
+              </Button>
             }
           />
         </Modal.Footer>

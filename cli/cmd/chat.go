@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/onboarding"
+	"github.com/onyx-dot-app/onyx/cli/internal/starprompt"
 	"github.com/onyx-dot-app/onyx/cli/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -23,6 +24,8 @@ func newChatCmd() *cobra.Command {
 				}
 				cfg = *result
 			}
+
+			starprompt.MaybePrompt()
 
 			m := tui.NewModel(cfg)
 			p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())

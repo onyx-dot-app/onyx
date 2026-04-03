@@ -56,7 +56,6 @@ import {
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
@@ -580,19 +579,18 @@ export default function AddConnector({
                       {/* Button to sign in via OAuth */}
                       {oauthSupportedSources.includes(connector) &&
                         (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
-                          <Disabled disabled={isAuthorizing}>
-                            <Button
-                              variant="action"
-                              onClick={handleAuthorize}
-                              hidden={!isAuthorizeVisible}
-                            >
-                              {isAuthorizing
-                                ? "Authorizing..."
-                                : `Authorize with ${getSourceDisplayName(
-                                    connector
-                                  )}`}
-                            </Button>
-                          </Disabled>
+                          <Button
+                            disabled={isAuthorizing}
+                            variant="action"
+                            onClick={handleAuthorize}
+                            hidden={!isAuthorizeVisible}
+                          >
+                            {isAuthorizing
+                              ? "Authorizing..."
+                              : `Authorize with ${getSourceDisplayName(
+                                  connector
+                                )}`}
+                          </Button>
                         )}
                     </div>
                   )}

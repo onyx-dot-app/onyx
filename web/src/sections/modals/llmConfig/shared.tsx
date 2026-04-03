@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Form, FormikProps } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
@@ -9,6 +9,7 @@ import { ModelConfiguration, SimpleKnownModel } from "@/interfaces/llm";
 import * as InputLayouts from "@/layouts/input-layouts";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
@@ -19,12 +20,13 @@ import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";
 import { WithoutStyles } from "@opal/types";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
-import { Disabled, Hoverable } from "@opal/core";
+import { Hoverable } from "@opal/core";
 import { Content } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgOnyxOctagon,
   SvgOrganization,
+  SvgPlusCircle,
   SvgRefreshCw,
   SvgSparkle,
   SvgUserManage,
@@ -375,6 +377,8 @@ export interface ModelsFieldProps<T> {
   shouldShowAutoUpdateToggle: boolean;
   /** Called when the user clicks the refresh button to re-fetch models. */
   onRefetch?: () => Promise<void> | void;
+  /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
+  onAddModel?: (modelName: string) => void;
 }
 
 export function ModelsField<T extends BaseLLMFormValues>({
@@ -383,7 +387,9 @@ export function ModelsField<T extends BaseLLMFormValues>({
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
   onRefetch,
+  onAddModel,
 }: ModelsFieldProps<T>) {
+  const [newModelName, setNewModelName] = useState("");
   const isAutoMode = formikProps.values.is_auto_mode;
   const selectedModels = formikProps.values.selected_model_names ?? [];
   const defaultModel = formikProps.values.default_model_name;
@@ -457,15 +463,14 @@ export function ModelsField<T extends BaseLLMFormValues>({
           center
         >
           <Section flexDirection="row" gap={0}>
-            <Disabled disabled={isAutoMode || modelConfigurations.length === 0}>
-              <Button
-                prominence="tertiary"
-                size="md"
-                onClick={handleToggleSelectAll}
-              >
-                {allSelected ? "Unselect All" : "Select All"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isAutoMode || modelConfigurations.length === 0}
+              prominence="tertiary"
+              size="md"
+              onClick={handleToggleSelectAll}
+            >
+              {allSelected ? "Unselect All" : "Select All"}
+            </Button>
             {onRefetch && (
               <Button
                 prominence="tertiary"
@@ -574,6 +579,50 @@ export function ModelsField<T extends BaseLLMFormValues>({
           </Section>
         )}
 
+        {onAddModel && !isAutoMode && (
+          <Section flexDirection="row" gap={0.5}>
+            <div className="flex-1">
+              <InputTypeIn
+                placeholder="Enter model name"
+                value={newModelName}
+                onChange={(e) => setNewModelName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newModelName.trim()) {
+                    e.preventDefault();
+                    const trimmed = newModelName.trim();
+                    if (!modelConfigurations.some((m) => m.name === trimmed)) {
+                      onAddModel(trimmed);
+                      setNewModelName("");
+                    }
+                  }
+                }}
+                showClearButton={false}
+              />
+            </div>
+            <Button
+              prominence="secondary"
+              icon={SvgPlusCircle}
+              type="button"
+              disabled={
+                !newModelName.trim() ||
+                modelConfigurations.some((m) => m.name === newModelName.trim())
+              }
+              onClick={() => {
+                const trimmed = newModelName.trim();
+                if (
+                  trimmed &&
+                  !modelConfigurations.some((m) => m.name === trimmed)
+                ) {
+                  onAddModel(trimmed);
+                  setNewModelName("");
+                }
+              }}
+            >
+              Add Model
+            </Button>
+          </Section>
+        )}
+
         {shouldShowAutoUpdateToggle && (
           <InputLayouts.Horizontal
             title="Auto Update"
@@ -647,21 +696,21 @@ export function LLMConfigurationModalWrapper({
             <Button prominence="secondary" onClick={onClose} type="button">
               Cancel
             </Button>
-            <Disabled
+            <Button
               disabled={
                 !isFormValid || busy || (!!existingProviderName && !isDirty)
               }
+              type="submit"
+              icon={busy ? SimpleLoader : undefined}
             >
-              <Button type="submit" icon={busy ? SimpleLoader : undefined}>
-                {existingProviderName
-                  ? busy
-                    ? "Updating"
-                    : "Update"
-                  : busy
-                    ? "Connecting"
-                    : "Connect"}
-              </Button>
-            </Disabled>
+              {existingProviderName
+                ? busy
+                  ? "Updating"
+                  : "Update"
+                : busy
+                  ? "Connecting"
+                  : "Connect"}
+            </Button>
           </Modal.Footer>
         </Form>
       </Modal.Content>

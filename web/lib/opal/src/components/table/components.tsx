@@ -586,7 +586,10 @@ export function Table<TData>(props: DataTableProps<TData>) {
 
                       // Data / Display cell
                       return (
-                        <TableCell key={cell.id}>
+                        <TableCell
+                          key={cell.id}
+                          data-column-id={cell.column.id}
+                        >
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext()

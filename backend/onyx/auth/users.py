@@ -80,7 +80,6 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserUpdateWithRole
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
@@ -120,11 +119,13 @@ from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import AccountType
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import log_onyx_error
@@ -500,18 +501,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             user = user_by_session
 
                     if (
-                        user.role.is_web_login()
+                        user.account_type.is_web_login()
                         or not isinstance(user_create, UserCreate)
-                        or not user_create.role.is_web_login()
+                        or not user_create.account_type.is_web_login()
                     ):
                         raise exceptions.UserAlreadyExists()
 
-                    user_update = UserUpdateWithRole(
-                        password=user_create.password,
-                        is_verified=user_create.is_verified,
-                        role=user_create.role,
-                    )
-                    user = await self.update(user_update, user)
+                    # Cache id before expire — accessing attrs on an expired
+                    # object triggers a sync lazy-load which raises MissingGreenlet
+                    # in this async context.
+                    user_id = user.id
+                    self._upgrade_user_to_standard__sync(user_id, user_create)
+                    # Expire so the async session re-fetches the row updated by
+                    # the sync session above.
+                    self.user_db.session.expire(user)
+                    user = await self.user_db.get(user_id)  # type: ignore[assignment]
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -525,18 +529,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     # Handle case where user has used product outside of web and is now creating an account through web
                     if (
-                        user.role.is_web_login()
+                        user.account_type.is_web_login()
                         or not isinstance(user_create, UserCreate)
-                        or not user_create.role.is_web_login()
+                        or not user_create.account_type.is_web_login()
                     ):
                         raise exceptions.UserAlreadyExists()
 
-                    user_update = UserUpdateWithRole(
-                        password=user_create.password,
-                        is_verified=user_create.is_verified,
-                        role=user_create.role,
-                    )
-                    user = await self.update(user_update, user)
+                    # Cache id before expire — accessing attrs on an expired
+                    # object triggers a sync lazy-load which raises MissingGreenlet
+                    # in this async context.
+                    user_id = user.id
+                    self._upgrade_user_to_standard__sync(user_id, user_create)
+                    # Expire so the async session re-fetches the row updated by
+                    # the sync session above.
+                    self.user_db.session.expire(user)
+                    user = await self.user_db.get(user_id)  # type: ignore[assignment]
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
                 remove_user_from_invited_users(user_create.email)
@@ -572,6 +579,38 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             {"pinned_assistants": default_persona_ids},
         )
         user.pinned_assistants = default_persona_ids
+
+    def _upgrade_user_to_standard__sync(
+        self,
+        user_id: uuid.UUID,
+        user_create: UserCreate,
+    ) -> None:
+        """Upgrade a non-web user to STANDARD and assign default groups atomically.
+
+        All writes happen in a single sync transaction so neither the field
+        update nor the group assignment is visible without the other.
+        """
+        with get_session_with_current_tenant() as sync_db:
+            sync_user = sync_db.query(User).filter(User.id == user_id).first()  # type: ignore[arg-type]
+            if sync_user:
+                sync_user.hashed_password = self.password_helper.hash(
+                    user_create.password
+                )
+                sync_user.is_verified = user_create.is_verified or False
+                sync_user.role = user_create.role
+                sync_user.account_type = AccountType.STANDARD
+                assign_user_to_default_groups__no_commit(
+                    sync_db,
+                    sync_user,
+                    is_admin=(user_create.role == UserRole.ADMIN),
+                )
+                sync_db.commit()
+            else:
+                logger.warning(
+                    "User %s not found in sync session during upgrade to standard; "
+                    "skipping upgrade",
+                    user_id,
+                )
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
@@ -694,6 +733,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         "email": account_email,
                         "hashed_password": self.password_helper.hash(password),
                         "is_verified": is_verified_by_default,
+                        "account_type": AccountType.STANDARD,
                     }
 
                     user = await self.user_db.create(user_dict)
@@ -726,7 +766,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 )
 
             # Handle case where user has used product outside of web and is now creating an account through web
-            if not user.role.is_web_login():
+            if not user.account_type.is_web_login():
                 # We must use the existing user in the session if it matches
                 # the user we just got by email/oauth. Note that this only applies
                 # to multi-tenant, due to the overwriting of the user_db
@@ -743,14 +783,25 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     with get_session_with_current_tenant() as sync_db:
                         enforce_seat_limit(sync_db)
 
-                await self.user_db.update(
-                    user,
-                    {
-                        "is_verified": is_verified_by_default,
-                        "role": UserRole.BASIC,
-                        **({"is_active": True} if not user.is_active else {}),
-                    },
-                )
+                # Upgrade the user and assign default groups in a single
+                # transaction so neither change is visible without the other.
+                was_inactive = not user.is_active
+                with get_session_with_current_tenant() as sync_db:
+                    sync_user = sync_db.query(User).filter(User.id == user.id).first()  # type: ignore[arg-type]
+                    if sync_user:
+                        sync_user.is_verified = is_verified_by_default
+                        sync_user.role = UserRole.BASIC
+                        sync_user.account_type = AccountType.STANDARD
+                        if was_inactive:
+                            sync_user.is_active = True
+                        assign_user_to_default_groups__no_commit(sync_db, sync_user)
+                        sync_db.commit()
+
+                # Refresh the async user object so downstream code
+                # (e.g. oidc_expiry check) sees the updated fields.
+                self.user_db.session.expire(user)
+                user = await self.user_db.get(user.id)
+                assert user is not None
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
@@ -835,6 +886,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     distinct_id=str(user.id),
                     event=MilestoneRecordType.TENANT_CREATED,
                 )
+
+            # Assign user to the appropriate default group (Admin or Basic).
+            # Must happen inside the try block while tenant context is active,
+            # otherwise get_session_with_current_tenant() targets the wrong schema.
+            is_admin = user_count == 1 or user.email in get_default_admin_user_emails()
+            with get_session_with_current_tenant() as db_session:
+                assign_user_to_default_groups__no_commit(
+                    db_session, user, is_admin=is_admin
+                )
+                db_session.commit()
 
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -975,7 +1036,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 self.password_helper.hash(credentials.password)
                 return None
 
-            if not user.role.is_web_login():
+            if not user.account_type.is_web_login():
                 raise BasicAuthenticationError(
                     detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
                 )
@@ -1471,7 +1532,7 @@ async def _get_or_create_user_from_jwt(
         if not user.is_active:
             logger.warning("Inactive user %s attempted JWT login; skipping", email)
             return None
-        if not user.role.is_web_login():
+        if not user.account_type.is_web_login():
             raise exceptions.UserNotExists()
     except exceptions.UserNotExists:
         logger.info("Provisioning user %s from JWT login", email)
@@ -1492,7 +1553,7 @@ async def _get_or_create_user_from_jwt(
                     email,
                 )
                 return None
-            if not user.role.is_web_login():
+            if not user.account_type.is_web_login():
                 logger.warning(
                     "Non-web-login user %s attempted JWT login during provisioning race; skipping",
                     email,
@@ -1554,6 +1615,7 @@ def get_anonymous_user() -> User:
         is_verified=True,
         is_superuser=False,
         role=UserRole.LIMITED,
+        account_type=AccountType.ANONYMOUS,
         use_memories=False,
         enable_memory_tool=False,
     )

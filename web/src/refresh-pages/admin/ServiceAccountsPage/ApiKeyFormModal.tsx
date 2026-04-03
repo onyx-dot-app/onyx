@@ -9,7 +9,6 @@ import {
 import type { APIKey } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
@@ -160,11 +159,12 @@ export default function ApiKeyFormModal({
                 <Button prominence="secondary" type="button" onClick={onClose}>
                   Cancel
                 </Button>
-                <Disabled disabled={isSubmitting || !values.name.trim()}>
-                  <Button type="submit">
-                    {isUpdate ? "Update" : "Create Account"}
-                  </Button>
-                </Disabled>
+                <Button
+                  disabled={isSubmitting || !values.name.trim()}
+                  type="submit"
+                >
+                  {isUpdate ? "Update" : "Create Account"}
+                </Button>
               </Modal.Footer>
             </Form>
           )}

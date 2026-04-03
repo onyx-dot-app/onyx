@@ -1,9 +1,13 @@
+from uuid import UUID
+
 import requests
 
 from onyx.auth.schemas import UserRole
+from onyx.db.enums import AccountType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -33,3 +37,120 @@ def test_limited(reset: None) -> None:  # noqa: ARG001
         headers=api_key.headers,
     )
     assert response.status_code == 403
+
+
+def _get_service_account_account_type(
+    admin_user: DATestUser,
+    api_key_user_id: UUID,
+) -> AccountType:
+    """Fetch the account_type of a service account user via the user listing API."""
+    response = requests.get(
+        f"{API_SERVER_URL}/manage/users",
+        headers=admin_user.headers,
+        params={"include_api_keys": "true"},
+    )
+    response.raise_for_status()
+    data = response.json()
+    user_id_str = str(api_key_user_id)
+    for user in data["accepted"]:
+        if user["id"] == user_id_str:
+            return AccountType(user["account_type"])
+    raise AssertionError(
+        f"Service account user {user_id_str} not found in user listing"
+    )
+
+
+def _get_default_group_user_ids(
+    admin_user: DATestUser,
+) -> tuple[set[str], set[str]]:
+    """Return (admin_group_user_ids, basic_group_user_ids) from default groups."""
+    all_groups = UserGroupManager.get_all(
+        user_performing_action=admin_user,
+        include_default=True,
+    )
+    admin_group = next(
+        (g for g in all_groups if g.name == "Admin" and g.is_default), None
+    )
+    basic_group = next(
+        (g for g in all_groups if g.name == "Basic" and g.is_default), None
+    )
+    assert admin_group is not None, "Admin default group not found"
+    assert basic_group is not None, "Basic default group not found"
+
+    admin_ids = {str(u.id) for u in admin_group.users}
+    basic_ids = {str(u.id) for u in basic_group.users}
+    return admin_ids, basic_ids
+
+
+def test_api_key_limited_service_account(reset: None) -> None:  # noqa: ARG001
+    """LIMITED role API key: account_type is SERVICE_ACCOUNT, no group membership."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    api_key: DATestAPIKey = APIKeyManager.create(
+        api_key_role=UserRole.LIMITED,
+        user_performing_action=admin_user,
+    )
+
+    # Verify account_type
+    account_type = _get_service_account_account_type(admin_user, api_key.user_id)
+    assert (
+        account_type == AccountType.SERVICE_ACCOUNT
+    ), f"Expected account_type={AccountType.SERVICE_ACCOUNT}, got {account_type}"
+
+    # Verify no group membership
+    admin_ids, basic_ids = _get_default_group_user_ids(admin_user)
+    user_id_str = str(api_key.user_id)
+    assert (
+        user_id_str not in admin_ids
+    ), "LIMITED API key should NOT be in Admin default group"
+    assert (
+        user_id_str not in basic_ids
+    ), "LIMITED API key should NOT be in Basic default group"
+
+
+def test_api_key_basic_service_account(reset: None) -> None:  # noqa: ARG001
+    """BASIC role API key: account_type is SERVICE_ACCOUNT, in Basic group only."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    api_key: DATestAPIKey = APIKeyManager.create(
+        api_key_role=UserRole.BASIC,
+        user_performing_action=admin_user,
+    )
+
+    # Verify account_type
+    account_type = _get_service_account_account_type(admin_user, api_key.user_id)
+    assert (
+        account_type == AccountType.SERVICE_ACCOUNT
+    ), f"Expected account_type={AccountType.SERVICE_ACCOUNT}, got {account_type}"
+
+    # Verify Basic group membership
+    admin_ids, basic_ids = _get_default_group_user_ids(admin_user)
+    user_id_str = str(api_key.user_id)
+    assert user_id_str in basic_ids, "BASIC API key should be in Basic default group"
+    assert (
+        user_id_str not in admin_ids
+    ), "BASIC API key should NOT be in Admin default group"
+
+
+def test_api_key_admin_service_account(reset: None) -> None:  # noqa: ARG001
+    """ADMIN role API key: account_type is SERVICE_ACCOUNT, in Admin group only."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    api_key: DATestAPIKey = APIKeyManager.create(
+        api_key_role=UserRole.ADMIN,
+        user_performing_action=admin_user,
+    )
+
+    # Verify account_type
+    account_type = _get_service_account_account_type(admin_user, api_key.user_id)
+    assert (
+        account_type == AccountType.SERVICE_ACCOUNT
+    ), f"Expected account_type={AccountType.SERVICE_ACCOUNT}, got {account_type}"
+
+    # Verify Admin group membership
+    admin_ids, basic_ids = _get_default_group_user_ids(admin_user)
+    user_id_str = str(api_key.user_id)
+    assert user_id_str in admin_ids, "ADMIN API key should be in Admin default group"
+    assert (
+        user_id_str not in basic_ids
+    ), "ADMIN API key should NOT be in Basic default group"

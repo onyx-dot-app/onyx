@@ -5,7 +5,6 @@ import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { Badge } from "@/components/ui/badge";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -126,14 +125,13 @@ export function BotConfigCard() {
               }
               disabled={!hasServerConfigs}
             >
-              <Disabled disabled={isSubmitting || hasServerConfigs}>
-                <Button
-                  variant="danger"
-                  onClick={() => setShowDeleteConfirm(true)}
-                >
-                  Delete Discord Token
-                </Button>
-              </Disabled>
+              <Button
+                disabled={isSubmitting || hasServerConfigs}
+                variant="danger"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Delete Discord Token
+              </Button>
             </SimpleTooltip>
           )}
         </Section>
@@ -167,11 +165,12 @@ export function BotConfigCard() {
                 disabled={isSubmitting}
                 className="flex-1"
               />
-              <Disabled disabled={isSubmitting || !botToken.trim()}>
-                <Button onClick={handleSaveToken}>
-                  {isSubmitting ? "Saving..." : "Save Token"}
-                </Button>
-              </Disabled>
+              <Button
+                disabled={isSubmitting || !botToken.trim()}
+                onClick={handleSaveToken}
+              >
+                {isSubmitting ? "Saving..." : "Save Token"}
+              </Button>
             </Section>
           </Section>
         )}

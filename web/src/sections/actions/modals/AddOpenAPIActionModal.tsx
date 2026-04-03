@@ -11,7 +11,7 @@ import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { Button } from "@opal/components";
-import { Disabled, Hoverable } from "@opal/core";
+import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -366,29 +366,31 @@ function FormContent({
                   onDisconnectTool(existingTool);
                 }}
               />
-              <Disabled disabled={!onEditAuthentication}>
-                <Button
-                  prominence="secondary"
-                  type="button"
-                  onClick={handleEditAuthenticationClick}
-                >
-                  Edit Configs
-                </Button>
-              </Disabled>
+              <Button
+                disabled={!onEditAuthentication}
+                prominence="secondary"
+                type="button"
+                onClick={handleEditAuthenticationClick}
+              >
+                Edit Configs
+              </Button>
             </Section>
           </Section>
         )}
       </Modal.Body>
 
       <Modal.Footer>
-        <Disabled disabled={isSubmitting}>
-          <Button prominence="secondary" type="button" onClick={handleClose}>
-            Cancel
-          </Button>
-        </Disabled>
-        <Disabled disabled={isSubmitting || !dirty}>
-          <Button type="submit">{primaryButtonLabel}</Button>
-        </Disabled>
+        <Button
+          disabled={isSubmitting}
+          prominence="secondary"
+          type="button"
+          onClick={handleClose}
+        >
+          Cancel
+        </Button>
+        <Button disabled={isSubmitting || !dirty} type="submit">
+          {primaryButtonLabel}
+        </Button>
       </Modal.Footer>
     </Form>
   );

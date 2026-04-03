@@ -42,6 +42,7 @@ const E2E_IMAGE_GEN_API_KEY =
  * - `deleteProvider(id)` - Deletes an LLM provider
  *
  * **User Groups:**
+ * - `getUserGroups()` - Lists all user groups (including default system groups)
  * - `createUserGroup(name)` - Creates a user group
  * - `deleteUserGroup(id)` - Deletes a user group
  *
@@ -630,6 +631,18 @@ export class OnyxApiClient {
     );
 
     this.log(`Deleted user group: ${groupId}`);
+  }
+
+  /**
+   * Lists all user groups.
+   */
+  async getUserGroups(): Promise<
+    Array<{ id: number; name: string; is_default: boolean }>
+  > {
+    const response = await this.get(
+      "/manage/admin/user-group?include_default=true"
+    );
+    return response.json();
   }
 
   async setUserRole(

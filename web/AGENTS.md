@@ -193,9 +193,9 @@ hover, active, and disabled states.
 
 ### Disabled (`core/disabled/`)
 
-Propagates disabled state via React context. `Interactive.Stateless` and `Interactive.Stateful`
-consume this automatically, so wrapping a subtree in `<Disabled disabled={true}>` disables all
-interactive descendants.
+A pure CSS wrapper that applies disabled visuals (`opacity-50`, `cursor-not-allowed`,
+`pointer-events: none`) to a single child element via Radix `Slot`. Has no React context —
+Interactive primitives and buttons manage their own disabled state via a `disabled` prop.
 
 ### Hoverable (`core/animations/`)
 

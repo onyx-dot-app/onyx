@@ -137,15 +137,14 @@ const LLMStepInner = ({
             variant="section"
             paddingVariant="lg"
             rightChildren={
-              <Disabled disabled={disabled}>
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgExternalLink}
-                  href="/admin/configuration/llm"
-                >
-                  View in Admin Panel
-                </Button>
-              </Disabled>
+              <Button
+                disabled={disabled}
+                prominence="tertiary"
+                rightIcon={SvgExternalLink}
+                href="/admin/configuration/llm"
+              >
+                View in Admin Panel
+              </Button>
             }
           />
           <Separator />

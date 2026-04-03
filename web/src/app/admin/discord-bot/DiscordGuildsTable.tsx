@@ -13,7 +13,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/DeleteButton";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SvgEdit, SvgServer } from "@opal/icons";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
@@ -116,17 +115,14 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
           {guilds.map((guild) => (
             <TableRow key={guild.id}>
               <TableCell>
-                <Disabled disabled={!guild.guild_id}>
-                  <Button
-                    prominence="internal"
-                    onClick={() =>
-                      router.push(`/admin/discord-bot/${guild.id}`)
-                    }
-                    icon={SvgEdit}
-                  >
-                    {guild.guild_name || `Server #${guild.id}`}
-                  </Button>
-                </Disabled>
+                <Button
+                  disabled={!guild.guild_id}
+                  prominence="internal"
+                  onClick={() => router.push(`/admin/discord-bot/${guild.id}`)}
+                  icon={SvgEdit}
+                >
+                  {guild.guild_name || `Server #${guild.id}`}
+                </Button>
               </TableCell>
               <TableCell>
                 {guild.guild_id ? (

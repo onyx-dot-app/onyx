@@ -8,6 +8,7 @@ import pytest
 from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import AccountType
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
@@ -46,6 +47,7 @@ def _create_admin(db_session: Session) -> User:
         is_superuser=True,
         is_verified=True,
         role=UserRole.ADMIN,
+        account_type=AccountType.STANDARD,
     )
     db_session.add(user)
     db_session.commit()

@@ -1,6 +1,6 @@
 """Tests for memory tool streaming packet emissions."""
 
-from queue import Queue
+import queue
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -18,9 +18,13 @@ from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
 
 @pytest.fixture
-def emitter() -> Emitter:
-    bus: Queue = Queue()
-    return Emitter(bus)
+def emitter_queue() -> queue.Queue:
+    return queue.Queue()
+
+
+@pytest.fixture
+def emitter(emitter_queue: queue.Queue) -> Emitter:
+    return Emitter(merged_queue=emitter_queue)
 
 
 @pytest.fixture
@@ -53,24 +57,27 @@ class TestMemoryToolEmitStart:
     def test_emit_start_emits_memory_tool_start_packet(
         self,
         memory_tool: MemoryTool,
-        emitter: Emitter,
+        emitter_queue: queue.Queue,
         placement: Placement,
     ) -> None:
         memory_tool.emit_start(placement)
 
-        packet = emitter.bus.get_nowait()
+        _key, packet = emitter_queue.get_nowait()
         assert isinstance(packet.obj, MemoryToolStart)
-        assert packet.placement == placement
+        assert packet.placement is not None
+        assert packet.placement.turn_index == placement.turn_index
+        assert packet.placement.tab_index == placement.tab_index
+        assert packet.placement.model_index == 0  # emitter stamps model_index=0
 
     def test_emit_start_with_different_placement(
         self,
         memory_tool: MemoryTool,
-        emitter: Emitter,
+        emitter_queue: queue.Queue,
     ) -> None:
         placement = Placement(turn_index=2, tab_index=1)
         memory_tool.emit_start(placement)
 
-        packet = emitter.bus.get_nowait()
+        _key, packet = emitter_queue.get_nowait()
         assert packet.placement.turn_index == 2
         assert packet.placement.tab_index == 1
 
@@ -81,7 +88,7 @@ class TestMemoryToolRun:
         self,
         mock_process: MagicMock,
         memory_tool: MemoryTool,
-        emitter: Emitter,
+        emitter_queue: queue.Queue,
         placement: Placement,
         override_kwargs: MemoryToolOverrideKwargs,
     ) -> None:
@@ -93,21 +100,19 @@ class TestMemoryToolRun:
             memory="User prefers Python",
         )
 
-        # The delta packet should be in the queue
-        packet = emitter.bus.get_nowait()
+        _key, packet = emitter_queue.get_nowait()
         assert isinstance(packet.obj, MemoryToolDelta)
         assert packet.obj.memory_text == "User prefers Python"
         assert packet.obj.operation == "add"
         assert packet.obj.memory_id is None
         assert packet.obj.index is None
-        assert packet.placement == placement
 
     @patch("onyx.tools.tool_implementations.memory.memory_tool.process_memory_update")
     def test_run_emits_delta_for_update_operation(
         self,
         mock_process: MagicMock,
         memory_tool: MemoryTool,
-        emitter: Emitter,
+        emitter_queue: queue.Queue,
         placement: Placement,
         override_kwargs: MemoryToolOverrideKwargs,
     ) -> None:
@@ -119,7 +124,7 @@ class TestMemoryToolRun:
             memory="User prefers light mode",
         )
 
-        packet = emitter.bus.get_nowait()
+        _key, packet = emitter_queue.get_nowait()
         assert isinstance(packet.obj, MemoryToolDelta)
         assert packet.obj.memory_text == "User prefers light mode"
         assert packet.obj.operation == "update"

@@ -11,7 +11,7 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { SidebarTab } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
@@ -34,7 +34,6 @@ import {
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import {
@@ -239,9 +238,7 @@ function BuildSessionButton({
               <Text
                 as="p"
                 data-state={isActive ? "active" : "inactive"}
-                className={cn(
-                  "sidebar-tab-text-defaulted line-clamp-1 break-all text-left"
-                )}
+                className="line-clamp-1 break-all text-left"
                 mainUiBody
               >
                 <TypewriterText
@@ -272,25 +269,22 @@ function BuildSessionButton({
           twoTone={!isDeleting && !deleteSuccess && !deleteError}
           submit={
             deleteSuccess ? (
-              <Disabled disabled>
-                <Button variant="action" icon={SvgCheckCircle}>
-                  Done
-                </Button>
-              </Disabled>
+              <Button disabled variant="action" icon={SvgCheckCircle}>
+                Done
+              </Button>
             ) : deleteError ? (
               <Button variant="danger" onClick={closeModal}>
                 Close
               </Button>
             ) : (
-              <Disabled disabled={isDeleting}>
-                <Button
-                  variant="danger"
-                  onClick={handleConfirmDelete}
-                  icon={isDeleting ? SimpleLoader : undefined}
-                >
-                  {isDeleting ? "Deleting..." : "Delete"}
-                </Button>
-              </Disabled>
+              <Button
+                disabled={isDeleting}
+                variant="danger"
+                onClick={handleConfirmDelete}
+                icon={isDeleting ? SimpleLoader : undefined}
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
             )
           }
         >

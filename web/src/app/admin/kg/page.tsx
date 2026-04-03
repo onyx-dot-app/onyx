@@ -10,7 +10,6 @@ import {
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
@@ -201,9 +200,9 @@ function KGConfiguration({
                 disabled={!props.values.enabled}
               />
             </div>
-            <Disabled disabled={!props.dirty}>
-              <Button type="submit">Submit</Button>
-            </Disabled>
+            <Button disabled={!props.dirty} type="submit">
+              Submit
+            </Button>
           </div>
         </Form>
       )}

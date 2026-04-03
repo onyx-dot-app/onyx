@@ -175,6 +175,28 @@ def _strip_tool_content_from_messages(
     return result
 
 
+def _fix_tool_user_message_ordering(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Insert a synthetic assistant message between tool and user messages.
+
+    Some models (e.g. Mistral on Azure) require strict message ordering where
+    a user message cannot immediately follow a tool message. This function
+    inserts a minimal assistant message to bridge the gap.
+    """
+    if len(messages) < 2:
+        return messages
+
+    result: list[dict[str, Any]] = [messages[0]]
+    for msg in messages[1:]:
+        prev_role = result[-1].get("role")
+        curr_role = msg.get("role")
+        if prev_role == "tool" and curr_role == "user":
+            result.append({"role": "assistant", "content": "Noted. Continuing."})
+        result.append(msg)
+    return result
+
+
 def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     """Check if any messages contain tool-related content blocks."""
     for msg in messages:
@@ -575,6 +597,18 @@ class LitellmLLM(LLM):
                     and _messages_contain_tool_content(messages)
                 ):
                     messages = _strip_tool_content_from_messages(messages)
+
+                # Some models (e.g. Mistral) reject a user message
+                # immediately after a tool message. Insert a synthetic
+                # assistant bridge message to satisfy the ordering
+                # constraint. Check both the provider and the deployment/
+                # model name to catch Mistral hosted on Azure.
+                model_or_deployment = (
+                    self._deployment_name or self._model_version or ""
+                ).lower()
+                is_mistral_model = is_mistral or "mistral" in model_or_deployment
+                if is_mistral_model:
+                    messages = _fix_tool_user_message_ordering(messages)
 
                 # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
                 # reject requests where tool_choice is explicitly null.

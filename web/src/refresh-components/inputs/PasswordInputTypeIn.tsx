@@ -5,7 +5,6 @@ import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { noProp } from "@/lib/utils";
 import { SvgEye, SvgEyeClosed } from "@opal/icons";
 
@@ -306,19 +305,18 @@ export default function PasswordInputTypeIn({
         data-ph-no-capture
         rightSection={
           showToggleButton ? (
-            <Disabled disabled={disabled || effectiveNonRevealable}>
-              <Button
-                icon={isRevealed ? SvgEye : SvgEyeClosed}
-                onClick={noProp(() => setIsPasswordVisible((v) => !v))}
-                type="button"
-                variant={isRevealed ? "action" : undefined}
-                prominence="tertiary"
-                size="sm"
-                tooltipSide="left"
-                tooltip={toggleLabel}
-                aria-label={toggleLabel}
-              />
-            </Disabled>
+            <Button
+              disabled={disabled || effectiveNonRevealable}
+              icon={isRevealed ? SvgEye : SvgEyeClosed}
+              onClick={noProp(() => setIsPasswordVisible((v) => !v))}
+              type="button"
+              variant={isRevealed ? "action" : undefined}
+              prominence="tertiary"
+              size="sm"
+              tooltipSide="left"
+              tooltip={toggleLabel}
+              aria-label={toggleLabel}
+            />
           ) : undefined
         }
         {...props}

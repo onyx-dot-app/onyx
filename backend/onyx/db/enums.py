@@ -13,19 +13,26 @@ class AccountType(str, PyEnum):
     BOT, EXT_PERM_USER, ANONYMOUS → fixed behavior
     """
 
-    STANDARD = "standard"
-    BOT = "bot"
-    EXT_PERM_USER = "ext_perm_user"
-    SERVICE_ACCOUNT = "service_account"
-    ANONYMOUS = "anonymous"
+    STANDARD = "STANDARD"
+    BOT = "BOT"
+    EXT_PERM_USER = "EXT_PERM_USER"
+    SERVICE_ACCOUNT = "SERVICE_ACCOUNT"
+    ANONYMOUS = "ANONYMOUS"
+
+    def is_web_login(self) -> bool:
+        """Whether this account type supports interactive web login."""
+        return self not in (
+            AccountType.BOT,
+            AccountType.EXT_PERM_USER,
+        )
 
 
 class GrantSource(str, PyEnum):
     """How a permission grant was created."""
 
-    USER = "user"
-    SCIM = "scim"
-    SYSTEM = "system"
+    USER = "USER"
+    SCIM = "SCIM"
+    SYSTEM = "SYSTEM"
 
 
 class IndexingStatus(str, PyEnum):

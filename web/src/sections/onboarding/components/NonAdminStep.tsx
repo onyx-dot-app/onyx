@@ -8,7 +8,6 @@ import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
@@ -118,9 +117,9 @@ export default function NonAdminStep() {
                   }}
                   className="w-[26%] min-w-40"
                 />
-                <Disabled disabled={name === ""}>
-                  <Button onClick={handleSave}>Save</Button>
-                </Disabled>
+                <Button disabled={name === ""} onClick={handleSave}>
+                  Save
+                </Button>
               </div>
             }
           />

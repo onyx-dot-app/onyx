@@ -1,5 +1,4 @@
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { Text } from "@opal/components";
 
 import { FaNewspaper, FaTrash } from "react-icons/fa";
@@ -97,11 +96,9 @@ export default function EditCredential({
               <Button onClick={() => resetForm()} icon={SvgTrash}>
                 Reset Changes
               </Button>
-              <Disabled disabled={isSubmitting}>
-                <Button type="submit" icon={FaNewspaper}>
-                  Update
-                </Button>
-              </Disabled>
+              <Button disabled={isSubmitting} type="submit" icon={FaNewspaper}>
+                Update
+              </Button>
             </div>
           </Form>
         )}

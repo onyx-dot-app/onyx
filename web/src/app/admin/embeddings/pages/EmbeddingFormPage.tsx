@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { WarningCircle, Warning, CaretDownIcon } from "@phosphor-icons/react";
 import {
   CloudEmbeddingModel,
@@ -378,16 +377,15 @@ export default function EmbeddingForm() {
         </div>
       ) : (
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
-          <Disabled disabled={!isOverallFormValid}>
-            <OpalButton
-              onClick={() => {
-                updateSearch();
-                navigateToEmbeddingPage("search settings");
-              }}
-            >
-              Update Search
-            </OpalButton>
-          </Disabled>
+          <OpalButton
+            disabled={!isOverallFormValid}
+            onClick={() => {
+              updateSearch();
+              navigateToEmbeddingPage("search settings");
+            }}
+          >
+            Update Search
+          </OpalButton>
           {!isOverallFormValid &&
             Object.keys(combinedFormErrors).length > 0 && (
               <div className="relative group">
