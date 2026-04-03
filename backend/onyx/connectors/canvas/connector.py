@@ -463,10 +463,18 @@ class CanvasConnector(
 
         # Fetch one page of API results for the current stage.
         # If next_url is set, we're resuming mid-pagination.
+        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
         stage_config: dict[str, dict[str, Any]] = {
             "pages": {
                 "endpoint": f"courses/{course_id}/pages",
-                "params": {"per_page": "100", "include[]": "body", "published": "true"},
+                "params": {
+                    "per_page": "100",
+                    "include[]": "body",
+                    "published": "true",
+                    "sort": "updated_at",
+                    "order": "desc",
+                },
             },
             "assignments": {
                 "endpoint": f"courses/{course_id}/assignments",
@@ -478,6 +486,8 @@ class CanvasConnector(
                     "per_page": "100",
                     "context_codes[]": f"course_{course_id}",
                     "active_only": "true",
+                    "start_date": start_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "end_date": end_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 },
             },
         }
@@ -515,11 +525,28 @@ class CanvasConnector(
             return new_checkpoint
 
         # Process fetched items
+        early_exit = False
         for item in response or []:
             try:
                 if stage == "pages":
                     page = CanvasPage.from_api(item, course_id=course_id)
-                    if not page.updated_at or not _in_time_window(page.updated_at):
+                    if not page.updated_at:
+                        continue
+                    # Pages are sorted by updated_at desc — once we see
+                    # an item at or before `start`, all remaining items
+                    # on this and subsequent pages are older too.
+                    if not _in_time_window(page.updated_at):
+                        ts = (
+                            datetime.fromisoformat(
+                                page.updated_at.replace("Z", "+00:00")
+                            )
+                            .astimezone(timezone.utc)
+                            .timestamp()
+                        )
+                        if ts <= start:
+                            early_exit = True
+                            break
+                        # ts > end: page is newer than our window, skip it
                         continue
                     doc = self._convert_page_to_document(page)
                     yield _maybe_attach_permissions(doc)
@@ -565,6 +592,11 @@ class CanvasConnector(
                     failure_message=f"Failed to process {stage.removesuffix('s')}: {e}",
                     exception=e,
                 )
+
+        # If we hit an item older than our window (pages sorted desc),
+        # skip remaining pagination and advance to the next stage.
+        if early_exit:
+            result_next_url = None
 
         # If there are more pages, save the cursor and return
         if result_next_url:
