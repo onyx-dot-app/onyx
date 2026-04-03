@@ -127,17 +127,8 @@
 }
 
 @layer utilities {
-  /* Hide scrollbar for Chrome, Safari and Opera */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* Hide scrollbar for IE, Edge and Firefox */
   .no-scrollbar {
-    -ms-overflow-style: none;
-    /* IE and Edge */
     scrollbar-width: none;
-    /* Firefox */
   }
 
   /* SHADOWS */
@@ -362,27 +353,9 @@
 
 /* SCROLL BAR */
 
-.default-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-
-.default-scrollbar::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-.default-scrollbar::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-.default-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
 .default-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: #888 transparent;
-  overflow: overlay;
   overflow-y: scroll;
   overflow-x: hidden;
 }
@@ -392,78 +365,21 @@
   height: 100%;
 }
 
-.inputscroll::-webkit-scrollbar-track {
-  background: #e5e7eb;
+.inputscroll {
   scrollbar-width: none;
 }
 
-::-webkit-scrollbar {
-  width: 0px;
-  /* Vertical scrollbar width */
-  height: 8px;
-  /* Horizontal scrollbar height */
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-  /* background: theme("colors.scrollbar.track"); */
-  /* Track background color */
-}
-
-/* Style the scrollbar handle */
-::-webkit-scrollbar-thumb {
-  background: transparent;
-  /* background: theme("colors.scrollbar.thumb"); */
-  /* Handle color */
-  border-radius: 10px;
-}
-
-/* Handle on hover */
-::-webkit-scrollbar-thumb:hover {
-  background: transparent;
-  /* background: theme("colors.scrollbar.thumb-hover"); */
-  /* Handle color on hover */
-}
-
-.dark-scrollbar::-webkit-scrollbar-thumb {
-  background: transparent;
-  /* background: theme("colors.scrollbar.dark.thumb"); */
-  /* Handle color */
-  border-radius: 10px;
-}
-
-.dark-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: transparent;
-  /* background: theme("colors.scrollbar.dark.thumb-hover"); */
-  /* Handle color on hover */
+/* Ensure native scrollbars are visible */
+@layer base {
+  * {
+    scrollbar-width: auto;
+  }
 }
 
 /* TEXTAREA */
 
-textarea::-webkit-scrollbar {
-  width: 8px;
-}
-
-textarea::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-  border-radius: 4px;
-}
-
-textarea::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 4px;
-}
-
-textarea::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-}
-
 textarea {
   resize: vertical;
-}
-
-/* For Firefox */
-textarea {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
