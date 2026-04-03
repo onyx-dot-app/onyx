@@ -34,6 +34,25 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 
+def is_limited_user(user: User) -> bool:
+    """Check if a user is effectively limited — i.e. should be denied
+    access by ``current_user`` and should not receive default-group
+    membership.
+
+    A user is limited when they are:
+    * an anonymous user, or
+    * a service account with no effective permissions (no group membership).
+    """
+    if user.account_type == AccountType.ANONYMOUS:
+        return True
+    if (
+        user.account_type == AccountType.SERVICE_ACCOUNT
+        and not user.effective_permissions
+    ):
+        return True
+    return False
+
+
 def validate_user_role_update(
     requested_role: UserRole,
     current_account_type: AccountType,
