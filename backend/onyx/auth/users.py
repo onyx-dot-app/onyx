@@ -1681,9 +1681,16 @@ async def current_user(
 ) -> User:
     user = await double_check_user(user)
 
-    if user.role == UserRole.LIMITED:
+    if user.account_type == AccountType.ANONYMOUS:
         raise BasicAuthenticationError(
-            detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
+            detail="Access denied. Anonymous users cannot access this resource.",
+        )
+    if (
+        user.account_type == AccountType.SERVICE_ACCOUNT
+        and not user.effective_permissions
+    ):
+        raise BasicAuthenticationError(
+            detail="Access denied. Service account has no permissions.",
         )
     return user
 
@@ -1817,11 +1824,19 @@ async def current_user_from_websocket(
     # Apply same checks as HTTP auth (verification, OIDC expiry, role)
     user = await double_check_user(user)
 
-    # Block LIMITED users (same as current_user)
-    if user.role == UserRole.LIMITED:
-        logger.warning(f"WS auth: user {user.email} has LIMITED role")
+    # Block anonymous and limited service account users (same as current_user)
+    if user.account_type == AccountType.ANONYMOUS:
+        logger.warning(f"WS auth: user {user.email} is anonymous")
         raise BasicAuthenticationError(
-            detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
+            detail="Access denied. Anonymous users cannot access this resource.",
+        )
+    if (
+        user.account_type == AccountType.SERVICE_ACCOUNT
+        and not user.effective_permissions
+    ):
+        logger.warning(f"WS auth: service account {user.email} has no permissions")
+        raise BasicAuthenticationError(
+            detail="Access denied. Service account has no permissions.",
         )
 
     logger.debug(f"WS auth: authenticated {user.email}")

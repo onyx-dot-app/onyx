@@ -36,7 +36,6 @@ logger = setup_logger()
 
 def validate_user_role_update(
     requested_role: UserRole,
-    current_role: UserRole,
     current_account_type: AccountType,
     explicit_override: bool = False,
 ) -> None:
@@ -50,7 +49,7 @@ def validate_user_role_update(
     - requested role is a limited user
     - current account type is BOT (slack user)
     - current account type is EXT_PERM_USER
-    - current role is a limited user
+    - current account type is ANONYMOUS or SERVICE_ACCOUNT
     """
 
     if current_account_type == AccountType.BOT:
@@ -65,10 +64,10 @@ def validate_user_role_update(
             detail="To change an External Permissioned User's role, they must first login to Onyx via the web app.",
         )
 
-    if current_role == UserRole.LIMITED:
+    if current_account_type in (AccountType.ANONYMOUS, AccountType.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=400,
-            detail="To change a Limited User's role, they must first login to Onyx via the web app.",
+            detail="Cannot change the role of an anonymous or service account user.",
         )
 
     if explicit_override:

@@ -65,8 +65,15 @@ def update_user_role(
             )
         )
 
-        # Re-assign to the correct default group (skip for LIMITED).
-        if new_role != UserRole.LIMITED:
+        # Re-assign to the correct default group.
+        # assign_user_to_default_groups__no_commit internally skips
+        # ANONYMOUS, BOT, and EXT_PERM_USER account types.
+        # Also skip SERVICE_ACCOUNT users with no effective permissions
+        # (equivalent to the old LIMITED role — no group assignment).
+        if not (
+            user.account_type == AccountType.SERVICE_ACCOUNT
+            and not user.effective_permissions
+        ):
             assign_user_to_default_groups__no_commit(
                 db_session,
                 user,
@@ -98,7 +105,14 @@ def activate_user(
     created while inactive or deactivated before the backfill migration.
     """
     user.is_active = True
-    if user.role != UserRole.LIMITED:
+    # assign_user_to_default_groups__no_commit internally skips
+    # ANONYMOUS, BOT, and EXT_PERM_USER account types.
+    # Also skip SERVICE_ACCOUNT users with no effective permissions
+    # (equivalent to the old LIMITED role — no group assignment).
+    if not (
+        user.account_type == AccountType.SERVICE_ACCOUNT
+        and not user.effective_permissions
+    ):
         assign_user_to_default_groups__no_commit(
             db_session, user, is_admin=(user.role == UserRole.ADMIN)
         )
