@@ -20,7 +20,8 @@ const (
 type Features struct {
 	// StreamMarkdown enables progressive markdown rendering during streaming,
 	// so output is formatted as it arrives rather than after completion.
-	StreamMarkdown bool `json:"stream_markdown,omitempty"`
+	// nil means use the app default (true).
+	StreamMarkdown *bool `json:"stream_markdown,omitempty"`
 }
 
 // OnyxCliConfig holds the CLI configuration.
@@ -34,10 +35,19 @@ type OnyxCliConfig struct {
 // DefaultConfig returns a config with default values.
 func DefaultConfig() OnyxCliConfig {
 	return OnyxCliConfig{
-		ServerURL:        "https://cloud.onyx.app",
-		APIKey:           "",
+		ServerURL:      "https://cloud.onyx.app",
+		APIKey:         "",
 		DefaultAgentID: 0,
 	}
+}
+
+// StreamMarkdownEnabled returns whether stream markdown is enabled,
+// defaulting to true when the user hasn't set an explicit preference.
+func (f Features) StreamMarkdownEnabled() bool {
+	if f.StreamMarkdown != nil {
+		return *f.StreamMarkdown
+	}
+	return true
 }
 
 // IsConfigured returns true if the config has an API key.
@@ -102,7 +112,7 @@ func Load() OnyxCliConfig {
 	}
 	if v := os.Getenv(EnvStreamMarkdown); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
-			cfg.Features.StreamMarkdown = b
+			cfg.Features.StreamMarkdown = &b
 		} else {
 			fmt.Fprintf(os.Stderr, "warning: invalid value %q for %s (expected true/false), ignoring\n", v, EnvStreamMarkdown)
 		}

@@ -199,22 +199,25 @@ func TestSaveAndReload(t *testing.T) {
 	}
 }
 
-func TestDefaultFeaturesStreamMarkdownDisabled(t *testing.T) {
+func TestDefaultFeaturesStreamMarkdownNil(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.Features.StreamMarkdown {
-		t.Error("expected StreamMarkdown to be false by default")
+	if cfg.Features.StreamMarkdown != nil {
+		t.Error("expected StreamMarkdown to be nil by default")
+	}
+	if !cfg.Features.StreamMarkdownEnabled() {
+		t.Error("expected StreamMarkdownEnabled() to return true when nil")
 	}
 }
 
-func TestEnvOverrideStreamMarkdown(t *testing.T) {
+func TestEnvOverrideStreamMarkdownFalse(t *testing.T) {
 	clearEnvVars(t)
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	t.Setenv(EnvStreamMarkdown, "true")
+	t.Setenv(EnvStreamMarkdown, "false")
 
 	cfg := Load()
-	if !cfg.Features.StreamMarkdown {
-		t.Error("expected StreamMarkdown=true from env override")
+	if cfg.Features.StreamMarkdown == nil || *cfg.Features.StreamMarkdown {
+		t.Error("expected StreamMarkdown=false from env override")
 	}
 }
 
@@ -233,7 +236,7 @@ func TestLoadFeaturesFromFile(t *testing.T) {
 	writeConfig(t, dir, data)
 
 	cfg := Load()
-	if !cfg.Features.StreamMarkdown {
+	if cfg.Features.StreamMarkdown == nil || !*cfg.Features.StreamMarkdown {
 		t.Error("expected StreamMarkdown=true from config file")
 	}
 }

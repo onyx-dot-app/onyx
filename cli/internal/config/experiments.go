@@ -18,11 +18,11 @@ func Experiments(f Features) []Experiment {
 	return []Experiment{
 		{
 			Name:    "Stream Markdown",
-			Flag:    "--stream-markdown",
+			Flag:    "--no-stream-markdown",
 			EnvVar:  EnvStreamMarkdown,
 			Config:  "features.stream_markdown",
-			Enabled: f.StreamMarkdown,
-			Desc:    "Render markdown progressively as the response streams in",
+			Enabled: f.StreamMarkdownEnabled(),
+			Desc:    "Render markdown progressively as the response streams in (enabled by default)",
 		},
 	}
 }
@@ -40,7 +40,7 @@ func ExperimentsText(f Features) string {
 		text += fmt.Sprintf("    %s\n", e.Desc)
 		text += fmt.Sprintf("    flag: %s  env: %s  config: %s\n\n", e.Flag, e.EnvVar, e.Config)
 	}
-	text += "Enable via CLI flag, environment variable, or config file.\n"
-	text += "Example: onyx-cli chat --stream-markdown"
+	text += "Toggle via CLI flag, environment variable, or config file.\n"
+	text += "Example: onyx-cli chat --no-stream-markdown"
 	return text
 }

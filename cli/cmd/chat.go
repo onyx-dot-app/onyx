@@ -10,7 +10,7 @@ import (
 )
 
 func newChatCmd() *cobra.Command {
-	var streamMarkdown bool
+	var noStreamMarkdown bool
 
 	cmd := &cobra.Command{
 		Use:   "chat",
@@ -33,8 +33,9 @@ an interactive setup wizard will guide you through configuration.`,
 			}
 
 			// CLI flag overrides config/env
-			if cmd.Flags().Changed("stream-markdown") {
-				cfg.Features.StreamMarkdown = streamMarkdown
+			if cmd.Flags().Changed("no-stream-markdown") {
+				v := !noStreamMarkdown
+				cfg.Features.StreamMarkdown = &v
 			}
 
 			starprompt.MaybePrompt()
@@ -46,8 +47,7 @@ an interactive setup wizard will guide you through configuration.`,
 		},
 	}
 
-	cmd.Flags().BoolVar(&streamMarkdown, "stream-markdown", false, "Enable progressive markdown rendering during streaming (experimental)")
-	_ = cmd.Flags().MarkHidden("stream-markdown")
+	cmd.Flags().BoolVar(&noStreamMarkdown, "no-stream-markdown", false, "Disable progressive markdown rendering during streaming")
 
 	return cmd
 }
