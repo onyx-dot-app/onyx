@@ -338,7 +338,7 @@ function AdminSidebarInner({
         >
           Exit Admin Panel
         </SidebarTab>
-        <AccountPopover folded={folded} />
+        <AccountPopover />
       </SidebarLayouts.Footer>
     </>
   );
