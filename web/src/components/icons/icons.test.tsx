@@ -60,7 +60,11 @@ describe("Logo Icons", () => {
     const icon = container.querySelector("svg");
 
     expect(icon).toBeInTheDocument();
-    expect(icon).toHaveClass("custom", "text-[#33C19E]", "dark:text-white");
-    expect(icon).not.toHaveClass("text-red-500", "dark:text-black");
+    expect(icon).toHaveClass(
+      "custom",
+      "text-red-500",
+      "dark:text-black",
+      "!text-[#33C19E]"
+    );
   });
 });
