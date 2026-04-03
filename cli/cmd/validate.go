@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,6 +41,10 @@ minimum required.`,
 			// Test connection
 			client := api.NewClient(cfg)
 			if err := client.TestConnection(cmd.Context()); err != nil {
+				var authErr *api.AuthError
+				if errors.As(err, &authErr) {
+					return exitcodes.Newf(exitcodes.AuthFailure, "authentication failed: %v\n  Reconfigure with: onyx-cli configure", err)
+				}
 				return exitcodes.Newf(exitcodes.Unreachable, "connection failed: %v\n  Reconfigure with: onyx-cli configure", err)
 			}
 

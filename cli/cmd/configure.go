@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -100,7 +101,11 @@ func configureNonInteractive(serverURL, apiKey string, dryRun bool) error {
 	defer cancel()
 
 	if err := client.TestConnection(ctx); err != nil {
-		return exitcodes.Newf(exitcodes.Unreachable, "connection test failed: %v\n  Check your server URL and API key", err)
+		var authErr *api.AuthError
+		if errors.As(err, &authErr) {
+			return exitcodes.Newf(exitcodes.AuthFailure, "authentication failed: %v\n  Check your API key", err)
+		}
+		return exitcodes.Newf(exitcodes.Unreachable, "connection failed: %v\n  Check your server URL", err)
 	}
 
 	if dryRun {
