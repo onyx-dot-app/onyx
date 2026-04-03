@@ -44,7 +44,7 @@ _NOTION_CALL_TIMEOUT = 30  # 30 seconds
 _MAX_PAGES = 1000
 
 
-# TODO: Tables need to be ingested, Pages need to have their metadata ingested
+# TODO: Pages need to have their metadata ingested
 
 
 class NotionPage(BaseModel):
@@ -452,6 +452,19 @@ class NotionConnector(LoadConnector, PollConnector):
             sub_inner_dict: dict[str, Any] | list[Any] | str = inner_dict
             while isinstance(sub_inner_dict, dict) and "type" in sub_inner_dict:
                 type_name = sub_inner_dict["type"]
+
+                # Notion user objects (people properties, created_by, etc.) have
+                # "name" at the same level as "type": "person"/"bot". If we drill
+                # into the person/bot sub-dict we lose the name. Capture it here
+                # before descending, but skip "title"-type properties where "name"
+                # is not the display value we want.
+                if (
+                    "name" in sub_inner_dict
+                    and isinstance(sub_inner_dict["name"], str)
+                    and type_name not in ("title",)
+                ):
+                    return sub_inner_dict["name"]
+
                 sub_inner_dict = sub_inner_dict[type_name]
 
                 # If the innermost layer is None, the value is not set
@@ -662,6 +675,19 @@ class NotionConnector(LoadConnector, PollConnector):
                         if "text" in rich_text:
                             text = rich_text["text"]["content"]
                             cur_result_text_arr.append(text)
+
+                # table_row blocks store content in "cells" (list of lists
+                # of rich text objects) rather than "rich_text"
+                if "cells" in result_obj:
+                    row_cells: list[str] = []
+                    for cell in result_obj["cells"]:
+                        cell_texts = [
+                            rt.get("plain_text", "")
+                            for rt in cell
+                            if isinstance(rt, dict)
+                        ]
+                        row_cells.append(" ".join(cell_texts))
+                    cur_result_text_arr.append("\t".join(row_cells))
 
                 if result["has_children"]:
                     if result_type == "child_page":
