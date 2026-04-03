@@ -3,11 +3,14 @@ from typing import Any
 from typing import cast
 from urllib.parse import urlencode
 
+import requests
+
 from onyx.configs.app_configs import FEISHU_CLIENT_ID
 from onyx.configs.app_configs import FEISHU_CLIENT_SECRET
 from onyx.configs.app_configs import FEISHU_OAUTH_EMAIL_FALLBACK
 from onyx.configs.app_configs import FEISHU_OAUTH_SCOPE
 from onyx.configs.app_configs import FEISHU_REDIRECT_URI
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
@@ -81,9 +84,8 @@ class FeishuConnector(OAuthConnector):
         redirect_uri = FEISHU_REDIRECT_URI or get_oauth_callback_uri(
             base_domain, DocumentSource.FEISHU.value
         )
-        token_response = request_with_retries(
-            method="POST",
-            url=_FEISHU_TOKEN_URL,
+        token_response = requests.post(
+            _FEISHU_TOKEN_URL,
             data=json.dumps(
                 {
                     "grant_type": "authorization_code",
@@ -94,8 +96,9 @@ class FeishuConnector(OAuthConnector):
                 }
             ),
             headers={"Content-Type": "application/json"},
-            tries=1,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
+        token_response.raise_for_status()
         token_payload = _unwrap_feishu_payload(token_response.json())
         access_token = token_payload.get("access_token")
         if not access_token:
