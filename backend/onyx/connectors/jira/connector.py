@@ -95,9 +95,7 @@ def _perform_jql_search(
     max_results: int,
     fields: str | None = None,
     all_issue_ids: list[list[str]] | None = None,
-    checkpoint_callback: (
-        Callable[[Iterator[list[str]], str | None], None] | None
-    ) = None,
+    checkpoint_callback: (Callable[[Iterator[list[str]], str | None], None] | None) = None,
     nextPageToken: str | None = None,
     ids_done: bool = False,
 ) -> Iterable[Issue]:
@@ -157,17 +155,9 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
     status_code = None
 
     def _format_error_text(error_payload: Any) -> str:
-        error_messages = (
-            error_payload.get("errorMessages", [])
-            if isinstance(error_payload, dict)
-            else []
-        )
+        error_messages = error_payload.get("errorMessages", []) if isinstance(error_payload, dict) else []
         if error_messages:
-            return (
-                "; ".join(error_messages)
-                if isinstance(error_messages, list)
-                else str(error_messages)
-            )
+            return "; ".join(error_messages) if isinstance(error_messages, list) else str(error_messages)
         return str(error_payload)
 
     # Try to get status code and error text from JIRAError or requests response
@@ -196,25 +186,17 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
             raise ConnectorValidationError(
                 f"The specified Jira project does not exist or you don't have access to it. JQL query: {jql}. Error: {error_text}"
             )
-        raise ConnectorValidationError(
-            f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
-        )
+        raise ConnectorValidationError(f"Invalid JQL query. JQL: {jql}. Error: {error_text}")
     elif status_code == 401:
-        raise CredentialExpiredError(
-            "Jira credentials are expired or invalid (HTTP 401)."
-        )
+        raise CredentialExpiredError("Jira credentials are expired or invalid (HTTP 401).")
     elif status_code == 403:
-        raise InsufficientPermissionsError(
-            f"Insufficient permissions to execute JQL query. JQL: {jql}"
-        )
+        raise InsufficientPermissionsError(f"Insufficient permissions to execute JQL query. JQL: {jql}")
 
     # Re-raise for other error types
     raise e
 
 
-def enhanced_search_ids(
-    jira_client: JIRA, jql: str, nextPageToken: str | None = None
-) -> tuple[list[str], str | None]:
+def enhanced_search_ids(jira_client: JIRA, jql: str, nextPageToken: str | None = None) -> tuple[list[str], str | None]:
     # https://community.atlassian.com/forums/Jira-articles/
     # Avoiding-Pitfalls-A-Guide-to-Smooth-Migration-to-Enhanced-JQL/ba-p/2985433
     # For cloud, it's recommended that we fetch all ids first then use the bulk fetch API.
@@ -235,14 +217,10 @@ def enhanced_search_ids(
         _handle_jira_search_error(e, jql)
         raise  # Explicitly re-raise for type checker, should never reach here
 
-    return [str(issue["id"]) for issue in response_json["issues"]], response_json.get(
-        "nextPageToken"
-    )
+    return [str(issue["id"]) for issue in response_json["issues"]], response_json.get("nextPageToken")
 
 
-def _bulk_fetch_request(
-    jira_client: JIRA, issue_ids: list[str], fields: str | None
-) -> list[dict[str, Any]]:
+def _bulk_fetch_request(jira_client: JIRA, issue_ids: list[str], fields: str | None) -> list[dict[str, Any]]:
     """Raw POST to the bulkfetch endpoint. Returns the list of raw issue dicts."""
     bulk_fetch_path = jira_client._get_url("issue/bulkfetch")
     # Prepare the payload according to Jira API v3 specification
@@ -255,9 +233,7 @@ def _bulk_fetch_request(
     return resp.json()["issues"]
 
 
-def bulk_fetch_issues(
-    jira_client: JIRA, issue_ids: list[str], fields: str | None = None
-) -> list[Issue]:
+def bulk_fetch_issues(jira_client: JIRA, issue_ids: list[str], fields: str | None = None) -> list[Issue]:
     # TODO(evan): move away from this jira library if they continue to not support
     # the endpoints we need. Using private fields is not ideal, but
     # is likely fine for now since we pin the library version
@@ -284,10 +260,7 @@ def bulk_fetch_issues(
         logger.error(f"Error fetching issues: {e}")
         raise
 
-    return [
-        Issue(jira_client._options, jira_client._session, raw=issue)
-        for issue in raw_issues
-    ]
+    return [Issue(jira_client._options, jira_client._session, raw=issue) for issue in raw_issues]
 
 
 def _perform_jql_search_v3(
@@ -296,9 +269,7 @@ def _perform_jql_search_v3(
     max_results: int,
     all_issue_ids: list[list[str]],
     fields: str | None = None,
-    checkpoint_callback: (
-        Callable[[Iterator[list[str]], str | None], None] | None
-    ) = None,
+    checkpoint_callback: (Callable[[Iterator[list[str]], str | None], None] | None) = None,
     nextPageToken: str | None = None,
     ids_done: bool = False,
 ) -> Iterable[Issue]:
@@ -337,9 +308,7 @@ def _perform_jql_search_v2(
     """
     Unfortunately, jira server/data center will forever use the v2 APIs that are now deprecated.
     """
-    logger.debug(
-        f"Fetching Jira issues with JQL: {jql}, starting at {start}, max results: {max_results}"
-    )
+    logger.debug(f"Fetching Jira issues with JQL: {jql}, starting at {start}, max results: {max_results}")
     try:
         issues = jira_client.search_issues(
             jql_str=jql,
@@ -364,6 +333,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -382,15 +352,11 @@ def process_jira_issue(
         issue=issue,
         comment_email_blacklist=comment_email_blacklist,
     )
-    ticket_content = f"{description}\n" + "\n".join(
-        [f"Comment: {comment}" for comment in comments if comment]
-    )
+    ticket_content = f"{description}\n" + "\n".join([f"Comment: {comment}" for comment in comments if comment])
 
     # Check ticket size
     if len(ticket_content.encode("utf-8")) > JIRA_CONNECTOR_MAX_TICKET_SIZE:
-        logger.info(
-            f"Skipping {issue.key} because it exceeds the maximum size of {JIRA_CONNECTOR_MAX_TICKET_SIZE} bytes."
-        )
+        logger.info(f"Skipping {issue.key} because it exceeds the maximum size of {JIRA_CONNECTOR_MAX_TICKET_SIZE} bytes.")
         return None
 
     page_url = build_jira_url(jira_base_url, issue.key)
@@ -399,18 +365,14 @@ def process_jira_issue(
     people = set()
 
     creator = best_effort_get_field_from_issue(issue, _FIELD_REPORTER)
-    if creator is not None and (
-        basic_expert_info := best_effort_basic_expert_info(creator)
-    ):
+    if creator is not None and (basic_expert_info := best_effort_basic_expert_info(creator)):
         people.add(basic_expert_info)
         metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()
         if email := basic_expert_info.get_email():
             metadata_dict[_FIELD_REPORTER_EMAIL] = email
 
     assignee = best_effort_get_field_from_issue(issue, _FIELD_ASSIGNEE)
-    if assignee is not None and (
-        basic_expert_info := best_effort_basic_expert_info(assignee)
-    ):
+    if assignee is not None and (basic_expert_info := best_effort_basic_expert_info(assignee)):
         people.add(basic_expert_info)
         metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()
         if email := basic_expert_info.get_email():
@@ -433,9 +395,7 @@ def process_jira_issue(
         metadata_dict[_FIELD_DUEDATE] = duedate
     if issuetype := best_effort_get_field_from_issue(issue, _FIELD_ISSUETYPE):
         metadata_dict[_FIELD_ISSUETYPE] = issuetype.name
-    if resolutiondate := best_effort_get_field_from_issue(
-        issue, _FIELD_RESOLUTION_DATE
-    ):
+    if resolutiondate := best_effort_get_field_from_issue(issue, _FIELD_RESOLUTION_DATE):
         metadata_dict[_FIELD_RESOLUTION_DATE_KEY] = resolutiondate
 
     parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
@@ -452,7 +412,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -478,6 +438,18 @@ class JiraConnector(
     CheckpointedConnectorWithPermSync[JiraConnectorCheckpoint],
     SlimConnectorWithPermSync,
 ):
+    @property
+    def source(self) -> DocumentSource:
+        return DocumentSource.JIRA
+
+    @property
+    def source_display_name(self) -> str:
+        return "Jira"
+
+    @property
+    def jql_issue_type_filter(self) -> str | None:
+        return None
+
     def __init__(
         self,
         jira_base_url: str,
@@ -515,7 +487,7 @@ class JiraConnector(
     @property
     def jira_client(self) -> JIRA:
         if self._jira_client is None:
-            raise ConnectorMissingCredentialError("Jira")
+            raise ConnectorMissingCredentialError(self.source_display_name)
         return self._jira_client
 
     @property
@@ -525,9 +497,7 @@ class JiraConnector(
             return ""
         return f'"{self.jira_project}"'
 
-    def _get_project_permissions(
-        self, project_key: str, add_prefix: bool = False
-    ) -> Any:
+    def _get_project_permissions(self, project_key: str, add_prefix: bool = False) -> Any:
         """Get project permissions with caching.
 
         Args:
@@ -561,11 +531,7 @@ class JiraConnector(
         The parent object from issue.fields.parent has a different structure
         than a full Issue, so we handle it separately.
         """
-        parent_issuetype = (
-            getattr(parent.fields, "issuetype", None)
-            if hasattr(parent, "fields")
-            else None
-        )
+        parent_issuetype = getattr(parent.fields, "issuetype", None) if hasattr(parent, "fields") else None
         if parent_issuetype is None:
             return False
         return parent_issuetype.name.lower() == "epic"
@@ -629,14 +595,8 @@ class JiraConnector(
         seen_hierarchy_node_ids.add(parent_key)
 
         # Get summary if available
-        parent_summary = (
-            getattr(parent.fields, "summary", None)
-            if hasattr(parent, "fields")
-            else None
-        )
-        display_name = (
-            f"{parent_key}: {parent_summary}" if parent_summary else parent_key
-        )
+        parent_summary = getattr(parent.fields, "summary", None) if hasattr(parent, "fields") else None
+        display_name = f"{parent_key}: {parent_summary}" if parent_summary else parent_key
 
         yield HierarchyNode(
             raw_node_id=parent_key,
@@ -673,33 +633,30 @@ class JiraConnector(
         )
         return None
 
-    def _get_jql_query(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> str:
+    def _get_jql_query(self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch) -> str:
         """Get the JQL query based on configuration and time range
 
         If a custom JQL query is provided, it will be used and combined with time constraints.
         Otherwise, the query will be constructed based on project key (if provided).
         """
-        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
+        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
 
         time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
 
+        jql_clauses: list[str] = []
+
         # If custom JQL query is provided, use it and combine with time constraints
         if self.jql_query:
-            return f"({self.jql_query}) AND {time_jql}"
+            jql_clauses.append(f"({self.jql_query})")
+        elif self.jira_project:
+            jql_clauses.append(f"project = {self.quoted_jira_project}")
 
-        # Otherwise, use project key if provided
-        if self.jira_project:
-            base_jql = f"project = {self.quoted_jira_project}"
-            return f"{base_jql} AND {time_jql}"
+        if issue_type_filter := self.jql_issue_type_filter:
+            jql_clauses.append(f"({issue_type_filter})")
 
-        return time_jql
+        jql_clauses.append(time_jql)
+        return " AND ".join(jql_clauses)
 
     def load_from_checkpoint(
         self,
@@ -709,15 +666,11 @@ class JiraConnector(
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         jql = self._get_jql_query(start, end)
         try:
-            return self._load_from_checkpoint(
-                jql, checkpoint, include_permissions=False
-            )
+            return self._load_from_checkpoint(jql, checkpoint, include_permissions=False)
         except Exception as e:
             if is_atlassian_date_error(e):
                 jql = self._get_jql_query(start - ONE_HOUR, end)
-                return self._load_from_checkpoint(
-                    jql, checkpoint, include_permissions=False
-                )
+                return self._load_from_checkpoint(jql, checkpoint, include_permissions=False)
             raise e
 
     def load_from_checkpoint_with_perm_sync(
@@ -733,9 +686,7 @@ class JiraConnector(
         except Exception as e:
             if is_atlassian_date_error(e):
                 jql = self._get_jql_query(start - ONE_HOUR, end)
-                return self._load_from_checkpoint(
-                    jql, checkpoint, include_permissions=True
-                )
+                return self._load_from_checkpoint(jql, checkpoint, include_permissions=True)
             raise e
 
     def _load_from_checkpoint(
@@ -771,29 +722,19 @@ class JiraConnector(
                 # Yield hierarchy nodes BEFORE the document (parent-before-child)
                 if project_key:
                     # 1. Yield project hierarchy node (if not already yielded)
-                    yield from self._yield_project_hierarchy_node(
-                        project_key, project_name, seen_hierarchy_node_ids
-                    )
+                    yield from self._yield_project_hierarchy_node(project_key, project_name, seen_hierarchy_node_ids)
 
                     # 2. If parent is an Epic, yield hierarchy node for it
                     parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
                     if parent:
-                        yield from self._yield_parent_hierarchy_node_if_epic(
-                            parent, project_key, seen_hierarchy_node_ids
-                        )
+                        yield from self._yield_parent_hierarchy_node_if_epic(parent, project_key, seen_hierarchy_node_ids)
 
                     # 3. If this issue IS an Epic, yield it as hierarchy node
                     if self._is_epic(issue):
-                        yield from self._yield_epic_hierarchy_node(
-                            issue, project_key, seen_hierarchy_node_ids
-                        )
+                        yield from self._yield_epic_hierarchy_node(issue, project_key, seen_hierarchy_node_ids)
 
                 # Determine parent hierarchy node ID for the document
-                parent_hierarchy_raw_node_id = (
-                    self._get_parent_hierarchy_raw_node_id(issue, project_key)
-                    if project_key
-                    else None
-                )
+                parent_hierarchy_raw_node_id = self._get_parent_hierarchy_raw_node_id(issue, project_key) if project_key else None
 
                 if document := process_jira_issue(
                     jira_base_url=self.jira_base,
@@ -801,6 +742,7 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source=self.source,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
@@ -826,9 +768,7 @@ class JiraConnector(
         new_checkpoint.seen_hierarchy_node_ids = list(seen_hierarchy_node_ids)
 
         # Update checkpoint
-        self.update_checkpoint_for_next_run(
-            new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE
-        )
+        self.update_checkpoint_for_next_run(new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE)
 
         return new_checkpoint
 
@@ -841,9 +781,7 @@ class JiraConnector(
     ) -> None:
         if _is_cloud_client(self.jira_client):
             # other updates done in the checkpoint callback
-            checkpoint.has_more = (
-                len(checkpoint.all_issue_ids) > 0 or not checkpoint.ids_done
-            )
+            checkpoint.has_more = len(checkpoint.all_issue_ids) > 0 or not checkpoint.ids_done
         else:
             checkpoint.offset = current_offset
             # if we didn't retrieve a full batch, we're done
@@ -858,9 +796,7 @@ class JiraConnector(
         one_day = timedelta(hours=24).total_seconds()
 
         start = start or 0
-        end = (
-            end or datetime.now().timestamp() + one_day
-        )  # we add one day to account for any potential timezone issues
+        end = end or datetime.now().timestamp() + one_day  # we add one day to account for any potential timezone issues
 
         jql = self._get_jql_query(start, end)
         checkpoint = self.build_dummy_checkpoint()
@@ -893,24 +829,18 @@ class JiraConnector(
 
                 # Yield hierarchy nodes BEFORE the slim document (parent-before-child)
                 # 1. Yield project hierarchy node (if not already yielded)
-                for node in self._yield_project_hierarchy_node(
-                    project_key, project_name, seen_hierarchy_node_ids
-                ):
+                for node in self._yield_project_hierarchy_node(project_key, project_name, seen_hierarchy_node_ids):
                     slim_doc_batch.append(node)
 
                 # 2. If parent is an Epic, yield hierarchy node for it
                 parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
                 if parent:
-                    for node in self._yield_parent_hierarchy_node_if_epic(
-                        parent, project_key, seen_hierarchy_node_ids
-                    ):
+                    for node in self._yield_parent_hierarchy_node_if_epic(parent, project_key, seen_hierarchy_node_ids):
                         slim_doc_batch.append(node)
 
                 # 3. If this issue IS an Epic, yield it as hierarchy node
                 if self._is_epic(issue):
-                    for node in self._yield_epic_hierarchy_node(
-                        issue, project_key, seen_hierarchy_node_ids
-                    ):
+                    for node in self._yield_epic_hierarchy_node(issue, project_key, seen_hierarchy_node_ids):
                         slim_doc_batch.append(node)
 
                 # Now add the slim document
@@ -921,13 +851,9 @@ class JiraConnector(
                     SlimDocument(
                         id=doc_id,
                         # Permission sync path - don't prefix, upsert_document_external_perms handles it
-                        external_access=self._get_project_permissions(
-                            project_key, add_prefix=False
-                        ),
+                        external_access=self._get_project_permissions(project_key, add_prefix=False),
                         parent_hierarchy_raw_node_id=(
-                            self._get_parent_hierarchy_raw_node_id(issue, project_key)
-                            if project_key
-                            else None
+                            self._get_parent_hierarchy_raw_node_id(issue, project_key) if project_key else None
                         ),
                     )
                 )
@@ -935,9 +861,7 @@ class JiraConnector(
                 if len(slim_doc_batch) >= JIRA_SLIM_PAGE_SIZE:
                     yield slim_doc_batch
                     slim_doc_batch = []
-            self.update_checkpoint_for_next_run(
-                checkpoint, current_offset, prev_offset, JIRA_SLIM_PAGE_SIZE
-            )
+            self.update_checkpoint_for_next_run(checkpoint, current_offset, prev_offset, JIRA_SLIM_PAGE_SIZE)
             prev_offset = current_offset
 
         if slim_doc_batch:
@@ -945,7 +869,7 @@ class JiraConnector(
 
     def validate_connector_settings(self) -> None:
         if self._jira_client is None:
-            raise ConnectorMissingCredentialError("Jira")
+            raise ConnectorMissingCredentialError(self.source_display_name)
 
         # If a custom JQL query is set, validate it's valid
         if self.jql_query:
@@ -997,32 +921,26 @@ class JiraConnector(
             ConnectorValidationError: For other HTTP errors with extracted error messages
         """
         status_code = getattr(e, "status_code", None)
-        logger.error(f"Jira API error during validation: {e}")
+        logger.error(f"{self.source_display_name} API error during validation: {e}")
 
         # Handle specific status codes with appropriate exceptions
         if status_code == 401:
-            raise CredentialExpiredError(
-                "Jira credential appears to be expired or invalid (HTTP 401)."
-            )
+            raise CredentialExpiredError(f"{self.source_display_name} credential appears to be expired or invalid (HTTP 401).")
         elif status_code == 403:
             raise InsufficientPermissionsError(
-                "Your Jira token does not have sufficient permissions for this configuration (HTTP 403)."
+                f"Your {self.source_display_name} token does not have sufficient permissions for this configuration (HTTP 403)."
             )
         elif status_code == 429:
             raise ConnectorValidationError(
-                "Validation failed due to Jira rate-limits being exceeded. Please try again later."
+                f"Validation failed due to {self.source_display_name} rate-limits being exceeded. Please try again later."
             )
 
         # Try to extract original error message from the response
         error_message = getattr(e, "text", None)
         if error_message is None:
-            raise UnexpectedValidationError(
-                f"Unexpected Jira error during validation: {e}"
-            )
+            raise UnexpectedValidationError(f"Unexpected {self.source_display_name} error during validation: {e}")
 
-        raise ConnectorValidationError(
-            f"Validation failed due to Jira error: {error_message}"
-        )
+        raise ConnectorValidationError(f"Validation failed due to {self.source_display_name} error: {error_message}")
 
     @override
     def validate_checkpoint_json(self, checkpoint_json: str) -> JiraConnectorCheckpoint:
@@ -1038,9 +956,7 @@ class JiraConnector(
 def make_checkpoint_callback(
     checkpoint: JiraConnectorCheckpoint,
 ) -> Callable[[Iterator[list[str]], str | None], None]:
-    def checkpoint_callback(
-        issue_ids: Iterator[list[str]], pageToken: str | None
-    ) -> None:
+    def checkpoint_callback(issue_ids: Iterator[list[str]], pageToken: str | None) -> None:
         for id_batch in issue_ids:
             checkpoint.all_issue_ids.append(id_batch)
         checkpoint.cursor = pageToken
