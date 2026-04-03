@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -9,6 +8,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.web_search import fetch_active_web_content_provider
 from onyx.db.web_search import fetch_active_web_search_provider
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.web_search.models import OpenUrlsToolRequest
 from onyx.server.features.web_search.models import OpenUrlsToolResponse
 from onyx.server.features.web_search.models import WebSearchToolRequest
@@ -61,9 +62,10 @@ def _get_active_search_provider(
 ) -> tuple[WebSearchProviderView, WebSearchProvider]:
     provider_model = fetch_active_web_search_provider(db_session)
     if provider_model is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No web search provider configured.",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "No web search provider configured. Please configure one in "
+            "Admin > Web Search settings.",
         )
 
     provider_view = WebSearchProviderView(
@@ -76,9 +78,10 @@ def _get_active_search_provider(
     )
 
     if provider_model.api_key is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Web search provider requires an API key.",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Web search provider requires an API key. Please configure one in "
+            "Admin > Web Search settings.",
         )
 
     try:
@@ -88,7 +91,7 @@ def _get_active_search_provider(
             config=provider_model.config or {},
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(exc)) from exc
 
     return provider_view, provider
 
@@ -110,9 +113,9 @@ def _get_active_content_provider(
 
     if provider_model.api_key is None:
         # TODO - this is not a great error, in fact, this key should not be nullable.
-        raise HTTPException(
-            status_code=400,
-            detail="Web content provider requires an API key.",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Web content provider requires an API key.",
         )
 
     try:
@@ -125,12 +128,12 @@ def _get_active_content_provider(
             config=config,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(exc)) from exc
 
     if provider is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Unable to initialize the configured web content provider.",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Unable to initialize the configured web content provider.",
         )
 
     provider_view = WebContentProviderView(
@@ -154,12 +157,13 @@ def _run_web_search(
     for query in request.queries:
         try:
             search_results = provider.search(query)
-        except HTTPException:
+        except OnyxError:
             raise
         except Exception as exc:
             logger.exception("Web search provider failed for query '%s'", query)
-            raise HTTPException(
-                status_code=502, detail="Web search provider failed to execute query."
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "Web search provider failed to execute query.",
             ) from exc
 
         filtered_results = filter_web_search_results_with_no_title_or_snippet(
@@ -192,12 +196,13 @@ def _open_urls(
         docs = filter_web_contents_with_no_title_or_content(
             list(provider.contents(urls))
         )
-    except HTTPException:
+    except OnyxError:
         raise
     except Exception as exc:
         logger.exception("Web content provider failed to fetch URLs")
-        raise HTTPException(
-            status_code=502, detail="Web content provider failed to fetch URLs."
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Web content provider failed to fetch URLs.",
         ) from exc
 
     results: list[LlmOpenUrlResult] = []
