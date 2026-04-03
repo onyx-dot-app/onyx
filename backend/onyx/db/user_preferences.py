@@ -20,6 +20,7 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
+from onyx.db.users import is_limited_user
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
@@ -68,12 +69,8 @@ def update_user_role(
         # Re-assign to the correct default group.
         # assign_user_to_default_groups__no_commit internally skips
         # ANONYMOUS, BOT, and EXT_PERM_USER account types.
-        # Also skip SERVICE_ACCOUNT users with no effective permissions
-        # (equivalent to the old LIMITED role — no group assignment).
-        if not (
-            user.account_type == AccountType.SERVICE_ACCOUNT
-            and not user.effective_permissions
-        ):
+        # Also skip limited users (no group assignment).
+        if not is_limited_user(user):
             assign_user_to_default_groups__no_commit(
                 db_session,
                 user,
@@ -107,12 +104,8 @@ def activate_user(
     user.is_active = True
     # assign_user_to_default_groups__no_commit internally skips
     # ANONYMOUS, BOT, and EXT_PERM_USER account types.
-    # Also skip SERVICE_ACCOUNT users with no effective permissions
-    # (equivalent to the old LIMITED role — no group assignment).
-    if not (
-        user.account_type == AccountType.SERVICE_ACCOUNT
-        and not user.effective_permissions
-    ):
+    # Also skip limited users (no group assignment).
+    if not is_limited_user(user):
         assign_user_to_default_groups__no_commit(
             db_session, user, is_admin=(user.role == UserRole.ADMIN)
         )

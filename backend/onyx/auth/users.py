@@ -127,6 +127,7 @@ from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.users import get_user_by_email
+from onyx.db.users import is_limited_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import onyx_error_to_json_response
@@ -1681,16 +1682,9 @@ async def current_user(
 ) -> User:
     user = await double_check_user(user)
 
-    if user.account_type == AccountType.ANONYMOUS:
+    if is_limited_user(user):
         raise BasicAuthenticationError(
-            detail="Access denied. Anonymous users cannot access this resource.",
-        )
-    if (
-        user.account_type == AccountType.SERVICE_ACCOUNT
-        and not user.effective_permissions
-    ):
-        raise BasicAuthenticationError(
-            detail="Access denied. Service account has no permissions.",
+            detail="Access denied. User has limited permissions.",
         )
     return user
 
@@ -1824,19 +1818,11 @@ async def current_user_from_websocket(
     # Apply same checks as HTTP auth (verification, OIDC expiry, role)
     user = await double_check_user(user)
 
-    # Block anonymous and limited service account users (same as current_user)
-    if user.account_type == AccountType.ANONYMOUS:
-        logger.warning(f"WS auth: user {user.email} is anonymous")
+    # Block limited users (same as current_user)
+    if is_limited_user(user):
+        logger.warning(f"WS auth: user {user.email} is limited")
         raise BasicAuthenticationError(
-            detail="Access denied. Anonymous users cannot access this resource.",
-        )
-    if (
-        user.account_type == AccountType.SERVICE_ACCOUNT
-        and not user.effective_permissions
-    ):
-        logger.warning(f"WS auth: service account {user.email} has no permissions")
-        raise BasicAuthenticationError(
-            detail="Access denied. Service account has no permissions.",
+            detail="Access denied. User has limited permissions.",
         )
 
     logger.debug(f"WS auth: authenticated {user.email}")
