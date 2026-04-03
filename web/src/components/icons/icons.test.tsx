@@ -4,7 +4,6 @@
  * Tests logo icons to ensure they render correctly with proper accessibility
  * and support various display sizes.
  */
-import React from "react";
 import { SvgBifrost } from "@opal/icons";
 import { render } from "@tests/setup/test-utils";
 import { GithubIcon, GitbookIcon, ConfluenceIcon } from "./icons";
@@ -60,7 +59,11 @@ describe("Logo Icons", () => {
     const icon = container.querySelector("svg");
 
     expect(icon).toBeInTheDocument();
-    expect(icon).toHaveClass("custom", "text-[#33C19E]", "dark:text-white");
-    expect(icon).not.toHaveClass("text-red-500", "dark:text-black");
+    expect(icon).toHaveClass(
+      "custom",
+      "text-red-500",
+      "dark:text-black",
+      "!text-[#33C19E]"
+    );
   });
 });

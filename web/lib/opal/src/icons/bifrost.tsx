@@ -8,7 +8,7 @@ const SvgBifrost = ({ size, className, ...props }: IconProps) => (
     viewBox="0 0 37 46"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    className={cn(className, "text-[#33C19E] dark:text-white")}
+    className={cn(className, "!text-[#33C19E]")}
     {...props}
   >
     <title>Bifrost</title>
