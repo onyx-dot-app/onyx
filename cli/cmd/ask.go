@@ -83,10 +83,11 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			)
 
 			// Determine truncation threshold.
+			isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 			truncateAt := 0 // 0 means no truncation
 			if cmd.Flags().Changed("max-output") {
 				truncateAt = maxOutput
-			} else if !term.IsTerminal(int(os.Stdout.Fd())) {
+			} else if !isTTY {
 				truncateAt = defaultMaxOutputBytes
 			}
 
@@ -128,6 +129,32 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				switch e := event.(type) {
 				case models.MessageDeltaEvent:
 					ow.Write(e.Content)
+				case models.SearchStartEvent:
+					if isTTY {
+						if e.IsInternetSearch {
+							fmt.Fprintf(os.Stderr, "\033[2mSearching the web...\033[0m\n")
+						} else {
+							fmt.Fprintf(os.Stderr, "\033[2mSearching documents...\033[0m\n")
+						}
+					}
+				case models.SearchQueriesEvent:
+					if isTTY {
+						for _, q := range e.Queries {
+							fmt.Fprintf(os.Stderr, "\033[2m  → %s\033[0m\n", q)
+						}
+					}
+				case models.SearchDocumentsEvent:
+					if isTTY && len(e.Documents) > 0 {
+						fmt.Fprintf(os.Stderr, "\033[2mFound %d documents\033[0m\n", len(e.Documents))
+					}
+				case models.ReasoningStartEvent:
+					if isTTY {
+						fmt.Fprintf(os.Stderr, "\033[2mThinking...\033[0m\n")
+					}
+				case models.ToolStartEvent:
+					if isTTY && e.ToolName != "" {
+						fmt.Fprintf(os.Stderr, "\033[2mUsing %s...\033[0m\n", e.ToolName)
+					}
 				case models.ErrorEvent:
 					ow.Finish()
 					return fmt.Errorf("%s", e.Error)
