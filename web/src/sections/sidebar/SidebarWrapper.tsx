@@ -35,7 +35,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
         />
       </div>
     ),
-    [onFoldClick]
+    [folded, onFoldClick]
   );
 
   return (
