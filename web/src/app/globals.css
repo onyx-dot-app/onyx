@@ -370,8 +370,10 @@
 }
 
 /* Ensure native scrollbars are visible */
-* {
-  scrollbar-width: auto;
+@layer base {
+  * {
+    scrollbar-width: auto;
+  }
 }
 
 /* TEXTAREA */

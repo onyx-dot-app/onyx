@@ -471,7 +471,6 @@
   /* Scrollbar */
   --scrollbar-track: transparent;
   --scrollbar-thumb: var(--alpha-grey-100-20);
-  --scrollbar-thumb-hover: var(--alpha-grey-100-40);
 }
 
 /* Dark Colors */
@@ -680,5 +679,4 @@
   /* Scrollbar */
   --scrollbar-track: transparent;
   --scrollbar-thumb: var(--alpha-grey-00-20);
-  --scrollbar-thumb-hover: var(--alpha-grey-00-40);
 }
