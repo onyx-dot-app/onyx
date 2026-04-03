@@ -272,7 +272,7 @@ kiwisolver==1.4.9
     # via matplotlib
 kubernetes==31.0.0
     # via onyx
-litellm==1.81.6
+litellm==1.83.0
     # via onyx
 mako==1.2.4
     # via alembic

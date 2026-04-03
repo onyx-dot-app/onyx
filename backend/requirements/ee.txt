@@ -207,7 +207,7 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 kubernetes==31.0.0
     # via onyx
-litellm==1.81.6
+litellm==1.83.0
     # via onyx
 markupsafe==3.0.3
     # via jinja2
