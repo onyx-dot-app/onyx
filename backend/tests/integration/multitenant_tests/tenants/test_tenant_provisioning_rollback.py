@@ -9,6 +9,7 @@ This test verifies the full flow: provisioning failure → rollback → schema c
 """
 
 import uuid
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from sqlalchemy import text
@@ -55,18 +56,28 @@ class TestTenantProvisioningRollback:
             created_tenant_id = tenant_id
             return create_schema_if_not_exists(tenant_id)
 
-        # Mock setup_tenant to fail after schema creation
+        # Mock setup_tenant to fail after schema creation.
+        # Also mock the Redis lock so the test doesn't compete with a live
+        # monitoring worker that may already hold the provision lock.
+        mock_lock = MagicMock()
+        mock_lock.acquire.return_value = True
+
         with patch(
-            "ee.onyx.background.celery.tasks.tenant_provisioning.tasks.setup_tenant"
-        ) as mock_setup:
-            mock_setup.side_effect = Exception("Simulated provisioning failure")
+            "ee.onyx.background.celery.tasks.tenant_provisioning.tasks.get_redis_client"
+        ) as mock_redis:
+            mock_redis.return_value.lock.return_value = mock_lock
 
             with patch(
-                "ee.onyx.background.celery.tasks.tenant_provisioning.tasks.create_schema_if_not_exists",
-                side_effect=track_schema_creation,
-            ):
-                # Run pre-provisioning - it should fail and trigger rollback
-                pre_provision_tenant()
+                "ee.onyx.background.celery.tasks.tenant_provisioning.tasks.setup_tenant"
+            ) as mock_setup:
+                mock_setup.side_effect = Exception("Simulated provisioning failure")
+
+                with patch(
+                    "ee.onyx.background.celery.tasks.tenant_provisioning.tasks.create_schema_if_not_exists",
+                    side_effect=track_schema_creation,
+                ):
+                    # Run pre-provisioning - it should fail and trigger rollback
+                    pre_provision_tenant()
 
         # Verify that the schema was created and then cleaned up
         assert created_tenant_id is not None, "Schema should have been created"
