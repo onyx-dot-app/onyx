@@ -130,7 +130,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				case models.MessageDeltaEvent:
 					ow.Write(e.Content)
 				case models.SearchStartEvent:
-					if isTTY {
+					if isTTY && !askQuiet {
 						if e.IsInternetSearch {
 							fmt.Fprintf(os.Stderr, "\033[2mSearching the web...\033[0m\n")
 						} else {
@@ -138,21 +138,21 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 						}
 					}
 				case models.SearchQueriesEvent:
-					if isTTY {
+					if isTTY && !askQuiet {
 						for _, q := range e.Queries {
 							fmt.Fprintf(os.Stderr, "\033[2m  → %s\033[0m\n", q)
 						}
 					}
 				case models.SearchDocumentsEvent:
-					if isTTY && len(e.Documents) > 0 {
+					if isTTY && !askQuiet && len(e.Documents) > 0 {
 						fmt.Fprintf(os.Stderr, "\033[2mFound %d documents\033[0m\n", len(e.Documents))
 					}
 				case models.ReasoningStartEvent:
-					if isTTY {
+					if isTTY && !askQuiet {
 						fmt.Fprintf(os.Stderr, "\033[2mThinking...\033[0m\n")
 					}
 				case models.ToolStartEvent:
-					if isTTY && e.ToolName != "" {
+					if isTTY && !askQuiet && e.ToolName != "" {
 						fmt.Fprintf(os.Stderr, "\033[2mUsing %s...\033[0m\n", e.ToolName)
 					}
 				case models.ErrorEvent:
