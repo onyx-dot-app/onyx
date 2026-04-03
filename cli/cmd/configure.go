@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
@@ -10,13 +13,15 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/onboarding"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func newConfigureCmd() *cobra.Command {
 	var (
-		serverURL string
-		apiKey    string
-		dryRun    bool
+		serverURL   string
+		apiKey      string
+		apiKeyStdin bool
+		dryRun      bool
 	)
 
 	cmd := &cobra.Command{
@@ -24,16 +29,37 @@ func newConfigureCmd() *cobra.Command {
 		Short: "Configure server URL and API key",
 		Long: `Set up the Onyx CLI with your server URL and API key.
 
-When --server-url and --api-key are both provided, the configuration is saved
-non-interactively (useful for scripts and AI agents). Otherwise, an interactive
-setup wizard is launched.
+When --server-url and --api-key (or --api-key-stdin) are both provided, the
+configuration is saved non-interactively (useful for scripts and AI agents).
+Otherwise, an interactive setup wizard is launched.
 
-Use --dry-run with --server-url and --api-key to test the connection without
-saving the configuration.`,
+Use --api-key-stdin to read the API key from stdin instead of passing it as
+a flag, which avoids leaking the key in shell history.
+
+Use --dry-run to test the connection without saving the configuration.`,
 		Example: `  onyx-cli configure
   onyx-cli configure --server-url https://my-onyx.com --api-key sk-...
+  echo "$ONYX_API_KEY" | onyx-cli configure --server-url https://my-onyx.com --api-key-stdin
   onyx-cli configure --server-url https://my-onyx.com --api-key sk-... --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Read API key from stdin if requested
+			if apiKeyStdin {
+				if apiKey != "" {
+					return exitcodes.New(exitcodes.BadRequest, "--api-key and --api-key-stdin cannot be used together")
+				}
+				if term.IsTerminal(int(os.Stdin.Fd())) {
+					return exitcodes.New(exitcodes.BadRequest, "--api-key-stdin requires piped input\n  Usage: echo \"$KEY\" | onyx-cli configure --server-url URL --api-key-stdin")
+				}
+				data, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					return fmt.Errorf("failed to read API key from stdin: %w", err)
+				}
+				apiKey = strings.TrimSpace(string(data))
+				if apiKey == "" {
+					return exitcodes.New(exitcodes.BadRequest, "stdin was empty — no API key provided")
+				}
+			}
+
 			if serverURL != "" && apiKey != "" {
 				return configureNonInteractive(serverURL, apiKey, dryRun)
 			}
@@ -54,6 +80,7 @@ saving the configuration.`,
 
 	cmd.Flags().StringVar(&serverURL, "server-url", "", "Onyx server URL (e.g., https://cloud.onyx.app)")
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key for authentication")
+	cmd.Flags().BoolVar(&apiKeyStdin, "api-key-stdin", false, "Read API key from stdin (avoids shell history)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Test connection without saving config (requires --server-url and --api-key)")
 
 	return cmd

@@ -14,6 +14,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/overflow"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -95,7 +96,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 
 			// Overflow writer: tees to stdout and optionally to a temp file.
 			// In quiet mode, buffer everything and print once at the end.
-			ow := &overflowWriter{limit: truncateAt, quiet: askQuiet}
+			ow := &overflow.Writer{Limit: truncateAt, Quiet: askQuiet}
 
 			for event := range ch {
 				if e, ok := event.(models.SessionCreatedEvent); ok {
@@ -136,7 +137,9 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				}
 			}
 
-			ow.Finish()
+			if !askJSON {
+				ow.Finish()
+			}
 
 			if ctx.Err() != nil {
 				if sessionID != "" {
@@ -202,98 +205,3 @@ func resolveQuestion(args []string, prompt string) (string, error) {
 	}
 }
 
-// overflowWriter handles streaming output with optional truncation.
-// When limit > 0, it streams to a temp file on disk (not memory) and stops
-// writing to stdout after limit bytes. When limit == 0, it writes directly
-// to stdout. In quiet mode, it buffers in memory and prints once at the end.
-type overflowWriter struct {
-	limit      int
-	quiet      bool
-	written    int
-	totalBytes int
-	truncated  bool
-	buf        strings.Builder // used only in quiet mode
-	tmpFile    *os.File        // used only in truncation mode (limit > 0)
-}
-
-func (w *overflowWriter) Write(s string) {
-	w.totalBytes += len(s)
-
-	// Quiet mode: buffer in memory, print nothing
-	if w.quiet {
-		w.buf.WriteString(s)
-		return
-	}
-
-	if w.limit <= 0 {
-		fmt.Print(s)
-		return
-	}
-
-	// Truncation mode: stream all content to temp file on disk
-	if w.tmpFile == nil {
-		f, err := os.CreateTemp("", "onyx-ask-*.txt")
-		if err != nil {
-			// Fall back to no-truncation if we can't create the file
-			fmt.Fprintf(os.Stderr, "warning: could not create temp file: %v\n", err)
-			w.limit = 0
-			fmt.Print(s)
-			return
-		}
-		w.tmpFile = f
-	}
-	if _, err := w.tmpFile.WriteString(s); err != nil {
-		// Disk write failed — abandon truncation, stream directly to stdout
-		fmt.Fprintf(os.Stderr, "warning: temp file write failed: %v\n", err)
-		_ = w.tmpFile.Close()
-		_ = os.Remove(w.tmpFile.Name())
-		w.tmpFile = nil
-		w.limit = 0
-		w.truncated = false
-		fmt.Print(s)
-		return
-	}
-
-	if w.truncated {
-		return
-	}
-
-	remaining := w.limit - w.written
-	if len(s) <= remaining {
-		fmt.Print(s)
-		w.written += len(s)
-	} else {
-		if remaining > 0 {
-			fmt.Print(s[:remaining])
-			w.written += remaining
-		}
-		w.truncated = true
-	}
-}
-
-func (w *overflowWriter) Finish() {
-	// Quiet mode: print buffered content at once
-	if w.quiet {
-		fmt.Println(w.buf.String())
-		return
-	}
-
-	if !w.truncated {
-		if w.tmpFile != nil {
-			_ = w.tmpFile.Close()
-			_ = os.Remove(w.tmpFile.Name())
-		}
-		fmt.Println()
-		return
-	}
-
-	// Close the temp file so it's readable
-	tmpPath := w.tmpFile.Name()
-	_ = w.tmpFile.Close()
-
-	fmt.Printf("\n\n--- response truncated (%d bytes total) ---\n", w.totalBytes)
-	fmt.Printf("Full response: %s\n", tmpPath)
-	fmt.Printf("Explore:\n")
-	fmt.Printf("  cat %s | grep \"<pattern>\"\n", tmpPath)
-	fmt.Printf("  cat %s | tail -50\n", tmpPath)
-}

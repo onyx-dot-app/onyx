@@ -4,12 +4,12 @@ package exitcodes
 import "fmt"
 
 const (
-	Success        = 0
-	General        = 1
-	NotConfigured  = 2
-	AuthFailure    = 3
-	Unreachable    = 4
-	BadRequest     = 5
+	Success       = 0
+	General       = 1
+	BadRequest    = 2 // invalid args / command-line errors (convention)
+	NotConfigured = 3
+	AuthFailure   = 4
+	Unreachable   = 5
 )
 
 // ExitError wraps an error with a specific exit code.
@@ -22,22 +22,9 @@ func (e *ExitError) Error() string {
 	return e.Err.Error()
 }
 
-func (e *ExitError) Unwrap() error {
-	return e.Err
-}
-
 // New creates an ExitError with the given code and message.
 func New(code int, msg string) *ExitError {
 	return &ExitError{Code: code, Err: fmt.Errorf("%s", msg)}
-}
-
-// Wrap creates an ExitError wrapping an existing error.
-// If err is nil, a generic message is used to avoid a nil-pointer panic in Error().
-func Wrap(code int, err error) *ExitError {
-	if err == nil {
-		err = fmt.Errorf("exit code %d", code)
-	}
-	return &ExitError{Code: code, Err: err}
 }
 
 // Newf creates an ExitError with a formatted message.

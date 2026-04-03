@@ -16,14 +16,6 @@ func TestExitError_Error(t *testing.T) {
 	}
 }
 
-func TestExitError_Unwrap(t *testing.T) {
-	inner := fmt.Errorf("inner error")
-	e := Wrap(AuthFailure, inner)
-	if !errors.Is(e, inner) {
-		t.Fatal("Unwrap should return the inner error")
-	}
-}
-
 func TestExitError_Newf(t *testing.T) {
 	e := Newf(Unreachable, "cannot reach %s", "server")
 	if e.Error() != "cannot reach server" {
