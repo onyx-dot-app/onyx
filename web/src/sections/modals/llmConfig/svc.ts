@@ -9,7 +9,6 @@ import {
 } from "@/lib/llmConfig/constants";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { toast } from "@/hooks/useToast";
-import isEqual from "lodash/isEqual";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 import {
   track,
@@ -94,10 +93,9 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     );
   }
 
-  const customConfigChanged = !isEqual(
-    values.custom_config,
-    initialValues.custom_config
-  );
+  const customConfigChanged =
+    JSON.stringify(values.custom_config) !==
+    JSON.stringify(initialValues.custom_config);
 
   const normalizedApiBase =
     typeof rest.api_base === "string" && rest.api_base.trim() === ""
@@ -115,7 +113,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   };
 
   // Test the configuration
-  if (!isEqual(finalValues, initialValues)) {
+  if (JSON.stringify(finalValues) !== JSON.stringify(initialValues)) {
     setIsTesting(true);
 
     const response = await fetch("/api/admin/llm/test", {

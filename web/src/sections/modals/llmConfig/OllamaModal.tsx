@@ -33,7 +33,7 @@ import {
   LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
-import debounce from "lodash/debounce";
+import { debounce } from "@/lib/debounce";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";

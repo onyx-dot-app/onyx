@@ -1,4 +1,3 @@
-var merge = require("lodash/merge");
 var path = require("path");
 var fs = require("fs");
 var { createRequire } = require("module");
@@ -23,5 +22,23 @@ if (fs.existsSync(customThemePath)) {
   customThemes = dynamicRequire(customThemePath);
 }
 
+function deepMerge(target, source) {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    if (
+      source[key] &&
+      typeof source[key] === "object" &&
+      !Array.isArray(source[key])
+    ) {
+      result[key] = deepMerge(result[key] || {}, source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
+}
+
 /** @type {import('tailwindcss').Config} */
-module.exports = customThemes ? merge(baseThemes, customThemes) : baseThemes;
+module.exports = customThemes
+  ? deepMerge(baseThemes, customThemes)
+  : baseThemes;
