@@ -386,6 +386,13 @@ class LMStudioFinalModelResponse(BaseModel):
     supports_image_input: bool
     supports_reasoning: bool
 
+    @field_validator("supports_reasoning", mode="before")
+    @classmethod
+    def coerce_reasoning(cls, v: Any) -> bool:
+        if isinstance(v, dict):
+            return bool(v.get("allowed_options"))
+        return bool(v)
+
 
 class DefaultModel(BaseModel):
     provider_id: int
@@ -464,3 +471,10 @@ class BifrostFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+
+    @field_validator("supports_reasoning", mode="before")
+    @classmethod
+    def coerce_reasoning(cls, v: Any) -> bool:
+        if isinstance(v, dict):
+            return bool(v.get("allowed_options"))
+        return bool(v)
