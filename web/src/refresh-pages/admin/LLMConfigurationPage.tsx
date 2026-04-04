@@ -8,7 +8,7 @@ import {
   useWellKnownLLMProviders,
 } from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Content, CardHeaderLayout } from "@opal/layouts";
+import { Content, Card } from "@opal/layouts";
 import { Button, SelectCard } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
@@ -24,7 +24,7 @@ import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import Text from "@/refresh-components/texts/Text";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
-import Card from "@/refresh-components/cards/Card";
+import LegacyCard from "@/refresh-components/cards/Card";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -217,7 +217,7 @@ function ExistingProviderCard({
           rounding="lg"
           onClick={() => setIsOpen(true)}
         >
-          <CardHeaderLayout
+          <Card.Header
             icon={getProviderIcon(provider.provider)}
             title={provider.name}
             description={getProviderDisplayName(provider.provider)}
@@ -292,7 +292,7 @@ function NewProviderCard({
       rounding="lg"
       onClick={() => setIsOpen(true)}
     >
-      <CardHeaderLayout
+      <Card.Header
         icon={getProviderIcon(provider.name)}
         title={getProviderProductName(provider.name)}
         description={getProviderDisplayName(provider.name)}
@@ -336,7 +336,7 @@ function NewCustomProviderCard({
       rounding="lg"
       onClick={() => setIsOpen(true)}
     >
-      <CardHeaderLayout
+      <Card.Header
         icon={getProviderIcon("custom")}
         title={getProviderProductName("custom")}
         description={getProviderDisplayName("custom")}
@@ -424,7 +424,7 @@ export default function LLMConfigurationPage() {
 
       <SettingsLayouts.Body>
         {hasProviders ? (
-          <Card>
+          <LegacyCard>
             <HorizontalInput
               title="Default Model"
               description="This model will be used by Onyx by default in your chats."
@@ -455,7 +455,7 @@ export default function LLMConfigurationPage() {
                 </InputSelect.Content>
               </InputSelect>
             </HorizontalInput>
-          </Card>
+          </LegacyCard>
         ) : (
           <Message
             info

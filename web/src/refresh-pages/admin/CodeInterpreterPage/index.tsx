@@ -13,7 +13,7 @@ import {
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
 import { Button, SelectCard } from "@opal/components";
-import { CardHeaderLayout } from "@opal/layouts";
+import { Card } from "@opal/layouts";
 import { Disabled, Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -113,7 +113,7 @@ export default function CodeInterpreterPage() {
         {isEnabled || isLoading ? (
           <Hoverable.Root group="code-interpreter/Card">
             <SelectCard state="filled" padding="sm" rounding="lg">
-              <CardHeaderLayout
+              <Card.Header
                 sizePreset="main-ui"
                 variant="section"
                 icon={SvgTerminal}
@@ -161,7 +161,7 @@ export default function CodeInterpreterPage() {
             rounding="lg"
             onClick={() => handleToggle(true)}
           >
-            <CardHeaderLayout
+            <Card.Header
               sizePreset="main-ui"
               variant="section"
               icon={SvgTerminal}
