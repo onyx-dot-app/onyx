@@ -5,9 +5,10 @@ from typing import cast
 
 import pytest
 import requests
-from fastapi import HTTPException
 
 import onyx.tools.tool_implementations.web_search.clients.baidu_client as baidu_module
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.clients.baidu_client import (
     BaiduClient,
 )
@@ -165,8 +166,10 @@ def test_test_connection_maps_invalid_key_errors() -> None:
 
     client.search = _mock_search  # type: ignore[method-assign]
 
-    with pytest.raises(HTTPException, match="Invalid Baidu API key"):
+    with pytest.raises(OnyxError) as exc_info:
         client.test_connection()
+    assert exc_info.value.error_code == OnyxErrorCode.CREDENTIAL_INVALID
+    assert "Invalid Baidu API key" in exc_info.value.detail
 
 
 def test_test_connection_maps_rate_limit_errors() -> None:
@@ -177,8 +180,24 @@ def test_test_connection_maps_rate_limit_errors() -> None:
 
     client.search = _mock_search  # type: ignore[method-assign]
 
-    with pytest.raises(HTTPException, match="rate limit exceeded"):
+    with pytest.raises(OnyxError) as exc_info:
         client.test_connection()
+    assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
+    assert "rate limit exceeded" in exc_info.value.detail
+
+
+def test_test_connection_rejects_empty_search_results() -> None:
+    client = BaiduClient(api_key="test-key")
+
+    def _mock_search(query: str) -> list[Any]:  # noqa: ARG001
+        return []
+
+    client.search = _mock_search  # type: ignore[method-assign]
+
+    with pytest.raises(OnyxError) as exc_info:
+        client.test_connection()
+    assert exc_info.value.error_code == OnyxErrorCode.CONNECTOR_VALIDATION_FAILED
+    assert "search returned no results" in exc_info.value.detail
 
 
 def test_test_connection_propagates_unexpected_errors() -> None:
@@ -191,3 +210,44 @@ def test_test_connection_propagates_unexpected_errors() -> None:
 
     with pytest.raises(RuntimeError, match="unexpected parsing bug"):
         client.test_connection()
+
+
+def test_extract_error_detail_logs_invalid_json(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response = cast(
+        requests.Response,
+        DummyResponse(status_code=500, payload=None, text="plain error detail"),
+    )
+
+    with caplog.at_level("DEBUG", logger=baidu_module.logger.name):
+        assert baidu_module._extract_error_detail(response) == "plain error detail"
+
+    assert "Failed to parse Baidu error response as JSON" in caplog.text
+
+
+def test_parse_published_date_logs_expected_parse_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def _mock_time_str_to_utc(value: str) -> Any:  # noqa: ARG001
+        raise ValueError("invalid date")
+
+    monkeypatch.setattr(baidu_module, "time_str_to_utc", _mock_time_str_to_utc)
+
+    with caplog.at_level("DEBUG", logger=baidu_module.logger.name):
+        assert baidu_module._parse_published_date("not-a-date") is None
+
+    assert "Could not parse Baidu published_date" in caplog.text
+
+
+def test_parse_published_date_propagates_unexpected_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _mock_time_str_to_utc(value: str) -> Any:  # noqa: ARG001
+        raise TypeError("unexpected parser bug")
+
+    monkeypatch.setattr(baidu_module, "time_str_to_utc", _mock_time_str_to_utc)
+
+    with pytest.raises(TypeError, match="unexpected parser bug"):
+        baidu_module._parse_published_date("2025-05-23 00:00:00")

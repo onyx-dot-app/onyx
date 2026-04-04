@@ -94,6 +94,15 @@ def test_build_baidu_provider_rejects_invalid_timeout() -> None:
         )
 
 
+def test_build_baidu_provider_rejects_numeric_zero_timeout() -> None:
+    with pytest.raises(ValueError, match="greater than 0"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.BAIDU,
+            api_key="test-api-key",
+            config={"timeout_seconds": 0},
+        )
+
+
 def test_build_brave_provider_with_optional_config() -> None:
     provider = build_search_provider_from_config(
         provider_type=WebSearchProviderType.BRAVE,
@@ -122,6 +131,15 @@ def test_build_brave_provider_rejects_invalid_timeout() -> None:
             provider_type=WebSearchProviderType.BRAVE,
             api_key="test-api-key",
             config={"timeout_seconds": "not-an-int"},
+        )
+
+
+def test_build_brave_provider_rejects_numeric_zero_timeout() -> None:
+    with pytest.raises(ValueError, match="greater than 0"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.BRAVE,
+            api_key="test-api-key",
+            config={"timeout_seconds": 0},
         )
 
 

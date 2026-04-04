@@ -4,9 +4,10 @@ from datetime import datetime
 from typing import Any
 
 import requests
-from fastapi import HTTPException
 
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
 )
@@ -139,15 +140,8 @@ class BaiduClient(WebSearchProvider):
     def test_connection(self) -> dict[str, str]:
         try:
             test_results = self.search("test")
-            if not test_results or not any(result.link for result in test_results):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Baidu API key validation failed: search returned no results.",
-                )
-        except HTTPException:
-            raise
-        except (ValueError, requests.RequestException) as e:
-            error_msg = str(e)
+        except (ValueError, requests.RequestException) as exc:
+            error_msg = str(exc)
             lower = error_msg.lower()
             if (
                 "status 401" in lower
@@ -155,19 +149,25 @@ class BaiduClient(WebSearchProvider):
                 or "api key" in lower
                 or "auth" in lower
             ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid Baidu API key: {error_msg}",
-                ) from e
+                raise OnyxError(
+                    OnyxErrorCode.CREDENTIAL_INVALID,
+                    f"Invalid Baidu API key: {error_msg}",
+                ) from exc
             if "status 429" in lower or "rate limit" in lower:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Baidu API rate limit exceeded: {error_msg}",
-                ) from e
-            raise HTTPException(
-                status_code=400,
-                detail=f"Baidu API key validation failed: {error_msg}",
-            ) from e
+                raise OnyxError(
+                    OnyxErrorCode.RATE_LIMITED,
+                    f"Baidu API rate limit exceeded: {error_msg}",
+                ) from exc
+            raise OnyxError(
+                OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
+                f"Baidu API key validation failed: {error_msg}",
+            ) from exc
+
+        if not test_results or not any(result.link for result in test_results):
+            raise OnyxError(
+                OnyxErrorCode.CONNECTOR_VALIDATION_FAILED,
+                "Baidu API key validation failed: search returned no results.",
+            )
 
         logger.info("Web search provider test succeeded for Baidu.")
         return {"status": "ok"}
@@ -180,7 +180,12 @@ def _build_error_message(response: requests.Response) -> str:
 def _extract_error_detail(response: requests.Response) -> str:
     try:
         payload: Any = response.json()
-    except Exception:
+    except ValueError as exc:
+        logger.debug(
+            "Failed to parse Baidu error response as JSON (status %s)",
+            response.status_code,
+            exc_info=exc,
+        )
         text = response.text.strip()
         return text[:200] if text else "No error details"
 
@@ -223,5 +228,10 @@ def _parse_published_date(value: Any) -> datetime | None:
 
     try:
         return time_str_to_utc(parsed)
-    except Exception:
+    except (ValueError, OverflowError) as exc:
+        logger.debug(
+            "Could not parse Baidu published_date: %r",
+            parsed,
+            exc_info=exc,
+        )
         return None

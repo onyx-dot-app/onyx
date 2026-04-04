@@ -26,6 +26,7 @@ from onyx.db.web_search import set_active_web_content_provider
 from onyx.db.web_search import set_active_web_search_provider
 from onyx.db.web_search import upsert_web_content_provider
 from onyx.db.web_search import upsert_web_search_provider
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.web_search.models import WebContentProviderTestRequest
 from onyx.server.manage.web_search.models import WebContentProviderUpsertRequest
 from onyx.server.manage.web_search.models import WebContentProviderView
@@ -222,7 +223,7 @@ def test_search_provider(
     # Run the API client's test_connection method to ensure the connection is valid.
     try:
         return provider.test_connection()
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
