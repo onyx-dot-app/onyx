@@ -328,8 +328,12 @@ function AdminSidebarInner({
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        <Separator noPadding className="px-2" />
-        <Spacer rem={0.5} />
+        {!folded && (
+          <>
+            <Separator noPadding className="px-2" />
+            <Spacer rem={0.5} />
+          </>
+        )}
         <SidebarTab
           icon={SvgX}
           href="/app"
@@ -338,7 +342,7 @@ function AdminSidebarInner({
         >
           Exit Admin Panel
         </SidebarTab>
-        <AccountPopover />
+        <AccountPopover folded={folded} />
       </SidebarLayouts.Footer>
     </>
   );
