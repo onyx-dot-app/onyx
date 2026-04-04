@@ -6,7 +6,7 @@ import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Content, CardHeaderLayout } from "@opal/layouts";
+import { Content, Card } from "@opal/layouts";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -275,7 +275,7 @@ function ProviderCard({
               : undefined
         }
       >
-        <CardHeaderLayout
+        <Card.Header
           sizePreset="main-ui"
           variant="section"
           icon={icon}

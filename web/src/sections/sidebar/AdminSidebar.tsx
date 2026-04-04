@@ -1,10 +1,18 @@
 "use client";
 
-import { useCallback } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
+import * as SidebarLayouts from "@/layouts/sidebar-layouts";
+import { useSidebarFolded } from "@/layouts/sidebar-layouts";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
@@ -12,23 +20,19 @@ import { UserRole } from "@/lib/types";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { CombinedSettings } from "@/interfaces/settings";
 import { SidebarTab } from "@opal/components";
-import SidebarBody from "@/sections/sidebar/SidebarBody";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Disabled } from "@opal/core";
-import { SvgArrowUpCircle, SvgUserManage, SvgX } from "@opal/icons";
+import Separator from "@/refresh-components/Separator";
+import Spacer from "@/refresh-components/Spacer";
+import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
   useLicense,
   hasActiveSubscription,
 } from "@/lib/billing";
-import { Content } from "@opal/layouts";
 import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
-import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { getUserDisplayName } from "@/lib/user";
-import { APP_SLOGAN } from "@/lib/constants";
+import AccountPopover from "@/sections/sidebar/AccountPopover";
 
 const SECTIONS = {
   UNLABELED: "",
@@ -141,15 +145,12 @@ function buildItems(
   if (!isCurator) {
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
-    } else {
-      items.push({
-        section: SECTIONS.ORGANIZATION,
-        name: "Upgrade Plan",
-        icon: SvgArrowUpCircle,
-        link: ADMIN_ROUTES.BILLING.path,
-      });
     }
-    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.TOKEN_RATE_LIMITS);
+    addDisabled(
+      SECTIONS.ORGANIZATION,
+      ADMIN_ROUTES.TOKEN_RATE_LIMITS,
+      !enableEnterprise
+    );
     addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
   }
 
@@ -163,6 +164,16 @@ function buildItems(
         !enableEnterprise
       );
     }
+  }
+
+  // 8. Upgrade Plan (admin only, no subscription)
+  if (!isCurator && !hasSubscription) {
+    items.push({
+      section: SECTIONS.UNLABELED,
+      name: "Upgrade Plan",
+      icon: SvgArrowUpCircle,
+      link: ADMIN_ROUTES.BILLING.path,
+    });
   }
 
   return items;
@@ -184,9 +195,29 @@ function groupBySection(items: SidebarItemEntry[]) {
 
 interface AdminSidebarProps {
   enableCloudSS: boolean;
+  folded: boolean;
+  onFoldChange: Dispatch<SetStateAction<boolean>>;
 }
 
-export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
+interface AdminSidebarInnerProps {
+  enableCloudSS: boolean;
+  onFoldChange: Dispatch<SetStateAction<boolean>>;
+}
+
+function AdminSidebarInner({
+  enableCloudSS,
+  onFoldChange,
+}: AdminSidebarInnerProps) {
+  const folded = useSidebarFolded();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [focusSearch, setFocusSearch] = useState(false);
+
+  useEffect(() => {
+    if (focusSearch && !folded && searchRef.current) {
+      searchRef.current.focus();
+      setFocusSearch(false);
+    }
+  }, [focusSearch, folded]);
   const { kgExposed } = useIsKGExposed();
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
@@ -224,88 +255,48 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
 
   const { query, setQuery, filtered } = useFilter(allItems, itemExtractor);
 
-  const groups = groupBySection(filtered);
+  const enabled = filtered.filter((item) => !item.disabled);
+  const disabled = filtered.filter((item) => item.disabled);
+  const enabledGroups = groupBySection(enabled);
+  const disabledGroups = groupBySection(disabled);
 
   return (
-    <SidebarWrapper>
-      <SidebarBody
-        scrollKey="admin-sidebar"
-        pinnedContent={
-          <div className="flex flex-col w-full">
+    <>
+      <SidebarLayouts.Header>
+        {folded ? (
+          <SidebarTab
+            icon={SvgSearch}
+            folded
+            onClick={() => {
+              onFoldChange(false);
+              setFocusSearch(true);
+            }}
+          >
+            Search
+          </SidebarTab>
+        ) : (
+          <InputTypeIn
+            ref={searchRef}
+            variant="internal"
+            leftSearchIcon
+            placeholder="Search..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        )}
+      </SidebarLayouts.Header>
+
+      <SidebarLayouts.Body scrollKey="admin-sidebar">
+        {enabledGroups.map((group, groupIndex) => {
+          const tabs = group.items.map(({ link, icon, name }) => (
             <SidebarTab
-              icon={({ className }) => <SvgX className={className} size={16} />}
-              href="/app"
-              variant="sidebar-light"
+              key={link}
+              icon={icon}
+              href={link}
+              selected={pathname.startsWith(link)}
             >
-              Exit Admin Panel
+              {name}
             </SidebarTab>
-            <InputTypeIn
-              variant="internal"
-              leftSearchIcon
-              placeholder="Search..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        }
-        footer={
-          <Section gap={0} height="fit" alignItems="start">
-            <div className="p-[0.38rem] w-full">
-              <Content
-                icon={SvgUserManage}
-                title={getUserDisplayName(user)}
-                sizePreset="main-ui"
-                variant="body"
-                prominence="muted"
-                widthVariant="full"
-              />
-            </div>
-            <div className="flex flex-row gap-1 p-[0.38rem] w-full">
-              <Text text03 secondaryAction>
-                <a
-                  className="underline"
-                  href="https://onyx.app"
-                  target="_blank"
-                >
-                  Onyx
-                </a>
-              </Text>
-              <Text text03 secondaryBody>
-                |
-              </Text>
-              {settings.webVersion ? (
-                <Text text03 secondaryBody>
-                  {settings.webVersion}
-                </Text>
-              ) : (
-                <Text text03 secondaryBody>
-                  {APP_SLOGAN}
-                </Text>
-              )}
-            </div>
-          </Section>
-        }
-      >
-        {groups.map((group, groupIndex) => {
-          const tabs = group.items.map(({ link, icon, name, disabled }) => (
-            <Disabled key={link} disabled={disabled}>
-              {/*
-                # NOTE (@raunakab)
-                We intentionally add a `div` intermediary here.
-                Without it, the disabled styling that is default provided by the `Disabled` component (which we want here) would be overridden by the custom disabled styling provided by the `SidebarTab`.
-                Therefore, in order to avoid that overriding, we add a layer of indirection.
-              */}
-              <div>
-                <SidebarTab
-                  disabled={disabled}
-                  icon={icon}
-                  href={disabled ? undefined : link}
-                  selected={pathname.startsWith(link)}
-                >
-                  {name}
-                </SidebarTab>
-              </div>
-            </Disabled>
           ));
 
           if (!group.section) {
@@ -318,7 +309,56 @@ export default function AdminSidebar({ enableCloudSS }: AdminSidebarProps) {
             </SidebarSection>
           );
         })}
-      </SidebarBody>
-    </SidebarWrapper>
+
+        {disabledGroups.length > 0 && <Separator noPadding className="px-2" />}
+
+        {disabledGroups.map((group, groupIndex) => (
+          <SidebarSection
+            key={`disabled-${groupIndex}`}
+            title={group.section}
+            disabled
+          >
+            {group.items.map(({ link, icon, name }) => (
+              <SidebarTab key={link} disabled icon={icon}>
+                {name}
+              </SidebarTab>
+            ))}
+          </SidebarSection>
+        ))}
+      </SidebarLayouts.Body>
+
+      <SidebarLayouts.Footer>
+        {!folded && (
+          <>
+            <Separator noPadding className="px-2" />
+            <Spacer rem={0.5} />
+          </>
+        )}
+        <SidebarTab
+          icon={SvgX}
+          href="/app"
+          variant="sidebar-light"
+          folded={folded}
+        >
+          Exit Admin Panel
+        </SidebarTab>
+        <AccountPopover folded={folded} />
+      </SidebarLayouts.Footer>
+    </>
+  );
+}
+
+export default function AdminSidebar({
+  enableCloudSS,
+  folded,
+  onFoldChange,
+}: AdminSidebarProps) {
+  return (
+    <SidebarLayouts.Root folded={folded} onFoldChange={onFoldChange}>
+      <AdminSidebarInner
+        enableCloudSS={enableCloudSS}
+        onFoldChange={onFoldChange}
+      />
+    </SidebarLayouts.Root>
   );
 }

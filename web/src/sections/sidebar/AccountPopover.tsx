@@ -141,7 +141,7 @@ export interface SettingsProps {
   onShowBuildIntro?: () => void;
 }
 
-export default function UserAvatarPopover({
+export default function AccountPopover({
   folded,
   onShowBuildIntro,
 }: SettingsProps) {

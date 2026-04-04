@@ -9,7 +9,7 @@ import (
 
 func clearEnvVars(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{EnvServerURL, EnvAPIKey, EnvAgentID} {
+	for _, key := range []string{EnvServerURL, EnvAPIKey, EnvAgentID, EnvStreamMarkdown} {
 		t.Setenv(key, "")
 		if err := os.Unsetenv(key); err != nil {
 			t.Fatal(err)
@@ -196,6 +196,48 @@ func TestSaveAndReload(t *testing.T) {
 	}
 	if loaded.DefaultAgentID != 10 {
 		t.Errorf("got %d", loaded.DefaultAgentID)
+	}
+}
+
+func TestDefaultFeaturesStreamMarkdownNil(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Features.StreamMarkdown != nil {
+		t.Error("expected StreamMarkdown to be nil by default")
+	}
+	if !cfg.Features.StreamMarkdownEnabled() {
+		t.Error("expected StreamMarkdownEnabled() to return true when nil")
+	}
+}
+
+func TestEnvOverrideStreamMarkdownFalse(t *testing.T) {
+	clearEnvVars(t)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv(EnvStreamMarkdown, "false")
+
+	cfg := Load()
+	if cfg.Features.StreamMarkdown == nil || *cfg.Features.StreamMarkdown {
+		t.Error("expected StreamMarkdown=false from env override")
+	}
+}
+
+func TestLoadFeaturesFromFile(t *testing.T) {
+	clearEnvVars(t)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	data, _ := json.Marshal(map[string]interface{}{
+		"server_url": "https://example.com",
+		"api_key":    "key",
+		"features": map[string]interface{}{
+			"stream_markdown": true,
+		},
+	})
+	writeConfig(t, dir, data)
+
+	cfg := Load()
+	if cfg.Features.StreamMarkdown == nil || !*cfg.Features.StreamMarkdown {
+		t.Error("expected StreamMarkdown=true from config file")
 	}
 }
 

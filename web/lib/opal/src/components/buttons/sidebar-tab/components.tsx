@@ -127,7 +127,7 @@ function SidebarTab({
               rightChildren={truncationSpacer}
             />
           ) : (
-            <div className="flex flex-row items-center gap-2 flex-1">
+            <div className="flex flex-row items-center gap-2 w-full">
               {Icon && (
                 <div className="flex items-center justify-center p-0.5">
                   <Icon className="h-[1rem] w-[1rem] text-text-03" />
@@ -153,7 +153,7 @@ function SidebarTab({
             side="right"
             sideOffset={4}
           >
-            <Text>{children}</Text>
+            {children}
           </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
       </TooltipPrimitive.Root>

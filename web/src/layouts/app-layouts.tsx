@@ -52,7 +52,7 @@ import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Interactive } from "@opal/core";
 import { Button, OpenButton } from "@opal/components";
-import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
+import { useSidebarState } from "@/layouts/sidebar-layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
@@ -91,7 +91,7 @@ function Header() {
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
-  const { setFolded } = useAppSidebarContext();
+  const { setFolded } = useSidebarState();
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =

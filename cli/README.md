@@ -98,6 +98,7 @@ Useful hardening flags:
 | `serve` | Serve the interactive chat TUI over SSH |
 | `configure` | Configure server URL and API key |
 | `validate-config` | Validate configuration and test connection |
+| `install-skill` | Install the agent skill file into a project |
 
 ## Slash Commands (in TUI)
 

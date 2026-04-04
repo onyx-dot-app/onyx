@@ -41,6 +41,7 @@ import {
   activateHook,
   deactivateHook,
   deleteHook,
+  getHook,
   validateHook,
 } from "@/ee/refresh-pages/admin/HooksPage/svc";
 import type {
@@ -319,8 +320,15 @@ function ConnectedHookCard({
       toast.error(
         err instanceof Error ? err.message : "Failed to validate hook."
       );
+      return;
     } finally {
       setIsBusy(false);
+    }
+    try {
+      const updated = await getHook(hook.id);
+      onToggled(updated);
+    } catch (err) {
+      console.error("Failed to refresh hook after validation:", err);
     }
   }
 

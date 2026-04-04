@@ -27,13 +27,13 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import TENANT_ID_PREFIX
 
 # Maximum tenants to provision in a single task run.
-# Each tenant takes ~80s (alembic migrations), so 5 tenants ≈ 7 minutes.
-_MAX_TENANTS_PER_RUN = 5
+# Each tenant takes ~80s (alembic migrations), so 15 tenants ≈ 20 minutes.
+_MAX_TENANTS_PER_RUN = 15
 
 # Time limits sized for worst-case: provisioning up to _MAX_TENANTS_PER_RUN new tenants
 # (~90s each) plus migrating up to TARGET_AVAILABLE_TENANTS pool tenants (~90s each).
-_TENANT_PROVISIONING_SOFT_TIME_LIMIT = 60 * 20  # 20 minutes
-_TENANT_PROVISIONING_TIME_LIMIT = 60 * 25  # 25 minutes
+_TENANT_PROVISIONING_SOFT_TIME_LIMIT = 60 * 40  # 40 minutes
+_TENANT_PROVISIONING_TIME_LIMIT = 60 * 45  # 45 minutes
 
 
 @shared_task(
