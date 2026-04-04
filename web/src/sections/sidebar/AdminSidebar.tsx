@@ -33,6 +33,7 @@ import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
+import useScreenSize from "@/hooks/useScreenSize";
 
 const SECTIONS = {
   UNLABELED: "",
@@ -211,6 +212,7 @@ function AdminSidebarInner({
   const folded = useSidebarFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
+  const { isMobile } = useScreenSize();
 
   useEffect(() => {
     if (focusSearch && !folded && searchRef.current) {
@@ -328,8 +330,12 @@ function AdminSidebarInner({
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        <Separator noPadding className="px-2" />
-        <Spacer rem={0.5} />
+        {!folded && (
+          <>
+            <Separator noPadding className="px-2" />
+            <Spacer rem={0.5} />
+          </>
+        )}
         <SidebarTab
           icon={SvgX}
           href="/app"
@@ -338,7 +344,7 @@ function AdminSidebarInner({
         >
           Exit Admin Panel
         </SidebarTab>
-        <AccountPopover />
+        <AccountPopover folded={folded} />
       </SidebarLayouts.Footer>
     </>
   );
