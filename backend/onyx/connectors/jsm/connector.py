@@ -1,10 +1,5 @@
-import json
-from collections.abc import Generator, Iterator
-from datetime import datetime
+from collections.abc import Iterator
 from typing import Any
-
-import requests
-from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -125,7 +120,6 @@ class JsmConnector(
     ) -> Iterator[list[SlimDocument | HierarchyNode]]:
         # JSM doesn't yet support granular permission syncing in this connector
         return
-        yield []
 
     def load_from_checkpoint_with_perm_sync(
         self,
