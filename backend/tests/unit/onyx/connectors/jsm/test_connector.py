@@ -43,7 +43,7 @@ class TestJsmConnector(unittest.TestCase):
         # side_effect to handle multiple calls
         mock_get.side_effect = [mock_requests_resp, mock_comments_resp]
         
-        checkpoint = JsmConnectorCheckpoint(offset=0)
+        checkpoint = JsmConnectorCheckpoint(offset=0, has_more=True)
         
         # Use a helper to consume generator and get return value
         gen = self.connector.load_from_checkpoint(0, 0, checkpoint)
