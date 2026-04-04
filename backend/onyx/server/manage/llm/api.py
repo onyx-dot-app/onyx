@@ -1321,7 +1321,7 @@ def get_lm_studio_available_models(
                 display_name=display_name,
                 max_input_tokens=max_context_length,
                 supports_image_input=capabilities.get("vision", False),
-                supports_reasoning=bool(capabilities.get("reasoning", False))
+                supports_reasoning=capabilities.get("reasoning", False)
                 or is_reasoning_model(model_key, display_name),
             )
         )
