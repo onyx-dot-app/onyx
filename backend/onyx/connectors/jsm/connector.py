@@ -82,7 +82,7 @@ class JsmConnector(
                 
                 if data.get("isLastPage", True):
                     break
-                start += len(data.get("values", []))
+                start += limit
             except Exception as e:
                 logger.error(f"Failed to fetch comments for {issue_key}: {e}")
                 break
