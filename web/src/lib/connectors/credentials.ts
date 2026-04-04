@@ -488,6 +488,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     testrail_username: "",
     testrail_api_key: "",
   } as TestRailCredentialJson,
+  jira_service_management: {
+    jira_user_email: null,
+    jira_api_token: "",
+  } as JiraCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
