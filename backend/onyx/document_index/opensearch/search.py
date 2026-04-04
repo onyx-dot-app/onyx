@@ -37,6 +37,7 @@ from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
+from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
 from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
 from onyx.document_index.opensearch.schema import LAST_UPDATED_FIELD_NAME
 from onyx.document_index.opensearch.schema import MAX_CHUNK_SIZE_FIELD_NAME
@@ -49,7 +50,6 @@ from onyx.document_index.opensearch.schema import TENANT_ID_FIELD_NAME
 from onyx.document_index.opensearch.schema import TITLE_FIELD_NAME
 from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
 from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
-from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
 
 # See https://docs.opensearch.org/latest/query-dsl/term/terms/.
 MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY = 65_536
@@ -431,13 +431,15 @@ class DocumentQuery:
             }
         }
 
-        # Apply document boost multiplier to the hybrid search query.
-        # After the search pipeline normalizes the scores from multiple subqueries,
-        # we then apply the per-document boost.
-        boosted_query = _apply_document_boost_to_query(hybrid_search_query)
+        # NOTE: Document boost is NOT applied to hybrid queries. OpenSearch forbids
+        # nesting hybrid queries inside wrapper queries (script_score, function_score, etc).
+        # Hybrid queries must be top-level. Additionally, script_score runs at shard level
+        # before the normalization pipeline, which would distort the combined scores.
+        # Boost is applied only to keyword and semantic searches.
+        # See: https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
 
         final_hybrid_search_body: dict[str, Any] = {
-            "query": boosted_query,
+            "query": hybrid_search_query,
             "size": num_hits,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
             # Exclude retrieving the vector fields in order to save on
