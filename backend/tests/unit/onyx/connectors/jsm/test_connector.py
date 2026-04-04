@@ -35,7 +35,8 @@ class TestJsmConnector(unittest.TestCase):
         mock_comments_resp.json.return_value = {
             "values": [
                 {"body": {"content": [{"type": "paragraph", "content": [{"type": "text", "text": "Test Comment"}]}]}}
-            ]
+            ],
+            "isLastPage": True
         }
         mock_comments_resp.raise_for_status.return_value = None
         
@@ -43,9 +44,18 @@ class TestJsmConnector(unittest.TestCase):
         mock_get.side_effect = [mock_requests_resp, mock_comments_resp]
         
         checkpoint = JsmConnectorCheckpoint(offset=0)
-        docs = list(self.connector.load_from_checkpoint(0, 0, checkpoint))
         
-        self.assertEqual(len(docs), 2)  # 1 Document + 1 Checkpoint
+        # Use a helper to consume generator and get return value
+        gen = self.connector.load_from_checkpoint(0, 0, checkpoint)
+        docs = []
+        new_checkpoint = None
+        try:
+            while True:
+                docs.append(next(gen))
+        except StopIteration as e:
+            new_checkpoint = e.value
+            
+        self.assertEqual(len(docs), 1)
         doc = docs[0]
         self.assertIsInstance(doc, Document)
         self.assertEqual(doc.title, "SD-1 Test Summary")
@@ -53,7 +63,6 @@ class TestJsmConnector(unittest.TestCase):
         self.assertIn("Test Comment", doc.sections[0].text)
         self.assertEqual(doc.source, DocumentSource.JIRA_SERVICE_MANAGEMENT)
         
-        new_checkpoint = docs[1]
         self.assertIsInstance(new_checkpoint, JsmConnectorCheckpoint)
         self.assertEqual(new_checkpoint.offset, 1)
 
