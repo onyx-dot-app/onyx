@@ -124,6 +124,7 @@ class JsmConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> Iterator[list[SlimDocument | HierarchyNode]]:
         # JSM doesn't yet support granular permission syncing in this connector
+        return
         yield []
 
     def load_from_checkpoint_with_perm_sync(
@@ -133,8 +134,7 @@ class JsmConnector(
         checkpoint: JsmConnectorCheckpoint,
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
         # For now, we reuse the same logic as load_from_checkpoint
-        yield from self.load_from_checkpoint(start, end, checkpoint)
-        return JsmConnectorCheckpoint(offset=0, has_more=False)
+        return (yield from self.load_from_checkpoint(start, end, checkpoint))
 
     def _process_request(self, req: dict[str, Any]) -> Document | None:
         issue_key = req.get("issueKey")
@@ -177,11 +177,26 @@ class JsmConnector(
             "status": req.get("currentStatus", {}).get("status", ""),
         }
         if reporter:
-            metadata["reporter"] = f"{reporter['display_name']} ({reporter['email']})"
+            display_name = reporter.get("display_name")
+            email = reporter.get("email")
+            if display_name and email:
+                metadata["reporter"] = f"{display_name} ({email})"
+            elif display_name:
+                metadata["reporter"] = display_name
+            elif email:
+                metadata["reporter"] = email
+
         if participants:
-            metadata["participants"] = [
-                f"{p['display_name']} ({p['email']})" for p in participants
-            ]
+            metadata["participants"] = []
+            for p in participants:
+                display_name = p.get("display_name")
+                email = p.get("email")
+                if display_name and email:
+                    metadata["participants"].append(f"{display_name} ({email})")
+                elif display_name:
+                    metadata["participants"].append(display_name)
+                elif email:
+                    metadata["participants"].append(email)
 
         return Document(
             id=page_url,
