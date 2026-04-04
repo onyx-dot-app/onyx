@@ -216,6 +216,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.testrail.connector",
         class_name="TestRailConnector",
     ),
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: ConnectorMapping(
+        module_path="onyx.connectors.jsm.connector",
+        class_name="JsmConnector",
+    ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",
