@@ -62,21 +62,31 @@ class JsmConnector(
         return response.json()
 
     def _fetch_comments(self, issue_key: str) -> list[str]:
-        url = get_jsm_api_url(self.jira_base_url, f"request/{issue_key}/comment")
+        all_comments = []
+        start = 0
+        limit = 50
         auth = self._get_auth()
-        try:
-            response = requests.get(url, auth=auth)
-            response.raise_for_status()
-            data = response.json()
-            comments = []
-            for comment in data.get("values", []):
-                body = comment.get("body")
-                if body:
-                    comments.append(extract_text_from_adf(body))
-            return comments
-        except Exception as e:
-            logger.error(f"Failed to fetch comments for {issue_key}: {e}")
-            return []
+        
+        while True:
+            url = get_jsm_api_url(self.jira_base_url, f"request/{issue_key}/comment")
+            params = {"start": start, "limit": limit}
+            try:
+                response = requests.get(url, params=params, auth=auth)
+                response.raise_for_status()
+                data = response.json()
+                
+                for comment in data.get("values", []):
+                    body = comment.get("body")
+                    if body:
+                        all_comments.append(extract_text_from_adf(body))
+                
+                if data.get("isLastPage", True):
+                    break
+                start += len(data.get("values", []))
+            except Exception as e:
+                logger.error(f"Failed to fetch comments for {issue_key}: {e}")
+                break
+        return all_comments
 
     def load_from_checkpoint(
         self,
@@ -148,7 +158,9 @@ class JsmConnector(
         content = f"Summary: {summary}\n\nDescription: {description}"
         if comments_str:
             content += f"\n\n{comments_str}"
-        page_url = build_jsm_url(self.jira_base_url, issue_key)
+        
+        service_desk_id = str(req.get("serviceDeskId", ""))
+        page_url = build_jsm_url(self.jira_base_url, service_desk_id, issue_key)
 
         reporter = best_effort_basic_expert_info(req.get("reporter"))
         participants = [

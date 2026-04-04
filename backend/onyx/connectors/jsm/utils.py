@@ -2,11 +2,11 @@ from typing import Any
 
 JSM_API_BASE = "rest/servicedeskapi"
 
-def build_jsm_url(jira_base_url: str, request_key: str) -> str:
+def build_jsm_url(jira_base_url: str, portal_id: str, request_key: str) -> str:
     """
     Get the url used to access a JSM request in the UI.
     """
-    return f"{jira_base_url}/servicedesk/customer/portal/search?q={request_key}"
+    return f"{jira_base_url.rstrip('/')}/servicedesk/customer/portal/{portal_id}/{request_key}"
 
 def get_jsm_api_url(jira_base_url: str, endpoint: str) -> str:
     """
