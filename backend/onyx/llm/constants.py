@@ -84,6 +84,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "gemini": "Gemini",
     "stability": "Stability",
     "writer": "Writer",
+    "baidu": "Baidu",
 }
 
 # Map vendors to their brand names (used for provider_display_name generation)
@@ -103,6 +104,7 @@ VENDOR_BRAND_NAMES: dict[str, str] = {
     "qwen": "Qwen",
     "alibaba": "Qwen",
     "writer": "Palmyra",
+    "baidu": "ERNIE",
 }
 
 # Aggregator providers that host models from multiple vendors
@@ -286,6 +288,8 @@ MODEL_PREFIX_TO_VENDOR: dict[str, str] = {
     "nemotron": "nvidia",
     # xAI
     "grok": "xai",
+    # Baidu
+    "ernie": "baidu",
 }
 
 

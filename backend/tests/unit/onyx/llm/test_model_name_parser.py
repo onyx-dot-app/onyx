@@ -48,3 +48,22 @@ def test_unknown_model_fallback() -> None:
     # Unknown models get title-cased display names
     assert result.display_name == "Some Unknown Model Xyz"
     assert result.vendor is None
+
+
+def test_openrouter_baidu_ernie_with_enrichment() -> None:
+    """Test OpenRouter ERNIE model uses Baidu metadata and brand display."""
+    result = parse_litellm_model_name("openrouter/baidu/ernie-4.5-300b-a47b")
+
+    assert result.provider == LlmProviderNames.OPENROUTER
+    assert result.vendor == "baidu"
+    assert result.display_name == "ERNIE 4.5 300B"
+    assert result.provider_display_name == "ERNIE (OpenRouter - Baidu)"
+
+
+def test_openrouter_baidu_ernie_vendor_fallback_without_enrichment() -> None:
+    """Test ERNIE prefix infers Baidu vendor when enrichment data is missing."""
+    result = parse_litellm_model_name("openrouter/baidu/ernie-custom-foo")
+
+    assert result.provider == LlmProviderNames.OPENROUTER
+    assert result.vendor == "baidu"
+    assert result.provider_display_name == "ERNIE (OpenRouter - Baidu)"
