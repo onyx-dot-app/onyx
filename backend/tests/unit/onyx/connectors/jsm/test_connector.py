@@ -63,8 +63,37 @@ class TestJsmConnector(unittest.TestCase):
         self.assertIn("Test Comment", doc.sections[0].text)
         self.assertEqual(doc.source, DocumentSource.JIRA_SERVICE_MANAGEMENT)
         
+        # Verify metadata is string, not list
+        self.assertIsInstance(doc.metadata.get("status"), str)
+        self.assertEqual(doc.metadata.get("issue_key"), "SD-1")
+
         self.assertIsInstance(new_checkpoint, JsmConnectorCheckpoint)
         self.assertEqual(new_checkpoint.offset, 1)
+
+    @patch("onyx.connectors.jsm.connector.requests.get")
+    def test_fetch_comments_pagination(self, mock_get):
+        # Mock two pages of comments
+        mock_resp1 = MagicMock()
+        mock_resp1.json.return_value = {
+            "values": [{"body": "Comment 1"}],
+            "isLastPage": False
+        }
+        mock_resp1.raise_for_status.return_value = None
+        
+        mock_resp2 = MagicMock()
+        mock_resp2.json.return_value = {
+            "values": [{"body": "Comment 2"}],
+            "isLastPage": True
+        }
+        mock_resp2.raise_for_status.return_value = None
+        
+        mock_get.side_effect = [mock_resp1, mock_resp2]
+        
+        comments = self.connector._fetch_comments("SD-1")
+        self.assertEqual(len(comments), 2)
+        self.assertEqual(comments[0], "Comment 1")
+        self.assertEqual(comments[1], "Comment 2")
+        self.assertEqual(mock_get.call_count, 2)
 
 if __name__ == "__main__":
     unittest.main()

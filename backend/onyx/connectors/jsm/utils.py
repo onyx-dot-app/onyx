@@ -49,7 +49,7 @@ def extract_text_from_adf(adf: Any) -> str:
     return "".join(texts).strip()
 
 
-def best_effort_basic_expert_info(obj: Any) -> Any:
+def best_effort_basic_expert_info(obj: Any) -> dict[str, str] | None:
     """
     Extract display name and email from a JSM user object.
     Matches the pattern in other connectors.

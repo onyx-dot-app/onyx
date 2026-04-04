@@ -50,7 +50,7 @@ class JsmConnector(
     def _fetch_requests(self, offset: int, limit: int) -> dict[str, Any]:
         url = get_jsm_api_url(self.jira_base_url, "request")
         params = {
-            "start": offset,
+            "startAt": offset,
             "limit": limit,
         }
         auth = self._get_auth()
@@ -66,21 +66,22 @@ class JsmConnector(
         
         while True:
             url = get_jsm_api_url(self.jira_base_url, f"request/{issue_key}/comment")
-            params = {"start": start, "limit": limit}
+            params = {"startAt": start, "limit": limit}
             try:
                 response = requests.get(url, params=params, auth=auth)
                 response.raise_for_status()
                 data = response.json()
                 
-                for comment in data.get("values", []):
+                values = data.get("values", [])
+                for comment in values:
                     body = comment.get("body")
                     if body:
                         all_comments.append(extract_text_from_adf(body))
                 
-                if data.get("isLastPage", True):
+                if data.get("isLastPage", True) or not values:
                     break
-                start += limit
-            except Exception as e:
+                start += len(values)
+            except requests.RequestException as e:
                 logger.error(f"Failed to fetch comments for {issue_key}: {e}")
                 break
         return all_comments
@@ -103,7 +104,7 @@ class JsmConnector(
                     yield doc
             
             offset += len(requests_list)
-            if data.get("isLastPage", True):
+            if data.get("isLastPage", True) or not requests_list:
                 break
                 
         return JsmConnectorCheckpoint(offset=offset, has_more=False)
@@ -183,16 +184,19 @@ class JsmConnector(
                 metadata["reporter"] = email
 
         if participants:
-            metadata["participants"] = []
+            participants_str_list = []
             for p in participants:
                 display_name = p.get("display_name")
                 email = p.get("email")
                 if display_name and email:
-                    metadata["participants"].append(f"{display_name} ({email})")
+                    participants_str_list.append(f"{display_name} ({email})")
                 elif display_name:
-                    metadata["participants"].append(display_name)
+                    participants_str_list.append(display_name)
                 elif email:
-                    metadata["participants"].append(email)
+                    participants_str_list.append(email)
+            
+            if participants_str_list:
+                metadata["participants"] = ", ".join(participants_str_list)
 
         return Document(
             id=page_url,
