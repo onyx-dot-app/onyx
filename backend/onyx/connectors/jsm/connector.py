@@ -121,7 +121,7 @@ class JsmConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> Iterator[list[SlimDocument | HierarchyNode]]:
         # JSM doesn't yet support granular permission syncing in this connector
-        yield []
+        yield from []
 
     def load_from_checkpoint_with_perm_sync(
         self,
