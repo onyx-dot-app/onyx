@@ -1,10 +1,4 @@
-import os
 from typing import Any
-from urllib.parse import urlparse
-
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 JSM_API_BASE = "rest/servicedeskapi"
 
