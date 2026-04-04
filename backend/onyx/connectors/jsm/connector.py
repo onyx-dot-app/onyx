@@ -1,5 +1,5 @@
 import json
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from datetime import datetime
 from typing import Any
 
@@ -10,10 +10,13 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import IndexingHeartbeatInterface
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.jsm.utils import build_jsm_url, get_jsm_api_url, extract_text_from_adf, best_effort_basic_expert_info
 from onyx.utils.logger import setup_logger
@@ -92,12 +95,26 @@ class JsmConnector(
                 if doc:
                     yield doc
             
+            offset += len(requests_list)
             if data.get("isLastPage", True):
                 break
                 
-            offset += len(requests_list)
-            
-        yield JsmConnectorCheckpoint(offset=offset)
+        return JsmConnectorCheckpoint(offset=offset, has_more=False)
+
+    def build_dummy_checkpoint(self) -> JsmConnectorCheckpoint:
+        return JsmConnectorCheckpoint(offset=0, has_more=True)
+
+    def validate_checkpoint_json(self, checkpoint_json: str) -> JsmConnectorCheckpoint:
+        return JsmConnectorCheckpoint.model_validate_json(checkpoint_json)
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> Iterator[list[SlimDocument | HierarchyNode]]:
+        # JSM doesn't yet support granular permission syncing in this connector
+        yield []
 
     def load_from_checkpoint_with_perm_sync(
         self,
@@ -106,7 +123,8 @@ class JsmConnector(
         checkpoint: JsmConnectorCheckpoint,
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
         # For now, we reuse the same logic as load_from_checkpoint
-        return self.load_from_checkpoint(start, end, checkpoint)
+        yield from self.load_from_checkpoint(start, end, checkpoint)
+        return JsmConnectorCheckpoint(offset=0, has_more=False)
 
     def _process_request(self, req: dict[str, Any]) -> Document | None:
         issue_key = req.get("issueKey")
