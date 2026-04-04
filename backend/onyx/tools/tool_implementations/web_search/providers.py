@@ -13,6 +13,9 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_PDF_SIZE_BYTES,
 )
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
+from onyx.tools.tool_implementations.web_search.clients.baidu_client import (
+    BaiduClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.brave_client import (
     BraveClient,
 )
@@ -92,6 +95,17 @@ def build_search_provider_from_config(
 
     if provider_type == WebSearchProviderType.EXA:
         return ExaClient(api_key=api_key, num_results=num_results)
+    if provider_type == WebSearchProviderType.BAIDU:
+        return BaiduClient(
+            api_key=api_key,
+            num_results=num_results,
+            timeout_seconds=_parse_positive_int_config(
+                raw_value=config.get("timeout_seconds"),
+                default=10,
+                provider_name="Baidu",
+                config_key="timeout_seconds",
+            ),
+        )
     if provider_type == WebSearchProviderType.BRAVE:
         return BraveClient(
             api_key=api_key,
