@@ -174,7 +174,7 @@ class JsmConnector(
             "issue_key": issue_key,
             "service_desk_id": str(req.get("serviceDeskId", "")),
             "request_type_id": str(req.get("requestTypeId", "")),
-            "status": req.get("currentStatus", {}).get("status", ""),
+            "status": (req.get("currentStatus") or {}).get("status", ""),
         }
         if reporter:
             display_name = reporter.get("display_name")
