@@ -23,7 +23,7 @@ import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Button, SelectCard, Text } from "@opal/components";
-import { Content, CardHeaderLayout } from "@opal/layouts";
+import { Content, Card } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import {
   SvgArrowExchange,
@@ -260,7 +260,7 @@ export default function ImageGenerationContent() {
                           : undefined
                     }
                   >
-                    <CardHeaderLayout
+                    <Card.Header
                       sizePreset="main-ui"
                       variant="section"
                       icon={() => (
