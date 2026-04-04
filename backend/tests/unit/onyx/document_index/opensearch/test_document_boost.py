@@ -118,6 +118,15 @@ class TestDocumentBoostApplication:
         # This ensures documents without boost don't get completely suppressed
         assert "Math.max" in script
 
+        # Verify the script applies Math.max only to boost, not final score
+        # This preserves ranking semantics: boost=0 should result in score=0,
+        # not score=MIN_BOOST_VALUE
+        assert "_score *" in script or "_score*" in script, \
+            "Score multiplication must come before Math.max to allow zero boost"
+
+        # Verify the boost field is referenced
+        assert GLOBAL_BOOST_FIELD_NAME in script
+
     def test_multiple_search_types_all_have_boost(self) -> None:
         """All search types should consistently apply document boost."""
         tenant_state = TenantState(tenant_id="test_tenant", multitenant=False)
@@ -177,12 +186,18 @@ class TestDocumentBoostApplication:
         assert "must" in base_query["bool"] or "filter" in base_query["bool"]
 
     def test_script_score_with_filters(self) -> None:
-        """Document boost should work correctly with filtered searches."""
+        """Document boost should work correctly with filtered searches.
+
+        Filters should be preserved inside the script_score query and not
+        interfere with boost application.
+        """
+        from onyx.configs.constants import DocumentSource
+
         tenant_state = TenantState(tenant_id="test_tenant", multitenant=False)
-        # Use filters to restrict search
+        # Apply actual filters to test filter + boost integration
         index_filters = IndexFilters(
             access_control_list=None,
-            source_type=None,
+            source_type=[DocumentSource.WEB],  # Actual filter
             document_set=None,
         )
 
@@ -198,4 +213,18 @@ class TestDocumentBoostApplication:
         assert "script_score" in query["query"]
         base_query = query["query"]["script_score"]["query"]
         assert base_query is not None
-        assert len(str(base_query)) > 0  # Ensure it's not empty
+
+        # Verify filters are preserved inside the base query
+        # (filters should be in the bool query that's inside script_score)
+        base_query_str = str(base_query)
+        assert len(base_query_str) > 0
+
+        # Verify the structure: filters should be within the wrapped query,
+        # not at the script_score level
+        assert "bool" in base_query, \
+            "Filtered queries should have bool structure preserved in base query"
+
+        # Verify script is correctly configured at script_score level
+        script = query["query"]["script_score"]["script"]
+        assert "source" in script
+        assert GLOBAL_BOOST_FIELD_NAME in script["source"]

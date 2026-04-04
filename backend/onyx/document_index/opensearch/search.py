@@ -90,7 +90,7 @@ def _apply_document_boost_to_query(
         "script_score": {
             "query": query,
             "script": {
-                "source": f"Math.max({MIN_BOOST_VALUE}, doc['{GLOBAL_BOOST_FIELD_NAME}'].value * _score)",
+                "source": f"_score * Math.max({MIN_BOOST_VALUE}, doc['{GLOBAL_BOOST_FIELD_NAME}'].value)",
                 "lang": "painless",
             },
         }
