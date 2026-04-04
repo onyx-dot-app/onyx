@@ -1,6 +1,8 @@
 from collections.abc import Iterator
 from typing import Any
 
+import requests
+
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
@@ -119,7 +121,7 @@ class JsmConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> Iterator[list[SlimDocument | HierarchyNode]]:
         # JSM doesn't yet support granular permission syncing in this connector
-        return
+        yield []
 
     def load_from_checkpoint_with_perm_sync(
         self,
