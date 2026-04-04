@@ -1315,13 +1315,25 @@ def get_lm_studio_available_models(
         max_context_length = item.get("max_context_length")
         capabilities = item.get("capabilities") or {}
 
+        # LM Studio 0.4.8+ changed some capability fields from booleans
+        # to dicts (e.g. {"allowed_options": ["off", "on"], "default": "on"}).
+        # Coerce to bool: a dict with non-empty allowed_options is truthy.
+        def _capability_as_bool(val: object) -> bool:
+            if isinstance(val, dict):
+                return bool(val.get("allowed_options"))
+            return bool(val)
+
         results.append(
             LMStudioFinalModelResponse(
                 name=model_key,
                 display_name=display_name,
                 max_input_tokens=max_context_length,
-                supports_image_input=capabilities.get("vision", False),
-                supports_reasoning=capabilities.get("reasoning", False)
+                supports_image_input=_capability_as_bool(
+                    capabilities.get("vision", False)
+                ),
+                supports_reasoning=_capability_as_bool(
+                    capabilities.get("reasoning", False)
+                )
                 or is_reasoning_model(model_key, display_name),
             )
         )
