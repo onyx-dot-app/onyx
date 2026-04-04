@@ -459,7 +459,7 @@ lazy-imports==1.0.1
     # via onyx
 legacy-cgi==2.6.4 ; python_full_version >= '3.13'
     # via ddtrace
-litellm==1.83.0
+litellm==1.81.6
     # via onyx
 locket==1.0.0
     # via
