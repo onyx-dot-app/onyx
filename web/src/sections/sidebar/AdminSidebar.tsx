@@ -22,21 +22,17 @@ import { CombinedSettings } from "@/interfaces/settings";
 import { SidebarTab } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Separator from "@/refresh-components/Separator";
-import { Disabled } from "@opal/core";
-import { SvgArrowUpCircle, SvgSearch, SvgUserManage, SvgX } from "@opal/icons";
+import Spacer from "@/refresh-components/Spacer";
+import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
   useLicense,
   hasActiveSubscription,
 } from "@/lib/billing";
-import { Content } from "@opal/layouts";
 import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
-import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { getUserDisplayName } from "@/lib/user";
-import { APP_SLOGAN } from "@/lib/constants";
+import AccountPopover from "@/sections/sidebar/AccountPopover";
 
 const SECTIONS = {
   UNLABELED: "",
@@ -267,37 +263,27 @@ function AdminSidebarInner({
   return (
     <>
       <SidebarLayouts.Header>
-        <div className="flex flex-col w-full">
+        {folded ? (
           <SidebarTab
-            icon={({ className }) => <SvgX className={className} size={16} />}
-            href="/app"
-            variant="sidebar-light"
-            folded={folded}
+            icon={SvgSearch}
+            folded
+            onClick={() => {
+              onFoldChange(false);
+              setFocusSearch(true);
+            }}
           >
-            Exit Admin Panel
+            Search
           </SidebarTab>
-          {folded ? (
-            <SidebarTab
-              icon={SvgSearch}
-              folded
-              onClick={() => {
-                onFoldChange(false);
-                setFocusSearch(true);
-              }}
-            >
-              Search
-            </SidebarTab>
-          ) : (
-            <InputTypeIn
-              ref={searchRef}
-              variant="internal"
-              leftSearchIcon
-              placeholder="Search..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          )}
-        </div>
+        ) : (
+          <InputTypeIn
+            ref={searchRef}
+            variant="internal"
+            leftSearchIcon
+            placeholder="Search..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        )}
       </SidebarLayouts.Header>
 
       <SidebarLayouts.Body scrollKey="admin-sidebar">
@@ -342,43 +328,17 @@ function AdminSidebarInner({
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        {!folded && (
-          <Section gap={0} height="fit" alignItems="start">
-            <div className="p-[0.38rem] w-full">
-              <Content
-                icon={SvgUserManage}
-                title={getUserDisplayName(user)}
-                sizePreset="main-ui"
-                variant="body"
-                prominence="muted"
-                widthVariant="full"
-              />
-            </div>
-            <div className="flex flex-row gap-1 p-[0.38rem] w-full">
-              <Text text03 secondaryAction>
-                <a
-                  className="underline"
-                  href="https://onyx.app"
-                  target="_blank"
-                >
-                  Onyx
-                </a>
-              </Text>
-              <Text text03 secondaryBody>
-                |
-              </Text>
-              {settings.webVersion ? (
-                <Text text03 secondaryBody>
-                  {settings.webVersion}
-                </Text>
-              ) : (
-                <Text text03 secondaryBody>
-                  {APP_SLOGAN}
-                </Text>
-              )}
-            </div>
-          </Section>
-        )}
+        <Separator noPadding className="px-2" />
+        <Spacer rem={0.5} />
+        <SidebarTab
+          icon={SvgX}
+          href="/app"
+          variant="sidebar-light"
+          folded={folded}
+        >
+          Exit Admin Panel
+        </SidebarTab>
+        <AccountPopover />
       </SidebarLayouts.Footer>
     </>
   );

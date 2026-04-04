@@ -76,7 +76,7 @@ import { track, AnalyticsEvent } from "@/lib/analytics";
 import { motion, AnimatePresence } from "motion/react";
 import { Notification, NotificationType } from "@/interfaces/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 
@@ -593,7 +593,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
             {isAdmin ? "Admin Panel" : "Curator Panel"}
           </SidebarTab>
         )}
-        <UserAvatarPopover
+        <AccountPopover
           folded={folded}
           onShowBuildIntro={
             isOnyxCraftEnabled ? handleShowBuildIntro : undefined
