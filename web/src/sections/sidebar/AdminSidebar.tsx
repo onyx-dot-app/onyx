@@ -33,7 +33,6 @@ import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import useScreenSize from "@/hooks/useScreenSize";
 
 const SECTIONS = {
   UNLABELED: "",
@@ -212,7 +211,6 @@ function AdminSidebarInner({
   const folded = useSidebarFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
-  const { isMobile } = useScreenSize();
 
   useEffect(() => {
     if (focusSearch && !folded && searchRef.current) {
