@@ -212,6 +212,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.bitbucket.connector",
         class_name="BitbucketConnector",
     ),
+    DocumentSource.PHABRICATOR: ConnectorMapping(
+        module_path="onyx.connectors.phabricator.connector",
+        class_name="PhabricatorConnector",
+    ),
     DocumentSource.TESTRAIL: ConnectorMapping(
         module_path="onyx.connectors.testrail.connector",
         class_name="TestRailConnector",

@@ -115,6 +115,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/coda",
   },
+  phabricator: {
+    icon: SvgFileText,
+    displayName: "Phabricator/Phorge",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/phabricator",
+  },
   notion: {
     icon: NotionIcon,
     displayName: "Notion",
