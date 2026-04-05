@@ -19,7 +19,7 @@ import {
   updateCustomTool,
 } from "@/lib/tools/openApiService";
 import ToolItem from "@/sections/actions/ToolItem";
-import debounce from "lodash/debounce";
+import { debounce } from "@/lib/debounce";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { Formik, Form, useFormikContext } from "formik";
