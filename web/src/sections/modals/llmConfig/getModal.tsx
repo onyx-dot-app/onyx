@@ -5,6 +5,7 @@ import OllamaModal from "@/sections/modals/llmConfig/OllamaModal";
 import AzureModal from "@/sections/modals/llmConfig/AzureModal";
 import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
 import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
+import AvianModal from "@/sections/modals/llmConfig/AvianModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
 import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
@@ -53,6 +54,8 @@ export function getModalForExistingProvider(
       return <BedrockModal {...props} />;
     case LLMProviderName.OPENROUTER:
       return <OpenRouterModal {...props} />;
+    case LLMProviderName.AVIAN:
+      return <AvianModal {...props} />;
     case LLMProviderName.LM_STUDIO:
       return <LMStudioForm {...props} />;
     case LLMProviderName.LITELLM_PROXY:
