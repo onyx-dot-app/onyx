@@ -332,6 +332,90 @@ def test_update_model_configurations(
     )
 
 
+def test_update_provider_custom_config_respects_non_null_without_change_flag(
+    reset: None,  # noqa: ARG001
+) -> None:
+    admin_user = UserManager.create(name="admin_user")
+
+    create_response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": f"custom-config-provider-{uuid.uuid4()}",
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "custom_config": {"think": "true"},
+            "custom_config_changed": True,
+            "is_public": True,
+            "groups": [],
+            "personas": [],
+        },
+    )
+    assert create_response.status_code == 200
+    created_provider = create_response.json()
+
+    # Do not set custom_config_changed=True; the server should still honor
+    # a non-null custom_config value instead of overwriting it with stored config.
+    update_response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider",
+        headers=admin_user.headers,
+        json={
+            "id": created_provider["id"],
+            "name": created_provider["name"],
+            "provider": created_provider["provider"],
+            "api_key": created_provider["api_key"],
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "custom_config": {"think": "false"},
+            "is_public": True,
+            "groups": [],
+            "personas": [],
+        },
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["custom_config"] == {"think": "false"}
+
+    persisted_provider = _get_provider_by_id(admin_user, created_provider["id"])
+    assert persisted_provider is not None
+    assert persisted_provider["custom_config"] == {"think": "false"}
+
+    # Null custom_config should keep the stored config when
+    # custom_config_changed remains false.
+    null_update_response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider",
+        headers=admin_user.headers,
+        json={
+            "id": created_provider["id"],
+            "name": created_provider["name"],
+            "provider": created_provider["provider"],
+            "api_key": created_provider["api_key"],
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True
+                ).model_dump()
+            ],
+            "custom_config": None,
+            "is_public": True,
+            "groups": [],
+            "personas": [],
+        },
+    )
+    assert null_update_response.status_code == 200
+    assert null_update_response.json()["custom_config"] == {"think": "false"}
+
+    persisted_provider = _get_provider_by_id(admin_user, created_provider["id"])
+    assert persisted_provider is not None
+    assert persisted_provider["custom_config"] == {"think": "false"}
+
+
 @pytest.mark.parametrize(
     "model_configurations",
     [
