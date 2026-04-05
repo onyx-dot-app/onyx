@@ -364,6 +364,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    document_source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -452,7 +453,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=document_source,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -478,6 +479,10 @@ class JiraConnector(
     CheckpointedConnectorWithPermSync[JiraConnectorCheckpoint],
     SlimConnectorWithPermSync,
 ):
+    @property
+    def document_source(self) -> DocumentSource:
+        return DocumentSource.JIRA
+
     def __init__(
         self,
         jira_base_url: str,
@@ -673,6 +678,30 @@ class JiraConnector(
         )
         return None
 
+    def _process_issue(
+        self,
+        issue: Issue,
+        parent_hierarchy_raw_node_id: str | None,
+    ) -> Document | None:
+        return process_jira_issue(
+            jira_base_url=self.jira_base,
+            issue=issue,
+            comment_email_blacklist=self.comment_email_blacklist,
+            labels_to_skip=self.labels_to_skip,
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            document_source=self.document_source,
+        )
+
+    def _get_document_external_access(
+        self,
+        project_key: str,
+        add_prefix: bool,
+    ) -> Any:
+        return self._get_project_permissions(
+            project_key,
+            add_prefix=add_prefix,
+        )
+
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
@@ -681,14 +710,7 @@ class JiraConnector(
         If a custom JQL query is provided, it will be used and combined with time constraints.
         Otherwise, the query will be constructed based on project key (if provided).
         """
-        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-
-        time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
+        time_jql = self._build_time_jql(start=start, end=end)
 
         # If custom JQL query is provided, use it and combine with time constraints
         if self.jql_query:
@@ -700,6 +722,20 @@ class JiraConnector(
             return f"{base_jql} AND {time_jql}"
 
         return time_jql
+
+    def _build_time_jql(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> str:
+        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+
+        return f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
 
     def load_from_checkpoint(
         self,
@@ -795,17 +831,14 @@ class JiraConnector(
                     else None
                 )
 
-                if document := process_jira_issue(
-                    jira_base_url=self.jira_base,
+                if document := self._process_issue(
                     issue=issue,
-                    comment_email_blacklist=self.comment_email_blacklist,
-                    labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
-                        document.external_access = self._get_project_permissions(
-                            project_key,
+                        document.external_access = self._get_document_external_access(
+                            project_key=project_key,
                             add_prefix=True,  # Indexing path - prefix here
                         )
                     yield document
@@ -921,8 +954,9 @@ class JiraConnector(
                     SlimDocument(
                         id=doc_id,
                         # Permission sync path - don't prefix, upsert_document_external_perms handles it
-                        external_access=self._get_project_permissions(
-                            project_key, add_prefix=False
+                        external_access=self._get_document_external_access(
+                            project_key=project_key,
+                            add_prefix=False,
                         ),
                         parent_hierarchy_raw_node_id=(
                             self._get_parent_hierarchy_raw_node_id(issue, project_key)
