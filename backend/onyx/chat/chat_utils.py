@@ -527,10 +527,10 @@ def _build_tool_call_response_history_message(
     generated_images: list[dict] | None,
     tool_call_response: str | None,
 ) -> str:
-    if tool_name != IMAGE_GENERATION_TOOL_NAME:
-        return TOOL_CALL_RESPONSE_CROSS_MESSAGE
-
-    if generated_images:
+    # If we have a stored tool response, use it — this preserves MCP and
+    # custom tool results across conversation turns instead of replacing
+    # them with an opaque "no longer accessible" placeholder.
+    if tool_name == IMAGE_GENERATION_TOOL_NAME and generated_images:
         llm_image_context: list[dict[str, str]] = []
         for image in generated_images:
             file_id = image.get("file_id")

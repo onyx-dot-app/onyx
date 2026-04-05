@@ -5,6 +5,7 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
+import json
 from collections.abc import Awaitable
 from collections.abc import Callable
 from enum import Enum
@@ -214,10 +215,19 @@ async def _call_mcp_client_function_async(
     return await run_client_function()
 
 
-def process_mcp_result(call_tool_result: CallToolResult) -> str:
-    """Flatten MCP CallToolResult->text (prefers text content blocks)."""
-    # TODO: use structured_content if available
-    parts = []
+def process_mcp_result(call_tool_result: CallToolResult) -> dict | list | str:
+    """Extract a clean, LLM-readable result from an MCP CallToolResult.
+
+    Prefers structuredContent (MCP spec 2025-03-26+) over raw content
+    text blocks. Returns a parsed object when possible so callers can
+    serialize once at the boundary, avoiding double-serialization.
+    """
+    # Prefer structuredContent — it's already a parsed object
+    if call_tool_result.structuredContent is not None:
+        return call_tool_result.structuredContent
+
+    # Fall back to content blocks
+    parts: list[str] = []
     for content_block in call_tool_result.content:
         if content_block.type == ContentBlockTypes.TEXT.value:
             parts.append(content_block.text or "")
@@ -231,11 +241,23 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
             )
         # TODO: handle other content block types
 
-    return "\n\n".join(p for p in parts if p) or str(call_tool_result.structuredContent)
+    joined = "\n\n".join(p for p in parts if p)
+
+    # If the result is a single JSON text block, parse it so callers
+    # can serialize cleanly (avoids JSON-string-inside-JSON-string)
+    if joined:
+        try:
+            return json.loads(joined)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    return joined
 
 
-def _call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> MCPClientFunction[str]:
-    async def call_tool(session: ClientSession) -> str:
+def _call_mcp_tool(
+    tool_name: str, arguments: dict[str, Any]
+) -> MCPClientFunction[dict | list | str]:
+    async def call_tool(session: ClientSession) -> dict | list | str:
         await session.initialize()
         result = await session.call_tool(tool_name, arguments)
         return process_mcp_result(result)
@@ -250,7 +272,7 @@ def call_mcp_tool(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
-) -> str:
+) -> dict | list | str:
     """Call a specific tool on the MCP server"""
     return _call_mcp_client_function_sync(
         _call_mcp_tool(tool_name, arguments),
