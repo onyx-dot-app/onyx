@@ -315,6 +315,9 @@ def create_update_persona(
             commit=False,
             hierarchy_node_ids=create_persona_request.hierarchy_node_ids,
             document_ids=create_persona_request.document_ids,
+            is_listed=create_persona_request.is_visible
+            if create_persona_request.is_visible is not None
+            else True,
         )
 
         versioned_update_persona_access = fetch_versioned_implementation(

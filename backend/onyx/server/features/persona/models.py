@@ -137,6 +137,7 @@ class PersonaUpsertRequest(BaseModel):
     replace_base_system_prompt: bool = False
     task_prompt: str
     datetime_aware: bool
+    is_visible: bool | None = None
 
 
 class MinimalPersonaSnapshot(BaseModel):
