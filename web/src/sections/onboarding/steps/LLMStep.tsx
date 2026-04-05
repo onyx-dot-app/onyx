@@ -19,11 +19,11 @@ import { Disabled } from "@opal/core";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
+import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 
 type LLMStepProps = {
   state: OnboardingState;
   actions: OnboardingActions;
-  llmDescriptors: WellKnownLLMProviderDescriptor[];
   disabled?: boolean;
 };
 
@@ -92,10 +92,14 @@ const StackedProviderIcons = ({ providers }: StackedProviderIconsProps) => {
 const LLMStepInner = ({
   state: onboardingState,
   actions: onboardingActions,
-  llmDescriptors,
   disabled,
 }: LLMStepProps) => {
-  const isLoading = !llmDescriptors || llmDescriptors.length === 0;
+  // Fetch well-known providers directly — this component only mounts during
+  // onboarding, so the slow /api/admin/llm/built-in/options call is deferred
+  // until the user actually needs to configure an LLM provider.
+  const { llmProviderOptions } = useLLMProviderOptions();
+  const llmDescriptors = llmProviderOptions ?? [];
+  const isLoading = !llmProviderOptions || llmProviderOptions.length === 0;
 
   const [selectedProvider, setSelectedProvider] =
     useState<SelectedProvider | null>(null);
