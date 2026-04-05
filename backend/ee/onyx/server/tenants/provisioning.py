@@ -16,6 +16,7 @@ from ee.onyx.server.tenants.models import TenantCreationPayload
 from ee.onyx.server.tenants.models import TenantDeletionPayload
 from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
 from ee.onyx.server.tenants.schema_management import drop_schema
+from ee.onyx.server.tenants.schema_management import fast_provision_tenant_schema
 from ee.onyx.server.tenants.schema_management import run_alembic_migrations
 from ee.onyx.server.tenants.user_mapping import add_users_to_tenant
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
@@ -668,11 +669,12 @@ async def setup_tenant(tenant_id: str) -> None:
     try:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-        # Run Alembic migrations in a way that isolates it from the current event loop
-        # Create a new event loop for this synchronous operation
+        # Fast path: create tables directly from model definitions + seed data
+        # instead of running hundreds of sequential Alembic migrations (~80s → ~2s)
         loop = asyncio.get_event_loop()
-        # Use run_in_executor which properly isolates the thread execution
-        await loop.run_in_executor(None, lambda: run_alembic_migrations(tenant_id))
+        await loop.run_in_executor(
+            None, lambda: fast_provision_tenant_schema(tenant_id)
+        )
 
         # Configure the tenant with default settings
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
