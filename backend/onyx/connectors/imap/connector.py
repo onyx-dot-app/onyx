@@ -7,6 +7,7 @@ from datetime import datetime
 from datetime import timezone
 from email.message import Message
 from email.utils import parseaddr
+from email.utils import getaddresses
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -188,7 +189,7 @@ class ImapConnector(
         for email_id in current_todos:
             email_msg = _fetch_email(mail_client=mail_client, email_id=email_id)
             if not email_msg:
-                logger.warn(f"Failed to fetch message {email_id=}; skipping")
+                logger.warning(f"Failed to fetch message {email_id=}; skipping")
                 continue
 
             email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
@@ -260,7 +261,7 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
         elif isinstance(mailboxes_raw, str):
             mailboxes_str = mailboxes_raw
         else:
-            logger.warn(
+            logger.warning(
                 f"Expected the mailbox data to be of type str, instead got {type(mailboxes_raw)=} {mailboxes_raw}; skipping"
             )
             continue
@@ -274,7 +275,7 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
         # The below regex matches on that pattern; from there, we select the 3rd match (index 2), which is the mailbox-name.
         match = re.match(r'\([^)]*\)\s+"([^"]+)"\s+"?(.+?)"?$', mailboxes_str)
         if not match:
-            logger.warn(
+            logger.warning(
                 f"Invalid mailbox-data formatting structure: {mailboxes_str=}; skipping"
             )
             continue
@@ -391,7 +392,7 @@ def _parse_email_body(
         try:
             raw_payload = part.get_payload(decode=True)
             if not isinstance(raw_payload, bytes):
-                logger.warn(
+                logger.warning(
                     "Payload section from email was expected to be an array of bytes, instead got "
                     f"{type(raw_payload)=}, {raw_payload=}"
                 )
@@ -403,7 +404,7 @@ def _parse_email_body(
             continue
 
     if not body:
-        logger.warn(
+        logger.warning(
             f"Email with {email_headers.id=} has an empty body; returning an empty string"
         )
         return ""
@@ -422,21 +423,64 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
+    """
+    Parse email addresses from a header string.
+    Uses getaddresses() which properly handles RFC 2822 format including
+    quoted display names with commas (e.g., "Doe, John" <john@example.com>).
+    """
+    # getaddresses handles comma-separated addresses correctly,
+    # respecting quoted strings in display names
+    name_addr_pairs = getaddresses([raw_header])
     return [(name, addr) for name, addr in name_addr_pairs if addr]
 
 
 def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
+    """
+    Parse a single email address from a header string.
+    Handles edge cases like display names containing commas.
+    """
     addrs = _parse_addrs(raw_header=raw_header)
+
     if not addrs:
-        raise RuntimeError(
-            f"Parsing email header resulted in no addresses being found; {raw_header=}"
+        # Fallback: try to extract email from angle brackets <email@example.com>
+        match = re.search(r'<([^>]+)>', raw_header)
+        if match:
+            email_addr = match.group(1)
+            # Try to get the display name (everything before the <)
+            name_part = raw_header[:raw_header.find('<')].strip()
+            # Remove surrounding quotes if present
+            name_part = name_part.strip('"').strip()
+            logger.warning(
+                f"Standard parsing failed, using fallback extraction; {raw_header=}"
+            )
+            return (name_part, email_addr)
+
+        # Ultimate fallback: return raw header as name with empty address
+        logger.warning(
+            f"No valid email address found in header, using raw value; {raw_header=}"
         )
-    elif len(addrs) >= 2:
-        raise RuntimeError(
-            f"Expected a singular address, but instead got multiple; {raw_header=} {addrs=}"
+        return (raw_header.strip().strip('"'), "")
+
+    if len(addrs) >= 2:
+        # This shouldn't happen with getaddresses() for properly formatted headers,
+        # but as a safety fallback, try regex extraction
+        match = re.search(r'<([^>]+)>', raw_header)
+        if match:
+            email_addr = match.group(1)
+            name_part = raw_header[:raw_header.find('<')].strip()
+            name_part = name_part.strip('"').strip()
+            logger.warning(
+                f"Multiple addresses found, using fallback extraction; {raw_header=} {addrs=}"
+            )
+            return (name_part, email_addr)
+
+        # Ultimate fallback: return first address or raw header
+        logger.warning(
+            f"Multiple addresses found without valid email, using first; {raw_header=} {addrs=}"
         )
+        if addrs:
+            return addrs[0]
+        return (raw_header.strip().strip('"'), "")
 
     return addrs[0]
 
