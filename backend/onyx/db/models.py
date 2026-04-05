@@ -3030,9 +3030,6 @@ class ModelConfiguration(Base):
     # - The end-user is configuring a model and chooses not to set a max-input-tokens limit.
     max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # Deprecated: use LLMModelFlow with VISION flow type instead
-    supports_image_input: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-
     # Human-readable display name for the model.
     # For dynamic providers (OpenRouter, Bedrock, Ollama), this comes from the source API.
     # For static providers (OpenAI, Anthropic), this may be null and will fall back to LiteLLM.
