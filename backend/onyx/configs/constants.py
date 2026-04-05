@@ -249,6 +249,7 @@ class DocumentSource(str, Enum):
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -704,4 +705,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: "jira service management - service desk tickets, requests, and SLAs",
 }
