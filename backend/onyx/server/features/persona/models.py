@@ -123,6 +123,7 @@ class PersonaUpsertRequest(BaseModel):
     )
     search_start_date: datetime | None = None
     label_ids: list[int] | None = None
+    is_visible: bool | None = None
     is_featured: bool = False
     display_priority: int | None = None
     # Accept string UUIDs from frontend
