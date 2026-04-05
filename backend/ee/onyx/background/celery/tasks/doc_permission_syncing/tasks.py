@@ -470,6 +470,7 @@ def connector_permission_sync_generator_task(
         return None
 
     try:
+        # --- Phase 1: Read cc_pair config + validate (short-lived session) ---
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
@@ -498,7 +499,6 @@ def connector_permission_sync_generator_task(
                 task_logger.exception(
                     f"validate_ccpair_permissions_sync exceptioned: cc_pair={cc_pair_id}"
                 )
-                # TODO: add some notification to the admins here
                 raise
 
             source_type = cc_pair.connector.source
@@ -523,94 +523,100 @@ def connector_permission_sync_generator_task(
 
             mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
 
-            payload = redis_connector.permissions.payload
-            if not payload:
-                raise ValueError(f"No fence payload found: cc_pair={cc_pair_id}")
+            # Extract identifiers for closures below (survive session close)
+            _connector_id = cc_pair.connector.id
+            _credential_id = cc_pair.credential.id
 
-            new_payload = RedisConnectorPermissionSyncPayload(
-                id=payload.id,
-                submitted=payload.submitted,
-                started=datetime.now(timezone.utc),
-                celery_task_id=payload.celery_task_id,
-            )
-            redis_connector.permissions.set_fence(new_payload)
+        # --- Phase 2: External work (no session held) ---
+        payload = redis_connector.permissions.payload
+        if not payload:
+            raise ValueError(f"No fence payload found: cc_pair={cc_pair_id}")
 
-            callback = PermissionSyncCallback(
-                redis_connector, lock, r, timeout_seconds=JOB_TIMEOUT
-            )
+        new_payload = RedisConnectorPermissionSyncPayload(
+            id=payload.id,
+            submitted=payload.submitted,
+            started=datetime.now(timezone.utc),
+            celery_task_id=payload.celery_task_id,
+        )
+        redis_connector.permissions.set_fence(new_payload)
 
-            # pass in the capability to fetch all existing docs for the cc_pair
-            # this is can be used to determine documents that are "missing" and thus
-            # should no longer be accessible. The decision as to whether we should find
-            # every document during the doc sync process is connector-specific.
-            def fetch_all_existing_docs_fn(
-                sort_order: SortOrder | None = None,
-            ) -> list[DocumentRow]:
+        callback = PermissionSyncCallback(
+            redis_connector, lock, r, timeout_seconds=JOB_TIMEOUT
+        )
+
+        # These closures open their own sessions so the caller doesn't need
+        # to hold a long-lived session during the external doc_sync_func call.
+        def fetch_all_existing_docs_fn(
+            sort_order: SortOrder | None = None,
+        ) -> list[DocumentRow]:
+            with get_session_with_current_tenant() as inner_db:
                 result = get_documents_for_connector_credential_pair_limited_columns(
-                    db_session=db_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
+                    db_session=inner_db,
+                    connector_id=_connector_id,
+                    credential_id=_credential_id,
                     sort_order=sort_order,
                 )
                 return list(result)
 
-            def fetch_all_existing_docs_ids_fn() -> list[str]:
-                result = get_document_ids_for_connector_credential_pair(
-                    db_session=db_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
+        def fetch_all_existing_docs_ids_fn() -> list[str]:
+            with get_session_with_current_tenant() as inner_db:
+                return get_document_ids_for_connector_credential_pair(
+                    db_session=inner_db,
+                    connector_id=_connector_id,
+                    credential_id=_credential_id,
                 )
-                return result
 
-            doc_sync_func = sync_config.doc_sync_config.doc_sync_func
-            document_external_accesses = doc_sync_func(
-                cc_pair,
-                fetch_all_existing_docs_fn,
-                fetch_all_existing_docs_ids_fn,
-                callback,
-            )
+        doc_sync_func = sync_config.doc_sync_config.doc_sync_func
+        document_external_accesses = doc_sync_func(
+            cc_pair,
+            fetch_all_existing_docs_fn,
+            fetch_all_existing_docs_ids_fn,
+            callback,
+        )
 
-            task_logger.info(
-                f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"
-            )
+        task_logger.info(
+            f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"
+        )
 
-            tasks_generated = 0
-            docs_with_errors = 0
-            for doc_external_access in document_external_accesses:
-                if callback.should_stop():
-                    raise RuntimeError(
-                        f"Permission sync task timed out or stop signal detected: "
-                        f"cc_pair={cc_pair_id} "
-                        f"tasks_generated={tasks_generated}"
-                    )
-
-                result = redis_connector.permissions.update_db(
-                    lock=lock,
-                    new_permissions=[doc_external_access],
-                    source_string=source_type,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    task_logger=task_logger,
+        tasks_generated = 0
+        docs_with_errors = 0
+        for doc_external_access in document_external_accesses:
+            if callback.should_stop():
+                raise RuntimeError(
+                    f"Permission sync task timed out or stop signal detected: "
+                    f"cc_pair={cc_pair_id} "
+                    f"tasks_generated={tasks_generated}"
                 )
-                tasks_generated += result.num_updated
-                docs_with_errors += result.num_errors
 
-            task_logger.info(
-                f"RedisConnector.permissions.generate_tasks finished. "
-                f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
+            result = redis_connector.permissions.update_db(
+                lock=lock,
+                new_permissions=[doc_external_access],
+                source_string=source_type,
+                connector_id=_connector_id,
+                credential_id=_credential_id,
+                task_logger=task_logger,
             )
+            tasks_generated += result.num_updated
+            docs_with_errors += result.num_errors
 
+        task_logger.info(
+            f"RedisConnector.permissions.generate_tasks finished. "
+            f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
+        )
+
+        # --- Phase 3: Write completion (short-lived session) ---
+        with get_session_with_current_tenant() as db_session:
             complete_doc_permission_sync_attempt(
                 db_session=db_session,
                 attempt_id=attempt_id,
                 total_docs_synced=tasks_generated,
                 docs_with_permission_errors=docs_with_errors,
             )
-            task_logger.info(
-                f"Completed doc permission sync attempt {attempt_id}: {tasks_generated} docs, {docs_with_errors} errors"
-            )
+        task_logger.info(
+            f"Completed doc permission sync attempt {attempt_id}: {tasks_generated} docs, {docs_with_errors} errors"
+        )
 
-            redis_connector.permissions.generator_complete = tasks_generated
+        redis_connector.permissions.generator_complete = tasks_generated
 
     except Exception as e:
         error_msg = format_error_for_logging(e)
