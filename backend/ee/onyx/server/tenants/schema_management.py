@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import re
+import threading
 from types import SimpleNamespace
 
 from sqlalchemy import text
@@ -17,6 +18,19 @@ from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from shared_configs.configs import TENANT_ID_PREFIX
 
 logger = logging.getLogger(__name__)
+
+# Lock to protect Base.metadata mutations during fast provisioning.
+# _deduplicate_ddl_names / _restore_ddl_names mutate the global metadata
+# singleton, so concurrent calls must be serialized.
+_METADATA_LOCK = threading.Lock()
+
+# Tables that exist in Base.metadata but should only be created in the
+# public schema, not in per-tenant schemas.
+_PUBLIC_ONLY_TABLES: set[str] = {
+    "available_tenant",
+    "tenant_anonymous_user_path",
+    "milestone",
+}
 
 
 def _get_current_alembic_head() -> str:
@@ -191,57 +205,61 @@ def fast_provision_tenant_schema(tenant_id: str) -> None:
     from ee.onyx.server.tenants.seed_tenant_data import seed_tenant_defaults
     from onyx.db.models import Base
 
+    if not validate_tenant_id(tenant_id):
+        raise ValueError(f"Invalid tenant_id format: {tenant_id}")
+
     engine = get_sqlalchemy_engine()
     head_rev = _get_current_alembic_head()
 
     logger.info(f"Fast-provisioning schema for tenant: {tenant_id}")
 
-    # Temporarily deduplicate index names to avoid collisions during create_all
-    renames = _deduplicate_ddl_names(Base.metadata)
+    # Hold the lock for the entire metadata mutation + create_all + restore
+    # sequence to prevent concurrent threads from corrupting each other's
+    # index/constraint renames on the shared Base.metadata singleton.
+    with _METADATA_LOCK:
+        renames = _deduplicate_ddl_names(Base.metadata)
+        try:
+            with engine.connect() as conn:
+                # Create schema (already exists from create_schema_if_not_exists,
+                # but be safe)
+                conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{tenant_id}"'))
+                conn.execute(text(f'SET search_path TO "{tenant_id}"'))
 
-    try:
-        with engine.connect() as conn:
-            # Create schema (already exists from create_schema_if_not_exists,
-            # but be safe)
-            conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{tenant_id}"'))
-            conn.execute(text(f'SET search_path TO "{tenant_id}"'))
-
-            # Create tenant-specific tables only.
-            # Exclude: tables with explicit schema (e.g. public),
-            # public-only tables without schema annotation, and tables
-            # defined in models but never created by migrations.
-            _PUBLIC_ONLY_TABLES = {
-                "available_tenant",
-                "tenant_anonymous_user_path",
-                "milestone",
-            }
-            tenant_tables = [
-                t
-                for t in Base.metadata.sorted_tables
-                if t.schema is None and t.name not in _PUBLIC_ONLY_TABLES
-            ]
-            Base.metadata.create_all(bind=conn, checkfirst=True, tables=tenant_tables)
-            # Note: ResultModelBase (Celery) tables are NOT created per-tenant;
-            # they only exist in the public/default schema.
-
-            # Stamp the alembic_version table so future migrations work
-            conn.execute(
-                text(
-                    "CREATE TABLE IF NOT EXISTS alembic_version "
-                    "(version_num VARCHAR(32) NOT NULL)"
+                # Create tenant-specific tables only.
+                # Exclude: tables with explicit schema (e.g. public),
+                # public-only tables without schema annotation, and tables
+                # defined in models but never created by migrations.
+                tenant_tables = [
+                    t
+                    for t in Base.metadata.sorted_tables
+                    if t.schema is None and t.name not in _PUBLIC_ONLY_TABLES
+                ]
+                Base.metadata.create_all(
+                    bind=conn, checkfirst=True, tables=tenant_tables
                 )
-            )
-            conn.execute(
-                text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
-                {"rev": head_rev},
-            )
+                # Note: ResultModelBase (Celery) tables are NOT created
+                # per-tenant; they only exist in the public/default schema.
 
-            # Insert seed/default data
-            seed_tenant_defaults(conn)
+                # Stamp the alembic_version table so future migrations work.
+                # Match Alembic's own DDL including the primary key constraint.
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS alembic_version "
+                        "(version_num VARCHAR(32) NOT NULL, "
+                        "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+                    )
+                )
+                conn.execute(
+                    text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
+                    {"rev": head_rev},
+                )
 
-            conn.commit()
-    finally:
-        _restore_ddl_names(Base.metadata, renames)
+                # Insert seed/default data
+                seed_tenant_defaults(conn)
+
+                conn.commit()
+        finally:
+            _restore_ddl_names(Base.metadata, renames)
 
     logger.info(
         f"Fast-provisioning complete for tenant {tenant_id} " f"(stamped at {head_rev})"

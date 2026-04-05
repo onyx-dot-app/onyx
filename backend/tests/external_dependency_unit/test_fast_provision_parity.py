@@ -147,7 +147,7 @@ def _get_column_info(
 def migration_schema() -> Generator[str, None, None]:
     """Create a tenant schema via full Alembic migrations."""
     engine = _get_engine()
-    schema = f"tenant_test_migration_{uuid.uuid4().hex[:8]}"
+    schema = f"tenant_{uuid.uuid4()}"
     _create_schema(engine, schema)
     try:
         run_alembic_migrations(schema)
@@ -160,7 +160,7 @@ def migration_schema() -> Generator[str, None, None]:
 def fast_schema() -> Generator[str, None, None]:
     """Create a tenant schema via fast provisioning."""
     engine = _get_engine()
-    schema = f"tenant_test_fast_{uuid.uuid4().hex[:8]}"
+    schema = f"tenant_{uuid.uuid4()}"
     _create_schema(engine, schema)
     try:
         fast_provision_tenant_schema(schema)
