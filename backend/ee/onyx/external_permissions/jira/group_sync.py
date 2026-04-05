@@ -99,21 +99,19 @@ def _get_group_member_emails(
     return emails
 
 
-def jira_group_sync(
-    tenant_id: str,  # noqa: ARG001
+def jira_group_sync_impl(
     cc_pair: ConnectorCredentialPair,
+    jira_base_url: str,
 ) -> Generator[ExternalUserGroup, None, None]:
-    """Sync Jira groups and their members, yielding one group at a time.
+    """Shared group-sync implementation for both Jira and JSM connectors.
 
-    Streams group-by-group rather than accumulating all groups in memory.
+    Accepts the base URL directly so callers can read it from whichever
+    config key is appropriate (``jira_base_url`` vs
+    ``jira_service_management_base_url``).
     """
-    jira_base_url = cc_pair.connector.connector_specific_config.get("jira_base_url", "")
     scoped_token = cc_pair.connector.connector_specific_config.get(
         "scoped_token", False
     )
-
-    if not jira_base_url:
-        raise ValueError("No jira_base_url found in connector config")
 
     credential_json = (
         cc_pair.credential.credential_json.get_value(apply_mask=False)
@@ -149,3 +147,17 @@ def jira_group_sync(
             id=group_name,
             user_emails=list(member_emails),
         )
+
+
+def jira_group_sync(
+    tenant_id: str,  # noqa: ARG001
+    cc_pair: ConnectorCredentialPair,
+) -> Generator[ExternalUserGroup, None, None]:
+    """Sync Jira groups and their members, yielding one group at a time."""
+    jira_base_url = cc_pair.connector.connector_specific_config.get(
+        "jira_base_url", ""
+    )
+    if not jira_base_url:
+        raise ValueError("No jira_base_url found in connector config")
+
+    yield from jira_group_sync_impl(cc_pair, jira_base_url)
