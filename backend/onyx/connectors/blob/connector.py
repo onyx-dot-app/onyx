@@ -140,6 +140,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             )
 
         elif self.bucket_type == BlobType.S3:
+            if "endpoint_url" in credentials:
+                self.endpoint_url = credentials["endpoint_url"]
             # For S3, we can use either access keys or IAM roles.
             authentication_method = credentials.get(
                 "authentication_method", "access_key"
@@ -159,7 +161,18 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     aws_access_key_id=credentials["aws_access_key_id"],
                     aws_secret_access_key=credentials["aws_secret_access_key"],
                 )
-                self.s3_client = session.client("s3")
+
+                client_kwargs: dict[str, Any] = {"service_name": "s3"}
+                if "endpoint_url" in credentials:
+                    self.endpoint_url = credentials["endpoint_url"]
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+                    client_kwargs["region_name"] = credentials.get("region", "us-east-1")
+                    client_kwargs["config"] = Config(
+                        signature_version="s3v4",
+                        s3={"addressing_style": "path"},
+                    )
+                self.s3_client = session.client(**client_kwargs)
             elif authentication_method == "iam_role":
                 # If using IAM roles, we assume the role and let boto3 handle the credentials.
                 role_arn = credentials.get("aws_role_arn")
@@ -192,11 +205,29 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 botocore_session = get_session()
                 botocore_session._credentials = refreshable  # type: ignore[attr-defined]
                 session = boto3.Session(botocore_session=botocore_session)
-                self.s3_client = session.client("s3")
+                client_kwargs: dict[str, Any] = {"service_name": "s3"}
+                if "endpoint_url" in credentials:
+                    self.endpoint_url = credentials["endpoint_url"]
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+                    client_kwargs["region_name"] = credentials.get("region", "us-east-1")
+                    client_kwargs["config"] = Config(
+                        signature_version="s3v4",
+                        s3={"addressing_style": "path"},
+                    )
+                self.s3_client = session.client(**client_kwargs)
             elif authentication_method == "assume_role":
                 # We will assume the instance role to access S3.
                 logger.debug("Using instance role authentication for S3 bucket.")
-                self.s3_client = boto3.client("s3")
+                client_kwargs: dict[str, Any] = {"service_name": "s3"}
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+                    client_kwargs["region_name"] = credentials.get("region", "us-east-1")
+                    client_kwargs["config"] = Config(
+                        signature_version="s3v4",
+                        s3={"addressing_style": "path"},
+                    )
+                self.s3_client = boto3.client(**client_kwargs)
             else:
                 raise ConnectorValidationError("Invalid authentication method for S3. ")
 

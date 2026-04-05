@@ -31,14 +31,6 @@ T = TypeVar("T")
 
 logger = setup_logger()
 
-# List of directories/Files to exclude
-exclude_patterns = [
-    "logs",
-    ".github/",
-    ".gitlab/",
-    ".pre-commit-config.yaml",
-]
-
 
 def _batch_gitlab_objects(git_objs: Iterable[T], batch_size: int) -> Iterator[list[T]]:
     it = iter(git_objs)
@@ -121,7 +113,7 @@ def _convert_code_to_document(
     return doc
 
 
-def _should_exclude(path: str) -> bool:
+def _should_exclude(path: str, exclude_patterns: list[str]) -> bool:
     """Check if a path matches any of the exclude patterns."""
     return any(fnmatch.fnmatch(path, pattern) for pattern in exclude_patterns)
 
@@ -136,6 +128,7 @@ class GitlabConnector(LoadConnector, PollConnector):
         include_mrs: bool = True,
         include_issues: bool = True,
         include_code_files: bool = GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+        exclude_patterns: list[str] | None = None,
     ) -> None:
         self.project_owner = project_owner
         self.project_name = project_name
@@ -144,6 +137,17 @@ class GitlabConnector(LoadConnector, PollConnector):
         self.include_mrs = include_mrs
         self.include_issues = include_issues
         self.include_code_files = include_code_files
+        # Set up exclude patterns - custom or default
+        default_patterns = [
+            "logs",
+            ".github/",
+            ".gitlab/",
+            ".pre-commit-config.yaml",
+        ]
+        if exclude_patterns is not None:
+            self.exclude_patterns = exclude_patterns
+        else:
+            self.exclude_patterns = default_patterns
         self.gitlab_client: gitlab.Gitlab | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -171,7 +175,7 @@ class GitlabConnector(LoadConnector, PollConnector):
                 for file_batch in _batch_gitlab_objects(files, self.batch_size):
                     code_doc_batch: list[Document | HierarchyNode] = []
                     for file in file_batch:
-                        if _should_exclude(file["path"]):
+                        if _should_exclude(file["path"], self.exclude_patterns):
                             continue
 
                         if file["type"] == "blob":
