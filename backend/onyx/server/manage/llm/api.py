@@ -476,7 +476,7 @@ def put_llm_provider(
     # custom_config_changed=False; only use stored config as a fallback when
     # custom_config is omitted/null.
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
-        if llm_provider_upsert_request.custom_config is None:
+        if not llm_provider_upsert_request.custom_config:
             llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
     # Check if we're transitioning to Auto mode
