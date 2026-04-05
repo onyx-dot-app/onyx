@@ -37,6 +37,7 @@ from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
+from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
 from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
 from onyx.document_index.opensearch.schema import LAST_UPDATED_FIELD_NAME
 from onyx.document_index.opensearch.schema import MAX_CHUNK_SIZE_FIELD_NAME
@@ -53,6 +54,11 @@ from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 # See https://docs.opensearch.org/latest/query-dsl/term/terms/.
 MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY = 65_536
 
+# Default boost value for documents without feedback
+DEFAULT_BOOST_VALUE = 1.0
+# Minimum boost to prevent too much suppression of boosted=0 documents
+MIN_BOOST_VALUE = 0.1
+
 
 _T = TypeVar("_T")
 TermsQuery: TypeAlias = dict[str, dict[str, list[_T]]]
@@ -60,6 +66,35 @@ TermQuery: TypeAlias = dict[str, dict[str, dict[str, _T]]]
 
 
 # TODO(andrei): Turn all magic dictionaries to pydantic models.
+
+
+def _apply_document_boost_to_query(
+    query: dict[str, Any],
+) -> dict[str, Any]:
+    """Wraps a query with script_score to apply per-document boost.
+
+    The boost field (global_boost) is multiplied by the base query score.
+    Documents with no explicit boost (NULL) are treated as boost=1.0 (neutral).
+
+    Args:
+        query: The base query to wrap
+
+    Returns:
+        The same query wrapped in script_score with boost applied.
+        If the query is empty or malformed, returns the original query.
+    """
+    if not query:
+        return query
+
+    return {
+        "script_score": {
+            "query": query,
+            "script": {
+                "source": f"_score * Math.max({MIN_BOOST_VALUE}, doc['{GLOBAL_BOOST_FIELD_NAME}'].value)",
+                "lang": "painless",
+            },
+        }
+    }
 
 
 # Normalization pipelines combine document scores from multiple query clauses.
@@ -176,7 +211,6 @@ def get_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
 class DocumentQuery:
     """
     TODO(andrei): Implement multi-phase search strategies.
-    TODO(andrei): Implement document boost.
     TODO(andrei): Implement document age.
     """
 
@@ -397,6 +431,13 @@ class DocumentQuery:
             }
         }
 
+        # NOTE: Document boost is NOT applied to hybrid queries. OpenSearch forbids
+        # nesting hybrid queries inside wrapper queries (script_score, function_score, etc).
+        # Hybrid queries must be top-level. Additionally, script_score runs at shard level
+        # before the normalization pipeline, which would distort the combined scores.
+        # Boost is applied only to keyword and semantic searches.
+        # See: https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
+
         final_hybrid_search_body: dict[str, Any] = {
             "query": hybrid_search_query,
             "size": num_hits,
@@ -476,8 +517,11 @@ class DocumentQuery:
             )
         )
 
+        # Apply document boost multiplier to the search query
+        boosted_query = _apply_document_boost_to_query(keyword_search_query)
+
         final_keyword_search_query: dict[str, Any] = {
-            "query": keyword_search_query,
+            "query": boosted_query,
             "size": num_hits,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
             # Exclude retrieving the vector fields in order to save on
@@ -560,8 +604,11 @@ class DocumentQuery:
             )
         )
 
+        # Apply document boost multiplier to the search query
+        boosted_query = _apply_document_boost_to_query(semantic_search_query)
+
         final_semantic_search_query: dict[str, Any] = {
-            "query": semantic_search_query,
+            "query": boosted_query,
             "size": num_hits,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
             # Exclude retrieving the vector fields in order to save on
