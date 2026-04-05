@@ -21,6 +21,25 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
+import { toast } from "@/hooks/useToast";
+import LogoCropModal from "./LogoCropModal";
+
+const LOGO_MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+const LOGO_MAX_FILE_SIZE_MB = LOGO_MAX_FILE_SIZE_BYTES / (1024 * 1024);
+const ALLOWED_LOGO_FILE_TYPES = ["image/png", "image/jpeg"];
+
+function validateLogoFile(file: File): string | null {
+  if (!ALLOWED_LOGO_FILE_TYPES.includes(file.type)) {
+    return `Unsupported file type (${
+      file.type || "unknown"
+    }). Please upload a PNG or JPEG image.`;
+  }
+  if (file.size > LOGO_MAX_FILE_SIZE_BYTES) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    return `File is too large (${sizeMB} MB). Maximum allowed size is ${LOGO_MAX_FILE_SIZE_MB} MB.`;
+  }
+  return null;
+}
 
 interface AppearanceThemeSettingsProps {
   selectedLogo: File | null;
@@ -63,6 +82,7 @@ export const AppearanceThemeSettings = forwardRef<
   const prevEnableConsentScreenRef = useRef<boolean>(
     Boolean(values.enable_consent_screen)
   );
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [focusedPreviewTarget, setFocusedPreviewTarget] =
     useState<PreviewHighlightTarget | null>(null);
   const [hoveredPreviewTarget, setHoveredPreviewTarget] =
@@ -146,10 +166,17 @@ export const AppearanceThemeSettings = forwardRef<
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setSelectedLogo(file);
-      setFieldValue("use_custom_logo", true);
+    if (!file) return;
+
+    const error = validateLogoFile(file);
+    if (error) {
+      toast.error(error);
+      event.target.value = "";
+      return;
     }
+
+    setCropFile(file);
+    event.target.value = "";
   };
 
   const handleLogoRemove = async () => {
@@ -305,8 +332,12 @@ export const AppearanceThemeSettings = forwardRef<
               src={logoSrc}
               onEdit={handleLogoEdit}
               onDrop={(file) => {
-                setSelectedLogo(file);
-                setFieldValue("use_custom_logo", true);
+                const error = validateLogoFile(file);
+                if (error) {
+                  toast.error(error);
+                  return;
+                }
+                setCropFile(file);
               }}
               onRemove={handleLogoRemove}
               showEditOverlay={false}
@@ -581,6 +612,18 @@ export const AppearanceThemeSettings = forwardRef<
           </>
         )}
       </div>
+
+      {cropFile && (
+        <LogoCropModal
+          file={cropFile}
+          onApply={(croppedFile) => {
+            setSelectedLogo(croppedFile);
+            setFieldValue("use_custom_logo", true);
+            setCropFile(null);
+          }}
+          onCancel={() => setCropFile(null)}
+        />
+      )}
     </div>
   );
 });
