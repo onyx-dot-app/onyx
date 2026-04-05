@@ -67,6 +67,9 @@ spec:
             - "/bin/sh"
             - "-c"
             - |
+              {{- if .Values.api.runUpdateCaCertificates }}
+              update-ca-certificates &&
+              {{- end }}
               alembic upgrade head &&
               echo "Starting Onyx Api Server" &&
               uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}
