@@ -56,7 +56,6 @@ Then it cycles through its tasks as scheduled by Celery Beat:
 | `check_for_user_file_processing` | 20s | Checks for user uploads → dispatches to `USER_FILE_PROCESSING` queue |
 | `check_for_checkpoint_cleanup` | 1h | Cleans up old indexing checkpoints |
 | `check_for_index_attempt_cleanup` | 30m | Cleans up old index attempts |
-| `kombu_message_cleanup_task` | periodic | Cleans orphaned Kombu messages from DB (Kombu being the messaging framework used by Celery) |
 | `celery_beat_heartbeat` | 1m | Heartbeat for Beat watchdog |
 
 Watchdog is a separate Python process managed by supervisord which runs alongside celery workers. It checks the ONYX_CELERY_BEAT_HEARTBEAT_KEY in

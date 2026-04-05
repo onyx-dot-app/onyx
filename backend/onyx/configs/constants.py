@@ -391,10 +391,6 @@ class MilestoneRecordType(str, Enum):
     REQUESTED_CONNECTOR = "requested_connector"
 
 
-class PostgresAdvisoryLocks(Enum):
-    KOMBU_MESSAGE_CLEANUP_LOCK_ID = auto()
-
-
 class OnyxCeleryQueues:
     # "celery" is the default queue defined by celery and also the queue
     # we are running in the primary worker to run system tasks
@@ -577,7 +573,6 @@ class OnyxCeleryTask:
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
 
-    KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
     )
