@@ -1,0 +1,51 @@
+name: Build Edge Images On Demand
+
+on:
+  repository_dispatch:
+    types: [build-edge-on-demand]
+
+permissions:
+  contents: write # Allows pushing tags to the repository
+
+jobs:
+  create-and-push-tag:
+    runs-on: ubuntu-slim
+    environment: ci-protected
+    timeout-minutes: 10
+
+    steps:
+      # actions using GITHUB_TOKEN cannot trigger another workflow, but we do want this to trigger docker pushes
+      # see https://github.com/orgs/community/discussions/27028#discussioncomment-3254367 for the workaround we
+      # implement here which needs an actual user's deploy key
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          ref: main
+          ssh-key: "${{ secrets.DEPLOY_KEY }}"
+          persist-credentials: true
+
+      - name: Set up Git user
+        run: |
+          git config user.name "Onyx Bot [bot]"
+          git config user.email "onyx-bot[bot]@onyx.app"
+
+      - name: Create and push tag
+        run: |
+          # Use the tag name from the dispatch payload, or generate one
+          TAG_NAME="${{ github.event.client_payload.tag_name }}"
+          if [ -z "$TAG_NAME" ]; then
+            TAG_NAME="nightly-latest-$(date -u +'%Y%m%d-%H%M%S')"
+          fi
+
+          echo "Creating tag: $TAG_NAME"
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+
+      - name: Send Slack notification
+        if: failure()
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          title: "🚨 On-Demand Edge Build Failed"
+          ref-name: ${{ github.ref_name }}
+          failed-jobs: "create-and-push-tag"
