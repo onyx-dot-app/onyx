@@ -1,3 +1,5 @@
+from typing import Any
+
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import InternetSearchProvider
 from onyx.db.web_search import fetch_active_web_content_provider
@@ -13,6 +15,9 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_PDF_SIZE_BYTES,
 )
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
+from onyx.tools.tool_implementations.web_search.clients.baidu_client import (
+    BaiduClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.brave_client import (
     BraveClient,
 )
@@ -40,16 +45,18 @@ logger = setup_logger()
 
 def _parse_positive_int_config(
     *,
-    raw_value: str | None,
+    raw_value: Any,
     default: int,
     provider_name: str,
     config_key: str,
 ) -> int:
-    if not raw_value:
+    if raw_value is None:
+        return default
+    if isinstance(raw_value, str) and not raw_value.strip():
         return default
     try:
         value = int(raw_value)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise ValueError(
             f"{provider_name} provider config '{config_key}' must be an integer."
         ) from exc
@@ -71,7 +78,7 @@ def provider_requires_api_key(provider_type: WebSearchProviderType) -> bool:
 def build_search_provider_from_config(
     provider_type: WebSearchProviderType,
     api_key: str | None,
-    config: dict[str, str] | None,  # TODO use a typed object
+    config: dict[str, Any] | None,  # TODO use a typed object
 ) -> WebSearchProvider:
     config = config or {}
     num_results = int(config.get("num_results") or DEFAULT_MAX_RESULTS)
@@ -92,6 +99,17 @@ def build_search_provider_from_config(
 
     if provider_type == WebSearchProviderType.EXA:
         return ExaClient(api_key=api_key, num_results=num_results)
+    if provider_type == WebSearchProviderType.BAIDU:
+        return BaiduClient(
+            api_key=api_key,
+            num_results=num_results,
+            timeout_seconds=_parse_positive_int_config(
+                raw_value=config.get("timeout_seconds"),
+                default=10,
+                provider_name="Baidu",
+                config_key="timeout_seconds",
+            ),
+        )
     if provider_type == WebSearchProviderType.BRAVE:
         return BraveClient(
             api_key=api_key,

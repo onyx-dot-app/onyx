@@ -3,7 +3,8 @@ export type WebSearchProviderType =
   | "serper"
   | "exa"
   | "searxng"
-  | "brave";
+  | "brave"
+  | "baidu";
 
 export const SEARCH_PROVIDER_DETAILS: Record<
   WebSearchProviderType,
@@ -36,6 +37,12 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     logoSrc: "/Brave.svg",
     apiKeyUrl:
       "https://api-dashboard.search.brave.com/app/documentation/web-search/get-started",
+  },
+  baidu: {
+    label: "Baidu",
+    subtitle: "Baidu AI Search",
+    helper: "Connect to Baidu AI Search to set up web search.",
+    apiKeyUrl: "https://cloud.baidu.com/doc/qianfan-api/s/Wmbq4z7e5",
   },
   google_pse: {
     label: "Google PSE",
@@ -105,6 +112,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     requiredConfigKeys: [],
   },
   brave: {
+    requiresApiKey: true,
+    requiredConfigKeys: [],
+  },
+  baidu: {
     requiresApiKey: true,
     requiredConfigKeys: [],
   },

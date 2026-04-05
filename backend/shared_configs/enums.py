@@ -27,6 +27,7 @@ class WebSearchProviderType(str, Enum):
     EXA = "exa"
     SEARXNG = "searxng"
     BRAVE = "brave"
+    BAIDU = "baidu"
 
 
 class WebContentProviderType(str, Enum):

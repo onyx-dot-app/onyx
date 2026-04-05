@@ -1,5 +1,8 @@
 import pytest
 
+from onyx.tools.tool_implementations.web_search.clients.baidu_client import (
+    BaiduClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.brave_client import (
     BraveClient,
 )
@@ -16,6 +19,7 @@ def test_provider_requires_api_key() -> None:
     """Test that provider_requires_api_key correctly identifies which providers need API keys."""
     assert provider_requires_api_key(WebSearchProviderType.EXA) is True
     assert provider_requires_api_key(WebSearchProviderType.BRAVE) is True
+    assert provider_requires_api_key(WebSearchProviderType.BAIDU) is True
     assert provider_requires_api_key(WebSearchProviderType.SERPER) is True
     assert provider_requires_api_key(WebSearchProviderType.GOOGLE_PSE) is True
     assert provider_requires_api_key(WebSearchProviderType.SEARXNG) is False
@@ -61,6 +65,44 @@ def test_build_brave_provider_requires_api_key() -> None:
         )
 
 
+def test_build_baidu_provider_requires_api_key() -> None:
+    """Test that Baidu provider requires an API key."""
+    with pytest.raises(ValueError, match="API key is required"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.BAIDU,
+            api_key=None,
+            config={},
+        )
+
+
+def test_build_baidu_provider_with_optional_config() -> None:
+    provider = build_search_provider_from_config(
+        provider_type=WebSearchProviderType.BAIDU,
+        api_key="test-api-key",
+        config={"timeout_seconds": "12"},
+    )
+    assert isinstance(provider, BaiduClient)
+    assert provider._timeout_seconds == 12  # noqa: SLF001
+
+
+def test_build_baidu_provider_rejects_invalid_timeout() -> None:
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.BAIDU,
+            api_key="test-api-key",
+            config={"timeout_seconds": "not-an-int"},
+        )
+
+
+def test_build_baidu_provider_rejects_numeric_zero_timeout() -> None:
+    with pytest.raises(ValueError, match="greater than 0"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.BAIDU,
+            api_key="test-api-key",
+            config={"timeout_seconds": 0},
+        )
+
+
 def test_build_brave_provider_with_optional_config() -> None:
     provider = build_search_provider_from_config(
         provider_type=WebSearchProviderType.BRAVE,
@@ -89,6 +131,15 @@ def test_build_brave_provider_rejects_invalid_timeout() -> None:
             provider_type=WebSearchProviderType.BRAVE,
             api_key="test-api-key",
             config={"timeout_seconds": "not-an-int"},
+        )
+
+
+def test_build_brave_provider_rejects_numeric_zero_timeout() -> None:
+    with pytest.raises(ValueError, match="greater than 0"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.BRAVE,
+            api_key="test-api-key",
+            config={"timeout_seconds": 0},
         )
 
 
