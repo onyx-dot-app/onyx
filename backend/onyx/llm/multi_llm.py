@@ -767,6 +767,7 @@ class LitellmLLM(LLM):
         from litellm import HTTPHandler
 
         from onyx.llm.model_response import from_litellm_model_response_stream
+        from onyx.llm.model_response import make_think_tag_processor
 
         # HTTPHandler Threading & Connection Pool Notes:
         # =============================================
@@ -819,8 +820,11 @@ class LitellmLLM(LLM):
                 ),
             )
 
+            process_think_tags = make_think_tag_processor()
             for chunk in response:
-                model_response = from_litellm_model_response_stream(chunk)
+                model_response = process_think_tags(
+                    from_litellm_model_response_stream(chunk)
+                )
 
                 # Track LLM cost when usage info is available (typically in the last chunk)
                 if model_response.usage:

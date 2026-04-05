@@ -6,11 +6,14 @@ from typing import TYPE_CHECKING
 import pytest
 
 from onyx.llm.model_response import ChatCompletionDeltaToolCall
+from onyx.llm.model_response import Delta
 from onyx.llm.model_response import from_litellm_model_response
 from onyx.llm.model_response import from_litellm_model_response_stream
 from onyx.llm.model_response import FunctionCall
+from onyx.llm.model_response import make_think_tag_processor
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.model_response import StreamingChoice
 
 if TYPE_CHECKING:
     from litellm.types.utils import (
@@ -295,6 +298,104 @@ def test_from_litellm_model_response_stream_parses_multiple_tool_calls() -> None
             name="web_search",
         ),
     )
+
+
+def _make_model_response_stream(
+    content: str | None = None,
+    reasoning_content: str | None = None,
+) -> ModelResponseStream:
+    """Helper to build a ModelResponseStream for ThinkTagStreamProcessor tests."""
+    return ModelResponseStream(
+        id="test-id",
+        created="123",
+        choice=StreamingChoice(
+            delta=Delta(
+                content=content,
+                reasoning_content=reasoning_content,
+            ),
+        ),
+    )
+
+
+class TestThinkTagProcessor:
+    def test_no_think_tags_passes_through(self) -> None:
+        process = make_think_tag_processor()
+        resp = _make_model_response_stream(content="hello world")
+        result = process(resp)
+        assert result.choice.delta.content == "hello world"
+        assert result.choice.delta.reasoning_content is None
+
+    def test_existing_reasoning_content_not_modified(self) -> None:
+        process = make_think_tag_processor()
+        resp = _make_model_response_stream(
+            content="some content", reasoning_content="already set"
+        )
+        result = process(resp)
+        assert result.choice.delta.content == "some content"
+        assert result.choice.delta.reasoning_content == "already set"
+
+    def test_think_tag_in_single_chunk(self) -> None:
+        process = make_think_tag_processor()
+        resp = _make_model_response_stream(
+            content="<think>reasoning here</think>answer"
+        )
+        result = process(resp)
+        assert result.choice.delta.reasoning_content == "reasoning here"
+        assert result.choice.delta.content == "answer"
+
+    def test_think_tags_across_multiple_chunks(self) -> None:
+        process = make_think_tag_processor()
+
+        r1 = process(_make_model_response_stream(content="<think>start"))
+        assert r1.choice.delta.reasoning_content == "start"
+        assert r1.choice.delta.content is None
+
+        r2 = process(_make_model_response_stream(content=" middle"))
+        assert r2.choice.delta.reasoning_content == " middle"
+        assert r2.choice.delta.content is None
+
+        r3 = process(_make_model_response_stream(content="</think>the answer"))
+        assert r3.choice.delta.reasoning_content is None
+        assert r3.choice.delta.content == "the answer"
+
+    def test_empty_content_passes_through(self) -> None:
+        process = make_think_tag_processor()
+        resp = _make_model_response_stream(content=None)
+        result = process(resp)
+        assert result is resp  # Same object, untouched
+
+    def test_closing_tag_with_trailing_reasoning_and_content(self) -> None:
+        """Mirrors the old Ollama test: content="final</think>" yields
+        reasoning='final' then subsequent content is regular."""
+        process = make_think_tag_processor()
+
+        process(_make_model_response_stream(content="<think>step 1"))
+        r2 = process(_make_model_response_stream(content="step 2"))
+        assert r2.choice.delta.reasoning_content == "step 2"
+        assert r2.choice.delta.content is None
+
+        r3 = process(_make_model_response_stream(content="final</think>"))
+        assert r3.choice.delta.reasoning_content == "final"
+        assert r3.choice.delta.content is None
+
+        r4 = process(_make_model_response_stream(content="visible answer"))
+        assert r4.choice.delta.content == "visible answer"
+        assert r4.choice.delta.reasoning_content is None
+
+    def test_think_only_no_content_after(self) -> None:
+        process = make_think_tag_processor()
+
+        r1 = process(_make_model_response_stream(content="<think>"))
+        assert r1.choice.delta.reasoning_content is None
+        assert r1.choice.delta.content is None
+
+        r2 = process(_make_model_response_stream(content="reasoning"))
+        assert r2.choice.delta.reasoning_content == "reasoning"
+        assert r2.choice.delta.content is None
+
+        r3 = process(_make_model_response_stream(content="</think>"))
+        assert r3.choice.delta.reasoning_content is None
+        assert r3.choice.delta.content is None
 
 
 def test_from_litellm_model_response_parses_basic_message() -> None:

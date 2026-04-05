@@ -9,8 +9,9 @@ Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
    - LiteLLM's chunk_parser doesn't properly handle reasoning content in streaming
      responses from Ollama
    - Processes native "thinking" field from Ollama responses
-   - Also handles <think>...</think> tags in content for models that use that format
    - Tracks reasoning state to properly separate thinking from regular content
+   - NOTE: <think>...</think> tag parsing is handled universally for ALL providers
+     by make_think_tag_processor in model_response.py
    STATUS: STILL NEEDED - LiteLLM has a bug where it only yields thinking content on
            the first two chunks, then stops (lines 504-510). Our patch correctly yields
            ALL thinking chunks. The upstream logic sets finished_reasoning_content=True
@@ -162,35 +163,23 @@ def _patch_ollama_chunk_parser() -> None:
                 reasoning_content = thinking_content
                 if self.started_reasoning_content is False:
                     self.started_reasoning_content = True
-            if chunk["message"].get("content") is not None:
-                message_content = chunk["message"].get("content")
-                # Track whether we are inside <think>...</think> tagged content.
-                in_think_tag_block = bool(getattr(self, "_in_think_tag_block", False))
-                if "<think>" in message_content:
-                    message_content = message_content.replace("<think>", "")
-                    self.started_reasoning_content = True
-                    self.finished_reasoning_content = False
-                    in_think_tag_block = True
-                if "</think>" in message_content and self.started_reasoning_content:
-                    message_content = message_content.replace("</think>", "")
-                    self.finished_reasoning_content = True
-                    in_think_tag_block = False
 
-                # For native Ollama "thinking" streams, content without active
-                # think tags indicates a transition into regular assistant output.
+            message_content = chunk["message"].get("content")
+            if message_content is not None:
+                # For native Ollama "thinking" streams, content arriving
+                # after thinking chunks (without the thinking field)
+                # indicates a transition into regular assistant output.
                 if (
                     self.started_reasoning_content
                     and not self.finished_reasoning_content
-                    and not in_think_tag_block
                     and not thinking_content
                 ):
                     self.finished_reasoning_content = True
 
-                self._in_think_tag_block = in_think_tag_block
-
-                # When Ollama returns both "thinking" and "content" in the same
-                # chunk, preserve both instead of classifying content as reasoning.
-                if thinking_content and not in_think_tag_block:
+                # When Ollama returns both "thinking" and "content" in the
+                # same chunk, preserve both.  Otherwise, if we're still in
+                # the reasoning phase, route content as reasoning.
+                if thinking_content:
                     content = message_content
                 elif (
                     self.started_reasoning_content
