@@ -43,6 +43,7 @@ import elevenLabsDarkSVG from "@public/ElevenLabsDark.svg";
 import elevenLabsSVG from "@public/ElevenLabs.svg";
 import firefliesIcon from "@public/Fireflies.png";
 import freshdeskIcon from "@public/Freshdesk.png";
+import freshdeskSolutionsIcon from "@public/FreshdeskSolutions.png";
 import geminiSVG from "@public/Gemini.svg";
 import gitbookDarkIcon from "@public/GitBookDark.png";
 import gitbookLightIcon from "@public/GitBookLight.png";
@@ -850,6 +851,7 @@ export const ElevenLabsIcon = createLogoIcon(elevenLabsSVG, {
 });
 export const FirefliesIcon = createLogoIcon(firefliesIcon);
 export const FreshdeskIcon = createLogoIcon(freshdeskIcon);
+export const FreshdeskSolutionsIcon = createLogoIcon(freshdeskSolutionsIcon);
 export const GeminiIcon = createLogoIcon(geminiSVG);
 export const GitbookIcon = createLogoIcon(gitbookDarkIcon, {
   darkSrc: gitbookLightIcon,

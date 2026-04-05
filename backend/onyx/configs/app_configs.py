@@ -771,6 +771,55 @@ ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS = os.environ.get(
     "ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS", ""
 ).split(",")
 
+# Freshdesk Solutions connector configuration
+FRESHDESK_RETRY_INTERVAL = int(os.environ.get("FRESHDESK_RETRY_INTERVAL") or 5)
+FRESHDESK_MAX_RETRIES = int(os.environ.get("FRESHDESK_MAX_RETRIES") or 3)
+
+# Freshdesk Time delays and timeouts
+FRESHDESK_API_REQUEST_DELAY_SECONDS = int(
+    os.environ.get("FRESHDESK_API_REQUEST_DELAY_SECONDS") or 2
+)
+FRESHDESK_RATE_LIMIT_WAIT_SECONDS = int(
+    os.environ.get("FRESHDESK_RATE_LIMIT_WAIT_SECONDS") or 61
+)
+FRESHDESK_ARTICLE_FETCH_DELAY_SECONDS = int(
+    os.environ.get("FRESHDESK_ARTICLE_FETCH_DELAY_SECONDS") or 60
+)
+FRESHDESK_IMAGE_REQUEST_TIMEOUT_SECONDS = int(
+    os.environ.get("FRESHDESK_IMAGE_REQUEST_TIMEOUT_SECONDS") or 20
+)
+
+# Freshdesk Image Processing Configuration
+FRESHDESK_SKIP_IMAGE_KEYWORDS = (
+    os.environ.get("FRESHDESK_SKIP_IMAGE_KEYWORDS") or "regards,disclaimer"
+)
+FRESHDESK_IMAGE_DOWNLOAD_INTERVAL = float(
+    os.environ.get("FRESHDESK_IMAGE_DOWNLOAD_INTERVAL") or "1.0"
+)
+FRESHDESK_SERVER_ERROR_RETRY_DELAY = int(
+    os.environ.get("FRESHDESK_SERVER_ERROR_RETRY_DELAY") or 5
+)
+FRESHDESK_RATE_LIMIT_CAP_SECONDS = int(
+    os.environ.get("FRESHDESK_RATE_LIMIT_CAP_SECONDS") or 60
+)
+
+# Freshdesk URL Configuration
+FRESHDESK_ATTACHMENT_BASE_URL = (
+    os.environ.get("FRESHDESK_ATTACHMENT_BASE_URL") or "attachment.freshdesk.com"
+)
+FRESHDESK_ATTACHMENT_INLINE_PATH = (
+    os.environ.get("FRESHDESK_ATTACHMENT_INLINE_PATH") or "/inline/attachment"
+)
+FRESHDESK_ATTACHMENT_PATH = os.environ.get("FRESHDESK_ATTACHMENT_PATH") or "/attachment"
+FRESHDESK_ATTACHMENT_TOKEN_PARAM = (
+    os.environ.get("FRESHDESK_ATTACHMENT_TOKEN_PARAM") or "token="
+)
+FRESHDESK_DOMAIN_SUFFIX = os.environ.get("FRESHDESK_DOMAIN_SUFFIX") or "freshdesk.com"
+
+# Icon dimension thresholds for skipping small images
+FRESHDESK_ICON_MIN_WIDTH = int(os.environ.get("FRESHDESK_ICON_MIN_WIDTH") or 200)
+FRESHDESK_ICON_MIN_HEIGHT = int(os.environ.get("FRESHDESK_ICON_MIN_HEIGHT") or 200)
+
 
 #####
 # Indexing Configs
