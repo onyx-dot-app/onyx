@@ -1,8 +1,5 @@
 """
 Permissioning / AccessControl logic for Canvas courses.
-
-CE stub — returns None (no permissions). The EE implementation is loaded
-at runtime via ``fetch_versioned_implementation``.
 """
 
 from collections.abc import Callable
@@ -18,15 +15,32 @@ def get_course_permissions(
     canvas_client: CanvasApiClient,
     course_id: int,
 ) -> ExternalAccess | None:
+    """
+    Fetch course-level permissions based on enrollment.
+    This functionality requires Enterprise Edition.
+
+    Args:
+        canvas_client: The Canvas API client instance.
+        course_id: The Canvas course ID.
+
+    Returns:
+        ExternalAccess object for the course. None if EE is not enabled.
+    """
+
     if not global_version.is_ee_version():
         return None
 
     ee_get_course_permissions = cast(
-        Callable[[CanvasApiClient, int], ExternalAccess | None],
+        Callable[
+            [CanvasApiClient, int],
+            ExternalAccess | None,
+        ],
         fetch_versioned_implementation(
-            "onyx.external_permissions.canvas.access",
-            "get_course_permissions",
+            "onyx.external_permissions.canvas.access", "get_course_permissions"
         ),
     )
 
-    return ee_get_course_permissions(canvas_client, course_id)
+    return ee_get_course_permissions(
+        canvas_client,
+        course_id,
+    )
