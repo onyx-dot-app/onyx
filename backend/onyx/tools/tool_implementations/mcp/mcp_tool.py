@@ -242,9 +242,17 @@ class MCPTool(Tool[None]):
 
             logger.info(f"MCP tool '{self._name}' executed successfully")
 
-            # Format the tool result for response
-            tool_result_dict = {"tool_result": tool_result}
-            llm_facing_response = json.dumps(tool_result_dict)
+            # Normalize result to a serializable object.
+            # process_mcp_result returns dict|list|str — if it's already
+            # structured, use it directly (matches custom_tool.py pattern).
+            # If it's a plain string, wrap it so json.dumps produces valid JSON.
+            if isinstance(tool_result, (dict, list)):
+                tool_result_obj = tool_result
+            else:
+                tool_result_obj = {"tool_result": tool_result}
+
+            response_type = "json" if isinstance(tool_result_obj, (dict, list)) else "text"
+            llm_facing_response = json.dumps(tool_result_obj)
 
             # Emit CustomToolDelta packet
             self.emitter.emit(
@@ -252,8 +260,8 @@ class MCPTool(Tool[None]):
                     placement=placement,
                     obj=CustomToolDelta(
                         tool_name=self._name,
-                        response_type="json",
-                        data=tool_result_dict,
+                        response_type=response_type,
+                        data=tool_result_obj,
                     ),
                 )
             )
@@ -261,8 +269,8 @@ class MCPTool(Tool[None]):
             return ToolResponse(
                 rich_response=CustomToolCallSummary(
                     tool_name=self._name,
-                    response_type="json",
-                    tool_result=tool_result_dict,
+                    response_type=response_type,
+                    tool_result=tool_result_obj,
                 ),
                 llm_facing_response=llm_facing_response,
             )
