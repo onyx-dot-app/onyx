@@ -97,9 +97,8 @@ const LLMStepInner = ({
   // Fetch well-known providers directly — this component only mounts during
   // onboarding, so the slow /api/admin/llm/built-in/options call is deferred
   // until the user actually needs to configure an LLM provider.
-  const { llmProviderOptions } = useLLMProviderOptions();
+  const { llmProviderOptions, isLoading } = useLLMProviderOptions();
   const llmDescriptors = llmProviderOptions ?? [];
-  const isLoading = !llmProviderOptions || llmProviderOptions.length === 0;
 
   const [selectedProvider, setSelectedProvider] =
     useState<SelectedProvider | null>(null);
