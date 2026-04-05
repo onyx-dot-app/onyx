@@ -401,6 +401,19 @@ POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() ==
 # defaults to False
 POSTGRES_POOL_PRE_PING = os.environ.get("POSTGRES_POOL_PRE_PING", "").lower() == "true"
 
+# SSL mode for PostgreSQL connections (e.g. "disable", "require", "verify-full")
+# asyncpg uses "ssl" param, psycopg2 uses "sslmode" param
+POSTGRES_SSLMODE: str | None = os.environ.get("POSTGRES_SSLMODE", None)
+
+_VALID_SSLMODES = frozenset(
+    {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
+)
+if POSTGRES_SSLMODE and POSTGRES_SSLMODE not in _VALID_SSLMODES:
+    raise ValueError(
+        f"Invalid POSTGRES_SSLMODE={POSTGRES_SSLMODE!r}. "
+        f"Must be one of: {sorted(_VALID_SSLMODES)}"
+    )
+
 # recycle timeout in seconds
 POSTGRES_POOL_RECYCLE_DEFAULT = 60 * 20  # 20 minutes
 try:
