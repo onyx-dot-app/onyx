@@ -167,6 +167,13 @@ class OnyxTokenStorage(TokenStorage):
                 r = get_redis_client()
                 r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
                 r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
+            else:
+                # Per-user OAuth: signal using connection_config_id so the
+                # waiting callback_handler (which uses connection_config_id as
+                # its key) receives the tokens without timing out.
+                r = get_redis_client()
+                r.rpush(key_tokens(str(self.connection_config_id)), tokens.model_dump_json())
+                r.expire(key_tokens(str(self.connection_config_id)), OAUTH_WAIT_SECONDS)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
@@ -621,12 +628,22 @@ async def process_oauth_callback(
         )
 
     # Run the blocking blpop operation in a thread pool to avoid blocking the event loop
-    # Wait until set_tokens is called
-    admin_config_id = admin_config.id
+    # Wait until set_tokens is called on the correct Redis key
+    if state_data.is_admin:
+        redis_key = key_tokens(str(admin_config.id))
+    else:
+        # Per-user OAuth: look up the user's connection config to get the right Redis key
+        user_connection_config = get_user_connection_config(
+            server_id=mcp_server.id, user_email=user_id, db_session=db_session
+        )
+        if user_connection_config is None:
+            raise HTTPException(status_code=400, detail="User connection config not found")
+        redis_key = key_tokens(str(user_connection_config.id))
+
     loop = asyncio.get_running_loop()
     tokens_raw = await loop.run_in_executor(
         None,
-        lambda: r.blpop([key_tokens(str(admin_config_id))], timeout=OAUTH_WAIT_SECONDS),
+        lambda: r.blpop([redis_key], timeout=OAUTH_WAIT_SECONDS),
     )
     if tokens_raw is None:
         raise HTTPException(status_code=400, detail="No tokens found")
