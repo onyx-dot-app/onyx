@@ -411,7 +411,8 @@ test.describe("LLM Runtime Selection", () => {
     const sharedModelOptions = dialog.locator("[data-selected]");
     await expect(sharedModelOptions).toHaveCount(2);
     const openAiModelOption = dialog
-      .getByRole("region", { name: /openai/i })
+      .getByRole("button", { name: /openai/i })
+      .locator("..")
       .locator("[data-selected]")
       .first();
     await expect(openAiModelOption).toBeVisible();
@@ -436,7 +437,8 @@ test.describe("LLM Runtime Selection", () => {
     const secondSharedModelOptions = secondDialog.locator("[data-selected]");
     await expect(secondSharedModelOptions).toHaveCount(2);
     const anthropicModelOption = secondDialog
-      .getByRole("region", { name: /anthropic/i })
+      .getByRole("button", { name: /anthropic/i })
+      .locator("..")
       .locator("[data-selected]")
       .first();
     await expect(anthropicModelOption).toBeVisible();
@@ -447,7 +449,8 @@ test.describe("LLM Runtime Selection", () => {
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const verifyDialog = page.locator('[role="dialog"]');
     const selectedAnthropicOption = verifyDialog
-      .getByRole("region", { name: /anthropic/i })
+      .getByRole("button", { name: /anthropic/i })
+      .locator("..")
       .locator('[data-selected="true"]');
     await expect(selectedAnthropicOption).toHaveCount(1);
     await page.keyboard.press("Escape");
