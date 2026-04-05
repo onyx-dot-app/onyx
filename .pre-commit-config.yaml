@@ -171,6 +171,13 @@ repos:
         pass_filenames: false
         files: ^web/package(-lock)?\.json$
 
+      - id: compose-variants-check
+        name: Check docker-compose variants are up to date
+        entry: uv run deployment/docker_compose/generate_compose_variants.py --check
+        language: system
+        pass_filenames: false
+        files: ^deployment/docker_compose/(docker-compose\.yml|generate_compose_variants\.py|headless/docker-compose\.yml)$
+
       # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
       # This is a preview package - if it breaks:
       #   1. Try updating: cd web && npm update @typescript/native-preview
