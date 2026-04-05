@@ -227,7 +227,7 @@ class JsmConnectorCheckpoint(ConnectorCheckpoint):
     seen_hierarchy_node_ids: list[str] = []
 
 
-def __make_checkpoint_callback(
+def _make_checkpoint_callback(
     checkpoint: JsmConnectorCheckpoint,
 ) -> Callable[[Iterator[list[str]], str | None], None]:
     def checkpoint_callback(
