@@ -207,6 +207,7 @@ class TestConnectorMappingIntegrity:
             DocumentSource.NOT_APPLICABLE,  # Special placeholder, no connector needed
             DocumentSource.USER_FILE,  # Special placeholder, no connector needed
             DocumentSource.CRAFT_FILE,  # Direct S3 upload via API, no connector needed
+            DocumentSource.FEISHU,  # OAuth credential bootstrap only for now
             # Add other legitimately unmapped sources here if they exist
         }
 
@@ -269,3 +270,4 @@ class TestInstantiateConnectorIntegration:
         # But the class should have been loaded into cache
         assert DocumentSource.WEB in _connector_cache
         assert _connector_cache[DocumentSource.WEB].__name__ == "WebConnector"
+

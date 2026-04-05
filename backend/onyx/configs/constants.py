@@ -216,6 +216,7 @@ class DocumentSource(str, Enum):
     NOTION = "notion"
     ZULIP = "zulip"
     LINEAR = "linear"
+    FEISHU = "feishu"
     HUBSPOT = "hubspot"
     DOCUMENT360 = "document360"
     GONG = "gong"
@@ -674,6 +675,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
 project management, and collaboration tools into a single, customizable platform",
     DocumentSource.ZULIP: "zulip data",
     DocumentSource.LINEAR: "linear data - project management tool, including tickets etc.",
+    DocumentSource.FEISHU: "feishu - oauth credential bootstrap for feishu connectors",
     DocumentSource.HUBSPOT: "hubspot data - CRM and marketing automation data",
     DocumentSource.DOCUMENT360: "document360 data",
     DocumentSource.GONG: "gong - call transcripts",
@@ -705,3 +707,4 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }
+

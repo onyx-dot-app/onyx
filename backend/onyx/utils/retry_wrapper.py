@@ -50,7 +50,7 @@ def request_with_retries(
     method: str,
     url: str,
     *,
-    data: dict[str, Any] | None = None,
+    data: dict[str, Any] | str | None = None,
     headers: dict[str, Any] | None = None,
     params: dict[str, Any] | None = None,
     timeout: int = REQUEST_TIMEOUT_SECONDS,
@@ -89,3 +89,4 @@ def request_with_retries(
         return response
 
     return _make_request()
+

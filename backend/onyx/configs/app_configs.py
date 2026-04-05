@@ -731,6 +731,17 @@ EGNYTE_CLIENT_SECRET = os.getenv("EGNYTE_CLIENT_SECRET")
 LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
 LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 
+# Feishu specific configs
+FEISHU_CLIENT_ID = os.getenv("FEISHU_CLIENT_ID")
+FEISHU_CLIENT_SECRET = os.getenv("FEISHU_CLIENT_SECRET")
+FEISHU_OAUTH_SCOPE = os.getenv(
+    "FEISHU_OAUTH_SCOPE", "contact:user.base:readonly"
+)
+FEISHU_REDIRECT_URI = os.getenv("FEISHU_REDIRECT_URI")
+FEISHU_OAUTH_EMAIL_FALLBACK = (
+    os.getenv("FEISHU_OAUTH_EMAIL_FALLBACK", "false").lower() == "true"
+)
+
 # Slack specific configs
 SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
 MAX_SLACK_QUERY_EXPANSIONS = int(os.environ.get("MAX_SLACK_QUERY_EXPANSIONS", "5"))
@@ -1194,3 +1205,5 @@ STRIPE_PUBLISHABLE_KEY_URL = (
 )
 # Override for local testing with Stripe test keys (pk_test_*)
 STRIPE_PUBLISHABLE_KEY_OVERRIDE = os.environ.get("STRIPE_PUBLISHABLE_KEY")
+
+
