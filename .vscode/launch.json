@@ -476,6 +476,18 @@
       }
     },
     {
+      "name": "Start Monitoring Stack (Prometheus + Grafana)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "-d"],
+      "cwd": "${workspaceFolder}/profiling",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "3"
+      }
+    },
+    {
       "name": "Clear and Restart External Volumes and Containers",
       "type": "node",
       "request": "launch",
