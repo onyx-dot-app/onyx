@@ -3021,6 +3021,11 @@
     "model_vendor": "deepseek",
     "model_version": "latest"
   },
+  "ollama/deepseek-v3.2:cloud": {
+    "display_name": "DeepSeek V3.2 Cloud",
+    "model_vendor": "deepseek",
+    "model_version": "latest"
+  },
   "ollama/gpt-oss:120b-cloud": {
     "display_name": "GPT Open-Source 120B",
     "model_vendor": "openai",
@@ -3109,6 +3114,11 @@
   },
   "ollama/qwen3-coder:480b-cloud": {
     "display_name": "Qwen3 Coder:480B Cloud",
+    "model_vendor": "alibaba",
+    "model_version": "latest"
+  },
+  "ollama/qwen3.5:397b-cloud": {
+    "display_name": "Qwen3.5:397B Cloud",
     "model_vendor": "alibaba",
     "model_version": "latest"
   },
