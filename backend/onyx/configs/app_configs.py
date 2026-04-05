@@ -712,6 +712,30 @@ JIRA_CONNECTOR_MAX_TICKET_SIZE = int(
 )
 JIRA_SLIM_PAGE_SIZE = int(os.environ.get("JIRA_SLIM_PAGE_SIZE", 500))
 
+# Jira Service Management connector settings
+JSM_CONNECTOR_LABELS_TO_SKIP = [
+    ignored_tag.strip()
+    for ignored_tag in os.environ.get("JSM_CONNECTOR_LABELS_TO_SKIP", "").split(",")
+    if ignored_tag.strip()
+]
+# Maximum size for JSM tickets in bytes (default: 100KB)
+try:
+    _jsm_raw = os.environ.get("JSM_CONNECTOR_MAX_TICKET_SIZE")
+    _jsm_size = int(_jsm_raw) if _jsm_raw else 100 * 1024
+    if _jsm_size <= 0:
+        import logging
+        logging.warning(
+            "JSM_CONNECTOR_MAX_TICKET_SIZE must be positive; defaulting to 100KB."
+        )
+        _jsm_size = 100 * 1024
+    JSM_CONNECTOR_MAX_TICKET_SIZE = _jsm_size
+except (ValueError, TypeError):
+    import logging
+    logging.warning(
+        f"Invalid JSM_CONNECTOR_MAX_TICKET_SIZE value; defaulting to 100KB."
+    )
+    JSM_CONNECTOR_MAX_TICKET_SIZE = 100 * 1024
+
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
 
 GITHUB_CONNECTOR_BASE_URL = os.environ.get("GITHUB_CONNECTOR_BASE_URL") or None
