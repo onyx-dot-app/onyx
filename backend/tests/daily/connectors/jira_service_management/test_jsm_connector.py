@@ -49,6 +49,13 @@ def test_jsm_connector_basic(
         assert doc.id is not None
         assert doc.semantic_identifier is not None
         assert len(doc.sections) > 0
+        # Verify standard Jira metadata is present
+        assert "key" in doc.metadata
+        assert "status" in doc.metadata
+        # Verify JSM-specific metadata when available
+        if "request_type" in doc.metadata:
+            assert isinstance(doc.metadata["request_type"], str)
+            assert len(doc.metadata["request_type"]) > 0
 
 
 @patch(

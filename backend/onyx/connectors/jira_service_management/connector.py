@@ -1,20 +1,14 @@
 import copy
-import json
-import os
 from collections.abc import Callable
 from collections.abc import Generator
-from collections.abc import Iterable
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Any
 
-import requests
 from jira import JIRA
-from jira.exceptions import JIRAError
 from jira.resources import Issue
-from more_itertools import chunked
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -36,13 +30,14 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.jira.access import get_project_permissions
+from onyx.connectors.jira.connector import _is_cloud_client
+from onyx.connectors.jira.connector import _perform_jql_search
 from onyx.connectors.jira.utils import best_effort_basic_expert_info
 from onyx.connectors.jira.utils import best_effort_get_field_from_issue
 from onyx.connectors.jira.utils import build_jira_client
 from onyx.connectors.jira.utils import build_jira_url
 from onyx.connectors.jira.utils import extract_text_from_adf
 from onyx.connectors.jira.utils import get_comment_strs
-from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -60,7 +55,6 @@ logger = setup_logger()
 
 ONE_HOUR = 3600
 
-_MAX_RESULTS_FETCH_IDS = 5000
 _JSM_FULL_PAGE_SIZE = 50
 
 # Constants for Jira field names
@@ -87,215 +81,11 @@ _FIELD_RESOLUTION_DATE_KEY = "resolution_date"
 _FIELD_REQUEST_TYPE = "request_type"
 
 
-def _is_cloud_client(jira_client: JIRA) -> bool:
-    return jira_client._options["rest_api_version"] == JIRA_CLOUD_API_VERSION
-
-
-def _perform_jql_search(
-    jira_client: JIRA,
-    jql: str,
-    start: int,
-    max_results: int,
-    fields: str | None = None,
-    all_issue_ids: list[list[str]] | None = None,
-    checkpoint_callback: (
-        Callable[[Iterator[list[str]], str | None], None] | None
-    ) = None,
-    nextPageToken: str | None = None,
-    ids_done: bool = False,
-) -> Iterable[Issue]:
-    if _is_cloud_client(jira_client):
-        if all_issue_ids is None:
-            raise ValueError("all_issue_ids is required for v3")
-        return _perform_jql_search_v3(
-            jira_client,
-            jql,
-            max_results,
-            all_issue_ids,
-            fields=fields,
-            checkpoint_callback=checkpoint_callback,
-            nextPageToken=nextPageToken,
-            ids_done=ids_done,
-        )
-    else:
-        return _perform_jql_search_v2(jira_client, jql, start, max_results, fields)
-
-
-def _handle_jira_search_error(e: Exception, jql: str) -> None:
-    error_text = ""
-    status_code = None
-
-    def _format_error_text(error_payload: Any) -> str:
-        error_messages = (
-            error_payload.get("errorMessages", [])
-            if isinstance(error_payload, dict)
-            else []
-        )
-        if error_messages:
-            return (
-                "; ".join(error_messages)
-                if isinstance(error_messages, list)
-                else str(error_messages)
-            )
-        return str(error_payload)
-
-    if hasattr(e, "status_code"):
-        status_code = e.status_code
-        raw_text = getattr(e, "text", "")
-        if isinstance(raw_text, str):
-            try:
-                error_text = _format_error_text(json.loads(raw_text))
-            except Exception:
-                error_text = raw_text
-        else:
-            error_text = str(raw_text)
-    elif hasattr(e, "response") and e.response is not None:
-        status_code = e.response.status_code
-        try:
-            error_json = e.response.json()
-            error_text = _format_error_text(error_json)
-        except Exception:
-            error_text = e.response.text
-
-    if status_code == 400:
-        if "does not exist for the field 'project'" in error_text:
-            raise ConnectorValidationError(
-                f"The specified Jira project does not exist or you don't have access to it. JQL query: {jql}. Error: {error_text}"
-            )
-        raise ConnectorValidationError(
-            f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
-        )
-    elif status_code == 401:
-        raise CredentialExpiredError(
-            "Jira credentials are expired or invalid (HTTP 401)."
-        )
-    elif status_code == 403:
-        raise InsufficientPermissionsError(
-            f"Insufficient permissions to execute JQL query. JQL: {jql}"
-        )
-
-    raise e
-
-
-def enhanced_search_ids(
-    jira_client: JIRA, jql: str, nextPageToken: str | None = None
-) -> tuple[list[str], str | None]:
-    enhanced_search_path = jira_client._get_url("search/jql")
-    params: dict[str, str | int | None] = {
-        "jql": jql,
-        "maxResults": _MAX_RESULTS_FETCH_IDS,
-        "nextPageToken": nextPageToken,
-        "fields": "id",
-    }
-    try:
-        response = jira_client._session.get(enhanced_search_path, params=params)
-        response.raise_for_status()
-        response_json = response.json()
-    except Exception as e:
-        _handle_jira_search_error(e, jql)
-        raise
-
-    return [str(issue["id"]) for issue in response_json["issues"]], response_json.get(
-        "nextPageToken"
-    )
-
-
-def _bulk_fetch_request(
-    jira_client: JIRA, issue_ids: list[str], fields: str | None
-) -> list[dict[str, Any]]:
-    bulk_fetch_path = jira_client._get_url("issue/bulkfetch")
-    payload: dict[str, Any] = {"issueIdsOrKeys": issue_ids}
-    payload["fields"] = fields.split(",") if fields else ["*all"]
-
-    resp = jira_client._session.post(bulk_fetch_path, json=payload)
-    return resp.json()["issues"]
-
-
-def bulk_fetch_issues(
-    jira_client: JIRA, issue_ids: list[str], fields: str | None = None
-) -> list[Issue]:
-    try:
-        raw_issues = _bulk_fetch_request(jira_client, issue_ids, fields)
-    except requests.exceptions.JSONDecodeError:
-        if len(issue_ids) <= 1:
-            logger.exception(
-                f"Jira bulk-fetch response for issue(s) {issue_ids} could not "
-                f"be decoded as JSON (response too large or truncated)."
-            )
-            raise
-
-        mid = len(issue_ids) // 2
-        logger.warning(
-            f"Jira bulk-fetch JSON decode failed for batch of {len(issue_ids)} issues. "
-            f"Splitting into sub-batches of {mid} and {len(issue_ids) - mid}."
-        )
-        left = bulk_fetch_issues(jira_client, issue_ids[:mid], fields)
-        right = bulk_fetch_issues(jira_client, issue_ids[mid:], fields)
-        return left + right
-    except Exception as e:
-        logger.error(f"Error fetching issues: {e}")
-        raise
-
-    return [
-        Issue(jira_client._options, jira_client._session, raw=issue)
-        for issue in raw_issues
-    ]
-
-
-def _perform_jql_search_v3(
-    jira_client: JIRA,
-    jql: str,
-    max_results: int,
-    all_issue_ids: list[list[str]],
-    fields: str | None = None,
-    checkpoint_callback: (
-        Callable[[Iterator[list[str]], str | None], None] | None
-    ) = None,
-    nextPageToken: str | None = None,
-    ids_done: bool = False,
-) -> Iterable[Issue]:
-    if not ids_done:
-        new_ids, pageToken = enhanced_search_ids(jira_client, jql, nextPageToken)
-        if checkpoint_callback is not None:
-            checkpoint_callback(chunked(new_ids, max_results), pageToken)
-
-    if all_issue_ids:
-        yield from bulk_fetch_issues(jira_client, all_issue_ids.pop(), fields)
-
-
-def _perform_jql_search_v2(
-    jira_client: JIRA,
-    jql: str,
-    start: int,
-    max_results: int,
-    fields: str | None = None,
-) -> Iterable[Issue]:
-    logger.debug(
-        f"Fetching JSM issues with JQL: {jql}, starting at {start}, max results: {max_results}"
-    )
-    try:
-        issues = jira_client.search_issues(
-            jql_str=jql,
-            startAt=start,
-            maxResults=max_results,
-            fields=fields,
-        )
-    except JIRAError as e:
-        _handle_jira_search_error(e, jql)
-        raise
-
-    for issue in issues:
-        if isinstance(issue, Issue):
-            yield issue
-        else:
-            raise RuntimeError(f"Found Jira object not of type Issue: {issue}")
-
-
-def _get_jsm_request_type(jira_client: JIRA, issue: Issue) -> str | None:
+def _get_jsm_request_type(issue: Issue) -> str | None:
     """Attempt to fetch the JSM request type for an issue.
 
     JSM Cloud stores this in a custom field (typically
-    `issue.fields.customfield_10010`) which contains a
+    ``issue.fields.customfield_10010``) which contains a
     ``requestType`` object with a ``name`` attribute.  For Jira
     Server / Data Center the field layout may differ, so we fall
     back gracefully.
@@ -322,7 +112,6 @@ def _get_jsm_request_type(jira_client: JIRA, issue: Issue) -> str | None:
 
 
 def process_jsm_issue(
-    jira_client: JIRA,
     jira_base_url: str,
     issue: Issue,
     comment_email_blacklist: tuple[str, ...] = (),
@@ -402,7 +191,7 @@ def process_jsm_issue(
         metadata_dict[_FIELD_RESOLUTION_DATE_KEY] = resolutiondate
 
     # JSM-specific: extract request type
-    request_type = _get_jsm_request_type(jira_client, issue)
+    request_type = _get_jsm_request_type(issue)
     if request_type:
         metadata_dict[_FIELD_REQUEST_TYPE] = request_type
 
@@ -438,6 +227,20 @@ class JsmConnectorCheckpoint(ConnectorCheckpoint):
     seen_hierarchy_node_ids: list[str] = []
 
 
+def __make_checkpoint_callback(
+    checkpoint: JsmConnectorCheckpoint,
+) -> Callable[[Iterator[list[str]], str | None], None]:
+    def checkpoint_callback(
+        issue_ids: Iterator[list[str]], pageToken: str | None
+    ) -> None:
+        for id_batch in issue_ids:
+            checkpoint.all_issue_ids.append(id_batch)
+        checkpoint.cursor = pageToken
+        checkpoint.ids_done = pageToken is None
+
+    return checkpoint_callback
+
+
 class JiraServiceManagementConnector(
     CheckpointedConnectorWithPermSync[JsmConnectorCheckpoint],
     SlimConnectorWithPermSync,
@@ -463,7 +266,7 @@ class JiraServiceManagementConnector(
         self._project_permissions_cache: dict[str, Any] = {}
 
     @property
-    def comment_email_blacklist(self) -> tuple:
+    def comment_email_blacklist(self) -> tuple[str, ...]:
         return tuple(email.strip() for email in self._comment_email_blacklist)
 
     @property
@@ -595,19 +398,6 @@ class JiraServiceManagementConnector(
         )
         return None
 
-    def _is_service_management_project(self, project_key: str) -> bool:
-        """Check if a project is a JSM (service management) project.
-
-        JSM projects have projectTypeKey == "service_desk".
-        """
-        try:
-            project = self.jira_client.project(project_key)
-            project_type = getattr(project, "projectTypeKey", None)
-            return project_type == "service_desk"
-        except Exception:
-            # If we can't determine, treat it as a JSM project to avoid blocking
-            return True
-
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
@@ -674,7 +464,7 @@ class JiraServiceManagementConnector(
 
         seen_hierarchy_node_ids = set(new_checkpoint.seen_hierarchy_node_ids)
 
-        checkpoint_callback = make_checkpoint_callback(new_checkpoint)
+        checkpoint_callback = _make_checkpoint_callback(new_checkpoint)
 
         for issue in _perform_jql_search(
             jira_client=self.jira_client,
@@ -715,14 +505,13 @@ class JiraServiceManagementConnector(
                 )
 
                 if document := process_jsm_issue(
-                    jira_client=self.jira_client,
                     jira_base_url=self.jira_base,
                     issue=issue,
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                 ):
-                    if include_permissions:
+                    if include_permissions and project_key:
                         document.external_access = self._get_project_permissions(
                             project_key,
                             add_prefix=True,
@@ -777,7 +566,7 @@ class JiraServiceManagementConnector(
 
         jql = self._get_jql_query(start, end)
         checkpoint = self.build_dummy_checkpoint()
-        checkpoint_callback = make_checkpoint_callback(checkpoint)
+        checkpoint_callback = _make_checkpoint_callback(checkpoint)
         prev_offset = 0
         current_offset = 0
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
@@ -916,54 +705,3 @@ class JiraServiceManagementConnector(
         return JsmConnectorCheckpoint(
             has_more=True,
         )
-
-
-def make_checkpoint_callback(
-    checkpoint: JsmConnectorCheckpoint,
-) -> Callable[[Iterator[list[str]], str | None], None]:
-    def checkpoint_callback(
-        issue_ids: Iterator[list[str]], pageToken: str | None
-    ) -> None:
-        for id_batch in issue_ids:
-            checkpoint.all_issue_ids.append(id_batch)
-        checkpoint.cursor = pageToken
-        checkpoint.ids_done = pageToken is None
-
-    return checkpoint_callback
-
-
-if __name__ == "__main__":
-    import os
-    from onyx.utils.variable_functionality import global_version
-    from tests.daily.connectors.utils import load_all_from_connector
-
-    global_version.set_ee()
-
-    connector = JiraServiceManagementConnector(
-        jira_base_url=os.environ["JIRA_BASE_URL"],
-        project_key=os.environ.get("JIRA_PROJECT_KEY"),
-        comment_email_blacklist=[],
-    )
-
-    connector.load_credentials(
-        {
-            "jira_user_email": os.environ["JIRA_USER_EMAIL"],
-            "jira_api_token": os.environ["JIRA_API_TOKEN"],
-        }
-    )
-
-    start = 0
-    end = datetime.now().timestamp()
-
-    for slim_doc in connector.retrieve_all_slim_docs_perm_sync(
-        start=start,
-        end=end,
-    ):
-        print(slim_doc)
-
-    for doc in load_all_from_connector(
-        connector=connector,
-        start=start,
-        end=end,
-    ).documents:
-        print(doc)
