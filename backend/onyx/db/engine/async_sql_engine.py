@@ -16,6 +16,7 @@ from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
+from onyx.configs.app_configs import POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
 from onyx.configs.app_configs import POSTGRES_PORT
@@ -63,8 +64,18 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
         )
 
         connect_args: dict[str, Any] = {}
+        server_settings: dict[str, str] = {}
         if app_name:
-            connect_args["server_settings"] = {"application_name": app_name}
+            server_settings["application_name"] = app_name
+        # Enforce idle-in-transaction timeout at the session level. asyncpg passes
+        # these as PostgreSQL GUC parameters on connection startup (equivalent to
+        # SET idle_in_transaction_session_timeout = ...).
+        if POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS > 0:
+            server_settings["idle_in_transaction_session_timeout"] = str(
+                POSTGRES_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS
+            )
+        if server_settings:
+            connect_args["server_settings"] = server_settings
 
         connect_args["ssl"] = create_ssl_context_if_iam()
 
