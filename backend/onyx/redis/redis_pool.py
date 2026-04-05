@@ -142,27 +142,35 @@ class TenantRedis(redis.Redis):
 class RedisPool:
     _instance: Optional["RedisPool"] = None
     _lock: threading.Lock = threading.Lock()
-    _pool: redis.BlockingConnectionPool
-    _replica_pool: redis.BlockingConnectionPool
+    _pool: redis.BlockingConnectionPool | None
+    _replica_pool: redis.BlockingConnectionPool | None
 
     def __new__(cls) -> "RedisPool":
         if not cls._instance:
             with cls._lock:
                 if not cls._instance:
                     cls._instance = super(RedisPool, cls).__new__(cls)
-                    cls._instance._init_pools()
+                    cls._instance._pool = None
+                    cls._instance._replica_pool = None
         return cls._instance
 
-    def _init_pools(self) -> None:
-        self._pool = RedisPool.create_pool(ssl=REDIS_SSL)
-        self._replica_pool = RedisPool.create_pool(
-            host=REDIS_REPLICA_HOST, ssl=REDIS_SSL
-        )
+    def _ensure_pools(self) -> None:
+        if self._pool is None:
+            with self._lock:
+                if self._pool is None:
+                    pool = RedisPool.create_pool(ssl=REDIS_SSL)
+                    replica_pool = RedisPool.create_pool(
+                        host=REDIS_REPLICA_HOST, ssl=REDIS_SSL
+                    )
+                    self._replica_pool = replica_pool
+                    self._pool = pool
 
     def get_client(self, tenant_id: str) -> Redis:
+        self._ensure_pools()
         return TenantRedis(tenant_id, connection_pool=self._pool)
 
     def get_replica_client(self, tenant_id: str) -> Redis:
+        self._ensure_pools()
         return TenantRedis(tenant_id, connection_pool=self._replica_pool)
 
     def get_raw_client(self) -> Redis:
@@ -170,6 +178,7 @@ class RedisPool:
         Returns a Redis client with direct access to the primary connection pool,
         without tenant prefixing.
         """
+        self._ensure_pools()
         return redis.Redis(connection_pool=self._pool)
 
     def get_raw_replica_client(self) -> Redis:
@@ -177,6 +186,7 @@ class RedisPool:
         Returns a Redis client with direct access to the replica connection pool,
         without tenant prefixing.
         """
+        self._ensure_pools()
         return redis.Redis(connection_pool=self._replica_pool)
 
     @staticmethod

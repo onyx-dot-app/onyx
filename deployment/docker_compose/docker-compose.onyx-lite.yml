@@ -57,6 +57,8 @@ services:
       - FILE_STORE_BACKEND=postgres
       - CACHE_BACKEND=postgres
       - AUTH_BACKEND=postgres
+      - DISABLE_MODEL_SERVER=true
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false
 
   # Move the background worker to a profile so it does not start by default.
   # The API server handles all background work in lite mode.
