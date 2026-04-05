@@ -232,7 +232,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onboardingDismissed,
     onboardingState,
     onboardingActions,
-    llmDescriptors,
     isLoadingOnboarding,
     finishOnboarding,
     hideOnboarding,
@@ -812,7 +811,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           handleFinishOnboarding={finishOnboarding}
                           state={onboardingState}
                           actions={onboardingActions}
-                          llmDescriptors={llmDescriptors}
                         />
                       )}
 

@@ -17,7 +17,6 @@ const mockProviderStatus = {
   llmProviders: [] as unknown[],
   isLoadingProviders: false,
   hasProviders: false,
-  providerOptions: [],
   refreshProviderInfo: jest.fn(),
 };
 
@@ -71,7 +70,6 @@ describe("useShowOnboarding", () => {
     mockProviderStatus.llmProviders = [];
     mockProviderStatus.isLoadingProviders = false;
     mockProviderStatus.hasProviders = false;
-    mockProviderStatus.providerOptions = [];
   });
 
   it("returns showOnboarding=false while providers are loading", () => {
@@ -198,7 +196,6 @@ describe("useShowOnboarding", () => {
       OnboardingStep.Welcome
     );
     expect(result.current.onboardingActions).toBeDefined();
-    expect(result.current.llmDescriptors).toEqual([]);
   });
 
   describe("localStorage persistence", () => {
