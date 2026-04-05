@@ -4,7 +4,6 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
 from fastapi import Form
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
@@ -28,6 +27,8 @@ from onyx.db.credentials import update_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import DocumentSource
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.models import CredentialBase
 from onyx.server.documents.models import CredentialDataUpdateRequest
 from onyx.server.documents.models import CredentialSnapshot
@@ -176,18 +177,18 @@ def create_credential_with_private_key(
     try:
         credential_data = json.loads(credential_json)
     except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid JSON in credential_json: {str(e)}",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Invalid JSON in credential_json: {str(e)}",
         )
 
     private_key_processor: ProcessPrivateKeyFileProtocol | None = (
         FILE_TYPE_TO_FILE_PROCESSOR.get(PrivateKeyFileTypes(type_definition_key))
     )
     if private_key_processor is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid type definition key for private key file",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Invalid type definition key for private key file",
         )
     private_key_content: str = private_key_processor(uploaded_file)
 
@@ -251,9 +252,9 @@ def get_credential_by_id(
         get_editable=False,
     )
     if credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     return CredentialSnapshot.from_credential_db_model(credential)
@@ -275,9 +276,9 @@ def update_credential_data(
     )
 
     if credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     return CredentialSnapshot.from_credential_db_model(credential)
@@ -297,18 +298,18 @@ def update_credential_private_key(
     try:
         credential_data = json.loads(credential_json)
     except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid JSON in credential_json: {str(e)}",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Invalid JSON in credential_json: {str(e)}",
         )
 
     private_key_processor: ProcessPrivateKeyFileProtocol | None = (
         FILE_TYPE_TO_FILE_PROCESSOR.get(PrivateKeyFileTypes(type_definition_key))
     )
     if private_key_processor is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid type definition key for private key file",
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Invalid type definition key for private key file",
         )
     private_key_content: str = private_key_processor(uploaded_file)
     credential_data[field_key] = private_key_content
@@ -322,9 +323,9 @@ def update_credential_private_key(
     )
 
     if credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     return CredentialSnapshot.from_credential_db_model(credential)
@@ -341,9 +342,9 @@ def update_credential_from_model(
         credential_id, credential_data, user, db_session
     )
     if updated_credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     # Get credential_json value - use masking for API responses
