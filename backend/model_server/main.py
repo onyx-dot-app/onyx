@@ -14,6 +14,7 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from transformers import logging as transformer_logging
 
+from model_server.encoders import init_embed_semaphore
 from model_server.encoders import router as encoders_router
 from model_server.management_endpoints import router as management_router
 from model_server.utils import get_gpu_type
@@ -72,6 +73,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.notice(f"Torch GPU Detection: gpu_type={gpu_type}")
 
     app.state.gpu_type = gpu_type
+
+    # Initialize the embedding concurrency semaphore based on GPU type.
+    # On CPU, this serializes embedding calls to avoid thread contention (#8396).
+    init_embed_semaphore(gpu_type)
 
     try:
         if TEMP_HF_CACHE_PATH.is_dir():
