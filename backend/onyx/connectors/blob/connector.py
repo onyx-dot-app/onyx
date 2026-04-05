@@ -8,6 +8,8 @@ from numbers import Integral
 from typing import Any
 from typing import Optional
 from urllib.parse import quote
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 import boto3
 from botocore.client import Config
@@ -52,6 +54,17 @@ DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 SIZE_THRESHOLD_BUFFER = 64
 
 
+def _sanitize_url(url: str) -> str:
+    """Strip embedded credentials from a URL before logging."""
+    parsed = urlparse(url)
+    if parsed.username or parsed.password:
+        sanitized = parsed._replace(
+            netloc="***@" + parsed.hostname + (f":{parsed.port}" if parsed.port else "")
+        )
+        return urlunparse(sanitized)
+    return url
+
+
 class BlobStorageConnector(LoadConnector, PollConnector):
     def __init__(
         self,
@@ -60,6 +73,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         prefix: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
         european_residency: bool = False,
+        endpoint_url: str = "",
+        s3_skip_ssl_verification: bool = False,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
         self.bucket_name = bucket_name.strip()
@@ -70,6 +85,12 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
         self.bucket_region: Optional[str] = None
         self.european_residency: bool = european_residency
+        self.endpoint_url: str = endpoint_url.strip() if endpoint_url else ""
+        if self.endpoint_url and not self.endpoint_url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"Invalid S3 endpoint URL: must start with http:// or https://"
+            )
+        self.s3_skip_ssl_verification: bool = s3_skip_ssl_verification
 
     def set_allow_images(self, allow_images: bool) -> None:
         """Set whether to process images in this connector."""
@@ -140,6 +161,25 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             )
 
         elif self.bucket_type == BlobType.S3:
+            # Build extra kwargs for custom S3-compatible endpoints (MinIO, Ceph, etc.)
+            extra_client_kwargs: dict[str, Any] = {}
+            if self.endpoint_url:
+                logger.info(
+                    f"Using custom S3 endpoint: {_sanitize_url(self.endpoint_url)}"
+                )
+                extra_client_kwargs["endpoint_url"] = self.endpoint_url
+                extra_client_kwargs["config"] = Config(
+                    signature_version="s3v4",
+                    s3={"addressing_style": "path"},
+                )
+            if self.endpoint_url and self.s3_skip_ssl_verification:
+                extra_client_kwargs["verify"] = False
+                logger.warning(
+                    "SSL verification is disabled for S3 endpoint '%s'. "
+                    "This is not recommended for production use.",
+                    _sanitize_url(self.endpoint_url),
+                )
+
             # For S3, we can use either access keys or IAM roles.
             authentication_method = credentials.get(
                 "authentication_method", "access_key"
@@ -159,7 +199,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     aws_access_key_id=credentials["aws_access_key_id"],
                     aws_secret_access_key=credentials["aws_secret_access_key"],
                 )
-                self.s3_client = session.client("s3")
+                self.s3_client = session.client("s3", **extra_client_kwargs)
             elif authentication_method == "iam_role":
                 # If using IAM roles, we assume the role and let boto3 handle the credentials.
                 role_arn = credentials.get("aws_role_arn")
@@ -192,17 +232,19 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 botocore_session = get_session()
                 botocore_session._credentials = refreshable  # type: ignore[attr-defined]
                 session = boto3.Session(botocore_session=botocore_session)
-                self.s3_client = session.client("s3")
+                self.s3_client = session.client("s3", **extra_client_kwargs)
             elif authentication_method == "assume_role":
                 # We will assume the instance role to access S3.
                 logger.debug("Using instance role authentication for S3 bucket.")
-                self.s3_client = boto3.client("s3")
+                self.s3_client = boto3.client("s3", **extra_client_kwargs)
             else:
                 raise ConnectorValidationError("Invalid authentication method for S3. ")
 
             # This is important for correct citation links
             # NOTE: the client region actually doesn't matter for accessing the bucket
-            self._detect_bucket_region()
+            # Skip region detection for custom endpoints (not applicable for MinIO, Ceph, etc.)
+            if not self.endpoint_url:
+                self._detect_bucket_region()
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
             if not all(
@@ -307,6 +349,13 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             return f"https://dash.cloudflare.com/{account_id}/r2/{subdomain}buckets/{self.bucket_name}/objects/{encoded_key}/details"
 
         elif self.bucket_type == BlobType.S3:
+            if self.endpoint_url:
+                # For custom S3-compatible endpoints (MinIO, Ceph, etc.) we
+                # intentionally return a direct object URL rather than a
+                # dashboard URL because these services do not have a
+                # standardised web console path.
+                base = self.endpoint_url.rstrip("/")
+                return f"{base}/{self.bucket_name}/{encoded_key}"
             region = self.bucket_region or self.s3_client.meta.region_name
             return f"https://s3.console.aws.amazon.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
 
