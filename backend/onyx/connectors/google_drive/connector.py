@@ -42,6 +42,9 @@ from onyx.connectors.google_drive.file_retrieval import (
     get_all_files_in_my_drive_and_shared,
 )
 from onyx.connectors.google_drive.file_retrieval import get_external_access_for_folder
+from onyx.connectors.google_drive.file_retrieval import (
+    get_files_by_web_view_links_batch,
+)
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
 from onyx.connectors.google_drive.file_retrieval import get_folder_metadata
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
@@ -70,11 +73,13 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import NormalizationResult
+from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
@@ -202,7 +207,9 @@ class DriveIdStatus(Enum):
 
 
 class GoogleDriveConnector(
-    SlimConnectorWithPermSync, CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint]
+    SlimConnectorWithPermSync,
+    CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint],
+    Resolver,
 ):
     def __init__(
         self,
@@ -1664,6 +1671,82 @@ class GoogleDriveConnector(
         return self._load_from_checkpoint(
             start, end, checkpoint, include_permissions=True
         )
+
+    @override
+    def resolve_errors(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        if self._creds is None or self._primary_admin_email is None:
+            raise RuntimeError(
+                "Credentials missing, should not call this method before calling load_credentials"
+            )
+
+        logger.info(f"Resolving {len(errors)} errors")
+        doc_ids = [
+            failure.failed_document.document_id
+            for failure in errors
+            if failure.failed_document
+        ]
+        service = get_drive_service(self.creds, self.primary_admin_email)
+        field_type = (
+            DriveFileFieldType.WITH_PERMISSIONS
+            if include_permissions or self.exclude_domain_link_only
+            else DriveFileFieldType.STANDARD
+        )
+        batch_result = get_files_by_web_view_links_batch(service, doc_ids, field_type)
+
+        for doc_id, error in batch_result.errors.items():
+            yield ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=doc_id,
+                    document_link=doc_id,
+                ),
+                failure_message=f"Failed to retrieve file during error resolution: {error}",
+                exception=error,
+            )
+
+        permission_sync_context = (
+            PermissionSyncContext(
+                primary_admin_email=self.primary_admin_email,
+                google_domain=self.google_domain,
+            )
+            if include_permissions
+            else None
+        )
+
+        retrieved_files = [
+            RetrievedDriveFile(
+                drive_file=file,
+                user_email=self.primary_admin_email,
+                completion_stage=DriveRetrievalStage.DONE,
+            )
+            for file in batch_result.files.values()
+        ]
+
+        yield from self._get_new_ancestors_for_files(
+            files=retrieved_files,
+            seen_hierarchy_node_raw_ids=ThreadSafeSet(),
+            fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
+            permission_sync_context=permission_sync_context,
+            add_prefix=True,
+        )
+
+        func_with_args = [
+            (
+                self._convert_retrieved_file_to_document,
+                (rf, permission_sync_context),
+            )
+            for rf in retrieved_files
+        ]
+        results = cast(
+            list[Document | ConnectorFailure | None],
+            run_functions_tuples_in_parallel(func_with_args, max_workers=8),
+        )
+        for result in results:
+            if result is not None:
+                yield result
 
     def _extract_slim_docs_from_google_drive(
         self,

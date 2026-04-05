@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from googleapiclient.discovery import Resource  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
+from googleapiclient.http import BatchHttpRequest  # type: ignore
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
@@ -59,6 +60,8 @@ SLIM_FILE_FIELDS = (
     "permissionIds, webViewLink, owners(emailAddress), modifiedTime)"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
+
+MAX_BATCH_SIZE = 100
 
 HIERARCHY_FIELDS = "id, name, parents, webViewLink, mimeType, driveId"
 
@@ -216,13 +219,32 @@ def get_external_access_for_folder(
 
 
 def _get_fields_for_file_type(field_type: DriveFileFieldType) -> str:
-    """Get the appropriate fields string based on the field type enum"""
+    """Get the appropriate fields string for files().list() based on the field type enum."""
     if field_type == DriveFileFieldType.SLIM:
         return SLIM_FILE_FIELDS
     elif field_type == DriveFileFieldType.WITH_PERMISSIONS:
         return FILE_FIELDS_WITH_PERMISSIONS
     else:  # DriveFileFieldType.STANDARD
         return FILE_FIELDS
+
+
+def _extract_single_file_fields(list_fields: str) -> str:
+    """Convert a files().list() fields string to one suitable for files().get().
+
+    List fields look like "nextPageToken, files(field1, field2, ...)"
+    Single-file fields should be just "field1, field2, ..."
+    """
+    start = list_fields.find("files(")
+    if start == -1:
+        return list_fields
+    inner_start = start + len("files(")
+    inner_end = list_fields.rfind(")")
+    return list_fields[inner_start:inner_end]
+
+
+def _get_single_file_fields(field_type: DriveFileFieldType) -> str:
+    """Get the appropriate fields string for files().get() based on the field type enum."""
+    return _extract_single_file_fields(_get_fields_for_file_type(field_type))
 
 
 def _get_files_in_parent(
@@ -536,3 +558,74 @@ def get_file_by_web_view_link(
         )
         .execute()
     )
+
+
+class BatchRetrievalResult:
+    """Result of a batch file retrieval, separating successes from errors."""
+
+    def __init__(self) -> None:
+        self.files: dict[str, GoogleDriveFileType] = {}
+        self.errors: dict[str, Exception] = {}
+
+
+def get_files_by_web_view_links_batch(
+    service: GoogleDriveService,
+    web_view_links: list[str],
+    field_type: DriveFileFieldType,
+) -> BatchRetrievalResult:
+    """Retrieve multiple Google Drive files by webViewLink using the batch API.
+
+    Returns a BatchRetrievalResult containing successful file retrievals
+    and errors for any files that could not be fetched.
+    Automatically splits into chunks of MAX_BATCH_SIZE.
+    """
+    fields = _get_single_file_fields(field_type)
+    if len(web_view_links) <= MAX_BATCH_SIZE:
+        return _get_files_by_web_view_links_batch(service, web_view_links, fields)
+
+    combined = BatchRetrievalResult()
+    for i in range(0, len(web_view_links), MAX_BATCH_SIZE):
+        chunk = web_view_links[i : i + MAX_BATCH_SIZE]
+        chunk_result = _get_files_by_web_view_links_batch(service, chunk, fields)
+        combined.files.update(chunk_result.files)
+        combined.errors.update(chunk_result.errors)
+    return combined
+
+
+def _get_files_by_web_view_links_batch(
+    service: GoogleDriveService,
+    web_view_links: list[str],
+    fields: str,
+) -> BatchRetrievalResult:
+    """Single-batch implementation."""
+
+    result = BatchRetrievalResult()
+
+    def callback(
+        request_id: str,
+        response: GoogleDriveFileType,
+        exception: Exception | None,
+    ) -> None:
+        if exception:
+            logger.warning(f"Error retrieving file {request_id}: {exception}")
+            result.errors[request_id] = exception
+        else:
+            result.files[request_id] = response
+
+    batch = cast(BatchHttpRequest, service.new_batch_http_request(callback=callback))
+
+    for web_view_link in web_view_links:
+        try:
+            file_id = _extract_file_id_from_web_view_link(web_view_link)
+            request = service.files().get(
+                fileId=file_id,
+                supportsAllDrives=True,
+                fields=fields,
+            )
+            batch.add(request, request_id=web_view_link)
+        except ValueError as e:
+            logger.warning(f"Failed to extract file ID from {web_view_link}: {e}")
+            result.errors[web_view_link] = e
+
+    batch.execute()
+    return result
