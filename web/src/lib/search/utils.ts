@@ -11,11 +11,19 @@ export const buildFilters = (
   sources: SourceMetadata[],
   documentSets: string[],
   timeRange: DateRangePickerValue | null,
-  tags: Tag[]
+  tags: Tag[],
+  totalAvailableSources?: number
 ): Filters => {
+  // If all available sources are selected, treat as no filter (null)
+  const allSourcesSelected =
+    totalAvailableSources !== undefined &&
+    sources.length >= totalAvailableSources;
+
   const filters = {
     source_type:
-      sources.length > 0 ? sources.map((source) => source.internalName) : null,
+      sources.length > 0 && !allSourcesSelected
+        ? sources.map((source) => source.internalName)
+        : null,
     document_set: documentSets.length > 0 ? documentSets : null,
     time_cutoff: timeRange?.from ? timeRange.from : null,
     tags: tags,

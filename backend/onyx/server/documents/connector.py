@@ -1120,23 +1120,36 @@ def get_connector_indexing_status(
     if mock_data is not None:
         mock_statuses = get_mock_indexing_statuses(mock_data)
         if mock_statuses is not None:
-            connector_indexing_statuses = [
-                ConnectorIndexingStatusLite(**status) for status in mock_statuses
-            ]
-            return [
-                ConnectorIndexingStatusLiteResponse(
-                    source=DocumentSource.FILE,
-                    summary=SourceSummary(
-                        total_connectors=100,
-                        active_connectors=100,
-                        public_connectors=100,
-                        total_docs_indexed=100000,
-                    ),
-                    current_page=1,
-                    total_pages=1,
-                    indexing_statuses=connector_indexing_statuses,
+            # Group statuses by source, mirroring the real code path.
+            source_to_statuses: dict[
+                DocumentSource, list[ConnectorIndexingStatusLite]
+            ] = {}
+            for raw in mock_statuses:
+                status = ConnectorIndexingStatusLite(**raw)
+                source_to_statuses.setdefault(status.source, []).append(status)
+
+            response_list: list[ConnectorIndexingStatusLiteResponse] = []
+            for source in sorted(source_to_statuses):
+                statuses = source_to_statuses[source]
+                total_docs = sum(s.docs_indexed for s in statuses)
+                public_count = sum(
+                    1 for s in statuses if s.access_type == AccessType.PUBLIC
                 )
-            ]
+                response_list.append(
+                    ConnectorIndexingStatusLiteResponse(
+                        source=source,
+                        summary=SourceSummary(
+                            total_connectors=len(statuses),
+                            active_connectors=len(statuses),
+                            public_connectors=public_count,
+                            total_docs_indexed=total_docs,
+                        ),
+                        current_page=1,
+                        total_pages=1,
+                        indexing_statuses=statuses,
+                    )
+                )
+            return response_list
 
     parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
         # Get editable connector/credential pairs

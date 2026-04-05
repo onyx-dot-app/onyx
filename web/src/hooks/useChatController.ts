@@ -112,6 +112,7 @@ interface UseChatControllerProps {
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
   setSelectedAgentFromId: (agentId: number | null) => void;
+  totalAvailableSources?: number;
 }
 
 async function stopChatSession(chatSessionId: string): Promise<void> {
@@ -136,6 +137,7 @@ export default function useChatController({
   selectedDocuments,
   resetInputBar,
   setSelectedAgentFromId,
+  totalAvailableSources,
 }: UseChatControllerProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -708,7 +710,8 @@ export default function useChatController({
             filterManager.selectedSources,
             filterManager.selectedDocumentSets,
             filterManager.timeRange,
-            filterManager.selectedTags
+            filterManager.selectedTags,
+            totalAvailableSources
           ),
           modelProvider:
             modelOverride?.name || llmManager.currentLlm.name || undefined,
