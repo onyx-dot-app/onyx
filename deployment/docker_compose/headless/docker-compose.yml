@@ -21,18 +21,13 @@ name: onyx
 services:
   api_server:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../../backend
-      dockerfile: Dockerfile
-      args:
-      - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     # Check env.template and copy to .env for env vars
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     depends_on:
       relational_db:
@@ -101,11 +96,6 @@ services:
 
   background:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../../backend
-      dockerfile: Dockerfile
-      args:
-      - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "
       if [ -f /app/scripts/setup_craft_templates.sh ]; then
@@ -116,7 +106,7 @@ services:
       fi &&
       /app/scripts/supervisord_entrypoint.sh"
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     depends_on:
       relational_db:
@@ -184,18 +174,6 @@ services:
 
   inference_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../../backend
-      dockerfile: Dockerfile.model_server
-    # GPU Support: Uncomment the following lines to enable GPU support
-    # Requires nvidia-container-toolkit to be installed on the host
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
     command: >
       /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
@@ -204,7 +182,7 @@ services:
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     restart: unless-stopped
     volumes:
@@ -225,18 +203,6 @@ services:
 
   indexing_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../../backend
-      dockerfile: Dockerfile.model_server
-    # GPU Support: Uncomment the following lines to enable GPU support
-    # Requires nvidia-container-toolkit to be installed on the host
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
     command: >
       /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
@@ -245,7 +211,7 @@ services:
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     restart: unless-stopped
     environment:
@@ -271,7 +237,7 @@ services:
     shm_size: 1g
     command: -c 'max_connections=250'
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     restart: unless-stopped
     # PRODUCTION: Override the defaults by passing in the environment variables
@@ -296,7 +262,7 @@ services:
     image: vespaengine/vespa:8.609.39
     restart: unless-stopped
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     environment:
     - VESPA_SKIP_UPGRADE_CHECK=${VESPA_SKIP_UPGRADE_CHECK:-true}
@@ -370,7 +336,7 @@ services:
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     # Use tmpfs to prevent creation of anonymous volumes for /data
     tmpfs:
@@ -387,7 +353,7 @@ services:
     #   - "9004:9000"
     #   - "9005:9001"
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
@@ -408,7 +374,7 @@ services:
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
 
     # Below is needed for the `docker-out-of-docker` execution mode
@@ -419,9 +385,6 @@ services:
 
   cli_server:
     image: ${ONYX_CLI_IMAGE:-onyxdotapp/onyx-cli:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../../cli
-      dockerfile: Dockerfile
     command: ["serve", "--host", "0.0.0.0", "--port", "2222"]
     depends_on:
     - api_server

@@ -49,8 +49,7 @@ class Variant:
     # Service names to remove from the base compose file.
     remove_services: set[str] = field(default_factory=set)
     # YAML strings defining services to add. Each string is a single-service
-    # YAML document (e.g. "cli_server:\n  image: ..."). Paths inside these
-    # definitions should already be relative to the output subdirectory.
+    # YAML document (e.g. "cli_server:\n  image: ...").
     add_services_yaml: list[str] = field(default_factory=list)
     # Volume names to add to the top-level volumes section.
     add_volumes: list[str] = field(default_factory=list)
@@ -103,9 +102,6 @@ register(
             """\
 cli_server:
   image: ${ONYX_CLI_IMAGE:-onyxdotapp/onyx-cli:${IMAGE_TAG:-latest}}
-  build:
-    context: ../../../cli
-    dockerfile: Dockerfile
   command: ["serve", "--host", "0.0.0.0", "--port", "2222"]
   depends_on:
     - api_server
@@ -176,9 +172,6 @@ register(
             """\
 cli_server:
   image: ${ONYX_CLI_IMAGE:-onyxdotapp/onyx-cli:${IMAGE_TAG:-latest}}
-  build:
-    context: ../../../cli
-    dockerfile: Dockerfile
   command: ["serve", "--host", "0.0.0.0", "--port", "2222"]
   depends_on:
     - api_server
@@ -238,79 +231,20 @@ def load_yaml() -> tuple[YAML, CommentedMap]:
 
 
 # ---------------------------------------------------------------------------
-# Path adjustment (for output files living in a subdirectory)
+# Service transforms (for standalone output files)
 # ---------------------------------------------------------------------------
 
 
-def adjust_path(path: str) -> str:
-    """Prepend ../ to a relative path to account for a subdirectory."""
-    if path.startswith("./") or path.startswith("../"):
-        return "../" + path
-    if not path.startswith("/") and not path.startswith("$"):
-        return "../" + path
-    return path
+def strip_build_blocks(services: CommentedMap) -> None:
+    """Remove ``build`` keys from all services.
 
-
-def adjust_env_file(entry: dict | str) -> dict | str:
-    if isinstance(entry, dict) and "path" in entry:
-        entry["path"] = adjust_path(entry["path"])
-    elif isinstance(entry, str):
-        return adjust_path(entry)
-    return entry
-
-
-def adjust_build_context(build: CommentedMap | str) -> CommentedMap | str:
-    if isinstance(build, CommentedMap) and "context" in build:
-        build["context"] = adjust_path(build["context"])
-    elif isinstance(build, str):
-        return adjust_path(build)
-    return build
-
-
-def adjust_volume_bind(vol: str) -> str:
-    """Adjust host path in a bind-mount volume string (host:container[:opts])."""
-    parts = vol.split(":")
-    if len(parts) >= 2:
-        host_path = parts[0]
-        if (
-            host_path.startswith("./")
-            or host_path.startswith("../")
-            or (
-                not host_path.startswith("/")
-                and not host_path.startswith("$")
-                and "/" in host_path
-            )
-        ):
-            parts[0] = adjust_path(host_path)
-            return ":".join(parts)
-    return vol
-
-
-def adjust_service_paths(service: CommentedMap) -> None:
-    """Adjust all relative paths in a service definition for a subdirectory."""
-    if "env_file" in service:
-        ef = service["env_file"]
-        if isinstance(ef, list):
-            for i, entry in enumerate(ef):
-                ef[i] = adjust_env_file(entry)
-        elif isinstance(ef, (str, dict)):
-            service["env_file"] = adjust_env_file(ef)
-
-    if "build" in service:
-        service["build"] = adjust_build_context(service["build"])
-
-    if "volumes" in service:
-        vols = service["volumes"]
-        if isinstance(vols, list):
-            for i, vol in enumerate(vols):
-                if isinstance(vol, str):
-                    vols[i] = adjust_volume_bind(vol)
-                elif isinstance(vol, dict) and "source" in vol:
-                    src = vol["source"]
-                    if isinstance(src, str) and (
-                        src.startswith("./") or src.startswith("../")
-                    ):
-                        vol["source"] = adjust_path(src)
+    Generated files are intended to be downloaded and used standalone — users
+    pull pre-built images rather than building from source, so ``build``
+    blocks are not useful and contain repo-relative paths that won't exist.
+    """
+    for svc in services.values():
+        if isinstance(svc, CommentedMap) and "build" in svc:
+            del svc["build"]
 
 
 # ---------------------------------------------------------------------------
@@ -433,14 +367,9 @@ def generate(variant: Variant) -> str:
                 ]
                 env.append(f"{key}={overrides[key]}")
 
-    # Adjust relative paths for services from the base file (not added ones)
-    if variant.output_dir:
-        for name in services:
-            if name in added_service_names:
-                continue
-            svc = services[name]
-            if isinstance(svc, CommentedMap):
-                adjust_service_paths(svc)
+    # Strip build blocks — generated files are standalone downloads, users
+    # pull images rather than building from source.
+    strip_build_blocks(services)
 
     # Add volumes
     if variant.add_volumes and "volumes" in data:

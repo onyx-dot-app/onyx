@@ -27,18 +27,13 @@ name: onyx
 services:
   api_server:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../../backend
-      dockerfile: Dockerfile
-      args:
-      - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     # Check env.template and copy to .env for env vars
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     depends_on:
       relational_db:
@@ -96,7 +91,7 @@ services:
     shm_size: 1g
     command: -c 'max_connections=250'
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
     restart: unless-stopped
     # PRODUCTION: Override the defaults by passing in the environment variables
@@ -122,7 +117,7 @@ services:
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
     env_file:
-    - path: ../.env
+    - path: .env
       required: false
 
     # Below is needed for the `docker-out-of-docker` execution mode
@@ -133,9 +128,6 @@ services:
 
   cli_server:
     image: ${ONYX_CLI_IMAGE:-onyxdotapp/onyx-cli:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../../cli
-      dockerfile: Dockerfile
     command: ["serve", "--host", "0.0.0.0", "--port", "2222"]
     depends_on:
     - api_server
