@@ -196,6 +196,7 @@ class DocumentSource(str, Enum):
     # Special case, document passed in via Onyx APIs without specifying a source type
     INGESTION_API = "ingestion_api"
     SLACK = "slack"
+    JSM = "jsm"
     WEB = "web"
     GOOGLE_DRIVE = "google_drive"
     GMAIL = "gmail"
