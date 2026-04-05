@@ -363,6 +363,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Sales,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/fireflies`,
   },
+  granola: {
+    icon: SvgGlobe,
+    displayName: "Granola",
+    category: SourceCategory.Sales,
+    // Placeholder docs path; can be updated when official docs exist
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/granola`,
+  },
   highspot: {
     icon: HighspotIcon,
     displayName: "Highspot",

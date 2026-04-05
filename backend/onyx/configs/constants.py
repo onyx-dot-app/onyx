@@ -246,6 +246,8 @@ class DocumentSource(str, Enum):
     HIGHSPOT = "highspot"
     DRUPAL_WIKI = "drupal_wiki"
 
+    GRANOLA = "granola"
+
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
@@ -702,6 +704,7 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
     DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
+    DocumentSource.GRANOLA: "granola - meeting notes and transcripts",
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }
