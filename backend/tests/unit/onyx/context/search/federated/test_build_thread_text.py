@@ -31,25 +31,6 @@ class TestBuildThreadText:
         assert "..." not in result
 
     @patch("onyx.context.search.federated.slack_search.batch_get_user_profiles")
-    def test_truncates_at_max_replies(self, mock_profiles: MagicMock) -> None:
-        """Replies beyond max_replies are truncated with '...' indicator."""
-        mock_profiles.return_value = {}
-        messages = [
-            _make_msg("U1", "parent", "1000.0"),
-            _make_msg("U2", "reply 1", "1001.0"),
-            _make_msg("U3", "reply 2", "1002.0"),
-            _make_msg("U4", "reply 3", "1003.0"),
-        ]
-        result = _build_thread_text(
-            messages, "token", "T123", MagicMock(), max_replies=2
-        )
-        assert "parent" in result
-        assert "reply 1" in result
-        assert "reply 2" in result
-        assert "reply 3" not in result
-        assert "..." in result
-
-    @patch("onyx.context.search.federated.slack_search.batch_get_user_profiles")
     def test_non_thread_returns_parent_only(self, mock_profiles: MagicMock) -> None:
         """Single message (no replies) returns just the parent text."""
         mock_profiles.return_value = {}

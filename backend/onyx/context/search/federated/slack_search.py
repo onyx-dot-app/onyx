@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import MAX_SLACK_THREAD_CONTEXT_MESSAGES
-from onyx.configs.app_configs import MAX_SLACK_THREAD_REPLIES
 from onyx.configs.app_configs import SLACK_THREAD_CONTEXT_BATCH_SIZE
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.connectors.models import IndexingDocument
@@ -703,12 +702,10 @@ def _build_thread_text(
     access_token: str,
     team_id: str | None,
     slack_client: WebClient,
-    max_replies: int = MAX_SLACK_THREAD_REPLIES,
 ) -> str:
-    """Build thread text including all replies up to max_replies.
+    """Build thread text including all replies.
 
-    Includes the thread parent message followed by all replies in order,
-    capped at max_replies to prevent unbounded growth for very long threads.
+    Includes the thread parent message followed by all replies in order.
     """
     msg_text = messages[0].get("text", "")
     msg_sender = messages[0].get("user", "")
@@ -721,15 +718,10 @@ def _build_thread_text(
 
     thread_text += "\n\nReplies:"
 
-    reply_count = 0
     for msg in replies:
-        if reply_count >= max_replies:
-            thread_text += "\n..."
-            break
         msg_text = msg.get("text", "")
         msg_sender = msg.get("user", "")
         thread_text += f"\n\n<@{msg_sender}>: {msg_text}"
-        reply_count += 1
 
     # Replace user IDs with names using cached lookups
     userids: set[str] = set(re.findall(r"<@([A-Z0-9]+)>", thread_text))

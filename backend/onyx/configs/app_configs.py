@@ -744,9 +744,6 @@ SLACK_THREAD_CONTEXT_BATCH_SIZE = int(
 MAX_SLACK_THREAD_CONTEXT_MESSAGES = int(
     os.environ.get("MAX_SLACK_THREAD_CONTEXT_MESSAGES", "5")
 )
-# Maximum number of replies to include when building thread text
-# Controls how many replies from a thread are included in the search result
-MAX_SLACK_THREAD_REPLIES = int(os.environ.get("MAX_SLACK_THREAD_REPLIES", "50"))
 
 # TestRail specific configs
 TESTRAIL_BASE_URL = os.environ.get("TESTRAIL_BASE_URL", "")
