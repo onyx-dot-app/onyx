@@ -181,12 +181,24 @@ function ModelConfigurationList({ formikProps }: ModelConfigurationListProps) {
 
 // ─── Custom Config Processing ─────────────────────────────────────────────────
 
-function customConfigProcessing(items: KeyValue[]) {
-  const customConfig: { [key: string]: string } = {};
-  items.forEach(({ key, value }) => {
-    customConfig[key] = value;
-  });
-  return customConfig;
+const FIRST_CLASS_KEYS = ["api_key", "api_base", "api_version"] as const;
+
+function extractFirstClassFields(items: KeyValue[]) {
+  const firstClass: Record<string, string | undefined> = {};
+  const remaining: { [key: string]: string } = {};
+
+  for (const { key, value } of items) {
+    if (
+      (FIRST_CLASS_KEYS as readonly string[]).includes(key) &&
+      value.trim() !== ""
+    ) {
+      firstClass[key] = value;
+    } else {
+      remaining[key] = value;
+    }
+  }
+
+  return { firstClass, customConfig: remaining };
 }
 
 export default function CustomModal({
@@ -230,11 +242,16 @@ export default function CustomModal({
         supports_image_input: false,
       },
     ],
-    custom_config_list: existingLlmProvider?.custom_config
-      ? Object.entries(existingLlmProvider.custom_config).map(
-          ([key, value]) => ({ key, value: String(value) })
-        )
-      : [],
+    custom_config_list: [
+      ...(FIRST_CLASS_KEYS.filter(
+        (k) => existingLlmProvider?.[k] != null && existingLlmProvider[k] !== ""
+      ).map((k) => ({ key: k, value: String(existingLlmProvider![k]) })) ?? []),
+      ...(existingLlmProvider?.custom_config
+        ? Object.entries(existingLlmProvider.custom_config).map(
+            ([key, value]) => ({ key, value: String(value) })
+          )
+        : []),
+    ],
   };
 
   const modelConfigurationSchema = Yup.object({
@@ -283,13 +300,18 @@ export default function CustomModal({
           return;
         }
 
+        const { firstClass, customConfig } = extractFirstClassFields(
+          values.custom_config_list
+        );
+
         if (isOnboarding && onboardingState && onboardingActions) {
           await submitOnboardingProvider({
             providerName: values.provider,
             payload: {
               ...values,
+              ...firstClass,
               model_configurations: modelConfigurations,
-              custom_config: customConfigProcessing(values.custom_config_list),
+              custom_config: customConfig,
             },
             onboardingState,
             onboardingActions,
@@ -302,18 +324,21 @@ export default function CustomModal({
             (config) => config.name
           );
 
+          const { customConfig: initialCustomConfig } = extractFirstClassFields(
+            initialValues.custom_config_list
+          );
+
           await submitLLMProvider({
             providerName: values.provider,
             values: {
               ...values,
+              ...firstClass,
               selected_model_names: selectedModelNames,
-              custom_config: customConfigProcessing(values.custom_config_list),
+              custom_config: customConfig,
             },
             initialValues: {
               ...initialValues,
-              custom_config: customConfigProcessing(
-                initialValues.custom_config_list
-              ),
+              custom_config: initialCustomConfig,
             },
             modelConfigurations,
             existingLlmProvider,
@@ -374,6 +399,7 @@ export default function CustomModal({
                   formikProps.setFieldValue("custom_config_list", items)
                 }
                 addButtonLabel="Add Line"
+                mode="fixed-line"
               />
             </Section>
           </FieldWrapper>
