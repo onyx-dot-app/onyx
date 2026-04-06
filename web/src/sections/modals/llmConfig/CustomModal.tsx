@@ -402,7 +402,6 @@ export default function CustomModal({
                   formikProps.setFieldValue("custom_config_list", items)
                 }
                 addButtonLabel="Add Line"
-                mode="fixed-line"
               />
             </Section>
           </FieldWrapper>
