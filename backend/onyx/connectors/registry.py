@@ -221,6 +221,10 @@ CONNECTOR_CLASS_MAP = {
         class_name="JsmConnector",
     ),
     # just for integration tests
+    DocumentSource.GOOGLE_CHAT: ConnectorMapping(
+        module_path="onyx.connectors.google_chat.connector",
+        class_name="GoogleChatConnector",
+    ),
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",
         class_name="MockConnector",

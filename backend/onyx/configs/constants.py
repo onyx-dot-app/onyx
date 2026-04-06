@@ -255,6 +255,7 @@ class DocumentSource(str, Enum):
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
     JIRA_SERVICE_MANAGEMENT = "jira_service_management"
+    GOOGLE_CHAT = "google_chat"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -711,4 +712,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
     DocumentSource.JIRA_SERVICE_MANAGEMENT: "jira service management - service desk tickets, requests, and customer portal data",
+    DocumentSource.GOOGLE_CHAT: "google chat - team messaging and collaboration in Google Workspace",
 }
