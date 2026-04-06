@@ -30,7 +30,7 @@ type EmptyMessageCardProps = {
 // ---------------------------------------------------------------------------
 
 function EmptyMessageCard({
-  sizePreset = "main-ui",
+  sizePreset = "secondary",
   icon = SvgEmpty,
   title,
   description,
