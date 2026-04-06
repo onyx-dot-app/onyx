@@ -181,6 +181,11 @@ function ModelConfigurationList({ formikProps }: ModelConfigurationListProps) {
 
 // ─── Custom Config Processing ─────────────────────────────────────────────────
 
+// Keys that the backend accepts as dedicated fields on the LLM provider model
+// (alongside `name`, `provider`, etc.) rather than inside the freeform
+// `custom_config` dict. When the user enters one of these in the key-value
+// list, we pull it out and send it as a top-level field in the upsert request
+// so the backend stores and validates it properly.
 const FIRST_CLASS_KEYS = ["api_key", "api_base", "api_version"] as const;
 
 function extractFirstClassFields(items: KeyValue[]) {
