@@ -209,14 +209,8 @@ export type ErrorTextType = "error" | "warning";
 interface ErrorTextLayoutProps {
   children?: React.ReactNode;
   type?: ErrorTextType;
-  /** Optional id for aria-describedby associations. */
-  id?: string;
 }
-function ErrorTextLayout({
-  children,
-  type = "error",
-  id,
-}: ErrorTextLayoutProps) {
+function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {
   const Icon = type === "error" ? SvgXOctagon : SvgAlertCircle;
   const colorClass =
     type === "error" ? "text-status-error-05" : "text-status-warning-05";
@@ -224,7 +218,7 @@ function ErrorTextLayout({
     type === "error" ? "stroke-status-error-05" : "stroke-status-warning-05";
 
   return (
-    <div className="px-1" id={id}>
+    <div className="px-1">
       <Section flexDirection="row" justifyContent="start" gap={0.25}>
         <Icon size={12} className={strokeClass} />
         <Text secondaryBody className={colorClass} role="alert">
