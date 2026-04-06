@@ -34,7 +34,14 @@ def is_pdf_protected(file: IO[Any]) -> bool:
     with preserve_position(file):
         reader = PdfReader(file)
 
-    return bool(reader.is_encrypted)
+        if not reader.is_encrypted:
+            return False
+
+        try:
+            result = reader.decrypt("")
+            return result == 0
+        except Exception:
+            return True
 
 
 def is_docx_protected(file: IO[Any]) -> bool:
