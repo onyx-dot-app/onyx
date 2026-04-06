@@ -4,14 +4,15 @@ from fastapi import HTTPException
 from fastapi import status
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_contextual_model
@@ -193,7 +194,7 @@ def delete_search_settings_endpoint(
 
 @router.get("/get-current-search-settings")
 def get_current_search_settings_endpoint(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SavedSearchSettings:
     current_search_settings = get_current_search_settings(db_session)
@@ -202,7 +203,7 @@ def get_current_search_settings_endpoint(
 
 @router.get("/get-secondary-search-settings")
 def get_secondary_search_settings_endpoint(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SavedSearchSettings | None:
     secondary_search_settings = get_secondary_search_settings(db_session)
@@ -214,7 +215,7 @@ def get_secondary_search_settings_endpoint(
 
 @router.get("/get-all-search-settings")
 def get_all_search_settings(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> FullModelVersionResponse:
     current_search_settings = get_current_search_settings(db_session)

@@ -4,12 +4,13 @@ from fastapi import HTTPException
 from fastapi_users.exceptions import InvalidPasswordException
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
 from onyx.auth.users import get_user_manager
 from onyx.auth.users import User
 from onyx.auth.users import UserManager
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.users import get_user_by_email
 from onyx.server.features.password.models import ChangePasswordRequest
 from onyx.server.features.password.models import UserResetRequest
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/password")
 async def change_my_password(
     form_data: ChangePasswordRequest,
     user_manager: UserManager = Depends(get_user_manager),
-    current_user: User = Depends(current_user),
+    current_user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> None:
     """
     Change the password for the current user.

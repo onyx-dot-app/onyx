@@ -17,10 +17,11 @@ from ee.onyx.db.analytics import fetch_persona_message_analytics
 from ee.onyx.db.analytics import fetch_persona_unique_users
 from ee.onyx.db.analytics import fetch_query_analytics
 from ee.onyx.db.analytics import user_can_view_assistant_stats
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 
 router = APIRouter(prefix="/analytics", tags=PUBLIC_API_TAGS)
@@ -218,7 +219,7 @@ def get_assistant_stats(
     assistant_id: int,
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> AssistantStatsResponse:
     """
