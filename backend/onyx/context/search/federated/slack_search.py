@@ -659,7 +659,6 @@ def _fetch_thread_context(
     """
     channel_id = message.channel_id
     thread_id = message.thread_id
-    message.message_id
 
     # If not a thread, return original text as success
     if thread_id is None:
