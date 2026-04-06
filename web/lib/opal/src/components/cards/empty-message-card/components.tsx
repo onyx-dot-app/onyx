@@ -40,15 +40,15 @@ type EmptyMessageCardProps =
 // EmptyMessageCard
 // ---------------------------------------------------------------------------
 
-function EmptyMessageCard({
-  sizePreset = "secondary",
-  icon = SvgEmpty,
-  title,
-  padding = "md",
-  ref,
-  ...rest
-}: EmptyMessageCardProps) {
-  const description = "description" in rest ? rest.description : undefined;
+function EmptyMessageCard(props: EmptyMessageCardProps) {
+  const {
+    sizePreset = "secondary",
+    icon = SvgEmpty,
+    title,
+    padding = "md",
+    ref,
+  } = props;
+
   return (
     <Card
       ref={ref}
@@ -69,7 +69,7 @@ function EmptyMessageCard({
         <Content
           icon={icon}
           title={title}
-          description={description}
+          description={"description" in props ? props.description : undefined}
           sizePreset={sizePreset}
           variant="section"
         />
