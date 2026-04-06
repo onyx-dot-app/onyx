@@ -379,6 +379,14 @@ POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
+# Comma-separated replica / multi-host list. If unset, defaults to POSTGRES_HOST
+# only.
+_POSTGRES_HOSTS_STR = os.environ.get("POSTGRES_HOSTS", "").strip()
+POSTGRES_HOSTS: list[str] = (
+    [h.strip() for h in _POSTGRES_HOSTS_STR.split(",") if h.strip()]
+    if _POSTGRES_HOSTS_STR
+    else [POSTGRES_HOST]
+)
 
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
