@@ -709,7 +709,7 @@ def set_message_as_latest(
 @router.put("/set-preferred-response")
 def set_preferred_response_endpoint(
     request_body: SetPreferredResponseRequest,
-    user: User | None = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Set the preferred assistant response for a multi-model turn."""
@@ -718,7 +718,7 @@ def set_preferred_response_endpoint(
         # doesn't belong to this user, preventing cross-user mutation.
         get_chat_message(
             chat_message_id=request_body.user_message_id,
-            user_id=user.id if user else None,
+            user_id=user.id,
             db_session=db_session,
         )
         set_preferred_response(
