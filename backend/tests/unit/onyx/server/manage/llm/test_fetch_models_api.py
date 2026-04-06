@@ -626,12 +626,14 @@ class TestGetLMStudioAvailableModels:
         from onyx.server.manage.llm.api import get_lm_studio_available_models
 
         mock_session = MagicMock()
+        # Use generic model names that won't trigger is_reasoning_model()
+        # heuristics, so the test validates dict parsing specifically.
         response = {
             "models": [
                 {
-                    "key": "reasoning-model",
+                    "key": "publisher/generic-chat-7b",
                     "type": "llm",
-                    "display_name": "Reasoning Model",
+                    "display_name": "Generic Chat 7B",
                     "max_context_length": 32768,
                     "capabilities": {
                         "vision": False,
@@ -642,9 +644,9 @@ class TestGetLMStudioAvailableModels:
                     },
                 },
                 {
-                    "key": "vision-reasoning-model",
+                    "key": "publisher/generic-multimodal-13b",
                     "type": "llm",
-                    "display_name": "Vision Reasoning Model",
+                    "display_name": "Generic Multimodal 13B",
                     "max_context_length": 65536,
                     "capabilities": {
                         "vision": True,
@@ -655,9 +657,9 @@ class TestGetLMStudioAvailableModels:
                     },
                 },
                 {
-                    "key": "basic-model",
+                    "key": "publisher/generic-base-3b",
                     "type": "llm",
-                    "display_name": "Basic Model",
+                    "display_name": "Generic Base 3B",
                     "max_context_length": 4096,
                     "capabilities": {
                         "vision": False,
@@ -678,19 +680,17 @@ class TestGetLMStudioAvailableModels:
                 request, MagicMock(), mock_session
             )
 
-            reasoning = next(r for r in results if r.name == "reasoning-model")
-            assert reasoning.supports_reasoning is True
-            assert reasoning.supports_image_input is False
+            chat = next(r for r in results if "generic-chat" in r.name)
+            assert chat.supports_reasoning is True
+            assert chat.supports_image_input is False
 
-            vision_reasoning = next(
-                r for r in results if r.name == "vision-reasoning-model"
-            )
-            assert vision_reasoning.supports_reasoning is True
-            assert vision_reasoning.supports_image_input is True
+            multimodal = next(r for r in results if "generic-multimodal" in r.name)
+            assert multimodal.supports_reasoning is True
+            assert multimodal.supports_image_input is True
 
-            basic = next(r for r in results if r.name == "basic-model")
-            assert basic.supports_reasoning is False
-            assert basic.supports_image_input is False
+            base = next(r for r in results if "generic-base" in r.name)
+            assert base.supports_reasoning is False
+            assert base.supports_image_input is False
 
     def test_handles_empty_allowed_options(self) -> None:
         """Test that an empty allowed_options list is treated as False."""

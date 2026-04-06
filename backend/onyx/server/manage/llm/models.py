@@ -389,7 +389,7 @@ class LMStudioFinalModelResponse(BaseModel):
     @field_validator("supports_image_input", "supports_reasoning", mode="before")
     @classmethod
     def coerce_capability(cls, v: Any) -> bool:
-        """LM Studio 0.4.8+ may return capabilities as dicts
+        """LM Studio 0.4.8+ changed some capability fields from booleans to dicts
         (e.g. {"allowed_options": ["off", "on"]}) instead of booleans."""
         if isinstance(v, dict):
             return bool(v.get("allowed_options"))
