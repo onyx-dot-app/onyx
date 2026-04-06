@@ -173,6 +173,12 @@ export interface KeyValueInputProps
   /** Title for the value column */
   valueTitle?: string;
 
+  /** Placeholder for the key input */
+  keyPlaceholder?: string;
+
+  /** Placeholder for the value input */
+  valuePlaceholder?: string;
+
   /** Array of key-value pairs */
   items: KeyValue[];
 
@@ -195,6 +201,8 @@ export interface KeyValueInputProps
 export default function KeyValueInput({
   keyTitle = "Key",
   valueTitle = "Value",
+  keyPlaceholder = "Key",
+  valuePlaceholder = "Value",
   items = [],
   onChange,
   mode = "line",
@@ -343,8 +351,8 @@ export default function KeyValueInput({
               item={item}
               onChange={(next) => handleItemChange(index, next)}
               onRemove={() => handleRemove(index)}
-              keyPlaceholder={keyTitle}
-              valuePlaceholder={valueTitle}
+              keyPlaceholder={keyPlaceholder}
+              valuePlaceholder={valuePlaceholder}
               error={errors[index]}
               canRemove={canRemoveItems}
               index={index}
