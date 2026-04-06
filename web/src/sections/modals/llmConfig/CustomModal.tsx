@@ -370,7 +370,9 @@ export default function CustomModal({
                 <InputLayouts.Vertical
                   name="provider"
                   title="Provider Name"
-                  subDescription="Should be one of the providers listed at https://docs.litellm.ai/docs/providers."
+                  subDescription={markdown(
+                    "Should be one of the providers listed at [LiteLLM](https://docs.litellm.ai/docs/providers)."
+                  )}
                 >
                   <InputTypeInField
                     name="provider"
