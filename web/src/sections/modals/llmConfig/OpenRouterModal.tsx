@@ -156,7 +156,6 @@ export default function OpenRouterModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -170,8 +169,6 @@ export default function OpenRouterModal({
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
     OPENROUTER_PROVIDER_NAME
   );
-
-  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 

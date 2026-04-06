@@ -99,7 +99,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       }),
     } as Response);
 
-    render(<CustomModal open={true} onOpenChange={() => {}} />);
+    render(<CustomModal onOpenChange={() => {}} />);
 
     await fillBasicFields(user, {
       name: "My Custom Provider",
@@ -166,7 +166,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Invalid API key" }),
     } as Response);
 
-    render(<CustomModal open={true} onOpenChange={() => {}} />);
+    render(<CustomModal onOpenChange={() => {}} />);
 
     await fillBasicFields(user, {
       name: "Bad Provider",
@@ -244,7 +244,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     render(
       <CustomModal
         existingLlmProvider={existingProvider}
-        open={true}
         onOpenChange={() => {}}
       />
     );
@@ -339,7 +338,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     render(
       <CustomModal
         existingLlmProvider={existingProvider}
-        open={true}
         onOpenChange={() => {}}
       />
     );
@@ -406,13 +404,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({}),
     } as Response);
 
-    render(
-      <CustomModal
-        shouldMarkAsDefault={true}
-        open={true}
-        onOpenChange={() => {}}
-      />
-    );
+    render(<CustomModal shouldMarkAsDefault={true} onOpenChange={() => {}} />);
 
     await fillBasicFields(user, {
       name: "New Default Provider",
@@ -457,7 +449,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Database error" }),
     } as Response);
 
-    render(<CustomModal open={true} onOpenChange={() => {}} />);
+    render(<CustomModal onOpenChange={() => {}} />);
 
     await fillBasicFields(user, {
       name: "Test Provider",
@@ -492,7 +484,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ id: 1, name: "Provider with Custom Config" }),
     } as Response);
 
-    render(<CustomModal open={true} onOpenChange={() => {}} />);
+    render(<CustomModal onOpenChange={() => {}} />);
 
     // Fill basic fields
     const nameInput = screen.getByPlaceholderText("Display Name");

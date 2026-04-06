@@ -122,7 +122,6 @@ export interface LLMProviderFormProps {
   variant?: LLMModalVariant;
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
-  open?: boolean;
   onOpenChange?: (open: boolean) => void;
 
   /** The current default model name for this provider (from the global default). */

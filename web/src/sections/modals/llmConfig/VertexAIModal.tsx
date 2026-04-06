@@ -46,7 +46,6 @@ export default function VertexAIModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -59,8 +58,6 @@ export default function VertexAIModal({
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
     VERTEXAI_PROVIDER_NAME
   );
-
-  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 

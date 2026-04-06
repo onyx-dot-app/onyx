@@ -210,7 +210,6 @@ export default function OllamaModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -223,8 +222,6 @@ export default function OllamaModal({
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } =
     useWellKnownLLMProvider(OLLAMA_PROVIDER_NAME);
-
-  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 

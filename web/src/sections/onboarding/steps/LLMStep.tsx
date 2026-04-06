@@ -162,12 +162,12 @@ const LLMStepInner = ({
               <>
                 {/* Render the selected provider form */}
                 {selectedProvider &&
+                  isModalOpen &&
                   getOnboardingForm({
                     llmDescriptor: selectedProvider.llmDescriptor,
                     isCustomProvider: selectedProvider.isCustomProvider,
                     onboardingState,
                     onboardingActions,
-                    open: isModalOpen,
                     onOpenChange: handleModalClose,
                   })}
 

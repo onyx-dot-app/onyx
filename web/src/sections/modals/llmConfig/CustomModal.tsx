@@ -210,7 +210,6 @@ export default function CustomModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -219,8 +218,6 @@ export default function CustomModal({
   const isOnboarding = variant === "onboarding";
   const [isTesting, setIsTesting] = useState(false);
   const { mutate } = useSWRConfig();
-
-  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 

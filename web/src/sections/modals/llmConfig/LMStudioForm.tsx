@@ -190,7 +190,6 @@ export default function LMStudioForm({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -204,8 +203,6 @@ export default function LMStudioForm({
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
     LLMProviderName.LM_STUDIO
   );
-
-  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 

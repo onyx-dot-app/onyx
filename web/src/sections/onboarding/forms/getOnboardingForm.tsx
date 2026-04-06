@@ -66,7 +66,6 @@ export interface OnboardingFormProps {
   isCustomProvider?: boolean;
   onboardingState: OnboardingState;
   onboardingActions: OnboardingActions;
-  open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -75,14 +74,12 @@ export function getOnboardingForm({
   isCustomProvider,
   onboardingState,
   onboardingActions,
-  open,
   onOpenChange,
 }: OnboardingFormProps): React.ReactNode {
   const sharedProps = {
     variant: "onboarding" as const,
     onboardingState,
     onboardingActions,
-    open,
     onOpenChange,
   };
 
