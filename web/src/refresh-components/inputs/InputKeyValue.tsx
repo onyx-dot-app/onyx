@@ -121,7 +121,7 @@ function KeyValueInputItem({
     <>
       <div className="flex flex-col gap-y-0.5">
         <InputTypeIn
-          placeholder={keyPlaceholder || "Key"}
+          placeholder={keyPlaceholder}
           value={item.key}
           onChange={(e) => onChange({ ...item, key: e.target.value })}
           aria-label={`${keyPlaceholder || "Key"} ${index + 1}`}
@@ -132,7 +132,7 @@ function KeyValueInputItem({
       </div>
       <div className="flex flex-col gap-y-0.5">
         <InputTypeIn
-          placeholder={valuePlaceholder || "Value"}
+          placeholder={valuePlaceholder}
           value={item.value}
           onChange={(e) => onChange({ ...item, value: e.target.value })}
           aria-label={`${valuePlaceholder || "Value"} ${index + 1}`}
@@ -190,8 +190,8 @@ export interface KeyValueInputProps
 export default function KeyValueInput({
   keyTitle = "Key",
   valueTitle = "Value",
-  keyPlaceholder = "Key",
-  valuePlaceholder = "Value",
+  keyPlaceholder,
+  valuePlaceholder,
   items = [],
   onChange,
   mode = "line",
