@@ -366,7 +366,7 @@ export default function CustomModal({
               <Content
                 title="Provider Configs"
                 description={markdown(
-                  "Add properties as needed by the model provider. This is passed to LiteLLM `completion()` call as [arguments](https://docs.litellm.ai/docs/completion/input#input-params-1) (e.g. API base URL, API version, API key). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions."
+                  "Add properties as needed by the model provider. This is passed to LiteLLM's `completion()` call as [arguments](https://docs.litellm.ai/docs/completion/input#input-params-1) (e.g. API base URL, API version, API key). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions."
                 )}
                 widthVariant="full"
                 variant="section"
