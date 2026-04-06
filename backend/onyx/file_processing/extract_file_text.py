@@ -218,7 +218,7 @@ def read_pdf_file(
                         decrypt_success = True
                         break
                 except Exception:
-                    logger.error("Unable to decrypt pdf")
+                    logger.exception("Unable to decrypt pdf")
 
             if not decrypt_success:
                 logger.warning(
