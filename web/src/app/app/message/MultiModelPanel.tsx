@@ -9,6 +9,7 @@ import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import AgentMessage, {
   AgentMessageProps,
 } from "@/app/app/message/messageComponents/AgentMessage";
+import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { cn } from "@/lib/utils";
 import { markdown } from "@opal/utils";
 
@@ -31,6 +32,16 @@ export interface MultiModelPanelProps {
   onToggleVisibility: () => void;
   /** Props to pass through to AgentMessage */
   agentMessageProps: AgentMessageProps;
+  /** Error message when this model failed */
+  errorMessage?: string | null;
+  /** Error code for display */
+  errorCode?: string | null;
+  /** Whether the error is retryable */
+  isRetryable?: boolean;
+  /** Stack trace for debugging */
+  errorStackTrace?: string | null;
+  /** Additional error details */
+  errorDetails?: Record<string, any> | null;
 }
 
 /**
@@ -54,6 +65,11 @@ export default function MultiModelPanel({
   onSelect,
   onToggleVisibility,
   agentMessageProps,
+  errorMessage,
+  errorCode,
+  isRetryable,
+  errorStackTrace,
+  errorDetails,
 }: MultiModelPanelProps) {
   const ProviderIcon = getProviderIcon(provider, modelName);
 
@@ -115,12 +131,24 @@ export default function MultiModelPanel({
       onClick={handlePanelClick}
     >
       {header}
-      <div className={cn(isNonPreferredInSelection && "pointer-events-none")}>
-        <AgentMessage
-          {...agentMessageProps}
-          hideFooter={isNonPreferredInSelection}
-        />
-      </div>
+      {errorMessage ? (
+        <div className="p-4">
+          <ErrorBanner
+            error={errorMessage}
+            errorCode={errorCode || undefined}
+            isRetryable={isRetryable ?? true}
+            details={errorDetails || undefined}
+            stackTrace={errorStackTrace}
+          />
+        </div>
+      ) : (
+        <div className={cn(isNonPreferredInSelection && "pointer-events-none")}>
+          <AgentMessage
+            {...agentMessageProps}
+            hideFooter={isNonPreferredInSelection}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import {
 } from "@/refresh-components/popovers/ModelSelector";
 import { LLMOverride } from "@/app/app/services/lib";
 import { LlmManager } from "@/lib/hooks";
-import { buildLlmOptions } from "@/refresh-components/popovers/LLMPopover";
+import { buildLlmOptions } from "@/refresh-components/popovers/llmUtils";
 
 export interface UseMultiModelChatReturn {
   /** Currently selected models for multi-model comparison. */
@@ -172,7 +172,7 @@ export default function useMultiModelChat(
 
   const buildLlmOverrides = useCallback((): LLMOverride[] => {
     return selectedModels.map((m) => ({
-      model_provider: m.provider,
+      model_provider: m.name,
       model_version: m.modelName,
       display_name: m.displayName,
     }));

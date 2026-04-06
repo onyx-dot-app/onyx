@@ -144,10 +144,10 @@ export default function ModelSelector({
               <Separator
                 orientation="vertical"
                 paddingXRem={0.5}
-                paddingYRem={0.5}
+                className="h-5"
               />
             )}
-            <div className="flex items-center">
+            <div className="flex items-center shrink-0">
               {selectedModels.map((model, index) => {
                 const ProviderIcon = getProviderIcon(
                   model.provider,

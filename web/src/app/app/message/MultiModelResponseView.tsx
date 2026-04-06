@@ -7,6 +7,8 @@ import { LlmManager } from "@/lib/hooks";
 import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelPanel from "@/app/app/message/MultiModelPanel";
 import { MultiModelResponse } from "@/app/app/message/interfaces";
+import { setPreferredResponse } from "@/app/app/services/lib";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { cn } from "@/lib/utils";
 
 export interface MultiModelResponseViewProps {
@@ -140,6 +142,13 @@ export default function MultiModelResponseView({
     [responses.length, onHiddenPanelsChange]
   );
 
+  const updateSessionMessageTree = useChatSessionStore(
+    (state) => state.updateSessionMessageTree
+  );
+  const currentSessionId = useChatSessionStore(
+    (state) => state.currentSessionId
+  );
+
   const handleSelectPreferred = useCallback(
     (modelIndex: number) => {
       if (isGenerating) return;
@@ -149,8 +158,38 @@ export default function MultiModelResponseView({
       if (onMessageSelection) {
         onMessageSelection(response.nodeId);
       }
+
+      // Persist preferred response to backend + update local tree so the
+      // input bar unblocks (awaitingPreferredSelection clears).
+      if (parentMessage?.messageId && response.messageId && currentSessionId) {
+        setPreferredResponse(parentMessage.messageId, response.messageId).catch(
+          (err) => console.error("Failed to persist preferred response:", err)
+        );
+
+        const tree = useChatSessionStore
+          .getState()
+          .sessions.get(currentSessionId)?.messageTree;
+        if (tree) {
+          const userMsg = tree.get(parentMessage.nodeId);
+          if (userMsg) {
+            const updated = new Map(tree);
+            updated.set(parentMessage.nodeId, {
+              ...userMsg,
+              preferredResponseId: response.messageId,
+            });
+            updateSessionMessageTree(currentSessionId, updated);
+          }
+        }
+      }
     },
-    [isGenerating, responses, onMessageSelection]
+    [
+      isGenerating,
+      responses,
+      onMessageSelection,
+      parentMessage,
+      currentSessionId,
+      updateSessionMessageTree,
+    ]
   );
 
   // Clear preferred selection when generation starts
@@ -206,6 +245,11 @@ export default function MultiModelResponseView({
         onRegenerate,
         parentMessage,
       },
+      errorMessage: response.errorMessage,
+      errorCode: response.errorCode,
+      isRetryable: response.isRetryable,
+      errorStackTrace: response.errorStackTrace,
+      errorDetails: response.errorDetails,
     }),
     [
       preferredIndex,

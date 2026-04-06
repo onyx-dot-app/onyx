@@ -222,8 +222,10 @@ export const MessageTextRenderer: MessageRenderer<
   const content = useMemo(() => {
     const wasUserCancelled = stopReason === StopReason.USER_CANCELLED;
 
-    // On user cancel, freeze at exactly what was already visible.
-    if (wasUserCancelled) {
+    // On user cancel during live streaming, freeze at exactly what was already
+    // visible to prevent flicker. On history reload (animate=false), the ref
+    // starts empty so we must use computedContent directly.
+    if (wasUserCancelled && animate) {
       return lastVisibleContentRef.current;
     }
 
@@ -248,7 +250,13 @@ export const MessageTextRenderer: MessageRenderer<
 
     // For normal completed responses, allow final full content.
     return computedContent;
-  }, [computedContent, shouldUseAutoPlaybackSync, stopPacketSeen, stopReason]);
+  }, [
+    computedContent,
+    shouldUseAutoPlaybackSync,
+    stopPacketSeen,
+    stopReason,
+    animate,
+  ]);
 
   // Sync the stable ref outside of useMemo to avoid side effects during render.
   useEffect(() => {

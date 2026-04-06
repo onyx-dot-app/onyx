@@ -13,4 +13,11 @@ export interface MultiModelResponse {
 
   currentFeedback?: FeedbackType | null;
   isGenerating?: boolean;
+
+  // Error state (when this model failed)
+  errorMessage?: string | null;
+  errorCode?: string | null;
+  isRetryable?: boolean;
+  errorStackTrace?: string | null;
+  errorDetails?: Record<string, any> | null;
 }
