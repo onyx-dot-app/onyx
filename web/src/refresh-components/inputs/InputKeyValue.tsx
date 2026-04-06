@@ -68,7 +68,7 @@
  * ```
  */
 
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
 import { Button, EmptyMessageCard } from "@opal/components";
@@ -105,6 +105,7 @@ interface KeyValueInputItemProps {
   error?: KeyValueError;
   canRemove: boolean;
   index: number;
+  fieldId: string;
 }
 
 function KeyValueInputItem({
@@ -116,7 +117,11 @@ function KeyValueInputItem({
   error,
   canRemove,
   index,
+  fieldId,
 }: KeyValueInputItemProps) {
+  const keyErrorId = `${fieldId}-key-error-${index}`;
+  const valueErrorId = `${fieldId}-value-error-${index}`;
+
   return (
     <>
       <div className="flex flex-col gap-y-0.5">
@@ -126,9 +131,12 @@ function KeyValueInputItem({
           onChange={(e) => onChange({ ...item, key: e.target.value })}
           aria-label={`${keyPlaceholder || "Key"} ${index + 1}`}
           aria-invalid={!!error?.key}
+          aria-describedby={error?.key ? keyErrorId : undefined}
           showClearButton={false}
         />
-        {error?.key && <ErrorTextLayout>{error.key}</ErrorTextLayout>}
+        {error?.key && (
+          <ErrorTextLayout id={keyErrorId}>{error.key}</ErrorTextLayout>
+        )}
       </div>
       <div className="flex flex-col gap-y-0.5">
         <InputTypeIn
@@ -137,9 +145,12 @@ function KeyValueInputItem({
           onChange={(e) => onChange({ ...item, value: e.target.value })}
           aria-label={`${valuePlaceholder || "Value"} ${index + 1}`}
           aria-invalid={!!error?.value}
+          aria-describedby={error?.value ? valueErrorId : undefined}
           showClearButton={false}
         />
-        {error?.value && <ErrorTextLayout>{error.value}</ErrorTextLayout>}
+        {error?.value && (
+          <ErrorTextLayout id={valueErrorId}>{error.value}</ErrorTextLayout>
+        )}
       </div>
       <Button
         disabled={!canRemove}
@@ -303,6 +314,7 @@ export default function KeyValueInput({
     }
   }, [mode]); // Only run on mode change
 
+  const fieldId = useId();
   const gridCols = GRID_COLS[layout];
 
   return (
@@ -336,6 +348,7 @@ export default function KeyValueInput({
               error={errors[index]}
               canRemove={canRemoveItems}
               index={index}
+              fieldId={fieldId}
             />
           ))}
         </div>
