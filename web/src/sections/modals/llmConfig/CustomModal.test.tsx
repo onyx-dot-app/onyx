@@ -477,6 +477,105 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     });
   });
 
+  test("includes api_base in the request when provided", async () => {
+    const user = setupUser();
+
+    // Mock POST /api/admin/llm/test
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
+
+    // Mock PUT /api/admin/llm/provider?is_creation=true
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 1, name: "vLLM Provider", provider: "openai" }),
+    } as Response);
+
+    render(<CustomModal open={true} onOpenChange={() => {}} />);
+
+    await fillBasicFields(user, {
+      name: "vLLM Provider",
+      provider: "openai",
+      modelName: "my-model",
+    });
+
+    // Fill in the API Base URL
+    const apiBaseInput = screen.getByPlaceholderText(
+      "https://your-api-endpoint.example.com/v1"
+    );
+    await user.type(apiBaseInput, "https://my-vllm-server:8000/v1");
+
+    // Submit
+    const submitButton = screen.getByRole("button", { name: /connect/i });
+    await user.click(submitButton);
+
+    // Verify the api_base was included in the test request
+    await waitFor(() => {
+      const testCall = fetchSpy.mock.calls.find(
+        ([url]) => url === "/api/admin/llm/test"
+      );
+      expect(testCall).toBeDefined();
+
+      const body = JSON.parse(testCall![1].body);
+      expect(body.api_base).toBe("https://my-vllm-server:8000/v1");
+    });
+
+    // Verify the api_base was included in the create request
+    await waitFor(() => {
+      const createCall = fetchSpy.mock.calls.find((call) =>
+        call[0].includes("/api/admin/llm/provider")
+      );
+      expect(createCall).toBeDefined();
+
+      const body = JSON.parse(createCall![1].body);
+      expect(body.api_base).toBe("https://my-vllm-server:8000/v1");
+    });
+  });
+
+  test("preserves api_base when editing an existing provider", async () => {
+    const user = setupUser();
+
+    const existingProvider = {
+      id: 3,
+      name: "My vLLM",
+      provider: "openai",
+      api_key: "sk-test",
+      api_base: "https://my-vllm-server:8000/v1",
+      api_version: "",
+      model_configurations: [
+        {
+          name: "my-model",
+          display_name: "",
+          is_visible: true,
+          max_input_tokens: null,
+          supports_image_input: false,
+          supports_reasoning: false,
+        },
+      ],
+      custom_config: {},
+      is_public: true,
+      is_auto_mode: false,
+      groups: [],
+      personas: [],
+      deployment_name: null,
+    };
+
+    render(
+      <CustomModal
+        existingLlmProvider={existingProvider}
+        open={true}
+        onOpenChange={() => {}}
+      />
+    );
+
+    // Verify the api_base field is pre-populated
+    const apiBaseInput = screen.getByPlaceholderText(
+      "https://your-api-endpoint.example.com/v1"
+    );
+    expect(apiBaseInput).toHaveValue("https://my-vllm-server:8000/v1");
+  });
+
   test("adds custom configuration key-value pairs", async () => {
     const user = setupUser();
 
