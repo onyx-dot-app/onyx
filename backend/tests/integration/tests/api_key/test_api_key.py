@@ -154,3 +154,68 @@ def test_api_key_admin_service_account(reset: None) -> None:  # noqa: ARG001
     assert (
         user_id_str not in basic_ids
     ), "ADMIN API key should NOT be in Basic default group"
+
+
+def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG001
+    """A LIMITED API key (service account, no permissions) should be rejected
+    by endpoints behind current_user but allowed through current_limited_user."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    limited_key: DATestAPIKey = APIKeyManager.create(
+        api_key_role=UserRole.LIMITED,
+        user_performing_action=admin_user,
+    )
+
+    # current_limited_user endpoint → should succeed
+    resp = requests.get(
+        f"{API_SERVER_URL}/persona/0",
+        headers=limited_key.headers,
+    )
+    assert (
+        resp.status_code == 200
+    ), f"Limited key should access /persona/0, got {resp.status_code}: {resp.text}"
+
+    # current_user endpoint → should be blocked
+    resp = requests.get(
+        f"{API_SERVER_URL}/query/valid-tags",
+        headers=limited_key.headers,
+    )
+    assert (
+        resp.status_code == 403
+    ), f"Limited key should be blocked from /query/valid-tags, got {resp.status_code}: {resp.text}"
+
+
+def test_basic_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
+    """A BASIC API key should pass the current_user dependency."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    basic_key: DATestAPIKey = APIKeyManager.create(
+        api_key_role=UserRole.BASIC,
+        user_performing_action=admin_user,
+    )
+
+    resp = requests.get(
+        f"{API_SERVER_URL}/query/valid-tags",
+        headers=basic_key.headers,
+    )
+    assert (
+        resp.status_code == 200
+    ), f"Basic key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
+
+
+def test_admin_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
+    """An ADMIN API key should pass the current_user dependency."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+
+    admin_key: DATestAPIKey = APIKeyManager.create(
+        api_key_role=UserRole.ADMIN,
+        user_performing_action=admin_user,
+    )
+
+    resp = requests.get(
+        f"{API_SERVER_URL}/query/valid-tags",
+        headers=admin_key.headers,
+    )
+    assert (
+        resp.status_code == 200
+    ), f"Admin key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
