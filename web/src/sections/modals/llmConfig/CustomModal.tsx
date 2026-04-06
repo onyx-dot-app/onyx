@@ -378,7 +378,7 @@ export default function CustomModal({
                 onChange={(items) =>
                   formikProps.setFieldValue("custom_config_list", items)
                 }
-                keyPlaceholder="e.g. base_url, api_version, api_key"
+                keyPlaceholder="e.g. api_base, api_version, api_key"
                 addButtonLabel="Add Line"
               />
             </Section>
