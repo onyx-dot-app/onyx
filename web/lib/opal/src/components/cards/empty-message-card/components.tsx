@@ -16,7 +16,7 @@ type EmptyMessageCardBaseProps = {
   icon?: IconFunctionComponent;
 
   /** Primary message text. */
-  title: string;
+  title: string | RichStr;
 
   /** Padding preset for the card. @default "md" */
   padding?: PaddingVariants;
