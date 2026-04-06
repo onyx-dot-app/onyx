@@ -107,4 +107,5 @@ def require_permission(
 
         return user
 
+    dependency._is_require_permission = True  # sentinel for auth_check detection
     return dependency
