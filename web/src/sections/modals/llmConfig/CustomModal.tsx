@@ -323,9 +323,10 @@ export default function CustomModal({
             (config) => config.name
           );
 
-          const { customConfig: initialCustomConfig } = extractFirstClassFields(
-            initialValues.custom_config_list
-          );
+          const {
+            firstClass: initialFirstClass,
+            customConfig: initialCustomConfig,
+          } = extractFirstClassFields(initialValues.custom_config_list);
 
           await submitLLMProvider({
             providerName: values.provider,
@@ -337,6 +338,7 @@ export default function CustomModal({
             },
             initialValues: {
               ...initialValues,
+              ...initialFirstClass,
               custom_config: initialCustomConfig,
             },
             modelConfigurations,
