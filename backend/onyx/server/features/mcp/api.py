@@ -25,9 +25,9 @@ from pydantic import AnyUrl
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -35,6 +35,7 @@ from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
+from onyx.db.enums import Permission
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
@@ -360,7 +361,7 @@ async def connect_admin_oauth(
 async def connect_user_oauth(
     request: MCPUserOAuthConnectRequest,
     db: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPUserOAuthConnectResponse:
     return await _connect_oauth(request, db, is_admin=False, user=user)
 
@@ -572,7 +573,7 @@ async def _connect_oauth(
 async def process_oauth_callback(
     request: Request,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPOAuthCallbackResponse:
     """Complete OAuth flow by exchanging code for tokens and storing them.
 
@@ -655,7 +656,7 @@ async def process_oauth_callback(
 def save_user_credentials(
     request: MCPUserCredentialsRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPApiKeyResponse:
     """Save user credentials for template-based MCP server authentication"""
 
@@ -983,7 +984,7 @@ def _db_mcp_server_to_api_mcp_server(
 def get_mcp_servers_for_assistant(
     assistant_id: str,
     db: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPServersResponse:
     """Get MCP servers for an assistant"""
 
@@ -1011,7 +1012,7 @@ def get_mcp_servers_for_assistant(
 @router.get("/servers", response_model=MCPServersResponse)
 def get_mcp_servers_for_user(
     db: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPServersResponse:
     """List all MCP servers for use in agent configuration and chat UI.
 
@@ -1140,7 +1141,7 @@ def get_mcp_server_tools_snapshots(
 def user_list_mcp_tools_by_id(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPToolListResponse:
     return _list_mcp_tools_by_id(server_id, db, False, user)
 

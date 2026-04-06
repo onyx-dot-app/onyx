@@ -10,9 +10,10 @@ from ee.onyx.server.tenants.user_mapping import approve_user_invite
 from ee.onyx.server.tenants.user_mapping import deny_user_invite
 from ee.onyx.server.tenants.user_mapping import invite_self_to_tenant
 from onyx.auth.invited_users import get_pending_users
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
 from onyx.auth.users import User
+from onyx.db.enums import Permission
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -55,7 +56,7 @@ async def approve_user(
 @router.post("/users/invite/accept")
 async def accept_invite(
     invite_request: RequestInviteRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> None:
     """
     Accept an invitation to join a tenant.
@@ -70,7 +71,7 @@ async def accept_invite(
 @router.post("/users/invite/deny")
 async def deny_invite(
     invite_request: RequestInviteRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> None:
     """
     Deny an invitation to join a tenant.

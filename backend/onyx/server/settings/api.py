@@ -6,8 +6,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from onyx import __version__ as onyx_version
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
 from onyx.auth.users import is_user_admin
 from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -15,6 +15,7 @@ from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.notification import dismiss_all_notifications
 from onyx.db.notification import get_notifications
@@ -68,7 +69,7 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
 
 @basic_router.get("")
 def fetch_settings(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserSettings:
     """Settings and notifications are stuffed into this single endpoint to reduce number of

@@ -2,9 +2,10 @@ from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.web_search import fetch_active_web_content_provider
 from onyx.db.web_search import fetch_active_web_search_provider
@@ -225,7 +226,7 @@ def _open_urls(
 @router.post("/search", response_model=WebSearchWithContentResponse)
 def execute_web_search(
     request: WebSearchToolRequest,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> WebSearchWithContentResponse:
     """
@@ -268,7 +269,7 @@ def execute_web_search(
 @router.post("/search-lite", response_model=WebSearchToolResponse)
 def execute_web_search_lite(
     request: WebSearchToolRequest,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> WebSearchToolResponse:
     """
@@ -284,7 +285,7 @@ def execute_web_search_lite(
 @router.post("/open-urls", response_model=OpenUrlsToolResponse)
 def execute_open_urls(
     request: OpenUrlsToolRequest,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> OpenUrlsToolResponse:
     """

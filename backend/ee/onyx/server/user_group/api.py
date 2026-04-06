@@ -23,12 +23,13 @@ from ee.onyx.server.user_group.models import UserGroup
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.db.persona import get_persona_by_id
@@ -68,7 +69,7 @@ def list_user_groups(
 @router.get("/user-groups/minimal")
 def list_minimal_user_groups(
     include_default: bool = False,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserGroupSnapshot]:
     if user.role == UserRole.ADMIN:

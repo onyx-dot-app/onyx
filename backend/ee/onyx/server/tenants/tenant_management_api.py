@@ -3,8 +3,9 @@ from fastapi import Depends
 
 from ee.onyx.server.tenants.models import TenantByDomainResponse
 from ee.onyx.server.tenants.provisioning import get_tenant_by_domain_from_control_plane
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
+from onyx.db.enums import Permission
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -26,7 +27,7 @@ FORBIDDEN_COMMON_EMAIL_SUBSTRINGS = [
 
 @router.get("/existing-team-by-domain")
 def get_existing_tenant_by_domain(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> TenantByDomainResponse | None:
     domain = user.email.split("@")[1]
     if any(substring in domain for substring in FORBIDDEN_COMMON_EMAIL_SUBSTRINGS):
