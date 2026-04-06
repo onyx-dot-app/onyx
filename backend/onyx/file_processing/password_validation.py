@@ -34,7 +34,17 @@ def is_pdf_protected(file: IO[Any]) -> bool:
     with preserve_position(file):
         reader = PdfReader(file)
 
-    return bool(reader.is_encrypted)
+    if not reader.is_encrypted:
+        return False
+
+    # PDFs with only an owner password (permission restrictions like
+    # print/copy disabled) use an empty user password — any viewer can open
+    # them without prompting.  decrypt("") returns 0 only when a real user
+    # password is required.  See https://github.com/onyx-dot-app/onyx/issues/9754
+    try:
+        return reader.decrypt("") == 0
+    except Exception:
+        return True
 
 
 def is_docx_protected(file: IO[Any]) -> bool:
