@@ -1,5 +1,5 @@
 import { Card } from "@opal/components/cards/card/components";
-import { Content } from "@opal/layouts";
+import { Content, SizePreset } from "@opal/layouts";
 import { SvgEmpty } from "@opal/icons";
 import type { IconFunctionComponent, PaddingVariants } from "@opal/types";
 
@@ -8,11 +8,15 @@ import type { IconFunctionComponent, PaddingVariants } from "@opal/types";
 // ---------------------------------------------------------------------------
 
 type EmptyMessageCardProps = {
+  sizePreset?: Extract<SizePreset, "main-ui" | "secondary">;
   /** Icon displayed alongside the title. */
   icon?: IconFunctionComponent;
 
   /** Primary message text. */
   title: string;
+
+  /** Description text. */
+  description?: string;
 
   /** Padding preset for the card. @default "md" */
   padding?: PaddingVariants;
@@ -26,8 +30,10 @@ type EmptyMessageCardProps = {
 // ---------------------------------------------------------------------------
 
 function EmptyMessageCard({
+  sizePreset = "secondary",
   icon = SvgEmpty,
   title,
+  description,
   padding = "md",
   ref,
 }: EmptyMessageCardProps) {
@@ -39,13 +45,23 @@ function EmptyMessageCard({
       padding={padding}
       rounding="md"
     >
-      <Content
-        icon={icon}
-        title={title}
-        sizePreset="secondary"
-        variant="body"
-        prominence="muted"
-      />
+      {sizePreset === "secondary" ? (
+        <Content
+          icon={icon}
+          title={title}
+          sizePreset="secondary"
+          variant="body"
+          prominence="muted"
+        />
+      ) : (
+        <Content
+          icon={icon}
+          title={title}
+          description={description}
+          sizePreset={sizePreset}
+          variant="section"
+        />
+      )}
     </Card>
   );
 }
