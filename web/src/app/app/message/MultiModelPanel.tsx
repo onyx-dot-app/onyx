@@ -58,8 +58,8 @@ export default function MultiModelPanel({
   const ProviderIcon = getProviderIcon(provider, modelName);
 
   const handlePanelClick = useCallback(() => {
-    if (!isHidden) onSelect();
-  }, [isHidden, onSelect]);
+    if (!isHidden && !isPreferred) onSelect();
+  }, [isHidden, isPreferred, onSelect]);
 
   const header = (
     <div
@@ -109,8 +109,8 @@ export default function MultiModelPanel({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 min-w-0 cursor-pointer rounded-16 transition-colors",
-        !isPreferred && "hover:bg-background-tint-02"
+        "flex flex-col gap-3 min-w-0 rounded-16 transition-colors",
+        !isPreferred && "cursor-pointer hover:bg-background-tint-02"
       )}
       onClick={handlePanelClick}
     >
