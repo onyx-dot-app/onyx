@@ -188,11 +188,10 @@ function extractFirstClassFields(items: KeyValue[]) {
   const remaining: { [key: string]: string } = {};
 
   for (const { key, value } of items) {
-    if (
-      (FIRST_CLASS_KEYS as readonly string[]).includes(key) &&
-      value.trim() !== ""
-    ) {
-      firstClass[key] = value;
+    if ((FIRST_CLASS_KEYS as readonly string[]).includes(key)) {
+      if (value.trim() !== "") {
+        firstClass[key] = value;
+      }
     } else {
       remaining[key] = value;
     }
@@ -243,9 +242,9 @@ export default function CustomModal({
       },
     ],
     custom_config_list: [
-      ...(FIRST_CLASS_KEYS.filter(
+      ...FIRST_CLASS_KEYS.filter(
         (k) => existingLlmProvider?.[k] != null && existingLlmProvider[k] !== ""
-      ).map((k) => ({ key: k, value: String(existingLlmProvider![k]) })) ?? []),
+      ).map((k) => ({ key: k, value: String(existingLlmProvider![k]) })),
       ...(existingLlmProvider?.custom_config
         ? Object.entries(existingLlmProvider.custom_config).map(
             ([key, value]) => ({ key, value: String(value) })
@@ -399,7 +398,6 @@ export default function CustomModal({
                   formikProps.setFieldValue("custom_config_list", items)
                 }
                 addButtonLabel="Add Line"
-                mode="fixed-line"
               />
             </Section>
           </FieldWrapper>
