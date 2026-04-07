@@ -13,6 +13,12 @@
   opacity: 1;
 }
 
+/* Interaction override — force items visible via JS */
+[data-hover-group][data-interaction="hover"]
+  .hoverable-item[data-hoverable-variant="opacity-on-hover"] {
+  opacity: 1;
+}
+
 /* Local mode — item handles its own :hover */
 .hoverable-item[data-hoverable-variant="opacity-on-hover"][data-hoverable-local="true"]:hover {
   opacity: 1;

@@ -169,7 +169,10 @@ function ExistingProviderCard({
         </ConfirmationModalLayout>
       )}
 
-      <Hoverable.Root group="ExistingProviderCard">
+      <Hoverable.Root
+        group="ExistingProviderCard"
+        interaction={deleteModal.isOpen ? "hover" : "rest"}
+      >
         <SelectCard
           state="filled"
           padding="sm"

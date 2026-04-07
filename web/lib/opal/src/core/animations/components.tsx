@@ -10,12 +10,25 @@ import { widthVariants } from "@opal/shared";
 // Types
 // ---------------------------------------------------------------------------
 
+type HoverableInteraction = "rest" | "hover";
+
 interface HoverableRootProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   children: React.ReactNode;
   group: string;
   /** Width preset. @default "auto" */
   widthVariant?: ExtremaSizeVariants;
+  /**
+   * JS-controllable interaction state override.
+   *
+   * - `"rest"` (default): items are shown/hidden by CSS `:hover`.
+   * - `"hover"`: forces items visible regardless of hover state. Useful when
+   *   a hoverable action opens a modal — set `interaction="hover"` while the
+   *   modal is open so the user can see which element they're interacting with.
+   *
+   * @default "rest"
+   */
+  interaction?: HoverableInteraction;
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -58,6 +71,7 @@ function HoverableRoot({
   group,
   children,
   widthVariant = "full",
+  interaction = "rest",
   ref,
   ...props
 }: HoverableRootProps) {
@@ -67,6 +81,7 @@ function HoverableRoot({
       ref={ref}
       className={cn(widthVariants[widthVariant])}
       data-hover-group={group}
+      data-interaction={interaction !== "rest" ? interaction : undefined}
     >
       {children}
     </div>
@@ -171,4 +186,5 @@ export {
   type HoverableRootProps,
   type HoverableItemProps,
   type HoverableItemVariant,
+  type HoverableInteraction,
 };
