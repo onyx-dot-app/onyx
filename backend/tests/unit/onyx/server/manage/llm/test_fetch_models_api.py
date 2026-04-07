@@ -621,6 +621,157 @@ class TestGetLMStudioAvailableModels:
             with pytest.raises(OnyxError):
                 get_lm_studio_available_models(request, MagicMock(), mock_session)
 
+    def test_handles_new_dict_capabilities_format(self) -> None:
+        """Test that LM Studio 0.4.8+ dict-style capabilities are parsed correctly."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        # Use generic model names that won't trigger is_reasoning_model()
+        # heuristics, so the test validates dict parsing specifically.
+        response = {
+            "models": [
+                {
+                    "key": "publisher/generic-chat-7b",
+                    "type": "llm",
+                    "display_name": "Generic Chat 7B",
+                    "max_context_length": 32768,
+                    "capabilities": {
+                        "vision": False,
+                        "reasoning": {
+                            "allowed_options": ["off", "on", "low", "medium", "high"],
+                            "default": "on",
+                        },
+                    },
+                },
+                {
+                    "key": "publisher/generic-multimodal-13b",
+                    "type": "llm",
+                    "display_name": "Generic Multimodal 13B",
+                    "max_context_length": 65536,
+                    "capabilities": {
+                        "vision": True,
+                        "reasoning": {
+                            "allowed_options": ["off", "on"],
+                            "default": "on",
+                        },
+                    },
+                },
+                {
+                    "key": "publisher/generic-base-3b",
+                    "type": "llm",
+                    "display_name": "Generic Base 3B",
+                    "max_context_length": 4096,
+                    "capabilities": {
+                        "vision": False,
+                        "reasoning": False,
+                    },
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            results = get_lm_studio_available_models(
+                request, MagicMock(), mock_session
+            )
+
+            chat = next(r for r in results if "generic-chat" in r.name)
+            assert chat.supports_reasoning is True
+            assert chat.supports_image_input is False
+
+            multimodal = next(r for r in results if "generic-multimodal" in r.name)
+            assert multimodal.supports_reasoning is True
+            assert multimodal.supports_image_input is True
+
+            base = next(r for r in results if "generic-base" in r.name)
+            assert base.supports_reasoning is False
+            assert base.supports_image_input is False
+
+    def test_handles_empty_allowed_options(self) -> None:
+        """Test that an empty allowed_options list is treated as False."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "models": [
+                {
+                    "key": "model-empty-options",
+                    "type": "llm",
+                    "display_name": "Empty Options Model",
+                    "max_context_length": 4096,
+                    "capabilities": {
+                        "reasoning": {"allowed_options": []},
+                    },
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            results = get_lm_studio_available_models(
+                request, MagicMock(), mock_session
+            )
+
+            assert results[0].supports_reasoning is False
+
+    def test_backwards_compatible_with_bool_capabilities(self) -> None:
+        """Test that old-style boolean capabilities still work (pre-0.4.8)."""
+        from onyx.server.manage.llm.api import get_lm_studio_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "models": [
+                {
+                    "key": "old-format-model",
+                    "type": "llm",
+                    "display_name": "Old Format Model",
+                    "max_context_length": 4096,
+                    "capabilities": {
+                        "vision": True,
+                        "reasoning": True,
+                    },
+                },
+                {
+                    "key": "old-format-basic",
+                    "type": "llm",
+                    "display_name": "Old Format Basic",
+                    "max_context_length": 4096,
+                    "capabilities": {
+                        "vision": False,
+                    },
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_response
+
+            request = LMStudioModelsRequest(api_base="http://localhost:1234")
+            results = get_lm_studio_available_models(
+                request, MagicMock(), mock_session
+            )
+
+            old = next(r for r in results if r.name == "old-format-model")
+            assert old.supports_image_input is True
+            assert old.supports_reasoning is True
+
+            basic = next(r for r in results if r.name == "old-format-basic")
+            assert basic.supports_image_input is False
+            assert basic.supports_reasoning is False
+
 
 class TestGetLitellmAvailableModels:
     """Tests for the Litellm proxy model fetch endpoint."""
