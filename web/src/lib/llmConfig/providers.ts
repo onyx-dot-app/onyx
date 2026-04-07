@@ -8,6 +8,7 @@ import {
   SvgCloud,
   SvgAws,
   SvgOpenrouter,
+  SvgPlug,
   SvgServer,
   SvgAzure,
   SvgGemini,
@@ -28,6 +29,7 @@ const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
   [LLMProviderName.LM_STUDIO]: SvgLmStudio,
   [LLMProviderName.BIFROST]: SvgBifrost,
+  [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
 
   // fallback
   [LLMProviderName.CUSTOM]: SvgServer,
@@ -45,6 +47,7 @@ const PROVIDER_PRODUCT_NAMES: Record<string, string> = {
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
   [LLMProviderName.BIFROST]: "Bifrost",
+  [LLMProviderName.OPENAI_COMPATIBLE]: "OpenAI Compatible",
 
   // fallback
   [LLMProviderName.CUSTOM]: "Custom Models",
@@ -62,6 +65,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
   [LLMProviderName.BIFROST]: "Bifrost",
+  [LLMProviderName.OPENAI_COMPATIBLE]: "OpenAI Compatible",
 
   // fallback
   [LLMProviderName.CUSTOM]: "Other providers or self-hosted",

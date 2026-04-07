@@ -74,6 +74,8 @@ from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
+from onyx.server.manage.llm.models import OpenAICompatibleFinalModelResponse
+from onyx.server.manage.llm.models import OpenAICompatibleModelsRequest
 from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
 from onyx.server.manage.llm.models import OpenRouterModelDetails
 from onyx.server.manage.llm.models import OpenRouterModelsRequest
@@ -1573,5 +1575,97 @@ def _get_bifrost_models_response(api_base: str, api_key: str | None = None) -> d
     return _get_openai_compatible_models_response(
         url=url,
         source_name="Bifrost",
+        api_key=api_key,
+    )
+
+
+@admin_router.post("/openai-compatible/available-models")
+def get_openai_compatible_server_available_models(
+    request: OpenAICompatibleModelsRequest,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[OpenAICompatibleFinalModelResponse]:
+    """Fetch available models from a generic OpenAI-compatible /v1/models endpoint."""
+    response_json = _get_openai_compatible_server_response(
+        api_base=request.api_base, api_key=request.api_key
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your OpenAI-compatible endpoint",
+        )
+
+    results: list[OpenAICompatibleFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            model_name = model.get("name", model_id)
+
+            if not model_id:
+                continue
+
+            # Skip embedding models
+            if is_embedding_model(model_id):
+                continue
+
+            results.append(
+                OpenAICompatibleFinalModelResponse(
+                    name=model_id,
+                    display_name=model_name,
+                    max_input_tokens=model.get("context_length"),
+                    supports_image_input=infer_vision_support(model_id),
+                    supports_reasoning=is_reasoning_model(model_id, model_name),
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse OpenAI-compatible model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from OpenAI-compatible endpoint",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_name is specified
+    if request.provider_name:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_name=request.provider_name,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                )
+                for r in sorted_results
+            ],
+            source_label="OpenAI Compatible",
+        )
+
+    return sorted_results
+
+
+def _get_openai_compatible_server_response(
+    api_base: str, api_key: str | None = None
+) -> dict:
+    """Perform GET to an OpenAI-compatible /v1/models and return parsed JSON."""
+    cleaned_api_base = api_base.strip().rstrip("/")
+    # Ensure we hit /v1/models
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+
+    return _get_openai_compatible_models_response(
+        url=url,
+        source_name="OpenAI Compatible",
         api_key=api_key,
     )
