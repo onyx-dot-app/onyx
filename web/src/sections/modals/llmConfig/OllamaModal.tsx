@@ -35,6 +35,7 @@ import debounce from "lodash/debounce";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
 const TAB_SELF_HOSTED = "self-hosted";
@@ -138,11 +139,17 @@ function OllamaModalInternals({
             </Tabs.Trigger>
             <Tabs.Trigger value={TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
           </Tabs.List>
-          <Tabs.Content value={TAB_SELF_HOSTED}>
-            <APIBaseField
+          <Tabs.Content value={TAB_SELF_HOSTED} padding={0}>
+            <InputLayouts.Vertical
+              name="api_base"
+              title="API Base URL"
               subDescription="The base URL for your Ollama instance."
-              placeholder="Your Ollama API base URL"
-            />
+            >
+              <InputTypeInField
+                name="api_base"
+                placeholder="Your Ollama API base URL"
+              />
+            </InputLayouts.Vertical>
           </Tabs.Content>
 
           <Tabs.Content value={TAB_CLOUD}>
