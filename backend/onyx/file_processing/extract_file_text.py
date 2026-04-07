@@ -202,18 +202,26 @@ def read_pdf_file(
     try:
         pdf_reader = PdfReader(file)
 
-        if pdf_reader.is_encrypted and pdf_pass is not None:
+        if pdf_reader.is_encrypted:
+            # Try the explicit password first, then fall back to an empty
+            # string.  Owner-password-only PDFs (permission restrictions but
+            # no open password) decrypt successfully with "".
+            # See https://github.com/onyx-dot-app/onyx/issues/9754
+            passwords = [p for p in [pdf_pass, ""] if p is not None]
             decrypt_success = False
-            try:
-                decrypt_success = pdf_reader.decrypt(pdf_pass) != 0
-            except Exception:
-                logger.error("Unable to decrypt pdf")
+            for pw in passwords:
+                try:
+                    if pdf_reader.decrypt(pw) != 0:
+                        decrypt_success = True
+                        break
+                except Exception:
+                    pass
 
             if not decrypt_success:
+                logger.error(
+                    "Encrypted PDF could not be decrypted, returning empty text."
+                )
                 return "", metadata, []
-        elif pdf_reader.is_encrypted:
-            logger.warning("No Password for an encrypted PDF, returning empty text.")
-            return "", metadata, []
 
         # Basic PDF metadata
         if pdf_reader.metadata is not None:
