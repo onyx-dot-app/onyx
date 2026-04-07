@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useSWRConfig } from "swr";
-import { Formik } from "formik";
+import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
@@ -42,6 +42,43 @@ interface AzureModalValues extends BaseLLMFormValues {
   api_base?: string;
   api_version?: string;
   deployment_name?: string;
+}
+
+interface AzureModelSelectionProps {
+  modelConfigurations: ModelConfiguration[];
+  setAddedModels: React.Dispatch<React.SetStateAction<ModelConfiguration[]>>;
+}
+
+function AzureModelSelection({
+  modelConfigurations,
+  setAddedModels,
+}: AzureModelSelectionProps) {
+  const formikProps = useFormikContext<AzureModalValues>();
+  return (
+    <ModelSelectionField
+      modelConfigurations={modelConfigurations}
+      recommendedDefaultModel={null}
+      shouldShowAutoUpdateToggle={false}
+      onAddModel={(modelName) => {
+        const newModel: ModelConfiguration = {
+          name: modelName,
+          is_visible: true,
+          max_input_tokens: null,
+          supports_image_input: false,
+          supports_reasoning: false,
+        };
+        setAddedModels((prev) => [...prev, newModel]);
+        const currentSelected = formikProps.values.visible_model_names ?? [];
+        formikProps.setFieldValue("visible_model_names", [
+          ...currentSelected,
+          modelName,
+        ]);
+        if (!formikProps.values.test_model_name) {
+          formikProps.setFieldValue("test_model_name", modelName);
+        }
+      }}
+    />
+  );
 }
 
 function buildTargetUri(existingLlmProvider?: LLMProviderView): string {
@@ -132,10 +169,12 @@ export default function AzureModal({
   });
 
   return (
-    <Formik
+    <ModalWrapper
+      providerName={LLMProviderName.AZURE}
+      llmProvider={existingLlmProvider}
+      onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         const processedValues = processValues(values);
 
@@ -171,68 +210,40 @@ export default function AzureModal({
         }
       }}
     >
-      {(formikProps) => (
-        <ModalWrapper
-          providerName={LLMProviderName.AZURE}
-          llmProvider={existingLlmProvider}
-          onClose={onClose}
+      <InputLayouts.FieldPadder>
+        <InputLayouts.Vertical
+          name="target_uri"
+          title="Target URI"
+          subDescription="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
         >
-          <InputLayouts.FieldPadder>
-            <InputLayouts.Vertical
-              name="target_uri"
-              title="Target URI"
-              subDescription="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
-            >
-              <InputTypeInField
-                name="target_uri"
-                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-              />
-            </InputLayouts.Vertical>
-          </InputLayouts.FieldPadder>
-
-          <APIKeyField providerName="Azure" />
-
-          {!isOnboarding && (
-            <>
-              <InputLayouts.FieldSeparator />
-              <DisplayNameField disabled={!!existingLlmProvider} />
-            </>
-          )}
-
-          <InputLayouts.FieldSeparator />
-          <ModelSelectionField
-            modelConfigurations={modelConfigurations}
-            recommendedDefaultModel={null}
-            shouldShowAutoUpdateToggle={false}
-            onAddModel={(modelName) => {
-              const newModel: ModelConfiguration = {
-                name: modelName,
-                is_visible: true,
-                max_input_tokens: null,
-                supports_image_input: false,
-                supports_reasoning: false,
-              };
-              setAddedModels((prev) => [...prev, newModel]);
-              const currentSelected =
-                formikProps.values.visible_model_names ?? [];
-              formikProps.setFieldValue("visible_model_names", [
-                ...currentSelected,
-                modelName,
-              ]);
-              if (!formikProps.values.test_model_name) {
-                formikProps.setFieldValue("test_model_name", modelName);
-              }
-            }}
+          <InputTypeInField
+            name="target_uri"
+            placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
           />
+        </InputLayouts.Vertical>
+      </InputLayouts.FieldPadder>
 
-          {!isOnboarding && (
-            <>
-              <InputLayouts.FieldSeparator />
-              <ModelAccessField />
-            </>
-          )}
-        </ModalWrapper>
+      <APIKeyField providerName="Azure" />
+
+      {!isOnboarding && (
+        <>
+          <InputLayouts.FieldSeparator />
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
       )}
-    </Formik>
+
+      <InputLayouts.FieldSeparator />
+      <AzureModelSelection
+        modelConfigurations={modelConfigurations}
+        setAddedModels={setAddedModels}
+      />
+
+      {!isOnboarding && (
+        <>
+          <InputLayouts.FieldSeparator />
+          <ModelAccessField />
+        </>
+      )}
+    </ModalWrapper>
   );
 }

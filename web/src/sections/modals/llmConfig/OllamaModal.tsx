@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, useFormikContext } from "formik";
+import { useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
@@ -53,6 +53,15 @@ interface OllamaModalInternalsProps {
   setFetchedModels: (models: ModelConfiguration[]) => void;
   onClose: () => void;
   isOnboarding: boolean;
+  initialValues: OllamaModalValues;
+  validationSchema: ReturnType<typeof buildValidationSchema>;
+  onSubmit: (
+    values: OllamaModalValues,
+    helpers: {
+      setSubmitting: (s: boolean) => void;
+      setStatus: (s: unknown) => void;
+    }
+  ) => Promise<void>;
 }
 
 function OllamaModalInternals({
@@ -61,6 +70,9 @@ function OllamaModalInternals({
   setFetchedModels,
   onClose,
   isOnboarding,
+  initialValues,
+  validationSchema,
+  onSubmit,
 }: OllamaModalInternalsProps) {
   const formikProps = useFormikContext<OllamaModalValues>();
 
@@ -107,6 +119,9 @@ function OllamaModalInternals({
       providerName={LLMProviderName.OLLAMA_CHAT}
       llmProvider={existingLlmProvider}
       onClose={onClose}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      onSubmit={onSubmit}
     >
       <Card background="light" border="none" padding="sm">
         <Tabs defaultValue={defaultTab}>
@@ -211,10 +226,14 @@ export default function OllamaModal({
   });
 
   return (
-    <Formik
+    <OllamaModalInternals
+      existingLlmProvider={existingLlmProvider}
+      fetchedModels={fetchedModels}
+      setFetchedModels={setFetchedModels}
+      onClose={onClose}
+      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
@@ -263,16 +282,6 @@ export default function OllamaModal({
           });
         }
       }}
-    >
-      {() => (
-        <OllamaModalInternals
-          existingLlmProvider={existingLlmProvider}
-          fetchedModels={fetchedModels}
-          setFetchedModels={setFetchedModels}
-          onClose={onClose}
-          isOnboarding={isOnboarding}
-        />
-      )}
-    </Formik>
+    />
   );
 }

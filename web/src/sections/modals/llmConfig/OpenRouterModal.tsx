@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, useFormikContext } from "formik";
+import { useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
@@ -46,6 +46,15 @@ interface OpenRouterModalInternalsProps {
   modelConfigurations: ModelConfiguration[];
   onClose: () => void;
   isOnboarding: boolean;
+  initialValues: OpenRouterModalValues;
+  validationSchema: ReturnType<typeof buildValidationSchema>;
+  onSubmit: (
+    values: OpenRouterModalValues,
+    helpers: {
+      setSubmitting: (s: boolean) => void;
+      setStatus: (s: unknown) => void;
+    }
+  ) => Promise<void>;
 }
 
 function OpenRouterModalInternals({
@@ -55,6 +64,9 @@ function OpenRouterModalInternals({
   modelConfigurations,
   onClose,
   isOnboarding,
+  initialValues,
+  validationSchema,
+  onSubmit,
 }: OpenRouterModalInternalsProps) {
   const formikProps = useFormikContext<OpenRouterModalValues>();
   const currentModels =
@@ -94,6 +106,9 @@ function OpenRouterModalInternals({
       providerName={LLMProviderName.OPENROUTER}
       llmProvider={existingLlmProvider}
       onClose={onClose}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      onSubmit={onSubmit}
     >
       <APIBaseField
         subDescription="Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly."
@@ -166,10 +181,15 @@ export default function OpenRouterModal({
   });
 
   return (
-    <Formik
+    <OpenRouterModalInternals
+      existingLlmProvider={existingLlmProvider}
+      fetchedModels={fetchedModels}
+      setFetchedModels={setFetchedModels}
+      modelConfigurations={modelConfigurations}
+      onClose={onClose}
+      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
@@ -203,17 +223,6 @@ export default function OpenRouterModal({
           });
         }
       }}
-    >
-      {() => (
-        <OpenRouterModalInternals
-          existingLlmProvider={existingLlmProvider}
-          fetchedModels={fetchedModels}
-          setFetchedModels={setFetchedModels}
-          modelConfigurations={modelConfigurations}
-          onClose={onClose}
-          isOnboarding={isOnboarding}
-        />
-      )}
-    </Formik>
+    />
   );
 }

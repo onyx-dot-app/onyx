@@ -1,7 +1,6 @@
 "use client";
 
 import { useSWRConfig } from "swr";
-import { Formik } from "formik";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
@@ -56,10 +55,12 @@ export default function OpenAIModal({
   });
 
   return (
-    <Formik
+    <ModalWrapper
+      providerName={LLMProviderName.OPENAI}
+      llmProvider={existingLlmProvider}
+      onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
@@ -94,38 +95,30 @@ export default function OpenAIModal({
         }
       }}
     >
-      {() => (
-        <ModalWrapper
-          providerName={LLMProviderName.OPENAI}
-          llmProvider={existingLlmProvider}
-          onClose={onClose}
-        >
-          <APIKeyField providerName="OpenAI" />
+      <APIKeyField providerName="OpenAI" />
 
-          {!isOnboarding && (
-            <>
-              <InputLayouts.FieldSeparator />
-              <DisplayNameField disabled={!!existingLlmProvider} />
-            </>
-          )}
-
+      {!isOnboarding && (
+        <>
           <InputLayouts.FieldSeparator />
-          <ModelSelectionField
-            modelConfigurations={modelConfigurations}
-            recommendedDefaultModel={
-              wellKnownLLMProvider?.recommended_default_model ?? null
-            }
-            shouldShowAutoUpdateToggle={true}
-          />
-
-          {!isOnboarding && (
-            <>
-              <InputLayouts.FieldSeparator />
-              <ModelAccessField />
-            </>
-          )}
-        </ModalWrapper>
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
       )}
-    </Formik>
+
+      <InputLayouts.FieldSeparator />
+      <ModelSelectionField
+        modelConfigurations={modelConfigurations}
+        recommendedDefaultModel={
+          wellKnownLLMProvider?.recommended_default_model ?? null
+        }
+        shouldShowAutoUpdateToggle={true}
+      />
+
+      {!isOnboarding && (
+        <>
+          <InputLayouts.FieldSeparator />
+          <ModelAccessField />
+        </>
+      )}
+    </ModalWrapper>
   );
 }

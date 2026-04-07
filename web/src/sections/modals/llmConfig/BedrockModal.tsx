@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, useFormikContext } from "formik";
+import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -81,6 +81,15 @@ interface BedrockModalInternalsProps {
   modelConfigurations: ModelConfiguration[];
   onClose: () => void;
   isOnboarding: boolean;
+  initialValues: BedrockModalValues;
+  validationSchema: ReturnType<typeof buildValidationSchema>;
+  onSubmit: (
+    values: BedrockModalValues,
+    helpers: {
+      setSubmitting: (s: boolean) => void;
+      setStatus: (s: unknown) => void;
+    }
+  ) => Promise<void>;
 }
 
 function BedrockModalInternals({
@@ -90,6 +99,9 @@ function BedrockModalInternals({
   modelConfigurations,
   onClose,
   isOnboarding,
+  initialValues,
+  validationSchema,
+  onSubmit,
 }: BedrockModalInternalsProps) {
   const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
@@ -156,6 +168,9 @@ function BedrockModalInternals({
       providerName={LLMProviderName.BEDROCK}
       llmProvider={existingLlmProvider}
       onClose={onClose}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      onSubmit={onSubmit}
     >
       <InputLayouts.FieldPadder>
         <Section gap={1}>
@@ -348,10 +363,15 @@ export default function BedrockModal({
   });
 
   return (
-    <Formik
+    <BedrockModalInternals
+      existingLlmProvider={existingLlmProvider}
+      fetchedModels={fetchedModels}
+      setFetchedModels={setFetchedModels}
+      modelConfigurations={modelConfigurations}
+      onClose={onClose}
+      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
@@ -397,17 +417,6 @@ export default function BedrockModal({
           });
         }
       }}
-    >
-      {() => (
-        <BedrockModalInternals
-          existingLlmProvider={existingLlmProvider}
-          fetchedModels={fetchedModels}
-          setFetchedModels={setFetchedModels}
-          modelConfigurations={modelConfigurations}
-          onClose={onClose}
-          isOnboarding={isOnboarding}
-        />
-      )}
-    </Formik>
+    />
   );
 }

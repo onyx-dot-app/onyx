@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, useFormikContext } from "formik";
+import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
@@ -49,6 +49,15 @@ interface LMStudioFormInternalsProps {
   setFetchedModels: (models: ModelConfiguration[]) => void;
   onClose: () => void;
   isOnboarding: boolean;
+  initialValues: LMStudioFormValues;
+  validationSchema: ReturnType<typeof buildValidationSchema>;
+  onSubmit: (
+    values: LMStudioFormValues,
+    helpers: {
+      setSubmitting: (s: boolean) => void;
+      setStatus: (s: unknown) => void;
+    }
+  ) => Promise<void>;
 }
 
 function LMStudioFormInternals({
@@ -57,6 +66,9 @@ function LMStudioFormInternals({
   setFetchedModels,
   onClose,
   isOnboarding,
+  initialValues,
+  validationSchema,
+  onSubmit,
 }: LMStudioFormInternalsProps) {
   const formikProps = useFormikContext<LMStudioFormValues>();
   const initialApiKey =
@@ -117,6 +129,9 @@ function LMStudioFormInternals({
       providerName={LLMProviderName.LM_STUDIO}
       llmProvider={existingLlmProvider}
       onClose={onClose}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      onSubmit={onSubmit}
     >
       <APIBaseField
         subDescription="The base URL for your LM Studio server."
@@ -195,10 +210,14 @@ export default function LMStudioForm({
   });
 
   return (
-    <Formik
+    <LMStudioFormInternals
+      existingLlmProvider={existingLlmProvider}
+      fetchedModels={fetchedModels}
+      setFetchedModels={setFetchedModels}
+      onClose={onClose}
+      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
@@ -244,16 +263,6 @@ export default function LMStudioForm({
           });
         }
       }}
-    >
-      {() => (
-        <LMStudioFormInternals
-          existingLlmProvider={existingLlmProvider}
-          fetchedModels={fetchedModels}
-          setFetchedModels={setFetchedModels}
-          onClose={onClose}
-          isOnboarding={isOnboarding}
-        />
-      )}
-    </Formik>
+    />
   );
 }

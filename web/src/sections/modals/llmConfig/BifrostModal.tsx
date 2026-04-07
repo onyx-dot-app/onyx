@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
-import { Formik, useFormikContext } from "formik";
+import { useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
@@ -45,6 +45,15 @@ interface BifrostModalInternalsProps {
   modelConfigurations: ModelConfiguration[];
   onClose: () => void;
   isOnboarding: boolean;
+  initialValues: BifrostModalValues;
+  validationSchema: ReturnType<typeof buildValidationSchema>;
+  onSubmit: (
+    values: BifrostModalValues,
+    helpers: {
+      setSubmitting: (s: boolean) => void;
+      setStatus: (s: unknown) => void;
+    }
+  ) => Promise<void>;
 }
 
 function BifrostModalInternals({
@@ -54,6 +63,9 @@ function BifrostModalInternals({
   modelConfigurations,
   onClose,
   isOnboarding,
+  initialValues,
+  validationSchema,
+  onSubmit,
 }: BifrostModalInternalsProps) {
   const formikProps = useFormikContext<BifrostModalValues>();
   const currentModels =
@@ -93,6 +105,9 @@ function BifrostModalInternals({
       providerName={LLMProviderName.BIFROST}
       llmProvider={existingLlmProvider}
       onClose={onClose}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      onSubmit={onSubmit}
     >
       <APIBaseField
         subDescription="Paste your Bifrost gateway endpoint URL (including API version)."
@@ -166,10 +181,15 @@ export default function BifrostModal({
   });
 
   return (
-    <Formik
+    <BifrostModalInternals
+      existingLlmProvider={existingLlmProvider}
+      fetchedModels={fetchedModels}
+      setFetchedModels={setFetchedModels}
+      modelConfigurations={modelConfigurations}
+      onClose={onClose}
+      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
@@ -203,17 +223,6 @@ export default function BifrostModal({
           });
         }
       }}
-    >
-      {() => (
-        <BifrostModalInternals
-          existingLlmProvider={existingLlmProvider}
-          fetchedModels={fetchedModels}
-          setFetchedModels={setFetchedModels}
-          modelConfigurations={modelConfigurations}
-          onClose={onClose}
-          isOnboarding={isOnboarding}
-        />
-      )}
-    </Formik>
+    />
   );
 }

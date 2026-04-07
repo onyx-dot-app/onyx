@@ -1,7 +1,6 @@
 "use client";
 
 import { useSWRConfig } from "swr";
-import { Formik } from "formik";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -85,10 +84,12 @@ export default function VertexAIModal({
   });
 
   return (
-    <Formik
+    <ModalWrapper
+      providerName={LLMProviderName.VERTEX_AI}
+      llmProvider={existingLlmProvider}
+      onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(
@@ -137,62 +138,54 @@ export default function VertexAIModal({
         }
       }}
     >
-      {() => (
-        <ModalWrapper
-          providerName={LLMProviderName.VERTEX_AI}
-          llmProvider={existingLlmProvider}
-          onClose={onClose}
+      <InputLayouts.FieldPadder>
+        <InputLayouts.Vertical
+          name="custom_config.vertex_location"
+          title="Google Cloud Region Name"
+          subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
         >
-          <InputLayouts.FieldPadder>
-            <InputLayouts.Vertical
-              name="custom_config.vertex_location"
-              title="Google Cloud Region Name"
-              subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
-            >
-              <InputTypeInField
-                name="custom_config.vertex_location"
-                placeholder={VERTEXAI_DEFAULT_LOCATION}
-              />
-            </InputLayouts.Vertical>
-          </InputLayouts.FieldPadder>
-
-          <InputLayouts.FieldPadder>
-            <InputLayouts.Vertical
-              name="custom_config.vertex_credentials"
-              title="API Key"
-              subDescription="Attach your API key JSON from Google Cloud to access your models."
-            >
-              <FileUploadFormField
-                name="custom_config.vertex_credentials"
-                label=""
-              />
-            </InputLayouts.Vertical>
-          </InputLayouts.FieldPadder>
-
-          {!isOnboarding && (
-            <>
-              <InputLayouts.FieldSeparator />
-              <DisplayNameField disabled={!!existingLlmProvider} />
-            </>
-          )}
-
-          <InputLayouts.FieldSeparator />
-          <ModelSelectionField
-            modelConfigurations={modelConfigurations}
-            recommendedDefaultModel={
-              wellKnownLLMProvider?.recommended_default_model ?? null
-            }
-            shouldShowAutoUpdateToggle={true}
+          <InputTypeInField
+            name="custom_config.vertex_location"
+            placeholder={VERTEXAI_DEFAULT_LOCATION}
           />
+        </InputLayouts.Vertical>
+      </InputLayouts.FieldPadder>
 
-          {!isOnboarding && (
-            <>
-              <InputLayouts.FieldSeparator />
-              <ModelAccessField />
-            </>
-          )}
-        </ModalWrapper>
+      <InputLayouts.FieldPadder>
+        <InputLayouts.Vertical
+          name="custom_config.vertex_credentials"
+          title="API Key"
+          subDescription="Attach your API key JSON from Google Cloud to access your models."
+        >
+          <FileUploadFormField
+            name="custom_config.vertex_credentials"
+            label=""
+          />
+        </InputLayouts.Vertical>
+      </InputLayouts.FieldPadder>
+
+      {!isOnboarding && (
+        <>
+          <InputLayouts.FieldSeparator />
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
       )}
-    </Formik>
+
+      <InputLayouts.FieldSeparator />
+      <ModelSelectionField
+        modelConfigurations={modelConfigurations}
+        recommendedDefaultModel={
+          wellKnownLLMProvider?.recommended_default_model ?? null
+        }
+        shouldShowAutoUpdateToggle={true}
+      />
+
+      {!isOnboarding && (
+        <>
+          <InputLayouts.FieldSeparator />
+          <ModelAccessField />
+        </>
+      )}
+    </ModalWrapper>
   );
 }

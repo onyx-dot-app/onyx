@@ -1,7 +1,7 @@
 "use client";
 
 import { useSWRConfig } from "swr";
-import { Formik, FormikProps } from "formik";
+import { useFormikContext } from "formik";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -108,13 +108,10 @@ function ModelConfigurationItem({
   );
 }
 
-interface ModelConfigurationListProps {
-  formikProps: FormikProps<{
+function ModelConfigurationList() {
+  const formikProps = useFormikContext<{
     model_configurations: CustomModelConfiguration[];
-  }>;
-}
-
-function ModelConfigurationList({ formikProps }: ModelConfigurationListProps) {
+  }>();
   const models = formikProps.values.model_configurations;
 
   function handleChange(index: number, next: CustomModelConfiguration) {
@@ -177,6 +174,19 @@ function ModelConfigurationList({ formikProps }: ModelConfigurationListProps) {
         Add Model
       </Button>
     </div>
+  );
+}
+
+function CustomConfigKeyValue() {
+  const formikProps = useFormikContext<{ custom_config_list: KeyValue[] }>();
+  return (
+    <KeyValueInput
+      items={formikProps.values.custom_config_list}
+      onChange={(items) =>
+        formikProps.setFieldValue("custom_config_list", items)
+      }
+      addButtonLabel="Add Line"
+    />
   );
 }
 
@@ -258,10 +268,12 @@ export default function CustomModal({
       });
 
   return (
-    <Formik
+    <ModalWrapper
+      providerName={LLMProviderName.CUSTOM}
+      llmProvider={existingLlmProvider}
+      onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         setSubmitting(true);
 
@@ -330,101 +342,87 @@ export default function CustomModal({
         }
       }}
     >
-      {(formikProps) => (
-        <ModalWrapper
-          providerName={LLMProviderName.CUSTOM}
-          llmProvider={existingLlmProvider}
-          onClose={onClose}
+      {!isOnboarding && (
+        <InputLayouts.FieldPadder>
+          <InputLayouts.Vertical
+            name="provider"
+            title="Provider Name"
+            subDescription={markdown(
+              "Should be one of the providers listed at [LiteLLM](https://docs.litellm.ai/docs/providers)."
+            )}
+          >
+            <InputTypeInField
+              name="provider"
+              placeholder="Provider Name as shown on LiteLLM"
+              variant={existingLlmProvider ? "disabled" : undefined}
+            />
+          </InputLayouts.Vertical>
+        </InputLayouts.FieldPadder>
+      )}
+
+      <APIBaseField optional />
+
+      <InputLayouts.FieldPadder>
+        <InputLayouts.Vertical
+          name="api_version"
+          title="API Version"
+          suffix="optional"
         >
-          {!isOnboarding && (
-            <InputLayouts.FieldPadder>
-              <InputLayouts.Vertical
-                name="provider"
-                title="Provider Name"
-                subDescription={markdown(
-                  "Should be one of the providers listed at [LiteLLM](https://docs.litellm.ai/docs/providers)."
-                )}
-              >
-                <InputTypeInField
-                  name="provider"
-                  placeholder="Provider Name as shown on LiteLLM"
-                  variant={existingLlmProvider ? "disabled" : undefined}
-                />
-              </InputLayouts.Vertical>
-            </InputLayouts.FieldPadder>
-          )}
+          <InputTypeInField name="api_version" />
+        </InputLayouts.Vertical>
+      </InputLayouts.FieldPadder>
 
-          <APIBaseField optional />
+      <APIKeyField
+        optional
+        subDescription="Paste your API key if your model provider requires authentication."
+      />
 
-          <InputLayouts.FieldPadder>
-            <InputLayouts.Vertical
-              name="api_version"
-              title="API Version"
-              suffix="optional"
-            >
-              <InputTypeInField name="api_version" />
-            </InputLayouts.Vertical>
-          </InputLayouts.FieldPadder>
-
-          <APIKeyField
-            optional
-            subDescription="Paste your API key if your model provider requires authentication."
+      <InputLayouts.FieldPadder>
+        <Section gap={0.75}>
+          <Content
+            title="Additional Configs"
+            description={markdown(
+              "Add extra properties as needed by the model provider. These are passed to LiteLLM's `completion()` call as [environment variables](https://docs.litellm.ai/docs/set_keys#environment-variables). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions."
+            )}
+            widthVariant="full"
+            variant="section"
+            sizePreset="main-content"
           />
 
-          <InputLayouts.FieldPadder>
-            <Section gap={0.75}>
-              <Content
-                title="Additional Configs"
-                description={markdown(
-                  "Add extra properties as needed by the model provider. These are passed to LiteLLM's `completion()` call as [environment variables](https://docs.litellm.ai/docs/set_keys#environment-variables). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions."
-                )}
-                widthVariant="full"
-                variant="section"
-                sizePreset="main-content"
-              />
+          <CustomConfigKeyValue />
+        </Section>
+      </InputLayouts.FieldPadder>
 
-              <KeyValueInput
-                items={formikProps.values.custom_config_list}
-                onChange={(items) =>
-                  formikProps.setFieldValue("custom_config_list", items)
-                }
-                addButtonLabel="Add Line"
-              />
-            </Section>
-          </InputLayouts.FieldPadder>
-
-          {!isOnboarding && (
-            <>
-              <InputLayouts.FieldSeparator />
-              <DisplayNameField disabled={!!existingLlmProvider} />
-            </>
-          )}
-
+      {!isOnboarding && (
+        <>
           <InputLayouts.FieldSeparator />
-          <Section gap={0.5}>
-            <InputLayouts.FieldPadder>
-              <Content
-                title="Models"
-                description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
-                variant="section"
-                sizePreset="main-content"
-                widthVariant="full"
-              />
-            </InputLayouts.FieldPadder>
-
-            <Card padding="sm">
-              <ModelConfigurationList formikProps={formikProps as any} />
-            </Card>
-          </Section>
-
-          {!isOnboarding && (
-            <>
-              <InputLayouts.FieldSeparator />
-              <ModelAccessField />
-            </>
-          )}
-        </ModalWrapper>
+          <DisplayNameField disabled={!!existingLlmProvider} />
+        </>
       )}
-    </Formik>
+
+      <InputLayouts.FieldSeparator />
+      <Section gap={0.5}>
+        <InputLayouts.FieldPadder>
+          <Content
+            title="Models"
+            description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
+            variant="section"
+            sizePreset="main-content"
+            widthVariant="full"
+          />
+        </InputLayouts.FieldPadder>
+
+        <Card padding="sm">
+          <ModelConfigurationList />
+        </Card>
+      </Section>
+
+      {!isOnboarding && (
+        <>
+          <InputLayouts.FieldSeparator />
+          <ModelAccessField />
+        </>
+      )}
+    </ModalWrapper>
   );
 }

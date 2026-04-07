@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Form, useFormikContext } from "formik";
+import { Formik, Form, useFormikContext } from "formik";
+import type { FormikConfig } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
@@ -657,18 +658,59 @@ export function ModelSelectionField({
 
 // ─── ModalWrapper ─────────────────────────────────────────────────────
 
-export interface ModalWrapperProps {
+export interface ModalWrapperProps<
+  T extends BaseLLMFormValues = BaseLLMFormValues,
+> {
+  providerName: string;
+  llmProvider?: LLMProviderView;
+  onClose: () => void;
+  initialValues: T;
+  validationSchema: FormikConfig<T>["validationSchema"];
+  onSubmit: FormikConfig<T>["onSubmit"];
+  children: React.ReactNode;
+}
+export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
+  providerName,
+  llmProvider,
+  onClose,
+  initialValues,
+  validationSchema,
+  onSubmit,
+  children,
+}: ModalWrapperProps<T>) {
+  return (
+    <Formik
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      validateOnMount
+      enableReinitialize
+      onSubmit={onSubmit}
+    >
+      {() => (
+        <ModalWrapperInner
+          providerName={providerName}
+          llmProvider={llmProvider}
+          onClose={onClose}
+        >
+          {children}
+        </ModalWrapperInner>
+      )}
+    </Formik>
+  );
+}
+
+interface ModalWrapperInnerProps {
   providerName: string;
   llmProvider?: LLMProviderView;
   onClose: () => void;
   children: React.ReactNode;
 }
-export function ModalWrapper({
+function ModalWrapperInner({
   providerName,
   llmProvider,
   onClose,
   children,
-}: ModalWrapperProps) {
+}: ModalWrapperInnerProps) {
   const { isValid, dirty, isSubmitting, status } =
     useFormikContext<BaseLLMFormValues>();
   const isTesting = status?.isTesting === true;

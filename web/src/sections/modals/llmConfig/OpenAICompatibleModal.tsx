@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
-import { Formik, useFormikContext } from "formik";
+import { useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
@@ -45,6 +45,15 @@ interface OpenAICompatibleModalInternalsProps {
   modelConfigurations: ModelConfiguration[];
   onClose: () => void;
   isOnboarding: boolean;
+  initialValues: OpenAICompatibleModalValues;
+  validationSchema: ReturnType<typeof buildValidationSchema>;
+  onSubmit: (
+    values: OpenAICompatibleModalValues,
+    helpers: {
+      setSubmitting: (s: boolean) => void;
+      setStatus: (s: unknown) => void;
+    }
+  ) => Promise<void>;
 }
 
 function OpenAICompatibleModalInternals({
@@ -54,6 +63,9 @@ function OpenAICompatibleModalInternals({
   modelConfigurations,
   onClose,
   isOnboarding,
+  initialValues,
+  validationSchema,
+  onSubmit,
 }: OpenAICompatibleModalInternalsProps) {
   const formikProps = useFormikContext<OpenAICompatibleModalValues>();
   const currentModels =
@@ -92,6 +104,9 @@ function OpenAICompatibleModalInternals({
       providerName={LLMProviderName.OPENAI_COMPATIBLE}
       llmProvider={existingLlmProvider}
       onClose={onClose}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      onSubmit={onSubmit}
     >
       <APIBaseField
         subDescription="The base URL of your OpenAI-compatible server."
@@ -165,10 +180,15 @@ export default function OpenAICompatibleModal({
   });
 
   return (
-    <Formik
+    <OpenAICompatibleModalInternals
+      existingLlmProvider={existingLlmProvider}
+      fetchedModels={fetchedModels}
+      setFetchedModels={setFetchedModels}
+      modelConfigurations={modelConfigurations}
+      onClose={onClose}
+      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
@@ -202,17 +222,6 @@ export default function OpenAICompatibleModal({
           });
         }
       }}
-    >
-      {() => (
-        <OpenAICompatibleModalInternals
-          existingLlmProvider={existingLlmProvider}
-          fetchedModels={fetchedModels}
-          setFetchedModels={setFetchedModels}
-          modelConfigurations={modelConfigurations}
-          onClose={onClose}
-          isOnboarding={isOnboarding}
-        />
-      )}
-    </Formik>
+    />
   );
 }

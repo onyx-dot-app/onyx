@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, useFormikContext } from "formik";
+import { useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
@@ -46,6 +46,15 @@ interface LiteLLMProxyModalInternalsProps {
   modelConfigurations: ModelConfiguration[];
   onClose: () => void;
   isOnboarding: boolean;
+  initialValues: LiteLLMProxyModalValues;
+  validationSchema: ReturnType<typeof buildValidationSchema>;
+  onSubmit: (
+    values: LiteLLMProxyModalValues,
+    helpers: {
+      setSubmitting: (s: boolean) => void;
+      setStatus: (s: unknown) => void;
+    }
+  ) => Promise<void>;
 }
 
 function LiteLLMProxyModalInternals({
@@ -55,6 +64,9 @@ function LiteLLMProxyModalInternals({
   modelConfigurations,
   onClose,
   isOnboarding,
+  initialValues,
+  validationSchema,
+  onSubmit,
 }: LiteLLMProxyModalInternalsProps) {
   const formikProps = useFormikContext<LiteLLMProxyModalValues>();
   const currentModels =
@@ -94,6 +106,9 @@ function LiteLLMProxyModalInternals({
       providerName={LLMProviderName.LITELLM_PROXY}
       llmProvider={existingLlmProvider}
       onClose={onClose}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      onSubmit={onSubmit}
     >
       <APIBaseField
         subDescription="The base URL for your LiteLLM Proxy server."
@@ -166,10 +181,15 @@ export default function LiteLLMProxyModal({
   });
 
   return (
-    <Formik
+    <LiteLLMProxyModalInternals
+      existingLlmProvider={existingLlmProvider}
+      fetchedModels={fetchedModels}
+      setFetchedModels={setFetchedModels}
+      modelConfigurations={modelConfigurations}
+      onClose={onClose}
+      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
@@ -203,17 +223,6 @@ export default function LiteLLMProxyModal({
           });
         }
       }}
-    >
-      {() => (
-        <LiteLLMProxyModalInternals
-          existingLlmProvider={existingLlmProvider}
-          fetchedModels={fetchedModels}
-          setFetchedModels={setFetchedModels}
-          modelConfigurations={modelConfigurations}
-          onClose={onClose}
-          isOnboarding={isOnboarding}
-        />
-      )}
-    </Formik>
+    />
   );
 }
