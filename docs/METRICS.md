@@ -288,6 +288,7 @@ If your tasks need richer labels beyond `task_name`/`queue`, create a new module
 | Light                | —                    | —              | —                                    |
 | Heavy                | —                    | —              | —                                    |
 | User File Processing | —                    | —              | —                                    |
+| KG Processing        | —                    | —              | —                                    |
 
 ### Example PromQL Queries (Celery)
 

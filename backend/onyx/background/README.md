@@ -94,7 +94,7 @@ Docprocessing and Docfetching are for indexing documents:
 
 - Docfetching runs connectors to pull documents from external APIs (Google Drive, Confluence, etc.), stores batches to file storage, and dispatches docprocessing tasks
 - Docprocessing retrieves batches, runs the indexing pipeline (chunking, embedding), and indexes into the Document Index
-  User Files come from uploads directly via the input bar
+- User Files come from uploads directly via the input bar
 
 ### Monitoring
 
