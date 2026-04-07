@@ -25,7 +25,6 @@ import {
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
-const VERTEXAI_DEFAULT_MODEL = "gemini-2.5-pro";
 const VERTEXAI_DEFAULT_LOCATION = "global";
 
 interface VertexAIModalValues extends BaseLLMFormValues {
@@ -63,9 +62,7 @@ export default function VertexAIModal({
     provider: existingLlmProvider?.provider ?? LLMProviderName.VERTEX_AI,
     test_model_name:
       existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
-        ?.name ??
-      wellKnownLLMProvider?.recommended_default_model?.name ??
-      VERTEXAI_DEFAULT_MODEL,
+        ?.name ?? wellKnownLLMProvider?.recommended_default_model?.name,
     is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
     custom_config: {
       vertex_credentials:
@@ -77,24 +74,16 @@ export default function VertexAIModal({
     },
   } as VertexAIModalValues;
 
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        test_model_name: Yup.string().required("Model name is required"),
-        custom_config: Yup.object({
-          vertex_credentials: Yup.string().required(
-            "Credentials file is required"
-          ),
-          vertex_location: Yup.string(),
-        }),
-      })
-    : buildValidationSchema().shape({
-        custom_config: Yup.object({
-          vertex_credentials: Yup.string().required(
-            "Credentials file is required"
-          ),
-          vertex_location: Yup.string(),
-        }),
-      });
+  const validationSchema = buildValidationSchema(isOnboarding, {
+    extra: {
+      custom_config: Yup.object({
+        vertex_credentials: Yup.string().required(
+          "Credentials file is required"
+        ),
+        vertex_location: Yup.string(),
+      }),
+    },
+  });
 
   return (
     <Formik
@@ -125,7 +114,7 @@ export default function VertexAIModal({
             payload: {
               ...submitValues,
               model_configurations: modelConfigsToUse,
-              is_auto_mode: values.test_model_name === VERTEXAI_DEFAULT_MODEL,
+              is_auto_mode: values.is_auto_mode,
             },
             onboardingState,
             onboardingActions,

@@ -114,33 +114,23 @@ export default function AzureModal({
     provider: existingLlmProvider?.provider ?? LLMProviderName.AZURE,
     api_key: existingLlmProvider?.api_key ?? "",
     target_uri: buildTargetUri(existingLlmProvider),
-    test_model_name:
-      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
-        ?.name ?? "",
+    test_model_name: existingLlmProvider?.model_configurations?.find(
+      (m) => m.is_visible
+    )?.name,
   } as AzureModalValues;
 
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        api_key: Yup.string().required("API Key is required"),
-        target_uri: Yup.string()
-          .required("Target URI is required")
-          .test(
-            "valid-target-uri",
-            "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
-            (value) => (value ? isValidAzureTargetUri(value) : false)
-          ),
-        test_model_name: Yup.string().required("Model name is required"),
-      })
-    : buildValidationSchema().shape({
-        api_key: Yup.string().required("API Key is required"),
-        target_uri: Yup.string()
-          .required("Target URI is required")
-          .test(
-            "valid-target-uri",
-            "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
-            (value) => (value ? isValidAzureTargetUri(value) : false)
-          ),
-      });
+  const validationSchema = buildValidationSchema(isOnboarding, {
+    apiKey: true,
+    extra: {
+      target_uri: Yup.string()
+        .required("Target URI is required")
+        .test(
+          "valid-target-uri",
+          "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+          (value) => (value ? isValidAzureTargetUri(value) : false)
+        ),
+    },
+  });
 
   return (
     <Formik

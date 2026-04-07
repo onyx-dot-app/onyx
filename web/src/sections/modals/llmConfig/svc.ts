@@ -241,7 +241,7 @@ export const testApiKeyHelper = async (
       ...((formValues?.custom_config as Record<string, unknown>) ?? {}),
       ...(customConfigOverride ?? {}),
     },
-    model: modelName ?? (formValues?.default_model_name as string) ?? "",
+    model: modelName ?? (formValues?.test_model_name as string) ?? "",
   };
 
   return await submitLlmTestRequest(
@@ -307,7 +307,7 @@ export const submitOnboardingProvider = async ({
       const newLlmProvider = await response.json();
       if (newLlmProvider?.id != null) {
         const defaultModelName =
-          (payload as Record<string, string>).default_model_name ??
+          (payload as Record<string, string>).test_model_name ??
           (payload as Record<string, ModelConfiguration[]>)
             .model_configurations?.[0]?.name ??
           "";

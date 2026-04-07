@@ -319,9 +319,9 @@ export default function BedrockModal({
   const initialValues: BedrockModalValues = {
     ...buildInitialValues(existingLlmProvider),
     provider: existingLlmProvider?.provider ?? LLMProviderName.BEDROCK,
-    test_model_name:
-      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
-        ?.name ?? "",
+    test_model_name: existingLlmProvider?.model_configurations?.find(
+      (m) => m.is_visible
+    )?.name,
     custom_config: {
       AWS_REGION_NAME:
         (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ?? "",
@@ -339,18 +339,13 @@ export default function BedrockModal({
     },
   } as BedrockModalValues;
 
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        test_model_name: Yup.string().required("Model name is required"),
-        custom_config: Yup.object({
-          AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
-        }),
-      })
-    : buildValidationSchema().shape({
-        custom_config: Yup.object({
-          AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
-        }),
-      });
+  const validationSchema = buildValidationSchema(isOnboarding, {
+    extra: {
+      custom_config: Yup.object({
+        AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
+      }),
+    },
+  });
 
   return (
     <Formik

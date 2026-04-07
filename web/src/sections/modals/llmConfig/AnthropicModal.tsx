@@ -3,7 +3,6 @@
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
-import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
@@ -22,8 +21,6 @@ import {
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import * as InputLayouts from "@/layouts/input-layouts";
-
-const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
 
 export default function AnthropicModal({
   variant = "llm-configuration",
@@ -55,20 +52,13 @@ export default function AnthropicModal({
     api_base: existingLlmProvider?.api_base ?? undefined,
     test_model_name:
       existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
-        ?.name ??
-      wellKnownLLMProvider?.recommended_default_model?.name ??
-      DEFAULT_DEFAULT_MODEL_NAME,
+        ?.name ?? wellKnownLLMProvider?.recommended_default_model?.name,
     is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
   };
 
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        api_key: Yup.string().required("API Key is required"),
-        test_model_name: Yup.string().required("Model name is required"),
-      })
-    : buildValidationSchema().shape({
-        api_key: Yup.string().required("API Key is required"),
-      });
+  const validationSchema = buildValidationSchema(isOnboarding, {
+    apiKey: true,
+  });
 
   return (
     <Formik
@@ -85,8 +75,7 @@ export default function AnthropicModal({
             payload: {
               ...values,
               model_configurations: modelConfigsToUse,
-              is_auto_mode:
-                values.test_model_name === DEFAULT_DEFAULT_MODEL_NAME,
+              is_auto_mode: values.is_auto_mode,
             },
             onboardingState,
             onboardingActions,

@@ -12,7 +12,6 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import { fetchOpenAICompatibleModels } from "@/app/admin/configuration/llm/utils";
-import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
@@ -163,19 +162,14 @@ export default function OpenAICompatibleModal({
       existingLlmProvider?.provider ?? LLMProviderName.OPENAI_COMPATIBLE,
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-    test_model_name:
-      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
-        ?.name ?? "",
+    test_model_name: existingLlmProvider?.model_configurations?.find(
+      (m) => m.is_visible
+    )?.name,
   } as OpenAICompatibleModalValues;
 
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        api_base: Yup.string().required("API Base URL is required"),
-        test_model_name: Yup.string().required("Model name is required"),
-      })
-    : buildValidationSchema().shape({
-        api_base: Yup.string().required("API Base URL is required"),
-      });
+  const validationSchema = buildValidationSchema(isOnboarding, {
+    apiBase: true,
+  });
 
   return (
     <Formik

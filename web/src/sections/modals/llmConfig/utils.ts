@@ -22,17 +22,52 @@ export function buildInitialValues(existingLlmProvider?: LLMProviderView) {
   };
 }
 
-export function buildValidationSchema() {
+interface ValidationSchemaOptions {
+  apiKey?: boolean;
+  apiBase?: boolean;
+  extra?: Yup.ObjectShape;
+}
+
+/**
+ * Builds the validation schema for a modal.
+ *
+ * @param isOnboarding — controls the base schema:
+ *   - `true`:  minimal (only `test_model_name`).
+ *   - `false`: full admin schema (display name, access, models, etc.).
+ * @param options.apiKey — require `api_key`.
+ * @param options.apiBase — require `api_base`.
+ * @param options.extra — arbitrary Yup fields for provider-specific validation.
+ */
+export function buildValidationSchema(
+  isOnboarding: boolean,
+  { apiKey, apiBase, extra }: ValidationSchemaOptions = {}
+) {
+  const providerFields: Yup.ObjectShape = {
+    ...(apiKey && {
+      api_key: Yup.string().required("API Key is required"),
+    }),
+    ...(apiBase && {
+      api_base: Yup.string().required("API Base URL is required"),
+    }),
+    ...extra,
+  };
+
+  if (isOnboarding) {
+    return Yup.object().shape({
+      test_model_name: Yup.string().required("Model name is required"),
+      ...providerFields,
+    });
+  }
+
   return Yup.object({
     name: Yup.string().required("Display Name is required"),
     is_public: Yup.boolean().required(),
     is_auto_mode: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
-
-    // Only for internal, frontend-only, validation purposes:
     test_model_name: Yup.string().required("Model name is required"),
     visible_model_names: Yup.array().of(Yup.string()),
+    ...providerFields,
   });
 }
 

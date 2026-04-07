@@ -11,7 +11,6 @@ import {
   LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
-import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
@@ -182,23 +181,18 @@ export default function LMStudioForm({
     ...buildInitialValues(existingLlmProvider),
     provider: existingLlmProvider?.provider ?? LLMProviderName.LM_STUDIO,
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-    test_model_name:
-      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
-        ?.name ?? "",
+    test_model_name: existingLlmProvider?.model_configurations?.find(
+      (m) => m.is_visible
+    )?.name,
     custom_config: {
       LM_STUDIO_API_KEY:
         (existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY as string) ?? "",
     },
   } as LMStudioFormValues;
 
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        api_base: Yup.string().required("API Base URL is required"),
-        test_model_name: Yup.string().required("Model name is required"),
-      })
-    : buildValidationSchema().shape({
-        api_base: Yup.string().required("API Base URL is required"),
-      });
+  const validationSchema = buildValidationSchema(isOnboarding, {
+    apiBase: true,
+  });
 
   return (
     <Formik
