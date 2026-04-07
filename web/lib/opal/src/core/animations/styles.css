@@ -7,8 +7,9 @@
   opacity: 0;
 }
 
-/* Group mode — Root controls visibility via React context */
-.hoverable-item[data-hoverable-variant="opacity-on-hover"][data-hoverable-active="true"] {
+/* Group mode — Root :hover controls descendant item visibility via CSS */
+[data-hover-group]:hover
+  .hoverable-item[data-hoverable-variant="opacity-on-hover"] {
   opacity: 1;
 }
 
