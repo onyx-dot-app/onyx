@@ -49,12 +49,27 @@ export default function useMultiModelChat(
     [llmManager.llmProviders]
   );
 
+  // Sync selectedModels[0] with llmManager.currentLlm when in single-model
+  // mode. This handles both initial load and session override changes (e.g.
+  // page reload restores the persisted model after providers load).
+  // Skip when user has manually added multiple models (multi-model mode).
   useEffect(() => {
-    if (defaultInitialized) return;
     if (llmOptions.length === 0) return;
     const { currentLlm } = llmManager;
-    // Don't initialize if currentLlm hasn't loaded yet
     if (!currentLlm.modelName) return;
+
+    // Don't override multi-model selections
+    if (selectedModels.length > 1) return;
+
+    // Skip if already showing the correct model
+    if (
+      selectedModels.length === 1 &&
+      selectedModels[0]!.provider === currentLlm.provider &&
+      selectedModels[0]!.modelName === currentLlm.modelName
+    ) {
+      return;
+    }
+
     const match = llmOptions.find(
       (opt) =>
         opt.provider === currentLlm.provider &&
@@ -71,7 +86,7 @@ export default function useMultiModelChat(
       ]);
       setDefaultInitialized(true);
     }
-  }, [llmOptions, llmManager.currentLlm, defaultInitialized]);
+  }, [llmOptions, llmManager.currentLlm, selectedModels]);
 
   const isMultiModelActive = selectedModels.length > 1;
 
