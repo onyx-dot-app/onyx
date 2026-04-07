@@ -22,7 +22,6 @@ import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 
-from ee.onyx.auth.users import current_admin_user
 from ee.onyx.server.tenants.access import control_plane_dep
 from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.billing import fetch_customer_portal_session
@@ -38,10 +37,12 @@ from ee.onyx.server.tenants.models import SubscriptionSessionResponse
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.product_gating import overwrite_full_gated_set
 from ee.onyx.server.tenants.product_gating import store_product_gating
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -99,7 +100,7 @@ def gate_product_full_sync(
 
 @router.get("/billing-information")
 async def billing_information(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> BillingInformation | SubscriptionStatusResponse:
     logger.info("Fetching billing information")
     tenant_id = get_current_tenant_id()
@@ -108,7 +109,7 @@ async def billing_information(
 
 @router.post("/create-customer-portal-session")
 async def create_customer_portal_session(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> dict:
     """Create a Stripe customer portal session via the control plane."""
     tenant_id = get_current_tenant_id()
@@ -130,7 +131,7 @@ async def create_customer_portal_session(
 @router.post("/create-checkout-session")
 async def create_checkout_session(
     request: CreateCheckoutSessionRequest | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> dict:
     """Create a Stripe checkout session via the control plane."""
     tenant_id = get_current_tenant_id()
@@ -153,7 +154,7 @@ async def create_checkout_session(
 @router.post("/create-subscription-session")
 async def create_subscription_session(
     request: CreateSubscriptionSessionRequest | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> SubscriptionSessionResponse:
     try:
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()

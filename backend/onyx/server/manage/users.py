@@ -31,7 +31,6 @@ from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
-from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import enforce_seat_limit
 from onyx.auth.users import optional_user
@@ -127,7 +126,9 @@ USERS_PAGE_SIZE = 10
 @router.patch("/manage/set-user-role", tags=PUBLIC_API_TAGS)
 def set_user_role(
     user_role_update_request: UserRoleUpdateRequest,
-    current_user: User = Depends(current_admin_user),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_update = get_user_by_email(
@@ -171,7 +172,7 @@ class TestUpsertRequest(BaseModel):
 @router.post("/manage/users/test-upsert-user")
 async def test_upsert_user(
     request: TestUpsertRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None | FullUserSnapshot:
     """Test endpoint for upsert_saml_user. Only used for integration testing."""
     user = await fetch_ee_implementation_or_noop(
@@ -187,7 +188,7 @@ def list_accepted_users(
     page_size: int = Query(10, ge=1, le=1000),
     roles: list[UserRole] = Query(default=[]),
     is_active: bool | None = Query(default=None),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[FullUserSnapshot]:
     filtered_accepted_users = get_page_of_filtered_users(
@@ -249,7 +250,7 @@ def list_accepted_users(
 
 @router.get("/manage/users/accepted/all", tags=PUBLIC_API_TAGS)
 def list_all_accepted_users(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[FullUserSnapshot]:
     """Returns all accepted users without pagination.
@@ -292,7 +293,7 @@ def list_all_accepted_users(
 
 @router.get("/manage/users/counts")
 def get_user_counts(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, dict[str, int]]:
     return get_user_counts_by_role_and_status(db_session)
@@ -300,7 +301,7 @@ def get_user_counts(
 
 @router.get("/manage/users/invited", tags=PUBLIC_API_TAGS)
 def list_invited_users(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[InvitedUserSnapshot]:
     invited_emails = get_invited_users()
@@ -388,7 +389,7 @@ def list_all_users(
 
 @router.get("/manage/users/download")
 def download_users_csv(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     """Download all users as a CSV file."""
@@ -426,7 +427,9 @@ def download_users_csv(
 @router.put("/manage/admin/users", tags=PUBLIC_API_TAGS)
 def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
-    current_user: User = Depends(current_admin_user),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> BulkInviteResponse:
     """emails are string validated. If any email fails validation, no emails are
@@ -526,7 +529,7 @@ def bulk_invite_users(
 @router.patch("/manage/admin/remove-invited-user", tags=PUBLIC_API_TAGS)
 def remove_invited_user(
     user_email: UserByEmail,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> int:
     tenant_id = get_current_tenant_id()
@@ -554,7 +557,9 @@ def remove_invited_user(
 @router.patch("/manage/admin/deactivate-user", tags=PUBLIC_API_TAGS)
 def deactivate_user_api(
     user_email: UserByEmail,
-    current_user: User = Depends(current_admin_user),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     if current_user.email == user_email.user_email:
@@ -583,7 +588,7 @@ def deactivate_user_api(
 @router.delete("/manage/admin/delete-user", tags=PUBLIC_API_TAGS)
 async def delete_user(
     user_email: UserByEmail,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_delete = get_user_by_email(
@@ -627,7 +632,7 @@ async def delete_user(
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
 def activate_user_api(
     user_email: UserByEmail,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_activate = get_user_by_email(
@@ -656,7 +661,7 @@ def activate_user_api(
 
 @router.get("/manage/admin/valid-domains")
 def get_valid_domains(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[str]:
     return VALID_EMAIL_DOMAINS
 
