@@ -49,9 +49,21 @@ KNOWN_OPENPYXL_BUGS = [
 
 def get_markitdown_converter() -> "MarkItDown":
     global _MARKITDOWN_CONVERTER
-    from markitdown import MarkItDown
 
     if _MARKITDOWN_CONVERTER is None:
+        from markitdown import MarkItDown
+
+        # Patch this function to effectively no-op because we were seeing this
+        # module take an inordinate amount of time to convert charts to markdown,
+        # making some powerpoint files with many or complicated charts nearly
+        # unindexable.
+        from markitdown.converters._pptx_converter import PptxConverter
+
+        setattr(
+            PptxConverter,
+            "_convert_chart_to_markdown",
+            lambda self, chart: "\n\n[chart omitted]\n\n",  # noqa: ARG005
+        )
         _MARKITDOWN_CONVERTER = MarkItDown(enable_plugins=False)
     return _MARKITDOWN_CONVERTER
 
