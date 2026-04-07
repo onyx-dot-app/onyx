@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, FormikProps } from "formik";
+import { Formik, useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -77,7 +76,6 @@ interface BedrockModalValues extends BaseLLMFormValues {
 }
 
 interface BedrockModalInternalsProps {
-  formikProps: FormikProps<BedrockModalValues>;
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
@@ -88,7 +86,6 @@ interface BedrockModalInternalsProps {
 }
 
 function BedrockModalInternals({
-  formikProps,
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
@@ -97,6 +94,7 @@ function BedrockModalInternals({
   onClose,
   isOnboarding,
 }: BedrockModalInternalsProps) {
+  const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
 
   useEffect(() => {
@@ -166,7 +164,7 @@ function BedrockModalInternals({
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
-      <FieldPadder>
+      <InputLayouts.FieldPadder>
         <Section gap={1}>
           <InputLayouts.Vertical
             name={FIELD_AWS_REGION_NAME}
@@ -220,7 +218,7 @@ function BedrockModalInternals({
             </InputSelect>
           </InputLayouts.Vertical>
         </Section>
-      </FieldPadder>
+      </InputLayouts.FieldPadder>
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
         <Card background="light" border="none" padding="sm">
@@ -248,7 +246,7 @@ function BedrockModalInternals({
       )}
 
       {authMethod === AUTH_METHOD_IAM && (
-        <FieldPadder>
+        <InputLayouts.FieldPadder>
           <Card background="none" border="solid" padding="sm">
             <Content
               icon={SvgAlertCircle}
@@ -257,7 +255,7 @@ function BedrockModalInternals({
               sizePreset="main-ui"
             />
           </Card>
-        </FieldPadder>
+        </InputLayouts.FieldPadder>
       )}
 
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
@@ -278,15 +276,14 @@ function BedrockModalInternals({
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <FieldSeparator />
+      <InputLayouts.FieldSeparator />
       <ModelSelectionField
         modelConfigurations={currentModels}
-        formikProps={formikProps}
         recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
@@ -294,8 +291,7 @@ function BedrockModalInternals({
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
-          <ModelAccessField formikProps={formikProps} />
+          <InputLayouts.FieldSeparator />
         </>
       )}
     </ModalWrapper>
@@ -383,7 +379,7 @@ export default function BedrockModal({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
+      validateOnMount
       onSubmit={async (values, { setSubmitting }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
@@ -430,9 +426,8 @@ export default function BedrockModal({
         }
       }}
     >
-      {(formikProps) => (
+      {() => (
         <BedrockModalInternals
-          formikProps={formikProps}
           existingLlmProvider={existingLlmProvider}
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}

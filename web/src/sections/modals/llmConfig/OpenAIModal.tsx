@@ -89,7 +89,7 @@ export default function OpenAIModal({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
+      validateOnMount
       onSubmit={async (values, { setSubmitting }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
@@ -147,7 +147,6 @@ export default function OpenAIModal({
           <FieldSeparator />
           <ModelSelectionField
             modelConfigurations={modelConfigurations}
-            formikProps={formikProps}
             recommendedDefaultModel={
               wellKnownLLMProvider?.recommended_default_model ?? null
             }
@@ -157,7 +156,6 @@ export default function OpenAIModal({
           {!isOnboarding && (
             <>
               <FieldSeparator />
-              <ModelAccessField formikProps={formikProps} />
             </>
           )}
         </ModalWrapper>

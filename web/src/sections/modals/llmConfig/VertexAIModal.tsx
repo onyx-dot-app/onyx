@@ -6,7 +6,6 @@ import { Formik } from "formik";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
@@ -122,7 +121,7 @@ export default function VertexAIModal({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
+      validateOnMount
       onSubmit={async (values, { setSubmitting }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(
@@ -183,7 +182,7 @@ export default function VertexAIModal({
           isTesting={isTesting}
           isSubmitting={formikProps.isSubmitting}
         >
-          <FieldPadder>
+          <InputLayouts.FieldPadder>
             <InputLayouts.Vertical
               name="custom_config.vertex_location"
               title="Google Cloud Region Name"
@@ -194,9 +193,9 @@ export default function VertexAIModal({
                 placeholder={VERTEXAI_DEFAULT_LOCATION}
               />
             </InputLayouts.Vertical>
-          </FieldPadder>
+          </InputLayouts.FieldPadder>
 
-          <FieldPadder>
+          <InputLayouts.FieldPadder>
             <InputLayouts.Vertical
               name="custom_config.vertex_credentials"
               title="API Key"
@@ -207,26 +206,23 @@ export default function VertexAIModal({
                 label=""
               />
             </InputLayouts.Vertical>
-          </FieldPadder>
+          </InputLayouts.FieldPadder>
 
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
 
           {!isOnboarding && (
             <DisplayNameField disabled={!!existingLlmProvider} />
           )}
 
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
 
           <ModelSelectionField
             modelConfigurations={modelConfigurations}
-            formikProps={formikProps}
             recommendedDefaultModel={
               wellKnownLLMProvider?.recommended_default_model ?? null
             }
             shouldShowAutoUpdateToggle={true}
           />
-
-          {!isOnboarding && <ModelAccessField formikProps={formikProps} />}
         </ModalWrapper>
       )}
     </Formik>

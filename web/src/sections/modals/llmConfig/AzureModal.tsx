@@ -5,7 +5,6 @@ import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
   LLMProviderView,
@@ -157,7 +156,7 @@ export default function AzureModal({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
+      validateOnMount
       onSubmit={async (values, { setSubmitting }) => {
         const processedValues = processValues(values);
 
@@ -203,7 +202,7 @@ export default function AzureModal({
           isTesting={isTesting}
           isSubmitting={formikProps.isSubmitting}
         >
-          <FieldPadder>
+          <InputLayouts.FieldPadder>
             <InputLayouts.Vertical
               name="target_uri"
               title="Target URI"
@@ -214,21 +213,20 @@ export default function AzureModal({
                 placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
               />
             </InputLayouts.Vertical>
-          </FieldPadder>
+          </InputLayouts.FieldPadder>
 
           <APIKeyField providerName="Azure" />
 
           {!isOnboarding && (
             <>
-              <FieldSeparator />
+              <InputLayouts.FieldSeparator />
               <DisplayNameField disabled={!!existingLlmProvider} />
             </>
           )}
 
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
           <ModelSelectionField
             modelConfigurations={modelConfigurations}
-            formikProps={formikProps}
             recommendedDefaultModel={null}
             shouldShowAutoUpdateToggle={false}
             onAddModel={(modelName) => {
@@ -254,8 +252,7 @@ export default function AzureModal({
 
           {!isOnboarding && (
             <>
-              <FieldSeparator />
-              <ModelAccessField formikProps={formikProps} />
+              <InputLayouts.FieldSeparator />
             </>
           )}
         </ModalWrapper>

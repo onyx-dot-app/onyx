@@ -91,7 +91,7 @@ export default function AnthropicModal({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
+      validateOnMount
       onSubmit={async (values, { setSubmitting }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
@@ -149,7 +149,6 @@ export default function AnthropicModal({
           <FieldSeparator />
           <ModelSelectionField
             modelConfigurations={modelConfigurations}
-            formikProps={formikProps}
             recommendedDefaultModel={
               wellKnownLLMProvider?.recommended_default_model ?? null
             }
@@ -159,7 +158,6 @@ export default function AnthropicModal({
           {!isOnboarding && (
             <>
               <FieldSeparator />
-              <ModelAccessField formikProps={formikProps} />
             </>
           )}
         </ModalWrapper>

@@ -1,13 +1,12 @@
 "use client";
 
 import { ReactNode, useState } from "react";
-import { Form, FormikProps } from "formik";
+import { Form, useFormikContext } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
 import { ModelConfiguration, SimpleKnownModel } from "@/interfaces/llm";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -55,7 +54,7 @@ export interface DisplayNameFieldProps {
 }
 export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
   return (
-    <FieldPadder>
+    <InputLayouts.FieldPadder>
       <InputLayouts.Vertical
         name="name"
         title="Display Name"
@@ -67,7 +66,7 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
           variant={disabled ? "disabled" : undefined}
         />
       </InputLayouts.Vertical>
-    </FieldPadder>
+    </InputLayouts.FieldPadder>
   );
 }
 
@@ -84,7 +83,7 @@ export function APIKeyField({
   subDescription,
 }: APIKeyFieldProps) {
   return (
-    <FieldPadder>
+    <InputLayouts.FieldPadder>
       <InputLayouts.Vertical
         name="api_key"
         title="API Key"
@@ -99,7 +98,7 @@ export function APIKeyField({
       >
         <PasswordInputTypeInField name="api_key" />
       </InputLayouts.Vertical>
-    </FieldPadder>
+    </InputLayouts.FieldPadder>
   );
 }
 
@@ -109,12 +108,8 @@ export function APIKeyField({
 const GROUP_PREFIX = "group:";
 const AGENT_PREFIX = "agent:";
 
-export interface ModelAccessFieldProps<T> {
-  formikProps: FormikProps<T>;
-}
-export function ModelAccessField<T extends BaseLLMFormValues>({
-  formikProps,
-}: ModelAccessFieldProps<T>) {
+export function ModelAccessField() {
+  const formikProps = useFormikContext<BaseLLMFormValues>();
   const { agents } = useAgents();
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { data: usersData } = useUsers({ includeApiKeys: false });
@@ -197,7 +192,7 @@ export function ModelAccessField<T extends BaseLLMFormValues>({
 
   return (
     <div className="flex flex-col w-full">
-      <FieldPadder>
+      <InputLayouts.FieldPadder>
         <InputLayouts.Horizontal
           name="is_public"
           title="Models Access"
@@ -218,7 +213,7 @@ export function ModelAccessField<T extends BaseLLMFormValues>({
             </InputSelect.Content>
           </InputSelect>
         </InputLayouts.Horizontal>
-      </FieldPadder>
+      </InputLayouts.FieldPadder>
 
       {!isPublic && (
         <Card background="light" border="none" padding="sm">
@@ -284,7 +279,7 @@ export function ModelAccessField<T extends BaseLLMFormValues>({
               </div>
             )}
 
-            <FieldSeparator />
+            <InputLayouts.FieldSeparator />
 
             {selectedAgentIds.length > 0 ? (
               <div className="grid grid-cols-2 gap-1 w-full">
@@ -339,8 +334,7 @@ export function ModelAccessField<T extends BaseLLMFormValues>({
 
 // ─── ModelsField ─────────────────────────────────────────────────────
 
-export interface ModelSelectionFieldProps<T> {
-  formikProps: FormikProps<T>;
+export interface ModelSelectionFieldProps {
   modelConfigurations: ModelConfiguration[];
   recommendedDefaultModel: SimpleKnownModel | null;
   shouldShowAutoUpdateToggle: boolean;
@@ -349,14 +343,14 @@ export interface ModelSelectionFieldProps<T> {
   /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
   onAddModel?: (modelName: string) => void;
 }
-export function ModelSelectionField<T extends BaseLLMFormValues>({
-  formikProps,
+export function ModelSelectionField({
   modelConfigurations,
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
   onRefetch,
   onAddModel,
-}: ModelSelectionFieldProps<T>) {
+}: ModelSelectionFieldProps) {
+  const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
   const isAutoMode = formikProps.values.is_auto_mode;
   const selectedModels = formikProps.values.selected_model_names ?? [];

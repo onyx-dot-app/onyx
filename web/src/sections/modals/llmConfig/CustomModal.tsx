@@ -21,7 +21,6 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
@@ -265,7 +264,7 @@ export default function CustomModal({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
+      validateOnMount
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
 
@@ -345,7 +344,7 @@ export default function CustomModal({
           isSubmitting={formikProps.isSubmitting}
         >
           {!isOnboarding && (
-            <FieldPadder>
+            <InputLayouts.FieldPadder>
               <InputLayouts.Vertical
                 name="provider"
                 title="Provider Name"
@@ -359,10 +358,10 @@ export default function CustomModal({
                   variant={existingLlmProvider ? "disabled" : undefined}
                 />
               </InputLayouts.Vertical>
-            </FieldPadder>
+            </InputLayouts.FieldPadder>
           )}
 
-          <FieldPadder>
+          <InputLayouts.FieldPadder>
             <InputLayouts.Vertical
               name="api_base"
               title="API Base URL"
@@ -370,9 +369,9 @@ export default function CustomModal({
             >
               <InputTypeInField name="api_base" placeholder="https://" />
             </InputLayouts.Vertical>
-          </FieldPadder>
+          </InputLayouts.FieldPadder>
 
-          <FieldPadder>
+          <InputLayouts.FieldPadder>
             <InputLayouts.Vertical
               name="api_version"
               title="API Version"
@@ -380,14 +379,14 @@ export default function CustomModal({
             >
               <InputTypeInField name="api_version" />
             </InputLayouts.Vertical>
-          </FieldPadder>
+          </InputLayouts.FieldPadder>
 
           <APIKeyField
             optional
             subDescription="Paste your API key if your model provider requires authentication."
           />
 
-          <FieldPadder>
+          <InputLayouts.FieldPadder>
             <Section gap={0.75}>
               <Content
                 title="Additional Configs"
@@ -407,18 +406,18 @@ export default function CustomModal({
                 addButtonLabel="Add Line"
               />
             </Section>
-          </FieldPadder>
+          </InputLayouts.FieldPadder>
 
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
 
           {!isOnboarding && (
             <DisplayNameField disabled={!!existingLlmProvider} />
           )}
 
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
 
           <Section gap={0.5}>
-            <FieldPadder>
+            <InputLayouts.FieldPadder>
               <Content
                 title="Models"
                 description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
@@ -426,7 +425,7 @@ export default function CustomModal({
                 sizePreset="main-content"
                 widthVariant="full"
               />
-            </FieldPadder>
+            </InputLayouts.FieldPadder>
 
             <Card padding="sm">
               <ModelConfigurationList formikProps={formikProps as any} />
@@ -435,8 +434,7 @@ export default function CustomModal({
 
           {!isOnboarding && (
             <>
-              <FieldSeparator />
-              <ModelAccessField formikProps={formikProps} />
+              <InputLayouts.FieldSeparator />
             </>
           )}
         </ModalWrapper>

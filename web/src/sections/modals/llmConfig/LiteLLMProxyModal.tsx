@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, FormikProps } from "formik";
+import { Formik, useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -43,7 +42,6 @@ interface LiteLLMProxyModalValues extends BaseLLMFormValues {
 }
 
 interface LiteLLMProxyModalInternalsProps {
-  formikProps: FormikProps<LiteLLMProxyModalValues>;
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
@@ -54,7 +52,6 @@ interface LiteLLMProxyModalInternalsProps {
 }
 
 function LiteLLMProxyModalInternals({
-  formikProps,
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
@@ -63,6 +60,7 @@ function LiteLLMProxyModalInternals({
   onClose,
   isOnboarding,
 }: LiteLLMProxyModalInternalsProps) {
+  const formikProps = useFormikContext<LiteLLMProxyModalValues>();
   const currentModels =
     fetchedModels.length > 0
       ? fetchedModels
@@ -105,7 +103,7 @@ function LiteLLMProxyModalInternals({
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
-      <FieldPadder>
+      <InputLayouts.FieldPadder>
         <InputLayouts.Vertical
           name="api_base"
           title="API Base URL"
@@ -116,21 +114,20 @@ function LiteLLMProxyModalInternals({
             placeholder="https://your-litellm-proxy.com"
           />
         </InputLayouts.Vertical>
-      </FieldPadder>
+      </InputLayouts.FieldPadder>
 
       <APIKeyField providerName="LiteLLM Proxy" />
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <FieldSeparator />
+      <InputLayouts.FieldSeparator />
       <ModelSelectionField
         modelConfigurations={currentModels}
-        formikProps={formikProps}
         recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
@@ -138,8 +135,7 @@ function LiteLLMProxyModalInternals({
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
-          <ModelAccessField formikProps={formikProps} />
+          <InputLayouts.FieldSeparator />
         </>
       )}
     </ModalWrapper>
@@ -205,7 +201,7 @@ export default function LiteLLMProxyModal({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
+      validateOnMount
       onSubmit={async (values, { setSubmitting }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
@@ -240,9 +236,8 @@ export default function LiteLLMProxyModal({
         }
       }}
     >
-      {(formikProps) => (
+      {() => (
         <LiteLLMProxyModalInternals
-          formikProps={formikProps}
           existingLlmProvider={existingLlmProvider}
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}

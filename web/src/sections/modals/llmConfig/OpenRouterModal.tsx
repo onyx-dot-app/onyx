@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, FormikProps } from "formik";
+import { Formik, useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
   LLMProviderView,
@@ -42,7 +41,6 @@ interface OpenRouterModalValues extends BaseLLMFormValues {
 }
 
 interface OpenRouterModalInternalsProps {
-  formikProps: FormikProps<OpenRouterModalValues>;
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
@@ -53,7 +51,6 @@ interface OpenRouterModalInternalsProps {
 }
 
 function OpenRouterModalInternals({
-  formikProps,
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
@@ -62,6 +59,7 @@ function OpenRouterModalInternals({
   onClose,
   isOnboarding,
 }: OpenRouterModalInternalsProps) {
+  const formikProps = useFormikContext<OpenRouterModalValues>();
   const currentModels =
     fetchedModels.length > 0
       ? fetchedModels
@@ -104,7 +102,7 @@ function OpenRouterModalInternals({
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
-      <FieldPadder>
+      <InputLayouts.FieldPadder>
         <InputLayouts.Vertical
           name="api_base"
           title="API Base URL"
@@ -115,22 +113,21 @@ function OpenRouterModalInternals({
             placeholder="Your OpenRouter base URL"
           />
         </InputLayouts.Vertical>
-      </FieldPadder>
+      </InputLayouts.FieldPadder>
 
       <APIKeyField providerName="OpenRouter" />
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <FieldSeparator />
+      <InputLayouts.FieldSeparator />
 
       <ModelSelectionField
         modelConfigurations={currentModels}
-        formikProps={formikProps}
         recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
@@ -138,8 +135,7 @@ function OpenRouterModalInternals({
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
-          <ModelAccessField formikProps={formikProps} />
+          <InputLayouts.FieldSeparator />
         </>
       )}
     </ModalWrapper>
@@ -205,7 +201,7 @@ export default function OpenRouterModal({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
+      validateOnMount
       onSubmit={async (values, { setSubmitting }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
@@ -240,9 +236,8 @@ export default function OpenRouterModal({
         }
       }}
     >
-      {(formikProps) => (
+      {() => (
         <OpenRouterModalInternals
-          formikProps={formikProps}
           existingLlmProvider={existingLlmProvider}
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}

@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
-import { Formik, FormikProps } from "formik";
+import { Formik, useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { FieldSeparator } from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -50,7 +49,6 @@ interface OllamaModalValues extends BaseLLMFormValues {
 }
 
 interface OllamaModalInternalsProps {
-  formikProps: FormikProps<OllamaModalValues>;
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
@@ -60,7 +58,6 @@ interface OllamaModalInternalsProps {
 }
 
 function OllamaModalInternals({
-  formikProps,
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
@@ -68,6 +65,7 @@ function OllamaModalInternals({
   onClose,
   isOnboarding,
 }: OllamaModalInternalsProps) {
+  const formikProps = useFormikContext<OllamaModalValues>();
   const isInitialMount = useRef(true);
 
   const doFetchModels = useCallback(
@@ -177,24 +175,22 @@ function OllamaModalInternals({
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
       )}
 
-      <FieldSeparator />
+      <InputLayouts.FieldSeparator />
 
       <ModelSelectionField
         modelConfigurations={currentModels}
-        formikProps={formikProps}
         recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
       />
 
       {!isOnboarding && (
         <>
-          <FieldSeparator />
-          <ModelAccessField formikProps={formikProps} />
+          <InputLayouts.FieldSeparator />
         </>
       )}
     </ModalWrapper>
@@ -263,7 +259,7 @@ export default function OllamaModal({
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      validateOnMount={true}
+      validateOnMount
       onSubmit={async (values, { setSubmitting }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
@@ -310,9 +306,8 @@ export default function OllamaModal({
         }
       }}
     >
-      {(formikProps) => (
+      {() => (
         <OllamaModalInternals
-          formikProps={formikProps}
           existingLlmProvider={existingLlmProvider}
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}
