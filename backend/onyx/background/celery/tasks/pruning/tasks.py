@@ -72,6 +72,7 @@ from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import format_error_for_logging
@@ -570,8 +571,9 @@ def connector_pruning_generator_task(
             )
 
             # Extract docs and hierarchy nodes from the source
+            connector_type = str(cc_pair.connector.source)
             extraction_result = extract_ids_from_runnable_connector(
-                runnable_connector, callback
+                runnable_connector, callback, connector_type=connector_type
             )
             all_connector_doc_ids = extraction_result.raw_id_to_parent
 
@@ -636,6 +638,8 @@ def connector_pruning_generator_task(
                 commit=True,
             )
 
+            diff_start = time.monotonic()
+
             # a list of docs in our local index
             all_indexed_document_ids = {
                 doc.id
@@ -670,6 +674,8 @@ def connector_pruning_generator_task(
             task_logger.info(
                 f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
             )
+
+            observe_pruning_diff_duration(time.monotonic() - diff_start, connector_type)
 
             redis_connector.prune.generator_complete = tasks_generated
 
