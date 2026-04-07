@@ -108,4 +108,4 @@ Observability and metrics collections:
 
 Workers can expose Prometheus metrics via a standalone HTTP server. Currently docfetching and docprocessing have push-based task lifecycle metrics; the monitoring worker runs pull-based collectors for queue depth and connector health.
 
-For the full metric reference, integration guide, and PromQL examples, see [`docs/METRICS.md`](../../docs/METRICS.md#celery-worker-metrics).
+For the full metric reference, integration guide, and PromQL examples, see [`docs/METRICS.md`](../../../docs/METRICS.md#celery-worker-metrics).
