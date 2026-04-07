@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   MAX_MODELS,
   SelectedModel,
@@ -53,19 +53,24 @@ export default function useMultiModelChat(
   // mode. This handles both initial load and session override changes (e.g.
   // page reload restores the persisted model after providers load).
   // Skip when user has manually added multiple models (multi-model mode).
+  const selectedModelsRef = useRef(selectedModels);
+  selectedModelsRef.current = selectedModels;
+
   useEffect(() => {
     if (llmOptions.length === 0) return;
     const { currentLlm } = llmManager;
     if (!currentLlm.modelName) return;
 
+    const current = selectedModelsRef.current;
+
     // Don't override multi-model selections
-    if (selectedModels.length > 1) return;
+    if (current.length > 1) return;
 
     // Skip if already showing the correct model
     if (
-      selectedModels.length === 1 &&
-      selectedModels[0]!.provider === currentLlm.provider &&
-      selectedModels[0]!.modelName === currentLlm.modelName
+      current.length === 1 &&
+      current[0]!.provider === currentLlm.provider &&
+      current[0]!.modelName === currentLlm.modelName
     ) {
       return;
     }
@@ -86,7 +91,7 @@ export default function useMultiModelChat(
       ]);
       setDefaultInitialized(true);
     }
-  }, [llmOptions, llmManager.currentLlm, selectedModels]);
+  }, [llmOptions, llmManager.currentLlm]);
 
   const isMultiModelActive = selectedModels.length > 1;
 
