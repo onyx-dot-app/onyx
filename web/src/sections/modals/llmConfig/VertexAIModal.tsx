@@ -223,6 +223,13 @@ export default function VertexAIModal({
             }
             shouldShowAutoUpdateToggle={true}
           />
+
+          {!isOnboarding && (
+            <>
+              <InputLayouts.FieldSeparator />
+              <ModelAccessField />
+            </>
+          )}
         </ModalWrapper>
       )}
     </Formik>

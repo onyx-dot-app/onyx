@@ -156,6 +156,7 @@ export default function OpenAIModal({
           {!isOnboarding && (
             <>
               <FieldSeparator />
+              <ModelAccessField />
             </>
           )}
         </ModalWrapper>

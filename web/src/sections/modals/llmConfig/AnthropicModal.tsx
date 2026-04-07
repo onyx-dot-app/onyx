@@ -158,6 +158,7 @@ export default function AnthropicModal({
           {!isOnboarding && (
             <>
               <FieldSeparator />
+              <ModelAccessField />
             </>
           )}
         </ModalWrapper>

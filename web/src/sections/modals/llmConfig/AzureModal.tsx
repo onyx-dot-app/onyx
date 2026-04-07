@@ -253,6 +253,7 @@ export default function AzureModal({
           {!isOnboarding && (
             <>
               <InputLayouts.FieldSeparator />
+              <ModelAccessField />
             </>
           )}
         </ModalWrapper>

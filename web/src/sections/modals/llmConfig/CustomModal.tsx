@@ -435,6 +435,7 @@ export default function CustomModal({
           {!isOnboarding && (
             <>
               <InputLayouts.FieldSeparator />
+              <ModelAccessField />
             </>
           )}
         </ModalWrapper>

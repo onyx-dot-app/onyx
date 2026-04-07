@@ -169,6 +169,7 @@ function LMStudioFormInternals({
       {!isOnboarding && (
         <>
           <InputLayouts.FieldSeparator />
+          <ModelAccessField />
         </>
       )}
     </ModalWrapper>

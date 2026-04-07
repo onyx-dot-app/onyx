@@ -136,6 +136,7 @@ function OpenRouterModalInternals({
       {!isOnboarding && (
         <>
           <InputLayouts.FieldSeparator />
+          <ModelAccessField />
         </>
       )}
     </ModalWrapper>

@@ -191,6 +191,7 @@ function OllamaModalInternals({
       {!isOnboarding && (
         <>
           <InputLayouts.FieldSeparator />
+          <ModelAccessField />
         </>
       )}
     </ModalWrapper>

@@ -292,6 +292,7 @@ function BedrockModalInternals({
       {!isOnboarding && (
         <>
           <InputLayouts.FieldSeparator />
+          <ModelAccessField />
         </>
       )}
     </ModalWrapper>

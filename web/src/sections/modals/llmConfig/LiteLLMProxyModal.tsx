@@ -136,6 +136,7 @@ function LiteLLMProxyModalInternals({
       {!isOnboarding && (
         <>
           <InputLayouts.FieldSeparator />
+          <ModelAccessField />
         </>
       )}
     </ModalWrapper>
