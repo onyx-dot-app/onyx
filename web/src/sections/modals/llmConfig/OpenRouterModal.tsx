@@ -152,7 +152,11 @@ export default function OpenRouterModal({
   );
 
   const initialValues: OpenRouterModalValues = {
-    ...useInitialValues(LLMProviderName.OPENROUTER, existingLlmProvider),
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.OPENROUTER,
+      existingLlmProvider
+    ),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
   } as OpenRouterModalValues;
 

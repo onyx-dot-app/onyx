@@ -31,6 +31,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import {
+  LLMProviderName,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
@@ -58,17 +59,18 @@ const route = ADMIN_ROUTES.LLM_MODELS;
 // Client-side ordering for the "Add Provider" cards. The backend may return
 // wellKnownLLMProviders in an arbitrary order, so we sort explicitly here.
 const PROVIDER_DISPLAY_ORDER: string[] = [
-  "openai",
-  "anthropic",
-  "vertex_ai",
-  "bedrock",
-  "azure",
-  "litellm_proxy",
-  "ollama_chat",
-  "openrouter",
-  "lm_studio",
-  "bifrost",
-  "openai_compatible",
+  LLMProviderName.OPENAI,
+  LLMProviderName.ANTHROPIC,
+  LLMProviderName.VERTEX_AI,
+  LLMProviderName.BEDROCK,
+  LLMProviderName.AZURE,
+  LLMProviderName.LITELLM,
+  LLMProviderName.LITELLM_PROXY,
+  LLMProviderName.OLLAMA_CHAT,
+  LLMProviderName.OPENROUTER,
+  LLMProviderName.LM_STUDIO,
+  LLMProviderName.BIFROST,
+  LLMProviderName.OPENAI_COMPATIBLE,
 ];
 
 const PROVIDER_MODAL_MAP: Record<

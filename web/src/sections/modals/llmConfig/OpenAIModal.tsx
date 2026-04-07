@@ -46,6 +46,7 @@ export default function OpenAIModal({
   );
 
   const initialValues = useInitialValues(
+    isOnboarding,
     LLMProviderName.OPENAI,
     existingLlmProvider
   );

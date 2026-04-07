@@ -58,7 +58,11 @@ export default function VertexAIModal({
   );
 
   const initialValues: VertexAIModalValues = {
-    ...useInitialValues(LLMProviderName.VERTEX_AI, existingLlmProvider),
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.VERTEX_AI,
+      existingLlmProvider
+    ),
     custom_config: {
       vertex_credentials:
         (existingLlmProvider?.custom_config?.vertex_credentials as string) ??

@@ -194,7 +194,11 @@ export default function OllamaModal({
   );
 
   const initialValues: OllamaModalValues = {
-    ...useInitialValues(LLMProviderName.OLLAMA_CHAT, existingLlmProvider),
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.OLLAMA_CHAT,
+      existingLlmProvider
+    ),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
     custom_config: {
       OLLAMA_API_KEY:

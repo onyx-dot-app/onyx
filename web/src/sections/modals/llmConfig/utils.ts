@@ -11,6 +11,7 @@ import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
 /** Shared initial values for all LLM provider forms (both onboarding and admin). */
 export function useInitialValues(
+  isOnboarding: boolean,
   providerName: LLMProviderName,
   existingLlmProvider?: LLMProviderView
 ) {
@@ -21,7 +22,7 @@ export function useInitialValues(
 
   return {
     provider: existingLlmProvider?.provider ?? providerName,
-    name: existingLlmProvider?.name ?? "",
+    name: isOnboarding ? providerName : existingLlmProvider?.name ?? "",
     api_key: existingLlmProvider?.api_key ?? undefined,
     api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,

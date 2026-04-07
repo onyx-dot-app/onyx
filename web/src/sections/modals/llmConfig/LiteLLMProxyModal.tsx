@@ -152,7 +152,11 @@ export default function LiteLLMProxyModal({
   );
 
   const initialValues: LiteLLMProxyModalValues = {
-    ...useInitialValues(LLMProviderName.LITELLM_PROXY, existingLlmProvider),
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.LITELLM_PROXY,
+      existingLlmProvider
+    ),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
   } as LiteLLMProxyModalValues;
 

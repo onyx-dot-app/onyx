@@ -110,7 +110,11 @@ export default function AzureModal({
   ];
 
   const initialValues: AzureModalValues = {
-    ...useInitialValues(LLMProviderName.AZURE, existingLlmProvider),
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.AZURE,
+      existingLlmProvider
+    ),
     target_uri: buildTargetUri(existingLlmProvider),
   } as AzureModalValues;
 

@@ -155,6 +155,7 @@ export default function OpenAICompatibleModal({
   );
 
   const initialValues = useInitialValues(
+    isOnboarding,
     LLMProviderName.OPENAI_COMPATIBLE,
     existingLlmProvider
   ) as OpenAICompatibleModalValues;

@@ -317,7 +317,11 @@ export default function BedrockModal({
   );
 
   const initialValues: BedrockModalValues = {
-    ...useInitialValues(LLMProviderName.BEDROCK, existingLlmProvider),
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.BEDROCK,
+      existingLlmProvider
+    ),
     custom_config: {
       AWS_REGION_NAME:
         (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ?? "",

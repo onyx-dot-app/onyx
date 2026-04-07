@@ -46,6 +46,7 @@ export default function AnthropicModal({
   );
 
   const initialValues = useInitialValues(
+    isOnboarding,
     LLMProviderName.ANTHROPIC,
     existingLlmProvider
   );

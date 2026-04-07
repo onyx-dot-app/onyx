@@ -207,7 +207,11 @@ export default function CustomModal({
   const onClose = () => onOpenChange?.(false);
 
   const initialValues = {
-    ...useInitialValues(LLMProviderName.CUSTOM, existingLlmProvider),
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.CUSTOM,
+      existingLlmProvider
+    ),
     provider: existingLlmProvider?.provider ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map(

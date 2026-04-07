@@ -178,7 +178,11 @@ export default function LMStudioForm({
   );
 
   const initialValues: LMStudioFormValues = {
-    ...useInitialValues(LLMProviderName.LM_STUDIO, existingLlmProvider),
+    ...useInitialValues(
+      isOnboarding,
+      LLMProviderName.LM_STUDIO,
+      existingLlmProvider
+    ),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
     custom_config: {
       LM_STUDIO_API_KEY:

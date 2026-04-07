@@ -33,8 +33,6 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
 
-const DEFAULT_API_BASE = "";
-
 interface BifrostModalValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
@@ -157,10 +155,11 @@ export default function BifrostModal({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues: BifrostModalValues = {
-    ...useInitialValues(LLMProviderName.BIFROST, existingLlmProvider),
-    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-  } as BifrostModalValues;
+  const initialValues: BifrostModalValues = useInitialValues(
+    isOnboarding,
+    LLMProviderName.BIFROST,
+    existingLlmProvider
+  ) as BifrostModalValues;
 
   const validationSchema = buildValidationSchema(isOnboarding, {
     apiBase: true,
