@@ -335,6 +335,11 @@ class LitellmLLM(LLM):
             LlmProviderNames.OPENAI_COMPATIBLE,
         ):
             self._custom_llm_provider = "openai"
+            # LiteLLM's OpenAI client requires an api_key to be set.
+            # Many OpenAI-compatible servers don't need auth, so supply a
+            # placeholder to prevent LiteLLM from raising AuthenticationError.
+            if not self._api_key:
+                model_kwargs.setdefault("api_key", "not-needed")
             if self._api_base is not None:
                 base = self._api_base.rstrip("/")
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
