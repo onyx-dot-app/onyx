@@ -327,11 +327,13 @@ class LitellmLLM(LLM):
         ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
-        # Bifrost: OpenAI-compatible proxy that expects model names in
-        # provider/model format (e.g. "anthropic/claude-sonnet-4-6").
-        # We route through LiteLLM's openai provider with the Bifrost base URL,
-        # and ensure /v1 is appended.
-        if model_provider == LlmProviderNames.BIFROST:
+        # Bifrost and OpenAI-compatible: OpenAI-compatible proxies that send
+        # model names directly to the endpoint. We route through LiteLLM's
+        # openai provider with the server's base URL, and ensure /v1 is appended.
+        if model_provider in (
+            LlmProviderNames.BIFROST,
+            LlmProviderNames.OPENAI_COMPATIBLE,
+        ):
             self._custom_llm_provider = "openai"
             if self._api_base is not None:
                 base = self._api_base.rstrip("/")
@@ -449,17 +451,20 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
-        is_bifrost = self._model_provider == LlmProviderNames.BIFROST
+        is_openai_compatible_proxy = self._model_provider in (
+            LlmProviderNames.BIFROST,
+            LlmProviderNames.OPENAI_COMPATIBLE,
+        )
         model_provider = (
             f"{self.config.model_provider}/responses"
             if is_openai_model  # Uses litellm's completions -> responses bridge
             else self.config.model_provider
         )
-        if is_bifrost:
-            # Bifrost expects model names in provider/model format
-            # (e.g. "anthropic/claude-sonnet-4-6") sent directly to its
-            # OpenAI-compatible endpoint. We use custom_llm_provider="openai"
-            # so LiteLLM doesn't try to route based on the provider prefix.
+        if is_openai_compatible_proxy:
+            # OpenAI-compatible proxies (Bifrost, generic OpenAI-compatible
+            # servers) expect model names sent directly to their endpoint.
+            # We use custom_llm_provider="openai" so LiteLLM doesn't try
+            # to route based on the provider prefix.
             model = self.config.deployment_name or self.config.model_name
         else:
             model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
@@ -550,7 +555,10 @@ class LitellmLLM(LLM):
         if structured_response_format:
             optional_kwargs["response_format"] = structured_response_format
 
-        if not (is_claude_model or is_ollama or is_mistral) or is_bifrost:
+        if (
+            not (is_claude_model or is_ollama or is_mistral)
+            or is_openai_compatible_proxy
+        ):
             # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
             # However, this param breaks Anthropic and Mistral models,
             # so it must be conditionally included unless the request is

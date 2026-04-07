@@ -10,6 +10,7 @@ import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
 import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
+import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
 
 export function getModalForExistingProvider(
   provider: LLMProviderView,
@@ -66,6 +67,8 @@ export function getModalForExistingProvider(
       return <LiteLLMProxyModal {...props} />;
     case LLMProviderName.BIFROST:
       return <BifrostModal {...props} />;
+    case LLMProviderName.OPENAI_COMPATIBLE:
+      return <OpenAICompatibleModal {...props} />;
     default:
       return <CustomModal {...props} />;
   }
