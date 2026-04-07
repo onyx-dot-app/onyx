@@ -422,6 +422,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.isMultiModelActive]);
 
+  // Sync single-model selection to llmManager so the submission path
+  // uses the correct provider/version (replaces the old LLMPopover sync).
+  useEffect(() => {
+    if (multiModel.selectedModels.length === 1) {
+      const model = multiModel.selectedModels[0]!;
+      llmManager.updateCurrentLlm({
+        name: model.name,
+        provider: model.provider,
+        modelName: model.modelName,
+      });
+    }
+  }, [multiModel.selectedModels]);
+
   const {
     onSubmit,
     stopGenerating,
