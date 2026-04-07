@@ -13,16 +13,20 @@ from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.db.user_group import insert_user_group
 from ee.onyx.db.user_group import prepare_user_group_for_deletion
 from ee.onyx.db.user_group import rename_user_group
+from ee.onyx.db.user_group import set_group_permission__no_commit
 from ee.onyx.db.user_group import update_user_curator_relationship
 from ee.onyx.db.user_group import update_user_group
 from ee.onyx.server.user_group.models import AddUsersToUserGroupRequest
 from ee.onyx.server.user_group.models import MinimalUserGroupSnapshot
 from ee.onyx.server.user_group.models import SetCuratorRequest
+from ee.onyx.server.user_group.models import SetPermissionRequest
+from ee.onyx.server.user_group.models import SetPermissionResponse
 from ee.onyx.server.user_group.models import UpdateGroupAgentsRequest
 from ee.onyx.server.user_group.models import UserGroup
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -102,6 +106,43 @@ def get_user_group_permissions(
         for grant in group.permission_grants
         if not grant.is_deleted
     ]
+
+
+@router.put("/admin/user-group/{user_group_id}/permissions")
+def set_user_group_permission(
+    user_group_id: int,
+    request: SetPermissionRequest,
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SetPermissionResponse:
+    group = fetch_user_group(db_session, user_group_id)
+    if group is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+
+    try:
+        perm = Permission(request.permission)
+    except ValueError:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Unknown permission: {request.permission}",
+        )
+
+    if perm in NON_TOGGLEABLE_PERMISSIONS:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Permission '{request.permission}' cannot be toggled via this endpoint",
+        )
+
+    set_group_permission__no_commit(
+        group_id=user_group_id,
+        permission=perm,
+        enabled=request.enabled,
+        granted_by=user.id,
+        db_session=db_session,
+    )
+    db_session.commit()
+
+    return SetPermissionResponse(permission=request.permission, enabled=request.enabled)
 
 
 @router.post("/admin/user-group")
