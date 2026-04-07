@@ -33,7 +33,6 @@ import {
   ModelsAccessField,
   FieldSeparator,
   FieldWrapper,
-  SingleDefaultModelField,
   LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
@@ -143,17 +142,13 @@ function OpenAICompatibleModalInternals({
 
       <FieldSeparator />
 
-      {isOnboarding ? (
-        <SingleDefaultModelField placeholder="E.g. meta-llama/Llama-3-8B-Instruct" />
-      ) : (
-        <ModelsField
-          modelConfigurations={currentModels}
-          formikProps={formikProps}
-          recommendedDefaultModel={null}
-          shouldShowAutoUpdateToggle={false}
-          onRefetch={isFetchDisabled ? undefined : handleFetchModels}
-        />
-      )}
+      <ModelsField
+        modelConfigurations={currentModels}
+        formikProps={formikProps}
+        recommendedDefaultModel={null}
+        shouldShowAutoUpdateToggle={false}
+        onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+      />
 
       {!isOnboarding && (
         <>
@@ -209,14 +204,9 @@ export default function OpenAICompatibleModal({
         api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
       };
 
-  const validationSchema = isOnboarding
-    ? Yup.object().shape({
-        api_base: Yup.string().required("API Base URL is required"),
-        default_model_name: Yup.string().required("Model name is required"),
-      })
-    : buildDefaultValidationSchema().shape({
-        api_base: Yup.string().required("API Base URL is required"),
-      });
+  const validationSchema = buildDefaultValidationSchema().shape({
+    api_base: Yup.string().required("API Base URL is required"),
+  });
 
   return (
     <Formik
