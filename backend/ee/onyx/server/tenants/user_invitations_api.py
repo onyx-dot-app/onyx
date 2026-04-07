@@ -11,7 +11,6 @@ from ee.onyx.server.tenants.user_mapping import deny_user_invite
 from ee.onyx.server.tenants.user_mapping import invite_self_to_tenant
 from onyx.auth.invited_users import get_pending_users
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_admin_user
 from onyx.auth.users import User
 from onyx.db.enums import Permission
 from onyx.utils.logger import setup_logger
@@ -25,7 +24,7 @@ router = APIRouter(prefix="/tenants")
 @router.post("/users/invite/request")
 async def request_invite(
     invite_request: RequestInviteRequest,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     try:
         invite_self_to_tenant(user.email, invite_request.tenant_id)
@@ -38,7 +37,7 @@ async def request_invite(
 
 @router.get("/users/pending")
 def list_pending_users(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[PendingUserSnapshot]:
     pending_emails = get_pending_users()
     return [PendingUserSnapshot(email=email) for email in pending_emails]
@@ -47,7 +46,7 @@ def list_pending_users(
 @router.post("/users/invite/approve")
 async def approve_user(
     approve_user_request: ApproveUserRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     tenant_id = get_current_tenant_id()
     approve_user_invite(approve_user_request.email, tenant_id)

@@ -24,7 +24,6 @@ from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -92,7 +91,7 @@ def list_minimal_user_groups(
 @router.get("/admin/user-group/{user_group_id}/permissions")
 def get_user_group_permissions(
     user_group_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[str]:
     group = fetch_user_group(db_session, user_group_id)
@@ -108,7 +107,7 @@ def get_user_group_permissions(
 @router.post("/admin/user-group")
 def create_user_group(
     user_group: UserGroupCreate,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -125,7 +124,7 @@ def create_user_group(
 @router.patch("/admin/user-group/rename")
 def rename_user_group_endpoint(
     rename_request: UserGroupRename,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     group = fetch_user_group(db_session, rename_request.id)
@@ -213,7 +212,7 @@ def set_user_curator(
 @router.delete("/admin/user-group/{user_group_id}")
 def delete_user_group(
     user_group_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     group = fetch_user_group(db_session, user_group_id)
@@ -234,7 +233,7 @@ def delete_user_group(
 def update_group_agents(
     user_group_id: int,
     request: UpdateGroupAgentsRequest,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     for agent_id in request.added_agent_ids:

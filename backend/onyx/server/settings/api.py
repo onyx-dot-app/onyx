@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from onyx import __version__ as onyx_version
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_admin_user
 from onyx.auth.users import is_user_admin
 from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -48,7 +47,8 @@ basic_router = APIRouter(prefix="/settings")
 
 @admin_router.put("")
 def admin_put_settings(
-    settings: Settings, _: User = Depends(current_admin_user)
+    settings: Settings,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     if (
         settings.user_file_max_upload_size_mb is not None

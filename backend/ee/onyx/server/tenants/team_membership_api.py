@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
 from ee.onyx.server.tenants.user_mapping import remove_all_users_from_tenant
 from ee.onyx.server.tenants.user_mapping import remove_users_from_tenant
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_user_by_email
 from onyx.server.manage.models import UserByEmail
@@ -24,7 +25,9 @@ router = APIRouter(prefix="/tenants")
 @router.post("/leave-team")
 async def leave_organization(
     user_email: UserByEmail,
-    current_user: User = Depends(current_admin_user),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     tenant_id = get_current_tenant_id()
