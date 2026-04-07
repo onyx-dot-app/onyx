@@ -42,7 +42,6 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.VERTEX_AI,
     LlmProviderNames.BEDROCK,
     LlmProviderNames.OPENROUTER,
-    LlmProviderNames.AVIAN,
     LlmProviderNames.AZURE,
     LlmProviderNames.OLLAMA_CHAT,
     LlmProviderNames.LM_STUDIO,

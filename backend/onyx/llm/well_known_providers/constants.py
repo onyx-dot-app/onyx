@@ -26,8 +26,6 @@ OPENROUTER_PROVIDER_NAME = "openrouter"
 
 ANTHROPIC_PROVIDER_NAME = "anthropic"
 
-AVIAN_PROVIDER_NAME = "avian"
-
 AZURE_PROVIDER_NAME = "azure"
 
 
