@@ -5,14 +5,20 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
+import { useTestingModelFromLLMProvider } from "@/hooks/useLLMProviders";
 import { ScopedMutator } from "swr";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
 /** Shared initial values for all LLM provider forms (both onboarding and admin). */
-export function buildInitialValues(
+export function useInitialValues(
   providerName: LLMProviderName,
   existingLlmProvider?: LLMProviderView
 ) {
+  const testModelName = useTestingModelFromLLMProvider(
+    providerName,
+    existingLlmProvider
+  );
+
   return {
     provider: existingLlmProvider?.provider ?? providerName,
     name: existingLlmProvider?.name ?? "",
@@ -26,6 +32,7 @@ export function buildInitialValues(
       existingLlmProvider?.model_configurations
         ?.filter((m) => m.is_visible)
         .map((m) => m.name) ?? [],
+    test_model_name: testModelName,
   };
 }
 

@@ -3,12 +3,9 @@
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  useTestingModelFromLLMProvider,
-  useWellKnownLLMProvider,
-} from "@/hooks/useLLMProviders";
-import {
-  buildInitialValues,
+  useInitialValues,
   buildValidationSchema,
   buildAvailableModelConfigurations,
 } from "@/sections/modals/llmConfig/utils";
@@ -48,13 +45,10 @@ export default function OpenAIModal({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues = {
-    ...buildInitialValues(LLMProviderName.OPENAI, existingLlmProvider),
-    test_model_name: useTestingModelFromLLMProvider(
-      LLMProviderName.OPENAI,
-      existingLlmProvider
-    ),
-  };
+  const initialValues = useInitialValues(
+    LLMProviderName.OPENAI,
+    existingLlmProvider
+  );
 
   const validationSchema = buildValidationSchema(isOnboarding, {
     apiKey: true,

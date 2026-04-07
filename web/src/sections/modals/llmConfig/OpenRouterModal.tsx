@@ -11,12 +11,9 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import { fetchOpenRouterModels } from "@/app/admin/configuration/llm/utils";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  useTestingModelFromLLMProvider,
-  useWellKnownLLMProvider,
-} from "@/hooks/useLLMProviders";
-import {
-  buildInitialValues,
+  useInitialValues,
   buildValidationSchema,
   buildAvailableModelConfigurations,
   BaseLLMFormValues,
@@ -36,6 +33,7 @@ import {
 import { toast } from "@/hooks/useToast";
 
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
+
 interface OpenRouterModalValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
@@ -154,12 +152,8 @@ export default function OpenRouterModal({
   );
 
   const initialValues: OpenRouterModalValues = {
-    ...buildInitialValues(LLMProviderName.OPENROUTER, existingLlmProvider),
+    ...useInitialValues(LLMProviderName.OPENROUTER, existingLlmProvider),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-    test_model_name: useTestingModelFromLLMProvider(
-      LLMProviderName.OPENROUTER,
-      existingLlmProvider
-    ),
   } as OpenRouterModalValues;
 
   const validationSchema = buildValidationSchema(isOnboarding, {

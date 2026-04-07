@@ -8,7 +8,7 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { buildInitialValues } from "@/sections/modals/llmConfig/utils";
+import { useInitialValues } from "@/sections/modals/llmConfig/utils";
 import {
   submitLLMProvider,
   submitOnboardingProvider,
@@ -207,7 +207,7 @@ export default function CustomModal({
   const onClose = () => onOpenChange?.(false);
 
   const initialValues = {
-    ...buildInitialValues(LLMProviderName.CUSTOM, existingLlmProvider),
+    ...useInitialValues(LLMProviderName.CUSTOM, existingLlmProvider),
     provider: existingLlmProvider?.provider ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map(

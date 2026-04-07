@@ -11,12 +11,9 @@ import {
   LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  useTestingModelFromLLMProvider,
-  useWellKnownLLMProvider,
-} from "@/hooks/useLLMProviders";
-import {
-  buildInitialValues,
+  useInitialValues,
   buildValidationSchema,
   buildAvailableModelConfigurations,
   BaseLLMFormValues,
@@ -197,12 +194,8 @@ export default function OllamaModal({
   );
 
   const initialValues: OllamaModalValues = {
-    ...buildInitialValues(LLMProviderName.OLLAMA_CHAT, existingLlmProvider),
+    ...useInitialValues(LLMProviderName.OLLAMA_CHAT, existingLlmProvider),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-    test_model_name: useTestingModelFromLLMProvider(
-      LLMProviderName.OLLAMA_CHAT,
-      existingLlmProvider
-    ),
     custom_config: {
       OLLAMA_API_KEY:
         (existingLlmProvider?.custom_config?.OLLAMA_API_KEY as string) ?? "",

@@ -11,12 +11,9 @@ import {
   LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  useTestingModelFromLLMProvider,
-  useWellKnownLLMProvider,
-} from "@/hooks/useLLMProviders";
-import {
-  buildInitialValues,
+  useInitialValues,
   buildValidationSchema,
   buildAvailableModelConfigurations,
   BaseLLMFormValues,
@@ -181,12 +178,8 @@ export default function LMStudioForm({
   );
 
   const initialValues: LMStudioFormValues = {
-    ...buildInitialValues(LLMProviderName.LM_STUDIO, existingLlmProvider),
+    ...useInitialValues(LLMProviderName.LM_STUDIO, existingLlmProvider),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-    test_model_name: useTestingModelFromLLMProvider(
-      LLMProviderName.LM_STUDIO,
-      existingLlmProvider
-    ),
     custom_config: {
       LM_STUDIO_API_KEY:
         (existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY as string) ?? "",
