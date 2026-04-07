@@ -7,15 +7,20 @@
   opacity: 0;
 }
 
-/* Group mode — Root :hover controls descendant item visibility via CSS */
+/* Group mode — Root :hover controls descendant item visibility via CSS.
+   Exclude local-mode items so they aren't revealed by an ancestor root. */
 [data-hover-group]:hover
-  .hoverable-item[data-hoverable-variant="opacity-on-hover"] {
+  .hoverable-item[data-hoverable-variant="opacity-on-hover"]:not(
+    [data-hoverable-local]
+  ) {
   opacity: 1;
 }
 
 /* Interaction override — force items visible via JS */
 [data-hover-group][data-interaction="hover"]
-  .hoverable-item[data-hoverable-variant="opacity-on-hover"] {
+  .hoverable-item[data-hoverable-variant="opacity-on-hover"]:not(
+    [data-hoverable-local]
+  ) {
   opacity: 1;
 }
 
