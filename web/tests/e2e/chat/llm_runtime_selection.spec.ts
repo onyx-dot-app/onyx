@@ -403,7 +403,7 @@ test.describe("LLM Runtime Selection", () => {
 
     await openChat(page);
 
-    await page.getByTestId("model-selector").locator("button").first().click();
+    await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const dialog = page.locator('[role="dialog"]');
     await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
@@ -427,7 +427,7 @@ test.describe("LLM Runtime Selection", () => {
     await startNewChat(page);
     await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
 
-    await page.getByTestId("model-selector").locator("button").first().click();
+    await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const secondDialog = page.locator('[role="dialog"]');
     await secondDialog
@@ -445,7 +445,7 @@ test.describe("LLM Runtime Selection", () => {
     await anthropicModelOption.click();
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
 
-    await page.getByTestId("model-selector").locator("button").first().click();
+    await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const verifyDialog = page.locator('[role="dialog"]');
     const selectedAnthropicOption = verifyDialog
@@ -511,7 +511,7 @@ test.describe("LLM Runtime Selection", () => {
     await loginWithCleanCookies(page, testInfo.workerIndex);
     await openChat(page);
 
-    await page.getByTestId("model-selector").locator("button").first().click();
+    await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
     const dialog = page.locator('[role="dialog"]');
