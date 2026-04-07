@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { Formik, useFormikContext } from "formik";
-import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
@@ -26,6 +25,7 @@ import {
 } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
+  APIBaseField,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -96,18 +96,10 @@ function LiteLLMProxyModalInternals({
       llmProvider={existingLlmProvider}
       onClose={onClose}
     >
-      <InputLayouts.FieldPadder>
-        <InputLayouts.Vertical
-          name="api_base"
-          title="API Base URL"
-          subDescription="The base URL for your LiteLLM Proxy server."
-        >
-          <InputTypeInField
-            name="api_base"
-            placeholder="https://your-litellm-proxy.com"
-          />
-        </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+      <APIBaseField
+        subDescription="The base URL for your LiteLLM Proxy server."
+        placeholder="https://your-litellm-proxy.com"
+      />
 
       <APIKeyField providerName="LiteLLM Proxy" />
 

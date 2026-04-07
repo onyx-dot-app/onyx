@@ -181,14 +181,14 @@ export default function VertexAIModal({
             </InputLayouts.Vertical>
           </InputLayouts.FieldPadder>
 
-          <InputLayouts.FieldSeparator />
-
           {!isOnboarding && (
-            <DisplayNameField disabled={!!existingLlmProvider} />
+            <>
+              <InputLayouts.FieldSeparator />
+              <DisplayNameField disabled={!!existingLlmProvider} />
+            </>
           )}
 
           <InputLayouts.FieldSeparator />
-
           <ModelSelectionField
             modelConfigurations={modelConfigurations}
             recommendedDefaultModel={

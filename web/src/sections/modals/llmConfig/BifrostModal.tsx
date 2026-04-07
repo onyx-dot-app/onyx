@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { Formik, useFormikContext } from "formik";
-import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
@@ -27,6 +25,8 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
+  APIBaseField,
+  APIKeyField,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -97,31 +97,17 @@ function BifrostModalInternals({
       llmProvider={existingLlmProvider}
       onClose={onClose}
     >
-      <InputLayouts.FieldPadder>
-        <InputLayouts.Vertical
-          name="api_base"
-          title="API Base URL"
-          subDescription="Paste your Bifrost gateway endpoint URL (including API version)."
-        >
-          <InputTypeInField
-            name="api_base"
-            placeholder="https://your-bifrost-gateway.com/v1"
-          />
-        </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+      <APIBaseField
+        subDescription="Paste your Bifrost gateway endpoint URL (including API version)."
+        placeholder="https://your-bifrost-gateway.com/v1"
+      />
 
-      <InputLayouts.FieldPadder>
-        <InputLayouts.Vertical
-          name="api_key"
-          title="API Key"
-          suffix="optional"
-          subDescription={markdown(
-            "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
-          )}
-        >
-          <PasswordInputTypeInField name="api_key" placeholder="API Key" />
-        </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+      <APIKeyField
+        optional
+        subDescription={markdown(
+          "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
+        )}
+      />
 
       {!isOnboarding && (
         <>

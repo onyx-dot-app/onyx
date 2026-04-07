@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { Formik, useFormikContext } from "formik";
-import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
@@ -26,6 +25,7 @@ import {
 } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
+  APIBaseField,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -95,18 +95,10 @@ function OpenRouterModalInternals({
       llmProvider={existingLlmProvider}
       onClose={onClose}
     >
-      <InputLayouts.FieldPadder>
-        <InputLayouts.Vertical
-          name="api_base"
-          title="API Base URL"
-          subDescription="Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly."
-        >
-          <InputTypeInField
-            name="api_base"
-            placeholder="Your OpenRouter base URL"
-          />
-        </InputLayouts.Vertical>
-      </InputLayouts.FieldPadder>
+      <APIBaseField
+        subDescription="Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly."
+        placeholder="Your OpenRouter base URL"
+      />
 
       <APIKeyField providerName="OpenRouter" />
 
@@ -118,7 +110,6 @@ function OpenRouterModalInternals({
       )}
 
       <InputLayouts.FieldSeparator />
-
       <ModelSelectionField
         modelConfigurations={currentModels}
         recommendedDefaultModel={null}

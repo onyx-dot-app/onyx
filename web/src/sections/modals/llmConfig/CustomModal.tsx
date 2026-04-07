@@ -15,6 +15,7 @@ import {
 } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
+  APIBaseField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
@@ -351,15 +352,7 @@ export default function CustomModal({
             </InputLayouts.FieldPadder>
           )}
 
-          <InputLayouts.FieldPadder>
-            <InputLayouts.Vertical
-              name="api_base"
-              title="API Base URL"
-              suffix="optional"
-            >
-              <InputTypeInField name="api_base" placeholder="https://" />
-            </InputLayouts.Vertical>
-          </InputLayouts.FieldPadder>
+          <APIBaseField optional />
 
           <InputLayouts.FieldPadder>
             <InputLayouts.Vertical
@@ -398,14 +391,14 @@ export default function CustomModal({
             </Section>
           </InputLayouts.FieldPadder>
 
-          <InputLayouts.FieldSeparator />
-
           {!isOnboarding && (
-            <DisplayNameField disabled={!!existingLlmProvider} />
+            <>
+              <InputLayouts.FieldSeparator />
+              <DisplayNameField disabled={!!existingLlmProvider} />
+            </>
           )}
 
           <InputLayouts.FieldSeparator />
-
           <Section gap={0.5}>
             <InputLayouts.FieldPadder>
               <Content

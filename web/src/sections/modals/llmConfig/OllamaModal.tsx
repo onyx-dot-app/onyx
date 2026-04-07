@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik, useFormikContext } from "formik";
-import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
@@ -25,6 +24,7 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
+  APIBaseField,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -139,16 +139,10 @@ function OllamaModalInternals({
             <Tabs.Trigger value={TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
           </Tabs.List>
           <Tabs.Content value={TAB_SELF_HOSTED}>
-            <InputLayouts.Vertical
-              name="api_base"
-              title="API Base URL"
+            <APIBaseField
               subDescription="The base URL for your Ollama instance."
-            >
-              <InputTypeInField
-                name="api_base"
-                placeholder="Your Ollama API base URL"
-              />
-            </InputLayouts.Vertical>
+              placeholder="Your Ollama API base URL"
+            />
           </Tabs.Content>
 
           <Tabs.Content value={TAB_CLOUD}>
@@ -174,7 +168,6 @@ function OllamaModalInternals({
       )}
 
       <InputLayouts.FieldSeparator />
-
       <ModelSelectionField
         modelConfigurations={currentModels}
         recommendedDefaultModel={null}
