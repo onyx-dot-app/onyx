@@ -7,6 +7,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -27,13 +28,10 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
-  ModelsField,
+  ModelSelectionField,
   DisplayNameField,
-  FieldSeparator,
-  FieldWrapper,
-  ModelsAccessField,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
 import { Card } from "@opal/components";
@@ -159,7 +157,7 @@ function BedrockModalInternals({
   });
 
   return (
-    <LLMConfigurationModalWrapper
+    <ModalWrapper
       providerEndpoint={BEDROCK_PROVIDER_NAME}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
@@ -168,7 +166,7 @@ function BedrockModalInternals({
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
-      <FieldWrapper>
+      <FieldPadder>
         <Section gap={1}>
           <InputLayouts.Vertical
             name={FIELD_AWS_REGION_NAME}
@@ -222,7 +220,7 @@ function BedrockModalInternals({
             </InputSelect>
           </InputLayouts.Vertical>
         </Section>
-      </FieldWrapper>
+      </FieldPadder>
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
         <Card background="light" border="none" padding="sm">
@@ -250,7 +248,7 @@ function BedrockModalInternals({
       )}
 
       {authMethod === AUTH_METHOD_IAM && (
-        <FieldWrapper>
+        <FieldPadder>
           <Card background="none" border="solid" padding="sm">
             <Content
               icon={SvgAlertCircle}
@@ -259,7 +257,7 @@ function BedrockModalInternals({
               sizePreset="main-ui"
             />
           </Card>
-        </FieldWrapper>
+        </FieldPadder>
       )}
 
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
@@ -286,26 +284,21 @@ function BedrockModalInternals({
       )}
 
       <FieldSeparator />
-
-      {isOnboarding ? (
-        <SingleDefaultModelField placeholder="E.g. us.anthropic.claude-sonnet-4-5-v1" />
-      ) : (
-        <ModelsField
-          modelConfigurations={currentModels}
-          formikProps={formikProps}
-          recommendedDefaultModel={null}
-          shouldShowAutoUpdateToggle={false}
-          onRefetch={isFetchDisabled ? undefined : handleFetchModels}
-        />
-      )}
+      <ModelSelectionField
+        modelConfigurations={currentModels}
+        formikProps={formikProps}
+        recommendedDefaultModel={null}
+        shouldShowAutoUpdateToggle={false}
+        onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+      />
 
       {!isOnboarding && (
         <>
           <FieldSeparator />
-          <ModelsAccessField formikProps={formikProps} />
+          <ModelAccessField formikProps={formikProps} />
         </>
       )}
-    </LLMConfigurationModalWrapper>
+    </ModalWrapper>
   );
 }
 

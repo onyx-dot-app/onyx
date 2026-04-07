@@ -5,6 +5,7 @@ import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
   LLMProviderView,
@@ -26,13 +27,10 @@ import {
 } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
-  ModelsField,
+  ModelSelectionField,
   DisplayNameField,
-  ModelsAccessField,
-  FieldSeparator,
-  FieldWrapper,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
 
@@ -97,7 +95,7 @@ function OpenRouterModalInternals({
   }, []);
 
   return (
-    <LLMConfigurationModalWrapper
+    <ModalWrapper
       providerEndpoint={OPENROUTER_PROVIDER_NAME}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
@@ -106,7 +104,7 @@ function OpenRouterModalInternals({
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
-      <FieldWrapper>
+      <FieldPadder>
         <InputLayouts.Vertical
           name="api_base"
           title="API Base URL"
@@ -117,7 +115,7 @@ function OpenRouterModalInternals({
             placeholder="Your OpenRouter base URL"
           />
         </InputLayouts.Vertical>
-      </FieldWrapper>
+      </FieldPadder>
 
       <APIKeyField providerName="OpenRouter" />
 
@@ -130,25 +128,21 @@ function OpenRouterModalInternals({
 
       <FieldSeparator />
 
-      {isOnboarding ? (
-        <SingleDefaultModelField placeholder="E.g. openai/gpt-4o" />
-      ) : (
-        <ModelsField
-          modelConfigurations={currentModels}
-          formikProps={formikProps}
-          recommendedDefaultModel={null}
-          shouldShowAutoUpdateToggle={false}
-          onRefetch={isFetchDisabled ? undefined : handleFetchModels}
-        />
-      )}
+      <ModelSelectionField
+        modelConfigurations={currentModels}
+        formikProps={formikProps}
+        recommendedDefaultModel={null}
+        shouldShowAutoUpdateToggle={false}
+        onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+      />
 
       {!isOnboarding && (
         <>
           <FieldSeparator />
-          <ModelsAccessField formikProps={formikProps} />
+          <ModelAccessField formikProps={formikProps} />
         </>
       )}
-    </LLMConfigurationModalWrapper>
+    </ModalWrapper>
   );
 }
 

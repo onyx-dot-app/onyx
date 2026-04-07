@@ -16,13 +16,12 @@ import {
 import {
   APIKeyField,
   DisplayNameField,
-  FieldSeparator,
-  ModelsAccessField,
-  LLMConfigurationModalWrapper,
-  FieldWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
@@ -336,7 +335,7 @@ export default function CustomModal({
       }}
     >
       {(formikProps) => (
-        <LLMConfigurationModalWrapper
+        <ModalWrapper
           providerEndpoint="custom"
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
@@ -346,7 +345,7 @@ export default function CustomModal({
           isSubmitting={formikProps.isSubmitting}
         >
           {!isOnboarding && (
-            <FieldWrapper>
+            <FieldPadder>
               <InputLayouts.Vertical
                 name="provider"
                 title="Provider Name"
@@ -360,10 +359,10 @@ export default function CustomModal({
                   variant={existingLlmProvider ? "disabled" : undefined}
                 />
               </InputLayouts.Vertical>
-            </FieldWrapper>
+            </FieldPadder>
           )}
 
-          <FieldWrapper>
+          <FieldPadder>
             <InputLayouts.Vertical
               name="api_base"
               title="API Base URL"
@@ -371,9 +370,9 @@ export default function CustomModal({
             >
               <InputTypeInField name="api_base" placeholder="https://" />
             </InputLayouts.Vertical>
-          </FieldWrapper>
+          </FieldPadder>
 
-          <FieldWrapper>
+          <FieldPadder>
             <InputLayouts.Vertical
               name="api_version"
               title="API Version"
@@ -381,14 +380,14 @@ export default function CustomModal({
             >
               <InputTypeInField name="api_version" />
             </InputLayouts.Vertical>
-          </FieldWrapper>
+          </FieldPadder>
 
           <APIKeyField
             optional
             subDescription="Paste your API key if your model provider requires authentication."
           />
 
-          <FieldWrapper>
+          <FieldPadder>
             <Section gap={0.75}>
               <Content
                 title="Additional Configs"
@@ -408,7 +407,7 @@ export default function CustomModal({
                 addButtonLabel="Add Line"
               />
             </Section>
-          </FieldWrapper>
+          </FieldPadder>
 
           <FieldSeparator />
 
@@ -419,7 +418,7 @@ export default function CustomModal({
           <FieldSeparator />
 
           <Section gap={0.5}>
-            <FieldWrapper>
+            <FieldPadder>
               <Content
                 title="Models"
                 description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
@@ -427,7 +426,7 @@ export default function CustomModal({
                 sizePreset="main-content"
                 widthVariant="full"
               />
-            </FieldWrapper>
+            </FieldPadder>
 
             <Card padding="sm">
               <ModelConfigurationList formikProps={formikProps as any} />
@@ -437,10 +436,10 @@ export default function CustomModal({
           {!isOnboarding && (
             <>
               <FieldSeparator />
-              <ModelsAccessField formikProps={formikProps} />
+              <ModelAccessField formikProps={formikProps} />
             </>
           )}
-        </LLMConfigurationModalWrapper>
+        </ModalWrapper>
       )}
     </Formik>
   );

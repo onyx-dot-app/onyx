@@ -7,6 +7,7 @@ import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -28,13 +29,10 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
-  ModelsField,
+  ModelSelectionField,
   DisplayNameField,
-  ModelsAccessField,
-  FieldSeparator,
-  FieldWrapper,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
 
@@ -100,7 +98,7 @@ function BifrostModalInternals({
   }, []);
 
   return (
-    <LLMConfigurationModalWrapper
+    <ModalWrapper
       providerEndpoint={LLMProviderName.BIFROST}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
@@ -109,7 +107,7 @@ function BifrostModalInternals({
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
-      <FieldWrapper>
+      <FieldPadder>
         <InputLayouts.Vertical
           name="api_base"
           title="API Base URL"
@@ -120,9 +118,9 @@ function BifrostModalInternals({
             placeholder="https://your-bifrost-gateway.com/v1"
           />
         </InputLayouts.Vertical>
-      </FieldWrapper>
+      </FieldPadder>
 
-      <FieldWrapper>
+      <FieldPadder>
         <InputLayouts.Vertical
           name="api_key"
           title="API Key"
@@ -133,7 +131,7 @@ function BifrostModalInternals({
         >
           <PasswordInputTypeInField name="api_key" placeholder="API Key" />
         </InputLayouts.Vertical>
-      </FieldWrapper>
+      </FieldPadder>
 
       {!isOnboarding && (
         <>
@@ -143,26 +141,21 @@ function BifrostModalInternals({
       )}
 
       <FieldSeparator />
-
-      {isOnboarding ? (
-        <SingleDefaultModelField placeholder="E.g. anthropic/claude-sonnet-4-6" />
-      ) : (
-        <ModelsField
-          modelConfigurations={currentModels}
-          formikProps={formikProps}
-          recommendedDefaultModel={null}
-          shouldShowAutoUpdateToggle={false}
-          onRefetch={isFetchDisabled ? undefined : handleFetchModels}
-        />
-      )}
+      <ModelSelectionField
+        modelConfigurations={currentModels}
+        formikProps={formikProps}
+        recommendedDefaultModel={null}
+        shouldShowAutoUpdateToggle={false}
+        onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+      />
 
       {!isOnboarding && (
         <>
           <FieldSeparator />
-          <ModelsAccessField formikProps={formikProps} />
+          <ModelAccessField formikProps={formikProps} />
         </>
       )}
-    </LLMConfigurationModalWrapper>
+    </ModalWrapper>
   );
 }
 

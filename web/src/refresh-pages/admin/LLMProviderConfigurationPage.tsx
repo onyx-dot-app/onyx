@@ -326,7 +326,7 @@ function NewCustomProviderCard({
 // LLMConfigurationPage — main page component
 // ============================================================================
 
-export default function LLMConfigurationPage() {
+export default function LLMProviderConfigurationPage() {
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();

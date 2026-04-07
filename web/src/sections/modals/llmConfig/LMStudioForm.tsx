@@ -5,6 +5,7 @@ import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -26,13 +27,10 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
-  ModelsField,
+  ModelSelectionField,
   DisplayNameField,
-  ModelsAccessField,
-  FieldSeparator,
-  FieldWrapper,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
@@ -120,7 +118,7 @@ function LMStudioFormInternals({
       : existingLlmProvider?.model_configurations || [];
 
   return (
-    <LLMConfigurationModalWrapper
+    <ModalWrapper
       providerEndpoint={LLMProviderName.LM_STUDIO}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
@@ -129,7 +127,7 @@ function LMStudioFormInternals({
       isTesting={isTesting}
       isSubmitting={formikProps.isSubmitting}
     >
-      <FieldWrapper>
+      <FieldPadder>
         <InputLayouts.Vertical
           name="api_base"
           title="API Base URL"
@@ -140,9 +138,9 @@ function LMStudioFormInternals({
             placeholder="Your LM Studio API base URL"
           />
         </InputLayouts.Vertical>
-      </FieldWrapper>
+      </FieldPadder>
 
-      <FieldWrapper>
+      <FieldPadder>
         <InputLayouts.Vertical
           name="custom_config.LM_STUDIO_API_KEY"
           title="API Key"
@@ -154,7 +152,7 @@ function LMStudioFormInternals({
             placeholder="API Key"
           />
         </InputLayouts.Vertical>
-      </FieldWrapper>
+      </FieldPadder>
 
       {!isOnboarding && (
         <>
@@ -164,25 +162,20 @@ function LMStudioFormInternals({
       )}
 
       <FieldSeparator />
-
-      {isOnboarding ? (
-        <SingleDefaultModelField placeholder="E.g. llama3.1" />
-      ) : (
-        <ModelsField
-          modelConfigurations={currentModels}
-          formikProps={formikProps}
-          recommendedDefaultModel={null}
-          shouldShowAutoUpdateToggle={false}
-        />
-      )}
+      <ModelSelectionField
+        modelConfigurations={currentModels}
+        formikProps={formikProps}
+        recommendedDefaultModel={null}
+        shouldShowAutoUpdateToggle={false}
+      />
 
       {!isOnboarding && (
         <>
           <FieldSeparator />
-          <ModelsAccessField formikProps={formikProps} />
+          <ModelAccessField formikProps={formikProps} />
         </>
       )}
-    </LLMConfigurationModalWrapper>
+    </ModalWrapper>
   );
 }
 

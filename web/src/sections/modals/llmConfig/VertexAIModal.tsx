@@ -6,6 +6,7 @@ import { Formik } from "formik";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
@@ -21,13 +22,10 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
-  ModelsField,
+  ModelSelectionField,
   DisplayNameField,
-  FieldSeparator,
-  FieldWrapper,
-  ModelsAccessField,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
 const VERTEXAI_PROVIDER_NAME = "vertex_ai";
@@ -175,7 +173,7 @@ export default function VertexAIModal({
       }}
     >
       {(formikProps) => (
-        <LLMConfigurationModalWrapper
+        <ModalWrapper
           providerEndpoint={VERTEXAI_PROVIDER_NAME}
           providerName={VERTEXAI_DISPLAY_NAME}
           existingProviderName={existingLlmProvider?.name}
@@ -185,7 +183,7 @@ export default function VertexAIModal({
           isTesting={isTesting}
           isSubmitting={formikProps.isSubmitting}
         >
-          <FieldWrapper>
+          <FieldPadder>
             <InputLayouts.Vertical
               name="custom_config.vertex_location"
               title="Google Cloud Region Name"
@@ -196,9 +194,9 @@ export default function VertexAIModal({
                 placeholder={VERTEXAI_DEFAULT_LOCATION}
               />
             </InputLayouts.Vertical>
-          </FieldWrapper>
+          </FieldPadder>
 
-          <FieldWrapper>
+          <FieldPadder>
             <InputLayouts.Vertical
               name="custom_config.vertex_credentials"
               title="API Key"
@@ -209,7 +207,7 @@ export default function VertexAIModal({
                 label=""
               />
             </InputLayouts.Vertical>
-          </FieldWrapper>
+          </FieldPadder>
 
           <FieldSeparator />
 
@@ -219,21 +217,17 @@ export default function VertexAIModal({
 
           <FieldSeparator />
 
-          {isOnboarding ? (
-            <SingleDefaultModelField placeholder="E.g. gemini-2.5-pro" />
-          ) : (
-            <ModelsField
-              modelConfigurations={modelConfigurations}
-              formikProps={formikProps}
-              recommendedDefaultModel={
-                wellKnownLLMProvider?.recommended_default_model ?? null
-              }
-              shouldShowAutoUpdateToggle={true}
-            />
-          )}
+          <ModelSelectionField
+            modelConfigurations={modelConfigurations}
+            formikProps={formikProps}
+            recommendedDefaultModel={
+              wellKnownLLMProvider?.recommended_default_model ?? null
+            }
+            shouldShowAutoUpdateToggle={true}
+          />
 
-          {!isOnboarding && <ModelsAccessField formikProps={formikProps} />}
-        </LLMConfigurationModalWrapper>
+          {!isOnboarding && <ModelAccessField formikProps={formikProps} />}
+        </ModalWrapper>
       )}
     </Formik>
   );

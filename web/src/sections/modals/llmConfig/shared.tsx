@@ -7,6 +7,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
 import { ModelConfiguration, SimpleKnownModel } from "@/interfaces/llm";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -17,8 +18,7 @@ import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import { Button, LineItemButton, Tag } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";
-import { RichStr, WithoutStyles } from "@opal/types";
-import Separator from "@/refresh-components/Separator";
+import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
 import { Hoverable } from "@opal/core";
 import { Content } from "@opal/layouts";
@@ -48,27 +48,14 @@ import {
   getProviderProductName,
 } from "@/lib/llmConfig/providers";
 
-export function FieldSeparator() {
-  return <Separator noPadding className="p-2" />;
-}
-
-export type FieldWrapperProps = WithoutStyles<
-  React.HTMLAttributes<HTMLDivElement>
->;
-
-export function FieldWrapper(props: FieldWrapperProps) {
-  return <div {...props} className="p-2 w-full" />;
-}
-
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
 export interface DisplayNameFieldProps {
   disabled?: boolean;
 }
-
 export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
   return (
-    <FieldWrapper>
+    <FieldPadder>
       <InputLayouts.Vertical
         name="name"
         title="Display Name"
@@ -80,7 +67,7 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
           variant={disabled ? "disabled" : undefined}
         />
       </InputLayouts.Vertical>
-    </FieldWrapper>
+    </FieldPadder>
   );
 }
 
@@ -91,14 +78,13 @@ export interface APIKeyFieldProps {
   providerName?: string;
   subDescription?: string | RichStr;
 }
-
 export function APIKeyField({
   optional = false,
   providerName,
   subDescription,
 }: APIKeyFieldProps) {
   return (
-    <FieldWrapper>
+    <FieldPadder>
       <InputLayouts.Vertical
         name="api_key"
         title="API Key"
@@ -113,27 +99,7 @@ export function APIKeyField({
       >
         <PasswordInputTypeInField name="api_key" />
       </InputLayouts.Vertical>
-    </FieldWrapper>
-  );
-}
-
-// ─── SingleDefaultModelField ─────────────────────────────────────────────────
-
-export interface SingleDefaultModelFieldProps {
-  placeholder?: string;
-}
-
-export function SingleDefaultModelField({
-  placeholder = "E.g. gpt-4o",
-}: SingleDefaultModelFieldProps) {
-  return (
-    <InputLayouts.Vertical
-      name="default_model_name"
-      title="Default Model"
-      description="The model to use by default for this provider unless otherwise specified."
-    >
-      <InputTypeInField name="default_model_name" placeholder={placeholder} />
-    </InputLayouts.Vertical>
+    </FieldPadder>
   );
 }
 
@@ -143,13 +109,12 @@ export function SingleDefaultModelField({
 const GROUP_PREFIX = "group:";
 const AGENT_PREFIX = "agent:";
 
-interface ModelsAccessFieldProps<T> {
+export interface ModelAccessFieldProps<T> {
   formikProps: FormikProps<T>;
 }
-
-export function ModelsAccessField<T extends BaseLLMFormValues>({
+export function ModelAccessField<T extends BaseLLMFormValues>({
   formikProps,
-}: ModelsAccessFieldProps<T>) {
+}: ModelAccessFieldProps<T>) {
   const { agents } = useAgents();
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { data: usersData } = useUsers({ includeApiKeys: false });
@@ -232,7 +197,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
 
   return (
     <div className="flex flex-col w-full">
-      <FieldWrapper>
+      <FieldPadder>
         <InputLayouts.Horizontal
           name="is_public"
           title="Models Access"
@@ -253,7 +218,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
             </InputSelect.Content>
           </InputSelect>
         </InputLayouts.Horizontal>
-      </FieldWrapper>
+      </FieldPadder>
 
       {!isPublic && (
         <Card background="light" border="none" padding="sm">
@@ -374,7 +339,7 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
 
 // ─── ModelsField ─────────────────────────────────────────────────────
 
-export interface ModelsFieldProps<T> {
+export interface ModelSelectionFieldProps<T> {
   formikProps: FormikProps<T>;
   modelConfigurations: ModelConfiguration[];
   recommendedDefaultModel: SimpleKnownModel | null;
@@ -384,15 +349,14 @@ export interface ModelsFieldProps<T> {
   /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
   onAddModel?: (modelName: string) => void;
 }
-
-export function ModelsField<T extends BaseLLMFormValues>({
+export function ModelSelectionField<T extends BaseLLMFormValues>({
   formikProps,
   modelConfigurations,
   recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
   onRefetch,
   onAddModel,
-}: ModelsFieldProps<T>) {
+}: ModelSelectionFieldProps<T>) {
   const [newModelName, setNewModelName] = useState("");
   const isAutoMode = formikProps.values.is_auto_mode;
   const selectedModels = formikProps.values.selected_model_names ?? [];
@@ -643,11 +607,9 @@ export function ModelsField<T extends BaseLLMFormValues>({
   );
 }
 
-// ============================================================================
-// LLMConfigurationModalWrapper
-// ============================================================================
+// ─── ModalWrapper ─────────────────────────────────────────────────────
 
-interface LLMConfigurationModalWrapperProps {
+export interface ModalWrapperProps {
   providerEndpoint: string;
   providerName?: string;
   existingProviderName?: string;
@@ -658,8 +620,7 @@ interface LLMConfigurationModalWrapperProps {
   isSubmitting?: boolean;
   children: ReactNode;
 }
-
-export function LLMConfigurationModalWrapper({
+export function ModalWrapper({
   providerEndpoint,
   providerName,
   existingProviderName,
@@ -669,7 +630,7 @@ export function LLMConfigurationModalWrapper({
   isTesting,
   isSubmitting,
   children,
-}: LLMConfigurationModalWrapperProps) {
+}: ModalWrapperProps) {
   const busy = isTesting || isSubmitting;
   const providerIcon = getProviderIcon(providerEndpoint);
   const providerDisplayName =

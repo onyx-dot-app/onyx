@@ -18,13 +18,12 @@ import {
 } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
-  ModelsField,
+  ModelSelectionField,
   DisplayNameField,
-  FieldSeparator,
-  ModelsAccessField,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
+import { FieldSeparator } from "@/layouts/input-layouts";
 
 const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
@@ -127,7 +126,7 @@ export default function OpenAIModal({
       }}
     >
       {(formikProps) => (
-        <LLMConfigurationModalWrapper
+        <ModalWrapper
           providerEndpoint={OPENAI_PROVIDER_NAME}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
@@ -146,26 +145,22 @@ export default function OpenAIModal({
           )}
 
           <FieldSeparator />
-          {isOnboarding ? (
-            <SingleDefaultModelField placeholder="E.g. gpt-5.2" />
-          ) : (
-            <ModelsField
-              modelConfigurations={modelConfigurations}
-              formikProps={formikProps}
-              recommendedDefaultModel={
-                wellKnownLLMProvider?.recommended_default_model ?? null
-              }
-              shouldShowAutoUpdateToggle={true}
-            />
-          )}
+          <ModelSelectionField
+            modelConfigurations={modelConfigurations}
+            formikProps={formikProps}
+            recommendedDefaultModel={
+              wellKnownLLMProvider?.recommended_default_model ?? null
+            }
+            shouldShowAutoUpdateToggle={true}
+          />
 
           {!isOnboarding && (
             <>
               <FieldSeparator />
-              <ModelsAccessField formikProps={formikProps} />
+              <ModelAccessField formikProps={formikProps} />
             </>
           )}
-        </LLMConfigurationModalWrapper>
+        </ModalWrapper>
       )}
     </Formik>
   );

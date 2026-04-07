@@ -18,13 +18,12 @@ import {
 } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
-  ModelsField,
+  ModelSelectionField,
   DisplayNameField,
-  ModelsAccessField,
-  FieldSeparator,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
+import { FieldSeparator } from "@/layouts/input-layouts";
 
 const ANTHROPIC_PROVIDER_NAME = "anthropic";
 const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
@@ -129,7 +128,7 @@ export default function AnthropicModal({
       }}
     >
       {(formikProps) => (
-        <LLMConfigurationModalWrapper
+        <ModalWrapper
           providerEndpoint={ANTHROPIC_PROVIDER_NAME}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
@@ -148,26 +147,22 @@ export default function AnthropicModal({
           )}
 
           <FieldSeparator />
-          {isOnboarding ? (
-            <SingleDefaultModelField placeholder="E.g. claude-sonnet-4-5" />
-          ) : (
-            <ModelsField
-              modelConfigurations={modelConfigurations}
-              formikProps={formikProps}
-              recommendedDefaultModel={
-                wellKnownLLMProvider?.recommended_default_model ?? null
-              }
-              shouldShowAutoUpdateToggle={true}
-            />
-          )}
+          <ModelSelectionField
+            modelConfigurations={modelConfigurations}
+            formikProps={formikProps}
+            recommendedDefaultModel={
+              wellKnownLLMProvider?.recommended_default_model ?? null
+            }
+            shouldShowAutoUpdateToggle={true}
+          />
 
           {!isOnboarding && (
             <>
               <FieldSeparator />
-              <ModelsAccessField formikProps={formikProps} />
+              <ModelAccessField formikProps={formikProps} />
             </>
           )}
-        </LLMConfigurationModalWrapper>
+        </ModalWrapper>
       )}
     </Formik>
   );

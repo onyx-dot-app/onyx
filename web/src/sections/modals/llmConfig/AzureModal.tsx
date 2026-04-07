@@ -5,6 +5,7 @@ import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { FieldSeparator, FieldPadder } from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
   LLMProviderView,
@@ -26,12 +27,9 @@ import {
 import {
   APIKeyField,
   DisplayNameField,
-  FieldSeparator,
-  FieldWrapper,
-  ModelsAccessField,
-  ModelsField,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModelSelectionField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import {
   isValidAzureTargetUri,
@@ -196,7 +194,7 @@ export default function AzureModal({
       }}
     >
       {(formikProps) => (
-        <LLMConfigurationModalWrapper
+        <ModalWrapper
           providerEndpoint={AZURE_PROVIDER_NAME}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
@@ -205,7 +203,7 @@ export default function AzureModal({
           isTesting={isTesting}
           isSubmitting={formikProps.isSubmitting}
         >
-          <FieldWrapper>
+          <FieldPadder>
             <InputLayouts.Vertical
               name="target_uri"
               title="Target URI"
@@ -216,7 +214,7 @@ export default function AzureModal({
                 placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
               />
             </InputLayouts.Vertical>
-          </FieldWrapper>
+          </FieldPadder>
 
           <APIKeyField providerName="Azure" />
 
@@ -228,44 +226,39 @@ export default function AzureModal({
           )}
 
           <FieldSeparator />
-
-          {isOnboarding ? (
-            <SingleDefaultModelField placeholder="E.g. gpt-4o" />
-          ) : (
-            <ModelsField
-              modelConfigurations={modelConfigurations}
-              formikProps={formikProps}
-              recommendedDefaultModel={null}
-              shouldShowAutoUpdateToggle={false}
-              onAddModel={(modelName) => {
-                const newModel: ModelConfiguration = {
-                  name: modelName,
-                  is_visible: true,
-                  max_input_tokens: null,
-                  supports_image_input: false,
-                  supports_reasoning: false,
-                };
-                setAddedModels((prev) => [...prev, newModel]);
-                const currentSelected =
-                  formikProps.values.selected_model_names ?? [];
-                formikProps.setFieldValue("selected_model_names", [
-                  ...currentSelected,
-                  modelName,
-                ]);
-                if (!formikProps.values.default_model_name) {
-                  formikProps.setFieldValue("default_model_name", modelName);
-                }
-              }}
-            />
-          )}
+          <ModelSelectionField
+            modelConfigurations={modelConfigurations}
+            formikProps={formikProps}
+            recommendedDefaultModel={null}
+            shouldShowAutoUpdateToggle={false}
+            onAddModel={(modelName) => {
+              const newModel: ModelConfiguration = {
+                name: modelName,
+                is_visible: true,
+                max_input_tokens: null,
+                supports_image_input: false,
+                supports_reasoning: false,
+              };
+              setAddedModels((prev) => [...prev, newModel]);
+              const currentSelected =
+                formikProps.values.selected_model_names ?? [];
+              formikProps.setFieldValue("selected_model_names", [
+                ...currentSelected,
+                modelName,
+              ]);
+              if (!formikProps.values.default_model_name) {
+                formikProps.setFieldValue("default_model_name", modelName);
+              }
+            }}
+          />
 
           {!isOnboarding && (
             <>
               <FieldSeparator />
-              <ModelsAccessField formikProps={formikProps} />
+              <ModelAccessField formikProps={formikProps} />
             </>
           )}
-        </LLMConfigurationModalWrapper>
+        </ModalWrapper>
       )}
     </Formik>
   );

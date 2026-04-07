@@ -1,1 +1,1 @@
-export { default } from "@/refresh-pages/admin/LLMConfigurationPage";
+export { default } from "@/refresh-pages/admin/LLMProviderConfigurationPage";

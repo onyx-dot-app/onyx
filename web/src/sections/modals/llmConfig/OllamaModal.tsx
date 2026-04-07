@@ -5,6 +5,7 @@ import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { FieldSeparator } from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -25,12 +26,10 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
-  ModelsField,
+  ModelSelectionField,
   DisplayNameField,
-  ModelsAccessField,
-  FieldSeparator,
-  SingleDefaultModelField,
-  LLMConfigurationModalWrapper,
+  ModelAccessField,
+  ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
 import debounce from "lodash/debounce";
@@ -131,7 +130,7 @@ function OllamaModalInternals({
     existingLlmProvider && hasApiKey ? TAB_CLOUD : TAB_SELF_HOSTED;
 
   return (
-    <LLMConfigurationModalWrapper
+    <ModalWrapper
       providerEndpoint={OLLAMA_PROVIDER_NAME}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
@@ -185,24 +184,20 @@ function OllamaModalInternals({
 
       <FieldSeparator />
 
-      {isOnboarding ? (
-        <SingleDefaultModelField placeholder="E.g. llama3.1" />
-      ) : (
-        <ModelsField
-          modelConfigurations={currentModels}
-          formikProps={formikProps}
-          recommendedDefaultModel={null}
-          shouldShowAutoUpdateToggle={false}
-        />
-      )}
+      <ModelSelectionField
+        modelConfigurations={currentModels}
+        formikProps={formikProps}
+        recommendedDefaultModel={null}
+        shouldShowAutoUpdateToggle={false}
+      />
 
       {!isOnboarding && (
         <>
           <FieldSeparator />
-          <ModelsAccessField formikProps={formikProps} />
+          <ModelAccessField formikProps={formikProps} />
         </>
       )}
-    </LLMConfigurationModalWrapper>
+    </ModalWrapper>
   );
 }
 
