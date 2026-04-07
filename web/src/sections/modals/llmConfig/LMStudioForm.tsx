@@ -47,7 +47,6 @@ interface LMStudioFormInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
-  isTesting: boolean;
   onClose: () => void;
   isOnboarding: boolean;
 }
@@ -56,7 +55,6 @@ function LMStudioFormInternals({
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
-  isTesting,
   onClose,
   isOnboarding,
 }: LMStudioFormInternalsProps) {
@@ -119,10 +117,6 @@ function LMStudioFormInternals({
       providerEndpoint={LLMProviderName.LM_STUDIO}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
-      isFormValid={formikProps.isValid}
-      isDirty={formikProps.dirty}
-      isTesting={isTesting}
-      isSubmitting={formikProps.isSubmitting}
     >
       <InputLayouts.FieldPadder>
         <InputLayouts.Vertical
@@ -186,7 +180,6 @@ export default function LMStudioForm({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
-  const [isTesting, setIsTesting] = useState(false);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
@@ -227,7 +220,7 @@ export default function LMStudioForm({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
         );
@@ -265,7 +258,7 @@ export default function LMStudioForm({
               fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
-            setIsTesting,
+            setStatus,
             mutate,
             onClose,
             setSubmitting,
@@ -278,7 +271,6 @@ export default function LMStudioForm({
           existingLlmProvider={existingLlmProvider}
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}
-          isTesting={isTesting}
           onClose={onClose}
           isOnboarding={isOnboarding}
         />

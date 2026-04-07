@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
@@ -38,7 +37,6 @@ export default function AnthropicModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
-  const [isTesting, setIsTesting] = useState(false);
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
     ANTHROPIC_PROVIDER_NAME
@@ -78,7 +76,7 @@ export default function AnthropicModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
             (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
@@ -105,7 +103,7 @@ export default function AnthropicModal({
             modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
-            setIsTesting,
+            setStatus,
             mutate,
             onClose,
             setSubmitting,
@@ -113,15 +111,11 @@ export default function AnthropicModal({
         }
       }}
     >
-      {(formikProps) => (
+      {() => (
         <ModalWrapper
           providerEndpoint={ANTHROPIC_PROVIDER_NAME}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
-          isFormValid={formikProps.isValid}
-          isDirty={formikProps.dirty}
-          isTesting={isTesting}
-          isSubmitting={formikProps.isSubmitting}
         >
           <APIKeyField providerName="Anthropic" />
 

@@ -47,7 +47,6 @@ interface BifrostModalInternalsProps {
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
   modelConfigurations: ModelConfiguration[];
-  isTesting: boolean;
   onClose: () => void;
   isOnboarding: boolean;
 }
@@ -57,7 +56,6 @@ function BifrostModalInternals({
   fetchedModels,
   setFetchedModels,
   modelConfigurations,
-  isTesting,
   onClose,
   isOnboarding,
 }: BifrostModalInternalsProps) {
@@ -99,10 +97,6 @@ function BifrostModalInternals({
       providerEndpoint={LLMProviderName.BIFROST}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
-      isFormValid={formikProps.isValid}
-      isDirty={formikProps.dirty}
-      isTesting={isTesting}
-      isSubmitting={formikProps.isSubmitting}
     >
       <InputLayouts.FieldPadder>
         <InputLayouts.Vertical
@@ -166,7 +160,6 @@ export default function BifrostModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
-  const [isTesting, setIsTesting] = useState(false);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
@@ -204,7 +197,7 @@ export default function BifrostModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
             fetchedModels.length > 0 ? fetchedModels : [];
@@ -230,7 +223,7 @@ export default function BifrostModal({
               fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
-            setIsTesting,
+            setStatus,
             mutate,
             onClose,
             setSubmitting,
@@ -244,7 +237,6 @@ export default function BifrostModal({
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}
           modelConfigurations={modelConfigurations}
-          isTesting={isTesting}
           onClose={onClose}
           isOnboarding={isOnboarding}
         />

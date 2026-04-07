@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import { LLMProviderFormProps } from "@/interfaces/llm";
@@ -38,7 +37,6 @@ export default function OpenAIModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
-  const [isTesting, setIsTesting] = useState(false);
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } =
     useWellKnownLLMProvider(OPENAI_PROVIDER_NAME);
@@ -76,7 +74,7 @@ export default function OpenAIModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
             (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
@@ -103,7 +101,7 @@ export default function OpenAIModal({
             modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
-            setIsTesting,
+            setStatus,
             mutate,
             onClose,
             setSubmitting,
@@ -111,15 +109,11 @@ export default function OpenAIModal({
         }
       }}
     >
-      {(formikProps) => (
+      {() => (
         <ModalWrapper
           providerEndpoint={OPENAI_PROVIDER_NAME}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
-          isFormValid={formikProps.isValid}
-          isDirty={formikProps.dirty}
-          isTesting={isTesting}
-          isSubmitting={formikProps.isSubmitting}
         >
           <APIKeyField providerName="OpenAI" />
 

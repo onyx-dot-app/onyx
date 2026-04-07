@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import { FileUploadFormField } from "@/components/Field";
@@ -49,7 +48,6 @@ export default function VertexAIModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
-  const [isTesting, setIsTesting] = useState(false);
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
     VERTEXAI_PROVIDER_NAME
@@ -105,7 +103,7 @@ export default function VertexAIModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(
             ([key, v]) => key === "vertex_credentials" || v !== ""
@@ -145,7 +143,7 @@ export default function VertexAIModal({
             modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
-            setIsTesting,
+            setStatus,
             mutate,
             onClose,
             setSubmitting,
@@ -153,16 +151,12 @@ export default function VertexAIModal({
         }
       }}
     >
-      {(formikProps) => (
+      {() => (
         <ModalWrapper
           providerEndpoint={VERTEXAI_PROVIDER_NAME}
           providerName={VERTEXAI_DISPLAY_NAME}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
-          isFormValid={formikProps.isValid}
-          isDirty={formikProps.dirty}
-          isTesting={isTesting}
-          isSubmitting={formikProps.isSubmitting}
         >
           <InputLayouts.FieldPadder>
             <InputLayouts.Vertical

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import { LLMProviderFormProps, ModelConfiguration } from "@/interfaces/llm";
@@ -198,7 +197,6 @@ export default function CustomModal({
   onboardingActions,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
-  const [isTesting, setIsTesting] = useState(false);
   const { mutate } = useSWRConfig();
 
   const onClose = () => onOpenChange?.(false);
@@ -257,7 +255,7 @@ export default function CustomModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         setSubmitting(true);
 
         const modelConfigurations = values.model_configurations
@@ -317,7 +315,7 @@ export default function CustomModal({
             modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
-            setIsTesting,
+            setStatus,
             mutate,
             onClose,
             setSubmitting,
@@ -330,10 +328,6 @@ export default function CustomModal({
           providerEndpoint="custom"
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
-          isFormValid={formikProps.isValid}
-          isDirty={formikProps.dirty}
-          isTesting={isTesting}
-          isSubmitting={formikProps.isSubmitting}
         >
           {!isOnboarding && (
             <InputLayouts.FieldPadder>

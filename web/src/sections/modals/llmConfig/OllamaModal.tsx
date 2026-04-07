@@ -51,7 +51,6 @@ interface OllamaModalInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
-  isTesting: boolean;
   onClose: () => void;
   isOnboarding: boolean;
 }
@@ -60,7 +59,6 @@ function OllamaModalInternals({
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
-  isTesting,
   onClose,
   isOnboarding,
 }: OllamaModalInternalsProps) {
@@ -131,10 +129,6 @@ function OllamaModalInternals({
       providerEndpoint={OLLAMA_PROVIDER_NAME}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
-      isFormValid={formikProps.isValid}
-      isDirty={formikProps.dirty}
-      isTesting={isTesting}
-      isSubmitting={formikProps.isSubmitting}
     >
       <Card background="light" border="none" padding="sm">
         <Tabs defaultValue={defaultTab}>
@@ -208,7 +202,6 @@ export default function OllamaModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
-  const [isTesting, setIsTesting] = useState(false);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } =
@@ -248,7 +241,7 @@ export default function OllamaModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
         );
@@ -286,7 +279,7 @@ export default function OllamaModal({
               fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
-            setIsTesting,
+            setStatus,
             mutate,
             onClose,
             setSubmitting,
@@ -299,7 +292,6 @@ export default function OllamaModal({
           existingLlmProvider={existingLlmProvider}
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}
-          isTesting={isTesting}
           onClose={onClose}
           isOnboarding={isOnboarding}
         />

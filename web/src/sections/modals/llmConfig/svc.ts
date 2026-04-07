@@ -58,7 +58,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   existingLlmProvider,
   shouldMarkAsDefault,
   hideSuccess,
-  setIsTesting,
+  setStatus,
   mutate,
   onClose,
   setSubmitting,
@@ -116,7 +116,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
 
   // Test the configuration
   if (!isEqual(finalValues, initialValues)) {
-    setIsTesting(true);
+    setStatus({ isTesting: true });
 
     const response = await fetch("/api/admin/llm/test", {
       method: "POST",
@@ -130,7 +130,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
         id: existingLlmProvider?.id,
       }),
     });
-    setIsTesting(false);
+    setStatus({ isTesting: false });
 
     if (!response.ok) {
       const errorMsg = (await response.json()).detail;

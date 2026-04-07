@@ -90,7 +90,7 @@ export interface SubmitLLMProviderParams<
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   hideSuccess?: boolean;
-  setIsTesting: (testing: boolean) => void;
+  setStatus: (status: Record<string, unknown>) => void;
   mutate: ScopedMutator;
   onClose: () => void;
   setSubmitting: (submitting: boolean) => void;

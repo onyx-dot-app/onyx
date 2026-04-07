@@ -608,10 +608,6 @@ export interface ModalWrapperProps {
   providerName?: string;
   existingProviderName?: string;
   onClose: () => void;
-  isFormValid: boolean;
-  isDirty?: boolean;
-  isTesting?: boolean;
-  isSubmitting?: boolean;
   children: ReactNode;
 }
 export function ModalWrapper({
@@ -619,12 +615,11 @@ export function ModalWrapper({
   providerName,
   existingProviderName,
   onClose,
-  isFormValid,
-  isDirty,
-  isTesting,
-  isSubmitting,
   children,
 }: ModalWrapperProps) {
+  const { isValid, dirty, isSubmitting, status } =
+    useFormikContext<BaseLLMFormValues>();
+  const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
   const providerIcon = getProviderIcon(providerEndpoint);
   const providerDisplayName =
@@ -656,9 +651,7 @@ export function ModalWrapper({
               Cancel
             </Button>
             <Button
-              disabled={
-                !isFormValid || busy || (!!existingProviderName && !isDirty)
-              }
+              disabled={!isValid || busy || (!!existingProviderName && !dirty)}
               type="submit"
               icon={busy ? SimpleLoader : undefined}
             >

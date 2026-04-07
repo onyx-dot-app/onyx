@@ -79,7 +79,6 @@ interface BedrockModalInternalsProps {
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
   modelConfigurations: ModelConfiguration[];
-  isTesting: boolean;
   onClose: () => void;
   isOnboarding: boolean;
 }
@@ -89,7 +88,6 @@ function BedrockModalInternals({
   fetchedModels,
   setFetchedModels,
   modelConfigurations,
-  isTesting,
   onClose,
   isOnboarding,
 }: BedrockModalInternalsProps) {
@@ -158,10 +156,6 @@ function BedrockModalInternals({
       providerEndpoint={BEDROCK_PROVIDER_NAME}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
-      isFormValid={formikProps.isValid}
-      isDirty={formikProps.dirty}
-      isTesting={isTesting}
-      isSubmitting={formikProps.isSubmitting}
     >
       <InputLayouts.FieldPadder>
         <Section gap={1}>
@@ -309,7 +303,6 @@ export default function BedrockModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
-  const [isTesting, setIsTesting] = useState(false);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
@@ -364,7 +357,7 @@ export default function BedrockModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         const filteredCustomConfig = Object.fromEntries(
           Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
         );
@@ -402,7 +395,7 @@ export default function BedrockModal({
               fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
-            setIsTesting,
+            setStatus,
             mutate,
             onClose,
             setSubmitting,
@@ -416,7 +409,6 @@ export default function BedrockModal({
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}
           modelConfigurations={modelConfigurations}
-          isTesting={isTesting}
           onClose={onClose}
           isOnboarding={isOnboarding}
         />

@@ -86,7 +86,6 @@ export default function AzureModal({
   llmDescriptor,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
-  const [isTesting, setIsTesting] = useState(false);
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(AZURE_PROVIDER_NAME);
 
@@ -147,7 +146,7 @@ export default function AzureModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={async (values, { setSubmitting }) => {
+      onSubmit={async (values, { setSubmitting, setStatus }) => {
         const processedValues = processValues(values);
 
         if (isOnboarding && onboardingState && onboardingActions) {
@@ -174,7 +173,7 @@ export default function AzureModal({
             modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
-            setIsTesting,
+            setStatus,
             mutate,
             onClose,
             setSubmitting,
@@ -187,10 +186,6 @@ export default function AzureModal({
           providerEndpoint={AZURE_PROVIDER_NAME}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
-          isFormValid={formikProps.isValid}
-          isDirty={formikProps.dirty}
-          isTesting={isTesting}
-          isSubmitting={formikProps.isSubmitting}
         >
           <InputLayouts.FieldPadder>
             <InputLayouts.Vertical
