@@ -120,7 +120,10 @@ export default function ModelSelector({
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <div className="flex items-center justify-end gap-1 p-1">
+      <div
+        data-testid="model-selector"
+        className="flex items-center justify-end gap-1 p-1"
+      >
         {!atMax && (
           <Button
             prominence="tertiary"

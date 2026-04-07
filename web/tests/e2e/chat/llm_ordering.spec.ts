@@ -44,7 +44,10 @@ test.describe("LLM Ordering", () => {
     await page.goto("/app");
     await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
 
-    const trigger = page.getByTestId("llm-popover-trigger");
+    const trigger = page
+      .getByTestId("model-selector")
+      .locator("button")
+      .first();
     const originalTriggerText = (await trigger.textContent())?.trim() ?? "";
 
     await trigger.click();
