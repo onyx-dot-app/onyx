@@ -230,18 +230,17 @@ function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {
   );
 }
 
-// ─── FieldSeparator ─────────────────────────────────────────────────────────
-
-/** A horizontal rule with inline padding, used to visually separate field groups. */
+/**
+ * FieldSeparator - A horizontal rule with inline padding, used to visually separate field groups.
+ */
 function FieldSeparator() {
   return <Separator noPadding className="p-2" />;
 }
 
-// ─── FieldPadder ────────────────────────────────────────────────────────────
-
+/**
+ * FieldPadder -  Wraps a field in standard horizontal + vertical padding (`p-2 w-full`).
+ */
 type FieldPadderProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
-
-/** Wraps a field in standard horizontal + vertical padding (`p-2 w-full`). */
 function FieldPadder(props: FieldPadderProps) {
   return <div {...props} className="p-2 w-full" />;
 }
