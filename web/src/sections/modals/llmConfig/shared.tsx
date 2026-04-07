@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Form, FormikProps } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
@@ -372,6 +372,44 @@ export function ModelsAccessField<T extends BaseLLMFormValues>({
   );
 }
 
+// ─── RefetchButton ──────────────────────────────────────────────────
+
+/**
+ * Manages an AbortController so that clicking the button cancels any
+ * in-flight fetch before starting a new one. Also aborts on unmount.
+ */
+function RefetchButton({
+  onRefetch,
+}: {
+  onRefetch: (signal: AbortSignal) => Promise<void> | void;
+}) {
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
+  return (
+    <Button
+      prominence="tertiary"
+      icon={SvgRefreshCw}
+      onClick={async () => {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        try {
+          await onRefetch(controller.signal);
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          toast.error(
+            err instanceof Error ? err.message : "Failed to fetch models"
+          );
+        }
+      }}
+    />
+  );
+}
+
 // ─── ModelsField ─────────────────────────────────────────────────────
 
 export interface ModelsFieldProps<T> {
@@ -379,8 +417,7 @@ export interface ModelsFieldProps<T> {
   modelConfigurations: ModelConfiguration[];
   recommendedDefaultModel: SimpleKnownModel | null;
   shouldShowAutoUpdateToggle: boolean;
-  /** Called when the user clicks the refresh button to re-fetch models. */
-  onRefetch?: () => Promise<void> | void;
+  onRefetch?: (signal: AbortSignal) => Promise<void> | void;
   /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
   onAddModel?: (modelName: string) => void;
 }
@@ -475,23 +512,7 @@ export function ModelsField<T extends BaseLLMFormValues>({
             >
               {allSelected ? "Unselect All" : "Select All"}
             </Button>
-            {onRefetch && (
-              <Button
-                prominence="tertiary"
-                icon={SvgRefreshCw}
-                onClick={async () => {
-                  try {
-                    await onRefetch();
-                  } catch (err) {
-                    toast.error(
-                      err instanceof Error
-                        ? err.message
-                        : "Failed to fetch models"
-                    );
-                  }
-                }}
-              />
-            )}
+            {onRefetch && <RefetchButton onRefetch={onRefetch} />}
           </Section>
         </InputLayouts.Horizontal>
 

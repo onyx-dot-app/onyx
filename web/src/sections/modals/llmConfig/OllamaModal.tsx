@@ -69,22 +69,26 @@ function OllamaModalInternals({
   onClose,
   isOnboarding,
 }: OllamaModalInternalsProps) {
-  const handleFetchModels = async () => {
+  const handleFetchModels = async (signal?: AbortSignal) => {
+    // Only Ollama cloud accepts API key
+    const apiBase = formikProps.values.custom_config?.OLLAMA_API_KEY
+      ? CLOUD_API_BASE
+      : formikProps.values.api_base;
     const { models, error } = await fetchOllamaModels({
-      api_base: formikProps.values.api_base,
+      api_base: apiBase,
       provider_name: existingLlmProvider?.name,
+      signal,
     });
+    if (signal?.aborted) return;
     if (error) {
       throw new Error(error);
     }
     setFetchedModels(models);
   };
 
-  const isFetchDisabled = !formikProps.values.api_base;
-
   // Auto-fetch models on initial load when editing an existing provider
   useEffect(() => {
-    if (existingLlmProvider && !isFetchDisabled) {
+    if (existingLlmProvider) {
       handleFetchModels().catch((err) => {
         toast.error(
           err instanceof Error ? err.message : "Failed to fetch models"
@@ -114,15 +118,7 @@ function OllamaModalInternals({
       isSubmitting={formikProps.isSubmitting}
     >
       <Card background="light" border="none" padding="sm">
-        <Tabs
-          defaultValue={defaultTab}
-          onValueChange={(tab) => {
-            formikProps.setFieldValue(
-              "api_base",
-              tab === TAB_CLOUD ? CLOUD_API_BASE : DEFAULT_API_BASE
-            );
-          }}
-        >
+        <Tabs defaultValue={defaultTab}>
           <Tabs.List>
             <Tabs.Trigger value={TAB_SELF_HOSTED}>
               Self-hosted Ollama
@@ -174,7 +170,7 @@ function OllamaModalInternals({
           formikProps={formikProps}
           recommendedDefaultModel={null}
           shouldShowAutoUpdateToggle={false}
-          onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+          onRefetch={handleFetchModels}
         />
       )}
 
@@ -258,6 +254,9 @@ export default function OllamaModal({
 
         const submitValues = {
           ...values,
+          api_base: filteredCustomConfig.OLLAMA_API_KEY
+            ? CLOUD_API_BASE
+            : values.api_base,
           custom_config:
             Object.keys(filteredCustomConfig).length > 0
               ? filteredCustomConfig
