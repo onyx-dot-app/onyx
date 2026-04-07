@@ -121,3 +121,13 @@ class SetCuratorRequest(BaseModel):
 class UpdateGroupAgentsRequest(BaseModel):
     added_agent_ids: list[int]
     removed_agent_ids: list[int]
+
+
+class SetPermissionRequest(BaseModel):
+    permission: str
+    enabled: bool
+
+
+class SetPermissionResponse(BaseModel):
+    permission: str
+    enabled: bool
