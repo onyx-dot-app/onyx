@@ -365,7 +365,13 @@ if not MULTI_TENANT:
         ]
     )
 
-    tasks_to_schedule.extend(beat_task_templates)
+    # `skip_gated` is a cloud-only hint consumed by `cloud_beat_task_generator`. Strip
+    # it before extending the self-hosted schedule so it doesn't leak into apply_async
+    # as an unrecognised option on every fired task message.
+    for _template in beat_task_templates:
+        _self_hosted_template = copy.deepcopy(_template)
+        _self_hosted_template["options"].pop("skip_gated", None)
+        tasks_to_schedule.append(_self_hosted_template)
 
 
 def generate_cloud_tasks(

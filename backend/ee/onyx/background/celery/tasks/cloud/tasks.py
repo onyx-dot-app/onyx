@@ -63,7 +63,7 @@ def cloud_beat_task_generator(
         gated_tenants: set[str] = get_gated_tenants() if skip_gated else set()
 
         for tenant_id in tenant_ids:
-            if skip_gated and tenant_id in gated_tenants:
+            if tenant_id in gated_tenants:
                 num_skipped_gated += 1
                 continue
 
