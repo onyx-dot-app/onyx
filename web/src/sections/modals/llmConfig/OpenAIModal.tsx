@@ -54,7 +54,6 @@ export default function OpenAIModal({
       LLMProviderName.OPENAI,
       existingLlmProvider
     ),
-    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
   };
 
   const validationSchema = buildValidationSchema(isOnboarding, {

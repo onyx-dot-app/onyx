@@ -19,7 +19,7 @@ export function buildInitialValues(
     api_key: existingLlmProvider?.api_key ?? undefined,
     api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,
-    is_auto_mode: existingLlmProvider?.is_auto_mode ?? false,
+    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
     groups: existingLlmProvider?.groups ?? [],
     personas: existingLlmProvider?.personas ?? [],
     visible_model_names:

@@ -54,7 +54,6 @@ export default function AnthropicModal({
       LLMProviderName.ANTHROPIC,
       existingLlmProvider
     ),
-    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
   };
 
   const validationSchema = buildValidationSchema(isOnboarding, {

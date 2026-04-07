@@ -66,7 +66,6 @@ export default function VertexAIModal({
       LLMProviderName.VERTEX_AI,
       existingLlmProvider
     ),
-    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
     custom_config: {
       vertex_credentials:
         (existingLlmProvider?.custom_config?.vertex_credentials as string) ??
