@@ -7,62 +7,39 @@ import * as Yup from "yup";
 import { ScopedMutator } from "swr";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
-// Common class names for the Form component across all LLM provider forms
-export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
-
-export const buildDefaultInitialValues = (
-  existingLlmProvider?: LLMProviderView,
-  modelConfigurations?: ModelConfiguration[],
-  currentDefaultModelName?: string
-) => {
-  const defaultModelName =
-    (currentDefaultModelName &&
-    existingLlmProvider?.model_configurations?.some(
-      (m) => m.name === currentDefaultModelName
-    )
-      ? currentDefaultModelName
-      : undefined) ??
-    existingLlmProvider?.model_configurations?.[0]?.name ??
-    modelConfigurations?.[0]?.name ??
-    "";
-
-  // Auto mode must be explicitly enabled by the user
-  // Default to false for new providers, preserve existing value when editing
-  const isAutoMode = existingLlmProvider?.is_auto_mode ?? false;
-
+/** Shared initial values for all LLM provider forms (both onboarding and admin). */
+export function buildInitialValues(existingLlmProvider?: LLMProviderView) {
   return {
-    name: existingLlmProvider?.name || "",
-    default_model_name: defaultModelName,
+    name: existingLlmProvider?.name ?? "",
     is_public: existingLlmProvider?.is_public ?? true,
-    is_auto_mode: isAutoMode,
+    is_auto_mode: existingLlmProvider?.is_auto_mode ?? false,
     groups: existingLlmProvider?.groups ?? [],
     personas: existingLlmProvider?.personas ?? [],
-    selected_model_names: existingLlmProvider
-      ? existingLlmProvider.model_configurations
-          .filter((modelConfiguration) => modelConfiguration.is_visible)
-          .map((modelConfiguration) => modelConfiguration.name)
-      : modelConfigurations
-          ?.filter((modelConfiguration) => modelConfiguration.is_visible)
-          .map((modelConfiguration) => modelConfiguration.name) ?? [],
+    visible_model_names:
+      existingLlmProvider?.model_configurations
+        ?.filter((m) => m.is_visible)
+        .map((m) => m.name) ?? [],
   };
-};
+}
 
-export const buildDefaultValidationSchema = () => {
+export function buildValidationSchema() {
   return Yup.object({
     name: Yup.string().required("Display Name is required"),
-    default_model_name: Yup.string().required("Model name is required"),
     is_public: Yup.boolean().required(),
     is_auto_mode: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
-    selected_model_names: Yup.array().of(Yup.string()),
-  });
-};
 
-export const buildAvailableModelConfigurations = (
+    // Only for internal, frontend-only, validation purposes:
+    test_model_name: Yup.string().required("Model name is required"),
+    visible_model_names: Yup.array().of(Yup.string()),
+  });
+}
+
+export function buildAvailableModelConfigurations(
   existingLlmProvider?: LLMProviderView,
   wellKnownLLMProvider?: WellKnownLLMProviderDescriptor
-): ModelConfiguration[] => {
+): ModelConfiguration[] {
   const existingModels = existingLlmProvider?.model_configurations ?? [];
   const wellKnownModels = wellKnownLLMProvider?.known_models ?? [];
 
@@ -80,21 +57,28 @@ export const buildAvailableModelConfigurations = (
   });
 
   return Array.from(modelMap.values());
-};
+}
 
-// Base form values that all provider forms share
+// ─── Form value types ─────────────────────────────────────────────────────
+
+/** Base form values that all provider forms share. */
 export interface BaseLLMFormValues {
   name: string;
   api_key?: string;
   api_base?: string;
-  default_model_name?: string;
+  /** Model name used for the test request — not sent to the backend. */
+  test_model_name?: string;
   is_public: boolean;
   is_auto_mode: boolean;
   groups: number[];
   personas: number[];
-  selected_model_names: string[];
+  /** User-selected visible models — not sent to the backend directly;
+   *  used to compute model_configurations[].is_visible. */
+  visible_model_names: string[];
   custom_config?: Record<string, string>;
 }
+
+// ─── Submit params ────────────────────────────────────────────────────────
 
 export interface SubmitLLMProviderParams<
   T extends BaseLLMFormValues = BaseLLMFormValues,
@@ -112,11 +96,14 @@ export interface SubmitLLMProviderParams<
   setSubmitting: (submitting: boolean) => void;
 }
 
-export const filterModelConfigurations = (
+// ─── Model configuration helpers ──────────────────────────────────────────
+
+/** Sets is_visible based on the user's selection and filters out unselected models. */
+export function filterModelConfigurations(
   currentModelConfigurations: ModelConfiguration[],
   visibleModels: string[],
-  defaultModelName?: string
-): ModelConfiguration[] => {
+  testModelName?: string
+): ModelConfiguration[] {
   return currentModelConfigurations
     .map(
       (modelConfiguration): ModelConfiguration => ({
@@ -130,17 +117,15 @@ export const filterModelConfigurations = (
     )
     .filter(
       (modelConfiguration) =>
-        modelConfiguration.name === defaultModelName ||
+        modelConfiguration.name === testModelName ||
         modelConfiguration.is_visible
     );
-};
+}
 
-// Helper to get model configurations for auto mode
-// In auto mode, we include ALL models but preserve their visibility status
-// Models in the auto config are visible, others are created but not visible
-export const getAutoModeModelConfigurations = (
+/** In auto mode, include ALL models but preserve their visibility status. */
+export function getAutoModeModelConfigurations(
   modelConfigurations: ModelConfiguration[]
-): ModelConfiguration[] => {
+): ModelConfiguration[] {
   return modelConfigurations.map(
     (modelConfiguration): ModelConfiguration => ({
       name: modelConfiguration.name,
@@ -151,40 +136,13 @@ export const getAutoModeModelConfigurations = (
       display_name: modelConfiguration.display_name,
     })
   );
-};
+}
+
+// ─── Misc ─────────────────────────────────────────────────────────────────
 
 export type TestApiKeyResult =
   | { ok: true }
   | { ok: false; errorMessage: string };
-
-export const getModelOptions = (
-  fetchedModelConfigurations: Array<{ name: string }>
-) => {
-  return fetchedModelConfigurations.map((model) => ({
-    label: model.name,
-    value: model.name,
-  }));
-};
-
-/** Initial values used by onboarding forms (flat shape, always creating new). */
-export const buildOnboardingInitialValues = () => ({
-  name: "",
-  provider: "",
-  api_key: "",
-  api_base: "",
-  api_version: "",
-  default_model_name: "",
-  model_configurations: [] as ModelConfiguration[],
-  custom_config: {} as Record<string, string>,
-  api_key_changed: true,
-  groups: [] as number[],
-  is_public: true,
-  is_auto_mode: false,
-  personas: [] as number[],
-  selected_model_names: [] as string[],
-  deployment_name: "",
-  target_uri: "",
-});
 
 export interface SubmitOnboardingProviderParams {
   providerName: string;

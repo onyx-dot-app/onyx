@@ -17,10 +17,9 @@ import { fetchBifrostModels } from "@/app/admin/configuration/llm/utils";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
+  buildInitialValues,
+  buildValidationSchema,
   buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -181,31 +180,22 @@ export default function BifrostModal({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues: BifrostModalValues = isOnboarding
-    ? ({
-        ...buildOnboardingInitialValues(),
-        name: BIFROST_PROVIDER_NAME,
-        provider: BIFROST_PROVIDER_NAME,
-        api_key: "",
-        api_base: DEFAULT_API_BASE,
-        default_model_name: "",
-      } as BifrostModalValues)
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        api_key: existingLlmProvider?.api_key ?? "",
-        api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-      };
+  const initialValues: BifrostModalValues = {
+    ...buildInitialValues(existingLlmProvider),
+    provider: existingLlmProvider?.provider ?? BIFROST_PROVIDER_NAME,
+    api_key: existingLlmProvider?.api_key ?? "",
+    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+    test_model_name:
+      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
+        ?.name ?? "",
+  } as BifrostModalValues;
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
         api_base: Yup.string().required("API Base URL is required"),
-        default_model_name: Yup.string().required("Model name is required"),
+        test_model_name: Yup.string().required("Model name is required"),
       })
-    : buildDefaultValidationSchema().shape({
+    : buildValidationSchema().shape({
         api_base: Yup.string().required("API Base URL is required"),
       });
 

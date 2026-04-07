@@ -14,10 +14,9 @@ import { fetchOpenRouterModels } from "@/app/admin/configuration/llm/utils";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
+  buildInitialValues,
+  buildValidationSchema,
   buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -168,32 +167,23 @@ export default function OpenRouterModal({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues: OpenRouterModalValues = isOnboarding
-    ? ({
-        ...buildOnboardingInitialValues(),
-        name: OPENROUTER_PROVIDER_NAME,
-        provider: OPENROUTER_PROVIDER_NAME,
-        api_key: "",
-        api_base: DEFAULT_API_BASE,
-        default_model_name: "",
-      } as OpenRouterModalValues)
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        api_key: existingLlmProvider?.api_key ?? "",
-        api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-      };
+  const initialValues: OpenRouterModalValues = {
+    ...buildInitialValues(existingLlmProvider),
+    provider: existingLlmProvider?.provider ?? OPENROUTER_PROVIDER_NAME,
+    api_key: existingLlmProvider?.api_key ?? "",
+    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+    test_model_name:
+      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
+        ?.name ?? "",
+  } as OpenRouterModalValues;
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
         api_key: Yup.string().required("API Key is required"),
         api_base: Yup.string().required("API Base URL is required"),
-        default_model_name: Yup.string().required("Model name is required"),
+        test_model_name: Yup.string().required("Model name is required"),
       })
-    : buildDefaultValidationSchema().shape({
+    : buildValidationSchema().shape({
         api_key: Yup.string().required("API Key is required"),
         api_base: Yup.string().required("API Base URL is required"),
       });

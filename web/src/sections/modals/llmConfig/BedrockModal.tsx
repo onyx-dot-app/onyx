@@ -16,10 +16,9 @@ import {
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
+  buildInitialValues,
+  buildValidationSchema,
   buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -324,53 +323,37 @@ export default function BedrockModal({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues: BedrockModalValues = isOnboarding
-    ? ({
-        ...buildOnboardingInitialValues(),
-        name: BEDROCK_PROVIDER_NAME,
-        provider: BEDROCK_PROVIDER_NAME,
-        default_model_name: "",
-        custom_config: {
-          AWS_REGION_NAME: "",
-          BEDROCK_AUTH_METHOD: "access_key",
-          AWS_ACCESS_KEY_ID: "",
-          AWS_SECRET_ACCESS_KEY: "",
-          AWS_BEARER_TOKEN_BEDROCK: "",
-        },
-      } as BedrockModalValues)
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        custom_config: {
-          AWS_REGION_NAME:
-            (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ??
-            "",
-          BEDROCK_AUTH_METHOD:
-            (existingLlmProvider?.custom_config
-              ?.BEDROCK_AUTH_METHOD as string) ?? "access_key",
-          AWS_ACCESS_KEY_ID:
-            (existingLlmProvider?.custom_config?.AWS_ACCESS_KEY_ID as string) ??
-            "",
-          AWS_SECRET_ACCESS_KEY:
-            (existingLlmProvider?.custom_config
-              ?.AWS_SECRET_ACCESS_KEY as string) ?? "",
-          AWS_BEARER_TOKEN_BEDROCK:
-            (existingLlmProvider?.custom_config
-              ?.AWS_BEARER_TOKEN_BEDROCK as string) ?? "",
-        },
-      };
+  const initialValues: BedrockModalValues = {
+    ...buildInitialValues(existingLlmProvider),
+    provider: existingLlmProvider?.provider ?? BEDROCK_PROVIDER_NAME,
+    test_model_name:
+      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
+        ?.name ?? "",
+    custom_config: {
+      AWS_REGION_NAME:
+        (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ?? "",
+      BEDROCK_AUTH_METHOD:
+        (existingLlmProvider?.custom_config?.BEDROCK_AUTH_METHOD as string) ??
+        "access_key",
+      AWS_ACCESS_KEY_ID:
+        (existingLlmProvider?.custom_config?.AWS_ACCESS_KEY_ID as string) ?? "",
+      AWS_SECRET_ACCESS_KEY:
+        (existingLlmProvider?.custom_config?.AWS_SECRET_ACCESS_KEY as string) ??
+        "",
+      AWS_BEARER_TOKEN_BEDROCK:
+        (existingLlmProvider?.custom_config
+          ?.AWS_BEARER_TOKEN_BEDROCK as string) ?? "",
+    },
+  } as BedrockModalValues;
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
-        default_model_name: Yup.string().required("Model name is required"),
+        test_model_name: Yup.string().required("Model name is required"),
         custom_config: Yup.object({
           AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
         }),
       })
-    : buildDefaultValidationSchema().shape({
+    : buildValidationSchema().shape({
         custom_config: Yup.object({
           AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
         }),

@@ -7,10 +7,9 @@ import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
+  buildInitialValues,
+  buildValidationSchema,
   buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
   submitLLMProvider,
@@ -23,7 +22,7 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-import { FieldSeparator } from "@/layouts/input-layouts";
+import * as InputLayouts from "@/layouts/input-layouts";
 
 const ANTHROPIC_PROVIDER_NAME = "anthropic";
 const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
@@ -52,38 +51,25 @@ export default function AnthropicModal({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues = isOnboarding
-    ? {
-        ...buildOnboardingInitialValues(),
-        name: ANTHROPIC_PROVIDER_NAME,
-        provider: ANTHROPIC_PROVIDER_NAME,
-        api_key: "",
-        default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
-      }
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        api_key: existingLlmProvider?.api_key ?? "",
-        api_base: existingLlmProvider?.api_base ?? undefined,
-        default_model_name:
-          (defaultModelName &&
-          modelConfigurations.some((m) => m.name === defaultModelName)
-            ? defaultModelName
-            : undefined) ??
-          wellKnownLLMProvider?.recommended_default_model?.name ??
-          DEFAULT_DEFAULT_MODEL_NAME,
-        is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
-      };
+  const initialValues = {
+    ...buildInitialValues(existingLlmProvider),
+    provider: existingLlmProvider?.provider ?? ANTHROPIC_PROVIDER_NAME,
+    api_key: existingLlmProvider?.api_key ?? "",
+    api_base: existingLlmProvider?.api_base ?? undefined,
+    test_model_name:
+      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
+        ?.name ??
+      wellKnownLLMProvider?.recommended_default_model?.name ??
+      DEFAULT_DEFAULT_MODEL_NAME,
+    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+  };
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
         api_key: Yup.string().required("API Key is required"),
-        default_model_name: Yup.string().required("Model name is required"),
+        test_model_name: Yup.string().required("Model name is required"),
       })
-    : buildDefaultValidationSchema().shape({
+    : buildValidationSchema().shape({
         api_key: Yup.string().required("API Key is required"),
       });
 
@@ -103,7 +89,7 @@ export default function AnthropicModal({
               ...values,
               model_configurations: modelConfigsToUse,
               is_auto_mode:
-                values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
+                values.test_model_name === DEFAULT_DEFAULT_MODEL_NAME,
             },
             onboardingState,
             onboardingActions,
@@ -141,12 +127,12 @@ export default function AnthropicModal({
 
           {!isOnboarding && (
             <>
-              <FieldSeparator />
+              <InputLayouts.FieldSeparator />
               <DisplayNameField disabled={!!existingLlmProvider} />
             </>
           )}
 
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
           <ModelSelectionField
             modelConfigurations={modelConfigurations}
             recommendedDefaultModel={
@@ -157,7 +143,7 @@ export default function AnthropicModal({
 
           {!isOnboarding && (
             <>
-              <FieldSeparator />
+              <InputLayouts.FieldSeparator />
               <ModelAccessField />
             </>
           )}

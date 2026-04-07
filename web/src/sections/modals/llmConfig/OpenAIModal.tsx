@@ -7,10 +7,9 @@ import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
+  buildInitialValues,
+  buildValidationSchema,
   buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
   submitLLMProvider,
@@ -23,7 +22,7 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-import { FieldSeparator } from "@/layouts/input-layouts";
+import * as InputLayouts from "@/layouts/input-layouts";
 
 const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
@@ -51,37 +50,24 @@ export default function OpenAIModal({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues = isOnboarding
-    ? {
-        ...buildOnboardingInitialValues(),
-        name: OPENAI_PROVIDER_NAME,
-        provider: OPENAI_PROVIDER_NAME,
-        api_key: "",
-        default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
-      }
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        api_key: existingLlmProvider?.api_key ?? "",
-        default_model_name:
-          (defaultModelName &&
-          modelConfigurations.some((m) => m.name === defaultModelName)
-            ? defaultModelName
-            : undefined) ??
-          wellKnownLLMProvider?.recommended_default_model?.name ??
-          DEFAULT_DEFAULT_MODEL_NAME,
-        is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
-      };
+  const initialValues = {
+    ...buildInitialValues(existingLlmProvider),
+    provider: existingLlmProvider?.provider ?? OPENAI_PROVIDER_NAME,
+    api_key: existingLlmProvider?.api_key ?? "",
+    test_model_name:
+      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
+        ?.name ??
+      wellKnownLLMProvider?.recommended_default_model?.name ??
+      DEFAULT_DEFAULT_MODEL_NAME,
+    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+  };
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
         api_key: Yup.string().required("API Key is required"),
-        default_model_name: Yup.string().required("Model name is required"),
+        test_model_name: Yup.string().required("Model name is required"),
       })
-    : buildDefaultValidationSchema().shape({
+    : buildValidationSchema().shape({
         api_key: Yup.string().required("API Key is required"),
       });
 
@@ -101,7 +87,7 @@ export default function OpenAIModal({
               ...values,
               model_configurations: modelConfigsToUse,
               is_auto_mode:
-                values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
+                values.test_model_name === DEFAULT_DEFAULT_MODEL_NAME,
             },
             onboardingState,
             onboardingActions,
@@ -139,12 +125,12 @@ export default function OpenAIModal({
 
           {!isOnboarding && (
             <>
-              <FieldSeparator />
+              <InputLayouts.FieldSeparator />
               <DisplayNameField disabled={!!existingLlmProvider} />
             </>
           )}
 
-          <FieldSeparator />
+          <InputLayouts.FieldSeparator />
           <ModelSelectionField
             modelConfigurations={modelConfigurations}
             recommendedDefaultModel={
@@ -155,7 +141,7 @@ export default function OpenAIModal({
 
           {!isOnboarding && (
             <>
-              <FieldSeparator />
+              <InputLayouts.FieldSeparator />
               <ModelAccessField />
             </>
           )}

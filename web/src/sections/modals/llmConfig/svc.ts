@@ -65,33 +65,33 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
 }: SubmitLLMProviderParams<T>): Promise<void> => {
   setSubmitting(true);
 
-  const { selected_model_names: visibleModels, api_key, ...rest } = values;
+  const {
+    visible_model_names: visibleModels,
+    test_model_name,
+    api_key,
+    ...rest
+  } = values;
 
   // In auto mode, use recommended models from descriptor
   // In manual mode, use user's selection
   let filteredModelConfigurations: ModelConfiguration[];
-  let finalDefaultModelName =
-    rest.default_model_name || modelConfigurations[0]?.name || "";
+  let testModelName = test_model_name || modelConfigurations[0]?.name || "";
 
   if (values.is_auto_mode) {
     filteredModelConfigurations =
       getAutoModeModelConfigurations(modelConfigurations);
 
-    // In auto mode, use the first recommended model as default if current default isn't in the list
     const visibleModelNames = new Set(
       filteredModelConfigurations.map((m) => m.name)
     );
-    if (
-      finalDefaultModelName &&
-      !visibleModelNames.has(finalDefaultModelName)
-    ) {
-      finalDefaultModelName = filteredModelConfigurations[0]?.name ?? "";
+    if (testModelName && !visibleModelNames.has(testModelName)) {
+      testModelName = filteredModelConfigurations[0]?.name ?? "";
     }
   } else {
     filteredModelConfigurations = filterModelConfigurations(
       modelConfigurations,
       visibleModels,
-      rest.default_model_name as string | undefined
+      test_model_name as string | undefined
     );
   }
 
@@ -108,7 +108,6 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   const finalValues = {
     ...rest,
     api_base: normalizedApiBase,
-    default_model_name: finalDefaultModelName,
     api_key,
     api_key_changed: api_key !== (initialValues.api_key as string | undefined),
     custom_config_changed: customConfigChanged,
@@ -127,7 +126,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
       body: JSON.stringify({
         provider: providerName,
         ...finalValues,
-        model: finalDefaultModelName,
+        model: testModelName,
         id: existingLlmProvider?.id,
       }),
     });
@@ -176,7 +175,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
       },
       body: JSON.stringify({
         provider_id: newLlmProvider.id,
-        model_name: finalDefaultModelName,
+        model_name: testModelName,
       }),
     });
     if (!setDefaultResponse.ok) {

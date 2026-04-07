@@ -10,10 +10,9 @@ import { LLMProviderFormProps } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
+  buildInitialValues,
+  buildValidationSchema,
   buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -63,44 +62,28 @@ export default function VertexAIModal({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues: VertexAIModalValues = isOnboarding
-    ? ({
-        ...buildOnboardingInitialValues(),
-        name: VERTEXAI_PROVIDER_NAME,
-        provider: VERTEXAI_PROVIDER_NAME,
-        default_model_name: VERTEXAI_DEFAULT_MODEL,
-        custom_config: {
-          vertex_credentials: "",
-          vertex_location: VERTEXAI_DEFAULT_LOCATION,
-        },
-      } as VertexAIModalValues)
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        default_model_name:
-          (defaultModelName &&
-          modelConfigurations.some((m) => m.name === defaultModelName)
-            ? defaultModelName
-            : undefined) ??
-          wellKnownLLMProvider?.recommended_default_model?.name ??
-          VERTEXAI_DEFAULT_MODEL,
-        is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
-        custom_config: {
-          vertex_credentials:
-            (existingLlmProvider?.custom_config
-              ?.vertex_credentials as string) ?? "",
-          vertex_location:
-            (existingLlmProvider?.custom_config?.vertex_location as string) ??
-            VERTEXAI_DEFAULT_LOCATION,
-        },
-      };
+  const initialValues: VertexAIModalValues = {
+    ...buildInitialValues(existingLlmProvider),
+    provider: existingLlmProvider?.provider ?? VERTEXAI_PROVIDER_NAME,
+    test_model_name:
+      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
+        ?.name ??
+      wellKnownLLMProvider?.recommended_default_model?.name ??
+      VERTEXAI_DEFAULT_MODEL,
+    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+    custom_config: {
+      vertex_credentials:
+        (existingLlmProvider?.custom_config?.vertex_credentials as string) ??
+        "",
+      vertex_location:
+        (existingLlmProvider?.custom_config?.vertex_location as string) ??
+        VERTEXAI_DEFAULT_LOCATION,
+    },
+  } as VertexAIModalValues;
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
-        default_model_name: Yup.string().required("Model name is required"),
+        test_model_name: Yup.string().required("Model name is required"),
         custom_config: Yup.object({
           vertex_credentials: Yup.string().required(
             "Credentials file is required"
@@ -108,7 +91,7 @@ export default function VertexAIModal({
           vertex_location: Yup.string(),
         }),
       })
-    : buildDefaultValidationSchema().shape({
+    : buildValidationSchema().shape({
         custom_config: Yup.object({
           vertex_credentials: Yup.string().required(
             "Credentials file is required"
@@ -146,8 +129,7 @@ export default function VertexAIModal({
             payload: {
               ...submitValues,
               model_configurations: modelConfigsToUse,
-              is_auto_mode:
-                values.default_model_name === VERTEXAI_DEFAULT_MODEL,
+              is_auto_mode: values.test_model_name === VERTEXAI_DEFAULT_MODEL,
             },
             onboardingState,
             onboardingActions,

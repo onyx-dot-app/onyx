@@ -13,10 +13,9 @@ import {
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
+  buildInitialValues,
+  buildValidationSchema,
   buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -110,24 +109,15 @@ export default function AzureModal({
     ...addedModels.filter((m) => !existingNames.has(m.name)),
   ];
 
-  const initialValues: AzureModalValues = isOnboarding
-    ? ({
-        ...buildOnboardingInitialValues(),
-        name: AZURE_PROVIDER_NAME,
-        provider: AZURE_PROVIDER_NAME,
-        api_key: "",
-        target_uri: "",
-        default_model_name: "",
-      } as AzureModalValues)
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        api_key: existingLlmProvider?.api_key ?? "",
-        target_uri: buildTargetUri(existingLlmProvider),
-      };
+  const initialValues: AzureModalValues = {
+    ...buildInitialValues(existingLlmProvider),
+    provider: existingLlmProvider?.provider ?? AZURE_PROVIDER_NAME,
+    api_key: existingLlmProvider?.api_key ?? "",
+    target_uri: buildTargetUri(existingLlmProvider),
+    test_model_name:
+      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
+        ?.name ?? "",
+  } as AzureModalValues;
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
@@ -139,9 +129,9 @@ export default function AzureModal({
             "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
             (value) => (value ? isValidAzureTargetUri(value) : false)
           ),
-        default_model_name: Yup.string().required("Model name is required"),
+        test_model_name: Yup.string().required("Model name is required"),
       })
-    : buildDefaultValidationSchema().shape({
+    : buildValidationSchema().shape({
         api_key: Yup.string().required("API Key is required"),
         target_uri: Yup.string()
           .required("Target URI is required")
@@ -239,13 +229,13 @@ export default function AzureModal({
               };
               setAddedModels((prev) => [...prev, newModel]);
               const currentSelected =
-                formikProps.values.selected_model_names ?? [];
-              formikProps.setFieldValue("selected_model_names", [
+                formikProps.values.visible_model_names ?? [];
+              formikProps.setFieldValue("visible_model_names", [
                 ...currentSelected,
                 modelName,
               ]);
-              if (!formikProps.values.default_model_name) {
-                formikProps.setFieldValue("default_model_name", modelName);
+              if (!formikProps.values.test_model_name) {
+                formikProps.setFieldValue("test_model_name", modelName);
               }
             }}
           />

@@ -353,45 +353,45 @@ export function ModelSelectionField({
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
   const isAutoMode = formikProps.values.is_auto_mode;
-  const selectedModels = formikProps.values.selected_model_names ?? [];
-  const defaultModel = formikProps.values.default_model_name;
+  const selectedModels = formikProps.values.visible_model_names ?? [];
+  const defaultModel = formikProps.values.test_model_name;
 
   function handleCheckboxChange(modelName: string, checked: boolean) {
     // Read current values inside the handler to avoid stale closure issues
-    const currentSelected = formikProps.values.selected_model_names ?? [];
-    const currentDefault = formikProps.values.default_model_name;
+    const currentSelected = formikProps.values.visible_model_names ?? [];
+    const currentDefault = formikProps.values.test_model_name;
 
     if (checked) {
       const newSelected = [...currentSelected, modelName];
-      formikProps.setFieldValue("selected_model_names", newSelected);
+      formikProps.setFieldValue("visible_model_names", newSelected);
       // If this is the first model, set it as default
       if (currentSelected.length === 0) {
-        formikProps.setFieldValue("default_model_name", modelName);
+        formikProps.setFieldValue("test_model_name", modelName);
       }
     } else {
       const newSelected = currentSelected.filter((name) => name !== modelName);
-      formikProps.setFieldValue("selected_model_names", newSelected);
+      formikProps.setFieldValue("visible_model_names", newSelected);
       // If removing the default, set the first remaining model as default
       if (currentDefault === modelName && newSelected.length > 0) {
-        formikProps.setFieldValue("default_model_name", newSelected[0]);
+        formikProps.setFieldValue("test_model_name", newSelected[0]);
       } else if (newSelected.length === 0) {
-        formikProps.setFieldValue("default_model_name", undefined);
+        formikProps.setFieldValue("test_model_name", undefined);
       }
     }
   }
 
   function handleSetDefault(modelName: string) {
-    formikProps.setFieldValue("default_model_name", modelName);
+    formikProps.setFieldValue("test_model_name", modelName);
   }
 
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     formikProps.setFieldValue(
-      "selected_model_names",
+      "visible_model_names",
       modelConfigurations.filter((m) => m.is_visible).map((m) => m.name)
     );
     formikProps.setFieldValue(
-      "default_model_name",
+      "test_model_name",
       recommendedDefaultModel?.name ?? undefined
     );
   }
@@ -402,13 +402,13 @@ export function ModelSelectionField({
 
   function handleToggleSelectAll() {
     if (allSelected) {
-      formikProps.setFieldValue("selected_model_names", []);
-      formikProps.setFieldValue("default_model_name", undefined);
+      formikProps.setFieldValue("visible_model_names", []);
+      formikProps.setFieldValue("test_model_name", undefined);
     } else {
       const allNames = modelConfigurations.map((m) => m.name);
-      formikProps.setFieldValue("selected_model_names", allNames);
-      if (!formikProps.values.default_model_name && allNames.length > 0) {
-        formikProps.setFieldValue("default_model_name", allNames[0]);
+      formikProps.setFieldValue("visible_model_names", allNames);
+      if (!formikProps.values.test_model_name && allNames.length > 0) {
+        formikProps.setFieldValue("test_model_name", allNames[0]);
       }
     }
   }

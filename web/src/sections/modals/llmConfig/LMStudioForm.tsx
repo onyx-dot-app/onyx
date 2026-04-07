@@ -15,10 +15,9 @@ import {
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
-  buildDefaultInitialValues,
-  buildDefaultValidationSchema,
+  buildInitialValues,
+  buildValidationSchema,
   buildAvailableModelConfigurations,
-  buildOnboardingInitialValues,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -201,37 +200,25 @@ export default function LMStudioForm({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues: LMStudioFormValues = isOnboarding
-    ? ({
-        ...buildOnboardingInitialValues(),
-        name: LLMProviderName.LM_STUDIO,
-        provider: LLMProviderName.LM_STUDIO,
-        api_base: DEFAULT_API_BASE,
-        default_model_name: "",
-        custom_config: {
-          LM_STUDIO_API_KEY: "",
-        },
-      } as LMStudioFormValues)
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-        ),
-        api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-        custom_config: {
-          LM_STUDIO_API_KEY:
-            (existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY as string) ??
-            "",
-        },
-      };
+  const initialValues: LMStudioFormValues = {
+    ...buildInitialValues(existingLlmProvider),
+    provider: existingLlmProvider?.provider ?? LLMProviderName.LM_STUDIO,
+    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+    test_model_name:
+      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
+        ?.name ?? "",
+    custom_config: {
+      LM_STUDIO_API_KEY:
+        (existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY as string) ?? "",
+    },
+  } as LMStudioFormValues;
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
         api_base: Yup.string().required("API Base URL is required"),
-        default_model_name: Yup.string().required("Model name is required"),
+        test_model_name: Yup.string().required("Model name is required"),
       })
-    : buildDefaultValidationSchema().shape({
+    : buildValidationSchema().shape({
         api_base: Yup.string().required("API Base URL is required"),
       });
 

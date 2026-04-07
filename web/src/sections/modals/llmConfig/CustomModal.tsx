@@ -5,10 +5,7 @@ import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import { LLMProviderFormProps, ModelConfiguration } from "@/interfaces/llm";
 import * as Yup from "yup";
-import {
-  buildDefaultInitialValues,
-  buildOnboardingInitialValues,
-} from "@/sections/modals/llmConfig/utils";
+import { buildInitialValues } from "@/sections/modals/llmConfig/utils";
 import {
   submitLLMProvider,
   submitOnboardingProvider,
@@ -207,12 +204,7 @@ export default function CustomModal({
   const onClose = () => onOpenChange?.(false);
 
   const initialValues = {
-    ...buildDefaultInitialValues(
-      existingLlmProvider,
-      undefined,
-      defaultModelName
-    ),
-    ...(isOnboarding ? buildOnboardingInitialValues() : {}),
+    ...buildInitialValues(existingLlmProvider),
     provider: existingLlmProvider?.provider ?? "",
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? "",
@@ -313,7 +305,7 @@ export default function CustomModal({
             providerName: values.provider,
             values: {
               ...values,
-              selected_model_names: selectedModelNames,
+              visible_model_names: selectedModelNames,
               custom_config: customConfig,
             },
             initialValues: {
