@@ -571,7 +571,7 @@ def connector_pruning_generator_task(
             )
 
             # Extract docs and hierarchy nodes from the source
-            connector_type = str(cc_pair.connector.source)
+            connector_type = cc_pair.connector.source.value
             extraction_result = extract_ids_from_runnable_connector(
                 runnable_connector, callback, connector_type=connector_type
             )
@@ -639,43 +639,45 @@ def connector_pruning_generator_task(
             )
 
             diff_start = time.monotonic()
+            try:
+                # a list of docs in our local index
+                all_indexed_document_ids = {
+                    doc.id
+                    for doc in get_documents_for_connector_credential_pair(
+                        db_session=db_session,
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                    )
+                }
 
-            # a list of docs in our local index
-            all_indexed_document_ids = {
-                doc.id
-                for doc in get_documents_for_connector_credential_pair(
-                    db_session=db_session,
-                    connector_id=connector_id,
-                    credential_id=credential_id,
+                # generate list of docs to remove (no longer in the source)
+                doc_ids_to_remove = list(
+                    all_indexed_document_ids - all_connector_doc_ids.keys()
                 )
-            }
 
-            # generate list of docs to remove (no longer in the source)
-            doc_ids_to_remove = list(
-                all_indexed_document_ids - all_connector_doc_ids.keys()
-            )
+                task_logger.info(
+                    "Pruning set collected: "
+                    f"cc_pair={cc_pair_id} "
+                    f"connector_source={cc_pair.connector.source} "
+                    f"docs_to_remove={len(doc_ids_to_remove)}"
+                )
 
-            task_logger.info(
-                "Pruning set collected: "
-                f"cc_pair={cc_pair_id} "
-                f"connector_source={cc_pair.connector.source} "
-                f"docs_to_remove={len(doc_ids_to_remove)}"
-            )
+                task_logger.info(
+                    f"RedisConnector.prune.generate_tasks starting. cc_pair={cc_pair_id}"
+                )
+                tasks_generated = redis_connector.prune.generate_tasks(
+                    set(doc_ids_to_remove), self.app, db_session, None
+                )
+                if tasks_generated is None:
+                    return None
 
-            task_logger.info(
-                f"RedisConnector.prune.generate_tasks starting. cc_pair={cc_pair_id}"
-            )
-            tasks_generated = redis_connector.prune.generate_tasks(
-                set(doc_ids_to_remove), self.app, db_session, None
-            )
-            if tasks_generated is None:
-                return None
-
-            task_logger.info(
-                f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
-            )
-
-            observe_pruning_diff_duration(time.monotonic() - diff_start, connector_type)
+                task_logger.info(
+                    f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
+                )
+            finally:
+                observe_pruning_diff_duration(
+                    time.monotonic() - diff_start, connector_type
+                )
 
             redis_connector.prune.generator_complete = tasks_generated
 
