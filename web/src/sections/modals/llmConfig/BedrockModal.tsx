@@ -153,8 +153,8 @@ function BedrockModalInternals({
 
   return (
     <ModalWrapper
-      providerEndpoint={LLMProviderName.BEDROCK}
-      existingProviderName={existingLlmProvider?.name}
+      providerName={LLMProviderName.BEDROCK}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
     >
       <InputLayouts.FieldPadder>

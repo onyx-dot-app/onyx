@@ -329,8 +329,8 @@ export default function CustomModal({
     >
       {(formikProps) => (
         <ModalWrapper
-          providerEndpoint={LLMProviderName.CUSTOM}
-          existingProviderName={existingLlmProvider?.name}
+          providerName={LLMProviderName.CUSTOM}
+          llmProvider={existingLlmProvider}
           onClose={onClose}
         >
           {!isOnboarding && (

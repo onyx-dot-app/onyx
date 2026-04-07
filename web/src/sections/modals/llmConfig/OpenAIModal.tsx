@@ -111,8 +111,8 @@ export default function OpenAIModal({
     >
       {() => (
         <ModalWrapper
-          providerEndpoint={LLMProviderName.OPENAI}
-          existingProviderName={existingLlmProvider?.name}
+          providerName={LLMProviderName.OPENAI}
+          llmProvider={existingLlmProvider}
           onClose={onClose}
         >
           <APIKeyField providerName="OpenAI" />

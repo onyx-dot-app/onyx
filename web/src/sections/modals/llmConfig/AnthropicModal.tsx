@@ -112,8 +112,8 @@ export default function AnthropicModal({
     >
       {() => (
         <ModalWrapper
-          providerEndpoint={LLMProviderName.ANTHROPIC}
-          existingProviderName={existingLlmProvider?.name}
+          providerName={LLMProviderName.ANTHROPIC}
+          llmProvider={existingLlmProvider}
           onClose={onClose}
         >
           <APIKeyField providerName="Anthropic" />

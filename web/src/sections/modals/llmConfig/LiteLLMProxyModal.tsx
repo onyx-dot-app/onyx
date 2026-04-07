@@ -92,8 +92,8 @@ function LiteLLMProxyModalInternals({
 
   return (
     <ModalWrapper
-      providerEndpoint={LLMProviderName.LITELLM_PROXY}
-      existingProviderName={existingLlmProvider?.name}
+      providerName={LLMProviderName.LITELLM_PROXY}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
     >
       <InputLayouts.FieldPadder>

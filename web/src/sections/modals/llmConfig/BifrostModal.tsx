@@ -93,8 +93,8 @@ function BifrostModalInternals({
 
   return (
     <ModalWrapper
-      providerEndpoint={LLMProviderName.BIFROST}
-      existingProviderName={existingLlmProvider?.name}
+      providerName={LLMProviderName.BIFROST}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
     >
       <InputLayouts.FieldPadder>

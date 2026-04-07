@@ -126,8 +126,8 @@ function OllamaModalInternals({
 
   return (
     <ModalWrapper
-      providerEndpoint={LLMProviderName.OLLAMA_CHAT}
-      existingProviderName={existingLlmProvider?.name}
+      providerName={LLMProviderName.OLLAMA_CHAT}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
     >
       <Card background="light" border="none" padding="sm">

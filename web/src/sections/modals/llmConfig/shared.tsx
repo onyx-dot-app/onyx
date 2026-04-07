@@ -5,7 +5,11 @@ import { Form, useFormikContext } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
-import { ModelConfiguration, SimpleKnownModel } from "@/interfaces/llm";
+import {
+  LLMProviderView,
+  ModelConfiguration,
+  SimpleKnownModel,
+} from "@/interfaces/llm";
 import * as InputLayouts from "@/layouts/input-layouts";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -604,16 +608,14 @@ export function ModelSelectionField({
 // ─── ModalWrapper ─────────────────────────────────────────────────────
 
 export interface ModalWrapperProps {
-  providerEndpoint: string;
-  providerName?: string;
-  existingProviderName?: string;
+  providerName: string;
+  llmProvider?: LLMProviderView;
   onClose: () => void;
   children: React.ReactNode;
 }
 export function ModalWrapper({
-  providerEndpoint,
   providerName,
-  existingProviderName,
+  llmProvider,
   onClose,
   children,
 }: ModalWrapperProps) {
@@ -621,13 +623,12 @@ export function ModalWrapper({
     useFormikContext<BaseLLMFormValues>();
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
-  const providerIcon = getProviderIcon(providerEndpoint);
-  const providerDisplayName =
-    providerName ?? getProviderDisplayName(providerEndpoint);
-  const providerProductName = getProviderProductName(providerEndpoint);
+  const providerIcon = getProviderIcon(providerName);
+  const providerDisplayName = getProviderDisplayName(providerName);
+  const providerProductName = getProviderProductName(providerName);
 
-  const title = existingProviderName
-    ? `Configure "${existingProviderName}"`
+  const title = llmProvider
+    ? `Configure "${llmProvider.name}"`
     : `Set up ${providerProductName}`;
   const description = `Connect to ${providerDisplayName} and set up your ${providerProductName} models.`;
 
@@ -651,11 +652,11 @@ export function ModalWrapper({
               Cancel
             </Button>
             <Button
-              disabled={!isValid || busy || (!!existingProviderName && !dirty)}
+              disabled={!isValid || !dirty || busy}
               type="submit"
               icon={busy ? SimpleLoader : undefined}
             >
-              {existingProviderName
+              {llmProvider?.name
                 ? busy
                   ? "Updating"
                   : "Update"

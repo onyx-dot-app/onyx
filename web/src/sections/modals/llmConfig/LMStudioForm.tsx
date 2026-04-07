@@ -114,8 +114,8 @@ function LMStudioFormInternals({
 
   return (
     <ModalWrapper
-      providerEndpoint={LLMProviderName.LM_STUDIO}
-      existingProviderName={existingLlmProvider?.name}
+      providerName={LLMProviderName.LM_STUDIO}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
     >
       <InputLayouts.FieldPadder>

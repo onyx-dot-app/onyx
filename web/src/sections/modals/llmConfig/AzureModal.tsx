@@ -184,8 +184,8 @@ export default function AzureModal({
     >
       {(formikProps) => (
         <ModalWrapper
-          providerEndpoint={LLMProviderName.AZURE}
-          existingProviderName={existingLlmProvider?.name}
+          providerName={LLMProviderName.AZURE}
+          llmProvider={existingLlmProvider}
           onClose={onClose}
         >
           <InputLayouts.FieldPadder>

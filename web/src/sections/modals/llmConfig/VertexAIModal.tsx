@@ -25,7 +25,6 @@ import {
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
-const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
 const VERTEXAI_DEFAULT_MODEL = "gemini-2.5-pro";
 const VERTEXAI_DEFAULT_LOCATION = "global";
 
@@ -152,9 +151,8 @@ export default function VertexAIModal({
     >
       {() => (
         <ModalWrapper
-          providerEndpoint={LLMProviderName.VERTEX_AI}
-          providerName={VERTEXAI_DISPLAY_NAME}
-          existingProviderName={existingLlmProvider?.name}
+          providerName={LLMProviderName.VERTEX_AI}
+          llmProvider={existingLlmProvider}
           onClose={onClose}
         >
           <InputLayouts.FieldPadder>

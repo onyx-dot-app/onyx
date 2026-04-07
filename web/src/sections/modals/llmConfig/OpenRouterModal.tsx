@@ -91,8 +91,8 @@ function OpenRouterModalInternals({
 
   return (
     <ModalWrapper
-      providerEndpoint={LLMProviderName.OPENROUTER}
-      existingProviderName={existingLlmProvider?.name}
+      providerName={LLMProviderName.OPENROUTER}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
     >
       <InputLayouts.FieldPadder>
