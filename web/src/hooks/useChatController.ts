@@ -941,6 +941,8 @@ export default function useChatController({
                     messages: [
                       {
                         ...errorNode,
+                        messageId:
+                          assistantMessageIds[errorModelIndex] ?? undefined,
                         message: streamingError.error,
                         type: "error",
                         stackTrace: streamingError.stack_trace || null,
