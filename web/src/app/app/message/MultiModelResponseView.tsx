@@ -388,7 +388,7 @@ export default function MultiModelResponseView({
 
   return (
     <div className="overflow-x-auto">
-      <div className="flex gap-6 items-start w-fit mx-auto">
+      <div className="flex gap-6 items-start w-full">
         {responses.map((r) => {
           const isHidden = hiddenPanels.has(r.modelIndex);
           return (
@@ -403,7 +403,11 @@ export default function MultiModelResponseView({
                       flexShrink: 0,
                       overflow: "hidden" as const,
                     }
-                  : { width: panelWidth, minWidth: MIN_PANEL_W }
+                  : {
+                      flex: "1 1 0",
+                      minWidth: MIN_PANEL_W,
+                      maxWidth: panelWidth,
+                    }
               }
             >
               <MultiModelPanel {...buildPanelProps(r, false)} />

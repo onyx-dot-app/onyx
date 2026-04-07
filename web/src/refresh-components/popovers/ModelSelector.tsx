@@ -211,12 +211,7 @@ export default function ModelSelector({
         )}
       </div>
 
-      <Popover.Content
-        side="top"
-        align="start"
-        width="lg"
-        avoidCollisions={false}
-      >
+      <Popover.Content side="top" align="end" width="lg">
         <ModelListContent
           llmProviders={llmManager.llmProviders}
           isLoading={llmManager.isLoadingProviders}
