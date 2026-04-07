@@ -218,10 +218,10 @@ def read_pdf_file(
                         decrypt_success = True
                         break
                 except Exception:
-                    logger.exception("Unable to decrypt pdf")
+                    pass
 
             if not decrypt_success:
-                logger.warning(
+                logger.error(
                     "Encrypted PDF could not be decrypted, returning empty text."
                 )
                 return "", metadata, []
