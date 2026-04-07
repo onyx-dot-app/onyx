@@ -10,7 +10,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
@@ -188,7 +187,7 @@ def patch_persona_featured_status(
 @admin_agents_router.patch("/display-priorities")
 def patch_agents_display_priorities(
     display_priority_request: DisplayPriorityRequest,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -266,7 +265,7 @@ def get_agents_admin_paginated(
 @admin_router.patch("/{persona_id}/undelete", tags=PUBLIC_API_TAGS)
 def undelete_persona(
     persona_id: int,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     mark_persona_as_not_deleted(
@@ -380,7 +379,7 @@ def create_label(
 def patch_persona_label(
     label_id: int,
     persona_label_patch_request: PersonaLabelPatchRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_persona_label(
@@ -393,7 +392,7 @@ def patch_persona_label(
 @admin_router.delete("/label/{label_id}")
 def delete_label(
     label_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     delete_persona_label(label_id=label_id, db_session=db_session)

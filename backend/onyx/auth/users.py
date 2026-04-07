@@ -1701,15 +1701,6 @@ async def current_curator_or_admin_user(
     return user
 
 
-async def current_admin_user(user: User = Depends(current_user)) -> User:
-    if user.role != UserRole.ADMIN:
-        raise BasicAuthenticationError(
-            detail="Access denied. User must be an admin to perform this action.",
-        )
-
-    return user
-
-
 async def _get_user_from_token_data(token_data: dict) -> User | None:
     """Shared logic: token data dict → User object.
 

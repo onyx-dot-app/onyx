@@ -10,7 +10,6 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.factory import validate_ccpair_for_user
@@ -96,7 +95,7 @@ def get_cc_source_full_info(
 @router.delete("/admin/credential/{credential_id}")
 def delete_credential_by_id_admin(
     credential_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     """Same as the user endpoint, but can delete any credential (not just the user's own)"""
