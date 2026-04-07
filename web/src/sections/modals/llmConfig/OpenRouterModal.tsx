@@ -44,17 +44,7 @@ interface OpenRouterModalInternalsProps {
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
   modelConfigurations: ModelConfiguration[];
-  onClose: () => void;
   isOnboarding: boolean;
-  initialValues: OpenRouterModalValues;
-  validationSchema: ReturnType<typeof buildValidationSchema>;
-  onSubmit: (
-    values: OpenRouterModalValues,
-    helpers: {
-      setSubmitting: (s: boolean) => void;
-      setStatus: (s: unknown) => void;
-    }
-  ) => Promise<void>;
 }
 
 function OpenRouterModalInternals({
@@ -62,11 +52,7 @@ function OpenRouterModalInternals({
   fetchedModels,
   setFetchedModels,
   modelConfigurations,
-  onClose,
   isOnboarding,
-  initialValues,
-  validationSchema,
-  onSubmit,
 }: OpenRouterModalInternalsProps) {
   const formikProps = useFormikContext<OpenRouterModalValues>();
   const currentModels =
@@ -102,14 +88,7 @@ function OpenRouterModalInternals({
   }, []);
 
   return (
-    <ModalWrapper
-      providerName={LLMProviderName.OPENROUTER}
-      llmProvider={existingLlmProvider}
-      onClose={onClose}
-      initialValues={initialValues}
-      validationSchema={validationSchema}
-      onSubmit={onSubmit}
-    >
+    <>
       <APIBaseField
         subDescription="Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly."
         placeholder="Your OpenRouter base URL"
@@ -138,7 +117,7 @@ function OpenRouterModalInternals({
           <ModelAccessField />
         </>
       )}
-    </ModalWrapper>
+    </>
   );
 }
 
@@ -181,13 +160,10 @@ export default function OpenRouterModal({
   });
 
   return (
-    <OpenRouterModalInternals
-      existingLlmProvider={existingLlmProvider}
-      fetchedModels={fetchedModels}
-      setFetchedModels={setFetchedModels}
-      modelConfigurations={modelConfigurations}
+    <ModalWrapper
+      providerName={LLMProviderName.OPENROUTER}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
-      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
@@ -223,6 +199,14 @@ export default function OpenRouterModal({
           });
         }
       }}
-    />
+    >
+      <OpenRouterModalInternals
+        existingLlmProvider={existingLlmProvider}
+        fetchedModels={fetchedModels}
+        setFetchedModels={setFetchedModels}
+        modelConfigurations={modelConfigurations}
+        isOnboarding={isOnboarding}
+      />
+    </ModalWrapper>
   );
 }

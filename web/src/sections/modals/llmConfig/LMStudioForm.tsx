@@ -47,28 +47,14 @@ interface LMStudioFormInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
-  onClose: () => void;
   isOnboarding: boolean;
-  initialValues: LMStudioFormValues;
-  validationSchema: ReturnType<typeof buildValidationSchema>;
-  onSubmit: (
-    values: LMStudioFormValues,
-    helpers: {
-      setSubmitting: (s: boolean) => void;
-      setStatus: (s: unknown) => void;
-    }
-  ) => Promise<void>;
 }
 
 function LMStudioFormInternals({
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
-  onClose,
   isOnboarding,
-  initialValues,
-  validationSchema,
-  onSubmit,
 }: LMStudioFormInternalsProps) {
   const formikProps = useFormikContext<LMStudioFormValues>();
   const initialApiKey =
@@ -125,14 +111,7 @@ function LMStudioFormInternals({
       : existingLlmProvider?.model_configurations || [];
 
   return (
-    <ModalWrapper
-      providerName={LLMProviderName.LM_STUDIO}
-      llmProvider={existingLlmProvider}
-      onClose={onClose}
-      initialValues={initialValues}
-      validationSchema={validationSchema}
-      onSubmit={onSubmit}
-    >
+    <>
       <APIBaseField
         subDescription="The base URL for your LM Studio server."
         placeholder="Your LM Studio API base URL"
@@ -164,7 +143,7 @@ function LMStudioFormInternals({
           <ModelAccessField />
         </>
       )}
-    </ModalWrapper>
+    </>
   );
 }
 
@@ -210,12 +189,10 @@ export default function LMStudioForm({
   });
 
   return (
-    <LMStudioFormInternals
-      existingLlmProvider={existingLlmProvider}
-      fetchedModels={fetchedModels}
-      setFetchedModels={setFetchedModels}
+    <ModalWrapper
+      providerName={LLMProviderName.LM_STUDIO}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
-      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
@@ -263,6 +240,13 @@ export default function LMStudioForm({
           });
         }
       }}
-    />
+    >
+      <LMStudioFormInternals
+        existingLlmProvider={existingLlmProvider}
+        fetchedModels={fetchedModels}
+        setFetchedModels={setFetchedModels}
+        isOnboarding={isOnboarding}
+      />
+    </ModalWrapper>
   );
 }

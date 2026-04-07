@@ -44,17 +44,7 @@ interface LiteLLMProxyModalInternalsProps {
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
   modelConfigurations: ModelConfiguration[];
-  onClose: () => void;
   isOnboarding: boolean;
-  initialValues: LiteLLMProxyModalValues;
-  validationSchema: ReturnType<typeof buildValidationSchema>;
-  onSubmit: (
-    values: LiteLLMProxyModalValues,
-    helpers: {
-      setSubmitting: (s: boolean) => void;
-      setStatus: (s: unknown) => void;
-    }
-  ) => Promise<void>;
 }
 
 function LiteLLMProxyModalInternals({
@@ -62,11 +52,7 @@ function LiteLLMProxyModalInternals({
   fetchedModels,
   setFetchedModels,
   modelConfigurations,
-  onClose,
   isOnboarding,
-  initialValues,
-  validationSchema,
-  onSubmit,
 }: LiteLLMProxyModalInternalsProps) {
   const formikProps = useFormikContext<LiteLLMProxyModalValues>();
   const currentModels =
@@ -102,14 +88,7 @@ function LiteLLMProxyModalInternals({
   }, []);
 
   return (
-    <ModalWrapper
-      providerName={LLMProviderName.LITELLM_PROXY}
-      llmProvider={existingLlmProvider}
-      onClose={onClose}
-      initialValues={initialValues}
-      validationSchema={validationSchema}
-      onSubmit={onSubmit}
-    >
+    <>
       <APIBaseField
         subDescription="The base URL for your LiteLLM Proxy server."
         placeholder="https://your-litellm-proxy.com"
@@ -138,7 +117,7 @@ function LiteLLMProxyModalInternals({
           <ModelAccessField />
         </>
       )}
-    </ModalWrapper>
+    </>
   );
 }
 
@@ -181,13 +160,10 @@ export default function LiteLLMProxyModal({
   });
 
   return (
-    <LiteLLMProxyModalInternals
-      existingLlmProvider={existingLlmProvider}
-      fetchedModels={fetchedModels}
-      setFetchedModels={setFetchedModels}
-      modelConfigurations={modelConfigurations}
+    <ModalWrapper
+      providerName={LLMProviderName.LITELLM_PROXY}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
-      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
@@ -223,6 +199,14 @@ export default function LiteLLMProxyModal({
           });
         }
       }}
-    />
+    >
+      <LiteLLMProxyModalInternals
+        existingLlmProvider={existingLlmProvider}
+        fetchedModels={fetchedModels}
+        setFetchedModels={setFetchedModels}
+        modelConfigurations={modelConfigurations}
+        isOnboarding={isOnboarding}
+      />
+    </ModalWrapper>
   );
 }

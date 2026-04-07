@@ -51,28 +51,14 @@ interface OllamaModalInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
-  onClose: () => void;
   isOnboarding: boolean;
-  initialValues: OllamaModalValues;
-  validationSchema: ReturnType<typeof buildValidationSchema>;
-  onSubmit: (
-    values: OllamaModalValues,
-    helpers: {
-      setSubmitting: (s: boolean) => void;
-      setStatus: (s: unknown) => void;
-    }
-  ) => Promise<void>;
 }
 
 function OllamaModalInternals({
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
-  onClose,
   isOnboarding,
-  initialValues,
-  validationSchema,
-  onSubmit,
 }: OllamaModalInternalsProps) {
   const formikProps = useFormikContext<OllamaModalValues>();
 
@@ -115,14 +101,7 @@ function OllamaModalInternals({
     existingLlmProvider && hasApiKey ? TAB_CLOUD : TAB_SELF_HOSTED;
 
   return (
-    <ModalWrapper
-      providerName={LLMProviderName.OLLAMA_CHAT}
-      llmProvider={existingLlmProvider}
-      onClose={onClose}
-      initialValues={initialValues}
-      validationSchema={validationSchema}
-      onSubmit={onSubmit}
-    >
+    <>
       <Card background="light" border="none" padding="sm">
         <Tabs defaultValue={defaultTab}>
           <Tabs.List>
@@ -180,7 +159,7 @@ function OllamaModalInternals({
           <ModelAccessField />
         </>
       )}
-    </ModalWrapper>
+    </>
   );
 }
 
@@ -226,12 +205,10 @@ export default function OllamaModal({
   });
 
   return (
-    <OllamaModalInternals
-      existingLlmProvider={existingLlmProvider}
-      fetchedModels={fetchedModels}
-      setFetchedModels={setFetchedModels}
+    <ModalWrapper
+      providerName={LLMProviderName.OLLAMA_CHAT}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
-      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
@@ -282,6 +259,13 @@ export default function OllamaModal({
           });
         }
       }}
-    />
+    >
+      <OllamaModalInternals
+        existingLlmProvider={existingLlmProvider}
+        fetchedModels={fetchedModels}
+        setFetchedModels={setFetchedModels}
+        isOnboarding={isOnboarding}
+      />
+    </ModalWrapper>
   );
 }

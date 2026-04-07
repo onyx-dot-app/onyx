@@ -79,17 +79,7 @@ interface BedrockModalInternalsProps {
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
   modelConfigurations: ModelConfiguration[];
-  onClose: () => void;
   isOnboarding: boolean;
-  initialValues: BedrockModalValues;
-  validationSchema: ReturnType<typeof buildValidationSchema>;
-  onSubmit: (
-    values: BedrockModalValues,
-    helpers: {
-      setSubmitting: (s: boolean) => void;
-      setStatus: (s: unknown) => void;
-    }
-  ) => Promise<void>;
 }
 
 function BedrockModalInternals({
@@ -97,11 +87,7 @@ function BedrockModalInternals({
   fetchedModels,
   setFetchedModels,
   modelConfigurations,
-  onClose,
   isOnboarding,
-  initialValues,
-  validationSchema,
-  onSubmit,
 }: BedrockModalInternalsProps) {
   const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
@@ -164,14 +150,7 @@ function BedrockModalInternals({
   });
 
   return (
-    <ModalWrapper
-      providerName={LLMProviderName.BEDROCK}
-      llmProvider={existingLlmProvider}
-      onClose={onClose}
-      initialValues={initialValues}
-      validationSchema={validationSchema}
-      onSubmit={onSubmit}
-    >
+    <>
       <InputLayouts.FieldPadder>
         <Section gap={1}>
           <InputLayouts.Vertical
@@ -303,7 +282,7 @@ function BedrockModalInternals({
           <ModelAccessField />
         </>
       )}
-    </ModalWrapper>
+    </>
   );
 }
 
@@ -363,13 +342,10 @@ export default function BedrockModal({
   });
 
   return (
-    <BedrockModalInternals
-      existingLlmProvider={existingLlmProvider}
-      fetchedModels={fetchedModels}
-      setFetchedModels={setFetchedModels}
-      modelConfigurations={modelConfigurations}
+    <ModalWrapper
+      providerName={LLMProviderName.BEDROCK}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
-      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
@@ -417,6 +393,14 @@ export default function BedrockModal({
           });
         }
       }}
-    />
+    >
+      <BedrockModalInternals
+        existingLlmProvider={existingLlmProvider}
+        fetchedModels={fetchedModels}
+        setFetchedModels={setFetchedModels}
+        modelConfigurations={modelConfigurations}
+        isOnboarding={isOnboarding}
+      />
+    </ModalWrapper>
   );
 }

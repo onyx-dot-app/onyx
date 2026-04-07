@@ -43,17 +43,7 @@ interface BifrostModalInternalsProps {
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
   modelConfigurations: ModelConfiguration[];
-  onClose: () => void;
   isOnboarding: boolean;
-  initialValues: BifrostModalValues;
-  validationSchema: ReturnType<typeof buildValidationSchema>;
-  onSubmit: (
-    values: BifrostModalValues,
-    helpers: {
-      setSubmitting: (s: boolean) => void;
-      setStatus: (s: unknown) => void;
-    }
-  ) => Promise<void>;
 }
 
 function BifrostModalInternals({
@@ -61,11 +51,7 @@ function BifrostModalInternals({
   fetchedModels,
   setFetchedModels,
   modelConfigurations,
-  onClose,
   isOnboarding,
-  initialValues,
-  validationSchema,
-  onSubmit,
 }: BifrostModalInternalsProps) {
   const formikProps = useFormikContext<BifrostModalValues>();
   const currentModels =
@@ -101,14 +87,7 @@ function BifrostModalInternals({
   }, []);
 
   return (
-    <ModalWrapper
-      providerName={LLMProviderName.BIFROST}
-      llmProvider={existingLlmProvider}
-      onClose={onClose}
-      initialValues={initialValues}
-      validationSchema={validationSchema}
-      onSubmit={onSubmit}
-    >
+    <>
       <APIBaseField
         subDescription="Paste your Bifrost gateway endpoint URL (including API version)."
         placeholder="https://your-bifrost-gateway.com/v1"
@@ -142,7 +121,7 @@ function BifrostModalInternals({
           <ModelAccessField />
         </>
       )}
-    </ModalWrapper>
+    </>
   );
 }
 
@@ -181,13 +160,10 @@ export default function BifrostModal({
   });
 
   return (
-    <BifrostModalInternals
-      existingLlmProvider={existingLlmProvider}
-      fetchedModels={fetchedModels}
-      setFetchedModels={setFetchedModels}
-      modelConfigurations={modelConfigurations}
+    <ModalWrapper
+      providerName={LLMProviderName.BIFROST}
+      llmProvider={existingLlmProvider}
       onClose={onClose}
-      isOnboarding={isOnboarding}
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
@@ -223,6 +199,14 @@ export default function BifrostModal({
           });
         }
       }}
-    />
+    >
+      <BifrostModalInternals
+        existingLlmProvider={existingLlmProvider}
+        fetchedModels={fetchedModels}
+        setFetchedModels={setFetchedModels}
+        modelConfigurations={modelConfigurations}
+        isOnboarding={isOnboarding}
+      />
+    </ModalWrapper>
   );
 }
