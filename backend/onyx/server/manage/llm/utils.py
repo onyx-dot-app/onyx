@@ -26,6 +26,7 @@ DYNAMIC_LLM_PROVIDERS = frozenset(
         LlmProviderNames.OLLAMA_CHAT,
         LlmProviderNames.LM_STUDIO,
         LlmProviderNames.BIFROST,
+        LlmProviderNames.OPENAI_COMPATIBLE,
     }
 )
 

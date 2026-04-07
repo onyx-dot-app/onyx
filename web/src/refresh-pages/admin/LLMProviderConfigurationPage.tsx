@@ -46,6 +46,7 @@ import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
+import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
 import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
@@ -67,6 +68,7 @@ const PROVIDER_DISPLAY_ORDER: string[] = [
   "openrouter",
   "lm_studio",
   "bifrost",
+  "openai_compatible",
 ];
 
 const PROVIDER_MODAL_MAP: Record<
@@ -105,6 +107,12 @@ const PROVIDER_MODAL_MAP: Record<
   ),
   bifrost: (d, onOpenChange) => (
     <BifrostModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
+  ),
+  openai_compatible: (d, onOpenChange) => (
+    <OpenAICompatibleModal
+      shouldMarkAsDefault={d}
+      onOpenChange={onOpenChange}
+    />
   ),
 };
 

@@ -14,6 +14,7 @@ import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
+import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
 
 // Display info for LLM provider cards - title is the product name, displayName is the company/platform
 const PROVIDER_DISPLAY_INFO: Record<
@@ -46,6 +47,10 @@ const PROVIDER_DISPLAY_INFO: Record<
   [LLMProviderName.LITELLM_PROXY]: {
     title: "LiteLLM Proxy",
     displayName: "LiteLLM Proxy",
+  },
+  [LLMProviderName.OPENAI_COMPATIBLE]: {
+    title: "OpenAI Compatible",
+    displayName: "OpenAI Compatible",
   },
 };
 
@@ -120,6 +125,9 @@ export function getOnboardingForm({
 
     case LLMProviderName.LITELLM_PROXY:
       return <LiteLLMProxyModal {...providerProps} />;
+
+    case LLMProviderName.OPENAI_COMPATIBLE:
+      return <OpenAICompatibleModal {...providerProps} />;
 
     default:
       return <CustomModal {...sharedProps} />;

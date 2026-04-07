@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { Formik, useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
-import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
+import { fetchOpenAICompatibleModels } from "@/app/admin/configuration/llm/utils";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
@@ -25,57 +26,52 @@ import {
 } from "@/sections/modals/llmConfig/svc";
 import {
   APIBaseField,
+  APIKeyField,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
-import Tabs from "@/refresh-components/Tabs";
-import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
-import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
-const DEFAULT_API_BASE = "http://127.0.0.1:11434";
-const CLOUD_API_BASE = "https://ollama.com";
-const TAB_SELF_HOSTED = "self-hosted";
-const TAB_CLOUD = "cloud";
+const DEFAULT_API_BASE = "";
 
-interface OllamaModalValues extends BaseLLMFormValues {
+interface OpenAICompatibleModalValues extends BaseLLMFormValues {
+  api_key: string;
   api_base: string;
-  custom_config: {
-    OLLAMA_API_KEY?: string;
-  };
 }
 
-interface OllamaModalInternalsProps {
+interface OpenAICompatibleModalInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
   fetchedModels: ModelConfiguration[];
   setFetchedModels: (models: ModelConfiguration[]) => void;
+  modelConfigurations: ModelConfiguration[];
   onClose: () => void;
   isOnboarding: boolean;
 }
 
-function OllamaModalInternals({
+function OpenAICompatibleModalInternals({
   existingLlmProvider,
   fetchedModels,
   setFetchedModels,
+  modelConfigurations,
   onClose,
   isOnboarding,
-}: OllamaModalInternalsProps) {
-  const formikProps = useFormikContext<OllamaModalValues>();
+}: OpenAICompatibleModalInternalsProps) {
+  const formikProps = useFormikContext<OpenAICompatibleModalValues>();
+  const currentModels =
+    fetchedModels.length > 0
+      ? fetchedModels
+      : existingLlmProvider?.model_configurations || modelConfigurations;
 
-  const handleFetchModels = async (signal?: AbortSignal) => {
-    // Only Ollama cloud accepts API key
-    const apiBase = formikProps.values.custom_config?.OLLAMA_API_KEY
-      ? CLOUD_API_BASE
-      : formikProps.values.api_base;
-    const { models, error } = await fetchOllamaModels({
-      api_base: apiBase,
+  const isFetchDisabled = !formikProps.values.api_base;
+
+  const handleFetchModels = async () => {
+    const { models, error } = await fetchOpenAICompatibleModels({
+      api_base: formikProps.values.api_base,
+      api_key: formikProps.values.api_key || undefined,
       provider_name: existingLlmProvider?.name,
-      signal,
     });
-    if (signal?.aborted) return;
     if (error) {
       throw new Error(error);
     }
@@ -84,7 +80,7 @@ function OllamaModalInternals({
 
   // Auto-fetch models on initial load when editing an existing provider
   useEffect(() => {
-    if (existingLlmProvider) {
+    if (existingLlmProvider && !isFetchDisabled) {
       handleFetchModels().catch((err) => {
         toast.error(
           err instanceof Error ? err.message : "Failed to fetch models"
@@ -94,56 +90,23 @@ function OllamaModalInternals({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const currentModels =
-    fetchedModels.length > 0
-      ? fetchedModels
-      : existingLlmProvider?.model_configurations || [];
-
-  const hasApiKey = !!formikProps.values.custom_config?.OLLAMA_API_KEY;
-  const defaultTab =
-    existingLlmProvider && hasApiKey ? TAB_CLOUD : TAB_SELF_HOSTED;
-
   return (
     <ModalWrapper
-      providerName={LLMProviderName.OLLAMA_CHAT}
+      providerName={LLMProviderName.OPENAI_COMPATIBLE}
       llmProvider={existingLlmProvider}
       onClose={onClose}
     >
-      <Card background="light" border="none" padding="sm">
-        <Tabs defaultValue={defaultTab}>
-          <Tabs.List>
-            <Tabs.Trigger value={TAB_SELF_HOSTED}>
-              Self-hosted Ollama
-            </Tabs.Trigger>
-            <Tabs.Trigger value={TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
-          </Tabs.List>
-          <Tabs.Content value={TAB_SELF_HOSTED} padding={0}>
-            <InputLayouts.Vertical
-              name="api_base"
-              title="API Base URL"
-              subDescription="The base URL for your Ollama instance."
-            >
-              <InputTypeInField
-                name="api_base"
-                placeholder="Your Ollama API base URL"
-              />
-            </InputLayouts.Vertical>
-          </Tabs.Content>
+      <APIBaseField
+        subDescription="The base URL of your OpenAI-compatible server."
+        placeholder="http://localhost:8000/v1"
+      />
 
-          <Tabs.Content value={TAB_CLOUD}>
-            <InputLayouts.Vertical
-              name="custom_config.OLLAMA_API_KEY"
-              title="API Key"
-              subDescription="Your Ollama Cloud API key."
-            >
-              <PasswordInputTypeInField
-                name="custom_config.OLLAMA_API_KEY"
-                placeholder="API Key"
-              />
-            </InputLayouts.Vertical>
-          </Tabs.Content>
-        </Tabs>
-      </Card>
+      <APIKeyField
+        optional
+        subDescription={markdown(
+          "Provide an API key if your server requires authentication."
+        )}
+      />
 
       {!isOnboarding && (
         <>
@@ -157,7 +120,7 @@ function OllamaModalInternals({
         modelConfigurations={currentModels}
         recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
-        onRefetch={handleFetchModels}
+        onRefetch={isFetchDisabled ? undefined : handleFetchModels}
       />
 
       {!isOnboarding && (
@@ -170,7 +133,7 @@ function OllamaModalInternals({
   );
 }
 
-export default function OllamaModal({
+export default function OpenAICompatibleModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
@@ -184,7 +147,7 @@ export default function OllamaModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    LLMProviderName.OLLAMA_CHAT
+    LLMProviderName.OPENAI_COMPATIBLE
   );
 
   const onClose = () => onOpenChange?.(false);
@@ -194,18 +157,16 @@ export default function OllamaModal({
     wellKnownLLMProvider ?? llmDescriptor
   );
 
-  const initialValues: OllamaModalValues = {
+  const initialValues: OpenAICompatibleModalValues = {
     ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? LLMProviderName.OLLAMA_CHAT,
+    provider:
+      existingLlmProvider?.provider ?? LLMProviderName.OPENAI_COMPATIBLE,
+    api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
     test_model_name:
       existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
         ?.name ?? "",
-    custom_config: {
-      OLLAMA_API_KEY:
-        (existingLlmProvider?.custom_config?.OLLAMA_API_KEY as string) ?? "",
-    },
-  } as OllamaModalValues;
+  } as OpenAICompatibleModalValues;
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
@@ -222,29 +183,14 @@ export default function OllamaModal({
       validationSchema={validationSchema}
       validateOnMount
       onSubmit={async (values, { setSubmitting, setStatus }) => {
-        const filteredCustomConfig = Object.fromEntries(
-          Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
-        );
-
-        const submitValues = {
-          ...values,
-          api_base: filteredCustomConfig.OLLAMA_API_KEY
-            ? CLOUD_API_BASE
-            : values.api_base,
-          custom_config:
-            Object.keys(filteredCustomConfig).length > 0
-              ? filteredCustomConfig
-              : undefined,
-        };
-
         if (isOnboarding && onboardingState && onboardingActions) {
           const modelConfigsToUse =
             fetchedModels.length > 0 ? fetchedModels : [];
 
           await submitOnboardingProvider({
-            providerName: LLMProviderName.OLLAMA_CHAT,
+            providerName: LLMProviderName.OPENAI_COMPATIBLE,
             payload: {
-              ...submitValues,
+              ...values,
               model_configurations: modelConfigsToUse,
             },
             onboardingState,
@@ -255,8 +201,8 @@ export default function OllamaModal({
           });
         } else {
           await submitLLMProvider({
-            providerName: LLMProviderName.OLLAMA_CHAT,
-            values: submitValues,
+            providerName: LLMProviderName.OPENAI_COMPATIBLE,
+            values,
             initialValues,
             modelConfigurations:
               fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
@@ -271,10 +217,11 @@ export default function OllamaModal({
       }}
     >
       {() => (
-        <OllamaModalInternals
+        <OpenAICompatibleModalInternals
           existingLlmProvider={existingLlmProvider}
           fetchedModels={fetchedModels}
           setFetchedModels={setFetchedModels}
+          modelConfigurations={modelConfigurations}
           onClose={onClose}
           isOnboarding={isOnboarding}
         />
