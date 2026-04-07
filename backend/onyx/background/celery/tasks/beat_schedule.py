@@ -75,6 +75,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too — they may still have stale checkpoints to clean.
+            "skip_gated": False,
         },
     },
     {
@@ -84,6 +86,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too — they may still have stale index attempts.
+            "skip_gated": False,
         },
     },
     {
@@ -93,6 +97,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still have connectors awaiting deletion.
+            "skip_gated": False,
         },
     },
     {
@@ -266,7 +272,7 @@ def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:
     cloud_task["kwargs"] = {}
     cloud_task["kwargs"]["task_name"] = task["task"]
 
-    optional_fields = ["queue", "priority", "expires"]
+    optional_fields = ["queue", "priority", "expires", "skip_gated"]
     for field in optional_fields:
         if field in task["options"]:
             cloud_task["kwargs"][field] = task["options"][field]
