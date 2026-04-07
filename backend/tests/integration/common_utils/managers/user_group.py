@@ -117,6 +117,20 @@ class UserGroupManager:
         return response.json()
 
     @staticmethod
+    def set_permission(
+        user_group: DATestUserGroup,
+        permission: str,
+        enabled: bool,
+        user_performing_action: DATestUser,
+    ) -> requests.Response:
+        response = requests.put(
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
+            json={"permission": permission, "enabled": enabled},
+            headers=user_performing_action.headers,
+        )
+        return response
+
+    @staticmethod
     def get_all(
         user_performing_action: DATestUser,
         include_default: bool = False,
