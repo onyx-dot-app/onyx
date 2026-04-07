@@ -124,7 +124,7 @@ function OpenAICompatibleModalInternals({
         <InputLayouts.Vertical
           name="api_key"
           title="API Key"
-          suffix="optional"
+          optional
           subDescription={markdown(
             "Provide an API key if your server requires authentication."
           )}
@@ -164,6 +164,7 @@ export default function OpenAICompatibleModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -177,6 +178,8 @@ export default function OpenAICompatibleModal({
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
     OPENAI_COMPATIBLE_PROVIDER
   );
+
+  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 

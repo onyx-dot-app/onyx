@@ -149,9 +149,10 @@ const PROVIDER_MODAL_MAP: Record<
       onOpenChange={onOpenChange}
     />
   ),
-  openai_compatible: (d, onOpenChange) => (
+  openai_compatible: (d, open, onOpenChange) => (
     <OpenAICompatibleModal
       shouldMarkAsDefault={d}
+      open={open}
       onOpenChange={onOpenChange}
     />
   ),
