@@ -8,6 +8,7 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
@@ -35,7 +36,6 @@ import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 
-const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
 const TAB_SELF_HOSTED = "self-hosted";
 const TAB_CLOUD = "cloud";
@@ -126,7 +126,7 @@ function OllamaModalInternals({
 
   return (
     <ModalWrapper
-      providerEndpoint={OLLAMA_PROVIDER_NAME}
+      providerEndpoint={LLMProviderName.OLLAMA_CHAT}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
     >
@@ -204,8 +204,9 @@ export default function OllamaModal({
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } =
-    useWellKnownLLMProvider(OLLAMA_PROVIDER_NAME);
+  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
+    LLMProviderName.OLLAMA_CHAT
+  );
 
   const onClose = () => onOpenChange?.(false);
 
@@ -216,7 +217,7 @@ export default function OllamaModal({
 
   const initialValues: OllamaModalValues = {
     ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? OLLAMA_PROVIDER_NAME,
+    provider: existingLlmProvider?.provider ?? LLMProviderName.OLLAMA_CHAT,
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
     test_model_name:
       existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
@@ -259,7 +260,7 @@ export default function OllamaModal({
             fetchedModels.length > 0 ? fetchedModels : [];
 
           await submitOnboardingProvider({
-            providerName: OLLAMA_PROVIDER_NAME,
+            providerName: LLMProviderName.OLLAMA_CHAT,
             payload: {
               ...submitValues,
               model_configurations: modelConfigsToUse,
@@ -272,7 +273,7 @@ export default function OllamaModal({
           });
         } else {
           await submitLLMProvider({
-            providerName: OLLAMA_PROVIDER_NAME,
+            providerName: LLMProviderName.OLLAMA_CHAT,
             values: submitValues,
             initialValues,
             modelConfigurations:

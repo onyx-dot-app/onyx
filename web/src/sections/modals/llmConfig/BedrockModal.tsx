@@ -10,6 +10,7 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
@@ -39,7 +40,6 @@ import { Content } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import useOnMount from "@/hooks/useOnMount";
 
-const BEDROCK_PROVIDER_NAME = "bedrock";
 const AWS_REGION_OPTIONS = [
   { name: "us-east-1", value: "us-east-1" },
   { name: "us-east-2", value: "us-east-2" },
@@ -153,7 +153,7 @@ function BedrockModalInternals({
 
   return (
     <ModalWrapper
-      providerEndpoint={BEDROCK_PROVIDER_NAME}
+      providerEndpoint={LLMProviderName.BEDROCK}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
     >
@@ -306,7 +306,7 @@ export default function BedrockModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    BEDROCK_PROVIDER_NAME
+    LLMProviderName.BEDROCK
   );
 
   const onClose = () => onOpenChange?.(false);
@@ -318,7 +318,7 @@ export default function BedrockModal({
 
   const initialValues: BedrockModalValues = {
     ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? BEDROCK_PROVIDER_NAME,
+    provider: existingLlmProvider?.provider ?? LLMProviderName.BEDROCK,
     test_model_name:
       existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
         ?.name ?? "",
@@ -375,7 +375,7 @@ export default function BedrockModal({
             fetchedModels.length > 0 ? fetchedModels : [];
 
           await submitOnboardingProvider({
-            providerName: BEDROCK_PROVIDER_NAME,
+            providerName: LLMProviderName.BEDROCK,
             payload: {
               ...submitValues,
               model_configurations: modelConfigsToUse,
@@ -388,7 +388,7 @@ export default function BedrockModal({
           });
         } else {
           await submitLLMProvider({
-            providerName: BEDROCK_PROVIDER_NAME,
+            providerName: LLMProviderName.BEDROCK,
             values: submitValues,
             initialValues,
             modelConfigurations:

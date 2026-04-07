@@ -34,7 +34,6 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
 
-const BIFROST_PROVIDER_NAME = LLMProviderName.BIFROST;
 const DEFAULT_API_BASE = "";
 
 interface BifrostModalValues extends BaseLLMFormValues {
@@ -163,7 +162,7 @@ export default function BifrostModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    BIFROST_PROVIDER_NAME
+    LLMProviderName.BIFROST
   );
 
   const onClose = () => onOpenChange?.(false);
@@ -175,7 +174,7 @@ export default function BifrostModal({
 
   const initialValues: BifrostModalValues = {
     ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? BIFROST_PROVIDER_NAME,
+    provider: existingLlmProvider?.provider ?? LLMProviderName.BIFROST,
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
     test_model_name:
@@ -203,7 +202,7 @@ export default function BifrostModal({
             fetchedModels.length > 0 ? fetchedModels : [];
 
           await submitOnboardingProvider({
-            providerName: BIFROST_PROVIDER_NAME,
+            providerName: LLMProviderName.BIFROST,
             payload: {
               ...values,
               model_configurations: modelConfigsToUse,
@@ -216,7 +215,7 @@ export default function BifrostModal({
           });
         } else {
           await submitLLMProvider({
-            providerName: BIFROST_PROVIDER_NAME,
+            providerName: LLMProviderName.BIFROST,
             values,
             initialValues,
             modelConfigurations:

@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import React, { useState } from "react";
 import { Form, useFormikContext } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
@@ -608,7 +608,7 @@ export interface ModalWrapperProps {
   providerName?: string;
   existingProviderName?: string;
   onClose: () => void;
-  children: ReactNode;
+  children: React.ReactNode;
 }
 export function ModalWrapper({
   providerEndpoint,

@@ -7,6 +7,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
@@ -34,8 +35,6 @@ import {
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
 import { toast } from "@/hooks/useToast";
-
-const AZURE_PROVIDER_NAME = "azure";
 
 interface AzureModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -87,7 +86,9 @@ export default function AzureModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(AZURE_PROVIDER_NAME);
+  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
+    LLMProviderName.AZURE
+  );
 
   const [addedModels, setAddedModels] = useState<ModelConfiguration[]>([]);
 
@@ -110,7 +111,7 @@ export default function AzureModal({
 
   const initialValues: AzureModalValues = {
     ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? AZURE_PROVIDER_NAME,
+    provider: existingLlmProvider?.provider ?? LLMProviderName.AZURE,
     api_key: existingLlmProvider?.api_key ?? "",
     target_uri: buildTargetUri(existingLlmProvider),
     test_model_name:
@@ -154,7 +155,7 @@ export default function AzureModal({
             (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
 
           await submitOnboardingProvider({
-            providerName: AZURE_PROVIDER_NAME,
+            providerName: LLMProviderName.AZURE,
             payload: {
               ...processedValues,
               model_configurations: modelConfigsToUse,
@@ -167,7 +168,7 @@ export default function AzureModal({
           });
         } else {
           await submitLLMProvider({
-            providerName: AZURE_PROVIDER_NAME,
+            providerName: LLMProviderName.AZURE,
             values: processedValues,
             initialValues,
             modelConfigurations,
@@ -183,7 +184,7 @@ export default function AzureModal({
     >
       {(formikProps) => (
         <ModalWrapper
-          providerEndpoint={AZURE_PROVIDER_NAME}
+          providerEndpoint={LLMProviderName.AZURE}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
         >

@@ -7,6 +7,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LLMProviderFormProps,
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
 } from "@/interfaces/llm";
@@ -32,7 +33,6 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
 
-const OPENROUTER_PROVIDER_NAME = "openrouter";
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
 interface OpenRouterModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -91,7 +91,7 @@ function OpenRouterModalInternals({
 
   return (
     <ModalWrapper
-      providerEndpoint={OPENROUTER_PROVIDER_NAME}
+      providerEndpoint={LLMProviderName.OPENROUTER}
       existingProviderName={existingLlmProvider?.name}
       onClose={onClose}
     >
@@ -150,7 +150,7 @@ export default function OpenRouterModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    OPENROUTER_PROVIDER_NAME
+    LLMProviderName.OPENROUTER
   );
 
   const onClose = () => onOpenChange?.(false);
@@ -162,7 +162,7 @@ export default function OpenRouterModal({
 
   const initialValues: OpenRouterModalValues = {
     ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? OPENROUTER_PROVIDER_NAME,
+    provider: existingLlmProvider?.provider ?? LLMProviderName.OPENROUTER,
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
     test_model_name:
@@ -192,7 +192,7 @@ export default function OpenRouterModal({
             fetchedModels.length > 0 ? fetchedModels : [];
 
           await submitOnboardingProvider({
-            providerName: OPENROUTER_PROVIDER_NAME,
+            providerName: LLMProviderName.OPENROUTER,
             payload: {
               ...values,
               model_configurations: modelConfigsToUse,
@@ -205,7 +205,7 @@ export default function OpenRouterModal({
           });
         } else {
           await submitLLMProvider({
-            providerName: OPENROUTER_PROVIDER_NAME,
+            providerName: LLMProviderName.OPENROUTER,
             values,
             initialValues,
             modelConfigurations:

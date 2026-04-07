@@ -5,7 +5,7 @@ import { Formik } from "formik";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { LLMProviderFormProps } from "@/interfaces/llm";
+import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
@@ -25,7 +25,6 @@ import {
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 
-const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
 const VERTEXAI_DEFAULT_MODEL = "gemini-2.5-pro";
 const VERTEXAI_DEFAULT_LOCATION = "global";
@@ -50,7 +49,7 @@ export default function VertexAIModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    VERTEXAI_PROVIDER_NAME
+    LLMProviderName.VERTEX_AI
   );
 
   const onClose = () => onOpenChange?.(false);
@@ -62,7 +61,7 @@ export default function VertexAIModal({
 
   const initialValues: VertexAIModalValues = {
     ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? VERTEXAI_PROVIDER_NAME,
+    provider: existingLlmProvider?.provider ?? LLMProviderName.VERTEX_AI,
     test_model_name:
       existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
         ?.name ??
@@ -123,7 +122,7 @@ export default function VertexAIModal({
             (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
 
           await submitOnboardingProvider({
-            providerName: VERTEXAI_PROVIDER_NAME,
+            providerName: LLMProviderName.VERTEX_AI,
             payload: {
               ...submitValues,
               model_configurations: modelConfigsToUse,
@@ -137,7 +136,7 @@ export default function VertexAIModal({
           });
         } else {
           await submitLLMProvider({
-            providerName: VERTEXAI_PROVIDER_NAME,
+            providerName: LLMProviderName.VERTEX_AI,
             values: submitValues,
             initialValues,
             modelConfigurations,
@@ -153,7 +152,7 @@ export default function VertexAIModal({
     >
       {() => (
         <ModalWrapper
-          providerEndpoint={VERTEXAI_PROVIDER_NAME}
+          providerEndpoint={LLMProviderName.VERTEX_AI}
           providerName={VERTEXAI_DISPLAY_NAME}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}

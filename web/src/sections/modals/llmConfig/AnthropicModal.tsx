@@ -2,7 +2,7 @@
 
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
-import { LLMProviderFormProps } from "@/interfaces/llm";
+import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
@@ -23,7 +23,6 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import * as InputLayouts from "@/layouts/input-layouts";
 
-const ANTHROPIC_PROVIDER_NAME = "anthropic";
 const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
 
 export default function AnthropicModal({
@@ -39,7 +38,7 @@ export default function AnthropicModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    ANTHROPIC_PROVIDER_NAME
+    LLMProviderName.ANTHROPIC
   );
 
   const onClose = () => onOpenChange?.(false);
@@ -51,7 +50,7 @@ export default function AnthropicModal({
 
   const initialValues = {
     ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? ANTHROPIC_PROVIDER_NAME,
+    provider: existingLlmProvider?.provider ?? LLMProviderName.ANTHROPIC,
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? undefined,
     test_model_name:
@@ -82,7 +81,7 @@ export default function AnthropicModal({
             (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
 
           await submitOnboardingProvider({
-            providerName: ANTHROPIC_PROVIDER_NAME,
+            providerName: LLMProviderName.ANTHROPIC,
             payload: {
               ...values,
               model_configurations: modelConfigsToUse,
@@ -97,7 +96,7 @@ export default function AnthropicModal({
           });
         } else {
           await submitLLMProvider({
-            providerName: ANTHROPIC_PROVIDER_NAME,
+            providerName: LLMProviderName.ANTHROPIC,
             values,
             initialValues,
             modelConfigurations,
@@ -113,7 +112,7 @@ export default function AnthropicModal({
     >
       {() => (
         <ModalWrapper
-          providerEndpoint={ANTHROPIC_PROVIDER_NAME}
+          providerEndpoint={LLMProviderName.ANTHROPIC}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
         >

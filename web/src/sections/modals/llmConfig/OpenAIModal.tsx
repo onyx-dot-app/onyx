@@ -2,7 +2,7 @@
 
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
-import { LLMProviderFormProps } from "@/interfaces/llm";
+import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
@@ -23,7 +23,6 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 import * as InputLayouts from "@/layouts/input-layouts";
 
-const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
 
 export default function OpenAIModal({
@@ -38,8 +37,9 @@ export default function OpenAIModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } =
-    useWellKnownLLMProvider(OPENAI_PROVIDER_NAME);
+  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
+    LLMProviderName.OPENAI
+  );
 
   const onClose = () => onOpenChange?.(false);
 
@@ -50,7 +50,7 @@ export default function OpenAIModal({
 
   const initialValues = {
     ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? OPENAI_PROVIDER_NAME,
+    provider: existingLlmProvider?.provider ?? LLMProviderName.OPENAI,
     api_key: existingLlmProvider?.api_key ?? "",
     test_model_name:
       existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
@@ -80,7 +80,7 @@ export default function OpenAIModal({
             (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
 
           await submitOnboardingProvider({
-            providerName: OPENAI_PROVIDER_NAME,
+            providerName: LLMProviderName.OPENAI,
             payload: {
               ...values,
               model_configurations: modelConfigsToUse,
@@ -95,7 +95,7 @@ export default function OpenAIModal({
           });
         } else {
           await submitLLMProvider({
-            providerName: OPENAI_PROVIDER_NAME,
+            providerName: LLMProviderName.OPENAI,
             values,
             initialValues,
             modelConfigurations,
@@ -111,7 +111,7 @@ export default function OpenAIModal({
     >
       {() => (
         <ModalWrapper
-          providerEndpoint={OPENAI_PROVIDER_NAME}
+          providerEndpoint={LLMProviderName.OPENAI}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
         >

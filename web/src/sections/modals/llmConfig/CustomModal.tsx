@@ -2,7 +2,11 @@
 
 import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
-import { LLMProviderFormProps, ModelConfiguration } from "@/interfaces/llm";
+import {
+  LLMProviderFormProps,
+  LLMProviderName,
+  ModelConfiguration,
+} from "@/interfaces/llm";
 import * as Yup from "yup";
 import { buildInitialValues } from "@/sections/modals/llmConfig/utils";
 import {
@@ -325,7 +329,7 @@ export default function CustomModal({
     >
       {(formikProps) => (
         <ModalWrapper
-          providerEndpoint="custom"
+          providerEndpoint={LLMProviderName.CUSTOM}
           existingProviderName={existingLlmProvider?.name}
           onClose={onClose}
         >
