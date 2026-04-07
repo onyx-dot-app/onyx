@@ -12,7 +12,10 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import { fetchOpenAICompatibleModels } from "@/app/admin/configuration/llm/utils";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import {
+  useTestingModelFromLLMProvider,
+  useWellKnownLLMProvider,
+} from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
   buildValidationSchema,
@@ -157,14 +160,15 @@ export default function OpenAICompatibleModal({
   );
 
   const initialValues: OpenAICompatibleModalValues = {
-    ...buildInitialValues(existingLlmProvider),
-    provider:
-      existingLlmProvider?.provider ?? LLMProviderName.OPENAI_COMPATIBLE,
-    api_key: existingLlmProvider?.api_key ?? "",
+    ...buildInitialValues(
+      LLMProviderName.OPENAI_COMPATIBLE,
+      existingLlmProvider
+    ),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-    test_model_name: existingLlmProvider?.model_configurations?.find(
-      (m) => m.is_visible
-    )?.name,
+    test_model_name: useTestingModelFromLLMProvider(
+      LLMProviderName.OPENAI_COMPATIBLE,
+      existingLlmProvider
+    ),
   } as OpenAICompatibleModalValues;
 
   const validationSchema = buildValidationSchema(isOnboarding, {

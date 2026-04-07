@@ -22,7 +22,7 @@ import {
   getBuildLlmSelection,
   getDefaultLlmSelection,
 } from "@/app/craft/onboarding/constants";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor, LLMProviderName } from "@/interfaces/llm";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import { buildInitialValues } from "@/sections/modals/llmConfig/utils";
 import { testApiKeyHelper } from "@/sections/modals/llmConfig/svc";
@@ -221,7 +221,9 @@ export default function BuildOnboardingModal({
     setConnectionStatus("testing");
     setErrorMessage("");
 
-    const baseValues = buildInitialValues();
+    const baseValues = buildInitialValues(
+      currentProviderConfig.providerName as LLMProviderName
+    );
     const providerName = `build-mode-${currentProviderConfig.providerName}`;
     const payload = {
       ...baseValues,

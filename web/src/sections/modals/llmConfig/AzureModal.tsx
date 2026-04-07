@@ -12,7 +12,10 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import {
+  useTestingModelFromLLMProvider,
+  useWellKnownLLMProvider,
+} from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
   buildValidationSchema,
@@ -110,13 +113,12 @@ export default function AzureModal({
   ];
 
   const initialValues: AzureModalValues = {
-    ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? LLMProviderName.AZURE,
-    api_key: existingLlmProvider?.api_key ?? "",
+    ...buildInitialValues(LLMProviderName.AZURE, existingLlmProvider),
     target_uri: buildTargetUri(existingLlmProvider),
-    test_model_name: existingLlmProvider?.model_configurations?.find(
-      (m) => m.is_visible
-    )?.name,
+    test_model_name: useTestingModelFromLLMProvider(
+      LLMProviderName.AZURE,
+      existingLlmProvider
+    ),
   } as AzureModalValues;
 
   const validationSchema = buildValidationSchema(isOnboarding, {

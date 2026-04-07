@@ -11,7 +11,10 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import { fetchOpenRouterModels } from "@/app/admin/configuration/llm/utils";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import {
+  useTestingModelFromLLMProvider,
+  useWellKnownLLMProvider,
+} from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
   buildValidationSchema,
@@ -151,13 +154,12 @@ export default function OpenRouterModal({
   );
 
   const initialValues: OpenRouterModalValues = {
-    ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? LLMProviderName.OPENROUTER,
-    api_key: existingLlmProvider?.api_key ?? "",
+    ...buildInitialValues(LLMProviderName.OPENROUTER, existingLlmProvider),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-    test_model_name: existingLlmProvider?.model_configurations?.find(
-      (m) => m.is_visible
-    )?.name,
+    test_model_name: useTestingModelFromLLMProvider(
+      LLMProviderName.OPENROUTER,
+      existingLlmProvider
+    ),
   } as OpenRouterModalValues;
 
   const validationSchema = buildValidationSchema(isOnboarding, {

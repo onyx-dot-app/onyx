@@ -207,10 +207,8 @@ export default function CustomModal({
   const onClose = () => onOpenChange?.(false);
 
   const initialValues = {
-    ...buildInitialValues(existingLlmProvider),
+    ...buildInitialValues(LLMProviderName.CUSTOM, existingLlmProvider),
     provider: existingLlmProvider?.provider ?? "",
-    api_key: existingLlmProvider?.api_key ?? "",
-    api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map(
       (mc) => ({

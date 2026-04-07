@@ -3,7 +3,10 @@
 import { useSWRConfig } from "swr";
 import { Formik } from "formik";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import {
+  useTestingModelFromLLMProvider,
+  useWellKnownLLMProvider,
+} from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
   buildValidationSchema,
@@ -46,13 +49,11 @@ export default function AnthropicModal({
   );
 
   const initialValues = {
-    ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? LLMProviderName.ANTHROPIC,
-    api_key: existingLlmProvider?.api_key ?? "",
-    api_base: existingLlmProvider?.api_base ?? undefined,
-    test_model_name:
-      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
-        ?.name ?? wellKnownLLMProvider?.recommended_default_model?.name,
+    ...buildInitialValues(LLMProviderName.ANTHROPIC, existingLlmProvider),
+    test_model_name: useTestingModelFromLLMProvider(
+      LLMProviderName.ANTHROPIC,
+      existingLlmProvider
+    ),
     is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
   };
 

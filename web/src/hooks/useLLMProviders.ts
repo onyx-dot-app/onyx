@@ -5,6 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   LLMProviderDescriptor,
+  LLMProviderName,
   LLMProviderResponse,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
@@ -138,12 +139,12 @@ export function useAdminLLMProviders() {
  * Used inside individual provider modals to pre-populate model lists
  * before the user has entered credentials.
  *
- * @param providerEndpoint - The provider's API endpoint name (e.g. "openai", "anthropic").
+ * @param providerName - The provider's API endpoint name (e.g. "openai", "anthropic").
  *   Pass `null` to suppress the request.
  */
-export function useWellKnownLLMProvider(providerEndpoint: string | null) {
+export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   const { data, error, isLoading } = useSWR<WellKnownLLMProviderDescriptor>(
-    providerEndpoint ? SWR_KEYS.wellKnownLlmProvider(providerEndpoint) : null,
+    providerName ? SWR_KEYS.wellKnownLlmProvider(providerName) : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -157,6 +158,20 @@ export function useWellKnownLLMProvider(providerEndpoint: string | null) {
     isLoading,
     error,
   };
+}
+
+export function useTestingModelFromLLMProvider(
+  providerName: LLMProviderName,
+  llmProvider?: LLMProviderView
+): string | undefined {
+  const { wellKnownLLMProvider } = useWellKnownLLMProvider(providerName);
+  const firstVisibleModelToTest = llmProvider?.model_configurations.find(
+    (modelConfiguration) => modelConfiguration.is_visible
+  )?.name;
+  return (
+    firstVisibleModelToTest ??
+    wellKnownLLMProvider?.recommended_default_model?.name
+  );
 }
 
 export function useWellKnownLLMProviders() {

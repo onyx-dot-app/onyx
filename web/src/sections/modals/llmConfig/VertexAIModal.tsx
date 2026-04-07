@@ -7,7 +7,10 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import {
+  useTestingModelFromLLMProvider,
+  useWellKnownLLMProvider,
+} from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
   buildValidationSchema,
@@ -58,11 +61,11 @@ export default function VertexAIModal({
   );
 
   const initialValues: VertexAIModalValues = {
-    ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? LLMProviderName.VERTEX_AI,
-    test_model_name:
-      existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
-        ?.name ?? wellKnownLLMProvider?.recommended_default_model?.name,
+    ...buildInitialValues(LLMProviderName.VERTEX_AI, existingLlmProvider),
+    test_model_name: useTestingModelFromLLMProvider(
+      LLMProviderName.VERTEX_AI,
+      existingLlmProvider
+    ),
     is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
     custom_config: {
       vertex_credentials:

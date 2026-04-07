@@ -1,4 +1,5 @@
 import {
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
@@ -8,9 +9,15 @@ import { ScopedMutator } from "swr";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
 /** Shared initial values for all LLM provider forms (both onboarding and admin). */
-export function buildInitialValues(existingLlmProvider?: LLMProviderView) {
+export function buildInitialValues(
+  providerName: LLMProviderName,
+  existingLlmProvider?: LLMProviderView
+) {
   return {
+    provider: existingLlmProvider?.provider ?? providerName,
     name: existingLlmProvider?.name ?? "",
+    api_key: existingLlmProvider?.api_key ?? undefined,
+    api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,
     is_auto_mode: existingLlmProvider?.is_auto_mode ?? false,
     groups: existingLlmProvider?.groups ?? [],

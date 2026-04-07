@@ -11,7 +11,10 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import { fetchLiteLLMProxyModels } from "@/app/admin/configuration/llm/utils";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import {
+  useTestingModelFromLLMProvider,
+  useWellKnownLLMProvider,
+} from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
   buildValidationSchema,
@@ -152,13 +155,12 @@ export default function LiteLLMProxyModal({
   );
 
   const initialValues: LiteLLMProxyModalValues = {
-    ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? LLMProviderName.LITELLM_PROXY,
-    api_key: existingLlmProvider?.api_key ?? "",
+    ...buildInitialValues(LLMProviderName.LITELLM_PROXY, existingLlmProvider),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-    test_model_name: existingLlmProvider?.model_configurations?.find(
-      (m) => m.is_visible
-    )?.name,
+    test_model_name: useTestingModelFromLLMProvider(
+      LLMProviderName.LITELLM_PROXY,
+      existingLlmProvider
+    ),
   } as LiteLLMProxyModalValues;
 
   const validationSchema = buildValidationSchema(isOnboarding, {

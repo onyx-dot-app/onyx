@@ -15,7 +15,10 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import {
+  useTestingModelFromLLMProvider,
+  useWellKnownLLMProvider,
+} from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
   buildValidationSchema,
@@ -317,11 +320,11 @@ export default function BedrockModal({
   );
 
   const initialValues: BedrockModalValues = {
-    ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? LLMProviderName.BEDROCK,
-    test_model_name: existingLlmProvider?.model_configurations?.find(
-      (m) => m.is_visible
-    )?.name,
+    ...buildInitialValues(LLMProviderName.BEDROCK, existingLlmProvider),
+    test_model_name: useTestingModelFromLLMProvider(
+      LLMProviderName.BEDROCK,
+      existingLlmProvider
+    ),
     custom_config: {
       AWS_REGION_NAME:
         (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ?? "",

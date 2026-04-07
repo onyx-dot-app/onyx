@@ -12,7 +12,10 @@ import {
   ModelConfiguration,
 } from "@/interfaces/llm";
 import { fetchBifrostModels } from "@/app/admin/configuration/llm/utils";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
+import {
+  useTestingModelFromLLMProvider,
+  useWellKnownLLMProvider,
+} from "@/hooks/useLLMProviders";
 import {
   buildInitialValues,
   buildValidationSchema,
@@ -158,13 +161,12 @@ export default function BifrostModal({
   );
 
   const initialValues: BifrostModalValues = {
-    ...buildInitialValues(existingLlmProvider),
-    provider: existingLlmProvider?.provider ?? LLMProviderName.BIFROST,
-    api_key: existingLlmProvider?.api_key ?? "",
+    ...buildInitialValues(LLMProviderName.BIFROST, existingLlmProvider),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-    test_model_name: existingLlmProvider?.model_configurations?.find(
-      (m) => m.is_visible
-    )?.name,
+    test_model_name: useTestingModelFromLLMProvider(
+      LLMProviderName.BIFROST,
+      existingLlmProvider
+    ),
   } as BifrostModalValues;
 
   const validationSchema = buildValidationSchema(isOnboarding, {
