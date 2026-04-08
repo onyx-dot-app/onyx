@@ -27,8 +27,8 @@ interface ComboBoxDropdownProps {
   allowCreate: boolean;
   /** Whether to show create option (pre-computed by parent) */
   showCreateOption: boolean;
-  /** Show "Add" prefix in create option */
-  showAddPrefix: boolean;
+  /** Prefix shown before the typed value in the create option (e.g., "Use", "Add") */
+  createPrefix?: string;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
 }
@@ -62,7 +62,7 @@ export const ComboBoxDropdown = forwardRef<
       inputValue,
       allowCreate,
       showCreateOption,
-      showAddPrefix,
+      createPrefix,
       dropdownMaxHeight,
     },
     ref
@@ -140,7 +140,7 @@ export const ComboBoxDropdown = forwardRef<
           inputValue={inputValue}
           allowCreate={allowCreate}
           showCreateOption={showCreateOption}
-          showAddPrefix={showAddPrefix}
+          createPrefix={createPrefix}
         />
       </div>,
       document.body

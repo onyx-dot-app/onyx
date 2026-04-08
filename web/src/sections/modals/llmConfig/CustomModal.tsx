@@ -215,7 +215,7 @@ function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
       options={options}
       placeholder="Select a provider"
       disabled={disabled}
-      strict
+      createPrefix="Use"
       dropdownMaxHeight="60vh"
     />
   );
