@@ -133,13 +133,12 @@ export default function LMStudioModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
+  open,
   onOpenChange,
   onSuccess,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-
-  const onClose = () => onOpenChange?.(false);
 
   const initialValues: LMStudioModalValues = {
     ...useInitialValues(
@@ -156,6 +155,10 @@ export default function LMStudioModal({
   const validationSchema = buildValidationSchema(isOnboarding, {
     apiBase: true,
   });
+
+  const onClose = () => onOpenChange?.(false);
+
+  if (open === false) return null;
 
   return (
     <ModalWrapper

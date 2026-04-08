@@ -280,10 +280,6 @@ export default function BedrockModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
-  if (open === false) return null;
-
-  const onClose = () => onOpenChange?.(false);
-
   const initialValues: BedrockModalValues = {
     ...useInitialValues(
       isOnboarding,
@@ -314,6 +310,10 @@ export default function BedrockModal({
       }),
     },
   });
+
+  const onClose = () => onOpenChange?.(false);
+
+  if (open === false) return null;
 
   return (
     <ModalWrapper

@@ -172,10 +172,6 @@ export default function OllamaModal({
     existingLlmProvider && !!apiKey ? Tab.TAB_CLOUD : Tab.TAB_SELF_HOSTED;
   const [tab, setTab] = useState<Tab>(defaultTab);
 
-  if (open === false) return null;
-
-  const onClose = () => onOpenChange?.(false);
-
   const initialValues: OllamaModalValues = {
     ...useInitialValues(
       isOnboarding,
@@ -203,6 +199,10 @@ export default function OllamaModal({
       }),
     [tab, isOnboarding]
   );
+
+  const onClose = () => onOpenChange?.(false);
+
+  if (open === false) return null;
 
   return (
     <ModalWrapper

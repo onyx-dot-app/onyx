@@ -116,10 +116,6 @@ export default function LiteLLMProxyModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
-  if (open === false) return null;
-
-  const onClose = () => onOpenChange?.(false);
-
   const initialValues: LiteLLMProxyModalValues = {
     ...useInitialValues(
       isOnboarding,
@@ -133,6 +129,10 @@ export default function LiteLLMProxyModal({
     apiKey: true,
     apiBase: true,
   });
+
+  const onClose = () => onOpenChange?.(false);
+
+  if (open === false) return null;
 
   return (
     <ModalWrapper

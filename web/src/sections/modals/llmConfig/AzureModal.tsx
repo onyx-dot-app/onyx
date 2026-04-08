@@ -107,10 +107,6 @@ export default function AzureModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
-  if (open === false) return null;
-
-  const onClose = () => onOpenChange?.(false);
-
   const initialValues: AzureModalValues = {
     ...useInitialValues(
       isOnboarding,
@@ -132,6 +128,10 @@ export default function AzureModal({
         ),
     },
   });
+
+  const onClose = () => onOpenChange?.(false);
+
+  if (open === false) return null;
 
   return (
     <ModalWrapper

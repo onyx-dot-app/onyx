@@ -120,10 +120,6 @@ export default function BifrostModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
-  if (open === false) return null;
-
-  const onClose = () => onOpenChange?.(false);
-
   const initialValues: BifrostModalValues = useInitialValues(
     isOnboarding,
     LLMProviderName.BIFROST,
@@ -133,6 +129,10 @@ export default function BifrostModal({
   const validationSchema = buildValidationSchema(isOnboarding, {
     apiBase: true,
   });
+
+  const onClose = () => onOpenChange?.(false);
+
+  if (open === false) return null;
 
   return (
     <ModalWrapper

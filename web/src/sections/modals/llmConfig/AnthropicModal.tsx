@@ -30,10 +30,6 @@ export default function AnthropicModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
-  if (open === false) return null;
-
-  const onClose = () => onOpenChange?.(false);
-
   const initialValues = useInitialValues(
     isOnboarding,
     LLMProviderName.ANTHROPIC,
@@ -43,6 +39,10 @@ export default function AnthropicModal({
   const validationSchema = buildValidationSchema(isOnboarding, {
     apiKey: true,
   });
+
+  const onClose = () => onOpenChange?.(false);
+
+  if (open === false) return null;
 
   return (
     <ModalWrapper

@@ -119,10 +119,6 @@ export default function OpenAICompatibleModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
-  if (open === false) return null;
-
-  const onClose = () => onOpenChange?.(false);
-
   const initialValues = useInitialValues(
     isOnboarding,
     LLMProviderName.OPENAI_COMPATIBLE,
@@ -132,6 +128,10 @@ export default function OpenAICompatibleModal({
   const validationSchema = buildValidationSchema(isOnboarding, {
     apiBase: true,
   });
+
+  const onClose = () => onOpenChange?.(false);
+
+  if (open === false) return null;
 
   return (
     <ModalWrapper

@@ -42,10 +42,6 @@ export default function VertexAIModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
-  if (open === false) return null;
-
-  const onClose = () => onOpenChange?.(false);
-
   const initialValues: VertexAIModalValues = {
     ...useInitialValues(
       isOnboarding,
@@ -72,6 +68,10 @@ export default function VertexAIModal({
       }),
     },
   });
+
+  const onClose = () => onOpenChange?.(false);
+
+  if (open === false) return null;
 
   return (
     <ModalWrapper
