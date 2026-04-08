@@ -4,11 +4,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Popover from "@/refresh-components/Popover";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { structureValue } from "@/lib/llmConfig/utils";
-import {
-  getProviderIcon,
-  AGGREGATOR_PROVIDERS,
-} from "@/app/admin/configuration/llm/utils";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { getModelIcon } from "@/lib/llmConfig/providers";
+import { AGGREGATOR_PROVIDERS } from "@/lib/llmConfig/svc";
+
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
 import Text from "@/refresh-components/texts/Text";
@@ -55,7 +53,7 @@ export function groupLlmOptions(
       groups.set(groupKey, {
         displayName,
         options: [],
-        Icon: getProviderIcon(provider),
+        Icon: getModelIcon(provider),
       });
     }
 
@@ -193,7 +191,7 @@ export default function LLMPopover({
             icon={
               foldable
                 ? SvgRefreshCw
-                : getProviderIcon(
+                : getModelIcon(
                     llmManager.currentLlm.provider,
                     llmManager.currentLlm.modelName
                   )

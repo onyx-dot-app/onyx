@@ -1,7 +1,4 @@
-import type {
-  OnboardingState,
-  OnboardingActions,
-} from "@/interfaces/onboarding";
+import type { OnboardingActions } from "@/interfaces/onboarding";
 
 export enum LLMProviderName {
   OPENAI = "openai",

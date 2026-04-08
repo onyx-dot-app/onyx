@@ -23,7 +23,7 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-import { fetchModels } from "@/app/admin/configuration/llm/utils";
+import { fetchModels } from "@/lib/llmConfig/svc";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 

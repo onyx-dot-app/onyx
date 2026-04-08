@@ -5,7 +5,7 @@ import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { SvgEyeOff, SvgX } from "@opal/icons";
-import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { getModelIcon } from "@/lib/llmConfig/providers";
 import AgentMessage, {
   AgentMessageProps,
 } from "@/app/app/message/messageComponents/AgentMessage";
@@ -71,7 +71,7 @@ export default function MultiModelPanel({
   errorStackTrace,
   errorDetails,
 }: MultiModelPanelProps) {
-  const ProviderIcon = getProviderIcon(provider, modelName);
+  const ModelIcon = getModelIcon(provider, modelName);
 
   const handlePanelClick = useCallback(() => {
     if (!isHidden && !isPreferred) onSelect();
@@ -88,7 +88,7 @@ export default function MultiModelPanel({
         sizePreset="main-ui"
         variant="body"
         paddingVariant="lg"
-        icon={ProviderIcon}
+        icon={ModelIcon}
         title={isHidden ? markdown(`~~${displayName}~~`) : displayName}
         rightChildren={
           <div className="flex items-center gap-1 px-2">

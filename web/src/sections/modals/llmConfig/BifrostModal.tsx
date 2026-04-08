@@ -9,7 +9,7 @@ import {
   LLMProviderName,
   LLMProviderView,
 } from "@/interfaces/llm";
-import { fetchBifrostModels } from "@/app/admin/configuration/llm/utils";
+import { fetchBifrostModels } from "@/lib/llmConfig/svc";
 import {
   useInitialValues,
   buildValidationSchema,

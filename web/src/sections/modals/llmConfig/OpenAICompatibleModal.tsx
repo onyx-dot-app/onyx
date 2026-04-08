@@ -9,7 +9,7 @@ import {
   LLMProviderName,
   LLMProviderView,
 } from "@/interfaces/llm";
-import { fetchOpenAICompatibleModels } from "@/app/admin/configuration/llm/utils";
+import { fetchOpenAICompatibleModels } from "@/lib/llmConfig/svc";
 import {
   useInitialValues,
   buildValidationSchema,

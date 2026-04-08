@@ -32,7 +32,7 @@ import {
   PersonaLabel,
 } from "@/app/admin/agents/interfaces";
 import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
-import { isAnthropic } from "@/app/admin/configuration/llm/utils";
+import { isAnthropic } from "@/lib/llmConfig/svc";
 import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
