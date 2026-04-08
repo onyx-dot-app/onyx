@@ -1003,3 +1003,72 @@ def set_group_permission__no_commit(
 
     db_session.flush()
     recompute_permissions_for_group__no_commit(group_id, db_session)
+
+
+def set_group_permissions_bulk__no_commit(
+    group_id: int,
+    desired_permissions: set[Permission],
+    granted_by: UUID,
+    db_session: Session,
+) -> list[Permission]:
+    """Set the full desired permission state for a group in one pass.
+
+    Enables permissions in `desired_permissions`, disables any toggleable
+    permission not in the set. Non-toggleable permissions are ignored.
+    Calls recompute once at the end. Does NOT commit.
+
+    Returns the resulting list of enabled permissions.
+    """
+
+    existing_grants = (
+        db_session.execute(
+            select(PermissionGrant)
+            .where(PermissionGrant.group_id == group_id)
+            .with_for_update()
+        )
+        .scalars()
+        .all()
+    )
+
+    grant_map: dict[Permission, PermissionGrant] = {
+        g.permission: g for g in existing_grants
+    }
+
+    # Enable desired permissions
+    for perm in desired_permissions:
+        existing = grant_map.get(perm)
+        if existing is not None:
+            if existing.is_deleted:
+                existing.is_deleted = False
+                existing.granted_by = granted_by
+                existing.granted_at = func.now()
+        else:
+            db_session.add(
+                PermissionGrant(
+                    group_id=group_id,
+                    permission=perm,
+                    grant_source=GrantSource.USER,
+                    granted_by=granted_by,
+                )
+            )
+
+    # Disable toggleable permissions not in the desired set
+    for perm, grant in grant_map.items():
+        if perm not in desired_permissions and not grant.is_deleted:
+            grant.is_deleted = True
+
+    db_session.flush()
+    recompute_permissions_for_group__no_commit(group_id, db_session)
+
+    # Return the resulting enabled set
+    return [
+        g.permission
+        for g in db_session.execute(
+            select(PermissionGrant).where(
+                PermissionGrant.group_id == group_id,
+                PermissionGrant.is_deleted.is_(False),
+            )
+        )
+        .scalars()
+        .all()
+    ]

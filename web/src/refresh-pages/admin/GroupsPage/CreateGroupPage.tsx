@@ -18,9 +18,11 @@ import {
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
   saveTokenLimits,
+  saveGroupPermissions,
 } from "./svc";
 import { memberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
+import GroupPermissionsSection from "./GroupPermissionsSection";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
 
@@ -33,6 +35,9 @@ function CreateGroupPage() {
   const [selectedCcPairIds, setSelectedCcPairIds] = useState<number[]>([]);
   const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
+    new Set()
+  );
   const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
     { tokenBudget: null, periodHours: null },
   ]);
@@ -53,6 +58,7 @@ function CreateGroupPage() {
         selectedUserIds,
         selectedCcPairIds
       );
+      await saveGroupPermissions(groupId, enabledPermissions);
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
       await saveTokenLimits(groupId, tokenLimits, []);
@@ -152,6 +158,11 @@ function CreateGroupPage() {
             />
           </Section>
         )}
+        <GroupPermissionsSection
+          enabledPermissions={enabledPermissions}
+          onPermissionsChange={setEnabledPermissions}
+        />
+
         <SharedGroupResources
           selectedCcPairIds={selectedCcPairIds}
           onCcPairIdsChange={setSelectedCcPairIds}

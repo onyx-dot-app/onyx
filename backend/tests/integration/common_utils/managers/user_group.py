@@ -117,15 +117,14 @@ class UserGroupManager:
         return response.json()
 
     @staticmethod
-    def set_permission(
+    def set_permissions(
         user_group: DATestUserGroup,
-        permission: str,
-        enabled: bool,
+        permissions: list[str],
         user_performing_action: DATestUser,
     ) -> requests.Response:
         response = requests.put(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
-            json={"permission": permission, "enabled": enabled},
+            json={"permissions": permissions},
             headers=user_performing_action.headers,
         )
         return response

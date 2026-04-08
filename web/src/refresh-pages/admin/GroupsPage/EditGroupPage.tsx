@@ -32,9 +32,11 @@ import {
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
   saveTokenLimits,
+  saveGroupPermissions,
 } from "./svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
+import GroupPermissionsSection from "./GroupPermissionsSection";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
 
@@ -89,6 +91,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     onErrorRetry: skipRetryOnAuthError,
   });
 
+  // Fetch permissions for this group
+  const { data: groupPermissions, isLoading: permissionsLoading } = useSWR<
+    string[]
+  >(SWR_KEYS.userGroupPermissions(groupId), errorHandlingFetcher);
+
   // Form state
   const [groupName, setGroupName] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -101,6 +108,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
     { tokenBudget: null, periodHours: null },
   ]);
+  const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
+    new Set()
+  );
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -115,7 +125,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     error: candidatesError,
   } = useGroupMemberCandidates();
 
-  const isLoading = groupLoading || candidatesLoading || tokenLimitsLoading;
+  const isLoading =
+    groupLoading ||
+    candidatesLoading ||
+    tokenLimitsLoading ||
+    permissionsLoading;
   const error = groupError ?? candidatesError;
 
   // Pre-populate form when group data loads
@@ -145,6 +159,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       );
     }
   }, [tokenRateLimits]);
+
+  // Pre-populate permissions when fetched
+  useEffect(() => {
+    if (groupPermissions) {
+      setEnabledPermissions(new Set(groupPermissions));
+    }
+  }, [groupPermissions]);
 
   const memberRows = useMemo(() => {
     const selected = new Set(selectedUserIds);
@@ -251,6 +272,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       if (isEnterpriseTier) {
         await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
       }
+      // Save permissions (bulk desired-state)
+      await saveGroupPermissions(groupId, enabledPermissions);
 
       // Update refs so subsequent saves diff correctly
       initialAgentIdsRef.current = selectedAgentIds;
@@ -258,6 +281,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
       mutate(SWR_KEYS.adminUserGroups);
       mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
+      mutate(SWR_KEYS.userGroupPermissions(groupId));
       toast.success(`Group "${trimmed}" updated`);
       router.push("/admin/groups");
     } catch (e) {
@@ -446,6 +470,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   />
                 )}
               </Section>
+
+              <GroupPermissionsSection
+                enabledPermissions={enabledPermissions}
+                onPermissionsChange={setEnabledPermissions}
+              />
 
               <SharedGroupResources
                 selectedCcPairIds={selectedCcPairIds}

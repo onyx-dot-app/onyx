@@ -100,6 +100,8 @@ export const SWR_KEYS = {
   // ── Groups ────────────────────────────────────────────────────────────────
   adminUserGroups: "/api/manage/admin/user-group",
   shareableGroups: "/api/manage/user-groups/minimal",
+  userGroupPermissions: (groupId: number) =>
+    `/api/manage/admin/user-group/${groupId}/permissions`,
   scimToken: "/api/admin/enterprise-settings/scim/token",
 
   // ── MCP Servers ───────────────────────────────────────────────────────────

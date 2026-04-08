@@ -281,6 +281,27 @@ async function saveTokenLimits(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Group permissions — bulk set desired permissions in a single request
+// ---------------------------------------------------------------------------
+
+async function saveGroupPermissions(
+  groupId: number,
+  enabledPermissions: Set<string>
+): Promise<void> {
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/permissions`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ permissions: Array.from(enabledPermissions) }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(
+      detail?.detail ?? `Failed to update permissions: ${res.statusText}`
+    );
+  }
+}
+
 export {
   renameGroup,
   createGroup,
@@ -289,4 +310,5 @@ export {
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
   saveTokenLimits,
+  saveGroupPermissions,
 };
