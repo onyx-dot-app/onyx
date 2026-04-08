@@ -97,14 +97,12 @@ def get_user_group_permissions(
     user_group_id: int,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> list[str]:
+) -> list[Permission]:
     group = fetch_user_group(db_session, user_group_id)
     if group is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
     return [
-        grant.permission.value
-        for grant in group.permission_grants
-        if not grant.is_deleted
+        grant.permission for grant in group.permission_grants if not grant.is_deleted
     ]
 
 
@@ -119,15 +117,7 @@ def set_user_group_permission(
     if group is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
 
-    try:
-        perm = Permission(request.permission)
-    except ValueError:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Unknown permission: {request.permission}",
-        )
-
-    if perm in NON_TOGGLEABLE_PERMISSIONS:
+    if request.permission in NON_TOGGLEABLE_PERMISSIONS:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Permission '{request.permission}' cannot be toggled via this endpoint",
@@ -135,7 +125,7 @@ def set_user_group_permission(
 
     set_group_permission__no_commit(
         group_id=user_group_id,
-        permission=perm,
+        permission=request.permission,
         enabled=request.enabled,
         granted_by=user.id,
         db_session=db_session,

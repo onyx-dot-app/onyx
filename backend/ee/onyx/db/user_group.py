@@ -967,10 +967,12 @@ def set_group_permission__no_commit(
     Does NOT commit — caller must commit the session.
     """
     existing = db_session.execute(
-        select(PermissionGrant).where(
+        select(PermissionGrant)
+        .where(
             PermissionGrant.group_id == group_id,
             PermissionGrant.permission == permission,
         )
+        .with_for_update()
     ).scalar_one_or_none()
 
     if enabled:
