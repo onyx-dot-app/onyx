@@ -25,6 +25,7 @@ import {
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { toast } from "@/hooks/useToast";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
 
@@ -143,13 +144,30 @@ export default function OpenRouterModal({
           values,
           initialValues,
           existingLlmProvider,
-          shouldMarkAsDefault,
+          shouldMarkAsDefault: isOnboarding
+            ? (onboardingState?.data.llmProviders ?? []).length === 0
+            : shouldMarkAsDefault,
           setStatus,
           setSubmitting,
           onClose,
-          mutate,
-          onboardingState,
-          onboardingActions,
+          onSuccess: async () => {
+            if (isOnboarding && onboardingActions) {
+              onboardingActions.updateData({
+                llmProviders: [
+                  ...(onboardingState?.data.llmProviders ?? []),
+                  LLMProviderName.OPENROUTER,
+                ],
+              });
+              onboardingActions.setButtonActive(true);
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              if (!existingLlmProvider) {
+                toast.success("Provider enabled successfully!");
+              } else {
+                toast.success("Provider updated successfully!");
+              }
+            }
+          },
         });
       }}
     >

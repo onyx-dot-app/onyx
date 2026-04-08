@@ -1,11 +1,8 @@
-"use client";
-
 import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
 import {
   LLM_ADMIN_URL,
   LLM_PROVIDERS_ADMIN_URL,
 } from "@/lib/llmConfig/constants";
-import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { toast } from "@/hooks/useToast";
 import isEqual from "lodash/isEqual";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
@@ -18,8 +15,6 @@ import {
   BaseLLMFormValues,
   TestApiKeyResult,
 } from "@/sections/modals/llmConfig/utils";
-import { ScopedMutator } from "swr";
-import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
 // ─── Test helpers ─────────────────────────────────────────────────────────
 
@@ -102,7 +97,7 @@ export const testCustomProvider = async (
   );
 };
 
-// ─── Unified submit ───────────────────────────────────────────────────────
+// ─── Submit provider ──────────────────────────────────────────────────────
 
 export interface SubmitProviderParams<
   T extends BaseLLMFormValues = BaseLLMFormValues,
@@ -113,17 +108,11 @@ export interface SubmitProviderParams<
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   isCustomProvider?: boolean;
-  hideSuccess?: boolean;
   setStatus: (status: Record<string, unknown>) => void;
   setSubmitting: (submitting: boolean) => void;
   onClose: () => void;
-
-  // Admin-only
-  mutate?: ScopedMutator;
-
-  // Onboarding-only
-  onboardingState?: OnboardingState;
-  onboardingActions?: OnboardingActions;
+  /** Called after successful create/update + set-default. Use for cache refresh, state updates, toasts, etc. */
+  onSuccess?: () => void | Promise<void>;
 }
 
 export async function submitProvider<T extends BaseLLMFormValues>({
@@ -133,15 +122,11 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   existingLlmProvider,
   shouldMarkAsDefault,
   isCustomProvider,
-  hideSuccess,
   setStatus,
   setSubmitting,
   onClose,
-  mutate,
-  onboardingState,
-  onboardingActions,
+  onSuccess,
 }: SubmitProviderParams<T>): Promise<void> {
-  const isOnboarding = !!onboardingState && !!onboardingActions;
   setSubmitting(true);
 
   const { test_model_name, api_key, ...rest } = values;
@@ -151,88 +136,48 @@ export async function submitProvider<T extends BaseLLMFormValues>({
     "";
 
   // ── Test credentials ────────────────────────────────────────────────
-  if (isOnboarding) {
-    // Onboarding always tests
-    const result = isCustomProvider
-      ? await testCustomProvider(values as unknown as Record<string, unknown>)
-      : await testApiKeyHelper(
-          providerName,
-          values as unknown as Record<string, unknown>
-        );
+  const customConfigChanged = !isEqual(
+    values.custom_config,
+    initialValues.custom_config
+  );
 
-    if (!result.ok) {
-      toast.error(result.errorMessage);
+  const normalizedApiBase =
+    typeof rest.api_base === "string" && rest.api_base.trim() === ""
+      ? undefined
+      : rest.api_base;
+
+  const finalValues = {
+    ...rest,
+    api_base: normalizedApiBase,
+    api_key,
+    api_key_changed: api_key !== (initialValues.api_key as string | undefined),
+    custom_config_changed: customConfigChanged,
+  };
+
+  if (!isEqual(finalValues, initialValues)) {
+    setStatus({ isTesting: true });
+
+    let testResult: TestApiKeyResult;
+    if (isCustomProvider) {
+      testResult = await testCustomProvider(
+        values as unknown as Record<string, unknown>
+      );
+    } else {
+      testResult = await testApiKeyHelper(
+        providerName,
+        values as unknown as Record<string, unknown>
+      );
+    }
+    setStatus({ isTesting: false });
+
+    if (!testResult.ok) {
+      toast.error(testResult.errorMessage);
       setSubmitting(false);
       return;
-    }
-  } else {
-    // Admin: only test if values changed
-    const customConfigChanged = !isEqual(
-      values.custom_config,
-      initialValues.custom_config
-    );
-
-    const normalizedApiBase =
-      typeof rest.api_base === "string" && rest.api_base.trim() === ""
-        ? undefined
-        : rest.api_base;
-
-    const finalValues = {
-      ...rest,
-      api_base: normalizedApiBase,
-      api_key,
-      api_key_changed:
-        api_key !== (initialValues.api_key as string | undefined),
-      custom_config_changed: customConfigChanged,
-    };
-
-    if (!isEqual(finalValues, initialValues)) {
-      setStatus({ isTesting: true });
-
-      const testResponse = await fetch("/api/admin/llm/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: providerName,
-          ...finalValues,
-          model: testModelName,
-          id: existingLlmProvider?.id,
-        }),
-      });
-      setStatus({ isTesting: false });
-
-      if (!testResponse.ok) {
-        const errorMsg = (await testResponse.json()).detail;
-        toast.error(errorMsg);
-        setSubmitting(false);
-        return;
-      }
     }
   }
 
   // ── Create/update provider ──────────────────────────────────────────
-  const payloadForPut = isOnboarding
-    ? values
-    : (() => {
-        const customConfigChanged = !isEqual(
-          values.custom_config,
-          initialValues.custom_config
-        );
-        const normalizedApiBase =
-          typeof rest.api_base === "string" && rest.api_base.trim() === ""
-            ? undefined
-            : rest.api_base;
-        return {
-          ...rest,
-          api_base: normalizedApiBase,
-          api_key,
-          api_key_changed:
-            api_key !== (initialValues.api_key as string | undefined),
-          custom_config_changed: customConfigChanged,
-          id: existingLlmProvider?.id,
-        };
-      })();
-
   const response = await fetch(
     `${LLM_PROVIDERS_ADMIN_URL}${
       existingLlmProvider ? "" : "?is_creation=true"
@@ -242,7 +187,8 @@ export async function submitProvider<T extends BaseLLMFormValues>({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         provider: providerName,
-        ...payloadForPut,
+        ...finalValues,
+        id: existingLlmProvider?.id,
       }),
     }
   );
@@ -258,11 +204,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   }
 
   // ── Set as default ──────────────────────────────────────────────────
-  const shouldSetDefault = isOnboarding
-    ? (onboardingState.data?.llmProviders ?? []).length === 0
-    : shouldMarkAsDefault;
-
-  if (shouldSetDefault && testModelName) {
+  if (shouldMarkAsDefault && testModelName) {
     try {
       const newLlmProvider = await response.json();
       if (newLlmProvider?.id != null) {
@@ -288,33 +230,13 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 
   // ── Post-success ────────────────────────────────────────────────────
   const knownProviders = new Set<string>(Object.values(LLMProviderName));
-
-  if (isOnboarding) {
-    onboardingActions.updateData({
-      llmProviders: [
-        ...(onboardingState.data?.llmProviders ?? []),
-        isCustomProvider ? "custom" : providerName,
-      ],
-    });
-    onboardingActions.setButtonActive(true);
-  } else {
-    if (mutate) await refreshLlmProviderCaches(mutate);
-
-    if (!hideSuccess) {
-      const successMsg = existingLlmProvider
-        ? "Provider updated successfully!"
-        : "Provider enabled successfully!";
-      toast.success(successMsg);
-    }
-  }
-
   track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
     provider: knownProviders.has(providerName) ? providerName : "custom",
     is_creation: !existingLlmProvider,
-    source: isOnboarding
-      ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-      : LLMProviderConfiguredSource.ADMIN_PAGE,
+    source: LLMProviderConfiguredSource.ADMIN_PAGE,
   });
+
+  if (onSuccess) await onSuccess();
 
   setSubmitting(false);
   onClose();

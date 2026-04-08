@@ -18,6 +18,8 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { toast } from "@/hooks/useToast";
 
 const VERTEXAI_DEFAULT_LOCATION = "global";
 
@@ -95,13 +97,30 @@ export default function VertexAIModal({
           values: submitValues,
           initialValues,
           existingLlmProvider,
-          shouldMarkAsDefault,
+          shouldMarkAsDefault: isOnboarding
+            ? (onboardingState?.data.llmProviders ?? []).length === 0
+            : shouldMarkAsDefault,
           setStatus,
           setSubmitting,
           onClose,
-          mutate,
-          onboardingState,
-          onboardingActions,
+          onSuccess: async () => {
+            if (isOnboarding && onboardingActions) {
+              onboardingActions.updateData({
+                llmProviders: [
+                  ...(onboardingState?.data.llmProviders ?? []),
+                  LLMProviderName.VERTEX_AI,
+                ],
+              });
+              onboardingActions.setButtonActive(true);
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              if (!existingLlmProvider) {
+                toast.success("Provider enabled successfully!");
+              } else {
+                toast.success("Provider updated successfully!");
+              }
+            }
+          },
         });
       }}
     >

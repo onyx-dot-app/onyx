@@ -32,6 +32,7 @@ import { Section } from "@/layouts/general-layouts";
 import { SvgAlertCircle } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import useOnMount from "@/hooks/useOnMount";
 
 const AWS_REGION_OPTIONS = [
@@ -336,13 +337,30 @@ export default function BedrockModal({
           values: submitValues,
           initialValues,
           existingLlmProvider,
-          shouldMarkAsDefault,
+          shouldMarkAsDefault: isOnboarding
+            ? (onboardingState?.data.llmProviders ?? []).length === 0
+            : shouldMarkAsDefault,
           setStatus,
           setSubmitting,
           onClose,
-          mutate,
-          onboardingState,
-          onboardingActions,
+          onSuccess: async () => {
+            if (isOnboarding && onboardingActions) {
+              onboardingActions.updateData({
+                llmProviders: [
+                  ...(onboardingState?.data.llmProviders ?? []),
+                  LLMProviderName.BEDROCK,
+                ],
+              });
+              onboardingActions.setButtonActive(true);
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              if (!existingLlmProvider) {
+                toast.success("Provider enabled successfully!");
+              } else {
+                toast.success("Provider updated successfully!");
+              }
+            }
+          },
         });
       }}
     >

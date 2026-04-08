@@ -27,6 +27,7 @@ import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
@@ -204,13 +205,30 @@ export default function OllamaModal({
           values: submitValues,
           initialValues,
           existingLlmProvider,
-          shouldMarkAsDefault,
+          shouldMarkAsDefault: isOnboarding
+            ? (onboardingState?.data.llmProviders ?? []).length === 0
+            : shouldMarkAsDefault,
           setStatus,
           setSubmitting,
           onClose,
-          mutate,
-          onboardingState,
-          onboardingActions,
+          onSuccess: async () => {
+            if (isOnboarding && onboardingActions) {
+              onboardingActions.updateData({
+                llmProviders: [
+                  ...(onboardingState?.data.llmProviders ?? []),
+                  LLMProviderName.OLLAMA_CHAT,
+                ],
+              });
+              onboardingActions.setButtonActive(true);
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              if (!existingLlmProvider) {
+                toast.success("Provider enabled successfully!");
+              } else {
+                toast.success("Provider updated successfully!");
+              }
+            }
+          },
         });
       }}
     >

@@ -29,6 +29,7 @@ import {
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
 import { toast } from "@/hooks/useToast";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 
 interface AzureModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -145,13 +146,30 @@ export default function AzureModal({
           values: processedValues,
           initialValues,
           existingLlmProvider,
-          shouldMarkAsDefault,
+          shouldMarkAsDefault: isOnboarding
+            ? (onboardingState?.data.llmProviders ?? []).length === 0
+            : shouldMarkAsDefault,
           setStatus,
           setSubmitting,
           onClose,
-          mutate,
-          onboardingState,
-          onboardingActions,
+          onSuccess: async () => {
+            if (isOnboarding && onboardingActions) {
+              onboardingActions.updateData({
+                llmProviders: [
+                  ...(onboardingState?.data.llmProviders ?? []),
+                  LLMProviderName.AZURE,
+                ],
+              });
+              onboardingActions.setButtonActive(true);
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              if (!existingLlmProvider) {
+                toast.success("Provider enabled successfully!");
+              } else {
+                toast.success("Provider updated successfully!");
+              }
+            }
+          },
         });
       }}
     >

@@ -29,6 +29,7 @@ import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 
@@ -311,14 +312,31 @@ export default function CustomModal({
             custom_config: keyValueListToDict(initialValues.custom_config_list),
           },
           existingLlmProvider,
-          shouldMarkAsDefault,
+          shouldMarkAsDefault: isOnboarding
+            ? (onboardingState?.data.llmProviders ?? []).length === 0
+            : shouldMarkAsDefault,
           isCustomProvider: true,
           setStatus,
           setSubmitting,
           onClose,
-          mutate,
-          onboardingState,
-          onboardingActions,
+          onSuccess: async () => {
+            if (isOnboarding && onboardingActions) {
+              onboardingActions.updateData({
+                llmProviders: [
+                  ...(onboardingState?.data.llmProviders ?? []),
+                  "custom",
+                ],
+              });
+              onboardingActions.setButtonActive(true);
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              if (!existingLlmProvider) {
+                toast.success("Provider enabled successfully!");
+              } else {
+                toast.success("Provider updated successfully!");
+              }
+            }
+          },
         });
       }}
     >

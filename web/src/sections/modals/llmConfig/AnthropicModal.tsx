@@ -15,6 +15,8 @@ import {
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import { toast } from "@/hooks/useToast";
 
 export default function AnthropicModal({
   variant = "llm-configuration",
@@ -52,13 +54,30 @@ export default function AnthropicModal({
           values,
           initialValues,
           existingLlmProvider,
-          shouldMarkAsDefault,
+          shouldMarkAsDefault: isOnboarding
+            ? (onboardingState?.data.llmProviders ?? []).length === 0
+            : shouldMarkAsDefault,
           setStatus,
           setSubmitting,
           onClose,
-          mutate,
-          onboardingState,
-          onboardingActions,
+          onSuccess: async () => {
+            if (isOnboarding && onboardingActions) {
+              onboardingActions.updateData({
+                llmProviders: [
+                  ...(onboardingState?.data.llmProviders ?? []),
+                  LLMProviderName.ANTHROPIC,
+                ],
+              });
+              onboardingActions.setButtonActive(true);
+            } else {
+              await refreshLlmProviderCaches(mutate);
+              if (!existingLlmProvider) {
+                toast.success("Provider enabled successfully!");
+              } else {
+                toast.success("Provider updated successfully!");
+              }
+            }
+          },
         });
       }}
     >
