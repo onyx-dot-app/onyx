@@ -49,6 +49,7 @@ import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
 import { Section } from "@/layouts/general-layouts";
+import { markdown } from "@opal/utils";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
 
@@ -156,24 +157,37 @@ function ExistingProviderCard({
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={`Delete ${provider.name}`}
+          title={markdown(`Delete *${provider.name}*`)}
           onClose={() => deleteModal.toggle(false)}
           submit={
-            <Button variant="danger" onClick={handleDelete}>
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              disabled={isDefault && !isLastProvider}
+            >
               Delete
             </Button>
           }
         >
           <Section alignItems="start" gap={0.5}>
-            <Text text03>
-              All LLM models from provider <b>{provider.name}</b> will be
-              removed and unavailable for future chats. Chat history will be
-              preserved.
-            </Text>
-            {isLastProvider && (
+            {isDefault && !isLastProvider ? (
               <Text text03>
-                Connect another provider to continue using chats.
+                Cannot delete the default provider. Select another provider as
+                the default prior to deleting this one.
               </Text>
+            ) : (
+              <>
+                <Text text03>
+                  All LLM models from provider <b>{provider.name}</b> will be
+                  removed and unavailable for future chats. Chat history will be
+                  preserved.
+                </Text>
+                {isLastProvider && (
+                  <Text text03>
+                    Connect another provider to continue using chats.
+                  </Text>
+                )}
+              </>
             )}
           </Section>
         </ConfirmationModalLayout>
@@ -198,22 +212,20 @@ function ExistingProviderCard({
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
               <div className="flex flex-row">
-                {!(isDefault && !isLastProvider) && (
-                  <Hoverable.Item
-                    group="ExistingProviderCard"
-                    variant="opacity-on-hover"
-                  >
-                    <Button
-                      icon={SvgTrash}
-                      prominence="tertiary"
-                      aria-label={`Delete ${provider.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteModal.toggle(true);
-                      }}
-                    />
-                  </Hoverable.Item>
-                )}
+                <Hoverable.Item
+                  group="ExistingProviderCard"
+                  variant="opacity-on-hover"
+                >
+                  <Button
+                    icon={SvgTrash}
+                    prominence="tertiary"
+                    aria-label={`Delete ${provider.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteModal.toggle(true);
+                    }}
+                  />
+                </Hoverable.Item>
                 <Button
                   icon={SvgSettings}
                   prominence="tertiary"
