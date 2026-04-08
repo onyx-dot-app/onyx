@@ -27,7 +27,7 @@ import {
 } from "@/sections/modals/llmConfig/shared";
 
 const ANTHROPIC_PROVIDER_NAME = "anthropic";
-const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
+const DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
 
 export default function AnthropicModal({
   variant = "llm-configuration",
@@ -62,7 +62,7 @@ export default function AnthropicModal({
         name: ANTHROPIC_PROVIDER_NAME,
         provider: ANTHROPIC_PROVIDER_NAME,
         api_key: "",
-        default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
+        default_model_name: DEFAULT_MODEL_NAME,
       }
     : {
         ...buildDefaultInitialValues(
@@ -78,7 +78,7 @@ export default function AnthropicModal({
             ? defaultModelName
             : undefined) ??
           wellKnownLLMProvider?.recommended_default_model?.name ??
-          DEFAULT_DEFAULT_MODEL_NAME,
+          DEFAULT_MODEL_NAME,
         is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
       };
 
@@ -107,7 +107,7 @@ export default function AnthropicModal({
               ...values,
               model_configurations: modelConfigsToUse,
               is_auto_mode:
-                values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
+                values.default_model_name === DEFAULT_MODEL_NAME,
             },
             onboardingState,
             onboardingActions,
