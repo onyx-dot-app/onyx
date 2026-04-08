@@ -71,7 +71,7 @@ export default function MultiModelPanel({
   errorStackTrace,
   errorDetails,
 }: MultiModelPanelProps) {
-  const ProviderIcon = getModelIcon(provider, modelName);
+  const ModelIcon = getModelIcon(provider, modelName);
 
   const handlePanelClick = useCallback(() => {
     if (!isHidden && !isPreferred) onSelect();
@@ -88,7 +88,7 @@ export default function MultiModelPanel({
         sizePreset="main-ui"
         variant="body"
         paddingVariant="lg"
-        icon={ProviderIcon}
+        icon={ModelIcon}
         title={isHidden ? markdown(`~~${displayName}~~`) : displayName}
         rightChildren={
           <div className="flex items-center gap-1 px-2">
