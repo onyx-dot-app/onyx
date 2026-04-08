@@ -6,18 +6,32 @@
  */
 
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import { toast } from "@/hooks/useToast";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 // Mock SWR's mutate function and useSWR
 const mockMutate = jest.fn();
+const MOCK_CUSTOM_PROVIDER_OPTIONS = [
+  { value: "anthropic", label: "Anthropic" },
+  { value: "cloudflare", label: "Cloudflare" },
+  { value: "openai", label: "OpenAI" },
+];
 jest.mock("swr", () => {
   const actual = jest.requireActual("swr");
   return {
     ...actual,
     useSWRConfig: () => ({ mutate: mockMutate }),
     __esModule: true,
-    default: () => ({ data: undefined, error: undefined, isLoading: false }),
+    default: (key: string | null) => ({
+      data:
+        key === SWR_KEYS.customProviderNames
+          ? MOCK_CUSTOM_PROVIDER_OPTIONS
+          : undefined,
+      error: undefined,
+      isLoading: false,
+    }),
   };
 });
 
@@ -70,12 +84,15 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     }
   ) {
     const nameInput = screen.getByPlaceholderText("Display Name");
-    const providerInput = screen.getByPlaceholderText(
-      "Provider Name as shown on LiteLLM"
-    );
-
     await user.type(nameInput, options.name);
-    await user.type(providerInput, options.provider);
+
+    // Select provider from the combo box dropdown
+    const providerInput = screen.getByPlaceholderText("Select a provider");
+    await user.click(providerInput);
+    const providerOption = await screen.findByRole("option", {
+      name: new RegExp(options.provider, "i"),
+    });
+    await user.click(providerOption);
 
     // Fill in model name (first model row)
     const modelNameInput = screen.getByPlaceholderText("Model name");
@@ -83,7 +100,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   }
 
   test("creates a new custom LLM provider successfully", async () => {
-    const user = setupUser();
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
 
     // Mock POST /api/admin/llm/test
     fetchSpy.mockResolvedValueOnce({
@@ -159,7 +178,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("shows error when test configuration fails", async () => {
-    const user = setupUser();
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
 
     // Mock POST /api/admin/llm/test (failure)
     fetchSpy.mockResolvedValueOnce({
@@ -204,7 +225,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("updates an existing LLM provider", async () => {
-    const user = setupUser();
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
 
     const existingProvider = {
       id: 1,
@@ -285,7 +308,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("preserves additional models when updating a provider", async () => {
-    const user = setupUser();
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
 
     const existingProvider = {
       id: 7,
@@ -382,7 +407,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("sets provider as default when shouldMarkAsDefault is true", async () => {
-    const user = setupUser();
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
 
     // Mock POST /api/admin/llm/test
     fetchSpy.mockResolvedValueOnce({
@@ -436,7 +463,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("shows error when provider creation fails", async () => {
-    const user = setupUser();
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
 
     // Mock POST /api/admin/llm/test
     fetchSpy.mockResolvedValueOnce({
@@ -472,7 +501,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
   });
 
   test("adds custom configuration key-value pairs", async () => {
-    const user = setupUser();
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
 
     // Mock POST /api/admin/llm/test
     fetchSpy.mockResolvedValueOnce({
@@ -492,10 +523,13 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     const nameInput = screen.getByPlaceholderText("Display Name");
     await user.type(nameInput, "Cloudflare Provider");
 
-    const providerInput = screen.getByPlaceholderText(
-      "Provider Name as shown on LiteLLM"
-    );
-    await user.type(providerInput, "cloudflare");
+    // Select provider from the combo box dropdown
+    const providerInput = screen.getByPlaceholderText("Select a provider");
+    await user.click(providerInput);
+    const providerOption = await screen.findByRole("option", {
+      name: /cloudflare/i,
+    });
+    await user.click(providerOption);
 
     // Click "Add Line" button for custom config (aria-label from KeyValueInput)
     const addLineButton = screen.getByRole("button", {

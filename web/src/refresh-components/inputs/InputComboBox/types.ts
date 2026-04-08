@@ -47,4 +47,6 @@ export interface InputComboBoxProps
    * Defaults to false so search results are strictly filtered.
    */
   showOtherOptions?: boolean;
+  /** Max height of the dropdown in CSS units. Defaults to "15rem". */
+  dropdownMaxHeight?: string;
 }

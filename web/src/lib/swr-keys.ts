@@ -32,6 +32,7 @@ export const SWR_KEYS = {
     `/api/llm/persona/${personaId}/providers`,
   adminLlmProviders: "/api/admin/llm/provider",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
+  customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,

@@ -28,6 +28,13 @@ if TYPE_CHECKING:
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
 
 
+class CustomProviderOption(BaseModel):
+    """A provider slug + human-friendly label for the custom-provider picker."""
+
+    value: str
+    label: str
+
+
 class TestLLMRequest(BaseModel):
     # provider level
     id: int | None = None
