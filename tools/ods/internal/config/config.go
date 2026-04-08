@@ -16,8 +16,7 @@ type DeployEdgeConfig struct {
 }
 
 // Config is the top-level on-disk schema for ~/.config/onyx-dev/config.json.
-// New per-command sections should be added as additional fields. Unknown
-// fields in the JSON file are preserved on save via the rawConfig roundtrip.
+// New per-command sections should be added as additional fields.
 type Config struct {
 	DeployEdge DeployEdgeConfig `json:"deploy_edge,omitempty"`
 }

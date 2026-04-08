@@ -88,7 +88,7 @@ func deployEdge(opts *DeployEdgeOptions) {
 	deployRepo, deployWorkflow := resolveDeployTarget(opts)
 
 	if opts.DryRun {
-		log.Warning("=== DRY RUN MODE: No remote operations will be performed ===")
+		log.Warning("=== DRY RUN MODE: tag push and workflow dispatch will be skipped (read-only gh and git fetch still run) ===")
 	}
 
 	if !opts.Yes {
@@ -112,15 +112,16 @@ func deployEdge(opts *DeployEdgeOptions) {
 		log.Fatalf("Failed to fetch origin/main: %v", err)
 	}
 
-	log.Infof("Moving local '%s' tag to origin/main...", edgeTagName)
-	if err := git.RunCommand("tag", "-f", edgeTagName, "origin/main"); err != nil {
-		log.Fatalf("Failed to move local tag: %v", err)
-	}
-
 	if opts.DryRun {
+		log.Warnf("[DRY RUN] Would move local '%s' tag to origin/main", edgeTagName)
 		log.Warnf("[DRY RUN] Would force-push tag '%s' to origin", edgeTagName)
 		log.Warn("[DRY RUN] Would wait for build then dispatch the configured deploy workflow")
 		return
+	}
+
+	log.Infof("Moving local '%s' tag to origin/main...", edgeTagName)
+	if err := git.RunCommand("tag", "-f", edgeTagName, "origin/main"); err != nil {
+		log.Fatalf("Failed to move local tag: %v", err)
 	}
 
 	log.Infof("Force-pushing tag '%s' to origin...", edgeTagName)
