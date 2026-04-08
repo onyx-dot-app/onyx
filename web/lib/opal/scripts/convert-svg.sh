@@ -4,30 +4,36 @@
 #
 # By default, converts to a colour-overridable icon (stroke colours stripped, replaced with currentColor).
 # With --illustration, converts to a fixed-colour illustration (all original colours preserved).
+# With --logo, converts to a fixed-colour logo (all original colours preserved, same as illustration).
 #
 # Usage (from the opal package root — web/lib/opal/):
 #   ./scripts/convert-svg.sh src/icons/<filename.svg>
 #   ./scripts/convert-svg.sh --illustration src/illustrations/<filename.svg>
+#   ./scripts/convert-svg.sh --logo src/logos/<filename.svg>
 
-ILLUSTRATION=false
+MODE="icon"
 
 # Parse flags
 while [[ "$1" == --* ]]; do
   case "$1" in
     --illustration)
-      ILLUSTRATION=true
+      MODE="illustration"
+      shift
+      ;;
+    --logo)
+      MODE="logo"
       shift
       ;;
     *)
       echo "Unknown flag: $1" >&2
-      echo "Usage: ./scripts/convert-svg.sh [--illustration] <filename.svg>" >&2
+      echo "Usage: ./scripts/convert-svg.sh [--illustration | --logo] <filename.svg>" >&2
       exit 1
       ;;
   esac
 done
 
 if [ -z "$1" ]; then
-  echo "Usage: ./scripts/convert-svg.sh [--illustration] <filename.svg>" >&2
+  echo "Usage: ./scripts/convert-svg.sh [--illustration | --logo] <filename.svg>" >&2
   exit 1
 fi
 
@@ -49,12 +55,12 @@ fi
 BASE_NAME="${SVG_FILE%.svg}"
 
 # Build the SVGO config based on mode
-if [ "$ILLUSTRATION" = true ]; then
-  # Illustrations: only strip width and height (preserve all colours)
-  SVGO_CONFIG='{"plugins":[{"name":"removeAttrs","params":{"attrs":["width","height"]}}]}'
-else
+if [ "$MODE" = "icon" ]; then
   # Icons: strip stroke, stroke-opacity, width, and height
   SVGO_CONFIG='{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}'
+else
+  # Illustrations and logos: only strip width and height (preserve all colours)
+  SVGO_CONFIG='{"plugins":[{"name":"removeAttrs","params":{"attrs":["width","height"]}}]}'
 fi
 
 # Resolve the template path relative to this script (not the caller's CWD)
@@ -85,7 +91,7 @@ if [ $? -eq 0 ]; then
   fi
 
   # Icons additionally get stroke="currentColor"
-  if [ "$ILLUSTRATION" = false ]; then
+  if [ "$MODE" = "icon" ]; then
     perl -i -pe 's/\{\.\.\.props\}/stroke="currentColor" {...props}/g' "${BASE_NAME}.tsx"
     if [ $? -ne 0 ]; then
       echo "Error: Failed to add stroke attribute" >&2
@@ -106,7 +112,7 @@ if [ $? -eq 0 ]; then
   fi
 
   # For icons, also verify stroke="currentColor" was added
-  if [ "$ILLUSTRATION" = false ]; then
+  if [ "$MODE" = "icon" ]; then
     if ! grep -q 'stroke="currentColor"' "${BASE_NAME}.tsx"; then
       echo "Error: Post-processing did not add stroke=\"currentColor\"" >&2
       exit 1
