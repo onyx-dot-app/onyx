@@ -13,7 +13,7 @@ permissions:
   id-token: write # zizmor: ignore[excessive-permissions]
 
 env:
-  EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
+  EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') || github.ref_name == 'edge' }}
 
 jobs:
   # Determine which components to build based on the tag
