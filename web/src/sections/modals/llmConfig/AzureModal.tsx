@@ -4,15 +4,11 @@ import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
-<<<<<<< HEAD
-import { LLMProviderFormProps, LLMProviderView } from "@/interfaces/llm";
-=======
 import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
 } from "@/interfaces/llm";
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 import * as Yup from "yup";
 import {
   useInitialValues,
@@ -111,31 +107,8 @@ export default function AzureModal({
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
-<<<<<<< HEAD
   if (open === false) return null;
 
-  const onClose = () => onOpenChange?.(false);
-
-  const modelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
-
-  const initialValues: AzureModalValues = isOnboarding
-    ? ({
-        ...buildOnboardingInitialValues(),
-        name: AZURE_PROVIDER_NAME,
-        provider: AZURE_PROVIDER_NAME,
-        api_key: "",
-        target_uri: "",
-        default_model_name: "",
-      } as AzureModalValues)
-    : {
-        ...buildDefaultInitialValues(
-          existingLlmProvider,
-          modelConfigurations,
-          defaultModelName
-=======
   const onClose = () => onOpenChange?.(false);
 
   const initialValues: AzureModalValues = {
@@ -156,7 +129,6 @@ export default function AzureModal({
           "valid-target-uri",
           "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
           (value) => (value ? isValidAzureTargetUri(value) : false)
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
         ),
     },
   });
@@ -213,41 +185,11 @@ export default function AzureModal({
 
       <APIKeyField providerName="Azure" />
 
-<<<<<<< HEAD
-          {!isOnboarding && (
-            <>
-              <FieldSeparator />
-              <DisplayNameField disabled={!!existingLlmProvider} />
-            </>
-          )}
-
-          <FieldSeparator />
-
-          {isOnboarding ? (
-            <SingleDefaultModelField placeholder="E.g. gpt-4o" />
-          ) : (
-            <ModelsField
-              modelConfigurations={modelConfigurations}
-              formikProps={formikProps}
-              recommendedDefaultModel={null}
-              shouldShowAutoUpdateToggle={false}
-            />
-          )}
-
-          {!isOnboarding && (
-            <>
-              <FieldSeparator />
-              <ModelsAccessField formikProps={formikProps} />
-            </>
-          )}
-        </LLMConfigurationModalWrapper>
-=======
       {!isOnboarding && (
         <>
           <InputLayouts.FieldSeparator />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
       )}
 
       <InputLayouts.FieldSeparator />

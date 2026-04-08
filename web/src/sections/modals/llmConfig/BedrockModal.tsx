@@ -218,13 +218,8 @@ function BedrockModalInternals({
       )}
 
       {authMethod === AUTH_METHOD_IAM && (
-<<<<<<< HEAD
-        <FieldWrapper>
-          <Card backgroundVariant="none" borderVariant="solid">
-=======
         <InputLayouts.FieldPadder>
-          <Card background="none" border="solid" padding="sm">
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
+          <Card backgroundVariant="none" borderVariant="solid">
             <Content
               icon={SvgAlertCircle}
               title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."

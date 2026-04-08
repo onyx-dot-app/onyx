@@ -1,13 +1,8 @@
 "use client";
 
-<<<<<<< HEAD
-import { ReactNode } from "react";
-import { Form, FormikProps } from "formik";
-=======
 import React, { useEffect, useRef, useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
@@ -17,25 +12,20 @@ import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import { Button, LineItemButton } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";
-<<<<<<< HEAD
-import { WithoutStyles } from "@opal/types";
-import Separator from "@/refresh-components/Separator";
-import { Section } from "@/layouts/general-layouts";
-import { Disabled, Hoverable } from "@opal/core";
-=======
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 import { Content } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgOnyxOctagon,
   SvgOrganization,
+  SvgPlusCircle,
   SvgRefreshCw,
   SvgSparkle,
   SvgUserManage,
@@ -57,21 +47,6 @@ import {
   getProviderProductName,
 } from "@/lib/llmConfig/providers";
 
-<<<<<<< HEAD
-export function FieldSeparator() {
-  return <Separator noPadding className="px-2" />;
-}
-
-export type FieldWrapperProps = WithoutStyles<
-  React.HTMLAttributes<HTMLDivElement>
->;
-
-export function FieldWrapper(props: FieldWrapperProps) {
-  return <div {...props} className="p-2 w-full" />;
-}
-
-=======
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
 export interface DisplayNameFieldProps {
@@ -100,21 +75,23 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
 export interface APIKeyFieldProps {
   optional?: boolean;
   providerName?: string;
+  subDescription?: string | RichStr;
 }
 export function APIKeyField({
   optional = false,
   providerName,
+  subDescription,
 }: APIKeyFieldProps) {
+  const defaultDescription = providerName
+    ? `Paste your API key from ${providerName} to access your models.`
+    : "Paste your API key to access your models.";
+
   return (
     <InputLayouts.FieldPadder>
       <InputLayouts.Vertical
         name="api_key"
         title="API Key"
-        subDescription={
-          providerName
-            ? `Paste your API key from ${providerName} to access your models.`
-            : "Paste your API key to access your models."
-        }
+        subDescription={subDescription ?? defaultDescription}
         optional={optional}
       >
         <PasswordInputTypeInField name="api_key" placeholder="API Key" />
@@ -141,7 +118,7 @@ export function APIBaseField({
         name="api_base"
         title="API Base URL"
         subDescription={subDescription}
-        suffix={optional ? "optional" : undefined}
+        optional={optional}
       >
         <InputTypeInField name="api_base" placeholder={placeholder} />
       </InputLayouts.Vertical>
@@ -382,71 +359,22 @@ export function ModelAccessField() {
   );
 }
 
-<<<<<<< HEAD
-=======
-// ─── RefetchButton ──────────────────────────────────────────────────
-
-/**
- * Manages an AbortController so that clicking the button cancels any
- * in-flight fetch before starting a new one. Also aborts on unmount.
- */
-interface RefetchButtonProps {
-  onRefetch: (signal: AbortSignal) => Promise<void> | void;
-}
-function RefetchButton({ onRefetch }: RefetchButtonProps) {
-  const abortRef = useRef<AbortController | null>(null);
-  const [isFetching, setIsFetching] = useState(false);
-
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
-
-  return (
-    <Button
-      prominence="tertiary"
-      icon={isFetching ? SimpleLoader : SvgRefreshCw}
-      onClick={async () => {
-        abortRef.current?.abort();
-        const controller = new AbortController();
-        abortRef.current = controller;
-        setIsFetching(true);
-        try {
-          await onRefetch(controller.signal);
-        } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") return;
-          toast.error(
-            err instanceof Error ? err.message : "Failed to fetch models"
-          );
-        } finally {
-          if (!controller.signal.aborted) {
-            setIsFetching(false);
-          }
-        }
-      }}
-      disabled={isFetching}
-    />
-  );
-}
-
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 // ─── ModelsField ─────────────────────────────────────────────────────
 
 export interface ModelSelectionFieldProps {
   shouldShowAutoUpdateToggle: boolean;
   /** Called when the user clicks the refresh button to re-fetch models. */
   onRefetch?: () => Promise<void> | void;
+  /** Called when the user adds a custom model name (e.g. for Azure). */
+  onAddModel?: (modelName: string) => void;
 }
 export function ModelSelectionField({
   shouldShowAutoUpdateToggle,
   onRefetch,
-<<<<<<< HEAD
-}: ModelsFieldProps<T>) {
-=======
   onAddModel,
 }: ModelSelectionFieldProps) {
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
   const isAutoMode = formikProps.values.is_auto_mode;
   const models = formikProps.values.model_configurations;
 
@@ -508,16 +436,14 @@ export function ModelSelectionField({
           center
         >
           <Section flexDirection="row" gap={0}>
-<<<<<<< HEAD
-            <Disabled disabled={isAutoMode || modelConfigurations.length === 0}>
-              <Button
-                prominence="tertiary"
-                size="md"
-                onClick={handleToggleSelectAll}
-              >
-                {allSelected ? "Unselect All" : "Select All"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isAutoMode || models.length === 0}
+              prominence="tertiary"
+              size="md"
+              onClick={handleToggleSelectAll}
+            >
+              {allSelected ? "Unselect All" : "Select All"}
+            </Button>
             {onRefetch && (
               <Button
                 prominence="tertiary"
@@ -538,24 +464,8 @@ export function ModelSelectionField({
           </Section>
         </InputLayouts.Horizontal>
 
-        {modelConfigurations.length === 0 ? (
-          <EmptyMessageCard title="No models available." />
-=======
-            <Button
-              disabled={isAutoMode || models.length === 0}
-              prominence="tertiary"
-              size="md"
-              onClick={handleToggleSelectAll}
-            >
-              {allSelected ? "Unselect All" : "Select All"}
-            </Button>
-            {onRefetch && <RefetchButton onRefetch={onRefetch} />}
-          </Section>
-        </InputLayouts.Horizontal>
-
         {models.length === 0 ? (
-          <EmptyMessageCard title="No models available." padding="sm" />
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
+          <EmptyMessageCard title="No models available." />
         ) : (
           <Section gap={0.25}>
             {isAutoMode
@@ -585,8 +495,6 @@ export function ModelSelectionField({
           </Section>
         )}
 
-<<<<<<< HEAD
-=======
         {onAddModel && !isAutoMode && (
           <Section flexDirection="row" gap={0.5}>
             <div className="flex-1">
@@ -628,7 +536,6 @@ export function ModelSelectionField({
           </Section>
         )}
 
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
         {shouldShowAutoUpdateToggle && (
           <InputLayouts.Horizontal
             title="Auto Update"
@@ -748,23 +655,6 @@ function ModalWrapperInner({
             <Button prominence="secondary" onClick={onClose} type="button">
               Cancel
             </Button>
-<<<<<<< HEAD
-            <Disabled
-              disabled={
-                !isFormValid || busy || (!!existingProviderName && !isDirty)
-              }
-            >
-              <Button type="submit" icon={busy ? SimpleLoader : undefined}>
-                {existingProviderName
-                  ? busy
-                    ? "Updating"
-                    : "Update"
-                  : busy
-                    ? "Connecting"
-                    : "Connect"}
-              </Button>
-            </Disabled>
-=======
             <Button
               disabled={!isValid || !dirty || busy}
               type="submit"
@@ -778,7 +668,6 @@ function ModalWrapperInner({
                   ? "Connecting"
                   : "Connect"}
             </Button>
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
           </Modal.Footer>
         </Form>
       </Modal.Content>

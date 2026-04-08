@@ -1,11 +1,7 @@
 "use client";
 
-<<<<<<< HEAD
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-=======
 import * as Yup from "yup";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -29,7 +25,6 @@ import {
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
-import debounce from "lodash/debounce";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
@@ -38,17 +33,12 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import useOnMount from "@/hooks/useOnMount";
 
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
-<<<<<<< HEAD
-const TAB_SELF_HOSTED = "self-hosted";
-const TAB_CLOUD = "cloud";
-=======
 const CLOUD_API_BASE = "https://ollama.com";
 
 enum Tab {
   TAB_SELF_HOSTED = "self-hosted",
   TAB_CLOUD = "cloud",
 }
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 
 interface OllamaModalValues extends BaseLLMFormValues {
   api_base: string;
@@ -70,24 +60,6 @@ function OllamaModalInternals({
   tab,
   setTab,
 }: OllamaModalInternalsProps) {
-<<<<<<< HEAD
-  const isInitialMount = useRef(true);
-
-  const doFetchModels = useCallback(
-    (apiBase: string, signal: AbortSignal) => {
-      fetchOllamaModels({
-        api_base: apiBase,
-        provider_name: existingLlmProvider?.name,
-        signal,
-      }).then((data) => {
-        if (signal.aborted) return;
-        if (data.error) {
-          toast.error(data.error);
-          setFetchedModels([]);
-          return;
-        }
-        setFetchedModels(data.models);
-=======
   const formikProps = useFormikContext<OllamaModalValues>();
 
   const isFetchDisabled = useMemo(
@@ -98,7 +70,7 @@ function OllamaModalInternals({
     [tab, formikProps]
   );
 
-  const handleFetchModels = async (signal?: AbortSignal) => {
+  const handleFetchModels = async () => {
     // Only Ollama cloud accepts API key
     const apiBase = formikProps.values.custom_config?.OLLAMA_API_KEY
       ? CLOUD_API_BASE
@@ -106,9 +78,7 @@ function OllamaModalInternals({
     const { models, error } = await fetchOllamaModels({
       api_base: apiBase,
       provider_name: existingLlmProvider?.name,
-      signal,
     });
-    if (signal?.aborted) return;
     if (error) {
       throw new Error(error);
     }
@@ -122,73 +92,14 @@ function OllamaModalInternals({
         toast.error(
           err instanceof Error ? err.message : "Failed to fetch models"
         );
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
       });
-    },
-    [existingLlmProvider?.name, setFetchedModels]
-  );
-
-  const debouncedFetchModels = useMemo(
-    () => debounce(doFetchModels, 500),
-    [doFetchModels]
-  );
-
-  // Skip the initial fetch for new providers — api_base starts with a default
-  // value, which would otherwise trigger a fetch before the user has done
-  // anything. Existing providers should still auto-fetch on mount.
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      if (!existingLlmProvider) return;
     }
-<<<<<<< HEAD
-
-    if (formikProps.values.api_base) {
-      const controller = new AbortController();
-      debouncedFetchModels(formikProps.values.api_base, controller.signal);
-      return () => {
-        debouncedFetchModels.cancel();
-        controller.abort();
-      };
-    } else {
-      setFetchedModels([]);
-    }
-  }, [
-    formikProps.values.api_base,
-    debouncedFetchModels,
-    setFetchedModels,
-    existingLlmProvider,
-  ]);
-
-  const currentModels =
-    fetchedModels.length > 0
-      ? fetchedModels
-      : existingLlmProvider?.model_configurations || [];
-
-  const hasApiKey = !!formikProps.values.custom_config?.OLLAMA_API_KEY;
-  const defaultTab =
-    existingLlmProvider && hasApiKey ? TAB_CLOUD : TAB_SELF_HOSTED;
-
-  return (
-    <LLMConfigurationModalWrapper
-      providerEndpoint={OLLAMA_PROVIDER_NAME}
-      existingProviderName={existingLlmProvider?.name}
-      onClose={onClose}
-      isFormValid={formikProps.isValid}
-      isDirty={formikProps.dirty}
-      isTesting={isTesting}
-      isSubmitting={formikProps.isSubmitting}
-    >
-      <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
-        <Tabs defaultValue={defaultTab}>
-=======
   });
 
   return (
     <>
-      <Card background="light" border="none" padding="sm">
+      <Card backgroundVariant="light" borderVariant="none" sizeVariant="lg">
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
           <Tabs.List>
             <Tabs.Trigger value={Tab.TAB_SELF_HOSTED}>
               Self-hosted Ollama
@@ -230,26 +141,11 @@ function OllamaModalInternals({
         </>
       )}
 
-<<<<<<< HEAD
-      <FieldSeparator />
-
-      {isOnboarding ? (
-        <SingleDefaultModelField placeholder="E.g. llama3.1" />
-      ) : (
-        <ModelsField
-          modelConfigurations={currentModels}
-          formikProps={formikProps}
-          recommendedDefaultModel={null}
-          shouldShowAutoUpdateToggle={false}
-        />
-      )}
-=======
       <InputLayouts.FieldSeparator />
       <ModelSelectionField
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
       />
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 
       {!isOnboarding && (
         <>

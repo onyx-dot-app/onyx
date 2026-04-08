@@ -1,5 +1,6 @@
 "use client";
 
+import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import {
@@ -12,11 +13,8 @@ import { useInitialValues } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
-<<<<<<< HEAD
-=======
   APIKeyField,
   APIBaseField,
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
@@ -225,10 +223,7 @@ export default function CustomModal({
       existingLlmProvider
     ),
     provider: existingLlmProvider?.provider ?? "",
-<<<<<<< HEAD
-=======
     api_version: existingLlmProvider?.api_version ?? "",
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
     model_configurations: existingLlmProvider?.model_configurations.map(
       (mc) => ({
         name: mc.name,
@@ -303,53 +298,10 @@ export default function CustomModal({
           return;
         }
 
-<<<<<<< HEAD
-        if (isOnboarding && onboardingState && onboardingActions) {
-          await submitOnboardingProvider({
-            providerName: values.provider,
-            payload: {
-              ...values,
-              model_configurations: modelConfigurations,
-              custom_config: customConfigProcessing(values.custom_config_list),
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: true,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          const selectedModelNames = modelConfigurations.map(
-            (config) => config.name
-          );
-
-          await submitLLMProvider({
-            providerName: values.provider,
-            values: {
-              ...values,
-              selected_model_names: selectedModelNames,
-              custom_config: customConfigProcessing(values.custom_config_list),
-            },
-            initialValues: {
-              ...initialValues,
-              custom_config: customConfigProcessing(
-                initialValues.custom_config_list
-              ),
-            },
-            modelConfigurations,
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setIsTesting,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
-=======
         // Always send custom_config as a dict (even empty) so the backend
         // preserves it as non-null — this is the signal that the provider was
         // created via CustomModal.
-        const customConfig = keyValueListToDict(values.custom_config_list);
+        const customConfig = customConfigProcessing(values.custom_config_list);
 
         await submitProvider({
           analyticsSource: isOnboarding
@@ -363,7 +315,9 @@ export default function CustomModal({
           },
           initialValues: {
             ...initialValues,
-            custom_config: keyValueListToDict(initialValues.custom_config_list),
+            custom_config: customConfigProcessing(
+              initialValues.custom_config_list
+            ),
           },
           existingLlmProvider,
           shouldMarkAsDefault,
@@ -384,7 +338,6 @@ export default function CustomModal({
             }
           },
         });
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
       }}
     >
       {!isOnboarding && (
@@ -408,80 +361,7 @@ export default function CustomModal({
       <APIBaseField optional />
 
       <InputLayouts.FieldPadder>
-        <InputLayouts.Vertical
-          name="api_version"
-          title="API Version"
-          suffix="optional"
-        >
-<<<<<<< HEAD
-          {!isOnboarding && (
-            <Section gap={0}>
-              <DisplayNameField disabled={!!existingLlmProvider} />
-
-              <FieldWrapper>
-                <InputLayouts.Vertical
-                  name="provider"
-                  title="Provider Name"
-                  subDescription="Should be one of the providers listed at https://docs.litellm.ai/docs/providers."
-                >
-                  <InputTypeInField
-                    name="provider"
-                    placeholder="Provider Name"
-                    variant={existingLlmProvider ? "disabled" : undefined}
-                  />
-                </InputLayouts.Vertical>
-              </FieldWrapper>
-            </Section>
-          )}
-
-          <FieldSeparator />
-
-          <FieldWrapper>
-            <Section gap={0.75}>
-              <Content
-                title="Provider Configs"
-                description="Add properties as needed by the model provider. This is passed to LiteLLM completion() call as arguments in the environment variable. See LiteLLM documentation for more instructions."
-                widthVariant="full"
-                variant="section"
-                sizePreset="main-content"
-              />
-
-              <KeyValueInput
-                items={formikProps.values.custom_config_list}
-                onChange={(items) =>
-                  formikProps.setFieldValue("custom_config_list", items)
-                }
-                addButtonLabel="Add Line"
-              />
-            </Section>
-          </FieldWrapper>
-
-          <FieldSeparator />
-
-          <Section gap={0.5}>
-            <FieldWrapper>
-              <Content
-                title="Models"
-                description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
-                variant="section"
-                sizePreset="main-content"
-                widthVariant="full"
-              />
-            </FieldWrapper>
-
-            <Card>
-              <ModelConfigurationList formikProps={formikProps as any} />
-            </Card>
-          </Section>
-
-          {!isOnboarding && (
-            <>
-              <FieldSeparator />
-              <ModelsAccessField formikProps={formikProps} />
-            </>
-          )}
-        </LLMConfigurationModalWrapper>
-=======
+        <InputLayouts.Vertical name="api_version" title="API Version" optional>
           <InputTypeInField name="api_version" />
         </InputLayouts.Vertical>
       </InputLayouts.FieldPadder>
@@ -512,7 +392,6 @@ export default function CustomModal({
           <InputLayouts.FieldSeparator />
           <DisplayNameField disabled={!!existingLlmProvider} />
         </>
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
       )}
 
       <InputLayouts.FieldSeparator />
@@ -527,7 +406,7 @@ export default function CustomModal({
           />
         </InputLayouts.FieldPadder>
 
-        <Card padding="sm">
+        <Card sizeVariant="lg">
           <ModelConfigurationList />
         </Card>
       </Section>

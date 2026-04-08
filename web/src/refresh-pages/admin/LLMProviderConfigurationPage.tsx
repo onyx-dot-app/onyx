@@ -64,7 +64,7 @@ const PROVIDER_DISPLAY_ORDER: string[] = [
   LLMProviderName.VERTEX_AI,
   LLMProviderName.BEDROCK,
   LLMProviderName.AZURE,
-  LLMProviderName.LITELLM,
+  "litellm",
   LLMProviderName.LITELLM_PROXY,
   LLMProviderName.OLLAMA_CHAT,
   LLMProviderName.OPENROUTER,
@@ -130,17 +130,12 @@ const PROVIDER_MODAL_MAP: Record<
       onOpenChange={onOpenChange}
     />
   ),
-<<<<<<< HEAD:web/src/refresh-pages/admin/LLMConfigurationPage.tsx
   lm_studio: (d, open, onOpenChange) => (
-    <LMStudioForm
+    <LMStudioModal
       shouldMarkAsDefault={d}
       open={open}
       onOpenChange={onOpenChange}
     />
-=======
-  lm_studio: (d, onOpenChange) => (
-    <LMStudioModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972)):web/src/refresh-pages/admin/LLMProviderConfigurationPage.tsx
   ),
   litellm_proxy: (d, open, onOpenChange) => (
     <LiteLLMProxyModal

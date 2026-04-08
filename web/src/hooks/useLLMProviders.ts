@@ -142,13 +142,7 @@ export function useAdminLLMProviders() {
  */
 export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   const { data, error, isLoading } = useSWR<WellKnownLLMProviderDescriptor>(
-<<<<<<< HEAD
-    providerEndpoint
-      ? `/api/admin/llm/built-in/options/${providerEndpoint}`
-      : null,
-=======
-    providerName ? SWR_KEYS.wellKnownLlmProvider(providerName) : null,
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
+    providerName ? `/api/admin/llm/built-in/options/${providerName}` : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,

@@ -79,27 +79,12 @@ function BifrostModalInternals({
         placeholder="https://your-bifrost-gateway.com/v1"
       />
 
-<<<<<<< HEAD
-      <FieldWrapper>
-        <InputLayouts.Vertical
-          name="api_key"
-          title="API Key"
-          optional={true}
-          subDescription={markdown(
-            "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
-          )}
-        >
-          <PasswordInputTypeInField name="api_key" placeholder="API Key" />
-        </InputLayouts.Vertical>
-      </FieldWrapper>
-=======
       <APIKeyField
         optional
         subDescription={markdown(
           "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
         )}
       />
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 
       {!isOnboarding && (
         <>

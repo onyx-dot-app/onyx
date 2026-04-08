@@ -78,27 +78,12 @@ function OpenAICompatibleModalInternals({
         placeholder="http://localhost:8000/v1"
       />
 
-<<<<<<< HEAD
-      <FieldWrapper>
-        <InputLayouts.Vertical
-          name="api_key"
-          title="API Key"
-          optional
-          subDescription={markdown(
-            "Provide an API key if your server requires authentication."
-          )}
-        >
-          <PasswordInputTypeInField name="api_key" placeholder="API Key" />
-        </InputLayouts.Vertical>
-      </FieldWrapper>
-=======
       <APIKeyField
         optional
         subDescription={markdown(
           "Provide an API key if your server requires authentication."
         )}
       />
->>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
 
       {!isOnboarding && (
         <>
