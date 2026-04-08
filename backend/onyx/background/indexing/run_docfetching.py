@@ -26,6 +26,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.factory import extract_credential_json
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.models import ConnectorFailure
@@ -100,13 +101,15 @@ def _get_connector_runner(
 
     task = attempt.connector_credential_pair.connector.input_type
 
+    credential = attempt.connector_credential_pair.credential
+
     try:
         runnable_connector = instantiate_connector(
-            db_session=db_session,
             source=attempt.connector_credential_pair.connector.source,
             input_type=task,
             connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
-            credential=attempt.connector_credential_pair.credential,
+            credential_json=extract_credential_json(credential),
+            credential_id=credential.id,
         )
 
         # validate the connector settings

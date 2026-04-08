@@ -30,6 +30,7 @@ from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.connectors.factory import ConnectorMissingException
+from onyx.connectors.factory import extract_credential_json
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import HierarchyConnector
@@ -247,63 +248,19 @@ def check_for_hierarchy_fetching(self: Task, *, tenant_id: str) -> int | None:
 HIERARCHY_NODE_BATCH_SIZE = 100
 
 
-def _run_hierarchy_extraction(
-    db_session: Session,
-    cc_pair: ConnectorCredentialPair,
+def _process_hierarchy_batch(
+    node_batch: list[PydanticHierarchyNode],
     source: DocumentSource,
-    tenant_id: str,
+    connector_id: int,
+    credential_id: int,
+    is_connector_public: bool,
+    redis_client: Redis,
 ) -> int:
-    """
-    Run the hierarchy extraction for a connector.
-
-    Instantiates the connector and calls load_hierarchy() if the connector
-    implements HierarchyConnector.
-
-    Returns the total number of hierarchy nodes extracted.
-    """
-    connector = cc_pair.connector
-    credential = cc_pair.credential
-
-    # Instantiate the connector using its configured input type
-    runnable_connector = instantiate_connector(
-        db_session=db_session,
-        source=source,
-        input_type=connector.input_type,
-        connector_specific_config=connector.connector_specific_config,
-        credential=credential,
-    )
-
-    # Check if the connector supports hierarchy fetching
-    if not isinstance(runnable_connector, HierarchyConnector):
-        task_logger.debug(
-            f"Connector {source} does not implement HierarchyConnector, skipping"
-        )
+    """Write a batch of hierarchy nodes to DB and Redis cache in a short-lived session."""
+    if not node_batch:
         return 0
 
-    redis_client = get_redis_client(tenant_id=tenant_id)
-
-    # Ensure the SOURCE-type root node exists before processing hierarchy nodes.
-    # This is the root of the hierarchy tree - all other nodes for this source
-    # should ultimately have this as an ancestor.
-    ensure_source_node_exists(redis_client, db_session, source)
-
-    # Determine time range: start from last hierarchy fetch, end at now
-    last_fetch = cc_pair.last_time_hierarchy_fetch
-    start_time = last_fetch.timestamp() if last_fetch else 0
-    end_time = datetime.now(timezone.utc).timestamp()
-
-    # Check if connector is public - all hierarchy nodes from public connectors
-    # should be accessible to all users
-    is_connector_public = cc_pair.access_type == AccessType.PUBLIC
-
-    total_nodes = 0
-    node_batch: list[PydanticHierarchyNode] = []
-
-    def _process_batch() -> int:
-        """Process accumulated hierarchy nodes batch."""
-        if not node_batch:
-            return 0
-
+    with get_session_with_current_tenant() as db_session:
         upserted_nodes = upsert_hierarchy_nodes_batch(
             db_session=db_session,
             nodes=node_batch,
@@ -315,35 +272,21 @@ def _run_hierarchy_extraction(
         upsert_hierarchy_node_cc_pair_entries(
             db_session=db_session,
             hierarchy_node_ids=[n.id for n in upserted_nodes],
-            connector_id=cc_pair.connector_id,
-            credential_id=cc_pair.credential_id,
+            connector_id=connector_id,
+            credential_id=credential_id,
             commit=True,
         )
 
-        # Cache in Redis for fast ancestor resolution
-        cache_entries = [
-            HierarchyNodeCacheEntry.from_db_model(node) for node in upserted_nodes
-        ]
-        cache_hierarchy_nodes_batch(
-            redis_client=redis_client,
-            source=source,
-            entries=cache_entries,
-        )
+    cache_entries = [
+        HierarchyNodeCacheEntry.from_db_model(node) for node in upserted_nodes
+    ]
+    cache_hierarchy_nodes_batch(
+        redis_client=redis_client,
+        source=source,
+        entries=cache_entries,
+    )
 
-        count = len(node_batch)
-        node_batch.clear()
-        return count
-
-    # Fetch hierarchy nodes from the connector
-    for node in runnable_connector.load_hierarchy(start=start_time, end=end_time):
-        node_batch.append(node)
-        if len(node_batch) >= HIERARCHY_NODE_BATCH_SIZE:
-            total_nodes += _process_batch()
-
-    # Process any remaining nodes
-    total_nodes += _process_batch()
-
-    return total_nodes
+    return len(node_batch)
 
 
 @shared_task(
@@ -368,6 +311,7 @@ def connector_hierarchy_fetching_task(
     )
 
     try:
+        # --- Phase 1: Read cc_pair config (short-lived session) ---
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
@@ -387,18 +331,72 @@ def connector_hierarchy_fetching_task(
                 return
 
             source = cc_pair.connector.source
-            total_nodes = _run_hierarchy_extraction(
-                db_session=db_session,
-                cc_pair=cc_pair,
-                source=source,
-                tenant_id=tenant_id,
+            input_type = cc_pair.connector.input_type
+            connector_specific_config = cc_pair.connector.connector_specific_config
+            credential_json = extract_credential_json(cc_pair.credential)
+            cred_id = cc_pair.credential.id
+            connector_id = cc_pair.connector_id
+            credential_id = cc_pair.credential_id
+            last_fetch = cc_pair.last_time_hierarchy_fetch
+            is_connector_public = cc_pair.access_type == AccessType.PUBLIC
+
+        # --- Phase 2: External work (no session held) ---
+        runnable_connector = instantiate_connector(
+            source=source,
+            input_type=input_type,
+            connector_specific_config=connector_specific_config,
+            credential_json=credential_json,
+            credential_id=cred_id,
+        )
+
+        if not isinstance(runnable_connector, HierarchyConnector):
+            task_logger.debug(
+                f"Connector {source} does not implement HierarchyConnector, skipping"
+            )
+            with get_session_with_current_tenant() as db_session:
+                mark_cc_pair_as_hierarchy_fetched(db_session, cc_pair_id)
+            return
+
+        redis_client = get_redis_client(tenant_id=tenant_id)
+
+        with get_session_with_current_tenant() as db_session:
+            ensure_source_node_exists(redis_client, db_session, source)
+
+        start_time = last_fetch.timestamp() if last_fetch else 0
+        end_time = datetime.now(timezone.utc).timestamp()
+
+        total_nodes = 0
+        node_batch: list[PydanticHierarchyNode] = []
+
+        for node in runnable_connector.load_hierarchy(start=start_time, end=end_time):
+            node_batch.append(node)
+            if len(node_batch) >= HIERARCHY_NODE_BATCH_SIZE:
+                total_nodes += _process_hierarchy_batch(
+                    node_batch,
+                    source,
+                    connector_id,
+                    credential_id,
+                    is_connector_public,
+                    redis_client,
+                )
+                node_batch = []
+
+        if node_batch:
+            total_nodes += _process_hierarchy_batch(
+                node_batch,
+                source,
+                connector_id,
+                credential_id,
+                is_connector_public,
+                redis_client,
             )
 
-            task_logger.info(
-                f"connector_hierarchy_fetching_task: Extracted {total_nodes} hierarchy nodes for cc_pair={cc_pair_id}"
-            )
+        task_logger.info(
+            f"connector_hierarchy_fetching_task: Extracted {total_nodes} hierarchy nodes for cc_pair={cc_pair_id}"
+        )
 
-            # Update the last fetch time to prevent re-running until next interval
+        # --- Phase 3: Final write ---
+        with get_session_with_current_tenant() as db_session:
             mark_cc_pair_as_hierarchy_fetched(db_session, cc_pair_id)
 
     except Exception:

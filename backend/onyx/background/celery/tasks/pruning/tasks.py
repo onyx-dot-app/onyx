@@ -37,6 +37,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
+from onyx.connectors.factory import extract_credential_json
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.models import InputType
 from onyx.db.connector import mark_ccpair_as_pruned
@@ -524,6 +525,7 @@ def connector_pruning_generator_task(
         return None
 
     try:
+        # --- Phase 1: Read cc_pair config (short-lived session) ---
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair(
                 db_session=db_session,
@@ -537,55 +539,58 @@ def connector_pruning_generator_task(
                 )
                 return
 
-            payload = redis_connector.prune.payload
-            if not payload:
-                raise ValueError(f"No fence payload found: cc_pair={cc_pair_id}")
-
-            new_payload = RedisConnectorPrunePayload(
-                id=payload.id,
-                submitted=payload.submitted,
-                started=datetime.now(timezone.utc),
-                celery_task_id=payload.celery_task_id,
-            )
-            redis_connector.prune.set_fence(new_payload)
-
-            task_logger.info(
-                f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={cc_pair.connector.source}"
-            )
-
-            runnable_connector = instantiate_connector(
-                db_session,
-                cc_pair.connector.source,
-                InputType.SLIM_RETRIEVAL,
-                cc_pair.connector.connector_specific_config,
-                cc_pair.credential,
-            )
-
-            callback = PruneCallback(
-                0,
-                redis_connector,
-                lock,
-                r,
-                timeout_seconds=JOB_TIMEOUT,
-            )
-
-            # Extract docs and hierarchy nodes from the source
-            extraction_result = extract_ids_from_runnable_connector(
-                runnable_connector, callback
-            )
-            all_connector_doc_ids = extraction_result.raw_id_to_parent
-
-            # Process hierarchy nodes (same as docfetching):
-            # upsert to Postgres and cache in Redis
             source = cc_pair.connector.source
+            connector_specific_config = cc_pair.connector.connector_specific_config
+            credential_json = extract_credential_json(cc_pair.credential)
+            cred_id = cc_pair.credential.id
+            is_connector_public = cc_pair.access_type == AccessType.PUBLIC
+
+        payload = redis_connector.prune.payload
+        if not payload:
+            raise ValueError(f"No fence payload found: cc_pair={cc_pair_id}")
+
+        new_payload = RedisConnectorPrunePayload(
+            id=payload.id,
+            submitted=payload.submitted,
+            started=datetime.now(timezone.utc),
+            celery_task_id=payload.celery_task_id,
+        )
+        redis_connector.prune.set_fence(new_payload)
+
+        task_logger.info(
+            f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={source}"
+        )
+
+        # --- Phase 2: External work (no session held) ---
+        runnable_connector = instantiate_connector(
+            source=source,
+            input_type=InputType.SLIM_RETRIEVAL,
+            connector_specific_config=connector_specific_config,
+            credential_json=credential_json,
+            credential_id=cred_id,
+        )
+
+        callback = PruneCallback(
+            0,
+            redis_connector,
+            lock,
+            r,
+            timeout_seconds=JOB_TIMEOUT,
+        )
+
+        extraction_result = extract_ids_from_runnable_connector(
+            runnable_connector, callback
+        )
+        all_connector_doc_ids = extraction_result.raw_id_to_parent
+
+        # --- Phase 3: Write results (new session) ---
+        with get_session_with_current_tenant() as db_session:
             redis_client = get_redis_client(tenant_id=tenant_id)
 
             ensure_source_node_exists(redis_client, db_session, source)
 
             upserted_nodes: list[DBHierarchyNode] = []
             if extraction_result.hierarchy_nodes:
-                is_connector_public = cc_pair.access_type == AccessType.PUBLIC
-
                 upserted_nodes = upsert_hierarchy_nodes_batch(
                     db_session=db_session,
                     nodes=extraction_result.hierarchy_nodes,
@@ -617,8 +622,6 @@ def connector_pruning_generator_task(
                     f"hierarchy nodes for cc_pair={cc_pair_id}"
                 )
 
-            # Resolve parent_hierarchy_raw_node_id → parent_hierarchy_node_id
-            # and bulk-update documents, mirroring the docfetching resolution
             _resolve_and_update_document_parents(
                 db_session=db_session,
                 redis_client=redis_client,
@@ -626,8 +629,6 @@ def connector_pruning_generator_task(
                 raw_id_to_parent=all_connector_doc_ids,
             )
 
-            # Link hierarchy nodes to documents for sources where pages can be
-            # both hierarchy nodes AND documents (e.g. Notion, Confluence)
             all_doc_id_list = list(all_connector_doc_ids.keys())
             link_hierarchy_nodes_to_documents(
                 db_session=db_session,
@@ -636,7 +637,6 @@ def connector_pruning_generator_task(
                 commit=True,
             )
 
-            # a list of docs in our local index
             all_indexed_document_ids = {
                 doc.id
                 for doc in get_documents_for_connector_credential_pair(
@@ -646,16 +646,12 @@ def connector_pruning_generator_task(
                 )
             }
 
-            # generate list of docs to remove (no longer in the source)
             doc_ids_to_remove = list(
                 all_indexed_document_ids - all_connector_doc_ids.keys()
             )
 
             task_logger.info(
-                "Pruning set collected: "
-                f"cc_pair={cc_pair_id} "
-                f"connector_source={cc_pair.connector.source} "
-                f"docs_to_remove={len(doc_ids_to_remove)}"
+                f"Pruning set collected: cc_pair={cc_pair_id} connector_source={source} docs_to_remove={len(doc_ids_to_remove)}"
             )
 
             task_logger.info(
