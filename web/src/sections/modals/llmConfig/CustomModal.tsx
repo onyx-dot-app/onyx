@@ -335,23 +335,21 @@ export default function CustomModal({
         });
       }}
     >
-      {!isOnboarding && (
-        <InputLayouts.FieldPadder>
-          <InputLayouts.Vertical
+      <InputLayouts.FieldPadder>
+        <InputLayouts.Vertical
+          name="provider"
+          title="Provider Name"
+          subDescription={markdown(
+            "Should be one of the providers listed at [LiteLLM](https://docs.litellm.ai/docs/providers)."
+          )}
+        >
+          <InputTypeInField
             name="provider"
-            title="Provider Name"
-            subDescription={markdown(
-              "Should be one of the providers listed at [LiteLLM](https://docs.litellm.ai/docs/providers)."
-            )}
-          >
-            <InputTypeInField
-              name="provider"
-              placeholder="Provider Name as shown on LiteLLM"
-              variant={existingLlmProvider ? "disabled" : undefined}
-            />
-          </InputLayouts.Vertical>
-        </InputLayouts.FieldPadder>
-      )}
+            placeholder="Provider Name as shown on LiteLLM"
+            variant={existingLlmProvider ? "disabled" : undefined}
+          />
+        </InputLayouts.Vertical>
+      </InputLayouts.FieldPadder>
 
       <APIBaseField optional />
 
