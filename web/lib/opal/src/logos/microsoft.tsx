@@ -6,7 +6,6 @@ const SvgMicrosoft = ({ size, ...props }: IconProps) => (
     viewBox="0 0 52 52"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    stroke="currentColor"
     {...props}
   >
     <path d="M5 5H25V25H5V5Z" fill="#F35325" />

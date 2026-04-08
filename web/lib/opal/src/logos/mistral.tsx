@@ -6,7 +6,6 @@ const SvgMistral = ({ size, ...props }: IconProps) => (
     viewBox="0 0 52 52"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    stroke="currentColor"
     {...props}
   >
     <path d="M15.5004 8H8.50043V15H15.5004V8Z" fill="#FFD800" />
