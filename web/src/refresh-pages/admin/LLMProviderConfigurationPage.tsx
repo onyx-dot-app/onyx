@@ -198,20 +198,22 @@ function ExistingProviderCard({
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
             rightChildren={
               <div className="flex flex-row">
-                <Hoverable.Item
-                  group="ExistingProviderCard"
-                  variant="opacity-on-hover"
-                >
-                  <Button
-                    icon={SvgTrash}
-                    prominence="tertiary"
-                    aria-label={`Delete ${provider.name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteModal.toggle(true);
-                    }}
-                  />
-                </Hoverable.Item>
+                {!(isDefault && !isLastProvider) && (
+                  <Hoverable.Item
+                    group="ExistingProviderCard"
+                    variant="opacity-on-hover"
+                  >
+                    <Button
+                      icon={SvgTrash}
+                      prominence="tertiary"
+                      aria-label={`Delete ${provider.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteModal.toggle(true);
+                      }}
+                    />
+                  </Hoverable.Item>
+                )}
                 <Button
                   icon={SvgSettings}
                   prominence="tertiary"
