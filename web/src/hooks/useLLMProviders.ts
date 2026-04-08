@@ -160,20 +160,6 @@ export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   };
 }
 
-export function useTestingModelFromLLMProvider(
-  providerName: LLMProviderName,
-  llmProvider?: LLMProviderView
-): string | undefined {
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(providerName);
-  const firstVisibleModelToTest = llmProvider?.model_configurations.find(
-    (modelConfiguration) => modelConfiguration.is_visible
-  )?.name;
-  return (
-    firstVisibleModelToTest ??
-    wellKnownLLMProvider?.recommended_default_model?.name
-  );
-}
-
 export function useWellKnownLLMProviders() {
   const {
     data: wellKnownLLMProviders,

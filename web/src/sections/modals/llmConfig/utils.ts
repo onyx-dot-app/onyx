@@ -5,7 +5,7 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useTestingModelFromLLMProvider } from "@/hooks/useLLMProviders";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import { ScopedMutator } from "swr";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
@@ -15,10 +15,10 @@ export function useInitialValues(
   providerName: LLMProviderName,
   existingLlmProvider?: LLMProviderView
 ) {
-  const testModelName = useTestingModelFromLLMProvider(
-    providerName,
-    existingLlmProvider
-  );
+  const { wellKnownLLMProvider } = useWellKnownLLMProvider(providerName);
+  const testModelName =
+    existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
+      ?.name ?? wellKnownLLMProvider?.recommended_default_model?.name;
 
   return {
     provider: existingLlmProvider?.provider ?? providerName,
