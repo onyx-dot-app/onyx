@@ -431,6 +431,17 @@ export function ModelSelectionField({
     }
   }, [models]);
 
+  // When models arrive (e.g. after a dynamic fetch) and test_model_name
+  // is still empty, auto-select the first visible model.
+  useEffect(() => {
+    if (models.length > 0 && !formikProps.values.test_model_name) {
+      const firstVisible = models.find((m) => m.is_visible);
+      if (firstVisible) {
+        formikProps.setFieldValue("test_model_name", firstVisible.name);
+      }
+    }
+  }, [models.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Keep test_model_name in sync: always the first visible model.
   function syncTestModelName(configs: ModelConfiguration[]) {
     const firstVisible = configs.find((m) => m.is_visible);
