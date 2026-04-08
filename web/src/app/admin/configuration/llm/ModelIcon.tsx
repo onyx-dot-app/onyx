@@ -1,17 +1,18 @@
-import { defaultTailwindCSS, IconProps } from "@/components/icons/icons";
+import { defaultTailwindCSS } from "@/components/icons/icons";
 import { getModelIcon } from "@/lib/llmConfig/providers";
+import { IconProps } from "@opal/types";
 
-export interface ProviderIconProps extends IconProps {
+export interface ModelIconProps extends IconProps {
   provider: string;
   modelName?: string;
 }
 
-export const ProviderIcon = ({
+export default function ModelIcon({
   provider,
   modelName,
   size = 16,
   className = defaultTailwindCSS,
-}: ProviderIconProps) => {
+}: ModelIconProps) {
   const Icon = getModelIcon(provider, modelName);
   return <Icon size={size} className={className} />;
-};
+}

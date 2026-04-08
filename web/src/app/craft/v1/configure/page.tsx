@@ -475,10 +475,10 @@ export default function BuildConfigPage() {
                         >
                           {pendingLlmSelection?.provider &&
                             (() => {
-                              const ProviderIcon = getModelIcon(
+                              const ModelIcon = getModelIcon(
                                 pendingLlmSelection.provider
                               );
-                              return <ProviderIcon className="w-4 h-4" />;
+                              return <ModelIcon className="w-4 h-4" />;
                             })()}
                           <Text mainUiAction>{pendingLlmDisplayName}</Text>
                           <SvgChevronDown className="w-4 h-4 text-text-03" />

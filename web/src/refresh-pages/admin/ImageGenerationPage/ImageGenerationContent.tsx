@@ -18,7 +18,7 @@ import {
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
 } from "@/refresh-pages/admin/ImageGenerationPage/svc";
-import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
+import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -264,7 +264,7 @@ export default function ImageGenerationContent() {
                       sizePreset="main-ui"
                       variant="section"
                       icon={() => (
-                        <ProviderIcon
+                        <ModelIcon
                           provider={provider.provider_name}
                           size={16}
                         />
@@ -391,7 +391,7 @@ export default function ImageGenerationContent() {
                               key={p.image_provider_id}
                               value={p.image_provider_id}
                               icon={() => (
-                                <ProviderIcon
+                                <ModelIcon
                                   provider={p.provider_name}
                                   size={16}
                                 />
