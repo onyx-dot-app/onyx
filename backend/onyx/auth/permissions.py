@@ -54,8 +54,11 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
     {
         Permission.BASIC_ACCESS,
         Permission.FULL_ADMIN_PANEL_ACCESS,
+        Permission.READ_CONNECTORS,
+        Permission.READ_DOCUMENT_SETS,
+        Permission.READ_AGENTS,
+        Permission.READ_USERS,
     }
-    | Permission.IMPLIED
 )
 
 
@@ -118,5 +121,5 @@ def require_permission(
 
         return user
 
-    dependency._is_require_permission = True  # sentinel for auth_check detection
+    dependency._is_require_permission = True  # type: ignore[attr-defined]  # sentinel for auth_check detection
     return dependency
