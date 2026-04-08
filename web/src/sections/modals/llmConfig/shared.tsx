@@ -546,15 +546,21 @@ export function ModelSelectionField({
                     >
                       <button
                         type="button"
-                        className="flex items-center justify-center gap-1 w-full py-1.5 text-sm"
+                        className="w-full rounded-md py-1.5 px-2"
                       >
-                        {isExpanded ? "Less Models" : "More Models"}
-                        <SvgChevronDown
-                          className={cn(
-                            "transition-transform",
-                            isExpanded && "-rotate-180"
+                        <Content
+                          sizePreset="secondary"
+                          variant="body"
+                          title={isExpanded ? "Fold Models" : "More Models"}
+                          icon={() => (
+                            <SvgChevronDown
+                              className={cn(
+                                "transition-transform",
+                                isExpanded && "-rotate-180"
+                              )}
+                              size={14}
+                            />
                           )}
-                          size={14}
                         />
                       </button>
                     </Interactive.Stateless>
