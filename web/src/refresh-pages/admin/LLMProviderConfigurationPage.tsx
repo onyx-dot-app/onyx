@@ -141,7 +141,7 @@ function ExistingProviderCard({
 
   const handleDelete = async () => {
     try {
-      await deleteLlmProvider(provider.id);
+      await deleteLlmProvider(provider.id, isLastProvider);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
       toast.success("Provider deleted successfully!");
