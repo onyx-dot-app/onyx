@@ -32,8 +32,9 @@ import {
   SvgUsers,
   SvgWallet,
   SvgZoomIn,
+  SvgDiscord,
+  SvgSlack,
 } from "@opal/icons";
-import { SvgDiscordMono, SvgSlack } from "@opal/logos";
 
 export interface AdminRouteEntry {
   path: string;
@@ -91,7 +92,7 @@ export const ADMIN_ROUTES = {
   },
   DISCORD_BOTS: {
     path: "/admin/discord-bot",
-    icon: SvgDiscordMono,
+    icon: SvgDiscord,
     title: "Discord Integration",
     sidebarLabel: "Discord Integration",
   },

@@ -4,7 +4,7 @@ export { default as SvgAzure } from "@opal/logos/azure";
 export { default as SvgBifrost } from "@opal/logos/bifrost";
 export { default as SvgClaude } from "@opal/logos/claude";
 export { default as SvgDeepseek } from "@opal/logos/deepseek";
-export { default as SvgDiscordMono } from "@opal/logos/DiscordMono";
+export { default as SvgDiscord } from "@opal/logos/discord";
 export { default as SvgGemini } from "@opal/logos/gemini";
 export { default as SvgGoogle } from "@opal/logos/google";
 export { default as SvgLitellm } from "@opal/logos/litellm";
