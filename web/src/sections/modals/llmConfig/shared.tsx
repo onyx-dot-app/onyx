@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
+import { cn } from "@/lib/utils";
+import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
@@ -23,6 +25,7 @@ import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import {
   SvgArrowExchange,
+  SvgChevronDown,
   SvgOnyxOctagon,
   SvgOrganization,
   SvgPlusCircle,
@@ -407,6 +410,8 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 // ─── ModelsField ─────────────────────────────────────────────────────
 
+const FOLD_THRESHOLD = 3;
+
 export interface ModelSelectionFieldProps {
   shouldShowAutoUpdateToggle: boolean;
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
@@ -420,6 +425,7 @@ export function ModelSelectionField({
 }: ModelSelectionFieldProps) {
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
+  const [isExpanded, setIsExpanded] = useState(false);
   const isAutoMode = formikProps.values.is_auto_mode;
   const models = formikProps.values.model_configurations;
 
@@ -497,30 +503,65 @@ export function ModelSelectionField({
           <EmptyMessageCard title="No models available." padding="sm" />
         ) : (
           <Section gap={0.25}>
-            {isAutoMode
-              ? visibleModels.map((model) => (
-                  <LineItemButton
-                    key={model.name}
-                    variant="section"
-                    sizePreset="main-ui"
-                    selectVariant="select-heavy"
-                    state="selected"
-                    icon={() => <Checkbox checked />}
-                    title={model.display_name || model.name}
-                  />
-                ))
-              : models.map((model) => (
-                  <LineItemButton
-                    key={model.name}
-                    variant="section"
-                    sizePreset="main-ui"
-                    selectVariant="select-heavy"
-                    state={model.is_visible ? "selected" : "empty"}
-                    icon={() => <Checkbox checked={model.is_visible} />}
-                    title={model.name}
-                    onClick={() => setVisibility(model.name, !model.is_visible)}
-                  />
-                ))}
+            {(() => {
+              const displayModels = isAutoMode ? visibleModels : models;
+              const isFoldable = displayModels.length > FOLD_THRESHOLD;
+              const shownModels =
+                isFoldable && !isExpanded
+                  ? displayModels.slice(0, FOLD_THRESHOLD)
+                  : displayModels;
+
+              return (
+                <>
+                  {shownModels.map((model) =>
+                    isAutoMode ? (
+                      <LineItemButton
+                        key={model.name}
+                        variant="section"
+                        sizePreset="main-ui"
+                        selectVariant="select-heavy"
+                        state="selected"
+                        icon={() => <Checkbox checked />}
+                        title={model.display_name || model.name}
+                      />
+                    ) : (
+                      <LineItemButton
+                        key={model.name}
+                        variant="section"
+                        sizePreset="main-ui"
+                        selectVariant="select-heavy"
+                        state={model.is_visible ? "selected" : "empty"}
+                        icon={() => <Checkbox checked={model.is_visible} />}
+                        title={model.name}
+                        onClick={() =>
+                          setVisibility(model.name, !model.is_visible)
+                        }
+                      />
+                    )
+                  )}
+                  {isFoldable && (
+                    <Interactive.Stateless
+                      prominence="tertiary"
+                      onClick={() => setIsExpanded(!isExpanded)}
+                    >
+                      <button
+                        type="button"
+                        className="flex items-center justify-center gap-1 w-full py-1.5 text-sm"
+                      >
+                        {isExpanded ? "Less Models" : "More Models"}
+                        <SvgChevronDown
+                          className={cn(
+                            "transition-transform",
+                            isExpanded && "-rotate-180"
+                          )}
+                          size={14}
+                        />
+                      </button>
+                    </Interactive.Stateless>
+                  )}
+                </>
+              );
+            })()}
           </Section>
         )}
 
