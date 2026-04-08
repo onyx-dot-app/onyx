@@ -418,6 +418,15 @@ export function ModelSelectionField({
   const isAutoMode = formikProps.values.is_auto_mode;
   const models = formikProps.values.model_configurations;
 
+  // Snapshot the original model visibility so we can restore it when
+  // toggling auto mode back on.
+  const originalModelsRef = useRef(models);
+  useEffect(() => {
+    if (originalModelsRef.current.length === 0 && models.length > 0) {
+      originalModelsRef.current = models;
+    }
+  }, [models]);
+
   // Keep test_model_name in sync: always the first visible model.
   function syncTestModelName(configs: ModelConfiguration[]) {
     const firstVisible = configs.find((m) => m.is_visible);
@@ -437,11 +446,14 @@ export function ModelSelectionField({
 
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
-    // Auto mode resets all models to their original visibility
-    // (i.e. all visible for well-known providers)
-    const updated = models.map((m) => ({ ...m, is_visible: true }));
-    formikProps.setFieldValue("model_configurations", updated);
-    syncTestModelName(updated);
+    if (nextIsAutoMode) {
+      // Restore original visibility from the provider
+      formikProps.setFieldValue(
+        "model_configurations",
+        originalModelsRef.current
+      );
+      syncTestModelName(originalModelsRef.current);
+    }
   }
 
   const allSelected = models.length > 0 && models.every((m) => m.is_visible);
@@ -603,6 +615,7 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
           llmProvider={llmProvider}
           onClose={onClose}
           testModelName={initialValues.test_model_name}
+          modelConfigurations={initialValues.model_configurations}
         >
           {children}
         </ModalWrapperInner>
@@ -616,6 +629,7 @@ interface ModalWrapperInnerProps {
   llmProvider?: LLMProviderView;
   onClose: () => void;
   testModelName?: string;
+  modelConfigurations?: ModelConfiguration[];
   children: React.ReactNode;
 }
 function ModalWrapperInner({
@@ -623,13 +637,24 @@ function ModalWrapperInner({
   llmProvider,
   onClose,
   testModelName,
+  modelConfigurations,
   children,
 }: ModalWrapperInnerProps) {
   const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
     useFormikContext<BaseLLMFormValues>();
 
-  // When SWR resolves the recommended model after mount, set it only if the
-  // user hasn't already selected one — avoids resetting the form mid-edit.
+  // When SWR resolves after mount, populate model_configurations and
+  // test_model_name if they're still empty — avoids resetting mid-edit.
+  useEffect(() => {
+    if (
+      modelConfigurations &&
+      modelConfigurations.length > 0 &&
+      values.model_configurations.length === 0
+    ) {
+      setFieldValue("model_configurations", modelConfigurations);
+    }
+  }, [modelConfigurations]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (testModelName && !values.test_model_name) {
       setFieldValue("test_model_name", testModelName);
