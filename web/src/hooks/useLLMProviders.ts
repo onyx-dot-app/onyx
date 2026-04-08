@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   LLMProviderDescriptor,
+  LLMProviderName,
   LLMProviderResponse,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
@@ -136,14 +137,18 @@ export function useAdminLLMProviders() {
  * Used inside individual provider modals to pre-populate model lists
  * before the user has entered credentials.
  *
- * @param providerEndpoint - The provider's API endpoint name (e.g. "openai", "anthropic").
+ * @param providerName - The provider's API endpoint name (e.g. "openai", "anthropic").
  *   Pass `null` to suppress the request.
  */
-export function useWellKnownLLMProvider(providerEndpoint: string | null) {
+export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   const { data, error, isLoading } = useSWR<WellKnownLLMProviderDescriptor>(
+<<<<<<< HEAD
     providerEndpoint
       ? `/api/admin/llm/built-in/options/${providerEndpoint}`
       : null,
+=======
+    providerName ? SWR_KEYS.wellKnownLlmProvider(providerName) : null,
+>>>>>>> 185b05748 (fix: onboarding LLM Provider configuration fixes (#9972))
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,

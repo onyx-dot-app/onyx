@@ -124,14 +124,11 @@ export interface LLMProviderFormProps {
   shouldMarkAsDefault?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-
-  /** The current default model name for this provider (from the global default). */
-  defaultModelName?: string;
+  /** Called after successful provider creation/update. */
+  onSuccess?: () => void | Promise<void>;
 
   // Onboarding-specific (only when variant === "onboarding")
-  onboardingState?: OnboardingState;
   onboardingActions?: OnboardingActions;
-  llmDescriptor?: WellKnownLLMProviderDescriptor;
 }
 
 // Param types for model fetching functions - use snake_case to match API structure
