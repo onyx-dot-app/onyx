@@ -8,8 +8,8 @@ import {
   useWellKnownLLMProviders,
 } from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Content, Card } from "@opal/layouts";
-import { Button, SelectCard } from "@opal/components";
+import { Content, Card as CardLayout } from "@opal/layouts";
+import { Button, SelectCard, Text, Card } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -22,9 +22,7 @@ import {
 } from "@/lib/llmConfig/providers";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
-import Text from "@/refresh-components/texts/Text";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
-import LegacyCard from "@/refresh-components/cards/Card";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Message from "@/refresh-components/messages/Message";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -49,6 +47,7 @@ import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
 import { Section } from "@/layouts/general-layouts";
+import { markdown } from "@opal/utils";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
 
@@ -141,7 +140,7 @@ function ExistingProviderCard({
 
   const handleDelete = async () => {
     try {
-      await deleteLlmProvider(provider.id);
+      await deleteLlmProvider(provider.id, isLastProvider);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
       toast.success("Provider deleted successfully!");
@@ -156,24 +155,37 @@ function ExistingProviderCard({
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={`Delete ${provider.name}`}
+          title={markdown(`Delete *${provider.name}*`)}
           onClose={() => deleteModal.toggle(false)}
           submit={
-            <Button variant="danger" onClick={handleDelete}>
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              disabled={isDefault && !isLastProvider}
+            >
               Delete
             </Button>
           }
         >
           <Section alignItems="start" gap={0.5}>
-            <Text text03>
-              All LLM models from provider <b>{provider.name}</b> will be
-              removed and unavailable for future chats. Chat history will be
-              preserved.
-            </Text>
-            {isLastProvider && (
-              <Text text03>
-                Connect another provider to continue using chats.
+            {isDefault && !isLastProvider ? (
+              <Text font="main-ui-body" color="text-03">
+                Cannot delete the default provider. Select another provider as
+                the default prior to deleting this one.
               </Text>
+            ) : (
+              <>
+                <Text font="main-ui-body" color="text-03">
+                  {markdown(
+                    `All LLM models from provider **${provider.name}** will be removed and unavailable for future chats. Chat history will be preserved.`
+                  )}
+                </Text>
+                {isLastProvider && (
+                  <Text font="main-ui-body" color="text-03">
+                    Connect another provider to continue using chats.
+                  </Text>
+                )}
+              </>
             )}
           </Section>
         </ConfirmationModalLayout>
@@ -189,7 +201,7 @@ function ExistingProviderCard({
           rounding="lg"
           onClick={() => setIsOpen(true)}
         >
-          <Card.Header
+          <CardLayout.Header
             icon={getProviderIcon(provider.provider)}
             title={provider.name}
             description={getProviderDisplayName(provider.provider)}
@@ -259,7 +271,7 @@ function NewProviderCard({
       rounding="lg"
       onClick={() => setIsOpen(true)}
     >
-      <Card.Header
+      <CardLayout.Header
         icon={getProviderIcon(provider.name)}
         title={getProviderProductName(provider.name)}
         description={getProviderDisplayName(provider.name)}
@@ -303,7 +315,7 @@ function NewCustomProviderCard({
       rounding="lg"
       onClick={() => setIsOpen(true)}
     >
-      <Card.Header
+      <CardLayout.Header
         icon={getProviderIcon("custom")}
         title={getProviderProductName("custom")}
         description={getProviderDisplayName("custom")}
@@ -392,7 +404,7 @@ export default function LLMProviderConfigurationPage() {
 
       <SettingsLayouts.Body>
         {hasProviders ? (
-          <LegacyCard>
+          <Card border="solid" rounding="lg">
             <HorizontalInput
               title="Default Model"
               description="This model will be used by Onyx by default in your chats."
@@ -423,7 +435,7 @@ export default function LLMProviderConfigurationPage() {
                 </InputSelect.Content>
               </InputSelect>
             </HorizontalInput>
-          </LegacyCard>
+          </Card>
         ) : (
           <Message
             info

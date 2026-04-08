@@ -76,12 +76,17 @@ export async function setDefaultLlmModel(
 /**
  * Delete an LLM provider.
  * @param providerId - The provider ID to delete
+ * @param force - Force delete even if this is the default provider
  * @throws Error with the detail message from the API on failure
  */
-export async function deleteLlmProvider(providerId: number): Promise<void> {
-  const response = await fetch(`${LLM_PROVIDERS_ADMIN_URL}/${providerId}`, {
-    method: "DELETE",
-  });
+export async function deleteLlmProvider(
+  providerId: number,
+  force = false
+): Promise<void> {
+  const url = force
+    ? `${LLM_PROVIDERS_ADMIN_URL}/${providerId}?force=true`
+    : `${LLM_PROVIDERS_ADMIN_URL}/${providerId}`;
+  const response = await fetch(url, { method: "DELETE" });
 
   if (!response.ok) {
     const errorMsg = (await response.json()).detail;
