@@ -172,7 +172,7 @@ def upsert_ingestion_doc(
 
     return IngestionResult(
         document_id=document.id,
-        already_existed=indexing_pipeline_result.new_docs > 0,
+        already_existed=indexing_pipeline_result.new_docs == 0,
     )
 
 
