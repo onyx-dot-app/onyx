@@ -110,7 +110,9 @@ def get_user_group_permissions(
     if group is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
     return [
-        grant.permission for grant in group.permission_grants if not grant.is_deleted
+        grant.permission
+        for grant in group.permission_grants
+        if not grant.is_deleted and grant.permission not in NON_TOGGLEABLE_PERMISSIONS
     ]
 
 

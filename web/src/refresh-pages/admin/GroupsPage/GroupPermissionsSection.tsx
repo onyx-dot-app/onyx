@@ -16,6 +16,10 @@ import {
   SvgHistory,
   SvgKey,
   SvgShield,
+  SvgCpu,
+  SvgFiles,
+  SvgCreateAgent,
+  SvgManageAgent,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
@@ -33,14 +37,14 @@ import type { PermissionRegistryEntry } from "@/refresh-pages/admin/GroupsPage/i
 // ---------------------------------------------------------------------------
 
 const ICON_MAP: Record<string, IconFunctionComponent> = {
-  manage_llms: SvgSettings,
-  manage_connectors_and_document_sets: SvgPlug,
+  manage_llms: SvgCpu,
+  manage_connectors_and_document_sets: SvgFiles,
   manage_actions: SvgActions,
   manage_groups: SvgUsers,
   manage_service_accounts: SvgUserKey,
   manage_slack_discord_bots: SvgSlack,
-  create_agents: SvgPlusCircle,
-  manage_agents: SvgUserManage,
+  create_agents: SvgCreateAgent,
+  manage_agents: SvgManageAgent,
   view_agent_analytics: SvgBarChart,
   view_query_history: SvgHistory,
   create_user_access_token: SvgKey,
