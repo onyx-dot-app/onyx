@@ -43,7 +43,6 @@ from onyx.db.slack_bot import fetch_slack_bots
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
-from onyx.tracing.setup import setup_tracing
 from onyx.onyxbot.slack.config import get_slack_channel_config_for_bot_and_channel
 from onyx.onyxbot.slack.config import MAX_TENANTS_PER_POD
 from onyx.onyxbot.slack.config import TENANT_ACQUISITION_INTERVAL
@@ -91,6 +90,7 @@ from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
+from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
