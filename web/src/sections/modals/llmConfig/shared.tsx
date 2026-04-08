@@ -397,6 +397,7 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
           }
         }
       }}
+      disabled={isFetching}
     />
   );
 }
