@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React from "react";
 import {
   Table,
   TableRow,
@@ -19,7 +19,6 @@ import {
 } from "@/lib/types";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { useSWRConfig } from "swr";
 import {
   FiChevronDown,
   FiChevronRight,
@@ -27,36 +26,11 @@ import {
   FiUnlock,
   FiRefreshCw,
 } from "react-icons/fi";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { toast } from "@/hooks/useToast";
-import { setCCPairStatus } from "@/lib/ccPair";
-import { deleteCCPair } from "@/lib/documentDeletion";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
-import {
-  PlayIcon,
-  PauseIcon,
-  Trash2Icon,
-  RefreshCwIcon,
-} from "lucide-react";
-import ReIndexModal from "../../connector/[ccPairId]/ReIndexModal";
-import {
-  buildCCPairInfoUrl,
-  triggerIndexing,
-} from "../../connector/[ccPairId]/lib";
-import {
-  CCPairFullInfo,
-  ConnectorCredentialPairStatus,
-  statusIsNotCurrentlyActive,
-} from "../../connector/[ccPairId]/types";
+import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
 import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import { Button } from "@opal/components";
@@ -87,7 +61,6 @@ function isFederatedConnectorStatus(
 
 const NUMBER_OF_ROWS_PER_PAGE = 10;
 const NUMBER_OF_COLUMNS = 6;
-const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
 
 function SummaryRow({
   source,
@@ -172,18 +145,7 @@ function ConnectorRow({
   isEditable: boolean;
 }) {
   const router = useRouter();
-  const { mutate } = useSWRConfig();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-
-  const [fullCCPair, setFullCCPair] = useState<CCPairFullInfo | null>(null);
-  const [isLoadingFullInfo, setIsLoadingFullInfo] = useState(false);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isReIndexModalOpen, setIsReIndexModalOpen] = useState(false);
-  const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
-    useState(false);
-  const [showInvalidConnectorConfirmModal, setShowInvalidConnectorConfirmModal] =
-    useState(false);
 
   const connectorUrl = `/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`;
 
@@ -191,333 +153,68 @@ function ConnectorRow({
     navigateWithModifier(e, connectorUrl, router);
   };
 
-  const stopRowNavigation = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const refreshStatusTable = useCallback(async () => {
-    await mutate(
-      (key: unknown) => Array.isArray(key) && key[0] === INDEXING_STATUS_URL,
-      undefined,
-      { revalidate: true }
-    );
-  }, [mutate]);
-
-  const loadFullCCPair = useCallback(async () => {
-    if (fullCCPair) return fullCCPair;
-
-    setIsLoadingFullInfo(true);
-    try {
-      const data = (await errorHandlingFetcher(
-        buildCCPairInfoUrl(ccPairsIndexingStatus.cc_pair_id)
-      )) as CCPairFullInfo;
-
-      if (!data?.connector?.id || !data?.credential?.id) {
-        toast.error(
-          "Loaded cc-pair, but connector_id / credential_id missing in response"
-        );
-        return null;
-      }
-
-      setFullCCPair(data);
-      return data;
-    } catch (error) {
-      console.error("Failed to load full connector info:", error);
-      toast.error("Failed to load connector details");
-      return null;
-    } finally {
-      setIsLoadingFullInfo(false);
-    }
-  }, [fullCCPair, ccPairsIndexingStatus.cc_pair_id]);
-
-  const performStatusUpdate = async (
-    newStatus: ConnectorCredentialPairStatus
-  ) => {
-    if (isUpdatingStatus) return;
-
-    setIsUpdatingStatus(true);
-    try {
-      await setCCPairStatus(ccPairsIndexingStatus.cc_pair_id, newStatus);
-      await refreshStatusTable();
-    } catch (error) {
-      console.error("Failed to update connector status:", error);
-      toast.error("Failed to update connector status");
-    } finally {
-      setIsUpdatingStatus(false);
-    }
-  };
-
-  const handleStatusUpdate = async (
-    newStatus: ConnectorCredentialPairStatus
-  ) => {
-    if (
-      ccPairsIndexingStatus.cc_pair_status ===
-        ConnectorCredentialPairStatus.INVALID &&
-      newStatus === ConnectorCredentialPairStatus.ACTIVE
-    ) {
-      setShowInvalidConnectorConfirmModal(true);
-      return;
-    }
-
-    await performStatusUpdate(newStatus);
-  };
-
-  const handleOpenReIndex = async () => {
-    const ccPair = await loadFullCCPair();
-    if (!ccPair) return;
-    setIsReIndexModalOpen(true);
-  };
-
-  const runReIndex = async (fromBeginning: boolean) => {
-    const ccPair = await loadFullCCPair();
-    if (!ccPair) return;
-
-    try {
-      const result = await triggerIndexing(
-        fromBeginning,
-        ccPair.connector.id,
-        ccPair.credential.id,
-        ccPair.id
-      );
-
-      if (result.success) {
-        toast.success(
-          `${
-            fromBeginning ? "Complete re-indexing" : "Indexing update"
-          } started successfully`
-        );
-        await refreshStatusTable();
-      } else {
-        toast.error(result.message || "Failed to start indexing");
-      }
-    } catch (error) {
-      console.error("Failed to trigger indexing:", error);
-      toast.error("An unexpected error occurred while trying to start indexing");
-    }
-  };
-
-  const handleDeleteClick = async () => {
-    const ccPair = await loadFullCCPair();
-    if (!ccPair) return;
-    setShowDeleteConnectorConfirmModal(true);
-  };
-
-  const scheduleConnectorDeletion = async () => {
-    if (isDeleting) return;
-
-    const ccPair = await loadFullCCPair();
-    if (!ccPair) return;
-
-    setIsDeleting(true);
-    try {
-      await deleteCCPair(ccPair.connector.id, ccPair.credential.id, () =>
-        refreshStatusTable()
-      );
-      await refreshStatusTable();
-      toast.success("Connector deleted successfully");
-    } catch (error) {
-      console.error("Error deleting connector:", error);
-      toast.error("Failed to delete connector");
-    } finally {
-      setShowDeleteConnectorConfirmModal(false);
-      setIsDeleting(false);
-    }
-  };
-
-  const isReIndexDisabled =
-    ccPairsIndexingStatus.in_progress ||
-    ccPairsIndexingStatus.cc_pair_status ===
-      ConnectorCredentialPairStatus.PAUSED ||
-    ccPairsIndexingStatus.cc_pair_status ===
-      ConnectorCredentialPairStatus.INVALID;
-
-  const reIndexTooltip = ccPairsIndexingStatus.in_progress
-    ? "Cannot re-index while indexing is already in progress"
-    : ccPairsIndexingStatus.cc_pair_status ===
-        ConnectorCredentialPairStatus.PAUSED
-      ? "Resume the connector before re-indexing"
-      : ccPairsIndexingStatus.cc_pair_status ===
-          ConnectorCredentialPairStatus.INVALID
-        ? "Fix the connector configuration before re-indexing"
-        : undefined;
-
-  const nextStatus = statusIsNotCurrentlyActive(
-    ccPairsIndexingStatus.cc_pair_status
-  )
-    ? ConnectorCredentialPairStatus.ACTIVE
-    : ConnectorCredentialPairStatus.PAUSED;
-
   return (
-    <>
-      <TableRow
-        className={`
-          border border-border dark:border-neutral-700
+    <TableRow
+      className={`
+  border border-border dark:border-neutral-700
           hover:bg-accent-background ${
             invisible
               ? "invisible !h-0 !-mb-10 !border-none"
               : "!border border-border dark:border-neutral-700"
-          } w-full cursor-pointer relative
-        `}
-        onClick={handleRowClick}
-      >
+          }  w-full cursor-pointer relative `}
+      onClick={handleRowClick}
+    >
+      <TableCell className="">
+        <p className="max-w-[200px] xl:max-w-[400px] inline-block ellipsis truncate">
+          {ccPairsIndexingStatus.name}
+        </p>
+      </TableCell>
+      <TableCell>
+        {timeAgo(ccPairsIndexingStatus?.last_success) || "-"}
+      </TableCell>
+      <TableCell>
+        <CCPairStatus
+          ccPairStatus={
+            ccPairsIndexingStatus.last_finished_status !== null
+              ? ccPairsIndexingStatus.cc_pair_status
+              : ccPairsIndexingStatus.last_status == "not_started"
+                ? ConnectorCredentialPairStatus.SCHEDULED
+                : ConnectorCredentialPairStatus.INITIAL_INDEXING
+          }
+          inRepeatedErrorState={ccPairsIndexingStatus.in_repeated_error_state}
+          lastIndexAttemptStatus={ccPairsIndexingStatus.last_status}
+        />
+      </TableCell>
+      {isPaidEnterpriseFeaturesEnabled && (
         <TableCell>
-          <p className="max-w-[200px] xl:max-w-[400px] inline-block ellipsis truncate">
-            {ccPairsIndexingStatus.name}
-          </p>
-        </TableCell>
-
-        <TableCell>
-          {timeAgo(ccPairsIndexingStatus?.last_success) || "-"}
-        </TableCell>
-
-        <TableCell>
-          <CCPairStatus
-            ccPairStatus={
-              ccPairsIndexingStatus.last_finished_status !== null
-                ? ccPairsIndexingStatus.cc_pair_status
-                : ccPairsIndexingStatus.last_status == "not_started"
-                  ? ConnectorCredentialPairStatus.SCHEDULED
-                  : ConnectorCredentialPairStatus.INITIAL_INDEXING
-            }
-            inRepeatedErrorState={ccPairsIndexingStatus.in_repeated_error_state}
-            lastIndexAttemptStatus={ccPairsIndexingStatus.last_status}
-          />
-        </TableCell>
-
-        {isPaidEnterpriseFeaturesEnabled && (
-          <TableCell>
-            {ccPairsIndexingStatus.access_type === "public" ? (
-              <Badge variant={isEditable ? "success" : "default"} icon={FiUnlock}>
-                Organization Public
-              </Badge>
-            ) : ccPairsIndexingStatus.access_type === "sync" ? (
-              <Badge
-                variant={isEditable ? "auto-sync" : "default"}
-                icon={FiRefreshCw}
-              >
-                Inherited from {getSourceDisplayName(ccPairsIndexingStatus.source)}
-              </Badge>
-            ) : (
-              <Badge variant={isEditable ? "private" : "default"} icon={FiLock}>
-                Private
-              </Badge>
-            )}
-          </TableCell>
-        )}
-
-        <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
-
-        <TableCell>
-          {isEditable && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  icon={SvgSettings}
-                  prominence="tertiary"
-                  tooltip="Manage Connector"
-                  onClick={stopRowNavigation}
-                  onMouseDown={stopRowNavigation}
-                />
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent
-                align="end"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <DropdownMenuItemWithTooltip
-                  onClick={() => void handleOpenReIndex()}
-                  disabled={isReIndexDisabled || isLoadingFullInfo}
-                  className="flex items-center gap-x-2 cursor-pointer px-3 py-2"
-                  tooltip={reIndexTooltip}
-                >
-                  <RefreshCwIcon className="h-4 w-4" />
-                  <span>Re-Index</span>
-                </DropdownMenuItemWithTooltip>
-
-                {!isDeleting && (
-                  <DropdownMenuItemWithTooltip
-                    onClick={() => void handleStatusUpdate(nextStatus)}
-                    disabled={isUpdatingStatus}
-                    className="flex items-center gap-x-2 cursor-pointer px-3 py-2"
-                    tooltip={
-                      isUpdatingStatus ? "Status update in progress" : undefined
-                    }
-                  >
-                    {statusIsNotCurrentlyActive(
-                      ccPairsIndexingStatus.cc_pair_status
-                    ) ? (
-                      <PlayIcon className="h-4 w-4" />
-                    ) : (
-                      <PauseIcon className="h-4 w-4" />
-                    )}
-                    <span>
-                      {statusIsNotCurrentlyActive(
-                        ccPairsIndexingStatus.cc_pair_status
-                      )
-                        ? "Resume"
-                        : "Pause"}
-                    </span>
-                  </DropdownMenuItemWithTooltip>
-                )}
-
-                {!isDeleting && (
-                  <DropdownMenuItemWithTooltip
-                    onClick={() => void handleDeleteClick()}
-                    disabled={
-                      !statusIsNotCurrentlyActive(
-                        ccPairsIndexingStatus.cc_pair_status
-                      ) || isLoadingFullInfo
-                    }
-                    className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    tooltip={
-                      !statusIsNotCurrentlyActive(
-                        ccPairsIndexingStatus.cc_pair_status
-                      )
-                        ? "Pause the connector before deleting"
-                        : undefined
-                    }
-                  >
-                    <Trash2Icon className="h-4 w-4" />
-                    <span>Delete</span>
-                  </DropdownMenuItemWithTooltip>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+          {ccPairsIndexingStatus.access_type === "public" ? (
+            <Badge variant={isEditable ? "success" : "default"} icon={FiUnlock}>
+              Organization Public
+            </Badge>
+          ) : ccPairsIndexingStatus.access_type === "sync" ? (
+            <Badge
+              variant={isEditable ? "auto-sync" : "default"}
+              icon={FiRefreshCw}
+            >
+              Inherited from{" "}
+              {getSourceDisplayName(ccPairsIndexingStatus.source)}
+            </Badge>
+          ) : (
+            <Badge variant={isEditable ? "private" : "default"} icon={FiLock}>
+              Private
+            </Badge>
           )}
         </TableCell>
-      </TableRow>
-
-      {isReIndexModalOpen && fullCCPair && (
-        <ReIndexModal
-          hide={() => setIsReIndexModalOpen(false)}
-          onRunIndex={runReIndex}
-        />
       )}
-
-      {showDeleteConnectorConfirmModal && (
-        <ConfirmEntityModal
-          entityType="Connector"
-          entityName={ccPairsIndexingStatus.name || "Unnamed Connector"}
-          onClose={() => setShowDeleteConnectorConfirmModal(false)}
-          onSubmit={() => void scheduleConnectorDeletion()}
-        />
-      )}
-
-      {showInvalidConnectorConfirmModal && (
-        <ConfirmEntityModal
-          entityType="Invalid Connector"
-          entityName={ccPairsIndexingStatus.name || "Unnamed Connector"}
-          onClose={() => setShowInvalidConnectorConfirmModal(false)}
-          onSubmit={() => {
-            setShowInvalidConnectorConfirmModal(false);
-            void performStatusUpdate(ConnectorCredentialPairStatus.ACTIVE);
-          }}
-          additionalDetails="This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?"
-          actionButtonText="Re-Enable"
-        />
-      )}
-    </>
+      <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
+      <TableCell>
+        {isEditable && (
+          <SimpleTooltip tooltip="Manage Connector">
+            <Button icon={SvgSettings} prominence="tertiary" />
+          </SimpleTooltip>
+        )}
+      </TableCell>
+    </TableRow>
   );
 }
 
