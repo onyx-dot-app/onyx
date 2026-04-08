@@ -683,7 +683,6 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      enableReinitialize
       onSubmit={onSubmit}
     >
       {() => (
@@ -691,6 +690,7 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
           providerName={providerName}
           llmProvider={llmProvider}
           onClose={onClose}
+          testModelName={initialValues.test_model_name}
         >
           {children}
         </ModalWrapperInner>
@@ -703,16 +703,27 @@ interface ModalWrapperInnerProps {
   providerName: string;
   llmProvider?: LLMProviderView;
   onClose: () => void;
+  testModelName?: string;
   children: React.ReactNode;
 }
 function ModalWrapperInner({
   providerName,
   llmProvider,
   onClose,
+  testModelName,
   children,
 }: ModalWrapperInnerProps) {
-  const { isValid, dirty, isSubmitting, status } =
+  const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
     useFormikContext<BaseLLMFormValues>();
+
+  // When SWR resolves the recommended model after mount, set it only if the
+  // user hasn't already selected one — avoids resetting the form mid-edit.
+  useEffect(() => {
+    if (testModelName && !values.test_model_name) {
+      setFieldValue("test_model_name", testModelName);
+    }
+  }, [testModelName]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
   const providerIcon = getProviderIcon(providerName);
