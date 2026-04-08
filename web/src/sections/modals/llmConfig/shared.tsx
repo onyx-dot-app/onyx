@@ -73,11 +73,14 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
 // ─── APIKeyField ─────────────────────────────────────────────────────────────
 
 export interface APIKeyFieldProps {
+  /** Formik field name. @default "api_key" */
+  name?: string;
   optional?: boolean;
   providerName?: string;
   subDescription?: string | RichStr;
 }
 export function APIKeyField({
+  name = "api_key",
   optional = false,
   providerName,
   subDescription,
@@ -89,12 +92,18 @@ export function APIKeyField({
   return (
     <InputLayouts.FieldPadder>
       <InputLayouts.Vertical
-        name="api_key"
+        name={name}
         title="API Key"
-        subDescription={subDescription ?? defaultDescription}
+        subDescription={
+          subDescription
+            ? subDescription
+            : providerName
+              ? `Paste your API key from ${providerName} to access your models.`
+              : "Paste your API key to access your models."
+        }
         optional={optional}
       >
-        <PasswordInputTypeInField name="api_key" placeholder="API Key" />
+        <PasswordInputTypeInField name={name} />
       </InputLayouts.Vertical>
     </InputLayouts.FieldPadder>
   );
