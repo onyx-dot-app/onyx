@@ -17,7 +17,6 @@ import {
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import {
-  APIBaseField,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
