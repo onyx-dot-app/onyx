@@ -184,6 +184,7 @@ function CustomConfigKeyValue() {
   return (
     <KeyValueInput
       items={formikProps.values.custom_config_list}
+      keyPlaceholder="e.g. OPENAI_ORGANIZATION"
       onChange={(items) =>
         formikProps.setFieldValue("custom_config_list", items)
       }
@@ -213,7 +214,7 @@ function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
       value={values.provider}
       onValueChange={(value) => setFieldValue("provider", value)}
       options={options}
-      placeholder="Select a provider"
+      placeholder="Provider ID string as shown on LiteLLM"
       disabled={disabled}
       createPrefix="Use"
       dropdownMaxHeight="60vh"
@@ -307,6 +308,7 @@ export default function CustomModal({
       onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
+      description="Connect models from other LiteLLM-compatible providers."
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         setSubmitting(true);
 
@@ -370,14 +372,19 @@ export default function CustomModal({
       <InputLayouts.FieldPadder>
         <InputLayouts.Vertical
           name="provider"
-          title="Provider Name"
+          title="Provider"
           subDescription={markdown(
-            "Should be one of the providers listed at [LiteLLM](https://docs.litellm.ai/docs/providers)."
+            "See full list of supported LLM providers at [LiteLLM](https://docs.litellm.ai/docs/providers)."
           )}
         >
           <ProviderNameSelect disabled={!!existingLlmProvider} />
         </InputLayouts.Vertical>
       </InputLayouts.FieldPadder>
+
+      <APIKeyField
+        optional
+        subDescription="Paste your API key if your model provider requires authentication."
+      />
 
       <APIBaseField optional />
 
@@ -391,15 +398,10 @@ export default function CustomModal({
         </InputLayouts.Vertical>
       </InputLayouts.FieldPadder>
 
-      <APIKeyField
-        optional
-        subDescription="Paste your API key if your model provider requires authentication."
-      />
-
       <InputLayouts.FieldPadder>
         <Section gap={0.75}>
           <Content
-            title="Additional Configs"
+            title="Environment Variables"
             description={markdown(
               "Add extra properties as needed by the model provider. These are passed to LiteLLM's `completion()` call as [environment variables](https://docs.litellm.ai/docs/set_keys#environment-variables). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions."
             )}

@@ -338,7 +338,7 @@ def get_provider_display_name(provider_name: str) -> str:
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
         LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
-        OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI Compatible",
+        OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI-Compatible",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

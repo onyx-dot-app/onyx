@@ -61,15 +61,15 @@ function OpenAICompatibleModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription="The base URL of your OpenAI-compatible server."
+        subDescription={markdown(
+          "Paste your OpenAI-compatible endpoint URL. [Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
+        )}
         placeholder="http://localhost:8000/v1"
       />
 
       <APIKeyField
         optional
-        subDescription={markdown(
-          "Provide an API key if your server requires authentication."
-        )}
+        subDescription="Paste your API key if your model provider requires authentication."
       />
 
       {!isOnboarding && (
@@ -123,6 +123,7 @@ export default function OpenAICompatibleModal({
       llmProvider={existingLlmProvider}
       onClose={onClose}
       initialValues={initialValues}
+      description="Connect from other cloud or self-hosted models via OpenAI-compatible endpoints."
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({

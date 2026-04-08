@@ -66,7 +66,7 @@ const PROVIDER_PRODUCT_NAMES: Record<string, string> = {
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
   [LLMProviderName.BIFROST]: "Bifrost",
-  [LLMProviderName.OPENAI_COMPATIBLE]: "OpenAI Compatible",
+  [LLMProviderName.OPENAI_COMPATIBLE]: "OpenAI-Compatible",
 
   // fallback
   [LLMProviderName.CUSTOM]: "Custom Models",
@@ -84,10 +84,10 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   [LLMProviderName.OPENROUTER]: "OpenRouter",
   [LLMProviderName.LM_STUDIO]: "LM Studio",
   [LLMProviderName.BIFROST]: "Bifrost",
-  [LLMProviderName.OPENAI_COMPATIBLE]: "OpenAI Compatible",
+  [LLMProviderName.OPENAI_COMPATIBLE]: "OpenAI-Compatible",
 
   // fallback
-  [LLMProviderName.CUSTOM]: "Other providers or self-hosted",
+  [LLMProviderName.CUSTOM]: "models from other LiteLLM-compatible providers",
 };
 
 export function getProviderProductName(providerName: string): string {

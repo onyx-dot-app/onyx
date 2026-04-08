@@ -66,7 +66,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.LM_STUDIO: "LM Studio",
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
     LlmProviderNames.BIFROST: "Bifrost",
-    LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI Compatible",
+    LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
