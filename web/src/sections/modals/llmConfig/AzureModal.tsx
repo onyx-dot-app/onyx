@@ -16,6 +16,7 @@ import {
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
+import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
   DisplayNameField,
@@ -140,6 +141,9 @@ export default function AzureModal({
         const processedValues = processValues(values);
 
         await submitProvider({
+          analyticsSource: isOnboarding
+            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+            : LLMProviderConfiguredSource.ADMIN_PAGE,
           providerName: LLMProviderName.AZURE,
           values: processedValues,
           initialValues,

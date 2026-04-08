@@ -7,6 +7,7 @@ import {
   buildValidationSchema,
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
+import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
   ModelSelectionField,
@@ -49,6 +50,9 @@ export default function AnthropicModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
+          analyticsSource: isOnboarding
+            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+            : LLMProviderConfiguredSource.ADMIN_PAGE,
           providerName: LLMProviderName.ANTHROPIC,
           values,
           initialValues,

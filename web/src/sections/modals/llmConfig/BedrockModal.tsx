@@ -20,6 +20,7 @@ import {
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
+import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   ModelSelectionField,
   DisplayNameField,
@@ -332,6 +333,9 @@ export default function BedrockModal({
         };
 
         await submitProvider({
+          analyticsSource: isOnboarding
+            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+            : LLMProviderConfiguredSource.ADMIN_PAGE,
           providerName: LLMProviderName.BEDROCK,
           values: submitValues,
           initialValues,

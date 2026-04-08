@@ -16,6 +16,7 @@ import {
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
+import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
   APIBaseField,
@@ -139,6 +140,9 @@ export default function OpenRouterModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
+          analyticsSource: isOnboarding
+            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+            : LLMProviderConfiguredSource.ADMIN_PAGE,
           providerName: LLMProviderName.OPENROUTER,
           values,
           initialValues,

@@ -113,6 +113,8 @@ export interface SubmitProviderParams<
   onClose: () => void;
   /** Called after successful create/update + set-default. Use for cache refresh, state updates, toasts, etc. */
   onSuccess?: () => void | Promise<void>;
+  /** Analytics source for tracking. @default LLMProviderConfiguredSource.ADMIN_PAGE */
+  analyticsSource?: LLMProviderConfiguredSource;
 }
 
 export async function submitProvider<T extends BaseLLMFormValues>({
@@ -126,6 +128,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   setSubmitting,
   onClose,
   onSuccess,
+  analyticsSource = LLMProviderConfiguredSource.ADMIN_PAGE,
 }: SubmitProviderParams<T>): Promise<void> {
   setSubmitting(true);
 
@@ -157,17 +160,15 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   if (!isEqual(finalValues, initialValues)) {
     setStatus({ isTesting: true });
 
-    let testResult: TestApiKeyResult;
-    if (isCustomProvider) {
-      testResult = await testCustomProvider(
-        values as unknown as Record<string, unknown>
-      );
-    } else {
-      testResult = await testApiKeyHelper(
-        providerName,
-        values as unknown as Record<string, unknown>
-      );
-    }
+    const testResult = await submitLlmTestRequest(
+      {
+        provider: providerName,
+        ...finalValues,
+        model: testModelName,
+        id: existingLlmProvider?.id,
+      },
+      "An error occurred while testing the provider."
+    );
     setStatus({ isTesting: false });
 
     if (!testResult.ok) {
@@ -233,7 +234,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
     provider: knownProviders.has(providerName) ? providerName : "custom",
     is_creation: !existingLlmProvider,
-    source: LLMProviderConfiguredSource.ADMIN_PAGE,
+    source: analyticsSource,
   });
 
   if (onSuccess) await onSuccess();

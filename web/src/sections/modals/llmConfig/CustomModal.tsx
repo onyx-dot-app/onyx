@@ -10,6 +10,7 @@ import {
 import * as Yup from "yup";
 import { useInitialValues } from "@/sections/modals/llmConfig/utils";
 import { submitProvider } from "@/sections/modals/llmConfig/svc";
+import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
   APIBaseField,
@@ -300,6 +301,9 @@ export default function CustomModal({
         const customConfig = keyValueListToDict(values.custom_config_list);
 
         await submitProvider({
+          analyticsSource: isOnboarding
+            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+            : LLMProviderConfiguredSource.ADMIN_PAGE,
           providerName: (values as Record<string, unknown>).provider as string,
           values: {
             ...values,
