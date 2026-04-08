@@ -4,7 +4,7 @@ import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import Modal from "@/refresh-components/Modal";
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import { refreshToken } from "@/lib/user";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
@@ -24,19 +24,51 @@ export default function AppHealthBanner() {
   const pathname = usePathname();
   const expirationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timer | null>(null);
+  const pathnameRef = useRef<string | null>(pathname);
+  const hasSeenAuthenticatedUserRef = useRef(false);
+  const isAuthPage = pathname?.startsWith("/auth") ?? false;
 
   const { user, mutateUser, userError } = useCurrentUser();
+  pathnameRef.current = pathname;
+  if (user) {
+    hasSeenAuthenticatedUserRef.current = true;
+  }
+
+  const maybeShowLoggedOutModal = useCallback(() => {
+    const currentPath = pathnameRef.current;
+    if (
+      !hasSeenAuthenticatedUserRef.current ||
+      !currentPath ||
+      currentPath.startsWith("/auth")
+    ) {
+      return;
+    }
+    setShowLoggedOutModal(true);
+  }, []);
 
   // Handle 403 errors from the /api/me endpoint.
   // Skip entirely on auth pages — the user isn't logged in yet, so there's
   // nothing to "log out" of and hitting /auth/logout just creates noise.
   useEffect(() => {
-    if (userError && userError.status === 403 && !pathname?.includes("/auth")) {
-      logout().then(() => {
-        setShowLoggedOutModal(true);
+    if (
+      userError &&
+      userError.status === 403 &&
+      hasSeenAuthenticatedUserRef.current &&
+      pathname &&
+      !isAuthPage
+    ) {
+      let cancelled = false;
+      logout().finally(() => {
+        if (!cancelled) {
+          maybeShowLoggedOutModal();
+        }
       });
+
+      return () => {
+        cancelled = true;
+      };
     }
-  }, [userError, pathname]);
+  }, [userError, pathname, isAuthPage, maybeShowLoggedOutModal]);
 
   // Function to handle the "Log in" button click
   function handleLogin() {
@@ -67,13 +99,10 @@ export default function AppHealthBanner() {
       const timeUntilExpire = (secondsUntilExpiration + 10) * 1000;
       expirationTimeoutRef.current = setTimeout(() => {
         setExpired(true);
-
-        if (!pathname?.includes("/auth")) {
-          setShowLoggedOutModal(true);
-        }
+        maybeShowLoggedOutModal();
       }, timeUntilExpire);
     },
-    [pathname]
+    [maybeShowLoggedOutModal]
   );
 
   // Clean up any timeouts/intervals when component unmounts
@@ -187,6 +216,12 @@ export default function AppHealthBanner() {
     }
   }, [user, setupExpirationTimeout, mutateUser]);
 
+  useEffect(() => {
+    if (error instanceof RedirectError || expired) {
+      maybeShowLoggedOutModal();
+    }
+  }, [error, expired, maybeShowLoggedOutModal]);
+
   // Logged out modal
   if (showLoggedOutModal) {
     return (
@@ -211,9 +246,6 @@ export default function AppHealthBanner() {
   }
 
   if (error instanceof RedirectError || expired) {
-    if (!pathname?.includes("/auth")) {
-      setShowLoggedOutModal(true);
-    }
     return null;
   } else {
     return (
