@@ -2,6 +2,7 @@ import React from "react";
 import {
   WellKnownLLMProviderDescriptor,
   LLMProviderName,
+  LLMProviderFormProps,
 } from "@/interfaces/llm";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 import OpenAIModal from "@/sections/modals/llmConfig/OpenAIModal";
@@ -81,11 +82,25 @@ export function getOnboardingForm({
   onboardingActions,
   onOpenChange,
 }: OnboardingFormProps): React.ReactNode {
-  const sharedProps = {
+  const providerName = isCustomProvider
+    ? "custom"
+    : llmDescriptor?.name ?? "custom";
+
+  const sharedProps: LLMProviderFormProps = {
     variant: "onboarding" as const,
-    onboardingState,
+    shouldMarkAsDefault:
+      (onboardingState?.data.llmProviders ?? []).length === 0,
     onboardingActions,
     onOpenChange,
+    onSuccess: () => {
+      onboardingActions.updateData({
+        llmProviders: [
+          ...(onboardingState?.data.llmProviders ?? []),
+          providerName,
+        ],
+      });
+      onboardingActions.setButtonActive(true);
+    },
   };
 
   // Handle custom provider
@@ -93,41 +108,36 @@ export function getOnboardingForm({
     return <CustomModal {...sharedProps} />;
   }
 
-  const providerProps = {
-    ...sharedProps,
-    llmDescriptor,
-  };
-
   switch (llmDescriptor.name) {
     case LLMProviderName.OPENAI:
-      return <OpenAIModal {...providerProps} />;
+      return <OpenAIModal {...sharedProps} />;
 
     case LLMProviderName.ANTHROPIC:
-      return <AnthropicModal {...providerProps} />;
+      return <AnthropicModal {...sharedProps} />;
 
     case LLMProviderName.OLLAMA_CHAT:
-      return <OllamaModal {...providerProps} />;
+      return <OllamaModal {...sharedProps} />;
 
     case LLMProviderName.AZURE:
-      return <AzureModal {...providerProps} />;
+      return <AzureModal {...sharedProps} />;
 
     case LLMProviderName.BEDROCK:
-      return <BedrockModal {...providerProps} />;
+      return <BedrockModal {...sharedProps} />;
 
     case LLMProviderName.VERTEX_AI:
-      return <VertexAIModal {...providerProps} />;
+      return <VertexAIModal {...sharedProps} />;
 
     case LLMProviderName.OPENROUTER:
-      return <OpenRouterModal {...providerProps} />;
+      return <OpenRouterModal {...sharedProps} />;
 
     case LLMProviderName.LM_STUDIO:
-      return <LMStudioForm {...providerProps} />;
+      return <LMStudioForm {...sharedProps} />;
 
     case LLMProviderName.LITELLM_PROXY:
-      return <LiteLLMProxyModal {...providerProps} />;
+      return <LiteLLMProxyModal {...sharedProps} />;
 
     case LLMProviderName.OPENAI_COMPATIBLE:
-      return <OpenAICompatibleModal {...providerProps} />;
+      return <OpenAICompatibleModal {...sharedProps} />;
 
     default:
       return <CustomModal {...sharedProps} />;

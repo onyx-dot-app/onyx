@@ -124,9 +124,10 @@ export interface LLMProviderFormProps {
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Called after successful provider creation/update. */
+  onSuccess?: () => void | Promise<void>;
 
   // Onboarding-specific (only when variant === "onboarding")
-  onboardingState?: OnboardingState;
   onboardingActions?: OnboardingActions;
 }
 

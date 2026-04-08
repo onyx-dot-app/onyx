@@ -136,8 +136,7 @@ export default function LMStudioForm({
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
-  onboardingState,
-  onboardingActions,
+  onSuccess,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -186,28 +185,20 @@ export default function LMStudioForm({
           values: submitValues,
           initialValues,
           existingLlmProvider,
-          shouldMarkAsDefault: isOnboarding
-            ? (onboardingState?.data.llmProviders ?? []).length === 0
-            : shouldMarkAsDefault,
+          shouldMarkAsDefault,
           setStatus,
           setSubmitting,
           onClose,
           onSuccess: async () => {
-            if (isOnboarding && onboardingActions) {
-              onboardingActions.updateData({
-                llmProviders: [
-                  ...(onboardingState?.data.llmProviders ?? []),
-                  LLMProviderName.LM_STUDIO,
-                ],
-              });
-              onboardingActions.setButtonActive(true);
+            if (onSuccess) {
+              await onSuccess();
             } else {
               await refreshLlmProviderCaches(mutate);
-              if (!existingLlmProvider) {
-                toast.success("Provider enabled successfully!");
-              } else {
-                toast.success("Provider updated successfully!");
-              }
+              toast.success(
+                existingLlmProvider
+                  ? "Provider updated successfully!"
+                  : "Provider enabled successfully!"
+              );
             }
           },
         });
