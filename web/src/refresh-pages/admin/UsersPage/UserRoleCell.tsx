@@ -5,13 +5,8 @@ import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { OpenButton } from "@opal/components";
 import { Disabled } from "@opal/core";
-import {
-  SvgCheck,
-  SvgGlobe,
-  SvgUser,
-  SvgSlack,
-  SvgUserManage,
-} from "@opal/icons";
+import { SvgCheck, SvgGlobe, SvgUser, SvgUserManage } from "@opal/icons";
+import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import Popover from "@/refresh-components/Popover";

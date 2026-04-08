@@ -19,11 +19,11 @@ import {
   SvgArrowRightCircle,
   SvgCheckSquare,
   SvgGlobe,
-  SvgOnyxLogo,
   SvgSettings,
   SvgSlash,
   SvgUnplug,
 } from "@opal/icons";
+import { SvgOnyxLogo } from "@opal/logos";
 import { Button, SelectCard } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

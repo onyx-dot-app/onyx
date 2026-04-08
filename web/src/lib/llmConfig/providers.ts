@@ -1,27 +1,23 @@
 import type { IconFunctionComponent } from "@opal/types";
+import { SvgCpu, SvgPlug, SvgServer } from "@opal/icons";
 import {
   SvgBifrost,
-  SvgCpu,
   SvgOpenai,
   SvgClaude,
   SvgOllama,
   SvgAws,
   SvgOpenrouter,
-  SvgPlug,
-  SvgServer,
   SvgAzure,
   SvgGemini,
   SvgLitellm,
   SvgLmStudio,
-} from "@opal/icons";
-import {
-  MicrosoftIconSVG,
-  MistralIcon,
-  MetaIcon,
-  DeepseekIcon,
-  QwenIcon,
-  ZAIIcon,
-} from "@/components/icons/icons";
+  SvgMicrosoft,
+  SvgMistral,
+  SvgDeepseek,
+  SvgQwen,
+  SvgGoogle,
+} from "@opal/logos";
+import { ZAIIcon } from "@/components/icons/icons";
 import { LLMProviderName } from "@/interfaces/llm";
 
 export const AGGREGATOR_PROVIDERS = new Set([
@@ -119,20 +115,20 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
 
   amazon: SvgAws,
-  phi: MicrosoftIconSVG,
-  mistral: MistralIcon,
-  ministral: MistralIcon,
-  llama: MetaIcon,
+  phi: SvgMicrosoft,
+  mistral: SvgMistral,
+  ministral: SvgMistral,
+  llama: SvgCpu,
   ollama: SvgOllama,
   gemini: SvgGemini,
-  deepseek: DeepseekIcon,
+  deepseek: SvgDeepseek,
   claude: SvgClaude,
   azure: SvgAzure,
-  microsoft: MicrosoftIconSVG,
-  meta: MetaIcon,
-  google: SvgGemini,
-  qwen: QwenIcon,
-  qwq: QwenIcon,
+  microsoft: SvgMicrosoft,
+  meta: SvgCpu,
+  google: SvgGoogle,
+  qwen: SvgQwen,
+  qwq: SvgQwen,
   zai: ZAIIcon,
   bedrock_converse: SvgAws,
 };
