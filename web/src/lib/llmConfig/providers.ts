@@ -17,6 +17,7 @@ import {
   SvgQwen,
   SvgGoogle,
 } from "@opal/logos";
+import { ZAIIcon } from "@/components/icons/icons";
 import { LLMProviderName } from "@/interfaces/llm";
 
 export const AGGREGATOR_PROVIDERS = new Set([
@@ -128,6 +129,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   google: SvgGoogle,
   qwen: SvgQwen,
   qwq: SvgQwen,
+  zai: ZAIIcon,
   bedrock_converse: SvgAws,
 };
 
