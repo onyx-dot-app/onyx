@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Response
 from sqlalchemy.exc import IntegrityError
 
@@ -18,6 +17,8 @@ from onyx.auth.users import User
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -33,7 +34,7 @@ async def get_anonymous_user_path_api(
     tenant_id = get_current_tenant_id()
 
     if tenant_id is None:
-        raise HTTPException(status_code=404, detail="Tenant not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Tenant not found")
 
     with get_session_with_shared_schema() as db_session:
         current_path = get_anonymous_user_path(tenant_id, db_session)
@@ -50,21 +51,21 @@ async def set_anonymous_user_path_api(
     try:
         validate_anonymous_user_path(anonymous_user_path)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     with get_session_with_shared_schema() as db_session:
         try:
             modify_anonymous_user_path(tenant_id, anonymous_user_path, db_session)
         except IntegrityError:
-            raise HTTPException(
-                status_code=409,
-                detail="The anonymous user path is already in use. Please choose a different path.",
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "The anonymous user path is already in use. Please choose a different path.",
             )
         except Exception as e:
             logger.exception(f"Failed to modify anonymous user path: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail="An unexpected error occurred while modifying the anonymous user path",
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "An unexpected error occurred while modifying the anonymous user path",
             )
 
 
@@ -77,10 +78,10 @@ async def login_as_anonymous_user(
             anonymous_user_path, db_session
         )
         if not tenant_id:
-            raise HTTPException(status_code=404, detail="Tenant not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Tenant not found")
 
     if not anonymous_user_enabled(tenant_id=tenant_id):
-        raise HTTPException(status_code=403, detail="Anonymous user is not enabled")
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Anonymous user is not enabled")
 
     token = generate_anonymous_user_jwt_token(tenant_id)
 
