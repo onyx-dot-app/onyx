@@ -57,7 +57,6 @@ function AzureModelSelection({
   return (
     <ModelSelectionField
       modelConfigurations={modelConfigurations}
-      recommendedDefaultModel={null}
       shouldShowAutoUpdateToggle={false}
       onAddModel={(modelName) => {
         const newModel: ModelConfiguration = {

@@ -174,9 +174,6 @@ export default function VertexAIModal({
       <InputLayouts.FieldSeparator />
       <ModelSelectionField
         modelConfigurations={modelConfigurations}
-        recommendedDefaultModel={
-          wellKnownLLMProvider?.recommended_default_model ?? null
-        }
         shouldShowAutoUpdateToggle={true}
       />
 

@@ -133,7 +133,6 @@ function LMStudioFormInternals({
       <InputLayouts.FieldSeparator />
       <ModelSelectionField
         modelConfigurations={currentModels}
-        recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
       />
 

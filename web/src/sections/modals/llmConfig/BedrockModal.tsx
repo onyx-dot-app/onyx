@@ -271,7 +271,6 @@ function BedrockModalInternals({
       <InputLayouts.FieldSeparator />
       <ModelSelectionField
         modelConfigurations={currentModels}
-        recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
       />

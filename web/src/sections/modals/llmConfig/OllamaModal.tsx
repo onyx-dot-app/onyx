@@ -148,7 +148,6 @@ function OllamaModalInternals({
       <InputLayouts.FieldSeparator />
       <ModelSelectionField
         modelConfigurations={currentModels}
-        recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
         onRefetch={handleFetchModels}
       />

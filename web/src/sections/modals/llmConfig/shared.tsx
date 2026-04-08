@@ -6,11 +6,7 @@ import type { FormikConfig } from "formik";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
-import {
-  LLMProviderView,
-  ModelConfiguration,
-  SimpleKnownModel,
-} from "@/interfaces/llm";
+import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
 import * as InputLayouts from "@/layouts/input-layouts";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -20,11 +16,10 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
-import { Button, LineItemButton, Tag } from "@opal/components";
+import { Button, LineItemButton } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/llmConfig/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
-import { Hoverable } from "@opal/core";
 import { Content } from "@opal/layouts";
 import {
   SvgArrowExchange,
@@ -372,11 +367,10 @@ export function ModelAccessField() {
  * Manages an AbortController so that clicking the button cancels any
  * in-flight fetch before starting a new one. Also aborts on unmount.
  */
-function RefetchButton({
-  onRefetch,
-}: {
+interface RefetchButtonProps {
   onRefetch: (signal: AbortSignal) => Promise<void> | void;
-}) {
+}
+function RefetchButton({ onRefetch }: RefetchButtonProps) {
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -386,7 +380,7 @@ function RefetchButton({
   return (
     <Button
       prominence="tertiary"
-      icon={SvgRefreshCw}
+      icon={!!abortRef.current ? SimpleLoader : SvgRefreshCw}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -398,6 +392,8 @@ function RefetchButton({
           toast.error(
             err instanceof Error ? err.message : "Failed to fetch models"
           );
+        } finally {
+          abortRef.current?.abort();
         }
       }}
     />
@@ -408,7 +404,6 @@ function RefetchButton({
 
 export interface ModelSelectionFieldProps {
   modelConfigurations: ModelConfiguration[];
-  recommendedDefaultModel: SimpleKnownModel | null;
   shouldShowAutoUpdateToggle: boolean;
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
   /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
@@ -416,7 +411,6 @@ export interface ModelSelectionFieldProps {
 }
 export function ModelSelectionField({
   modelConfigurations,
-  recommendedDefaultModel,
   shouldShowAutoUpdateToggle,
   onRefetch,
   onAddModel,
@@ -425,46 +419,48 @@ export function ModelSelectionField({
   const [newModelName, setNewModelName] = useState("");
   const isAutoMode = formikProps.values.is_auto_mode;
   const selectedModels = formikProps.values.visible_model_names ?? [];
-  const defaultModel = formikProps.values.test_model_name;
+
+  // When models arrive (e.g. after a fetch) and nothing is selected yet,
+  // auto-select all and set test_model_name to the first one.
+  useEffect(() => {
+    if (modelConfigurations.length > 0 && !formikProps.values.test_model_name) {
+      const allNames = modelConfigurations.map((m) => m.name);
+      formikProps.setFieldValue("visible_model_names", allNames);
+      formikProps.setFieldValue("test_model_name", allNames[0]);
+    }
+  }, [modelConfigurations.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep test_model_name in sync: always the first selected/visible model.
+  function syncTestModelName(models: string[]) {
+    formikProps.setFieldValue(
+      "test_model_name",
+      models.length > 0 ? models[0] : undefined
+    );
+  }
 
   function handleCheckboxChange(modelName: string, checked: boolean) {
-    // Read current values inside the handler to avoid stale closure issues
     const currentSelected = formikProps.values.visible_model_names ?? [];
-    const currentDefault = formikProps.values.test_model_name;
 
     if (checked) {
       const newSelected = [...currentSelected, modelName];
       formikProps.setFieldValue("visible_model_names", newSelected);
-      // If this is the first model, set it as default
       if (currentSelected.length === 0) {
-        formikProps.setFieldValue("test_model_name", modelName);
+        syncTestModelName(newSelected);
       }
     } else {
       const newSelected = currentSelected.filter((name) => name !== modelName);
       formikProps.setFieldValue("visible_model_names", newSelected);
-      // If removing the default, set the first remaining model as default
-      if (currentDefault === modelName && newSelected.length > 0) {
-        formikProps.setFieldValue("test_model_name", newSelected[0]);
-      } else if (newSelected.length === 0) {
-        formikProps.setFieldValue("test_model_name", undefined);
-      }
+      syncTestModelName(newSelected);
     }
-  }
-
-  function handleSetDefault(modelName: string) {
-    formikProps.setFieldValue("test_model_name", modelName);
   }
 
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
-    formikProps.setFieldValue(
-      "visible_model_names",
-      modelConfigurations.filter((m) => m.is_visible).map((m) => m.name)
-    );
-    formikProps.setFieldValue(
-      "test_model_name",
-      recommendedDefaultModel?.name ?? undefined
-    );
+    const autoModels = modelConfigurations
+      .filter((m) => m.is_visible)
+      .map((m) => m.name);
+    formikProps.setFieldValue("visible_model_names", autoModels);
+    syncTestModelName(autoModels);
   }
 
   const allSelected =
@@ -474,13 +470,11 @@ export function ModelSelectionField({
   function handleToggleSelectAll() {
     if (allSelected) {
       formikProps.setFieldValue("visible_model_names", []);
-      formikProps.setFieldValue("test_model_name", undefined);
+      syncTestModelName([]);
     } else {
       const allNames = modelConfigurations.map((m) => m.name);
       formikProps.setFieldValue("visible_model_names", allNames);
-      if (!formikProps.values.test_model_name && allNames.length > 0) {
-        formikProps.setFieldValue("test_model_name", allNames[0]);
-      }
+      syncTestModelName(allNames);
     }
   }
 
@@ -515,82 +509,38 @@ export function ModelSelectionField({
             {isAutoMode
               ? // Auto mode: read-only display
                 visibleModels.map((model) => (
-                  <Hoverable.Root
+                  <LineItemButton
                     key={model.name}
-                    group="LLMConfigurationButton"
-                    widthVariant="full"
-                  >
-                    <LineItemButton
-                      variant="section"
-                      sizePreset="main-ui"
-                      selectVariant="select-heavy"
-                      state="selected"
-                      icon={() => <Checkbox checked />}
-                      title={model.display_name || model.name}
-                      rightChildren={
-                        model.name === defaultModel ? (
-                          <Section>
-                            <Tag title="Default Model" color="blue" />
-                          </Section>
-                        ) : undefined
-                      }
-                    />
-                  </Hoverable.Root>
+                    variant="section"
+                    sizePreset="main-ui"
+                    selectVariant="select-heavy"
+                    state="selected"
+                    icon={() => <Checkbox checked />}
+                    title={model.display_name || model.name}
+                  />
                 ))
               : // Manual mode: checkbox selection
                 modelConfigurations.map((modelConfiguration) => {
                   const isSelected = selectedModels.includes(
                     modelConfiguration.name
                   );
-                  const isDefault = defaultModel === modelConfiguration.name;
 
                   return (
-                    <Hoverable.Root
+                    <LineItemButton
                       key={modelConfiguration.name}
-                      group="LLMConfigurationButton"
-                      widthVariant="full"
-                    >
-                      <LineItemButton
-                        variant="section"
-                        sizePreset="main-ui"
-                        selectVariant="select-heavy"
-                        state={isSelected ? "selected" : "empty"}
-                        icon={() => <Checkbox checked={isSelected} />}
-                        title={modelConfiguration.name}
-                        onClick={() =>
-                          handleCheckboxChange(
-                            modelConfiguration.name,
-                            !isSelected
-                          )
-                        }
-                        rightChildren={
-                          isSelected ? (
-                            isDefault ? (
-                              <Section>
-                                <Tag color="blue" title="Default Model" />
-                              </Section>
-                            ) : (
-                              <Hoverable.Item
-                                group="LLMConfigurationButton"
-                                variant="opacity-on-hover"
-                              >
-                                <Button
-                                  size="sm"
-                                  prominence="internal"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSetDefault(modelConfiguration.name);
-                                  }}
-                                  type="button"
-                                >
-                                  Set as default
-                                </Button>
-                              </Hoverable.Item>
-                            )
-                          ) : undefined
-                        }
-                      />
-                    </Hoverable.Root>
+                      variant="section"
+                      sizePreset="main-ui"
+                      selectVariant="select-heavy"
+                      state={isSelected ? "selected" : "empty"}
+                      icon={() => <Checkbox checked={isSelected} />}
+                      title={modelConfiguration.name}
+                      onClick={() =>
+                        handleCheckboxChange(
+                          modelConfiguration.name,
+                          !isSelected
+                        )
+                      }
+                    />
                   );
                 })}
           </Section>

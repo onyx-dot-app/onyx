@@ -107,9 +107,6 @@ export default function AnthropicModal({
       <InputLayouts.FieldSeparator />
       <ModelSelectionField
         modelConfigurations={modelConfigurations}
-        recommendedDefaultModel={
-          wellKnownLLMProvider?.recommended_default_model ?? null
-        }
         shouldShowAutoUpdateToggle={true}
       />
 
