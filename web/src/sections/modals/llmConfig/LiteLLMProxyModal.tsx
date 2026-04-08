@@ -15,10 +15,7 @@ import {
   buildValidationSchema,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
-import {
-  submitLLMProvider,
-  submitOnboardingProvider,
-} from "@/sections/modals/llmConfig/svc";
+import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
   APIBaseField,
@@ -111,7 +108,6 @@ export default function LiteLLMProxyModal({
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
-  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -143,31 +139,19 @@ export default function LiteLLMProxyModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
-        if (isOnboarding && onboardingState && onboardingActions) {
-          await submitOnboardingProvider({
-            providerName: LLMProviderName.LITELLM_PROXY,
-            payload: {
-              ...values,
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: false,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          await submitLLMProvider({
-            providerName: LLMProviderName.LITELLM_PROXY,
-            values,
-            initialValues,
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setStatus,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
+        await submitProvider({
+          providerName: LLMProviderName.LITELLM_PROXY,
+          values,
+          initialValues,
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          setStatus,
+          setSubmitting,
+          onClose,
+          mutate,
+          onboardingState,
+          onboardingActions,
+        });
       }}
     >
       <LiteLLMProxyModalInternals

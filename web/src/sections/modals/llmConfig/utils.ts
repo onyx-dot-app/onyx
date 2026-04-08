@@ -6,8 +6,6 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
-import { ScopedMutator } from "swr";
-import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
 // ─── useInitialValues ─────────────────────────────────────────────────────
 
@@ -125,35 +123,8 @@ export interface BaseLLMFormValues {
   custom_config?: Record<string, string>;
 }
 
-// ─── Submit params ────────────────────────────────────────────────────────
-
-export interface SubmitLLMProviderParams<
-  T extends BaseLLMFormValues = BaseLLMFormValues,
-> {
-  providerName: string;
-  values: T;
-  initialValues: T;
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
-  hideSuccess?: boolean;
-  setStatus: (status: Record<string, unknown>) => void;
-  mutate: ScopedMutator;
-  onClose: () => void;
-  setSubmitting: (submitting: boolean) => void;
-}
-
 // ─── Misc ─────────────────────────────────────────────────────────────────
 
 export type TestApiKeyResult =
   | { ok: true }
   | { ok: false; errorMessage: string };
-
-export interface SubmitOnboardingProviderParams {
-  providerName: string;
-  payload: Record<string, unknown>;
-  onboardingState: OnboardingState;
-  onboardingActions: OnboardingActions;
-  isCustomProvider: boolean;
-  onClose: () => void;
-  setIsSubmitting: (submitting: boolean) => void;
-}

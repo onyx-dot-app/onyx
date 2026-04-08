@@ -15,10 +15,7 @@ import {
   buildValidationSchema,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
-import {
-  submitLLMProvider,
-  submitOnboardingProvider,
-} from "@/sections/modals/llmConfig/svc";
+import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
   APIBaseField,
@@ -138,7 +135,6 @@ export default function LMStudioForm({
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
-  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -185,31 +181,19 @@ export default function LMStudioForm({
               : undefined,
         };
 
-        if (isOnboarding && onboardingState && onboardingActions) {
-          await submitOnboardingProvider({
-            providerName: LLMProviderName.LM_STUDIO,
-            payload: {
-              ...submitValues,
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: false,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          await submitLLMProvider({
-            providerName: LLMProviderName.LM_STUDIO,
-            values: submitValues,
-            initialValues,
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setStatus,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
+        await submitProvider({
+          providerName: LLMProviderName.LM_STUDIO,
+          values: submitValues,
+          initialValues,
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          setStatus,
+          setSubmitting,
+          onClose,
+          mutate,
+          onboardingState,
+          onboardingActions,
+        });
       }}
     >
       <LMStudioFormInternals

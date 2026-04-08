@@ -11,10 +11,7 @@ import {
   buildValidationSchema,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
-import {
-  submitLLMProvider,
-  submitOnboardingProvider,
-} from "@/sections/modals/llmConfig/svc";
+import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import {
   ModelSelectionField,
   DisplayNameField,
@@ -36,7 +33,6 @@ export default function VertexAIModal({
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
-  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -95,31 +91,19 @@ export default function VertexAIModal({
               : undefined,
         };
 
-        if (isOnboarding && onboardingState && onboardingActions) {
-          await submitOnboardingProvider({
-            providerName: LLMProviderName.VERTEX_AI,
-            payload: {
-              ...submitValues,
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: false,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          await submitLLMProvider({
-            providerName: LLMProviderName.VERTEX_AI,
-            values: submitValues,
-            initialValues,
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setStatus,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
+        await submitProvider({
+          providerName: LLMProviderName.VERTEX_AI,
+          values: submitValues,
+          initialValues,
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          setStatus,
+          setSubmitting,
+          onClose,
+          mutate,
+          onboardingState,
+          onboardingActions,
+        });
       }}
     >
       <InputLayouts.FieldPadder>

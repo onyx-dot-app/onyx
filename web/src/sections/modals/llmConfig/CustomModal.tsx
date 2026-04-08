@@ -9,10 +9,7 @@ import {
 } from "@/interfaces/llm";
 import * as Yup from "yup";
 import { useInitialValues } from "@/sections/modals/llmConfig/utils";
-import {
-  submitLLMProvider,
-  submitOnboardingProvider,
-} from "@/sections/modals/llmConfig/svc";
+import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
   APIBaseField,
@@ -207,7 +204,6 @@ export default function CustomModal({
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
-  defaultModelName,
   onboardingState,
   onboardingActions,
 }: LLMProviderFormProps) {
@@ -303,42 +299,27 @@ export default function CustomModal({
         // created via CustomModal.
         const customConfig = keyValueListToDict(values.custom_config_list);
 
-        if (isOnboarding && onboardingState && onboardingActions) {
-          await submitOnboardingProvider({
-            providerName: values.provider,
-            payload: {
-              ...values,
-              model_configurations: modelConfigurations,
-              custom_config: customConfig,
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: true,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          await submitLLMProvider({
-            providerName: values.provider as string,
-            values: {
-              ...values,
-              model_configurations: modelConfigurations,
-              custom_config: customConfig,
-            },
-            initialValues: {
-              ...initialValues,
-              custom_config: keyValueListToDict(
-                initialValues.custom_config_list
-              ),
-            },
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setStatus,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
+        await submitProvider({
+          providerName: (values as Record<string, unknown>).provider as string,
+          values: {
+            ...values,
+            model_configurations: modelConfigurations,
+            custom_config: customConfig,
+          },
+          initialValues: {
+            ...initialValues,
+            custom_config: keyValueListToDict(initialValues.custom_config_list),
+          },
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          isCustomProvider: true,
+          setStatus,
+          setSubmitting,
+          onClose,
+          mutate,
+          onboardingState,
+          onboardingActions,
+        });
       }}
     >
       {!isOnboarding && (

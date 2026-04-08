@@ -16,10 +16,7 @@ import {
   buildValidationSchema,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
-import {
-  submitLLMProvider,
-  submitOnboardingProvider,
-} from "@/sections/modals/llmConfig/svc";
+import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import {
   APIBaseField,
   APIKeyField,
@@ -115,7 +112,6 @@ export default function BifrostModal({
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
-  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -143,31 +139,19 @@ export default function BifrostModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
-        if (isOnboarding && onboardingState && onboardingActions) {
-          await submitOnboardingProvider({
-            providerName: LLMProviderName.BIFROST,
-            payload: {
-              ...values,
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: false,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          await submitLLMProvider({
-            providerName: LLMProviderName.BIFROST,
-            values,
-            initialValues,
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setStatus,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
+        await submitProvider({
+          providerName: LLMProviderName.BIFROST,
+          values,
+          initialValues,
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          setStatus,
+          setSubmitting,
+          onClose,
+          mutate,
+          onboardingState,
+          onboardingActions,
+        });
       }}
     >
       <BifrostModalInternals

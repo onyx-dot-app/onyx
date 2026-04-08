@@ -16,10 +16,7 @@ import {
   buildValidationSchema,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
-import {
-  submitLLMProvider,
-  submitOnboardingProvider,
-} from "@/sections/modals/llmConfig/svc";
+import { submitProvider } from "@/sections/modals/llmConfig/svc";
 import {
   APIKeyField,
   DisplayNameField,
@@ -103,7 +100,6 @@ export default function AzureModal({
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
-  defaultModelName,
   onboardingState,
   onboardingActions,
   llmDescriptor,
@@ -145,31 +141,19 @@ export default function AzureModal({
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         const processedValues = processValues(values);
 
-        if (isOnboarding && onboardingState && onboardingActions) {
-          await submitOnboardingProvider({
-            providerName: LLMProviderName.AZURE,
-            payload: {
-              ...processedValues,
-            },
-            onboardingState,
-            onboardingActions,
-            isCustomProvider: false,
-            onClose,
-            setIsSubmitting: setSubmitting,
-          });
-        } else {
-          await submitLLMProvider({
-            providerName: LLMProviderName.AZURE,
-            values: processedValues,
-            initialValues,
-            existingLlmProvider,
-            shouldMarkAsDefault,
-            setStatus,
-            mutate,
-            onClose,
-            setSubmitting,
-          });
-        }
+        await submitProvider({
+          providerName: LLMProviderName.AZURE,
+          values: processedValues,
+          initialValues,
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          setStatus,
+          setSubmitting,
+          onClose,
+          mutate,
+          onboardingState,
+          onboardingActions,
+        });
       }}
     >
       <InputLayouts.FieldPadder>
