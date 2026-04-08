@@ -27,7 +27,7 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-import { fetchBedrockModels } from "@/app/admin/configuration/llm/utils";
+import { fetchBedrockModels } from "@/lib/llmConfig/svc";
 import { Card } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { SvgAlertCircle } from "@opal/icons";

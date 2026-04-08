@@ -1,5 +1,5 @@
 import { defaultTailwindCSS, IconProps } from "@/components/icons/icons";
-import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { getModelIcon } from "@/lib/llmConfig/providers";
 
 export interface ProviderIconProps extends IconProps {
   provider: string;
@@ -12,6 +12,6 @@ export const ProviderIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: ProviderIconProps) => {
-  const Icon = getProviderIcon(provider, modelName);
+  const Icon = getModelIcon(provider, modelName);
   return <Icon size={size} className={className} />;
 };

@@ -24,7 +24,7 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
-import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
+import { fetchOllamaModels } from "@/lib/llmConfig/svc";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";

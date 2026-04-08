@@ -8,7 +8,7 @@ import {
   LLMProviderName,
   LLMProviderView,
 } from "@/interfaces/llm";
-import { fetchLiteLLMProxyModels } from "@/app/admin/configuration/llm/utils";
+import { fetchLiteLLMProxyModels } from "@/lib/llmConfig/svc";
 import {
   useInitialValues,
   buildValidationSchema,

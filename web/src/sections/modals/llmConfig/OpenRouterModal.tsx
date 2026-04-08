@@ -8,7 +8,7 @@ import {
   LLMProviderName,
   LLMProviderView,
 } from "@/interfaces/llm";
-import { fetchOpenRouterModels } from "@/app/admin/configuration/llm/utils";
+import { fetchOpenRouterModels } from "@/lib/llmConfig/svc";
 import {
   useInitialValues,
   buildValidationSchema,
