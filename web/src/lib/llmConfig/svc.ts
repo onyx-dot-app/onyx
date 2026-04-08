@@ -590,19 +590,3 @@ export const fetchModels = async (
       return { models: [], error: `Unknown provider: ${providerName}` };
   }
 };
-
-export function canProviderFetchModels(providerName?: string) {
-  if (!providerName) return false;
-  switch (providerName) {
-    case LLMProviderName.BEDROCK:
-    case LLMProviderName.OLLAMA_CHAT:
-    case LLMProviderName.LM_STUDIO:
-    case LLMProviderName.OPENROUTER:
-    case LLMProviderName.LITELLM_PROXY:
-    case LLMProviderName.BIFROST:
-    case LLMProviderName.OPENAI_COMPATIBLE:
-      return true;
-    default:
-      return false;
-  }
-}

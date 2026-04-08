@@ -1,4 +1,3 @@
-import { JSX } from "react";
 import type { IconFunctionComponent } from "@opal/types";
 import {
   SvgBifrost,
@@ -16,25 +15,26 @@ import {
   SvgLmStudio,
 } from "@opal/icons";
 import {
-  AnthropicIcon,
-  AmazonIcon,
-  AzureIcon,
-  CPUIcon,
   MicrosoftIconSVG,
   MistralIcon,
   MetaIcon,
-  GeminiIcon,
-  IconProps,
   DeepseekIcon,
-  OpenAISVG,
   QwenIcon,
-  OllamaIcon,
-  LMStudioIcon,
-  LiteLLMIcon,
   ZAIIcon,
 } from "@/components/icons/icons";
 import { LLMProviderName } from "@/interfaces/llm";
-import { AGGREGATOR_PROVIDERS } from "@/lib/llmConfig/svc";
+
+export const AGGREGATOR_PROVIDERS = new Set([
+  LLMProviderName.BEDROCK,
+  "bedrock_converse",
+  LLMProviderName.OPENROUTER,
+  LLMProviderName.OLLAMA_CHAT,
+  LLMProviderName.LM_STUDIO,
+  LLMProviderName.LITELLM_PROXY,
+  LLMProviderName.BIFROST,
+  LLMProviderName.OPENAI_COMPATIBLE,
+  LLMProviderName.VERTEX_AI,
+]);
 
 const PROVIDER_ICONS: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENAI]: SvgOpenai,
@@ -106,37 +106,35 @@ export function getProviderIcon(providerName: string): IconFunctionComponent {
 // Model-aware icon resolver (legacy icon set)
 // ---------------------------------------------------------------------------
 
-const MODEL_ICON_MAP: Record<
-  string,
-  ({ size, className }: IconProps) => JSX.Element
-> = {
-  amazon: AmazonIcon,
+const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
+  [LLMProviderName.OPENAI]: SvgOpenai,
+  [LLMProviderName.ANTHROPIC]: SvgClaude,
+  [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
+  [LLMProviderName.LM_STUDIO]: SvgLmStudio,
+  [LLMProviderName.OPENROUTER]: SvgOpenrouter,
+  [LLMProviderName.VERTEX_AI]: SvgGemini,
+  [LLMProviderName.BEDROCK]: SvgAws,
+  [LLMProviderName.LITELLM_PROXY]: SvgLitellm,
+  [LLMProviderName.BIFROST]: SvgBifrost,
+  [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
+
+  amazon: SvgAws,
   phi: MicrosoftIconSVG,
   mistral: MistralIcon,
   ministral: MistralIcon,
   llama: MetaIcon,
-  ollama_chat: OllamaIcon,
-  ollama: OllamaIcon,
-  lm_studio: LMStudioIcon,
-  gemini: GeminiIcon,
+  ollama: SvgOllama,
+  gemini: SvgGemini,
   deepseek: DeepseekIcon,
-  claude: AnthropicIcon,
-  anthropic: AnthropicIcon,
-  openai: OpenAISVG,
-  azure: AzureIcon,
+  claude: SvgClaude,
+  azure: SvgAzure,
   microsoft: MicrosoftIconSVG,
   meta: MetaIcon,
-  google: GeminiIcon,
+  google: SvgGemini,
   qwen: QwenIcon,
   qwq: QwenIcon,
   zai: ZAIIcon,
-  bedrock: SvgAws,
   bedrock_converse: SvgAws,
-  openrouter: SvgOpenrouter,
-  litellm_proxy: LiteLLMIcon,
-  bifrost: SvgBifrost,
-  openai_compatible: SvgPlug,
-  vertex_ai: GeminiIcon,
 };
 
 /**
@@ -146,7 +144,7 @@ const MODEL_ICON_MAP: Record<
 export const getModelIcon = (
   providerName: string,
   modelName?: string
-): (({ size, className }: IconProps) => JSX.Element) => {
+): IconFunctionComponent => {
   const lowerProviderName = providerName.toLowerCase();
 
   // For aggregator providers, prioritise showing the vendor icon based on model name
@@ -178,5 +176,5 @@ export const getModelIcon = (
   }
 
   // Fallback to CPU icon if no matches
-  return CPUIcon;
+  return SvgCpu;
 };
