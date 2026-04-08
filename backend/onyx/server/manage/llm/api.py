@@ -1583,7 +1583,7 @@ def _get_bifrost_models_response(api_base: str, api_key: str | None = None) -> d
 @admin_router.post("/openai-compatible/available-models")
 def get_openai_compatible_server_available_models(
     request: OpenAICompatibleModelsRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[OpenAICompatibleFinalModelResponse]:
     """Fetch available models from a generic OpenAI-compatible /v1/models endpoint."""
