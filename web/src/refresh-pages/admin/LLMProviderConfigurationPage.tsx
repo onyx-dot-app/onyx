@@ -9,7 +9,7 @@ import {
 } from "@/hooks/useLLMProviders";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, Card } from "@opal/layouts";
-import { Button, SelectCard } from "@opal/components";
+import { Button, SelectCard, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -22,7 +22,6 @@ import {
 } from "@/lib/llmConfig/providers";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
-import Text from "@/refresh-components/texts/Text";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
 import LegacyCard from "@/refresh-components/cards/Card";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -171,19 +170,19 @@ function ExistingProviderCard({
         >
           <Section alignItems="start" gap={0.5}>
             {isDefault && !isLastProvider ? (
-              <Text text03>
+              <Text font="main-ui-body" color="text-03">
                 Cannot delete the default provider. Select another provider as
                 the default prior to deleting this one.
               </Text>
             ) : (
               <>
-                <Text text03>
-                  All LLM models from provider <b>{provider.name}</b> will be
-                  removed and unavailable for future chats. Chat history will be
-                  preserved.
+                <Text font="main-ui-body" color="text-03">
+                  {markdown(
+                    `All LLM models from provider **${provider.name}** will be removed and unavailable for future chats. Chat history will be preserved.`
+                  )}
                 </Text>
                 {isLastProvider && (
-                  <Text text03>
+                  <Text font="main-ui-body" color="text-03">
                     Connect another provider to continue using chats.
                   </Text>
                 )}
