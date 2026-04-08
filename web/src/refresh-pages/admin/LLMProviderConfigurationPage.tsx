@@ -44,7 +44,7 @@ import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
 import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
 import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
-import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
+import LMStudioModal from "@/sections/modals/llmConfig/LMStudioModal";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
@@ -102,7 +102,7 @@ const PROVIDER_MODAL_MAP: Record<
     <OpenRouterModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
   lm_studio: (d, onOpenChange) => (
-    <LMStudioForm shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
+    <LMStudioModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
   litellm_proxy: (d, onOpenChange) => (
     <LiteLLMProxyModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />

@@ -7,7 +7,7 @@ import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
 import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
-import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
+import LMStudioModal from "@/sections/modals/llmConfig/LMStudioModal";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
@@ -62,7 +62,7 @@ export function getModalForExistingProvider(
     case LLMProviderName.BEDROCK:
       return <BedrockModal {...props} />;
     case LLMProviderName.LM_STUDIO:
-      return <LMStudioForm {...props} />;
+      return <LMStudioModal {...props} />;
     case LLMProviderName.LITELLM_PROXY:
       return <LiteLLMProxyModal {...props} />;
     case LLMProviderName.BIFROST:

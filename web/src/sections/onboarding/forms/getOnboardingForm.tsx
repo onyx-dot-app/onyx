@@ -13,7 +13,7 @@ import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
 import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
 import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
-import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
+import LMStudioModal from "@/sections/modals/llmConfig/LMStudioModal";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
 
@@ -131,7 +131,7 @@ export function getOnboardingForm({
       return <OpenRouterModal {...sharedProps} />;
 
     case LLMProviderName.LM_STUDIO:
-      return <LMStudioForm {...sharedProps} />;
+      return <LMStudioModal {...sharedProps} />;
 
     case LLMProviderName.LITELLM_PROXY:
       return <LiteLLMProxyModal {...sharedProps} />;

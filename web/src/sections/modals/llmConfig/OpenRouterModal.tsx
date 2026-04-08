@@ -52,7 +52,7 @@ function OpenRouterModalInternals({
     const { models, error } = await fetchOpenRouterModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key,
-      provider_name: existingLlmProvider?.name,
+      provider_name: LLMProviderName.OPENROUTER,
     });
     if (error) {
       throw new Error(error);

@@ -50,7 +50,7 @@ function BifrostModalInternals({
     const { models, error } = await fetchBifrostModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key || undefined,
-      provider_name: existingLlmProvider?.name,
+      provider_name: LLMProviderName.BIFROST,
     });
     if (error) {
       throw new Error(error);
