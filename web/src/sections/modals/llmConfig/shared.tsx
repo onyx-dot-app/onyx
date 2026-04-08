@@ -544,10 +544,7 @@ export function ModelSelectionField({
                       prominence="tertiary"
                       onClick={() => setIsExpanded(!isExpanded)}
                     >
-                      <button
-                        type="button"
-                        className="w-full rounded-12 py-1.5 px-2"
-                      >
+                      <Interactive.Container type="button" widthVariant="full">
                         <Content
                           sizePreset="secondary"
                           variant="body"
@@ -562,7 +559,7 @@ export function ModelSelectionField({
                             />
                           )}
                         />
-                      </button>
+                      </Interactive.Container>
                     </Interactive.Stateless>
                   )}
                 </>
