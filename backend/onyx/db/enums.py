@@ -418,7 +418,6 @@ class Permission(str, PyEnum):
     ADD_AGENTS = "add:agents"
     MANAGE_AGENTS = "manage:agents"
     MANAGE_DOCUMENT_SETS = "manage:document_sets"
-    ADD_CONNECTORS = "add:connectors"
     MANAGE_CONNECTORS = "manage:connectors"
     MANAGE_LLMS = "manage:llms"
 

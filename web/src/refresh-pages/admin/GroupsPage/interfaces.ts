@@ -20,3 +20,12 @@ export interface TokenRateLimitDisplay {
   token_budget: number;
   period_hours: number;
 }
+
+/** Mirrors backend PermissionRegistryEntry from onyx.auth.permissions. */
+export interface PermissionRegistryEntry {
+  id: string;
+  display_name: string;
+  description: string;
+  permissions: string[];
+  group: number;
+}

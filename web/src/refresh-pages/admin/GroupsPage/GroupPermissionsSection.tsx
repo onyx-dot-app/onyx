@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import useSWR from "swr";
 import { ContentAction } from "@opal/layouts";
 import {
   SvgSettings,
@@ -14,113 +15,36 @@ import {
   SvgBarChart,
   SvgHistory,
   SvgKey,
+  SvgShield,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
 import Switch from "@/refresh-components/inputs/Switch";
 import Separator from "@/refresh-components/Separator";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { PermissionRegistryEntry } from "@/refresh-pages/admin/GroupsPage/interfaces";
 
 // ---------------------------------------------------------------------------
-// Permission row configuration
+// Icon mapping — the only permission metadata maintained in the frontend.
+// The `id` keys must match the backend PERMISSION_REGISTRY entries.
 // ---------------------------------------------------------------------------
 
-interface PermissionRowConfig {
-  permissions: string[];
-  icon: IconFunctionComponent;
-  title: string;
-  description: string;
-  group: number;
-}
-
-const PERMISSION_ROWS: PermissionRowConfig[] = [
-  // Group 0 — System Configuration
-  {
-    permissions: ["manage:llms"],
-    icon: SvgSettings,
-    title: "Manage LLMs",
-    description: "Add and update configurations for language models (LLMs).",
-    group: 0,
-  },
-  {
-    permissions: [
-      "manage:connectors",
-      "manage:document_sets",
-      "add:connectors",
-    ],
-    icon: SvgPlug,
-    title: "Manage Connectors & Document Sets",
-    description: "Add and update connectors and document sets.",
-    group: 0,
-  },
-  {
-    permissions: ["manage:actions"],
-    icon: SvgActions,
-    title: "Manage Actions",
-    description: "Add and update custom tools and MCP/OpenAPI actions.",
-    group: 0,
-  },
-  // Group 1 — User & Access Management
-  {
-    permissions: ["manage:user_groups"],
-    icon: SvgUsers,
-    title: "Manage Groups",
-    description: "Add and update user groups.",
-    group: 1,
-  },
-  {
-    permissions: ["create:service_account_api_keys"],
-    icon: SvgUserKey,
-    title: "Manage Service Accounts",
-    description: "Add and update service accounts and their API keys.",
-    group: 1,
-  },
-  {
-    permissions: ["create:slack_discord_bots"],
-    icon: SvgSlack,
-    title: "Manage Slack/Discord Bots",
-    description: "Add and update Onyx integrations with Slack or Discord.",
-    group: 1,
-  },
-  // Group 2 — Agents
-  {
-    permissions: ["add:agents"],
-    icon: SvgPlusCircle,
-    title: "Create Agents",
-    description: "Create and edit the user's own agents.",
-    group: 2,
-  },
-  {
-    permissions: ["manage:agents"],
-    icon: SvgUserManage,
-    title: "Manage Agents",
-    description:
-      "View and update all public and shared agents in the organization.",
-    group: 2,
-  },
-  // Group 3 — Monitoring & Tokens
-  {
-    permissions: ["read:agent_analytics"],
-    icon: SvgBarChart,
-    title: "View Agent Analytics",
-    description: "View analytics for agents the group can manage.",
-    group: 3,
-  },
-  {
-    permissions: ["read:query_history"],
-    icon: SvgHistory,
-    title: "View Query History",
-    description: "View query history of everyone in the organization.",
-    group: 3,
-  },
-  {
-    permissions: ["create:user_api_keys"],
-    icon: SvgKey,
-    title: "Create User Access Token",
-    description: "Add and update the user's personal access tokens.",
-    group: 3,
-  },
-];
+const ICON_MAP: Record<string, IconFunctionComponent> = {
+  manage_llms: SvgSettings,
+  manage_connectors_and_document_sets: SvgPlug,
+  manage_actions: SvgActions,
+  manage_groups: SvgUsers,
+  manage_service_accounts: SvgUserKey,
+  manage_slack_discord_bots: SvgSlack,
+  create_agents: SvgPlusCircle,
+  manage_agents: SvgUserManage,
+  view_agent_analytics: SvgBarChart,
+  view_query_history: SvgHistory,
+  create_user_access_token: SvgKey,
+};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -135,13 +59,18 @@ function GroupPermissionsSection({
   enabledPermissions,
   onPermissionsChange,
 }: GroupPermissionsSectionProps) {
-  function isRowEnabled(row: PermissionRowConfig): boolean {
-    return row.permissions.every((p) => enabledPermissions.has(p));
+  const { data: registry, isLoading } = useSWR<PermissionRegistryEntry[]>(
+    SWR_KEYS.permissionRegistry,
+    errorHandlingFetcher
+  );
+
+  function isRowEnabled(entry: PermissionRegistryEntry): boolean {
+    return entry.permissions.every((p) => enabledPermissions.has(p));
   }
 
-  function handleToggle(row: PermissionRowConfig, checked: boolean) {
+  function handleToggle(entry: PermissionRegistryEntry, checked: boolean) {
     const next = new Set(enabledPermissions);
-    for (const perm of row.permissions) {
+    for (const perm of entry.permissions) {
       if (checked) {
         next.add(perm);
       } else {
@@ -158,33 +87,40 @@ function GroupPermissionsSection({
         description="Set access and permissions for members of this group."
       />
       <SimpleCollapsible.Content>
-        <Card>
-          {PERMISSION_ROWS.map((row, index) => {
-            const prevGroup =
-              index > 0 ? PERMISSION_ROWS[index - 1]!.group : row.group;
-            return (
-              <Fragment key={row.title}>
-                {index > 0 && row.group !== prevGroup && (
-                  <Separator noPadding />
-                )}
-                <ContentAction
-                  icon={row.icon}
-                  title={row.title}
-                  description={row.description}
-                  sizePreset="main-ui"
-                  variant="section"
-                  paddingVariant="md"
-                  rightChildren={
-                    <Switch
-                      checked={isRowEnabled(row)}
-                      onCheckedChange={(checked) => handleToggle(row, checked)}
-                    />
-                  }
-                />
-              </Fragment>
-            );
-          })}
-        </Card>
+        {isLoading || !registry ? (
+          <SimpleLoader />
+        ) : (
+          <Card>
+            {registry.map((entry, index) => {
+              const prevGroup =
+                index > 0 ? registry[index - 1]!.group : entry.group;
+              const icon = ICON_MAP[entry.id] ?? SvgShield;
+              return (
+                <Fragment key={entry.id}>
+                  {index > 0 && entry.group !== prevGroup && (
+                    <Separator noPadding />
+                  )}
+                  <ContentAction
+                    icon={icon}
+                    title={entry.display_name}
+                    description={entry.description}
+                    sizePreset="main-ui"
+                    variant="section"
+                    paddingVariant="md"
+                    rightChildren={
+                      <Switch
+                        checked={isRowEnabled(entry)}
+                        onCheckedChange={(checked) =>
+                          handleToggle(entry, checked)
+                        }
+                      />
+                    }
+                  />
+                </Fragment>
+              );
+            })}
+          </Card>
+        )}
       </SimpleCollapsible.Content>
     </SimpleCollapsible>
   );
