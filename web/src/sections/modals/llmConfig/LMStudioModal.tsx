@@ -105,6 +105,7 @@ function LMStudioModalInternals({
       />
 
       <APIKeyField
+        name="custom_config.LM_STUDIO_API_KEY"
         optional
         subDescription="Optional API key if your LM Studio server requires authentication."
       />
