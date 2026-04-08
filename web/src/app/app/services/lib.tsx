@@ -361,7 +361,9 @@ export function processRawChatHistory(
       nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
       message: messageInfo.message,
-      type: messageInfo.message_type as "user" | "assistant",
+      type: messageInfo.error
+        ? "error"
+        : (messageInfo.message_type as "user" | "assistant"),
       files: messageInfo.files,
       alternateAgentID:
         messageInfo.alternate_assistant_id !== null

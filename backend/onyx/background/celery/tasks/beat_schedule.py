@@ -75,6 +75,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too — they may still have stale checkpoints to clean.
+            "skip_gated": False,
         },
     },
     {
@@ -84,6 +86,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too — they may still have stale index attempts.
+            "skip_gated": False,
         },
     },
     {
@@ -93,6 +97,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still have connectors awaiting deletion.
+            "skip_gated": False,
         },
     },
     {
@@ -136,7 +142,14 @@ beat_task_templates: list[dict] = [
     {
         "name": "cleanup-idle-sandboxes",
         "task": OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
-        "schedule": timedelta(minutes=1),
+        # SANDBOX_IDLE_TIMEOUT_SECONDS defaults to 1 hour, so there is no
+        # functional reason to scan more often than every ~15 minutes. In the
+        # cloud this is multiplied by CLOUD_BEAT_MULTIPLIER_DEFAULT (=8) so
+        # the effective cadence becomes ~2 hours, which still meets the
+        # idle-detection SLA. The previous 1-minute base schedule produced
+        # an 8-minute per-tenant fan-out and was the dominant source of
+        # background DB load on the cloud cluster.
+        "schedule": timedelta(minutes=15),
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
@@ -266,7 +279,7 @@ def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:
     cloud_task["kwargs"] = {}
     cloud_task["kwargs"]["task_name"] = task["task"]
 
-    optional_fields = ["queue", "priority", "expires"]
+    optional_fields = ["queue", "priority", "expires", "skip_gated"]
     for field in optional_fields:
         if field in task["options"]:
             cloud_task["kwargs"][field] = task["options"][field]
@@ -359,7 +372,13 @@ if not MULTI_TENANT:
         ]
     )
 
-    tasks_to_schedule.extend(beat_task_templates)
+    # `skip_gated` is a cloud-only hint consumed by `cloud_beat_task_generator`. Strip
+    # it before extending the self-hosted schedule so it doesn't leak into apply_async
+    # as an unrecognised option on every fired task message.
+    for _template in beat_task_templates:
+        _self_hosted_template = copy.deepcopy(_template)
+        _self_hosted_template["options"].pop("skip_gated", None)
+        tasks_to_schedule.append(_self_hosted_template)
 
 
 def generate_cloud_tasks(

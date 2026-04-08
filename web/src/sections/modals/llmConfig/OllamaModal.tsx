@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSWRConfig } from "swr";
 import { Formik, FormikProps } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -33,13 +33,13 @@ import {
   LLMConfigurationModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchOllamaModels } from "@/app/admin/configuration/llm/utils";
-import debounce from "lodash/debounce";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 
 const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
+const CLOUD_API_BASE = "https://ollama.com";
 const TAB_SELF_HOSTED = "self-hosted";
 const TAB_CLOUD = "cloud";
 
@@ -69,57 +69,34 @@ function OllamaModalInternals({
   onClose,
   isOnboarding,
 }: OllamaModalInternalsProps) {
-  const isInitialMount = useRef(true);
+  const handleFetchModels = async (signal?: AbortSignal) => {
+    // Only Ollama cloud accepts API key
+    const apiBase = formikProps.values.custom_config?.OLLAMA_API_KEY
+      ? CLOUD_API_BASE
+      : formikProps.values.api_base;
+    const { models, error } = await fetchOllamaModels({
+      api_base: apiBase,
+      provider_name: existingLlmProvider?.name,
+      signal,
+    });
+    if (signal?.aborted) return;
+    if (error) {
+      throw new Error(error);
+    }
+    setFetchedModels(models);
+  };
 
-  const doFetchModels = useCallback(
-    (apiBase: string, signal: AbortSignal) => {
-      fetchOllamaModels({
-        api_base: apiBase,
-        provider_name: existingLlmProvider?.name,
-        signal,
-      }).then((data) => {
-        if (signal.aborted) return;
-        if (data.error) {
-          toast.error(data.error);
-          setFetchedModels([]);
-          return;
-        }
-        setFetchedModels(data.models);
-      });
-    },
-    [existingLlmProvider?.name, setFetchedModels]
-  );
-
-  const debouncedFetchModels = useMemo(
-    () => debounce(doFetchModels, 500),
-    [doFetchModels]
-  );
-
-  // Skip the initial fetch for new providers — api_base starts with a default
-  // value, which would otherwise trigger a fetch before the user has done
-  // anything. Existing providers should still auto-fetch on mount.
+  // Auto-fetch models on initial load when editing an existing provider
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      if (!existingLlmProvider) return;
+    if (existingLlmProvider) {
+      handleFetchModels().catch((err) => {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to fetch models"
+        );
+      });
     }
-
-    if (formikProps.values.api_base) {
-      const controller = new AbortController();
-      debouncedFetchModels(formikProps.values.api_base, controller.signal);
-      return () => {
-        debouncedFetchModels.cancel();
-        controller.abort();
-      };
-    } else {
-      setFetchedModels([]);
-    }
-  }, [
-    formikProps.values.api_base,
-    debouncedFetchModels,
-    setFetchedModels,
-    existingLlmProvider,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const currentModels =
     fetchedModels.length > 0
@@ -193,6 +170,7 @@ function OllamaModalInternals({
           formikProps={formikProps}
           recommendedDefaultModel={null}
           shouldShowAutoUpdateToggle={false}
+          onRefetch={handleFetchModels}
         />
       )}
 
@@ -210,7 +188,6 @@ export default function OllamaModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -223,8 +200,6 @@ export default function OllamaModal({
   const { mutate } = useSWRConfig();
   const { wellKnownLLMProvider } =
     useWellKnownLLMProvider(OLLAMA_PROVIDER_NAME);
-
-  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 
@@ -279,6 +254,9 @@ export default function OllamaModal({
 
         const submitValues = {
           ...values,
+          api_base: filteredCustomConfig.OLLAMA_API_KEY
+            ? CLOUD_API_BASE
+            : values.api_base,
           custom_config:
             Object.keys(filteredCustomConfig).length > 0
               ? filteredCustomConfig

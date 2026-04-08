@@ -70,7 +70,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     }
   ) {
     const nameInput = screen.getByPlaceholderText("Display Name");
-    const providerInput = screen.getByPlaceholderText("Provider Name");
+    const providerInput = screen.getByPlaceholderText(
+      "Provider Name as shown on LiteLLM"
+    );
 
     await user.type(nameInput, options.name);
     await user.type(providerInput, options.provider);
@@ -99,7 +101,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       }),
     } as Response);
 
-    render(<CustomModal open={true} onOpenChange={() => {}} />);
+    render(<CustomModal onOpenChange={() => {}} />);
 
     await fillBasicFields(user, {
       name: "My Custom Provider",
@@ -166,7 +168,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Invalid API key" }),
     } as Response);
 
-    render(<CustomModal open={true} onOpenChange={() => {}} />);
+    render(<CustomModal onOpenChange={() => {}} />);
 
     await fillBasicFields(user, {
       name: "Bad Provider",
@@ -244,7 +246,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     render(
       <CustomModal
         existingLlmProvider={existingProvider}
-        open={true}
         onOpenChange={() => {}}
       />
     );
@@ -339,7 +340,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     render(
       <CustomModal
         existingLlmProvider={existingProvider}
-        open={true}
         onOpenChange={() => {}}
       />
     );
@@ -406,13 +406,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({}),
     } as Response);
 
-    render(
-      <CustomModal
-        shouldMarkAsDefault={true}
-        open={true}
-        onOpenChange={() => {}}
-      />
-    );
+    render(<CustomModal shouldMarkAsDefault={true} onOpenChange={() => {}} />);
 
     await fillBasicFields(user, {
       name: "New Default Provider",
@@ -457,7 +451,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ detail: "Database error" }),
     } as Response);
 
-    render(<CustomModal open={true} onOpenChange={() => {}} />);
+    render(<CustomModal onOpenChange={() => {}} />);
 
     await fillBasicFields(user, {
       name: "Test Provider",
@@ -492,13 +486,15 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       json: async () => ({ id: 1, name: "Provider with Custom Config" }),
     } as Response);
 
-    render(<CustomModal open={true} onOpenChange={() => {}} />);
+    render(<CustomModal onOpenChange={() => {}} />);
 
     // Fill basic fields
     const nameInput = screen.getByPlaceholderText("Display Name");
     await user.type(nameInput, "Cloudflare Provider");
 
-    const providerInput = screen.getByPlaceholderText("Provider Name");
+    const providerInput = screen.getByPlaceholderText(
+      "Provider Name as shown on LiteLLM"
+    );
     await user.type(providerInput, "cloudflare");
 
     // Click "Add Line" button for custom config (aria-label from KeyValueInput)
@@ -508,8 +504,8 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     await user.click(addLineButton);
 
     // Fill in custom config key-value pair
-    const keyInputs = screen.getAllByPlaceholderText("Key");
-    const valueInputs = screen.getAllByPlaceholderText("Value");
+    const keyInputs = screen.getAllByRole("textbox", { name: /Key \d+/ });
+    const valueInputs = screen.getAllByRole("textbox", { name: /Value \d+/ });
 
     await user.type(keyInputs[0]!, "CLOUDFLARE_ACCOUNT_ID");
     await user.type(valueInputs[0]!, "my-account-id-123");

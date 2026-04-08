@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
 import { Table, Button } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgUsers } from "@opal/icons";
@@ -14,17 +13,14 @@ import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Separator from "@/refresh-components/Separator";
 import { toast } from "@/hooks/useToast";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import useAdminUsers from "@/hooks/useAdminUsers";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
+import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import {
   createGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
   saveTokenLimits,
 } from "./svc";
-import { apiKeyToMemberRow, memberTableColumns, PAGE_SIZE } from "./shared";
+import { memberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
@@ -42,22 +38,7 @@ function CreateGroupPage() {
     { tokenBudget: null, periodHours: null },
   ]);
 
-  const { users, isLoading: usersLoading, error: usersError } = useAdminUsers();
-
-  const {
-    data: apiKeys,
-    isLoading: apiKeysLoading,
-    error: apiKeysError,
-  } = useSWR<ApiKeyDescriptor[]>(SWR_KEYS.adminApiKeys, errorHandlingFetcher);
-
-  const isLoading = usersLoading || apiKeysLoading;
-  const error = usersError ?? apiKeysError;
-
-  const allRows: MemberRow[] = useMemo(() => {
-    const activeUsers = users.filter((u) => u.is_active);
-    const serviceAccountRows = (apiKeys ?? []).map(apiKeyToMemberRow);
-    return [...activeUsers, ...serviceAccountRows];
-  }, [users, apiKeys]);
+  const { rows: allRows, isLoading, error } = useGroupMemberCandidates();
 
   async function handleCreate() {
     const trimmed = groupName.trim();
@@ -134,11 +115,11 @@ function CreateGroupPage() {
         {/* Members table */}
         {isLoading && <SimpleLoader />}
 
-        {error && (
+        {error ? (
           <Text as="p" secondaryBody text03>
             Failed to load users.
           </Text>
-        )}
+        ) : null}
 
         {!isLoading && !error && (
           <Section

@@ -33,7 +33,6 @@ export default function AnthropicModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -46,8 +45,6 @@ export default function AnthropicModal({
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(
     ANTHROPIC_PROVIDER_NAME
   );
-
-  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 

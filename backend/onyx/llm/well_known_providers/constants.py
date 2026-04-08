@@ -15,6 +15,8 @@ LITELLM_PROXY_PROVIDER_NAME = "litellm_proxy"
 
 BIFROST_PROVIDER_NAME = "bifrost"
 
+OPENAI_COMPATIBLE_PROVIDER_NAME = "openai_compatible"
+
 # Providers that use optional Bearer auth from custom_config
 PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING: dict[str, str] = {
     LlmProviderNames.OLLAMA_CHAT: OLLAMA_API_KEY_CONFIG_KEY,

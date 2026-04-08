@@ -46,6 +46,7 @@ import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import LMStudioForm from "@/sections/modals/llmConfig/LMStudioForm";
 import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
 import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
+import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
 import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
@@ -67,83 +68,49 @@ const PROVIDER_DISPLAY_ORDER: string[] = [
   "openrouter",
   "lm_studio",
   "bifrost",
+  "openai_compatible",
 ];
 
 const PROVIDER_MODAL_MAP: Record<
   string,
   (
     shouldMarkAsDefault: boolean,
-    open: boolean,
     onOpenChange: (open: boolean) => void
   ) => React.ReactNode
 > = {
-  openai: (d, open, onOpenChange) => (
-    <OpenAIModal
-      shouldMarkAsDefault={d}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+  openai: (d, onOpenChange) => (
+    <OpenAIModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
-  anthropic: (d, open, onOpenChange) => (
-    <AnthropicModal
-      shouldMarkAsDefault={d}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+  anthropic: (d, onOpenChange) => (
+    <AnthropicModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
-  ollama_chat: (d, open, onOpenChange) => (
-    <OllamaModal
-      shouldMarkAsDefault={d}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+  ollama_chat: (d, onOpenChange) => (
+    <OllamaModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
-  azure: (d, open, onOpenChange) => (
-    <AzureModal
-      shouldMarkAsDefault={d}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+  azure: (d, onOpenChange) => (
+    <AzureModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
-  bedrock: (d, open, onOpenChange) => (
-    <BedrockModal
-      shouldMarkAsDefault={d}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+  bedrock: (d, onOpenChange) => (
+    <BedrockModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
-  vertex_ai: (d, open, onOpenChange) => (
-    <VertexAIModal
-      shouldMarkAsDefault={d}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+  vertex_ai: (d, onOpenChange) => (
+    <VertexAIModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
-  openrouter: (d, open, onOpenChange) => (
-    <OpenRouterModal
-      shouldMarkAsDefault={d}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+  openrouter: (d, onOpenChange) => (
+    <OpenRouterModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
-  lm_studio: (d, open, onOpenChange) => (
-    <LMStudioForm
-      shouldMarkAsDefault={d}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+  lm_studio: (d, onOpenChange) => (
+    <LMStudioForm shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
-  litellm_proxy: (d, open, onOpenChange) => (
-    <LiteLLMProxyModal
-      shouldMarkAsDefault={d}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+  litellm_proxy: (d, onOpenChange) => (
+    <LiteLLMProxyModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
   ),
-  bifrost: (d, open, onOpenChange) => (
-    <BifrostModal
+  bifrost: (d, onOpenChange) => (
+    <BifrostModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
+  ),
+  openai_compatible: (d, onOpenChange) => (
+    <OpenAICompatibleModal
       shouldMarkAsDefault={d}
-      open={open}
       onOpenChange={onOpenChange}
     />
   ),
@@ -210,7 +177,10 @@ function ExistingProviderCard({
         </ConfirmationModalLayout>
       )}
 
-      <Hoverable.Root group="ExistingProviderCard">
+      <Hoverable.Root
+        group="ExistingProviderCard"
+        interaction={deleteModal.isOpen ? "hover" : "rest"}
+      >
         <SelectCard
           state="filled"
           padding="sm"
@@ -252,12 +222,8 @@ function ExistingProviderCard({
               </div>
             }
           />
-          {getModalForExistingProvider(
-            provider,
-            isOpen,
-            setIsOpen,
-            defaultModelName
-          )}
+          {isOpen &&
+            getModalForExistingProvider(provider, setIsOpen, defaultModelName)}
         </SelectCard>
       </Hoverable.Root>
     </>
@@ -273,7 +239,6 @@ interface NewProviderCardProps {
   isFirstProvider: boolean;
   formFn: (
     shouldMarkAsDefault: boolean,
-    open: boolean,
     onOpenChange: (open: boolean) => void
   ) => React.ReactNode;
 }
@@ -311,7 +276,7 @@ function NewProviderCard({
           </Button>
         }
       />
-      {formFn(isFirstProvider, isOpen, setIsOpen)}
+      {isOpen && formFn(isFirstProvider, setIsOpen)}
     </SelectCard>
   );
 }
@@ -355,11 +320,12 @@ function NewCustomProviderCard({
           </Button>
         }
       />
-      <CustomModal
-        shouldMarkAsDefault={isFirstProvider}
-        open={isOpen}
-        onOpenChange={setIsOpen}
-      />
+      {isOpen && (
+        <CustomModal
+          shouldMarkAsDefault={isFirstProvider}
+          onOpenChange={setIsOpen}
+        />
+      )}
     </SelectCard>
   );
 }

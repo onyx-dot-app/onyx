@@ -70,7 +70,8 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   // In auto mode, use recommended models from descriptor
   // In manual mode, use user's selection
   let filteredModelConfigurations: ModelConfiguration[];
-  let finalDefaultModelName = rest.default_model_name;
+  let finalDefaultModelName =
+    rest.default_model_name || modelConfigurations[0]?.name || "";
 
   if (values.is_auto_mode) {
     filteredModelConfigurations =

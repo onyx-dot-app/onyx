@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
+import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import { Table, Button } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgUsers, SvgTrash, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
@@ -19,20 +20,9 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import Separator from "@/refresh-components/Separator";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import useAdminUsers from "@/hooks/useAdminUsers";
 import type { UserGroup } from "@/lib/types";
-import type {
-  ApiKeyDescriptor,
-  MemberRow,
-  TokenRateLimitDisplay,
-} from "./interfaces";
-import {
-  apiKeyToMemberRow,
-  baseColumns,
-  memberTableColumns,
-  tc,
-  PAGE_SIZE,
-} from "./shared";
+import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
+import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
 import {
   renameGroup,
   updateGroup,
@@ -104,18 +94,15 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const initialAgentIdsRef = useRef<number[]>([]);
   const initialDocSetIdsRef = useRef<number[]>([]);
 
-  // Users and API keys
-  const { users, isLoading: usersLoading, error: usersError } = useAdminUsers();
-
+  // Users + service accounts (curator-accessible — see hook docs).
   const {
-    data: apiKeys,
-    isLoading: apiKeysLoading,
-    error: apiKeysError,
-  } = useSWR<ApiKeyDescriptor[]>(SWR_KEYS.adminApiKeys, errorHandlingFetcher);
+    rows: allRows,
+    isLoading: candidatesLoading,
+    error: candidatesError,
+  } = useGroupMemberCandidates();
 
-  const isLoading =
-    groupLoading || usersLoading || apiKeysLoading || tokenLimitsLoading;
-  const error = groupError ?? usersError ?? apiKeysError;
+  const isLoading = groupLoading || candidatesLoading || tokenLimitsLoading;
+  const error = groupError ?? candidatesError;
 
   // Pre-populate form when group data loads
   useEffect(() => {
@@ -144,12 +131,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       );
     }
   }, [tokenRateLimits]);
-
-  const allRows = useMemo(() => {
-    const activeUsers = users.filter((u) => u.is_active);
-    const serviceAccountRows = (apiKeys ?? []).map(apiKeyToMemberRow);
-    return [...activeUsers, ...serviceAccountRows];
-  }, [users, apiKeys]);
 
   const memberRows = useMemo(() => {
     const selected = new Set(selectedUserIds);

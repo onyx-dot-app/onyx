@@ -83,7 +83,6 @@ export default function AzureModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -96,8 +95,6 @@ export default function AzureModal({
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(AZURE_PROVIDER_NAME);
 
   const [addedModels, setAddedModels] = useState<ModelConfiguration[]>([]);
-
-  if (open === false) return null;
 
   const onClose = () => {
     setAddedModels([]);

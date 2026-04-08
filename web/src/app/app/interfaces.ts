@@ -238,6 +238,8 @@ export interface BackendMessage {
   // Multi-model answer generation
   preferred_response_id: number | null;
   model_display_name: string | null;
+  // Non-null when the model errored during generation
+  error: string | null;
 }
 
 export interface MessageResponseIDInfo {

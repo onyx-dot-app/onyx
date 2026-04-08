@@ -996,6 +996,7 @@ def _run_models(
 
     def _run_model(model_idx: int) -> None:
         """Run one LLM loop inside a worker thread, writing packets to ``merged_queue``."""
+
         model_emitter = Emitter(
             model_idx=model_idx,
             merged_queue=merged_queue,
@@ -1102,33 +1103,33 @@ def _run_models(
         finally:
             merged_queue.put((model_idx, _MODEL_DONE))
 
-    def _delete_orphaned_message(model_idx: int, context: str) -> None:
-        """Delete a reserved ChatMessage that was never populated due to a model error."""
+    def _save_errored_message(model_idx: int, context: str) -> None:
+        """Save an error message to a reserved ChatMessage that failed during execution."""
         try:
-            orphaned = db_session.get(
-                ChatMessage, setup.reserved_messages[model_idx].id
-            )
-            if orphaned is not None:
-                db_session.delete(orphaned)
+            msg = db_session.get(ChatMessage, setup.reserved_messages[model_idx].id)
+            if msg is not None:
+                error_text = f"Error from {setup.model_display_names[model_idx]}: model encountered an error during generation."
+                msg.message = error_text
+                msg.error = error_text
                 db_session.commit()
         except Exception:
             logger.exception(
-                "%s orphan cleanup failed for model %d (%s)",
+                "%s error save failed for model %d (%s)",
                 context,
                 model_idx,
                 setup.model_display_names[model_idx],
             )
 
-    # Copy contextvars before submitting futures — ThreadPoolExecutor does NOT
-    # auto-propagate contextvars in Python 3.11; threads would inherit a blank context.
-    worker_context = contextvars.copy_context()
+    # Each worker thread needs its own Context copy — a single Context object
+    # cannot be entered concurrently by multiple threads (RuntimeError).
     executor = ThreadPoolExecutor(
         max_workers=n_models, thread_name_prefix="multi-model"
     )
     completion_persisted: bool = False
     try:
         for i in range(n_models):
-            executor.submit(worker_context.run, _run_model, i)
+            ctx = contextvars.copy_context()
+            executor.submit(ctx.run, _run_model, i)
 
         # ── Main thread: merge and yield packets ────────────────────────────
         models_remaining = n_models
@@ -1145,7 +1146,7 @@ def _run_models(
                     #   save "stopped by user" for a model that actually threw an exception.
                     for i in range(n_models):
                         if model_errored[i]:
-                            _delete_orphaned_message(i, "stop-button")
+                            _save_errored_message(i, "stop-button")
                             continue
                         try:
                             succeeded = model_succeeded[i]
@@ -1211,7 +1212,7 @@ def _run_models(
         for i in range(n_models):
             if not model_succeeded[i]:
                 # Model errored — delete its orphaned reserved message.
-                _delete_orphaned_message(i, "normal")
+                _save_errored_message(i, "normal")
                 continue
             try:
                 llm_loop_completion_handle(
@@ -1264,7 +1265,7 @@ def _run_models(
                             setup.model_display_names[i],
                         )
                 elif model_errored[i]:
-                    _delete_orphaned_message(i, "disconnect")
+                    _save_errored_message(i, "disconnect")
             # 4. Drain buffered packets from memory — no consumer is running.
             while not merged_queue.empty():
                 try:

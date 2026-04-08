@@ -64,50 +64,50 @@ export default function CreateRateLimitModal({
           title="Create a Token Rate Limit"
           onClose={() => setIsOpen(false)}
         />
-        <Modal.Body>
-          <Formik
-            initialValues={{
-              enabled: true,
-              period_hours: "",
-              token_budget: "",
-              target_scope: forSpecificScope || Scope.GLOBAL,
-              user_group_id: forSpecificUserGroup,
-            }}
-            validationSchema={Yup.object().shape({
-              period_hours: Yup.number()
-                .required("Time Window is a required field")
-                .min(1, "Time Window must be at least 1 hour"),
-              token_budget: Yup.number()
-                .required("Token Budget is a required field")
-                .min(1, "Token Budget must be at least 1"),
-              target_scope: Yup.string().required(
-                "Target Scope is a required field"
-              ),
-              user_group_id: Yup.string().test(
-                "user_group_id",
-                "User Group is a required field",
-                (value, context) => {
-                  return (
-                    context.parent.target_scope !== "user_group" ||
-                    (context.parent.target_scope === "user_group" &&
-                      value !== undefined)
-                  );
-                }
-              ),
-            })}
-            onSubmit={async (values, formikHelpers) => {
-              formikHelpers.setSubmitting(true);
-              onSubmit(
-                values.target_scope,
-                Number(values.period_hours),
-                Number(values.token_budget),
-                Number(values.user_group_id)
-              );
-              return formikHelpers.setSubmitting(false);
-            }}
-          >
-            {({ isSubmitting, values, setFieldValue }) => (
-              <Form className="overflow-visible px-2">
+        <Formik
+          initialValues={{
+            enabled: true,
+            period_hours: "",
+            token_budget: "",
+            target_scope: forSpecificScope || Scope.GLOBAL,
+            user_group_id: forSpecificUserGroup,
+          }}
+          validationSchema={Yup.object().shape({
+            period_hours: Yup.number()
+              .required("Time Window is a required field")
+              .min(1, "Time Window must be at least 1 hour"),
+            token_budget: Yup.number()
+              .required("Token Budget is a required field")
+              .min(1, "Token Budget must be at least 1"),
+            target_scope: Yup.string().required(
+              "Target Scope is a required field"
+            ),
+            user_group_id: Yup.string().test(
+              "user_group_id",
+              "User Group is a required field",
+              (value, context) => {
+                return (
+                  context.parent.target_scope !== "user_group" ||
+                  (context.parent.target_scope === "user_group" &&
+                    value !== undefined)
+                );
+              }
+            ),
+          })}
+          onSubmit={async (values, formikHelpers) => {
+            formikHelpers.setSubmitting(true);
+            onSubmit(
+              values.target_scope,
+              Number(values.period_hours),
+              Number(values.token_budget),
+              Number(values.user_group_id)
+            );
+            return formikHelpers.setSubmitting(false);
+          }}
+        >
+          {({ isSubmitting, values, setFieldValue }) => (
+            <Form className="flex flex-col h-full min-h-0 overflow-visible">
+              <Modal.Body>
                 {!forSpecificScope && (
                   <SelectorFormField
                     name="target_scope"
@@ -147,13 +147,15 @@ export default function CreateRateLimitModal({
                   type="number"
                   placeholder=""
                 />
+              </Modal.Body>
+              <Modal.Footer>
                 <Button disabled={isSubmitting} type="submit">
                   Create
                 </Button>
-              </Form>
-            )}
-          </Formik>
-        </Modal.Body>
+              </Modal.Footer>
+            </Form>
+          )}
+        </Formik>
       </Modal.Content>
     </Modal>
   );

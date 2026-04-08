@@ -19,6 +19,7 @@ from onyx.llm.well_known_providers.constants import BIFROST_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LITELLM_PROXY_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LM_STUDIO_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import OPENAI_COMPATIBLE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
@@ -51,6 +52,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
         LITELLM_PROXY_PROVIDER_NAME: [],  # Dynamic - fetched from LiteLLM proxy API
         BIFROST_PROVIDER_NAME: [],  # Dynamic - fetched from Bifrost API
+        OPENAI_COMPATIBLE_PROVIDER_NAME: [],  # Dynamic - fetched from OpenAI-compatible API
     }
 
 
@@ -336,6 +338,7 @@ def get_provider_display_name(provider_name: str) -> str:
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
         LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
+        OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI Compatible",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

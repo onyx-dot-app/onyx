@@ -14,6 +14,7 @@ import {
   submitOnboardingProvider,
 } from "@/sections/modals/llmConfig/svc";
 import {
+  APIKeyField,
   DisplayNameField,
   FieldSeparator,
   ModelsAccessField,
@@ -30,6 +31,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
+import { markdown } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -181,19 +183,20 @@ function ModelConfigurationList({ formikProps }: ModelConfigurationListProps) {
 
 // ─── Custom Config Processing ─────────────────────────────────────────────────
 
-function customConfigProcessing(items: KeyValue[]) {
-  const customConfig: { [key: string]: string } = {};
-  items.forEach(({ key, value }) => {
-    customConfig[key] = value;
-  });
-  return customConfig;
+function keyValueListToDict(items: KeyValue[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const { key, value } of items) {
+    if (key.trim() !== "") {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 export default function CustomModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
-  open,
   onOpenChange,
   defaultModelName,
   onboardingState,
@@ -202,8 +205,6 @@ export default function CustomModal({
   const isOnboarding = variant === "onboarding";
   const [isTesting, setIsTesting] = useState(false);
   const { mutate } = useSWRConfig();
-
-  if (open === false) return null;
 
   const onClose = () => onOpenChange?.(false);
 
@@ -215,6 +216,9 @@ export default function CustomModal({
     ),
     ...(isOnboarding ? buildOnboardingInitialValues() : {}),
     provider: existingLlmProvider?.provider ?? "",
+    api_key: existingLlmProvider?.api_key ?? "",
+    api_base: existingLlmProvider?.api_base ?? "",
+    api_version: existingLlmProvider?.api_version ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map(
       (mc) => ({
         name: mc.name,
@@ -283,13 +287,18 @@ export default function CustomModal({
           return;
         }
 
+        // Always send custom_config as a dict (even empty) so the backend
+        // preserves it as non-null — this is the signal that the provider was
+        // created via CustomModal.
+        const customConfig = keyValueListToDict(values.custom_config_list);
+
         if (isOnboarding && onboardingState && onboardingActions) {
           await submitOnboardingProvider({
             providerName: values.provider,
             payload: {
               ...values,
               model_configurations: modelConfigurations,
-              custom_config: customConfigProcessing(values.custom_config_list),
+              custom_config: customConfig,
             },
             onboardingState,
             onboardingActions,
@@ -307,11 +316,11 @@ export default function CustomModal({
             values: {
               ...values,
               selected_model_names: selectedModelNames,
-              custom_config: customConfigProcessing(values.custom_config_list),
+              custom_config: customConfig,
             },
             initialValues: {
               ...initialValues,
-              custom_config: customConfigProcessing(
+              custom_config: keyValueListToDict(
                 initialValues.custom_config_list
               ),
             },
@@ -337,32 +346,55 @@ export default function CustomModal({
           isSubmitting={formikProps.isSubmitting}
         >
           {!isOnboarding && (
-            <Section gap={0}>
-              <DisplayNameField disabled={!!existingLlmProvider} />
-
-              <FieldWrapper>
-                <InputLayouts.Vertical
+            <FieldWrapper>
+              <InputLayouts.Vertical
+                name="provider"
+                title="Provider Name"
+                subDescription={markdown(
+                  "Should be one of the providers listed at [LiteLLM](https://docs.litellm.ai/docs/providers)."
+                )}
+              >
+                <InputTypeInField
                   name="provider"
-                  title="Provider Name"
-                  subDescription="Should be one of the providers listed at https://docs.litellm.ai/docs/providers."
-                >
-                  <InputTypeInField
-                    name="provider"
-                    placeholder="Provider Name"
-                    variant={existingLlmProvider ? "disabled" : undefined}
-                  />
-                </InputLayouts.Vertical>
-              </FieldWrapper>
-            </Section>
+                  placeholder="Provider Name as shown on LiteLLM"
+                  variant={existingLlmProvider ? "disabled" : undefined}
+                />
+              </InputLayouts.Vertical>
+            </FieldWrapper>
           )}
 
-          <FieldSeparator />
+          <FieldWrapper>
+            <InputLayouts.Vertical
+              name="api_base"
+              title="API Base URL"
+              suffix="optional"
+            >
+              <InputTypeInField name="api_base" placeholder="https://" />
+            </InputLayouts.Vertical>
+          </FieldWrapper>
+
+          <FieldWrapper>
+            <InputLayouts.Vertical
+              name="api_version"
+              title="API Version"
+              suffix="optional"
+            >
+              <InputTypeInField name="api_version" />
+            </InputLayouts.Vertical>
+          </FieldWrapper>
+
+          <APIKeyField
+            optional
+            subDescription="Paste your API key if your model provider requires authentication."
+          />
 
           <FieldWrapper>
             <Section gap={0.75}>
               <Content
-                title="Provider Configs"
-                description="Add properties as needed by the model provider. This is passed to LiteLLM completion() call as arguments in the environment variable. See LiteLLM documentation for more instructions."
+                title="Additional Configs"
+                description={markdown(
+                  "Add extra properties as needed by the model provider. These are passed to LiteLLM's `completion()` call as [environment variables](https://docs.litellm.ai/docs/set_keys#environment-variables). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions."
+                )}
                 widthVariant="full"
                 variant="section"
                 sizePreset="main-content"
@@ -377,6 +409,12 @@ export default function CustomModal({
               />
             </Section>
           </FieldWrapper>
+
+          <FieldSeparator />
+
+          {!isOnboarding && (
+            <DisplayNameField disabled={!!existingLlmProvider} />
+          )}
 
           <FieldSeparator />
 

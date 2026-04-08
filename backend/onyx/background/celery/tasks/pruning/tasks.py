@@ -217,7 +217,7 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
     try:
         # the entire task needs to run frequently in order to finalize pruning
 
-        # but pruning only kicks off once per hour
+        # but pruning only kicks off once per min
         if not r.exists(OnyxRedisSignals.BLOCK_PRUNING):
             task_logger.info("Checking for pruning due")
 
