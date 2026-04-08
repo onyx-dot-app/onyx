@@ -431,43 +431,29 @@ export function ModelSelectionField({
     }
   }, [models]);
 
-  // When models arrive (e.g. after a dynamic fetch) and test_model_name
-  // is still empty, auto-select the first visible model.
+  // Automatically derive test_model_name from model_configurations.
+  // Any change to visibility or the model list syncs this automatically.
   useEffect(() => {
-    if (models.length > 0 && !formikProps.values.test_model_name) {
-      const firstVisible = models.find((m) => m.is_visible);
-      if (firstVisible) {
-        formikProps.setFieldValue("test_model_name", firstVisible.name);
-      }
+    const firstVisible = models.find((m) => m.is_visible)?.name;
+    if (firstVisible !== formikProps.values.test_model_name) {
+      formikProps.setFieldValue("test_model_name", firstVisible);
     }
-  }, [models.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Keep test_model_name in sync: always the first visible model.
-  function syncTestModelName(configs: ModelConfiguration[]) {
-    const firstVisible = configs.find((m) => m.is_visible);
-    formikProps.setFieldValue(
-      "test_model_name",
-      firstVisible?.name ?? undefined
-    );
-  }
+  }, [models]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function setVisibility(modelName: string, visible: boolean) {
     const updated = models.map((m) =>
       m.name === modelName ? { ...m, is_visible: visible } : m
     );
     formikProps.setFieldValue("model_configurations", updated);
-    syncTestModelName(updated);
   }
 
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     if (nextIsAutoMode) {
-      // Restore original visibility from the provider
       formikProps.setFieldValue(
         "model_configurations",
         originalModelsRef.current
       );
-      syncTestModelName(originalModelsRef.current);
     }
   }
 
@@ -480,7 +466,6 @@ export function ModelSelectionField({
       is_visible: nextVisible,
     }));
     formikProps.setFieldValue("model_configurations", updated);
-    syncTestModelName(updated);
   }
 
   const visibleModels = models.filter((m) => m.is_visible);
@@ -629,7 +614,6 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
           providerName={providerName}
           llmProvider={llmProvider}
           onClose={onClose}
-          testModelName={initialValues.test_model_name}
           modelConfigurations={initialValues.model_configurations}
         >
           {children}
@@ -643,7 +627,6 @@ interface ModalWrapperInnerProps {
   providerName: string;
   llmProvider?: LLMProviderView;
   onClose: () => void;
-  testModelName?: string;
   modelConfigurations?: ModelConfiguration[];
   children: React.ReactNode;
 }
@@ -651,24 +634,15 @@ function ModalWrapperInner({
   providerName,
   llmProvider,
   onClose,
-  testModelName,
   modelConfigurations,
   children,
 }: ModalWrapperInnerProps) {
-  const {
-    isValid,
-    dirty,
-    isSubmitting,
-    status,
-    setFieldValue,
-    values,
-    errors,
-  } = useFormikContext<BaseLLMFormValues>();
+  const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
+    useFormikContext<BaseLLMFormValues>();
 
-  console.log(errors);
-
-  // When SWR resolves after mount, populate model_configurations and
-  // test_model_name if they're still empty — avoids resetting mid-edit.
+  // When SWR resolves after mount, populate model_configurations if still
+  // empty. test_model_name is then derived automatically by
+  // ModelSelectionField's useEffect.
   useEffect(() => {
     if (
       modelConfigurations &&
@@ -678,12 +652,6 @@ function ModalWrapperInner({
       setFieldValue("model_configurations", modelConfigurations);
     }
   }, [modelConfigurations]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (testModelName && !values.test_model_name) {
-      setFieldValue("test_model_name", testModelName);
-    }
-  }, [testModelName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
