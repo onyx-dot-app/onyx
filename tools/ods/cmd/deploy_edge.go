@@ -92,7 +92,7 @@ func deployEdge(opts *DeployEdgeOptions) {
 	}
 
 	if !opts.Yes {
-		msg := "About to force-push tag 'edge' to origin/main and trigger an ad-hoc deploy. Continue? (yes/no): "
+		msg := "About to force-push tag 'edge' to origin/main and trigger an ad-hoc deploy. Continue? (Y/n): "
 		if !prompt.Confirm(msg) {
 			log.Info("Exiting...")
 			return
