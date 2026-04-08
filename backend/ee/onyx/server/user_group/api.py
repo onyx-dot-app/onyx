@@ -13,14 +13,13 @@ from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.db.user_group import insert_user_group
 from ee.onyx.db.user_group import prepare_user_group_for_deletion
 from ee.onyx.db.user_group import rename_user_group
-from ee.onyx.db.user_group import set_group_permission__no_commit
+from ee.onyx.db.user_group import set_group_permissions_bulk__no_commit
 from ee.onyx.db.user_group import update_user_curator_relationship
 from ee.onyx.db.user_group import update_user_group
 from ee.onyx.server.user_group.models import AddUsersToUserGroupRequest
+from ee.onyx.server.user_group.models import BulkSetPermissionsRequest
 from ee.onyx.server.user_group.models import MinimalUserGroupSnapshot
 from ee.onyx.server.user_group.models import SetCuratorRequest
-from ee.onyx.server.user_group.models import SetPermissionRequest
-from ee.onyx.server.user_group.models import SetPermissionResponse
 from ee.onyx.server.user_group.models import UpdateGroupAgentsRequest
 from ee.onyx.server.user_group.models import UserGroup
 from ee.onyx.server.user_group.models import UserGroupCreate
@@ -107,32 +106,32 @@ def get_user_group_permissions(
 
 
 @router.put("/admin/user-group/{user_group_id}/permissions")
-def set_user_group_permission(
+def set_user_group_permissions(
     user_group_id: int,
-    request: SetPermissionRequest,
+    request: BulkSetPermissionsRequest,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> SetPermissionResponse:
+) -> list[Permission]:
     group = fetch_user_group(db_session, user_group_id)
     if group is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
 
-    if request.permission in NON_TOGGLEABLE_PERMISSIONS:
+    non_toggleable = [p for p in request.permissions if p in NON_TOGGLEABLE_PERMISSIONS]
+    if non_toggleable:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Permission '{request.permission}' cannot be toggled via this endpoint",
+            f"Permissions {non_toggleable} cannot be toggled via this endpoint",
         )
 
-    set_group_permission__no_commit(
+    result = set_group_permissions_bulk__no_commit(
         group_id=user_group_id,
-        permission=request.permission,
-        enabled=request.enabled,
+        desired_permissions=set(request.permissions),
         granted_by=user.id,
         db_session=db_session,
     )
     db_session.commit()
 
-    return SetPermissionResponse(permission=request.permission, enabled=request.enabled)
+    return result
 
 
 @router.post("/admin/user-group")

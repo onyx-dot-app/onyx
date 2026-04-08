@@ -132,3 +132,7 @@ class SetPermissionRequest(BaseModel):
 class SetPermissionResponse(BaseModel):
     permission: Permission
     enabled: bool
+
+
+class BulkSetPermissionsRequest(BaseModel):
+    permissions: list[Permission]
