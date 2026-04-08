@@ -26,6 +26,8 @@ from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
+from onyx.auth.permissions import PERMISSION_REGISTRY
+from onyx.auth.permissions import PermissionRegistryEntry
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -89,6 +91,13 @@ def list_minimal_user_groups(
     return [
         MinimalUserGroupSnapshot.from_model(user_group) for user_group in user_groups
     ]
+
+
+@router.get("/admin/permissions/registry")
+def get_permission_registry(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[PermissionRegistryEntry]:
+    return PERMISSION_REGISTRY
 
 
 @router.get("/admin/user-group/{user_group_id}/permissions")
