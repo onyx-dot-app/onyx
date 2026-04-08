@@ -1,6 +1,7 @@
 import { createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
-import { SvgUser, SvgUserManage, SvgGlobe, SvgSlack } from "@opal/icons";
+import { SvgUser, SvgUserManage, SvgGlobe } from "@opal/icons";
+import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { UserRole, UserStatus, USER_ROLE_LABELS } from "@/lib/types";

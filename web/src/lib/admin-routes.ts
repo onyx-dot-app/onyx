@@ -10,7 +10,6 @@ import {
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
-  SvgDiscordMono,
   SvgDownload,
   SvgEmpty,
   SvgFileText,
@@ -24,7 +23,6 @@ import {
   SvgPaintBrush,
   SvgProgressBars,
   SvgSearchMenu,
-  SvgSlack,
   SvgTerminal,
   SvgThumbsUp,
   SvgUploadCloud,
@@ -35,6 +33,7 @@ import {
   SvgWallet,
   SvgZoomIn,
 } from "@opal/icons";
+import { SvgDiscordMono, SvgSlack } from "@opal/logos";
 
 export interface AdminRouteEntry {
   path: string;

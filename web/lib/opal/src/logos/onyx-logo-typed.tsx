@@ -1,5 +1,5 @@
-import SvgOnyxLogo from "@opal/icons/onyx-logo";
-import SvgOnyxTyped from "@opal/icons/onyx-typed";
+import SvgOnyxLogo from "@opal/logos/onyx-logo";
+import SvgOnyxTyped from "@opal/logos/onyx-typed";
 import { cn } from "@opal/utils";
 
 interface OnyxLogoTypedProps {
