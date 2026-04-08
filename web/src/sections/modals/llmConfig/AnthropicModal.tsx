@@ -23,7 +23,6 @@ export default function AnthropicModal({
   onOpenChange,
   onboardingState,
   onboardingActions,
-  llmDescriptor,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();

@@ -1,3 +1,5 @@
+"use client";
+
 import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
 import {
   LLM_ADMIN_URL,

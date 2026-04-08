@@ -110,7 +110,6 @@ export default function LiteLLMProxyModal({
   onOpenChange,
   onboardingState,
   onboardingActions,
-  llmDescriptor,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();

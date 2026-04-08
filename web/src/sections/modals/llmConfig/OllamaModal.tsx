@@ -153,7 +153,6 @@ export default function OllamaModal({
   onOpenChange,
   onboardingState,
   onboardingActions,
-  llmDescriptor,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();

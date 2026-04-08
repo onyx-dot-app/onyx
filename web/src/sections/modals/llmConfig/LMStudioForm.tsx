@@ -137,7 +137,6 @@ export default function LMStudioForm({
   onOpenChange,
   onboardingState,
   onboardingActions,
-  llmDescriptor,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();

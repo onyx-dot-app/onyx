@@ -274,7 +274,6 @@ export default function BedrockModal({
   onOpenChange,
   onboardingState,
   onboardingActions,
-  llmDescriptor,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
