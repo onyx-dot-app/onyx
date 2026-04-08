@@ -388,7 +388,7 @@ export default function MultiModelResponseView({
 
   return (
     <div className="overflow-x-auto">
-      <div className="flex gap-6 items-start w-full">
+      <div className="flex gap-6 items-start justify-center w-full">
         {responses.map((r) => {
           const isHidden = hiddenPanels.has(r.modelIndex);
           return (
