@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import {
@@ -18,11 +19,13 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
+import { useCustomProviderNames } from "@/hooks/useLLMProviders";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/refresh-components/texts/Text";
@@ -189,6 +192,35 @@ function CustomConfigKeyValue() {
   );
 }
 
+// ─── Provider Name Select ─────────────────────────────────────────────────────
+
+function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
+  const { customProviderNames } = useCustomProviderNames();
+  const { values, setFieldValue } = useFormikContext<{ provider: string }>();
+
+  const options = useMemo(
+    () =>
+      (customProviderNames ?? []).map((opt) => ({
+        value: opt.value,
+        label: opt.value,
+        description: opt.label,
+      })),
+    [customProviderNames]
+  );
+
+  return (
+    <InputComboBox
+      value={values.provider}
+      onValueChange={(value) => setFieldValue("provider", value)}
+      options={options}
+      placeholder="Select a provider"
+      disabled={disabled}
+      createPrefix="Use"
+      dropdownMaxHeight="60vh"
+    />
+  );
+}
+
 // ─── Custom Config Processing ─────────────────────────────────────────────────
 
 function keyValueListToDict(items: KeyValue[]): Record<string, string> {
@@ -343,11 +375,7 @@ export default function CustomModal({
             "Should be one of the providers listed at [LiteLLM](https://docs.litellm.ai/docs/providers)."
           )}
         >
-          <InputTypeInField
-            name="provider"
-            placeholder="Provider Name as shown on LiteLLM"
-            variant={existingLlmProvider ? "disabled" : undefined}
-          />
+          <ProviderNameSelect disabled={!!existingLlmProvider} />
         </InputLayouts.Vertical>
       </InputLayouts.FieldPadder>
 

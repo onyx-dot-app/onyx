@@ -40,6 +40,8 @@ from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
+from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
@@ -60,6 +62,7 @@ from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import BifrostFinalModelResponse
 from onyx.server.manage.llm.models import BifrostModelsRequest
+from onyx.server.manage.llm.models import CustomProviderOption
 from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LitellmFinalModelResponse
 from onyx.server.manage.llm.models import LitellmModelDetails
@@ -248,6 +251,29 @@ def _validate_llm_provider_change(
             OnyxErrorCode.VALIDATION_ERROR,
             "API base and/or custom config cannot be changed without changing the API key",
         )
+
+
+@admin_router.get("/custom-provider-names")
+def fetch_custom_provider_names(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[CustomProviderOption]:
+    """Returns the sorted list of LiteLLM provider names that can be used
+    with the custom provider modal (i.e. everything that is not already
+    covered by a well-known provider modal)."""
+    import litellm
+
+    well_known = {p.value for p in WELL_KNOWN_PROVIDER_NAMES}
+    return sorted(
+        (
+            CustomProviderOption(
+                value=name,
+                label=PROVIDER_DISPLAY_NAMES.get(name, name.replace("_", " ").title()),
+            )
+            for name in litellm.models_by_provider.keys()
+            if name not in well_known
+        ),
+        key=lambda o: o.label.lower(),
+    )
 
 
 @admin_router.get("/built-in/options")

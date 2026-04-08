@@ -160,6 +160,35 @@ export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   };
 }
 
+export interface CustomProviderOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * Fetches the list of LiteLLM provider names available for custom provider
+ * configuration (i.e. providers that don't have a dedicated well-known modal).
+ *
+ * Hits `GET /api/admin/llm/custom-provider-names`.
+ */
+export function useCustomProviderNames() {
+  const { data, error, isLoading } = useSWR<CustomProviderOption[]>(
+    SWR_KEYS.customProviderNames,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60000,
+    }
+  );
+
+  return {
+    customProviderNames: data ?? null,
+    isLoading,
+    error,
+  };
+}
+
 export function useWellKnownLLMProviders() {
   const {
     data: wellKnownLLMProviders,

@@ -401,7 +401,7 @@ export default function VoiceProviderSetupModal({
                     options={existingApiKeyOptions}
                     separatorLabel="Reuse OpenAI API Keys"
                     strict={false}
-                    showAddPrefix
+                    createPrefix="Add"
                   />
                 ) : (
                   <PasswordInputTypeIn
