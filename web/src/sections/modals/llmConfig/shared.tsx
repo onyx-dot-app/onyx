@@ -493,7 +493,7 @@ export function ModelSelectionField({
               size="md"
               onClick={handleToggleSelectAll}
             >
-              {allSelected ? "Unselect All" : "Select All"}
+              {allSelected ? "Deselect All" : "Select All"}
             </Button>
             {onRefetch && <RefetchButton onRefetch={onRefetch} />}
           </Section>
