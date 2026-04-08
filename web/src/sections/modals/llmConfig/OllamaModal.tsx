@@ -30,7 +30,6 @@ import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import useOnMount from "@/hooks/useOnMount";
 
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
 const CLOUD_API_BASE = "https://ollama.com";
@@ -86,17 +85,6 @@ function OllamaModalInternals({
     }
     formikProps.setFieldValue("model_configurations", models);
   };
-
-  // Auto-fetch models on initial load when editing an existing provider
-  useOnMount(() => {
-    if (existingLlmProvider) {
-      handleFetchModels().catch((err) => {
-        toast.error(
-          err instanceof Error ? err.message : "Failed to fetch models"
-        );
-      });
-    }
-  });
 
   return (
     <>

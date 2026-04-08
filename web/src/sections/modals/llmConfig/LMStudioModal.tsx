@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -25,7 +24,6 @@ import {
   ModalWrapper,
 } from "@/sections/modals/llmConfig/shared";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
-import debounce from "lodash/debounce";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 
@@ -48,54 +46,23 @@ function LMStudioModalInternals({
   isOnboarding,
 }: LMStudioModalInternalsProps) {
   const formikProps = useFormikContext<LMStudioModalValues>();
-  const initialApiKey = existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY;
 
-  const doFetchModels = useCallback(
-    (apiBase: string, apiKey: string | undefined, signal: AbortSignal) => {
-      fetchModels(
-        LLMProviderName.LM_STUDIO,
-        {
-          api_base: apiBase,
-          custom_config: apiKey ? { LM_STUDIO_API_KEY: apiKey } : {},
-          api_key_changed: apiKey !== initialApiKey,
-          name: existingLlmProvider?.name,
-        },
-        signal
-      ).then((data) => {
-        if (signal.aborted) return;
-        if (data.error) {
-          toast.error(data.error);
-          formikProps.setFieldValue("model_configurations", []);
-          return;
-        }
-        formikProps.setFieldValue("model_configurations", data.models);
-      });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [existingLlmProvider?.name, initialApiKey]
-  );
+  const isFetchDisabled = !formikProps.values.api_base;
 
-  const debouncedFetchModels = useMemo(
-    () => debounce(doFetchModels, 500),
-    [doFetchModels]
-  );
-
-  const apiBase = formikProps.values.api_base;
-  const apiKey = formikProps.values.custom_config?.LM_STUDIO_API_KEY;
-
-  useEffect(() => {
-    if (apiBase) {
-      const controller = new AbortController();
-      debouncedFetchModels(apiBase, apiKey, controller.signal);
-      return () => {
-        debouncedFetchModels.cancel();
-        controller.abort();
-      };
-    } else {
-      formikProps.setFieldValue("model_configurations", []);
+  const handleFetchModels = async () => {
+    const apiKey = formikProps.values.custom_config?.LM_STUDIO_API_KEY;
+    const initialApiKey = existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY;
+    const data = await fetchModels(LLMProviderName.LM_STUDIO, {
+      api_base: formikProps.values.api_base,
+      custom_config: apiKey ? { LM_STUDIO_API_KEY: apiKey } : {},
+      api_key_changed: apiKey !== initialApiKey,
+      name: existingLlmProvider?.name,
+    });
+    if (data.error) {
+      throw new Error(data.error);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiBase, apiKey, debouncedFetchModels]);
+    formikProps.setFieldValue("model_configurations", data.models);
+  };
 
   return (
     <>
@@ -118,7 +85,10 @@ function LMStudioModalInternals({
       )}
 
       <InputLayouts.FieldSeparator />
-      <ModelSelectionField shouldShowAutoUpdateToggle={false} />
+      <ModelSelectionField
+        shouldShowAutoUpdateToggle={false}
+        onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+      />
 
       {!isOnboarding && (
         <>
