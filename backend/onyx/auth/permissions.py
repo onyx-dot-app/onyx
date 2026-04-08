@@ -54,11 +54,8 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
     {
         Permission.BASIC_ACCESS,
         Permission.FULL_ADMIN_PANEL_ACCESS,
-        Permission.READ_CONNECTORS,
-        Permission.READ_DOCUMENT_SETS,
-        Permission.READ_AGENTS,
-        Permission.READ_USERS,
     }
+    | Permission.IMPLIED
 )
 
 
