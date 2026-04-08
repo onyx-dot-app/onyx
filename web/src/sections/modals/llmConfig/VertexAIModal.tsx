@@ -6,11 +6,9 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   useInitialValues,
   buildValidationSchema,
-  buildAvailableModelConfigurations,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -45,16 +43,8 @@ export default function VertexAIModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    LLMProviderName.VERTEX_AI
-  );
 
   const onClose = () => onOpenChange?.(false);
-
-  const modelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
 
   const initialValues: VertexAIModalValues = {
     ...useInitialValues(
@@ -106,15 +96,10 @@ export default function VertexAIModal({
         };
 
         if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
-
           await submitOnboardingProvider({
             providerName: LLMProviderName.VERTEX_AI,
             payload: {
               ...submitValues,
-              model_configurations: modelConfigsToUse,
-              is_auto_mode: values.is_auto_mode,
             },
             onboardingState,
             onboardingActions,
@@ -127,7 +112,6 @@ export default function VertexAIModal({
             providerName: LLMProviderName.VERTEX_AI,
             values: submitValues,
             initialValues,
-            modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
             setStatus,
@@ -172,10 +156,7 @@ export default function VertexAIModal({
       )}
 
       <InputLayouts.FieldSeparator />
-      <ModelSelectionField
-        modelConfigurations={modelConfigurations}
-        shouldShowAutoUpdateToggle={true}
-      />
+      <ModelSelectionField shouldShowAutoUpdateToggle={true} />
 
       {!isOnboarding && (
         <>

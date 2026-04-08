@@ -2,11 +2,9 @@
 
 import { useSWRConfig } from "swr";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   useInitialValues,
   buildValidationSchema,
-  buildAvailableModelConfigurations,
 } from "@/sections/modals/llmConfig/utils";
 import {
   submitLLMProvider,
@@ -33,16 +31,8 @@ export default function AnthropicModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    LLMProviderName.ANTHROPIC
-  );
 
   const onClose = () => onOpenChange?.(false);
-
-  const modelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
 
   const initialValues = useInitialValues(
     isOnboarding,
@@ -63,15 +53,10 @@ export default function AnthropicModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
-
           await submitOnboardingProvider({
             providerName: LLMProviderName.ANTHROPIC,
             payload: {
               ...values,
-              model_configurations: modelConfigsToUse,
-              is_auto_mode: values.is_auto_mode,
             },
             onboardingState,
             onboardingActions,
@@ -84,7 +69,6 @@ export default function AnthropicModal({
             providerName: LLMProviderName.ANTHROPIC,
             values,
             initialValues,
-            modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
             setStatus,
@@ -105,10 +89,7 @@ export default function AnthropicModal({
       )}
 
       <InputLayouts.FieldSeparator />
-      <ModelSelectionField
-        modelConfigurations={modelConfigurations}
-        shouldShowAutoUpdateToggle={true}
-      />
+      <ModelSelectionField shouldShowAutoUpdateToggle={true} />
 
       {!isOnboarding && (
         <>

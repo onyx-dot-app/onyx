@@ -21,8 +21,6 @@ import {
   SubmitLLMProviderParams,
   SubmitOnboardingProviderParams,
   TestApiKeyResult,
-  filterModelConfigurations,
-  getAutoModeModelConfigurations,
 } from "@/sections/modals/llmConfig/utils";
 
 const submitLlmTestRequest = async (
@@ -54,7 +52,6 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   providerName,
   values,
   initialValues,
-  modelConfigurations,
   existingLlmProvider,
   shouldMarkAsDefault,
   hideSuccess,
@@ -65,35 +62,11 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
 }: SubmitLLMProviderParams<T>): Promise<void> => {
   setSubmitting(true);
 
-  const {
-    visible_model_names: visibleModels,
-    test_model_name,
-    api_key,
-    ...rest
-  } = values;
-
-  // In auto mode, use recommended models from descriptor
-  // In manual mode, use user's selection
-  let filteredModelConfigurations: ModelConfiguration[];
-  let testModelName = test_model_name || modelConfigurations[0]?.name || "";
-
-  if (values.is_auto_mode) {
-    filteredModelConfigurations =
-      getAutoModeModelConfigurations(modelConfigurations);
-
-    const visibleModelNames = new Set(
-      filteredModelConfigurations.map((m) => m.name)
-    );
-    if (testModelName && !visibleModelNames.has(testModelName)) {
-      testModelName = filteredModelConfigurations[0]?.name ?? "";
-    }
-  } else {
-    filteredModelConfigurations = filterModelConfigurations(
-      modelConfigurations,
-      visibleModels,
-      test_model_name as string | undefined
-    );
-  }
+  const { test_model_name, api_key, ...rest } = values;
+  const testModelName =
+    test_model_name ||
+    values.model_configurations.find((m) => m.is_visible)?.name ||
+    "";
 
   const customConfigChanged = !isEqual(
     values.custom_config,
@@ -111,7 +84,6 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     api_key,
     api_key_changed: api_key !== (initialValues.api_key as string | undefined),
     custom_config_changed: customConfigChanged,
-    model_configurations: filteredModelConfigurations,
   };
 
   // Test the configuration

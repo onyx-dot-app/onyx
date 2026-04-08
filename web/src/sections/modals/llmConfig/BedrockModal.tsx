@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -12,14 +12,11 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-  ModelConfiguration,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   useInitialValues,
   buildValidationSchema,
-  buildAvailableModelConfigurations,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -76,17 +73,11 @@ interface BedrockModalValues extends BaseLLMFormValues {
 
 interface BedrockModalInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
-  fetchedModels: ModelConfiguration[];
-  setFetchedModels: (models: ModelConfiguration[]) => void;
-  modelConfigurations: ModelConfiguration[];
   isOnboarding: boolean;
 }
 
 function BedrockModalInternals({
   existingLlmProvider,
-  fetchedModels,
-  setFetchedModels,
-  modelConfigurations,
   isOnboarding,
 }: BedrockModalInternalsProps) {
   const formikProps = useFormikContext<BedrockModalValues>();
@@ -105,11 +96,6 @@ function BedrockModalInternals({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authMethod]);
-
-  const currentModels =
-    fetchedModels.length > 0
-      ? fetchedModels
-      : existingLlmProvider?.model_configurations || modelConfigurations;
 
   const isAuthComplete =
     authMethod === AUTH_METHOD_IAM ||
@@ -135,7 +121,7 @@ function BedrockModalInternals({
     if (error) {
       throw new Error(error);
     }
-    setFetchedModels(models);
+    formikProps.setFieldValue("model_configurations", models);
   };
 
   // Auto-fetch models on initial load when editing an existing provider
@@ -270,7 +256,6 @@ function BedrockModalInternals({
 
       <InputLayouts.FieldSeparator />
       <ModelSelectionField
-        modelConfigurations={currentModels}
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
       />
@@ -295,19 +280,10 @@ export default function BedrockModal({
   onboardingActions,
   llmDescriptor,
 }: LLMProviderFormProps) {
-  const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    LLMProviderName.BEDROCK
-  );
 
   const onClose = () => onOpenChange?.(false);
-
-  const modelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
 
   const initialValues: BedrockModalValues = {
     ...useInitialValues(
@@ -361,14 +337,10 @@ export default function BedrockModal({
         };
 
         if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            fetchedModels.length > 0 ? fetchedModels : [];
-
           await submitOnboardingProvider({
             providerName: LLMProviderName.BEDROCK,
             payload: {
               ...submitValues,
-              model_configurations: modelConfigsToUse,
             },
             onboardingState,
             onboardingActions,
@@ -381,8 +353,6 @@ export default function BedrockModal({
             providerName: LLMProviderName.BEDROCK,
             values: submitValues,
             initialValues,
-            modelConfigurations:
-              fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
             setStatus,
@@ -395,9 +365,6 @@ export default function BedrockModal({
     >
       <BedrockModalInternals
         existingLlmProvider={existingLlmProvider}
-        fetchedModels={fetchedModels}
-        setFetchedModels={setFetchedModels}
-        modelConfigurations={modelConfigurations}
         isOnboarding={isOnboarding}
       />
     </ModalWrapper>

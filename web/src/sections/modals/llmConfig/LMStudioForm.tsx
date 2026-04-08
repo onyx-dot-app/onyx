@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -9,13 +9,10 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-  ModelConfiguration,
 } from "@/interfaces/llm";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   useInitialValues,
   buildValidationSchema,
-  buildAvailableModelConfigurations,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -45,15 +42,11 @@ interface LMStudioFormValues extends BaseLLMFormValues {
 
 interface LMStudioFormInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
-  fetchedModels: ModelConfiguration[];
-  setFetchedModels: (models: ModelConfiguration[]) => void;
   isOnboarding: boolean;
 }
 
 function LMStudioFormInternals({
   existingLlmProvider,
-  fetchedModels,
-  setFetchedModels,
   isOnboarding,
 }: LMStudioFormInternalsProps) {
   const formikProps = useFormikContext<LMStudioFormValues>();
@@ -75,13 +68,14 @@ function LMStudioFormInternals({
         if (signal.aborted) return;
         if (data.error) {
           toast.error(data.error);
-          setFetchedModels([]);
+          formikProps.setFieldValue("model_configurations", []);
           return;
         }
-        setFetchedModels(data.models);
+        formikProps.setFieldValue("model_configurations", data.models);
       });
     },
-    [existingLlmProvider?.name, initialApiKey, setFetchedModels]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [existingLlmProvider?.name, initialApiKey]
   );
 
   const debouncedFetchModels = useMemo(
@@ -101,14 +95,10 @@ function LMStudioFormInternals({
         controller.abort();
       };
     } else {
-      setFetchedModels([]);
+      formikProps.setFieldValue("model_configurations", []);
     }
-  }, [apiBase, apiKey, debouncedFetchModels, setFetchedModels]);
-
-  const currentModels =
-    fetchedModels.length > 0
-      ? fetchedModels
-      : existingLlmProvider?.model_configurations || [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBase, apiKey, debouncedFetchModels]);
 
   return (
     <>
@@ -131,10 +121,7 @@ function LMStudioFormInternals({
       )}
 
       <InputLayouts.FieldSeparator />
-      <ModelSelectionField
-        modelConfigurations={currentModels}
-        shouldShowAutoUpdateToggle={false}
-      />
+      <ModelSelectionField shouldShowAutoUpdateToggle={false} />
 
       {!isOnboarding && (
         <>
@@ -156,19 +143,10 @@ export default function LMStudioForm({
   onboardingActions,
   llmDescriptor,
 }: LLMProviderFormProps) {
-  const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    LLMProviderName.LM_STUDIO
-  );
 
   const onClose = () => onOpenChange?.(false);
-
-  const modelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
 
   const initialValues: LMStudioFormValues = {
     ...useInitialValues(
@@ -208,14 +186,10 @@ export default function LMStudioForm({
         };
 
         if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            fetchedModels.length > 0 ? fetchedModels : [];
-
           await submitOnboardingProvider({
             providerName: LLMProviderName.LM_STUDIO,
             payload: {
               ...submitValues,
-              model_configurations: modelConfigsToUse,
             },
             onboardingState,
             onboardingActions,
@@ -228,8 +202,6 @@ export default function LMStudioForm({
             providerName: LLMProviderName.LM_STUDIO,
             values: submitValues,
             initialValues,
-            modelConfigurations:
-              fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
             setStatus,
@@ -242,8 +214,6 @@ export default function LMStudioForm({
     >
       <LMStudioFormInternals
         existingLlmProvider={existingLlmProvider}
-        fetchedModels={fetchedModels}
-        setFetchedModels={setFetchedModels}
         isOnboarding={isOnboarding}
       />
     </ModalWrapper>

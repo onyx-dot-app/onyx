@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -9,14 +9,11 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-  ModelConfiguration,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   useInitialValues,
   buildValidationSchema,
-  buildAvailableModelConfigurations,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -44,34 +41,25 @@ interface AzureModalValues extends BaseLLMFormValues {
   deployment_name?: string;
 }
 
-interface AzureModelSelectionProps {
-  modelConfigurations: ModelConfiguration[];
-  setAddedModels: React.Dispatch<React.SetStateAction<ModelConfiguration[]>>;
-}
-
-function AzureModelSelection({
-  modelConfigurations,
-  setAddedModels,
-}: AzureModelSelectionProps) {
+function AzureModelSelection() {
   const formikProps = useFormikContext<AzureModalValues>();
   return (
     <ModelSelectionField
-      modelConfigurations={modelConfigurations}
       shouldShowAutoUpdateToggle={false}
       onAddModel={(modelName) => {
-        const newModel: ModelConfiguration = {
-          name: modelName,
-          is_visible: true,
-          max_input_tokens: null,
-          supports_image_input: false,
-          supports_reasoning: false,
-        };
-        setAddedModels((prev) => [...prev, newModel]);
-        const currentSelected = formikProps.values.visible_model_names ?? [];
-        formikProps.setFieldValue("visible_model_names", [
-          ...currentSelected,
-          modelName,
-        ]);
+        const current = formikProps.values.model_configurations;
+        if (current.some((m) => m.name === modelName)) return;
+        const updated = [
+          ...current,
+          {
+            name: modelName,
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+          },
+        ];
+        formikProps.setFieldValue("model_configurations", updated);
         if (!formikProps.values.test_model_name) {
           formikProps.setFieldValue("test_model_name", modelName);
         }
@@ -122,28 +110,8 @@ export default function AzureModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    LLMProviderName.AZURE
-  );
 
-  const [addedModels, setAddedModels] = useState<ModelConfiguration[]>([]);
-
-  const onClose = () => {
-    setAddedModels([]);
-    onOpenChange?.(false);
-  };
-
-  const baseModelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
-
-  // Merge base models with any user-added models (dedup by name)
-  const existingNames = new Set(baseModelConfigurations.map((m) => m.name));
-  const modelConfigurations = [
-    ...baseModelConfigurations,
-    ...addedModels.filter((m) => !existingNames.has(m.name)),
-  ];
+  const onClose = () => onOpenChange?.(false);
 
   const initialValues: AzureModalValues = {
     ...useInitialValues(
@@ -178,14 +146,10 @@ export default function AzureModal({
         const processedValues = processValues(values);
 
         if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            (wellKnownLLMProvider ?? llmDescriptor)?.known_models ?? [];
-
           await submitOnboardingProvider({
             providerName: LLMProviderName.AZURE,
             payload: {
               ...processedValues,
-              model_configurations: modelConfigsToUse,
             },
             onboardingState,
             onboardingActions,
@@ -198,7 +162,6 @@ export default function AzureModal({
             providerName: LLMProviderName.AZURE,
             values: processedValues,
             initialValues,
-            modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
             setStatus,
@@ -232,10 +195,7 @@ export default function AzureModal({
       )}
 
       <InputLayouts.FieldSeparator />
-      <AzureModelSelection
-        modelConfigurations={modelConfigurations}
-        setAddedModels={setAddedModels}
-      />
+      <AzureModelSelection />
 
       {!isOnboarding && (
         <>

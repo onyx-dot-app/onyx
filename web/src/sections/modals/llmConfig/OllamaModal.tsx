@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -9,13 +9,10 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-  ModelConfiguration,
 } from "@/interfaces/llm";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   useInitialValues,
   buildValidationSchema,
-  buildAvailableModelConfigurations,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -49,15 +46,11 @@ interface OllamaModalValues extends BaseLLMFormValues {
 
 interface OllamaModalInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
-  fetchedModels: ModelConfiguration[];
-  setFetchedModels: (models: ModelConfiguration[]) => void;
   isOnboarding: boolean;
 }
 
 function OllamaModalInternals({
   existingLlmProvider,
-  fetchedModels,
-  setFetchedModels,
   isOnboarding,
 }: OllamaModalInternalsProps) {
   const formikProps = useFormikContext<OllamaModalValues>();
@@ -76,7 +69,7 @@ function OllamaModalInternals({
     if (error) {
       throw new Error(error);
     }
-    setFetchedModels(models);
+    formikProps.setFieldValue("model_configurations", models);
   };
 
   // Auto-fetch models on initial load when editing an existing provider
@@ -90,11 +83,6 @@ function OllamaModalInternals({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const currentModels =
-    fetchedModels.length > 0
-      ? fetchedModels
-      : existingLlmProvider?.model_configurations || [];
 
   const hasApiKey = !!formikProps.values.custom_config?.OLLAMA_API_KEY;
   const defaultTab =
@@ -147,7 +135,6 @@ function OllamaModalInternals({
 
       <InputLayouts.FieldSeparator />
       <ModelSelectionField
-        modelConfigurations={currentModels}
         shouldShowAutoUpdateToggle={false}
         onRefetch={handleFetchModels}
       />
@@ -172,19 +159,10 @@ export default function OllamaModal({
   onboardingActions,
   llmDescriptor,
 }: LLMProviderFormProps) {
-  const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    LLMProviderName.OLLAMA_CHAT
-  );
 
   const onClose = () => onOpenChange?.(false);
-
-  const modelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
 
   const initialValues: OllamaModalValues = {
     ...useInitialValues(
@@ -227,14 +205,10 @@ export default function OllamaModal({
         };
 
         if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            fetchedModels.length > 0 ? fetchedModels : [];
-
           await submitOnboardingProvider({
             providerName: LLMProviderName.OLLAMA_CHAT,
             payload: {
               ...submitValues,
-              model_configurations: modelConfigsToUse,
             },
             onboardingState,
             onboardingActions,
@@ -247,8 +221,6 @@ export default function OllamaModal({
             providerName: LLMProviderName.OLLAMA_CHAT,
             values: submitValues,
             initialValues,
-            modelConfigurations:
-              fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
             setStatus,
@@ -261,8 +233,6 @@ export default function OllamaModal({
     >
       <OllamaModalInternals
         existingLlmProvider={existingLlmProvider}
-        fetchedModels={fetchedModels}
-        setFetchedModels={setFetchedModels}
         isOnboarding={isOnboarding}
       />
     </ModalWrapper>

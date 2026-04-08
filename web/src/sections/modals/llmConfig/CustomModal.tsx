@@ -228,15 +228,19 @@ export default function CustomModal({
       (mc) => ({
         name: mc.name,
         display_name: mc.display_name ?? "",
+        is_visible: mc.is_visible,
         max_input_tokens: mc.max_input_tokens ?? null,
         supports_image_input: mc.supports_image_input,
+        supports_reasoning: mc.supports_reasoning,
       })
     ) ?? [
       {
         name: "",
         display_name: "",
+        is_visible: true,
         max_input_tokens: null,
         supports_image_input: false,
+        supports_reasoning: false,
       },
     ],
     custom_config_list: existingLlmProvider?.custom_config
@@ -314,15 +318,11 @@ export default function CustomModal({
             setIsSubmitting: setSubmitting,
           });
         } else {
-          const selectedModelNames = modelConfigurations.map(
-            (config) => config.name
-          );
-
           await submitLLMProvider({
-            providerName: values.provider,
+            providerName: values.provider as string,
             values: {
               ...values,
-              visible_model_names: selectedModelNames,
+              model_configurations: modelConfigurations,
               custom_config: customConfig,
             },
             initialValues: {
@@ -331,7 +331,6 @@ export default function CustomModal({
                 initialValues.custom_config_list
               ),
             },
-            modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
             setStatus,

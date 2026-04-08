@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -8,14 +8,11 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-  ModelConfiguration,
 } from "@/interfaces/llm";
 import { fetchOpenRouterModels } from "@/app/admin/configuration/llm/utils";
-import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import {
   useInitialValues,
   buildValidationSchema,
-  buildAvailableModelConfigurations,
   BaseLLMFormValues,
 } from "@/sections/modals/llmConfig/utils";
 import {
@@ -41,24 +38,14 @@ interface OpenRouterModalValues extends BaseLLMFormValues {
 
 interface OpenRouterModalInternalsProps {
   existingLlmProvider: LLMProviderView | undefined;
-  fetchedModels: ModelConfiguration[];
-  setFetchedModels: (models: ModelConfiguration[]) => void;
-  modelConfigurations: ModelConfiguration[];
   isOnboarding: boolean;
 }
 
 function OpenRouterModalInternals({
   existingLlmProvider,
-  fetchedModels,
-  setFetchedModels,
-  modelConfigurations,
   isOnboarding,
 }: OpenRouterModalInternalsProps) {
   const formikProps = useFormikContext<OpenRouterModalValues>();
-  const currentModels =
-    fetchedModels.length > 0
-      ? fetchedModels
-      : existingLlmProvider?.model_configurations || modelConfigurations;
 
   const isFetchDisabled =
     !formikProps.values.api_base || !formikProps.values.api_key;
@@ -72,7 +59,7 @@ function OpenRouterModalInternals({
     if (error) {
       throw new Error(error);
     }
-    setFetchedModels(models);
+    formikProps.setFieldValue("model_configurations", models);
   };
 
   // Auto-fetch models on initial load when editing an existing provider
@@ -105,7 +92,6 @@ function OpenRouterModalInternals({
 
       <InputLayouts.FieldSeparator />
       <ModelSelectionField
-        modelConfigurations={currentModels}
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
       />
@@ -130,19 +116,10 @@ export default function OpenRouterModal({
   onboardingActions,
   llmDescriptor,
 }: LLMProviderFormProps) {
-  const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { wellKnownLLMProvider } = useWellKnownLLMProvider(
-    LLMProviderName.OPENROUTER
-  );
 
   const onClose = () => onOpenChange?.(false);
-
-  const modelConfigurations = buildAvailableModelConfigurations(
-    existingLlmProvider,
-    wellKnownLLMProvider ?? llmDescriptor
-  );
 
   const initialValues: OpenRouterModalValues = {
     ...useInitialValues(
@@ -167,14 +144,10 @@ export default function OpenRouterModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         if (isOnboarding && onboardingState && onboardingActions) {
-          const modelConfigsToUse =
-            fetchedModels.length > 0 ? fetchedModels : [];
-
           await submitOnboardingProvider({
             providerName: LLMProviderName.OPENROUTER,
             payload: {
               ...values,
-              model_configurations: modelConfigsToUse,
             },
             onboardingState,
             onboardingActions,
@@ -187,8 +160,6 @@ export default function OpenRouterModal({
             providerName: LLMProviderName.OPENROUTER,
             values,
             initialValues,
-            modelConfigurations:
-              fetchedModels.length > 0 ? fetchedModels : modelConfigurations,
             existingLlmProvider,
             shouldMarkAsDefault,
             setStatus,
@@ -201,9 +172,6 @@ export default function OpenRouterModal({
     >
       <OpenRouterModalInternals
         existingLlmProvider={existingLlmProvider}
-        fetchedModels={fetchedModels}
-        setFetchedModels={setFetchedModels}
-        modelConfigurations={modelConfigurations}
         isOnboarding={isOnboarding}
       />
     </ModalWrapper>

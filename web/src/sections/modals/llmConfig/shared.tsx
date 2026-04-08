@@ -403,14 +403,12 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
 // ─── ModelsField ─────────────────────────────────────────────────────
 
 export interface ModelSelectionFieldProps {
-  modelConfigurations: ModelConfiguration[];
   shouldShowAutoUpdateToggle: boolean;
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
   /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
   onAddModel?: (modelName: string) => void;
 }
 export function ModelSelectionField({
-  modelConfigurations,
   shouldShowAutoUpdateToggle,
   onRefetch,
   onAddModel,
@@ -418,67 +416,47 @@ export function ModelSelectionField({
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
   const isAutoMode = formikProps.values.is_auto_mode;
-  const selectedModels = formikProps.values.visible_model_names ?? [];
+  const models = formikProps.values.model_configurations;
 
-  // When models arrive (e.g. after a fetch) and nothing is selected yet,
-  // auto-select all and set test_model_name to the first one.
-  useEffect(() => {
-    if (modelConfigurations.length > 0 && !formikProps.values.test_model_name) {
-      const allNames = modelConfigurations.map((m) => m.name);
-      formikProps.setFieldValue("visible_model_names", allNames);
-      formikProps.setFieldValue("test_model_name", allNames[0]);
-    }
-  }, [modelConfigurations.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Keep test_model_name in sync: always the first selected/visible model.
-  function syncTestModelName(models: string[]) {
+  // Keep test_model_name in sync: always the first visible model.
+  function syncTestModelName(configs: ModelConfiguration[]) {
+    const firstVisible = configs.find((m) => m.is_visible);
     formikProps.setFieldValue(
       "test_model_name",
-      models.length > 0 ? models[0] : undefined
+      firstVisible?.name ?? undefined
     );
   }
 
-  function handleCheckboxChange(modelName: string, checked: boolean) {
-    const currentSelected = formikProps.values.visible_model_names ?? [];
-
-    if (checked) {
-      const newSelected = [...currentSelected, modelName];
-      formikProps.setFieldValue("visible_model_names", newSelected);
-      if (currentSelected.length === 0) {
-        syncTestModelName(newSelected);
-      }
-    } else {
-      const newSelected = currentSelected.filter((name) => name !== modelName);
-      formikProps.setFieldValue("visible_model_names", newSelected);
-      syncTestModelName(newSelected);
-    }
+  function setVisibility(modelName: string, visible: boolean) {
+    const updated = models.map((m) =>
+      m.name === modelName ? { ...m, is_visible: visible } : m
+    );
+    formikProps.setFieldValue("model_configurations", updated);
+    syncTestModelName(updated);
   }
 
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
-    const autoModels = modelConfigurations
-      .filter((m) => m.is_visible)
-      .map((m) => m.name);
-    formikProps.setFieldValue("visible_model_names", autoModels);
-    syncTestModelName(autoModels);
+    // Auto mode resets all models to their original visibility
+    // (i.e. all visible for well-known providers)
+    const updated = models.map((m) => ({ ...m, is_visible: true }));
+    formikProps.setFieldValue("model_configurations", updated);
+    syncTestModelName(updated);
   }
 
-  const allSelected =
-    modelConfigurations.length > 0 &&
-    modelConfigurations.every((m) => selectedModels.includes(m.name));
+  const allSelected = models.length > 0 && models.every((m) => m.is_visible);
 
   function handleToggleSelectAll() {
-    if (allSelected) {
-      formikProps.setFieldValue("visible_model_names", []);
-      syncTestModelName([]);
-    } else {
-      const allNames = modelConfigurations.map((m) => m.name);
-      formikProps.setFieldValue("visible_model_names", allNames);
-      syncTestModelName(allNames);
-    }
+    const nextVisible = !allSelected;
+    const updated = models.map((m) => ({
+      ...m,
+      is_visible: nextVisible,
+    }));
+    formikProps.setFieldValue("model_configurations", updated);
+    syncTestModelName(updated);
   }
 
-  const visibleModels = modelConfigurations.filter((m) => m.is_visible);
+  const visibleModels = models.filter((m) => m.is_visible);
 
   return (
     <Card background="light" border="none" padding="sm">
@@ -491,7 +469,7 @@ export function ModelSelectionField({
         >
           <Section flexDirection="row" gap={0}>
             <Button
-              disabled={isAutoMode || modelConfigurations.length === 0}
+              disabled={isAutoMode || models.length === 0}
               prominence="tertiary"
               size="md"
               onClick={handleToggleSelectAll}
@@ -502,13 +480,12 @@ export function ModelSelectionField({
           </Section>
         </InputLayouts.Horizontal>
 
-        {modelConfigurations.length === 0 ? (
+        {models.length === 0 ? (
           <EmptyMessageCard title="No models available." padding="sm" />
         ) : (
           <Section gap={0.25}>
             {isAutoMode
-              ? // Auto mode: read-only display
-                visibleModels.map((model) => (
+              ? visibleModels.map((model) => (
                   <LineItemButton
                     key={model.name}
                     variant="section"
@@ -519,30 +496,18 @@ export function ModelSelectionField({
                     title={model.display_name || model.name}
                   />
                 ))
-              : // Manual mode: checkbox selection
-                modelConfigurations.map((modelConfiguration) => {
-                  const isSelected = selectedModels.includes(
-                    modelConfiguration.name
-                  );
-
-                  return (
-                    <LineItemButton
-                      key={modelConfiguration.name}
-                      variant="section"
-                      sizePreset="main-ui"
-                      selectVariant="select-heavy"
-                      state={isSelected ? "selected" : "empty"}
-                      icon={() => <Checkbox checked={isSelected} />}
-                      title={modelConfiguration.name}
-                      onClick={() =>
-                        handleCheckboxChange(
-                          modelConfiguration.name,
-                          !isSelected
-                        )
-                      }
-                    />
-                  );
-                })}
+              : models.map((model) => (
+                  <LineItemButton
+                    key={model.name}
+                    variant="section"
+                    sizePreset="main-ui"
+                    selectVariant="select-heavy"
+                    state={model.is_visible ? "selected" : "empty"}
+                    icon={() => <Checkbox checked={model.is_visible} />}
+                    title={model.name}
+                    onClick={() => setVisibility(model.name, !model.is_visible)}
+                  />
+                ))}
           </Section>
         )}
 
@@ -557,7 +522,7 @@ export function ModelSelectionField({
                   if (e.key === "Enter" && newModelName.trim()) {
                     e.preventDefault();
                     const trimmed = newModelName.trim();
-                    if (!modelConfigurations.some((m) => m.name === trimmed)) {
+                    if (!models.some((m) => m.name === trimmed)) {
                       onAddModel(trimmed);
                       setNewModelName("");
                     }
@@ -572,14 +537,11 @@ export function ModelSelectionField({
               type="button"
               disabled={
                 !newModelName.trim() ||
-                modelConfigurations.some((m) => m.name === newModelName.trim())
+                models.some((m) => m.name === newModelName.trim())
               }
               onClick={() => {
                 const trimmed = newModelName.trim();
-                if (
-                  trimmed &&
-                  !modelConfigurations.some((m) => m.name === trimmed)
-                ) {
+                if (trimmed && !models.some((m) => m.name === trimmed)) {
                   onAddModel(trimmed);
                   setNewModelName("");
                 }

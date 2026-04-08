@@ -9,6 +9,23 @@ import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 import { ScopedMutator } from "swr";
 import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
 
+// ─── useInitialValues ─────────────────────────────────────────────────────
+
+/** Builds the merged model list from existing + well-known, deduped by name. */
+function buildModelConfigurations(
+  existingLlmProvider?: LLMProviderView,
+  wellKnownLLMProvider?: WellKnownLLMProviderDescriptor
+): ModelConfiguration[] {
+  const existingModels = existingLlmProvider?.model_configurations ?? [];
+  const wellKnownModels = wellKnownLLMProvider?.known_models ?? [];
+
+  const modelMap = new Map<string, ModelConfiguration>();
+  wellKnownModels.forEach((m) => modelMap.set(m.name, m));
+  existingModels.forEach((m) => modelMap.set(m.name, m));
+
+  return Array.from(modelMap.values());
+}
+
 /** Shared initial values for all LLM provider forms (both onboarding and admin). */
 export function useInitialValues(
   isOnboarding: boolean,
@@ -16,9 +33,15 @@ export function useInitialValues(
   existingLlmProvider?: LLMProviderView
 ) {
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(providerName);
+
+  const modelConfigurations = buildModelConfigurations(
+    existingLlmProvider,
+    wellKnownLLMProvider ?? undefined
+  );
+
   const testModelName =
-    existingLlmProvider?.model_configurations?.find((m) => m.is_visible)
-      ?.name ?? wellKnownLLMProvider?.recommended_default_model?.name;
+    modelConfigurations.find((m) => m.is_visible)?.name ??
+    wellKnownLLMProvider?.recommended_default_model?.name;
 
   return {
     provider: existingLlmProvider?.provider ?? providerName,
@@ -29,13 +52,12 @@ export function useInitialValues(
     is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
     groups: existingLlmProvider?.groups ?? [],
     personas: existingLlmProvider?.personas ?? [],
-    visible_model_names:
-      existingLlmProvider?.model_configurations
-        ?.filter((m) => m.is_visible)
-        .map((m) => m.name) ?? [],
+    model_configurations: modelConfigurations,
     test_model_name: testModelName,
   };
 }
+
+// ─── buildValidationSchema ────────────────────────────────────────────────
 
 interface ValidationSchemaOptions {
   apiKey?: boolean;
@@ -81,32 +103,8 @@ export function buildValidationSchema(
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
     test_model_name: Yup.string().required("Model name is required"),
-    visible_model_names: Yup.array().of(Yup.string()),
     ...providerFields,
   });
-}
-
-export function buildAvailableModelConfigurations(
-  existingLlmProvider?: LLMProviderView,
-  wellKnownLLMProvider?: WellKnownLLMProviderDescriptor
-): ModelConfiguration[] {
-  const existingModels = existingLlmProvider?.model_configurations ?? [];
-  const wellKnownModels = wellKnownLLMProvider?.known_models ?? [];
-
-  // Create a map to deduplicate by model name, preferring existing models
-  const modelMap = new Map<string, ModelConfiguration>();
-
-  // Add well-known models first
-  wellKnownModels.forEach((model) => {
-    modelMap.set(model.name, model);
-  });
-
-  // Override with existing models (they take precedence)
-  existingModels.forEach((model) => {
-    modelMap.set(model.name, model);
-  });
-
-  return Array.from(modelMap.values());
 }
 
 // ─── Form value types ─────────────────────────────────────────────────────
@@ -116,15 +114,14 @@ export interface BaseLLMFormValues {
   name: string;
   api_key?: string;
   api_base?: string;
-  /** Model name used for the test request — not sent to the backend. */
+  /** Model name used for the test request — automatically derived. */
   test_model_name?: string;
   is_public: boolean;
   is_auto_mode: boolean;
   groups: number[];
   personas: number[];
-  /** User-selected visible models — not sent to the backend directly;
-   *  used to compute model_configurations[].is_visible. */
-  visible_model_names: string[];
+  /** The full model list with is_visible set directly by user interaction. */
+  model_configurations: ModelConfiguration[];
   custom_config?: Record<string, string>;
 }
 
@@ -136,7 +133,6 @@ export interface SubmitLLMProviderParams<
   providerName: string;
   values: T;
   initialValues: T;
-  modelConfigurations: ModelConfiguration[];
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   hideSuccess?: boolean;
@@ -144,48 +140,6 @@ export interface SubmitLLMProviderParams<
   mutate: ScopedMutator;
   onClose: () => void;
   setSubmitting: (submitting: boolean) => void;
-}
-
-// ─── Model configuration helpers ──────────────────────────────────────────
-
-/** Sets is_visible based on the user's selection and filters out unselected models. */
-export function filterModelConfigurations(
-  currentModelConfigurations: ModelConfiguration[],
-  visibleModels: string[],
-  testModelName?: string
-): ModelConfiguration[] {
-  return currentModelConfigurations
-    .map(
-      (modelConfiguration): ModelConfiguration => ({
-        name: modelConfiguration.name,
-        is_visible: visibleModels.includes(modelConfiguration.name),
-        max_input_tokens: modelConfiguration.max_input_tokens ?? null,
-        supports_image_input: modelConfiguration.supports_image_input,
-        supports_reasoning: modelConfiguration.supports_reasoning,
-        display_name: modelConfiguration.display_name,
-      })
-    )
-    .filter(
-      (modelConfiguration) =>
-        modelConfiguration.name === testModelName ||
-        modelConfiguration.is_visible
-    );
-}
-
-/** In auto mode, include ALL models but preserve their visibility status. */
-export function getAutoModeModelConfigurations(
-  modelConfigurations: ModelConfiguration[]
-): ModelConfiguration[] {
-  return modelConfigurations.map(
-    (modelConfiguration): ModelConfiguration => ({
-      name: modelConfiguration.name,
-      is_visible: modelConfiguration.is_visible,
-      max_input_tokens: modelConfiguration.max_input_tokens ?? null,
-      supports_image_input: modelConfiguration.supports_image_input,
-      supports_reasoning: modelConfiguration.supports_reasoning,
-      display_name: modelConfiguration.display_name,
-    })
-  );
 }
 
 // ─── Misc ─────────────────────────────────────────────────────────────────
