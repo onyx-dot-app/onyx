@@ -546,7 +546,7 @@ export function ModelSelectionField({
                     >
                       <button
                         type="button"
-                        className="w-full rounded-md py-1.5 px-2"
+                        className="w-full rounded-12 py-1.5 px-2"
                       >
                         <Content
                           sizePreset="secondary"
