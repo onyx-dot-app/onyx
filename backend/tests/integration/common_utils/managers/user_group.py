@@ -128,6 +128,7 @@ class UserGroupManager:
             json={"permission": permission, "enabled": enabled},
             headers=user_performing_action.headers,
         )
+        response.raise_for_status()
         return response
 
     @staticmethod

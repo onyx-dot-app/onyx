@@ -18,14 +18,14 @@ from tests.integration.common_utils.test_models import DATestUser
 # One per major router file to cover breadth without redundancy.
 BASIC_ACCESS_ENDPOINTS: list[tuple[str, str]] = [
     ("GET", "/chat/get-user-chat-sessions"),
-    ("GET", "/credential"),
-    ("GET", "/connector/indexing-status"),
-    ("GET", "/manage/users"),
+    ("GET", "/manage/credential"),
+    ("GET", "/manage/connector"),
+    ("GET", "/users"),
     ("GET", "/settings"),
     ("GET", "/query/valid-tags"),
     ("GET", "/input_prompt"),
     ("GET", "/notifications"),
-    ("GET", "/manage/search-settings/get-all-search-settings"),
+    ("GET", "/search-settings/get-all-search-settings"),
     ("GET", "/user/pats"),
 ]
 
@@ -50,7 +50,7 @@ def test_admin_user_allowed(
         timeout=30,
     )
     assert (
-        resp.status_code != 403
+        resp.status_code < 400
     ), f"Admin should access {method} {path}, got {resp.status_code}"
 
 
@@ -69,7 +69,7 @@ def test_basic_user_allowed(
         timeout=30,
     )
     assert (
-        resp.status_code != 403
+        resp.status_code < 400
     ), f"Basic user should access {method} {path}, got {resp.status_code}"
 
 

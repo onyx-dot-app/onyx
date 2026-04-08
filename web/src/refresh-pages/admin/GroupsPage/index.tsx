@@ -43,7 +43,8 @@ function GroupsPage() {
             onAction={() =>
               window.open(
                 "https://docs.onyx.app/admins/permissions/whats_changing",
-                "_blank"
+                "_blank",
+                "noopener,noreferrer"
               )
             }
             className="w-full"

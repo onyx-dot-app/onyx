@@ -46,7 +46,7 @@ def test_admin_user_allowed(
         timeout=30,
     )
     assert (
-        resp.status_code != 403
+        resp.status_code < 400
     ), f"Admin should access {method} {path}, got {resp.status_code}"
 
 

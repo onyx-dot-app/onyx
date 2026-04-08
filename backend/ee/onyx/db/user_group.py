@@ -980,6 +980,7 @@ def set_group_permission__no_commit(
             if existing.is_deleted:
                 existing.is_deleted = False
                 existing.granted_by = granted_by
+                existing.granted_at = func.now()
         else:
             db_session.add(
                 PermissionGrant(

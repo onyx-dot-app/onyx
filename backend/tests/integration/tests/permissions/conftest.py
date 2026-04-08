@@ -7,6 +7,10 @@ Creates six user types that cover the full access spectrum:
   - bot_user:                 BOT account, SLACK_USER role
   - ext_perm_user:            EXT_PERM_USER account, EXT_PERM_USER role
   - anonymous (no fixture):   unauthenticated request (empty headers)
+
+All fixtures are module-scoped because permission tests are read-only
+(GET requests checking status codes) and don't mutate state between tests.
+This avoids a costly full reset per test.
 """
 
 import pytest
@@ -18,17 +22,24 @@ from onyx.db.users import add_slack_user_if_not_exists
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
 
-@pytest.fixture
-def permission_admin_user(reset: None) -> DATestUser:  # noqa: ARG001
+@pytest.fixture(scope="module")
+def module_reset() -> None:
+    """Reset once per test module instead of per test."""
+    reset_all()
+
+
+@pytest.fixture(scope="module")
+def permission_admin_user(module_reset: None) -> DATestUser:  # noqa: ARG001
     """First registered user — automatically gets ADMIN role."""
     return UserManager.create(name="perm_admin")
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def permission_basic_user(
     permission_admin_user: DATestUser,  # noqa: ARG001
 ) -> DATestUser:
@@ -36,7 +47,7 @@ def permission_basic_user(
     return UserManager.create(name="perm_basic")
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def limited_service_account(
     permission_admin_user: DATestUser,
 ) -> DATestAPIKey:
@@ -48,7 +59,7 @@ def limited_service_account(
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def bot_user_headers(
     permission_admin_user: DATestUser,  # noqa: ARG001
 ) -> dict[str, str]:
@@ -68,7 +79,7 @@ def bot_user_headers(
     return {"Authorization": f"Bearer {raw_token}"}
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def ext_perm_user_headers(
     permission_admin_user: DATestUser,  # noqa: ARG001
 ) -> dict[str, str]:
