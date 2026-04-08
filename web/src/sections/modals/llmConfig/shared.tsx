@@ -380,7 +380,10 @@ export function ModelSelectionField({
 }: ModelSelectionFieldProps) {
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
-  const isAutoMode = formikProps.values.is_auto_mode;
+  // When the auto-update toggle is hidden, auto mode should have no effect —
+  // otherwise models can't be deselected and "Select All" stays disabled.
+  const isAutoMode =
+    shouldShowAutoUpdateToggle && formikProps.values.is_auto_mode;
   const models = formikProps.values.model_configurations;
 
   // Snapshot the original model visibility so we can restore it when
@@ -632,6 +635,15 @@ function ModalWrapperInner({
 
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
+
+  const disabledTooltip = busy
+    ? undefined
+    : !isValid
+      ? "Please fill in all required fields."
+      : !dirty
+        ? "No changes to save."
+        : undefined;
+
   const providerIcon = getProviderIcon(providerName);
   const providerDisplayName = getProviderDisplayName(providerName);
   const providerProductName = getProviderProductName(providerName);
@@ -664,6 +676,7 @@ function ModalWrapperInner({
               disabled={!isValid || !dirty || busy}
               type="submit"
               icon={busy ? SimpleLoader : undefined}
+              tooltip={disabledTooltip}
             >
               {llmProvider?.name
                 ? busy
