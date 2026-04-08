@@ -372,6 +372,7 @@ interface RefetchButtonProps {
 }
 function RefetchButton({ onRefetch }: RefetchButtonProps) {
   const abortRef = useRef<AbortController | null>(null);
+  const [isFetching, setIsFetching] = useState(false);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
@@ -380,11 +381,12 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
   return (
     <Button
       prominence="tertiary"
-      icon={!!abortRef.current ? SimpleLoader : SvgRefreshCw}
+      icon={isFetching ? SimpleLoader : SvgRefreshCw}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
+        setIsFetching(true);
         try {
           await onRefetch(controller.signal);
         } catch (err) {
@@ -393,7 +395,9 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
             err instanceof Error ? err.message : "Failed to fetch models"
           );
         } finally {
-          abortRef.current?.abort();
+          if (!controller.signal.aborted) {
+            setIsFetching(false);
+          }
         }
       }}
     />
@@ -640,8 +644,17 @@ function ModalWrapperInner({
   modelConfigurations,
   children,
 }: ModalWrapperInnerProps) {
-  const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
-    useFormikContext<BaseLLMFormValues>();
+  const {
+    isValid,
+    dirty,
+    isSubmitting,
+    status,
+    setFieldValue,
+    values,
+    errors,
+  } = useFormikContext<BaseLLMFormValues>();
+
+  console.log(errors);
 
   // When SWR resolves after mount, populate model_configurations and
   // test_model_name if they're still empty — avoids resetting mid-edit.
