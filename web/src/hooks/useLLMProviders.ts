@@ -144,7 +144,9 @@ export function useAdminLLMProviders() {
  */
 export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   const { data, error, isLoading } = useSWR<WellKnownLLMProviderDescriptor>(
-    providerName ? SWR_KEYS.wellKnownLlmProvider(providerName) : null,
+    providerName && providerName !== LLMProviderName.CUSTOM
+      ? SWR_KEYS.wellKnownLlmProvider(providerName)
+      : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
