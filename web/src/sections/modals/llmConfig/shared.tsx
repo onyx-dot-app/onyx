@@ -85,10 +85,6 @@ export function APIKeyField({
   providerName,
   subDescription,
 }: APIKeyFieldProps) {
-  const defaultDescription = providerName
-    ? `Paste your API key from ${providerName} to access your models.`
-    : "Paste your API key to access your models.";
-
   return (
     <InputLayouts.FieldPadder>
       <InputLayouts.Vertical
