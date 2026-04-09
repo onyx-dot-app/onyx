@@ -30,7 +30,7 @@ const SELECTION_PANEL_W = 400;
 // Compact width for hidden panels in the carousel track
 const HIDDEN_PANEL_W = 220;
 // Generation-mode panel widths (from Figma)
-const GEN_PANEL_W_2 = 640; // 2 panels side-by-side
+const GEN_PANEL_W_2 = 720; // 2 panels side-by-side
 const GEN_PANEL_W_3 = 436; // 3 panels side-by-side
 // Gap between panels — matches CSS gap-6 (24px)
 const PANEL_GAP = 24;
