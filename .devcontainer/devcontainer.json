@@ -1,6 +1,6 @@
 {
   "name": "Onyx Dev Sandbox",
-  "image": "onyxdotapp/onyx-devcontainer@sha256:2de6a330ab26050c798e2ba4bdaad45c2a04656c81be35966f362f25bb1b759f",
+  "image": "onyxdotapp/onyx-devcontainer@sha256:0e715dc4256d60e3070e8d95fee0b66deea43bfe4f962f6a8381c87d1ea1637d",
   "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
   "mounts": [
     "source=${localEnv:DOCKER_SOCK},target=/var/run/docker.sock,type=bind",

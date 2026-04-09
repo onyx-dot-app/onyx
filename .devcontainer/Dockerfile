@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   jq \
   make \
   neovim \
+  openssh-client \
   ripgrep \
   sudo \
   ca-certificates \
