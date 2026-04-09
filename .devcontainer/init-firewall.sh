@@ -42,6 +42,8 @@ ALLOWED_DOMAINS=(
     "update.code.visualstudio.com"
     "pypi.org"
     "files.pythonhosted.org"
+    "go.dev"
+    "static.rust-lang.org"
 )
 
 for domain in "${ALLOWED_DOMAINS[@]}"; do
