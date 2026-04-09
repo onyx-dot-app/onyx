@@ -1,13 +1,26 @@
 import asyncio
+import logging
 from logging.config import fileConfig
+from typing import Any
 
+from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
+from onyx.configs.app_configs import AWS_REGION_NAME
+from onyx.configs.app_configs import POSTGRES_HOST
+from onyx.configs.app_configs import POSTGRES_PORT
+from onyx.configs.app_configs import POSTGRES_REQUIRE_SSL
+from onyx.configs.app_configs import POSTGRES_USER
+from onyx.configs.app_configs import USE_IAM_AUTH
+from onyx.db.engine.iam_auth import get_iam_auth_token
+from onyx.db.engine.rds_ssl import get_rds_ssl_context_or_require
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.models import PublicBase
+
+logger = logging.getLogger(__name__)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -74,10 +87,55 @@ async def run_async_migrations() -> None:
 
     """
 
+    connect_args: dict[str, Any] = {}
+
+    # Configure SSL if required
+    # IAM auth always requires SSL, or can be explicitly enabled via POSTGRES_REQUIRE_SSL
+    if USE_IAM_AUTH or POSTGRES_REQUIRE_SSL:
+        ssl_context = get_rds_ssl_context_or_require()
+        connect_args["ssl"] = ssl_context
+        logger.info(f"Alembic tenants: SSL configured for asyncpg: ssl={ssl_context}")
+    else:
+        logger.warning(
+            "Alembic tenants: SSL NOT configured - USE_IAM_AUTH and POSTGRES_REQUIRE_SSL are both False"
+        )
+
     connectable = create_async_engine(
         build_connection_string(),
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
+
+    # For IAM auth, set up event listener to generate fresh tokens
+    if USE_IAM_AUTH:
+
+        @event.listens_for(connectable.sync_engine, "do_connect")
+        def provide_iam_token_alembic_tenants(
+            dialect: Any,  # noqa: ARG001
+            conn_rec: Any,  # noqa: ARG001
+            cargs: Any,  # noqa: ARG001
+            cparams: Any,
+        ) -> None:
+            try:
+                token = get_iam_auth_token(
+                    POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, AWS_REGION_NAME
+                )
+                if not token:
+                    raise RuntimeError("IAM token is None after generation")
+
+                cparams["password"] = token
+
+                # ALWAYS set SSL for IAM auth (required)
+                # connect_args may not propagate to cparams, so we must set it here
+                cparams["ssl"] = get_rds_ssl_context_or_require()
+                logger.debug(
+                    f"Alembic tenants IAM auth: set ssl={cparams['ssl']} for "
+                    f"{POSTGRES_HOST}:{POSTGRES_PORT}"
+                )
+
+            except Exception as e:
+                logger.error(f"Alembic tenants: Failed to configure IAM auth: {e}")
+                raise
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
