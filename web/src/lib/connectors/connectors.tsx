@@ -761,6 +761,20 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  google_chat: {
+    description: "Configure Google Chat connector",
+    values: [
+      {
+        type: "list",
+        label: "Space Names",
+        name: "space_names",
+        optional: true,
+        description:
+          "Comma-separated list of Google Chat space display names to index. If empty, all spaces accessible by the service account will be indexed.",
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [

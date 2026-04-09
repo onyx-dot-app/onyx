@@ -77,7 +77,7 @@ def _convert_message_to_document(
                 created_time_str.replace("Z", "+00:00")
             )
         except (ValueError, TypeError):
-            pass
+            logger.error(f"Failed to parse createTime for message: {created_time_str}")
 
     snippet = text[:50].rstrip() + "..." if len(text) > 50 else text
     semantic_identifier = f"{sender} in {space_display_name}: {snippet}"
@@ -256,24 +256,3 @@ class GoogleChatConnector(PollConnector, LoadConnector):
         )
 
 
-if __name__ == "__main__":
-    import os
-    import time
-
-    service_account_json_str = os.environ.get("GOOGLE_CHAT_SERVICE_ACCOUNT_KEY", "{}")
-    delegated_email = os.environ.get("GOOGLE_CHAT_DELEGATED_USER_EMAIL")
-
-    connector = GoogleChatConnector()
-    connector.load_credentials(
-        {
-            "google_chat_service_account_key": service_account_json_str,
-            "google_chat_delegated_user_email": delegated_email,
-        }
-    )
-
-    end = time.time()
-    start = end - 24 * 60 * 60  # 1 day
-
-    for doc_batch in connector.poll_source(start, end):
-        for doc in doc_batch:
-            print(doc)

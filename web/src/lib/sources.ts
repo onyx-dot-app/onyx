@@ -13,6 +13,7 @@ import {
   GmailIcon,
   GongIcon,
   GoogleDriveIcon,
+  GoogleIcon,
   GoogleSitesIcon,
   GuruIcon,
   HubSpotIcon,
@@ -339,6 +340,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Zulip",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/zulip`,
+  },
+  google_chat: {
+    icon: GoogleIcon,
+    displayName: "Google Chat",
+    category: SourceCategory.Messaging,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/google_chat`,
   },
 
   // Sales

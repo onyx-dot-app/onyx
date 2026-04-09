@@ -1,4 +1,6 @@
 from collections.abc import Iterator
+from datetime import datetime
+from datetime import timezone
 from typing import Any
 
 import requests
@@ -92,13 +94,31 @@ class JsmConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: JsmConnectorCheckpoint,
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
-        offset = checkpoint.offset
-        
-        while True:
+        stop_indexing = False
+        while not stop_indexing:
             data = self._fetch_requests(offset, self.batch_size)
             requests_list = data.get("values", [])
             
             for req in requests_list:
+                created_date_str = req.get("createdDate", {}).get("iso8601")
+                if created_date_str:
+                    try:
+                        created_dt = datetime.fromisoformat(
+                            created_date_str.replace("Z", "+00:00")
+                        )
+                        created_ts = int(created_dt.timestamp())
+                        
+                        # Stop if we've reached requests older than our start time
+                        if created_ts < start:
+                            stop_indexing = True
+                            break
+                            
+                        # Skip if it's newer than our end time (unlikely but possible if polling)
+                        if created_ts > end:
+                            continue
+                    except (ValueError, TypeError):
+                        logger.warning(f"Failed to parse createdDate for JSM request: {created_date_str}")
+
                 doc = self._process_request(req)
                 if doc:
                     yield doc
