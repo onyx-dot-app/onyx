@@ -1,4 +1,4 @@
-{{- if .Values.monitoring.redisExporter.enabled }}
+{{- if and .Values.monitoring.serviceMonitors.enabled .Values.monitoring.redisExporter.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:

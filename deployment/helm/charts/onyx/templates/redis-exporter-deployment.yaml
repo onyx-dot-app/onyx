@@ -36,6 +36,18 @@ spec:
           ports:
             - name: metrics
               containerPort: 9121
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
           resources:
             {{- toYaml .Values.monitoring.redisExporter.resources | nindent 12 }}
 {{- end }}

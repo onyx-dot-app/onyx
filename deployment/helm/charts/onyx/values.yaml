@@ -284,8 +284,8 @@ monitoring:
     redisPasswordSecret: "onyx-redis"
     # -- Key within the secret that holds the Redis password.
     redisPasswordSecretKey: "redis_password"
-    # -- Skip TLS certificate verification (needed for ElastiCache).
-    skipTlsVerification: true
+    # -- Skip TLS certificate verification (needed for ElastiCache with self-signed certs).
+    skipTlsVerification: false
     resources:
       requests:
         cpu: 100m
