@@ -1,12 +1,15 @@
 {
   "name": "Onyx Dev Sandbox",
-  "image": "onyxdotapp/onyx-devcontainer@sha256:adcf1ec8271928be4eb9bfc4ed66c7c8064369b597c662f5783d592dacdd912c",
+  "image": "onyxdotapp/onyx-devcontainer@sha256:2de6a330ab26050c798e2ba4bdaad45c2a04656c81be35966f362f25bb1b759f",
   "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
   "mounts": [
     "source=${localEnv:DOCKER_SOCK},target=/var/run/docker.sock,type=bind",
     "source=${localEnv:HOME}/.claude,target=/home/dev/.claude,type=bind",
     "source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind",
-    "source=${localEnv:HOME}/.zshrc,target=/home/dev/.zshrc.host,type=bind,readonly"
+    "source=${localEnv:HOME}/.zshrc,target=/home/dev/.zshrc.host,type=bind,readonly",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig,type=bind,readonly",
+    "source=${localEnv:HOME}/.ssh,target=/home/dev/.ssh,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/nvim,target=/home/dev/.config/nvim,type=bind,readonly"
   ],
   "remoteUser": "dev",
   "updateRemoteUserUID": false,

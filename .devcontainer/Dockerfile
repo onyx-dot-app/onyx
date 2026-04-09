@@ -53,12 +53,11 @@ WORKDIR /workspace
 ARG CLAUDE_CODE_VERSION=latest
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
-# Configure zsh for both root and dev — auto-activate Python venv,
-# source host zshrc if bind-mounted.
+# Configure zsh — source the repo-local zshrc so shell customization
+# doesn't require an image rebuild.
 RUN chsh -s /bin/zsh root && \
   for rc in /root/.zshrc /home/dev/.zshrc; do \
-    echo 'if [ -f /workspace/.venv/bin/activate ]; then . /workspace/.venv/bin/activate; fi' >> "$rc"; \
-    echo '[ -f ~/.zshrc.host ] && . ~/.zshrc.host' >> "$rc"; \
+    echo '[ -f /workspace/.devcontainer/zshrc ] && . /workspace/.devcontainer/zshrc' >> "$rc"; \
   done && \
   chown dev:dev /home/dev/.zshrc
 
