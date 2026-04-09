@@ -87,10 +87,10 @@ export default function useMultiModelChat(
   const addModel = useCallback(
     (model: SelectedModel) => {
       setSelectedModels((prev) => {
-        // When transitioning from single-model (derived) to multi-model (stateful),
-        // seed the state array with the current single model first.
+        // When in effective single-model mode (prev <= 1), always re-seed from
+        // the current derived model so stale state from a prior remove doesn't persist.
         const base =
-          prev.length === 0 && currentLlmModel ? [currentLlmModel] : prev;
+          prev.length <= 1 && currentLlmModel ? [currentLlmModel] : prev;
         if (base.length >= MAX_MODELS) return base;
         if (
           base.some(
