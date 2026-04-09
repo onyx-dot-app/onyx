@@ -180,28 +180,31 @@ export default function MultiModelResponseView({
         setSelectionExiting(false);
       }
 
-      // Freeze scroll position so the carousel animation doesn't trigger auto-scroll
-      const scrollContainer = trackContainerElRef.current?.closest(
-        "[data-chat-scroll]"
-      ) as HTMLElement | null;
-      const scrollTop = scrollContainer?.scrollTop ?? 0;
-      if (scrollContainer) scrollContainer.style.overflow = "hidden";
+      // Only freeze scroll when entering selection mode for the first time.
+      // When switching preferred within selection mode, panels are already
+      // capped and the track just slides — no height changes to worry about.
+      const alreadyInSelection = preferredIndex !== null;
+      if (!alreadyInSelection) {
+        const scrollContainer = trackContainerElRef.current?.closest(
+          "[data-chat-scroll]"
+        ) as HTMLElement | null;
+        const scrollTop = scrollContainer?.scrollTop ?? 0;
+        if (scrollContainer) scrollContainer.style.overflow = "hidden";
 
-      // Restore scroll after the carousel animation completes.
-      // Double-rAF ensures scrollTop is set after React commit + observers settle.
-      setTimeout(() => {
-        if (scrollContainer) {
-          scrollContainer.scrollTop = scrollTop;
-          requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (scrollContainer) {
+            scrollContainer.scrollTop = scrollTop;
             requestAnimationFrame(() => {
-              if (scrollContainer) {
-                scrollContainer.scrollTop = scrollTop;
-                scrollContainer.style.overflow = "";
-              }
+              requestAnimationFrame(() => {
+                if (scrollContainer) {
+                  scrollContainer.scrollTop = scrollTop;
+                  scrollContainer.style.overflow = "";
+                }
+              });
             });
-          });
-        }
-      }, 450);
+          }
+        }, 450);
+      }
 
       setPreferredIndex(modelIndex);
       const response = responses.find((r) => r.modelIndex === modelIndex);
