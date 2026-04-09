@@ -27,8 +27,7 @@ import {
 import { fetchModels } from "@/lib/languageModels/svc";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
-
-const DEFAULT_API_BASE = "http://localhost:1234";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 interface LMStudioModalValues extends BaseLLMModalValues {
   api_base: string;
@@ -116,6 +115,10 @@ export default function LMStudioModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
+  const { settings } = useSettingsContext();
+  const defaultApiBase = settings.is_containerized
+    ? "http://host.docker.internal:1234"
+    : "http://localhost:1234";
 
   const onClose = () => onOpenChange?.(false);
 
@@ -125,7 +128,7 @@ export default function LMStudioModal({
       LLMProviderName.LM_STUDIO,
       existingLlmProvider
     ),
-    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+    api_base: existingLlmProvider?.api_base ?? defaultApiBase,
     custom_config: {
       LM_STUDIO_API_KEY: existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY,
     },

@@ -31,8 +31,7 @@ import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-
-const DEFAULT_API_BASE = "http://127.0.0.1:11434";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 const CLOUD_API_BASE = "https://ollama.com";
 
 enum Tab {
@@ -163,6 +162,10 @@ export default function OllamaModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
+  const { settings } = useSettingsContext();
+  const defaultApiBase = settings.is_containerized
+    ? "http://host.docker.internal:11434"
+    : "http://127.0.0.1:11434";
   const apiKey = existingLlmProvider?.custom_config?.OLLAMA_API_KEY;
   const defaultTab =
     existingLlmProvider && !!apiKey ? Tab.TAB_CLOUD : Tab.TAB_SELF_HOSTED;
@@ -176,7 +179,7 @@ export default function OllamaModal({
       LLMProviderName.OLLAMA_CHAT,
       existingLlmProvider
     ),
-    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+    api_base: existingLlmProvider?.api_base ?? defaultApiBase,
     custom_config: {
       OLLAMA_API_KEY: apiKey,
     },

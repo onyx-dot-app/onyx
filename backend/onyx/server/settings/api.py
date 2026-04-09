@@ -34,6 +34,7 @@ from onyx.server.settings.models import UserSettings
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
 from onyx.utils.logger import setup_logger
+from onyx.utils.platform import is_running_in_container
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
@@ -126,6 +127,7 @@ def fetch_settings(
             if DISABLE_VECTOR_DB
             else DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
         ),
+        is_containerized=is_running_in_container(),
     )
 
 
