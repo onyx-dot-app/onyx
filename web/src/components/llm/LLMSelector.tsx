@@ -3,14 +3,14 @@
 import { useMemo } from "react";
 import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
 import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
-import { getModelIcon } from "@/lib/llmConfig/providers";
+import { getLLMModelIcon } from "@/lib/providers";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { createIcon } from "@/components/icons/icons";
 
 interface LLMOption {
   name: string;
   value: string;
-  icon: ReturnType<typeof getModelIcon>;
+  icon: ReturnType<typeof getLLMModelIcon>;
   modelName: string;
   providerName: string;
   provider: string;
@@ -85,7 +85,7 @@ export default function LLMSelector({
             provider.provider,
             modelConfiguration.name
           ),
-          icon: getModelIcon(provider.provider, modelConfiguration.name),
+          icon: getLLMModelIcon(provider.provider, modelConfiguration.name),
           modelName: modelConfiguration.name,
           providerName: provider.name,
           provider: provider.provider,

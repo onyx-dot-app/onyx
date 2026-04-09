@@ -18,7 +18,7 @@ import {
   isRecommendedModel,
 } from "@/app/craft/onboarding/constants";
 import { ToggleWarningModal } from "./ToggleWarningModal";
-import { getModelIcon } from "@/lib/llmConfig/providers";
+import { getLLMModelIcon } from "@/lib/providers";
 import { Section } from "@/layouts/general-layouts";
 import {
   Accordion,
@@ -365,7 +365,9 @@ export function BuildLLMPopover({
                             const isExpanded = expandedGroups.includes(
                               group.providerKey
                             );
-                            const ModelIcon = getModelIcon(group.providerKey);
+                            const ModelIcon = getLLMModelIcon(
+                              group.providerKey
+                            );
 
                             return (
                               <AccordionItem
