@@ -13,11 +13,13 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_permission
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import Permission
 from onyx.db.federated import create_federated_connector_document_set_mapping
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
@@ -38,7 +40,9 @@ logger = setup_logger()
 
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
-    if user.role == UserRole.ADMIN:
+    if has_permission(user, Permission.MANAGE_DOCUMENT_SETS):
+        return stmt
+    if not get_editable and has_permission(user, Permission.READ_DOCUMENT_SETS):
         return stmt
 
     stmt = stmt.distinct()

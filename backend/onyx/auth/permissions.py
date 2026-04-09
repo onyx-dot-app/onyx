@@ -31,6 +31,7 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.MANAGE_AGENTS.value: {
         Permission.ADD_AGENTS.value,
         Permission.READ_AGENTS.value,
+        Permission.READ_DOCUMENT_SETS.value,
     },
     Permission.MANAGE_DOCUMENT_SETS.value: {
         Permission.READ_DOCUMENT_SETS.value,

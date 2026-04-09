@@ -149,7 +149,7 @@ export const ADMIN_ROUTES = {
     icon: SvgOnyxOctagon,
     title: "Agents",
     sidebarLabel: "Agents",
-    requiredPermission: "admin",
+    requiredPermission: "manage:agents",
     section: "Agents & Actions",
     requiresEnterprise: false,
     visibleWhen: null,
