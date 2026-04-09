@@ -254,7 +254,7 @@ oauthlib==3.2.2
     # via
     #   kubernetes
     #   requests-oauthlib
-onyx-devtools==0.7.3
+onyx-devtools==0.7.4
 openai==2.14.0
     # via
     #   litellm
