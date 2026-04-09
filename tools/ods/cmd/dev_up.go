@@ -52,8 +52,17 @@ func devcontainerImage() string {
 	return cfg.Image
 }
 
+// checkDevcontainerCLI ensures the devcontainer CLI is installed.
+func checkDevcontainerCLI() {
+	if _, err := exec.LookPath("devcontainer"); err != nil {
+		log.Fatal("devcontainer CLI is not installed. Install it with: npm install -g @devcontainers/cli")
+	}
+}
+
 // runDevcontainer executes "devcontainer <action> --workspace-folder <root> [extraArgs...]".
 func runDevcontainer(action string, extraArgs []string) {
+	checkDevcontainerCLI()
+
 	root, err := paths.GitRoot()
 	if err != nil {
 		log.Fatalf("Failed to find git root: %v", err)

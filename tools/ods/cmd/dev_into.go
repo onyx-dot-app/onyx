@@ -28,6 +28,8 @@ Examples:
 
 // runDevExec executes "devcontainer exec --workspace-folder <root> <command...>".
 func runDevExec(command []string) {
+	checkDevcontainerCLI()
+
 	root, err := paths.GitRoot()
 	if err != nil {
 		log.Fatalf("Failed to find git root: %v", err)
