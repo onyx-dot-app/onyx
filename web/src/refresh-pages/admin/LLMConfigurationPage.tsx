@@ -16,7 +16,6 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
-  getModalForExistingProvider,
   getProviderDisplayName,
   getProviderIcon,
   getProviderModal,
@@ -71,14 +70,12 @@ interface ExistingProviderCardProps {
   provider: LLMProviderView;
   isDefault: boolean;
   isLastProvider: boolean;
-  defaultModelName?: string;
 }
 
 function ExistingProviderCard({
   provider,
   isDefault,
   isLastProvider,
-  defaultModelName,
 }: ExistingProviderCardProps) {
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
@@ -96,8 +93,14 @@ function ExistingProviderCard({
     }
   };
 
+  const Modal = getProviderModal(provider.provider, provider);
+
   return (
     <>
+      {isOpen && (
+        <Modal existingLlmProvider={provider} onOpenChange={setIsOpen} />
+      )}
+
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
@@ -182,8 +185,6 @@ function ExistingProviderCard({
               </div>
             }
           />
-          {isOpen &&
-            getModalForExistingProvider(provider, setIsOpen, defaultModelName)}
         </SelectCard>
       </Hoverable.Root>
     </>
@@ -414,11 +415,6 @@ export default function LLMConfigurationPage() {
                     provider={provider}
                     isDefault={defaultText?.provider_id === provider.id}
                     isLastProvider={sortedProviders.length === 1}
-                    defaultModelName={
-                      defaultText?.provider_id === provider.id
-                        ? defaultText.model_name
-                        : undefined
-                    }
                   />
                 ))}
               </div>

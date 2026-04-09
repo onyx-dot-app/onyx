@@ -60,7 +60,7 @@ interface ProviderEntry {
   Modal: React.ComponentType<LLMProviderFormProps>;
 }
 
-const PROVIDER_REGISTRY: Record<string, ProviderEntry> = {
+const PROVIDER_REGISTRY: Record<LLMProviderName, ProviderEntry> = {
   [LLMProviderName.OPENAI]: {
     icon: SvgOpenai,
     productName: "GPT",
@@ -146,87 +146,45 @@ const PROVIDER_REGISTRY: Record<string, ProviderEntry> = {
 // ---------------------------------------------------------------------------
 
 export function getProviderProductName(providerName: string): string {
-  return PROVIDER_REGISTRY[providerName]?.productName ?? providerName;
+  return (
+    PROVIDER_REGISTRY[providerName as LLMProviderName]?.productName ??
+    providerName
+  );
 }
 
 export function getProviderDisplayName(providerName: string): string {
-  return PROVIDER_REGISTRY[providerName]?.displayName ?? providerName;
+  return (
+    PROVIDER_REGISTRY[providerName as LLMProviderName]?.displayName ??
+    providerName
+  );
 }
 
 export function getProviderIcon(providerName: string): IconFunctionComponent {
-  return PROVIDER_REGISTRY[providerName]?.icon ?? SvgCpu;
+  return PROVIDER_REGISTRY[providerName as LLMProviderName]?.icon ?? SvgCpu;
 }
+
+// Providers that don't use custom_config themselves — if custom_config is
+// present it means the provider was originally created via CustomModal.
+const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
+  LLMProviderName.OPENAI,
+  LLMProviderName.ANTHROPIC,
+  LLMProviderName.AZURE,
+  LLMProviderName.OPENROUTER,
+]);
 
 export function getProviderModal(
-  providerName: string
-): React.ComponentType<LLMProviderFormProps> | undefined {
-  return PROVIDER_REGISTRY[providerName]?.Modal;
-}
-
-// ---------------------------------------------------------------------------
-// Modal for *existing* (already-configured) providers
-// ---------------------------------------------------------------------------
-
-export function getModalForExistingProvider(
-  provider: LLMProviderView,
-  onOpenChange?: (open: boolean) => void,
-  defaultModelName?: string
-) {
-  const props = {
-    existingLlmProvider: provider,
-    onOpenChange,
-    defaultModelName,
-  };
-
-  const hasCustomConfig = provider.custom_config != null;
-
-  switch (provider.provider) {
-    // These providers don't use custom_config themselves, so a non-null
-    // custom_config means the provider was created via CustomModal.
-    case LLMProviderName.OPENAI:
-      return hasCustomConfig ? (
-        <CustomModal {...props} />
-      ) : (
-        <OpenAIModal {...props} />
-      );
-    case LLMProviderName.ANTHROPIC:
-      return hasCustomConfig ? (
-        <CustomModal {...props} />
-      ) : (
-        <AnthropicModal {...props} />
-      );
-    case LLMProviderName.AZURE:
-      return hasCustomConfig ? (
-        <CustomModal {...props} />
-      ) : (
-        <AzureModal {...props} />
-      );
-    case LLMProviderName.OPENROUTER:
-      return hasCustomConfig ? (
-        <CustomModal {...props} />
-      ) : (
-        <OpenRouterModal {...props} />
-      );
-
-    // These providers legitimately store settings in custom_config,
-    // so always use their dedicated modals.
-    case LLMProviderName.OLLAMA_CHAT:
-      return <OllamaModal {...props} />;
-    case LLMProviderName.VERTEX_AI:
-      return <VertexAIModal {...props} />;
-    case LLMProviderName.BEDROCK:
-      return <BedrockModal {...props} />;
-    case LLMProviderName.LM_STUDIO:
-      return <LMStudioModal {...props} />;
-    case LLMProviderName.LITELLM_PROXY:
-      return <LiteLLMProxyModal {...props} />;
-    case LLMProviderName.BIFROST:
-      return <BifrostModal {...props} />;
-    case LLMProviderName.OPENAI_COMPATIBLE:
-      return <OpenAICompatibleModal {...props} />;
-    default:
-      return <CustomModal {...props} />;
+  providerName: string,
+  existingProvider?: LLMProviderView
+): React.ComponentType<LLMProviderFormProps> {
+  if (
+    existingProvider?.custom_config != null &&
+    CUSTOM_CONFIG_OVERRIDES.has(providerName)
+  ) {
+    return CustomModal;
   }
+  return (
+    PROVIDER_REGISTRY[providerName as LLMProviderName]?.Modal ?? CustomModal
+  );
 }
 
 // ---------------------------------------------------------------------------
