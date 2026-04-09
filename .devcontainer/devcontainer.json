@@ -15,6 +15,6 @@
   "updateRemoteUserUID": false,
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
-  "postStartCommand": "/usr/local/bin/init-dev-user.sh && /usr/local/bin/init-firewall.sh",
+  "postStartCommand": "sudo /usr/local/bin/init-dev-user.sh && sudo /usr/local/bin/init-firewall.sh",
   "waitFor": "postStartCommand"
 }
