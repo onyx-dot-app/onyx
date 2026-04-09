@@ -68,6 +68,8 @@ export default function MultiModelResponseView({
   const [hiddenPanels, setHiddenPanels] = useState<Set<number>>(new Set());
   // Controls animation: false = panels at start position, true = panels at peek position
   const [selectionEntered, setSelectionEntered] = useState(false);
+  // True while the reverse animation is playing (deselect → back to equal panels)
+  const [selectionExiting, setSelectionExiting] = useState(false);
   // Measures the overflow-hidden carousel container for responsive preferred-panel sizing.
   const [trackContainerW, setTrackContainerW] = useState(0);
   const roRef = useRef<ResizeObserver | null>(null);
@@ -193,9 +195,11 @@ export default function MultiModelResponseView({
   );
 
   const handleDeselectPreferred = useCallback(() => {
-    // Animate panels back to equal positions first, then clear preferred
+    // Animate panels back to equal positions, then clear preferred after transition
+    setSelectionExiting(true);
     setSelectionEntered(false);
     setTimeout(() => {
+      setSelectionExiting(false);
       setPreferredIndex(null);
 
       // Clear preferredResponseId in the local tree so input bar re-gates
@@ -215,7 +219,7 @@ export default function MultiModelResponseView({
           }
         }
       }
-    }, 450); // matches the 0.45s cubic-bezier transition duration
+    }, 450);
   }, [parentMessage, currentSessionId, updateSessionMessageTree]);
 
   // Clear preferred selection when generation starts
@@ -347,9 +351,10 @@ export default function MultiModelResponseView({
           className="flex items-start"
           style={{
             gap: `${PANEL_GAP}px`,
-            transition: selectionEntered
-              ? "transform 0.45s cubic-bezier(0.2, 0, 0, 1)"
-              : "none",
+            transition:
+              selectionEntered || selectionExiting
+                ? "transform 0.45s cubic-bezier(0.2, 0, 0, 1)"
+                : "none",
             transform: trackTransform,
           }}
         >
@@ -381,9 +386,10 @@ export default function MultiModelResponseView({
                 style={{
                   width: `${selectionEntered ? finalW : startW}px`,
                   flexShrink: 0,
-                  transition: selectionEntered
-                    ? "width 0.45s cubic-bezier(0.2, 0, 0, 1)"
-                    : "none",
+                  transition:
+                    selectionEntered || selectionExiting
+                      ? "width 0.45s cubic-bezier(0.2, 0, 0, 1)"
+                      : "none",
                   maxHeight: capped ? preferredPanelHeight : undefined,
                   overflow: capped ? "hidden" : undefined,
                   position: capped ? "relative" : undefined,
