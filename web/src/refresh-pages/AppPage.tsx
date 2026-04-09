@@ -400,19 +400,22 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const multiModel = useMultiModelChat(llmManager);
 
-  // Auto-fold sidebar when multi-model is active (panels need full width)
+  // Auto-fold sidebar when a multi-model message is submitted.
+  // Stays collapsed until the user exits multi-model mode (removes models).
   const { folded: sidebarFolded, setFolded: setSidebarFolded } =
     useSidebarState();
   const preMultiModelFoldedRef = useRef<boolean | null>(null);
 
-  useEffect(() => {
-    if (
-      multiModel.isMultiModelActive &&
-      preMultiModelFoldedRef.current === null
-    ) {
+  const foldSidebarForMultiModel = useCallback(() => {
+    if (preMultiModelFoldedRef.current === null) {
       preMultiModelFoldedRef.current = sidebarFolded;
       setSidebarFolded(true);
-    } else if (
+    }
+  }, [sidebarFolded, setSidebarFolded]);
+
+  // Restore sidebar when user exits multi-model mode
+  useEffect(() => {
+    if (
       !multiModel.isMultiModelActive &&
       preMultiModelFoldedRef.current !== null
     ) {
@@ -532,6 +535,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const onChat = useCallback(
     (message: string) => {
+      if (multiModel.isMultiModelActive) {
+        foldSidebarForMultiModel();
+      }
       resetInputBar();
       onSubmit({
         message,
@@ -552,6 +558,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       deepResearchEnabledForCurrentWorkflow,
       multiModel.isMultiModelActive,
       multiModel.selectedModels,
+      foldSidebarForMultiModel,
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
