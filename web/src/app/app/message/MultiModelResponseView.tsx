@@ -160,6 +160,19 @@ export default function MultiModelResponseView({
     (modelIndex: number) => {
       if (isGenerating) return;
       setPreferredIndex(modelIndex);
+
+      // Scroll the multi-model view to the top of the chat viewport
+      const scrollContainer = trackContainerElRef.current?.closest(
+        "[data-chat-scroll]"
+      ) as HTMLElement | null;
+      const trackEl = trackContainerElRef.current;
+      if (scrollContainer && trackEl) {
+        const offset =
+          trackEl.getBoundingClientRect().top -
+          scrollContainer.getBoundingClientRect().top +
+          scrollContainer.scrollTop;
+        scrollContainer.scrollTo({ top: offset, behavior: "smooth" });
+      }
       const response = responses.find((r) => r.modelIndex === modelIndex);
       if (!response) return;
       if (onMessageSelection) {
