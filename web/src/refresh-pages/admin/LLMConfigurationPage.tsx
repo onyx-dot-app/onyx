@@ -29,23 +29,16 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import {
+  LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import { getModalForExistingProvider } from "@/sections/modals/llmConfig/getModal";
-import OpenAIModal from "@/sections/modals/llmConfig/OpenAIModal";
-import AnthropicModal from "@/sections/modals/llmConfig/AnthropicModal";
-import OllamaModal from "@/sections/modals/llmConfig/OllamaModal";
-import AzureModal from "@/sections/modals/llmConfig/AzureModal";
-import BedrockModal from "@/sections/modals/llmConfig/BedrockModal";
-import VertexAIModal from "@/sections/modals/llmConfig/VertexAIModal";
-import OpenRouterModal from "@/sections/modals/llmConfig/OpenRouterModal";
+import {
+  getModalForExistingProvider,
+  PROVIDER_MODAL_COMPONENTS,
+} from "@/sections/modals/llmConfig/getModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
-import LMStudioModal from "@/sections/modals/llmConfig/LMStudioModal";
-import LiteLLMProxyModal from "@/sections/modals/llmConfig/LiteLLMProxyModal";
-import BifrostModal from "@/sections/modals/llmConfig/BifrostModal";
-import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleModal";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 
@@ -71,51 +64,6 @@ const PROVIDER_DISPLAY_ORDER: string[] = [
   LLMProviderName.BIFROST,
   LLMProviderName.OPENAI_COMPATIBLE,
 ];
-
-const PROVIDER_MODAL_MAP: Record<
-  string,
-  (
-    shouldMarkAsDefault: boolean,
-    onOpenChange: (open: boolean) => void
-  ) => React.ReactNode
-> = {
-  openai: (d, onOpenChange) => (
-    <OpenAIModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  anthropic: (d, onOpenChange) => (
-    <AnthropicModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  ollama_chat: (d, onOpenChange) => (
-    <OllamaModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  azure: (d, onOpenChange) => (
-    <AzureModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  bedrock: (d, onOpenChange) => (
-    <BedrockModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  vertex_ai: (d, onOpenChange) => (
-    <VertexAIModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  openrouter: (d, onOpenChange) => (
-    <OpenRouterModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  lm_studio: (d, onOpenChange) => (
-    <LMStudioModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  litellm_proxy: (d, onOpenChange) => (
-    <LiteLLMProxyModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  bifrost: (d, onOpenChange) => (
-    <BifrostModal shouldMarkAsDefault={d} onOpenChange={onOpenChange} />
-  ),
-  openai_compatible: (d, onOpenChange) => (
-    <OpenAICompatibleModal
-      shouldMarkAsDefault={d}
-      onOpenChange={onOpenChange}
-    />
-  ),
-};
 
 // ============================================================================
 // ExistingProviderCard — card for configured (existing) providers
@@ -251,16 +199,13 @@ function ExistingProviderCard({
 interface NewProviderCardProps {
   provider: WellKnownLLMProviderDescriptor;
   isFirstProvider: boolean;
-  formFn: (
-    shouldMarkAsDefault: boolean,
-    onOpenChange: (open: boolean) => void
-  ) => React.ReactNode;
+  Modal: React.ComponentType<LLMProviderFormProps>;
 }
 
 function NewProviderCard({
   provider,
   isFirstProvider,
-  formFn,
+  Modal,
 }: NewProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -290,7 +235,9 @@ function NewProviderCard({
           </Button>
         }
       />
-      {isOpen && formFn(isFirstProvider, setIsOpen)}
+      {isOpen && (
+        <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
+      )}
     </SelectCard>
   );
 }
@@ -348,7 +295,7 @@ function NewCustomProviderCard({
 // LLMConfigurationPage — main page component
 // ============================================================================
 
-export default function LLMProviderConfigurationPage() {
+export default function LLMConfigurationPage() {
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
@@ -508,8 +455,8 @@ export default function LLMProviderConfigurationPage() {
                 );
               })
               .map((provider) => {
-                const formFn = PROVIDER_MODAL_MAP[provider.name];
-                if (!formFn) {
+                const Modal = PROVIDER_MODAL_COMPONENTS[provider.name];
+                if (!Modal) {
                   toast.error(
                     `No modal mapping for provider "${provider.name}".`
                   );
@@ -520,7 +467,7 @@ export default function LLMProviderConfigurationPage() {
                     key={provider.name}
                     provider={provider}
                     isFirstProvider={isFirstProvider}
-                    formFn={formFn}
+                    Modal={Modal}
                   />
                 );
               })}
