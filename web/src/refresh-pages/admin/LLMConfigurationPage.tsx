@@ -16,8 +16,10 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
+  getModalForExistingProvider,
   getProviderDisplayName,
   getProviderIcon,
+  getProviderModal,
   getProviderProductName,
 } from "@/lib/llmConfig/providers";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
@@ -34,10 +36,6 @@ import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import {
-  getModalForExistingProvider,
-  PROVIDER_MODAL_COMPONENTS,
-} from "@/sections/modals/llmConfig/getModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
@@ -455,7 +453,7 @@ export default function LLMConfigurationPage() {
                 );
               })
               .map((provider) => {
-                const Modal = PROVIDER_MODAL_COMPONENTS[provider.name];
+                const Modal = getProviderModal(provider.name);
                 if (!Modal) {
                   toast.error(
                     `No modal mapping for provider "${provider.name}".`

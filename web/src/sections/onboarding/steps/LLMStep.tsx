@@ -17,8 +17,8 @@ import {
 import {
   getProviderProductName,
   getProviderDisplayName,
+  getProviderModal,
 } from "@/lib/llmConfig/providers";
-import { PROVIDER_MODAL_COMPONENTS } from "@/sections/modals/llmConfig/getModal";
 import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import { Disabled } from "@opal/core";
 import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
@@ -133,8 +133,7 @@ const LLMStep = memo(
 
       const ModalComponent =
         selectedProvider?.llmDescriptor && !selectedProvider.isCustomProvider
-          ? PROVIDER_MODAL_COMPONENTS[selectedProvider.llmDescriptor.name] ??
-            CustomModal
+          ? getProviderModal(selectedProvider.llmDescriptor.name) ?? CustomModal
           : CustomModal;
 
       const modalProps: LLMProviderFormProps = {
