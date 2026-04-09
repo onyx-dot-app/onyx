@@ -171,6 +171,7 @@ export { default as SvgTrash } from "@opal/icons/trash";
 export { default as SvgTwoLineSmall } from "@opal/icons/two-line-small";
 export { default as SvgUnplug } from "@opal/icons/unplug";
 export { default as SvgUploadCloud } from "@opal/icons/upload-cloud";
+export { default as SvgUploadSquare } from "@opal/icons/upload-square";
 export { default as SvgUser } from "@opal/icons/user";
 export { default as SvgUserCheck } from "@opal/icons/user-check";
 export { default as SvgUserEdit } from "@opal/icons/user-edit";
