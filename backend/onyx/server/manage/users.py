@@ -857,6 +857,7 @@ def verify_user_logged_in(
             invitation=tenant_invitation,
         ),
         memories=memories,
+        effective_permissions=sorted(p.value for p in get_effective_permissions(user)),
     )
 
     return user_info

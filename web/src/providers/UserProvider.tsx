@@ -15,6 +15,7 @@ import {
   UserRole,
   ThemePreference,
 } from "@/lib/types";
+import { hasAnyAdminPermission } from "@/lib/permissions";
 import { usePostHog } from "posthog-js/react";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
@@ -26,10 +27,14 @@ import {
 import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
 import { useTheme } from "next-themes";
 
+const EMPTY_PERMISSIONS: string[] = [];
+
 interface UserContextType {
   user: User | null;
   isAdmin: boolean;
   isCurator: boolean;
+  hasAdminAccess: boolean;
+  permissions: string[];
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
   authTypeMetadata: AuthTypeMetadata;
@@ -523,6 +528,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         isCurator:
           upToDateUser?.role === UserRole.CURATOR ||
           upToDateUser?.role === UserRole.GLOBAL_CURATOR,
+        hasAdminAccess: hasAnyAdminPermission(
+          upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
+        ),
+        permissions: upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS,
         isCloudSuperuser: upToDateUser?.is_cloud_superuser ?? false,
       }}
     >

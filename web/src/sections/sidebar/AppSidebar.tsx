@@ -55,6 +55,7 @@ import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
+import { getFirstPermittedAdminRoute } from "@/lib/permissions";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { useModalContext } from "@/components/context/ModalContext";
@@ -479,7 +480,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
     ]
   );
 
-  const { isAdmin, isCurator, user } = useUser();
+  const { isAdmin, isCurator, hasAdminAccess, permissions, user } = useUser();
   const activeSidebarTab = useAppFocus();
   const createProjectModal = useCreateModal();
   const defaultAppMode =
@@ -584,13 +585,13 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   const settingsButton = useMemo(
     () => (
       <div>
-        {(isAdmin || isCurator) && (
+        {hasAdminAccess && (
           <SidebarTab
-            href={isCurator ? "/admin/agents" : "/admin/configuration/llm"}
+            href={getFirstPermittedAdminRoute(permissions)}
             icon={SvgSettings}
             folded={folded}
           >
-            {isAdmin ? "Admin Panel" : "Curator Panel"}
+            Admin Panel
           </SidebarTab>
         )}
         <AccountPopover
@@ -601,7 +602,13 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
         />
       </div>
     ),
-    [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
+    [
+      folded,
+      hasAdminAccess,
+      permissions,
+      handleShowBuildIntro,
+      isOnyxCraftEnabled,
+    ]
   );
 
   return (

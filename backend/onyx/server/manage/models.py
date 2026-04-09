@@ -135,6 +135,7 @@ class UserInfo(BaseModel):
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
     tenant_info: TenantInfo | None = None
+    effective_permissions: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_model(
@@ -148,6 +149,7 @@ class UserInfo(BaseModel):
         tenant_info: TenantInfo | None = None,
         assistant_specific_configs: UserSpecificAssistantPreferences | None = None,
         memories: list[MemoryItem] | None = None,
+        effective_permissions: list[str] | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -187,6 +189,7 @@ class UserInfo(BaseModel):
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
             tenant_info=tenant_info,
+            effective_permissions=effective_permissions or [],
             personalization=UserPersonalization(
                 name=user.personal_name or "",
                 role=user.personal_role or "",

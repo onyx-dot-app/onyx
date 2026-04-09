@@ -126,6 +126,7 @@ export interface User {
   password_configured?: boolean;
   tenant_info?: TenantInfo | null;
   personalization?: UserPersonalization;
+  effective_permissions?: string[];
 }
 
 export interface TenantInfo {
