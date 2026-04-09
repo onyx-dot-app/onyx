@@ -9,7 +9,6 @@ repos:
     rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
       - id: uv-sync
-        args: ["--locked"]
       - id: uv-lock
       - id: uv-export
         name: uv-export default.txt
