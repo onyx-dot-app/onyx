@@ -1,4 +1,3 @@
-import os
 import re
 import threading
 import time
@@ -27,6 +26,7 @@ from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_REQUIRE_SSL
 from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
 from onyx.configs.app_configs import POSTGRES_USER
+from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
@@ -52,9 +52,6 @@ def is_valid_schema_name(name: str) -> bool:
 
 SYNC_DB_API = "psycopg2"
 ASYNC_DB_API = "asyncpg"
-
-# why isn't this in configs?
-USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
 
 def build_connection_string(
