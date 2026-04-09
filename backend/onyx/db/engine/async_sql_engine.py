@@ -104,9 +104,13 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
 
                     cparams["password"] = token
 
-                    # Ensure SSL is configured (required for IAM auth)
-                    if "ssl" not in cparams or cparams["ssl"] is None:
-                        cparams["ssl"] = get_rds_ssl_context_or_require()
+                    # ALWAYS set SSL for IAM auth (required)
+                    # connect_args may not propagate to cparams, so we must set it here
+                    cparams["ssl"] = get_rds_ssl_context_or_require()
+                    logger.debug(
+                        f"IAM auth connection: set ssl={cparams['ssl']} for "
+                        f"{POSTGRES_HOST}:{POSTGRES_PORT}"
+                    )
 
                 except Exception as e:
                     logger.error(f"Failed to configure IAM auth: {e}")
