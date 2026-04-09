@@ -14,7 +14,6 @@ from fastapi import Depends
 from pydantic import BaseModel
 from pydantic import field_validator
 
-from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_user
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -213,8 +212,6 @@ def get_effective_permissions(user: User) -> set[Permission]:
     Admin-role users always receive all permissions regardless of the JSONB
     column, maintaining backward compatibility with role-based access control.
     """
-    if user.role == UserRole.ADMIN:
-        return set(Permission)
 
     granted: set[Permission] = set()
     for p in user.effective_permissions:
