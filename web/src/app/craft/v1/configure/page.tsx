@@ -48,7 +48,7 @@ import NotAllowedModal from "@/app/craft/onboarding/components/NotAllowedModal";
 import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useUser } from "@/providers/UserProvider";
-import { getModelIcon } from "@/lib/llmConfig/providers";
+import { getModelIcon } from "@/lib/llmConfig";
 import {
   getBuildUserPersona,
   getPersonaInfo,

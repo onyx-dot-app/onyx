@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
 import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
-import { getModelIcon } from "@/lib/llmConfig/providers";
+import { getModelIcon } from "@/lib/llmConfig";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { createIcon } from "@/components/icons/icons";
 

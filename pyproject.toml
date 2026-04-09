@@ -28,7 +28,7 @@ dependencies = [
     "kubernetes>=31.0.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 # Main backend application dependencies
 backend = [
     "aiohttp==3.13.4",
@@ -195,6 +195,9 @@ model_server = [
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]
 
+[tool.uv]
+default-groups = ["backend", "dev", "ee", "model_server"]
+
 [tool.mypy]
 plugins = "sqlalchemy.ext.mypy.plugin"
 mypy_path = "backend"
@@ -230,7 +233,7 @@ follow_imports = "skip"
 ignore_errors = true
 
 [tool.uv.workspace]
-members = ["backend", "tools/ods"]
+members = ["tools/ods"]
 
 [tool.basedpyright]
 include = ["backend"]

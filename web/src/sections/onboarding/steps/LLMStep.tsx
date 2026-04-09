@@ -4,35 +4,29 @@ import { memo, useState, useCallback } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import Separator from "@/refresh-components/Separator";
-import LLMProviderCard from "../components/LLMProviderCard";
+import LLMProviderCard from "@/sections/onboarding/components/LLMProviderCard";
 import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
 } from "@/interfaces/onboarding";
-import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import {
-  getOnboardingForm,
-  getProviderDisplayInfo,
-} from "../forms/getOnboardingForm";
+  LLMProviderFormProps,
+  WellKnownLLMProviderDescriptor,
+} from "@/interfaces/llm";
+import { getProvider } from "@/lib/llmConfig";
 import { Disabled } from "@opal/core";
 import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 
-type LLMStepProps = {
-  state: OnboardingState;
-  actions: OnboardingActions;
-  disabled?: boolean;
-};
-
 interface SelectedProvider {
   llmDescriptor?: WellKnownLLMProviderDescriptor;
   isCustomProvider: boolean;
 }
 
-const LLMProviderSkeleton = () => {
+function LLMProviderSkeleton() {
   return (
     <div className="flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 animate-pulse">
       <div className="flex gap-1 p-1 flex-1 min-w-0">
@@ -47,12 +41,11 @@ const LLMProviderSkeleton = () => {
       <div className="h-6 w-16 bg-neutral-200 rounded" />
     </div>
   );
-};
+}
 
-type StackedProviderIconsProps = {
+interface StackedProviderIconsProps {
   providers: string[];
-};
-
+}
 const StackedProviderIcons = ({ providers }: StackedProviderIconsProps) => {
   if (!providers || providers.length === 0) {
     return null;
@@ -89,133 +82,157 @@ const StackedProviderIcons = ({ providers }: StackedProviderIconsProps) => {
   );
 };
 
-const LLMStepInner = ({
-  state: onboardingState,
-  actions: onboardingActions,
-  disabled,
-}: LLMStepProps) => {
-  const { llmProviderOptions, isLoading } = useLLMProviderOptions();
-  const llmDescriptors = llmProviderOptions ?? [];
+interface LLMStepProps {
+  state: OnboardingState;
+  actions: OnboardingActions;
+  disabled?: boolean;
+}
+const LLMStep = memo(
+  ({
+    state: onboardingState,
+    actions: onboardingActions,
+    disabled,
+  }: LLMStepProps) => {
+    const { llmProviderOptions, isLoading } = useLLMProviderOptions();
+    const llmDescriptors = llmProviderOptions ?? [];
 
-  const [selectedProvider, setSelectedProvider] =
-    useState<SelectedProvider | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedProvider, setSelectedProvider] =
+      useState<SelectedProvider | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleProviderClick = useCallback(
-    (
-      llmDescriptor?: WellKnownLLMProviderDescriptor,
-      isCustomProvider: boolean = false
-    ) => {
-      setSelectedProvider({ llmDescriptor, isCustomProvider });
-      setIsModalOpen(true);
-    },
-    []
-  );
+    const handleProviderClick = useCallback(
+      (
+        llmDescriptor?: WellKnownLLMProviderDescriptor,
+        isCustomProvider: boolean = false
+      ) => {
+        setSelectedProvider({ llmDescriptor, isCustomProvider });
+        setIsModalOpen(true);
+      },
+      []
+    );
 
-  const handleModalClose = useCallback((open: boolean) => {
-    setIsModalOpen(open);
-    if (!open) {
-      setSelectedProvider(null);
-    }
-  }, []);
+    const handleModalClose = useCallback((open: boolean) => {
+      setIsModalOpen(open);
+      if (!open) {
+        setSelectedProvider(null);
+      }
+    }, []);
 
-  if (
-    onboardingState.currentStep === OnboardingStep.LlmSetup ||
-    onboardingState.currentStep === OnboardingStep.Name
-  ) {
-    return (
-      <Disabled disabled={disabled} allowClick>
-        <div
-          className="flex flex-col items-center justify-between w-full p-1 rounded-16 border border-border-01 bg-background-tint-00"
-          aria-label="onboarding-llm-step"
-        >
-          <ContentAction
-            icon={SvgCpu}
-            title="Connect your LLM models"
-            description="Onyx supports both self-hosted models and popular providers."
-            sizePreset="main-ui"
-            variant="section"
-            paddingVariant="lg"
-            rightChildren={
-              <Button
-                disabled={disabled}
-                prominence="tertiary"
-                rightIcon={SvgExternalLink}
-                href="/admin/configuration/llm"
-              >
-                View in Admin Panel
-              </Button>
-            }
-          />
-          <Separator />
-          <div className="flex flex-wrap gap-1 [&>*:last-child:nth-child(odd)]:basis-full">
-            {isLoading ? (
-              Array.from({ length: 8 }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className="basis-[calc(50%-theme(spacing.1)/2)] grow"
+    if (
+      onboardingState.currentStep === OnboardingStep.LlmSetup ||
+      onboardingState.currentStep === OnboardingStep.Name
+    ) {
+      const providerName = selectedProvider?.isCustomProvider
+        ? "custom"
+        : selectedProvider?.llmDescriptor?.name ?? "custom";
+
+      const { Modal: ModalComponent } = getProvider(providerName);
+
+      const modalProps: LLMProviderFormProps = {
+        variant: "onboarding" as const,
+        shouldMarkAsDefault:
+          (onboardingState?.data.llmProviders ?? []).length === 0,
+        onboardingActions,
+        onOpenChange: handleModalClose,
+        onSuccess: () => {
+          onboardingActions.updateData({
+            llmProviders: [
+              ...(onboardingState?.data.llmProviders ?? []),
+              providerName,
+            ],
+          });
+          onboardingActions.setButtonActive(true);
+        },
+      };
+
+      return (
+        <Disabled disabled={disabled} allowClick>
+          <div
+            className="flex flex-col items-center justify-between w-full p-1 rounded-16 border border-border-01 bg-background-tint-00"
+            aria-label="onboarding-llm-step"
+          >
+            <ContentAction
+              icon={SvgCpu}
+              title="Connect your LLM models"
+              description="Onyx supports both self-hosted models and popular providers."
+              sizePreset="main-ui"
+              variant="section"
+              paddingVariant="lg"
+              rightChildren={
+                <Button
+                  disabled={disabled}
+                  prominence="tertiary"
+                  rightIcon={SvgExternalLink}
+                  href="/admin/configuration/llm"
                 >
-                  <LLMProviderSkeleton />
-                </div>
-              ))
-            ) : (
-              <>
-                {/* Render the selected provider form */}
-                {selectedProvider &&
-                  isModalOpen &&
-                  getOnboardingForm({
-                    llmDescriptor: selectedProvider.llmDescriptor,
-                    isCustomProvider: selectedProvider.isCustomProvider,
-                    onboardingState,
-                    onboardingActions,
-                    onOpenChange: handleModalClose,
+                  View in Admin Panel
+                </Button>
+              }
+            />
+            <Separator />
+            <div className="flex flex-wrap gap-1 [&>*:last-child:nth-child(odd)]:basis-full">
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="basis-[calc(50%-theme(spacing.1)/2)] grow"
+                  >
+                    <LLMProviderSkeleton />
+                  </div>
+                ))
+              ) : (
+                <>
+                  {/* Render the selected provider form */}
+                  {selectedProvider && isModalOpen && (
+                    <ModalComponent {...modalProps} />
+                  )}
+
+                  {/* Render provider cards */}
+                  {llmDescriptors.map((llmDescriptor) => {
+                    const { productName, companyName } = getProvider(
+                      llmDescriptor.name
+                    );
+                    return (
+                      <div
+                        key={llmDescriptor.name}
+                        className="basis-[calc(50%-theme(spacing.1)/2)] grow"
+                      >
+                        <LLMProviderCard
+                          title={productName}
+                          subtitle={companyName}
+                          providerName={llmDescriptor.name}
+                          disabled={disabled}
+                          isConnected={onboardingState.data.llmProviders?.some(
+                            (provider) => provider === llmDescriptor.name
+                          )}
+                          onClick={() =>
+                            handleProviderClick(llmDescriptor, false)
+                          }
+                        />
+                      </div>
+                    );
                   })}
 
-                {/* Render provider cards */}
-                {llmDescriptors.map((llmDescriptor) => {
-                  const displayInfo = getProviderDisplayInfo(
-                    llmDescriptor.name
-                  );
-                  return (
-                    <div
-                      key={llmDescriptor.name}
-                      className="basis-[calc(50%-theme(spacing.1)/2)] grow"
-                    >
-                      <LLMProviderCard
-                        title={displayInfo.title}
-                        subtitle={displayInfo.displayName}
-                        providerName={llmDescriptor.name}
-                        disabled={disabled}
-                        isConnected={onboardingState.data.llmProviders?.some(
-                          (provider) => provider === llmDescriptor.name
-                        )}
-                        onClick={() =>
-                          handleProviderClick(llmDescriptor, false)
-                        }
-                      />
-                    </div>
-                  );
-                })}
-
-                {/* Custom provider card */}
-                <div className="basis-[calc(50%-theme(spacing.1)/2)] grow">
-                  <LLMProviderCard
-                    title="Custom LLM Provider"
-                    subtitle="LiteLLM Compatible APIs"
-                    disabled={disabled}
-                    isConnected={onboardingState.data.llmProviders?.some(
-                      (provider) => provider === "custom"
-                    )}
-                    onClick={() => handleProviderClick(undefined, true)}
-                  />
-                </div>
-              </>
-            )}
+                  {/* Custom provider card */}
+                  <div className="basis-[calc(50%-theme(spacing.1)/2)] grow">
+                    <LLMProviderCard
+                      title="Custom LLM Provider"
+                      subtitle="LiteLLM Compatible APIs"
+                      disabled={disabled}
+                      isConnected={onboardingState.data.llmProviders?.some(
+                        (provider) => provider === "custom"
+                      )}
+                      onClick={() => handleProviderClick(undefined, true)}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      </Disabled>
-    );
-  } else {
+        </Disabled>
+      );
+    }
+
     return (
       <button
         type="button"
@@ -244,7 +261,7 @@ const LLMStepInner = ({
       </button>
     );
   }
-};
+);
+LLMStep.displayName = "LLMStep";
 
-const LLMStep = memo(LLMStepInner);
 export default LLMStep;

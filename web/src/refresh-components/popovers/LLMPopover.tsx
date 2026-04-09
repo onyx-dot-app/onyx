@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Popover from "@/refresh-components/Popover";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { structureValue } from "@/lib/llmConfig/utils";
-import { getModelIcon } from "@/lib/llmConfig/providers";
+import { getModelIcon } from "@/lib/llmConfig";
 import { AGGREGATOR_PROVIDERS } from "@/lib/llmConfig/svc";
 
 import { Slider } from "@/components/ui/slider";

@@ -1,5 +1,5 @@
 import { defaultTailwindCSS } from "@/components/icons/icons";
-import { getModelIcon } from "@/lib/llmConfig/providers";
+import { getModelIcon } from "@/lib/llmConfig";
 import { IconProps } from "@opal/types";
 
 export interface ModelIconProps extends IconProps {

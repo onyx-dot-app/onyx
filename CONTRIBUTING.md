@@ -117,7 +117,7 @@ If using PowerShell, the command slightly differs:
 Install the required Python dependencies:
 
 ```bash
-uv sync --all-extras
+uv sync
 ```
 
 Install Playwright for Python (headless browser required by the Web Connector):
