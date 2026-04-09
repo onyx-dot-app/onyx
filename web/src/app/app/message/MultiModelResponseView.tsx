@@ -68,6 +68,9 @@ export default function MultiModelResponseView({
   const [hiddenPanels, setHiddenPanels] = useState<Set<number>>(new Set());
   // Controls animation: false = panels at start position, true = panels at peek position
   const [selectionEntered, setSelectionEntered] = useState(false);
+  // Tracks the deselect animation timeout so it can be cancelled if the user
+  // re-selects a panel during the 450ms animation window.
+  const deselectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True while the reverse animation is playing (deselect → back to equal panels)
   const [selectionExiting, setSelectionExiting] = useState(false);
   // Measures the overflow-hidden carousel container for responsive preferred-panel sizing.
@@ -160,6 +163,13 @@ export default function MultiModelResponseView({
     (modelIndex: number) => {
       if (isGenerating) return;
 
+      // Cancel any pending deselect animation so it doesn't overwrite this selection
+      if (deselectTimeoutRef.current !== null) {
+        clearTimeout(deselectTimeoutRef.current);
+        deselectTimeoutRef.current = null;
+        setSelectionExiting(false);
+      }
+
       // Freeze scroll position so the carousel animation doesn't trigger auto-scroll
       const scrollContainer = trackContainerElRef.current?.closest(
         "[data-chat-scroll]"
@@ -217,6 +227,10 @@ export default function MultiModelResponseView({
     ]
   );
 
+  // NOTE: Deselect only clears the local tree — no backend call to clear
+  // preferred_response_id. The SetPreferredResponseRequest model doesn't
+  // accept null. A backend endpoint for clearing preference would be needed
+  // if deselect should persist across reloads.
   const handleDeselectPreferred = useCallback(() => {
     const scrollContainer = trackContainerElRef.current?.closest(
       "[data-chat-scroll]"
@@ -225,7 +239,8 @@ export default function MultiModelResponseView({
     // Animate panels back to equal positions, then clear preferred after transition
     setSelectionExiting(true);
     setSelectionEntered(false);
-    setTimeout(() => {
+    deselectTimeoutRef.current = setTimeout(() => {
+      deselectTimeoutRef.current = null;
       const scrollTop = scrollContainer?.scrollTop ?? 0;
       if (scrollContainer) scrollContainer.style.overflow = "hidden";
 
