@@ -43,6 +43,7 @@ ALLOWED_DOMAINS=(
     "pypi.org"
     "files.pythonhosted.org"
     "go.dev"
+    "storage.googleapis.com"
     "static.rust-lang.org"
 )
 
