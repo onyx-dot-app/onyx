@@ -34,6 +34,7 @@ import { SvgAlertCircle } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
+import useOnMount from "@/hooks/useOnMount";
 
 const AWS_REGION_OPTIONS = [
   { name: "us-east-1", value: "us-east-1" },
@@ -121,6 +122,17 @@ function BedrockModalInternals({
     }
     formikProps.setFieldValue("model_configurations", models);
   };
+
+  // Auto-fetch models on initial load when editing an existing provider
+  useOnMount(() => {
+    if (existingLlmProvider && !isFetchDisabled) {
+      handleFetchModels().catch((err) => {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to fetch models"
+        );
+      });
+    }
+  });
 
   return (
     <>

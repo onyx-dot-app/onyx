@@ -3,8 +3,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
-import { cn } from "@/lib/utils";
-import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
 import { useUserGroups } from "@/lib/hooks";
@@ -25,7 +23,6 @@ import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import {
   SvgArrowExchange,
-  SvgChevronDown,
   SvgOnyxOctagon,
   SvgOrganization,
   SvgPlusCircle,
@@ -76,14 +73,11 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
 // ─── APIKeyField ─────────────────────────────────────────────────────────────
 
 export interface APIKeyFieldProps {
-  /** Formik field name. @default "api_key" */
-  name?: string;
   optional?: boolean;
   providerName?: string;
   subDescription?: string | RichStr;
 }
 export function APIKeyField({
-  name = "api_key",
   optional = false,
   providerName,
   subDescription,
@@ -91,7 +85,7 @@ export function APIKeyField({
   return (
     <InputLayouts.FieldPadder>
       <InputLayouts.Vertical
-        name={name}
+        name="api_key"
         title="API Key"
         subDescription={
           subDescription
@@ -102,7 +96,7 @@ export function APIKeyField({
         }
         suffix={optional ? "optional" : undefined}
       >
-        <PasswordInputTypeInField name={name} />
+        <PasswordInputTypeInField name="api_key" />
       </InputLayouts.Vertical>
     </InputLayouts.FieldPadder>
   );
@@ -410,8 +404,6 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 // ─── ModelsField ─────────────────────────────────────────────────────
 
-const FOLD_THRESHOLD = 3;
-
 export interface ModelSelectionFieldProps {
   shouldShowAutoUpdateToggle: boolean;
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
@@ -425,11 +417,15 @@ export function ModelSelectionField({
 }: ModelSelectionFieldProps) {
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
+<<<<<<< Updated upstream
   const [isExpanded, setIsExpanded] = useState(false);
   // When the auto-update toggle is hidden, auto mode should have no effect —
   // otherwise models can't be deselected and "Select All" stays disabled.
   const isAutoMode =
     shouldShowAutoUpdateToggle && formikProps.values.is_auto_mode;
+=======
+  const isAutoMode = formikProps.values.is_auto_mode;
+>>>>>>> Stashed changes
   const models = formikProps.values.model_configurations;
 
   // Snapshot the original model visibility so we can restore it when
@@ -496,7 +492,7 @@ export function ModelSelectionField({
               size="md"
               onClick={handleToggleSelectAll}
             >
-              {allSelected ? "Deselect All" : "Select All"}
+              {allSelected ? "Unselect All" : "Select All"}
             </Button>
             {onRefetch && <RefetchButton onRefetch={onRefetch} />}
           </Section>
@@ -506,68 +502,30 @@ export function ModelSelectionField({
           <EmptyMessageCard title="No models available." padding="sm" />
         ) : (
           <Section gap={0.25}>
-            {(() => {
-              const displayModels = isAutoMode ? visibleModels : models;
-              const isFoldable = displayModels.length > FOLD_THRESHOLD;
-              const shownModels =
-                isFoldable && !isExpanded
-                  ? displayModels.slice(0, FOLD_THRESHOLD)
-                  : displayModels;
-
-              return (
-                <>
-                  {shownModels.map((model) =>
-                    isAutoMode ? (
-                      <LineItemButton
-                        key={model.name}
-                        variant="section"
-                        sizePreset="main-ui"
-                        selectVariant="select-heavy"
-                        state="selected"
-                        icon={() => <Checkbox checked />}
-                        title={model.display_name || model.name}
-                      />
-                    ) : (
-                      <LineItemButton
-                        key={model.name}
-                        variant="section"
-                        sizePreset="main-ui"
-                        selectVariant="select-heavy"
-                        state={model.is_visible ? "selected" : "empty"}
-                        icon={() => <Checkbox checked={model.is_visible} />}
-                        title={model.name}
-                        onClick={() =>
-                          setVisibility(model.name, !model.is_visible)
-                        }
-                      />
-                    )
-                  )}
-                  {isFoldable && (
-                    <Interactive.Stateless
-                      prominence="tertiary"
-                      onClick={() => setIsExpanded(!isExpanded)}
-                    >
-                      <Interactive.Container type="button" widthVariant="full">
-                        <Content
-                          sizePreset="secondary"
-                          variant="body"
-                          title={isExpanded ? "Fold Models" : "More Models"}
-                          icon={() => (
-                            <SvgChevronDown
-                              className={cn(
-                                "transition-transform",
-                                isExpanded && "-rotate-180"
-                              )}
-                              size={14}
-                            />
-                          )}
-                        />
-                      </Interactive.Container>
-                    </Interactive.Stateless>
-                  )}
-                </>
-              );
-            })()}
+            {isAutoMode
+              ? visibleModels.map((model) => (
+                  <LineItemButton
+                    key={model.name}
+                    variant="section"
+                    sizePreset="main-ui"
+                    selectVariant="select-heavy"
+                    state="selected"
+                    icon={() => <Checkbox checked />}
+                    title={model.display_name || model.name}
+                  />
+                ))
+              : models.map((model) => (
+                  <LineItemButton
+                    key={model.name}
+                    variant="section"
+                    sizePreset="main-ui"
+                    selectVariant="select-heavy"
+                    state={model.is_visible ? "selected" : "empty"}
+                    icon={() => <Checkbox checked={model.is_visible} />}
+                    title={model.name}
+                    onClick={() => setVisibility(model.name, !model.is_visible)}
+                  />
+                ))}
           </Section>
         )}
 
