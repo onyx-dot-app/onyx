@@ -193,24 +193,29 @@ export default function MultiModelResponseView({
   );
 
   const handleDeselectPreferred = useCallback(() => {
-    setPreferredIndex(null);
+    // Animate panels back to equal positions first, then clear preferred
+    setSelectionEntered(false);
+    setTimeout(() => {
+      setPreferredIndex(null);
 
-    // Clear preferredResponseId in the local tree so input bar re-gates
-    if (parentMessage && currentSessionId) {
-      const tree = useChatSessionStore.getState().sessions.get(currentSessionId)
-        ?.messageTree;
-      if (tree) {
-        const userMsg = tree.get(parentMessage.nodeId);
-        if (userMsg) {
-          const updated = new Map(tree);
-          updated.set(parentMessage.nodeId, {
-            ...userMsg,
-            preferredResponseId: undefined,
-          });
-          updateSessionMessageTree(currentSessionId, updated);
+      // Clear preferredResponseId in the local tree so input bar re-gates
+      if (parentMessage && currentSessionId) {
+        const tree = useChatSessionStore
+          .getState()
+          .sessions.get(currentSessionId)?.messageTree;
+        if (tree) {
+          const userMsg = tree.get(parentMessage.nodeId);
+          if (userMsg) {
+            const updated = new Map(tree);
+            updated.set(parentMessage.nodeId, {
+              ...userMsg,
+              preferredResponseId: undefined,
+            });
+            updateSessionMessageTree(currentSessionId, updated);
+          }
         }
       }
-    }
+    }, 450); // matches the 0.45s cubic-bezier transition duration
   }, [parentMessage, currentSessionId, updateSessionMessageTree]);
 
   // Clear preferred selection when generation starts
