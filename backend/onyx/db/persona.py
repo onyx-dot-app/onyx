@@ -16,12 +16,14 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
+from onyx.auth.permissions import has_permission
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
+from onyx.db.enums import Permission
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentSet
@@ -74,7 +76,7 @@ class PersonaLoadType(Enum):
 def _add_user_filters(
     stmt: Select[tuple[Persona]], user: User, get_editable: bool = True
 ) -> Select[tuple[Persona]]:
-    if user.role == UserRole.ADMIN:
+    if user.role == UserRole.ADMIN or has_permission(user, Permission.READ_AGENTS):
         return stmt
 
     stmt = stmt.distinct()

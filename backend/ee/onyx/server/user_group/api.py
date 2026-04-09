@@ -49,24 +49,15 @@ router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 @router.get("/admin/user-group")
 def list_user_groups(
     include_default: bool = False,
-    user: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
-    if user.role == UserRole.ADMIN:
-        user_groups = fetch_user_groups(
-            db_session,
-            only_up_to_date=False,
-            eager_load_for_snapshot=True,
-            include_default=include_default,
-        )
-    else:
-        user_groups = fetch_user_groups_for_user(
-            db_session=db_session,
-            user_id=user.id,
-            only_curator_groups=user.role == UserRole.CURATOR,
-            eager_load_for_snapshot=True,
-            include_default=include_default,
-        )
+    user_groups = fetch_user_groups(
+        db_session,
+        only_up_to_date=False,
+        eager_load_for_snapshot=True,
+        include_default=include_default,
+    )
     return [UserGroup.from_model(user_group) for user_group in user_groups]
 
 

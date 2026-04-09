@@ -45,6 +45,11 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
         Permission.READ_DOCUMENT_SETS.value,
         Permission.READ_AGENTS.value,
         Permission.READ_USERS.value,
+        Permission.READ_USER_GROUPS.value,
+    },
+    Permission.MANAGE_LLMS.value: {
+        Permission.READ_USER_GROUPS.value,
+        Permission.READ_AGENTS.value,
     },
 }
 
@@ -59,6 +64,7 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.READ_DOCUMENT_SETS,
         Permission.READ_AGENTS,
         Permission.READ_USERS,
+        Permission.READ_USER_GROUPS,
     }
 )
 

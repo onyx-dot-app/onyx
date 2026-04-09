@@ -366,6 +366,7 @@ class Permission(str, PyEnum):
     READ_DOCUMENT_SETS = "read:document_sets"
     READ_AGENTS = "read:agents"
     READ_USERS = "read:users"
+    READ_USER_GROUPS = "read:user_groups"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
