@@ -459,7 +459,7 @@ langfuse==3.10.0
 langsmith==0.7.32
     # via langchain-core
 lazy-imports==1.0.1
-litellm==1.81.6
+litellm==1.83.0
     # via onyx
 locket==1.0.0
     # via
