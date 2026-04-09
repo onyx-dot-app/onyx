@@ -285,7 +285,9 @@ export default function MultiModelResponseView({
       };
 
       if (animations.length > 0) {
-        Promise.all(animations.map((a) => a.finished)).then(restoreScroll);
+        Promise.all(animations.map((a) => a.finished))
+          .then(restoreScroll)
+          .catch(restoreScroll);
       } else {
         restoreScroll();
       }
