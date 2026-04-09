@@ -209,9 +209,6 @@ export default function MultiModelResponseView({
       setPreferredIndex(modelIndex);
       const response = responses.find((r) => r.modelIndex === modelIndex);
       if (!response) return;
-      if (onMessageSelection) {
-        onMessageSelection(response.nodeId);
-      }
 
       // Persist preferred response to backend + update local tree so the
       // input bar unblocks (awaitingPreferredSelection clears).
@@ -239,7 +236,7 @@ export default function MultiModelResponseView({
     [
       isGenerating,
       responses,
-      onMessageSelection,
+      preferredIndex,
       parentMessage,
       currentSessionId,
       updateSessionMessageTree,
