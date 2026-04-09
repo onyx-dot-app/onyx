@@ -5,8 +5,9 @@ A containerized development environment for working on Onyx.
 ## What's included
 
 - Ubuntu 25.10 base image
-- Node.js 20
-- Claude Code
+- Node.js 20, uv, Claude Code
+- Docker CLI, GitHub CLI (`gh`)
+- Neovim, ripgrep, fd, fzf, jq, make, wget, unzip
 - Zsh as default shell (sources host `~/.zshrc` if available)
 - Python venv auto-activation
 - Network firewall (default-deny, whitelists only npm, GitHub, and Anthropic APIs)
@@ -96,6 +97,21 @@ read/write access to the bind-mounted workspace:
   container due to user-namespace mapping. The init script grants `dev` access via
   POSIX ACLs (`setfacl`), which adds a few seconds to the first container start on
   large repos.
+
+## Docker socket
+
+The container mounts the host's Docker socket so you can run `docker` commands
+from inside. `ods dev` auto-detects the socket path and sets `DOCKER_SOCK`:
+
+| Environment | Socket path |
+|---|---|
+| Linux (rootless Docker) | `$XDG_RUNTIME_DIR/docker.sock` |
+| macOS (Docker Desktop) | `~/.docker/run/docker.sock` |
+| Linux (standard Docker) | `/var/run/docker.sock` |
+
+To override, set `DOCKER_SOCK` before running `ods dev up`. When using the
+VS Code extension or `devcontainer` CLI directly (without `ods`), you must set
+`DOCKER_SOCK` yourself.
 
 ## Firewall
 
