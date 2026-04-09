@@ -1,19 +1,20 @@
-from collections.abc import Iterator
+import logging
+from typing import Any
 
-from onyx.connectors.jira.connector import JiraConnector
-from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from typing import Any
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 class JiraServiceManagementConnector(JiraConnector):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._jsm_403_warned: bool = False
+
     @property
     def document_source(self) -> DocumentSource:
         return DocumentSource.JIRA_SERVICE_MANAGEMENT
