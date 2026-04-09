@@ -168,5 +168,7 @@ def test_bulk_fetch_respects_api_batch_limit() -> None:
     result = bulk_fetch_issues(client, all_ids)
 
     assert len(result) == total_issues
-    assert all(size <= _JIRA_BULK_FETCH_LIMIT for size in batch_sizes)
+    # keeping this hardcoded because it's the documented limit
+    # https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
+    assert all(size <= 100 for size in batch_sizes)
     assert len(batch_sizes) == 4
