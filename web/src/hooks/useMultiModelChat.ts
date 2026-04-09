@@ -110,24 +110,37 @@ export default function useMultiModelChat(
     setSelectedModels((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const replaceModel = useCallback((index: number, model: SelectedModel) => {
-    setSelectedModels((prev) => {
-      // Don't replace with a model that's already selected elsewhere
-      if (
-        prev.some(
-          (m, i) =>
-            i !== index &&
-            m.provider === model.provider &&
-            m.modelName === model.modelName
-        )
-      ) {
-        return prev;
+  const replaceModel = useCallback(
+    (index: number, model: SelectedModel) => {
+      // In single-model mode, update llmManager directly so currentLlm
+      // (and thus effectiveSelectedModels) reflects the change immediately.
+      if (!isMultiModelActive) {
+        llmManager.updateCurrentLlm({
+          name: model.name,
+          provider: model.provider,
+          modelName: model.modelName,
+        });
+        return;
       }
-      const next = [...prev];
-      next[index] = model;
-      return next;
-    });
-  }, []);
+      setSelectedModels((prev) => {
+        // Don't replace with a model that's already selected elsewhere
+        if (
+          prev.some(
+            (m, i) =>
+              i !== index &&
+              m.provider === model.provider &&
+              m.modelName === model.modelName
+          )
+        ) {
+          return prev;
+        }
+        const next = [...prev];
+        next[index] = model;
+        return next;
+      });
+    },
+    [isMultiModelActive, llmManager]
+  );
 
   const clearModels = useCallback(() => {
     setSelectedModels([]);
