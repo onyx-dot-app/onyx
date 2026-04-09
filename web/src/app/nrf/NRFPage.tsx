@@ -110,6 +110,19 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const llmManager = useLlmManager(undefined, liveAgent ?? undefined);
   const multiModel = useMultiModelChat(llmManager);
 
+  // Sync single-model selection to llmManager so the submission path
+  // uses the correct provider/version (mirrors AppPage behaviour).
+  useEffect(() => {
+    if (multiModel.selectedModels.length === 1) {
+      const model = multiModel.selectedModels[0]!;
+      llmManager.updateCurrentLlm({
+        name: model.name,
+        provider: model.provider,
+        modelName: model.modelName,
+      });
+    }
+  }, [multiModel.selectedModels]);
+
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
