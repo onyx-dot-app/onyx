@@ -53,7 +53,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
 // Unified provider registry (icon + product name + display name + modal)
 // ---------------------------------------------------------------------------
 
-interface ProviderEntry {
+export interface ProviderEntry {
   icon: IconFunctionComponent;
   productName: string;
   displayName: string;
@@ -142,26 +142,15 @@ const PROVIDER_REGISTRY: Record<LLMProviderName, ProviderEntry> = {
 };
 
 // ---------------------------------------------------------------------------
-// Public accessors
+// Public accessor
 // ---------------------------------------------------------------------------
 
-export function getProviderProductName(providerName: string): string {
-  return (
-    PROVIDER_REGISTRY[providerName as LLMProviderName]?.productName ??
-    providerName
-  );
-}
-
-export function getProviderDisplayName(providerName: string): string {
-  return (
-    PROVIDER_REGISTRY[providerName as LLMProviderName]?.displayName ??
-    providerName
-  );
-}
-
-export function getProviderIcon(providerName: string): IconFunctionComponent {
-  return PROVIDER_REGISTRY[providerName as LLMProviderName]?.icon ?? SvgCpu;
-}
+const DEFAULT_ENTRY: ProviderEntry = {
+  icon: SvgCpu,
+  productName: "",
+  displayName: "",
+  Modal: CustomModal,
+};
 
 // Providers that don't use custom_config themselves — if custom_config is
 // present it means the provider was originally created via CustomModal.
@@ -172,19 +161,24 @@ const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
   LLMProviderName.OPENROUTER,
 ]);
 
-export function getProviderModal(
+export function getProvider(
   providerName: string,
   existingProvider?: LLMProviderView
-): React.ComponentType<LLMProviderFormProps> {
+): ProviderEntry {
+  const entry = PROVIDER_REGISTRY[providerName as LLMProviderName] ?? {
+    ...DEFAULT_ENTRY,
+    productName: providerName,
+    displayName: providerName,
+  };
+
   if (
     existingProvider?.custom_config != null &&
     CUSTOM_CONFIG_OVERRIDES.has(providerName)
   ) {
-    return CustomModal;
+    return { ...entry, Modal: CustomModal };
   }
-  return (
-    PROVIDER_REGISTRY[providerName as LLMProviderName]?.Modal ?? CustomModal
-  );
+
+  return entry;
 }
 
 // ---------------------------------------------------------------------------

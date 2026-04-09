@@ -15,12 +15,7 @@ import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import {
-  getProviderDisplayName,
-  getProviderIcon,
-  getProviderModal,
-  getProviderProductName,
-} from "@/lib/llmConfig/providers";
+import { getProvider } from "@/lib/llmConfig/providers";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
@@ -30,12 +25,10 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import {
-  LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import CustomModal from "@/sections/modals/llmConfig/CustomModal";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 
@@ -93,7 +86,7 @@ function ExistingProviderCard({
     }
   };
 
-  const Modal = getProviderModal(provider.provider, provider);
+  const { icon, displayName, Modal } = getProvider(provider.provider, provider);
 
   return (
     <>
@@ -151,9 +144,9 @@ function ExistingProviderCard({
           onClick={() => setIsOpen(true)}
         >
           <CardLayout.Header
-            icon={getProviderIcon(provider.provider)}
+            icon={icon}
             title={provider.name}
-            description={getProviderDisplayName(provider.provider)}
+            description={displayName}
             sizePreset="main-ui"
             variant="section"
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
@@ -198,15 +191,11 @@ function ExistingProviderCard({
 interface NewProviderCardProps {
   provider: WellKnownLLMProviderDescriptor;
   isFirstProvider: boolean;
-  Modal: React.ComponentType<LLMProviderFormProps>;
 }
 
-function NewProviderCard({
-  provider,
-  isFirstProvider,
-  Modal,
-}: NewProviderCardProps) {
+function NewProviderCard({ provider, isFirstProvider }: NewProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { icon, productName, displayName, Modal } = getProvider(provider.name);
 
   return (
     <SelectCard
@@ -216,9 +205,9 @@ function NewProviderCard({
       onClick={() => setIsOpen(true)}
     >
       <CardLayout.Header
-        icon={getProviderIcon(provider.name)}
-        title={getProviderProductName(provider.name)}
-        description={getProviderDisplayName(provider.name)}
+        icon={icon}
+        title={productName}
+        description={displayName}
         sizePreset="main-ui"
         variant="section"
         rightChildren={
@@ -253,6 +242,7 @@ function NewCustomProviderCard({
   isFirstProvider,
 }: NewCustomProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { icon, productName, displayName, Modal } = getProvider("custom");
 
   return (
     <SelectCard
@@ -262,9 +252,9 @@ function NewCustomProviderCard({
       onClick={() => setIsOpen(true)}
     >
       <CardLayout.Header
-        icon={getProviderIcon("custom")}
-        title={getProviderProductName("custom")}
-        description={getProviderDisplayName("custom")}
+        icon={icon}
+        title={productName}
+        description={displayName}
         sizePreset="main-ui"
         variant="section"
         rightChildren={
@@ -281,10 +271,7 @@ function NewCustomProviderCard({
         }
       />
       {isOpen && (
-        <CustomModal
-          shouldMarkAsDefault={isFirstProvider}
-          onOpenChange={setIsOpen}
-        />
+        <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
       )}
     </SelectCard>
   );
@@ -448,23 +435,13 @@ export default function LLMConfigurationPage() {
                   (bIndex === -1 ? Infinity : bIndex)
                 );
               })
-              .map((provider) => {
-                const Modal = getProviderModal(provider.name);
-                if (!Modal) {
-                  toast.error(
-                    `No modal mapping for provider "${provider.name}".`
-                  );
-                  return null;
-                }
-                return (
-                  <NewProviderCard
-                    key={provider.name}
-                    provider={provider}
-                    isFirstProvider={isFirstProvider}
-                    Modal={Modal}
-                  />
-                );
-              })}
+              .map((provider) => (
+                <NewProviderCard
+                  key={provider.name}
+                  provider={provider}
+                  isFirstProvider={isFirstProvider}
+                />
+              ))}
             <NewCustomProviderCard isFirstProvider={isFirstProvider} />
           </div>
         </GeneralLayouts.Section>

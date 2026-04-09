@@ -14,12 +14,7 @@ import {
   LLMProviderFormProps,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import {
-  getProviderProductName,
-  getProviderDisplayName,
-  getProviderModal,
-} from "@/lib/llmConfig/providers";
-import CustomModal from "@/sections/modals/llmConfig/CustomModal";
+import { getProvider } from "@/lib/llmConfig/providers";
 import { Disabled } from "@opal/core";
 import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
@@ -131,10 +126,7 @@ const LLMStep = memo(
         ? "custom"
         : selectedProvider?.llmDescriptor?.name ?? "custom";
 
-      const ModalComponent =
-        selectedProvider?.llmDescriptor && !selectedProvider.isCustomProvider
-          ? getProviderModal(selectedProvider.llmDescriptor.name) ?? CustomModal
-          : CustomModal;
+      const { Modal: ModalComponent } = getProvider(providerName);
 
       const modalProps: LLMProviderFormProps = {
         variant: "onboarding" as const,
@@ -197,14 +189,17 @@ const LLMStep = memo(
 
                   {/* Render provider cards */}
                   {llmDescriptors.map((llmDescriptor) => {
+                    const { productName, displayName } = getProvider(
+                      llmDescriptor.name
+                    );
                     return (
                       <div
                         key={llmDescriptor.name}
                         className="basis-[calc(50%-theme(spacing.1)/2)] grow"
                       >
                         <LLMProviderCard
-                          title={getProviderProductName(llmDescriptor.name)}
-                          subtitle={getProviderDisplayName(llmDescriptor.name)}
+                          title={productName}
+                          subtitle={displayName}
                           providerName={llmDescriptor.name}
                           disabled={disabled}
                           isConnected={onboardingState.data.llmProviders?.some(
