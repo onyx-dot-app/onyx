@@ -94,6 +94,9 @@ export default function MultiModelResponseView({
     number | null
   >(null);
   const preferredRoRef = useRef<ResizeObserver | null>(null);
+  // Refs to each panel wrapper for height animation on deselect
+  const panelElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
+
   // Tracks which non-preferred panels overflow the preferred height cap
   const [overflowingPanels, setOverflowingPanels] = useState<Set<number>>(
     new Set()
@@ -205,27 +208,54 @@ export default function MultiModelResponseView({
     setSelectionExiting(true);
     setSelectionEntered(false);
     setTimeout(() => {
-      // Capture scroll position right before the state change
       const scrollTop = scrollContainer?.scrollTop ?? 0;
+      if (scrollContainer) scrollContainer.style.overflow = "hidden";
 
-      // Temporarily freeze the scroll container so auto-scroll observers
-      // can't push to the bottom when panels uncap their height.
-      if (scrollContainer) {
-        scrollContainer.style.overflow = "hidden";
-      }
+      // Before clearing state, animate each capped panel's height from
+      // its current clientHeight to its natural scrollHeight.
+      const animations: Animation[] = [];
+      panelElsRef.current.forEach((el, modelIndex) => {
+        if (modelIndex === preferredIndex) return;
+        if (hiddenPanels.has(modelIndex)) return;
+        const from = el.clientHeight;
+        const to = el.scrollHeight;
+        if (to <= from) return;
+        // Lock current height, remove maxHeight cap, then animate
+        el.style.maxHeight = `${from}px`;
+        el.style.overflow = "hidden";
+        const anim = el.animate(
+          [{ maxHeight: `${from}px` }, { maxHeight: `${to}px` }],
+          {
+            duration: 350,
+            easing: "cubic-bezier(0.2, 0, 0, 1)",
+            fill: "forwards",
+          }
+        );
+        animations.push(anim);
+        anim.onfinish = () => {
+          el.style.maxHeight = "";
+          el.style.overflow = "";
+        };
+      });
 
       setSelectionExiting(false);
       setPreferredIndex(null);
 
-      // Restore after React commits + observers settle
-      requestAnimationFrame(() => {
+      // Restore scroll after animations + React settle
+      const restoreScroll = () => {
         requestAnimationFrame(() => {
           if (scrollContainer) {
             scrollContainer.scrollTop = scrollTop;
             scrollContainer.style.overflow = "";
           }
         });
-      });
+      };
+
+      if (animations.length > 0) {
+        Promise.all(animations.map((a) => a.finished)).then(restoreScroll);
+      } else {
+        restoreScroll();
+      }
 
       // Clear preferredResponseId in the local tree so input bar re-gates
       if (parentMessage && currentSessionId) {
@@ -245,7 +275,13 @@ export default function MultiModelResponseView({
         }
       }
     }, 450);
-  }, [parentMessage, currentSessionId, updateSessionMessageTree]);
+  }, [
+    parentMessage,
+    currentSessionId,
+    updateSessionMessageTree,
+    preferredIndex,
+    hiddenPanels,
+  ]);
 
   // Clear preferred selection when generation starts
   // Reset selection state when generation restarts
@@ -417,6 +453,11 @@ export default function MultiModelResponseView({
               <div
                 key={r.modelIndex}
                 ref={(el) => {
+                  if (el) {
+                    panelElsRef.current.set(r.modelIndex, el);
+                  } else {
+                    panelElsRef.current.delete(r.modelIndex);
+                  }
                   if (isPref) preferredPanelRef(el);
                   if (capped && el) {
                     const doesOverflow = el.scrollHeight > el.clientHeight;
