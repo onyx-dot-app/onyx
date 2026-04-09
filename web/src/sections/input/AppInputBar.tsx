@@ -44,8 +44,8 @@ import {
   SvgGlobe,
   SvgHourglass,
   SvgMicrophone,
+  SvgPaperclip,
   SvgPlus,
-  SvgPlusCircle,
   SvgSearch,
   SvgStop,
   SvgX,
@@ -507,7 +507,7 @@ const AppInputBar = React.memo(
             trigger={(open) => (
               <Button
                 disabled={disabled}
-                icon={SvgPlusCircle}
+                icon={SvgPaperclip}
                 tooltip="Attach Files"
                 interaction={open ? "hover" : "rest"}
                 prominence="tertiary"
