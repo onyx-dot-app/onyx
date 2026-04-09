@@ -214,6 +214,11 @@ def get_effective_permissions(user: User) -> set[Permission]:
     return {Permission(p) for p in expanded}
 
 
+def has_permission(user: User, permission: Permission) -> bool:
+    """Check whether *user* holds *permission* (directly or via implication/admin override)."""
+    return permission in get_effective_permissions(user)
+
+
 def require_permission(
     required: Permission,
 ) -> Callable[..., Coroutine[Any, Any, User]]:
