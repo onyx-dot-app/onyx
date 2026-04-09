@@ -223,9 +223,12 @@ export default function MultiModelResponseView({
   }, [parentMessage, currentSessionId, updateSessionMessageTree]);
 
   // Clear preferred selection when generation starts
+  // Reset selection state when generation restarts
   useEffect(() => {
     if (isGenerating) {
       setPreferredIndex(null);
+      setHasEnteredSelection(false);
+      setSelectionExiting(false);
     }
   }, [isGenerating]);
 
@@ -234,22 +237,37 @@ export default function MultiModelResponseView({
     (r) => r.modelIndex === preferredIndex
   );
 
-  // Selection mode when preferred is set, found in responses, not generating, and at least 2 visible panels
-  const showSelectionMode =
+  // Track whether selection mode was ever entered — once it has been,
+  // we stay in the selection layout (even after deselect) to avoid a
+  // jarring DOM swap between the two layout strategies.
+  const [hasEnteredSelection, setHasEnteredSelection] = useState(false);
+
+  const isActivelySelected =
     preferredIndex !== null &&
     preferredIdx !== -1 &&
     !isGenerating &&
     visibleResponses.length > 1;
 
-  // Trigger the slide-out animation one frame after entering selection mode
   useEffect(() => {
-    if (!showSelectionMode) {
-      setSelectionEntered(false);
+    if (isActivelySelected) setHasEnteredSelection(true);
+  }, [isActivelySelected]);
+
+  // Use the selection layout once a preferred response has been chosen,
+  // even after deselect. Only fall through to generation layout before
+  // the first selection or during active streaming.
+  const showSelectionMode = isActivelySelected || hasEnteredSelection;
+
+  // Trigger the slide-out animation one frame after a preferred panel is selected.
+  // Uses isActivelySelected (not showSelectionMode) so re-selecting after a
+  // deselect still triggers the animation.
+  useEffect(() => {
+    if (!isActivelySelected) {
+      // Don't reset selectionEntered here — handleDeselectPreferred manages it
       return;
     }
     const raf = requestAnimationFrame(() => setSelectionEntered(true));
     return () => cancelAnimationFrame(raf);
-  }, [showSelectionMode]);
+  }, [isActivelySelected]);
 
   // Build panel props — isHidden reflects actual hidden state
   const buildPanelProps = useCallback(
