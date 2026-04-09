@@ -1,0 +1,30 @@
+{{- if .Values.monitoring.redisExporter.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "onyx.fullname" . }}-redis-queues
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.serviceMonitors.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: onyx.redis.queues
+      rules:
+        - record: onyx_celery_queue_depth
+          expr: |
+            sum by (queue) (
+              label_replace(
+                redis_key_size{
+                  key=~"(celery|docprocessing|connector_doc_fetching|vespa_metadata_sync|connector_deletion|connector_pruning|connector_doc_permissions_sync|connector_external_group_sync|doc_permissions_upsert|connector_hierarchy_fetching|llm_model_update|checkpoint_cleanup|index_attempt_cleanup|csv_generation|user_file_processing|user_file_project_sync|user_file_delete|monitoring|sandbox|opensearch_migration)(:[0-9]+)?"
+                },
+                "queue",
+                "$1",
+                "key",
+                "^([^:]+)(?::[0-9]+)?$"
+              )
+            )
+        - record: onyx_celery_unacked_tasks
+          expr: max(redis_key_size{key="unacked"})
+{{- end }}

@@ -269,6 +269,30 @@ monitoring:
     # Use `labels` to match your Prometheus CR's serviceMonitorSelector (e.g. release: onyx-monitoring).
     enabled: false
     labels: {}
+  redisExporter:
+    # -- Set to true to deploy a Redis exporter that monitors Celery queue depths.
+    # Also creates a ServiceMonitor (requires serviceMonitors.enabled) and PrometheusRule
+    # with recording rules for onyx_celery_queue_depth and onyx_celery_unacked_tasks.
+    enabled: false
+    image:
+      repository: oliver006/redis_exporter
+      tag: "v1.80.1"
+    # -- Redis connection URI. Must be set per-cluster when enabled.
+    # Example: rediss://master.my-redis-cluster.region.cache.amazonaws.com:6379
+    redisAddr: ""
+    # -- Name of existing K8s secret containing the Redis password.
+    redisPasswordSecret: "onyx-redis"
+    # -- Key within the secret that holds the Redis password.
+    redisPasswordSecretKey: "redis_password"
+    # -- Skip TLS certificate verification (needed for ElastiCache).
+    skipTlsVerification: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
 
 serviceAccount:
   # Specifies whether a service account should be created
