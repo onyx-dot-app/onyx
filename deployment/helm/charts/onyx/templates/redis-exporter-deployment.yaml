@@ -1,0 +1,41 @@
+{{- if .Values.monitoring.redisExporter.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.fullname" . }}-redis-exporter
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app: onyx-redis-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: onyx-redis-exporter
+  template:
+    metadata:
+      labels:
+        app: onyx-redis-exporter
+    spec:
+      containers:
+        - name: redis-exporter
+          image: "{{ .Values.monitoring.redisExporter.image.repository }}:{{ .Values.monitoring.redisExporter.image.tag }}"
+          args:
+            - --redis.addr={{ .Values.monitoring.redisExporter.redisAddr }}
+            - --redis.password=$(REDIS_PASSWORD)
+            - --check-keys=db15=celery,db15=celery:*,db15=docprocessing,db15=docprocessing:*,db15=connector_doc_fetching,db15=connector_doc_fetching:*,db15=vespa_metadata_sync,db15=vespa_metadata_sync:*,db15=connector_deletion,db15=connector_deletion:*,db15=connector_pruning,db15=connector_pruning:*,db15=connector_doc_permissions_sync,db15=connector_doc_permissions_sync:*,db15=connector_external_group_sync,db15=connector_external_group_sync:*,db15=doc_permissions_upsert,db15=doc_permissions_upsert:*,db15=connector_hierarchy_fetching,db15=connector_hierarchy_fetching:*,db15=llm_model_update,db15=llm_model_update:*,db15=checkpoint_cleanup,db15=checkpoint_cleanup:*,db15=index_attempt_cleanup,db15=index_attempt_cleanup:*,db15=csv_generation,db15=csv_generation:*,db15=user_file_processing,db15=user_file_processing:*,db15=user_file_project_sync,db15=user_file_project_sync:*,db15=user_file_delete,db15=user_file_delete:*,db15=monitoring,db15=monitoring:*,db15=sandbox,db15=sandbox:*,db15=opensearch_migration,db15=opensearch_migration:*
+            - --check-single-keys=db15=unacked
+            {{- if .Values.monitoring.redisExporter.skipTlsVerification }}
+            - --skip-tls-verification
+            {{- end }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.monitoring.redisExporter.redisPasswordSecret }}
+                  key: {{ .Values.monitoring.redisExporter.redisPasswordSecretKey }}
+          ports:
+            - name: metrics
+              containerPort: 9121
+          resources:
+            {{- toYaml .Values.monitoring.redisExporter.resources | nindent 12 }}
+{{- end }}

@@ -1,0 +1,16 @@
+{{- if .Values.monitoring.redisExporter.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.fullname" . }}-redis-exporter
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app: onyx-redis-exporter
+spec:
+  selector:
+    app: onyx-redis-exporter
+  ports:
+    - name: metrics
+      port: 9121
+      targetPort: metrics
+{{- end }}
