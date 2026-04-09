@@ -67,6 +67,10 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "/experiments":
+		m.viewport.addInfo(m.experimentsText())
+		return m, nil
+
 	case "/quit":
 		return m, tea.Quit
 

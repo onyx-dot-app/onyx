@@ -8,7 +8,8 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 
-import { SvgArrowExchange, SvgOnyxLogo } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
+import { SvgOnyxLogo } from "@opal/logos";
 import type { IconProps } from "@opal/types";
 
 export type WebProviderSetupModalProps = {

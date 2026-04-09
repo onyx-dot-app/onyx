@@ -1,197 +1,130 @@
 import {
+  LLMProviderName,
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
 import * as Yup from "yup";
-import { ScopedMutator } from "swr";
-import { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
+import { useWellKnownLLMProvider } from "@/hooks/useLLMProviders";
 
-// Common class names for the Form component across all LLM provider forms
-export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
+// ─── useInitialValues ─────────────────────────────────────────────────────
 
-export const buildDefaultInitialValues = (
+/** Builds the merged model list from existing + well-known, deduped by name. */
+function buildModelConfigurations(
   existingLlmProvider?: LLMProviderView,
-  modelConfigurations?: ModelConfiguration[],
-  currentDefaultModelName?: string
-) => {
-  const defaultModelName =
-    (currentDefaultModelName &&
-    existingLlmProvider?.model_configurations?.some(
-      (m) => m.name === currentDefaultModelName
-    )
-      ? currentDefaultModelName
-      : undefined) ??
-    existingLlmProvider?.model_configurations?.[0]?.name ??
-    modelConfigurations?.[0]?.name ??
-    "";
+  wellKnownLLMProvider?: WellKnownLLMProviderDescriptor
+): ModelConfiguration[] {
+  const existingModels = existingLlmProvider?.model_configurations ?? [];
+  const wellKnownModels = wellKnownLLMProvider?.known_models ?? [];
 
-  // Auto mode must be explicitly enabled by the user
-  // Default to false for new providers, preserve existing value when editing
-  const isAutoMode = existingLlmProvider?.is_auto_mode ?? false;
+  const modelMap = new Map<string, ModelConfiguration>();
+  wellKnownModels.forEach((m) => modelMap.set(m.name, m));
+  existingModels.forEach((m) => modelMap.set(m.name, m));
+
+  return Array.from(modelMap.values());
+}
+
+/** Shared initial values for all LLM provider forms (both onboarding and admin). */
+export function useInitialValues(
+  isOnboarding: boolean,
+  providerName: LLMProviderName,
+  existingLlmProvider?: LLMProviderView
+) {
+  const { wellKnownLLMProvider } = useWellKnownLLMProvider(providerName);
+
+  const modelConfigurations = buildModelConfigurations(
+    existingLlmProvider,
+    wellKnownLLMProvider ?? undefined
+  );
+
+  const testModelName =
+    modelConfigurations.find((m) => m.is_visible)?.name ??
+    wellKnownLLMProvider?.recommended_default_model?.name;
 
   return {
-    name: existingLlmProvider?.name || "",
-    default_model_name: defaultModelName,
+    provider: existingLlmProvider?.provider ?? providerName,
+    name: isOnboarding ? providerName : existingLlmProvider?.name ?? "",
+    api_key: existingLlmProvider?.api_key ?? undefined,
+    api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,
-    is_auto_mode: isAutoMode,
+    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
     groups: existingLlmProvider?.groups ?? [],
     personas: existingLlmProvider?.personas ?? [],
-    selected_model_names: existingLlmProvider
-      ? existingLlmProvider.model_configurations
-          .filter((modelConfiguration) => modelConfiguration.is_visible)
-          .map((modelConfiguration) => modelConfiguration.name)
-      : modelConfigurations
-          ?.filter((modelConfiguration) => modelConfiguration.is_visible)
-          .map((modelConfiguration) => modelConfiguration.name) ?? [],
+    model_configurations: modelConfigurations,
+    test_model_name: testModelName,
   };
-};
+}
 
-export const buildDefaultValidationSchema = () => {
+// ─── buildValidationSchema ────────────────────────────────────────────────
+
+interface ValidationSchemaOptions {
+  apiKey?: boolean;
+  apiBase?: boolean;
+  extra?: Yup.ObjectShape;
+}
+
+/**
+ * Builds the validation schema for a modal.
+ *
+ * @param isOnboarding — controls the base schema:
+ *   - `true`:  minimal (only `test_model_name`).
+ *   - `false`: full admin schema (display name, access, models, etc.).
+ * @param options.apiKey — require `api_key`.
+ * @param options.apiBase — require `api_base`.
+ * @param options.extra — arbitrary Yup fields for provider-specific validation.
+ */
+export function buildValidationSchema(
+  isOnboarding: boolean,
+  { apiKey, apiBase, extra }: ValidationSchemaOptions = {}
+) {
+  const providerFields: Yup.ObjectShape = {
+    ...(apiKey && {
+      api_key: Yup.string().required("API Key is required"),
+    }),
+    ...(apiBase && {
+      api_base: Yup.string().required("API Base URL is required"),
+    }),
+    ...extra,
+  };
+
+  if (isOnboarding) {
+    return Yup.object().shape({
+      test_model_name: Yup.string().required("Model name is required"),
+      ...providerFields,
+    });
+  }
+
   return Yup.object({
     name: Yup.string().required("Display Name is required"),
-    default_model_name: Yup.string().required("Model name is required"),
     is_public: Yup.boolean().required(),
     is_auto_mode: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
-    selected_model_names: Yup.array().of(Yup.string()),
+    test_model_name: Yup.string().required("Model name is required"),
+    ...providerFields,
   });
-};
+}
 
-export const buildAvailableModelConfigurations = (
-  existingLlmProvider?: LLMProviderView,
-  wellKnownLLMProvider?: WellKnownLLMProviderDescriptor
-): ModelConfiguration[] => {
-  const existingModels = existingLlmProvider?.model_configurations ?? [];
-  const wellKnownModels = wellKnownLLMProvider?.known_models ?? [];
+// ─── Form value types ─────────────────────────────────────────────────────
 
-  // Create a map to deduplicate by model name, preferring existing models
-  const modelMap = new Map<string, ModelConfiguration>();
-
-  // Add well-known models first
-  wellKnownModels.forEach((model) => {
-    modelMap.set(model.name, model);
-  });
-
-  // Override with existing models (they take precedence)
-  existingModels.forEach((model) => {
-    modelMap.set(model.name, model);
-  });
-
-  return Array.from(modelMap.values());
-};
-
-// Base form values that all provider forms share
+/** Base form values that all provider forms share. */
 export interface BaseLLMFormValues {
   name: string;
   api_key?: string;
   api_base?: string;
-  default_model_name?: string;
+  /** Model name used for the test request — automatically derived. */
+  test_model_name?: string;
   is_public: boolean;
   is_auto_mode: boolean;
   groups: number[];
   personas: number[];
-  selected_model_names: string[];
+  /** The full model list with is_visible set directly by user interaction. */
+  model_configurations: ModelConfiguration[];
   custom_config?: Record<string, string>;
 }
 
-export interface SubmitLLMProviderParams<
-  T extends BaseLLMFormValues = BaseLLMFormValues,
-> {
-  providerName: string;
-  values: T;
-  initialValues: T;
-  modelConfigurations: ModelConfiguration[];
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
-  hideSuccess?: boolean;
-  setIsTesting: (testing: boolean) => void;
-  mutate: ScopedMutator;
-  onClose: () => void;
-  setSubmitting: (submitting: boolean) => void;
-}
-
-export const filterModelConfigurations = (
-  currentModelConfigurations: ModelConfiguration[],
-  visibleModels: string[],
-  defaultModelName?: string
-): ModelConfiguration[] => {
-  return currentModelConfigurations
-    .map(
-      (modelConfiguration): ModelConfiguration => ({
-        name: modelConfiguration.name,
-        is_visible: visibleModels.includes(modelConfiguration.name),
-        max_input_tokens: modelConfiguration.max_input_tokens ?? null,
-        supports_image_input: modelConfiguration.supports_image_input,
-        supports_reasoning: modelConfiguration.supports_reasoning,
-        display_name: modelConfiguration.display_name,
-      })
-    )
-    .filter(
-      (modelConfiguration) =>
-        modelConfiguration.name === defaultModelName ||
-        modelConfiguration.is_visible
-    );
-};
-
-// Helper to get model configurations for auto mode
-// In auto mode, we include ALL models but preserve their visibility status
-// Models in the auto config are visible, others are created but not visible
-export const getAutoModeModelConfigurations = (
-  modelConfigurations: ModelConfiguration[]
-): ModelConfiguration[] => {
-  return modelConfigurations.map(
-    (modelConfiguration): ModelConfiguration => ({
-      name: modelConfiguration.name,
-      is_visible: modelConfiguration.is_visible,
-      max_input_tokens: modelConfiguration.max_input_tokens ?? null,
-      supports_image_input: modelConfiguration.supports_image_input,
-      supports_reasoning: modelConfiguration.supports_reasoning,
-      display_name: modelConfiguration.display_name,
-    })
-  );
-};
+// ─── Misc ─────────────────────────────────────────────────────────────────
 
 export type TestApiKeyResult =
   | { ok: true }
   | { ok: false; errorMessage: string };
-
-export const getModelOptions = (
-  fetchedModelConfigurations: Array<{ name: string }>
-) => {
-  return fetchedModelConfigurations.map((model) => ({
-    label: model.name,
-    value: model.name,
-  }));
-};
-
-/** Initial values used by onboarding forms (flat shape, always creating new). */
-export const buildOnboardingInitialValues = () => ({
-  name: "",
-  provider: "",
-  api_key: "",
-  api_base: "",
-  api_version: "",
-  default_model_name: "",
-  model_configurations: [] as ModelConfiguration[],
-  custom_config: {} as Record<string, string>,
-  api_key_changed: true,
-  groups: [] as number[],
-  is_public: true,
-  is_auto_mode: false,
-  personas: [] as number[],
-  selected_model_names: [] as string[],
-  deployment_name: "",
-  target_uri: "",
-});
-
-export interface SubmitOnboardingProviderParams {
-  providerName: string;
-  payload: Record<string, unknown>;
-  onboardingState: OnboardingState;
-  onboardingActions: OnboardingActions;
-  isCustomProvider: boolean;
-  onClose: () => void;
-  setIsSubmitting: (submitting: boolean) => void;
-}

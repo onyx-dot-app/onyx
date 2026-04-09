@@ -236,14 +236,15 @@ def upsert_llm_provider(
         db_session.add(existing_llm_provider)
 
     # Filter out empty strings and None values from custom_config to allow
-    # providers like Bedrock to fall back to IAM roles when credentials are not provided
+    # providers like Bedrock to fall back to IAM roles when credentials are not provided.
+    # NOTE: An empty dict ({}) is preserved as-is — it signals that the provider was
+    # created via the custom modal and must be reopened with CustomModal, not a
+    # provider-specific modal. Only None means "no custom config at all".
     custom_config = llm_provider_upsert_request.custom_config
     if custom_config:
         custom_config = {
             k: v for k, v in custom_config.items() if v is not None and v.strip() != ""
         }
-        # Set to None if the dict is empty after filtering
-        custom_config = custom_config or None
 
     api_base = llm_provider_upsert_request.api_base or None
     existing_llm_provider.provider = llm_provider_upsert_request.provider
@@ -303,16 +304,7 @@ def upsert_llm_provider(
         ).delete(synchronize_session="fetch")
         db_session.flush()
 
-    # Import here to avoid circular imports
-    from onyx.llm.utils import get_max_input_tokens
-
     for model_config in llm_provider_upsert_request.model_configurations:
-        max_input_tokens = model_config.max_input_tokens
-        if max_input_tokens is None:
-            max_input_tokens = get_max_input_tokens(
-                model_name=model_config.name,
-                model_provider=llm_provider_upsert_request.provider,
-            )
 
         supported_flows = [LLMModelFlowType.CHAT]
         if model_config.supports_image_input:
@@ -325,7 +317,7 @@ def upsert_llm_provider(
                 model_configuration_id=existing.id,
                 supported_flows=supported_flows,
                 is_visible=model_config.is_visible,
-                max_input_tokens=max_input_tokens,
+                max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
             )
         else:
@@ -335,7 +327,7 @@ def upsert_llm_provider(
                 model_name=model_config.name,
                 supported_flows=supported_flows,
                 is_visible=model_config.is_visible,
-                max_input_tokens=max_input_tokens,
+                max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
             )
 

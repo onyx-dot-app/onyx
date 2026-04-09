@@ -1,8 +1,9 @@
 "use client";
 
-import type { RichStr } from "@opal/types";
+import type { RichStr, WithoutStyles } from "@opal/types";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
 import Text from "@/refresh-components/texts/Text";
+import Separator from "@/refresh-components/Separator";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
@@ -229,9 +230,27 @@ function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {
   );
 }
 
+/**
+ * FieldSeparator - A horizontal rule with inline padding, used to visually separate field groups.
+ */
+function FieldSeparator() {
+  return <Separator noPadding className="p-2" />;
+}
+
+/**
+ * FieldPadder -  Wraps a field in standard horizontal + vertical padding (`p-2 w-full`).
+ */
+type FieldPadderProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
+function FieldPadder(props: FieldPadderProps) {
+  return <div {...props} className="p-2 w-full" />;
+}
+
 export {
   VerticalInputLayout as Vertical,
   HorizontalInputLayout as Horizontal,
   ErrorLayout as Error,
   ErrorTextLayout,
+  FieldSeparator,
+  FieldPadder,
+  type FieldPadderProps,
 };

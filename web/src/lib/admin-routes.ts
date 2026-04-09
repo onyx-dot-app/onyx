@@ -10,7 +10,6 @@ import {
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
-  SvgDiscordMono,
   SvgDownload,
   SvgEmpty,
   SvgFileText,
@@ -24,7 +23,6 @@ import {
   SvgPaintBrush,
   SvgProgressBars,
   SvgSearchMenu,
-  SvgSlack,
   SvgTerminal,
   SvgThumbsUp,
   SvgUploadCloud,
@@ -34,6 +32,8 @@ import {
   SvgUsers,
   SvgWallet,
   SvgZoomIn,
+  SvgDiscord,
+  SvgSlack,
 } from "@opal/icons";
 
 export interface AdminRouteEntry {
@@ -92,7 +92,7 @@ export const ADMIN_ROUTES = {
   },
   DISCORD_BOTS: {
     path: "/admin/discord-bot",
-    icon: SvgDiscordMono,
+    icon: SvgDiscord,
     title: "Discord Integration",
     sidebarLabel: "Discord Integration",
   },

@@ -32,6 +32,7 @@ export const SWR_KEYS = {
     `/api/llm/persona/${personaId}/providers`,
   adminLlmProviders: "/api/admin/llm/provider",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
+  customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
@@ -80,6 +81,11 @@ export const SWR_KEYS = {
   // ── Users ─────────────────────────────────────────────────────────────────
   acceptedUsers: "/api/manage/users/accepted/all",
   invitedUsers: "/api/manage/users/invited",
+  // Curator-accessible listing of all users (and optionally service-account
+  // entries when `?include_api_keys=true`). Used by group create/edit pages so
+  // global curators — who cannot hit the admin-only `/accepted/all` and
+  // `/invited` endpoints — can still load the member picker.
+  groupMemberCandidates: "/api/manage/users?include_api_keys=true",
   pendingTenantUsers: "/api/tenants/users/pending",
   userCounts: "/api/manage/users/counts",
 

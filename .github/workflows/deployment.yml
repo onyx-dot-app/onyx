@@ -13,7 +13,7 @@ permissions:
   id-token: write # zizmor: ignore[excessive-permissions]
 
 env:
-  EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
+  EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') || github.ref_name == 'edge' }}
 
 jobs:
   # Determine which components to build based on the tag
@@ -156,7 +156,7 @@ jobs:
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
-    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.event_name != 'workflow_dispatch' }}
+    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -228,7 +228,7 @@ jobs:
 
       - name: Create GitHub Release
         id: create-release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # ratchet:softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # ratchet:softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release-tag.outputs.tag }}
           name: ${{ steps.release-tag.outputs.tag }}

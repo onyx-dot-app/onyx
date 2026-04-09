@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { CardHeaderLayout } from "@opal/layouts";
+import { Card } from "@opal/layouts";
 import { Button } from "@opal/components";
 import {
   SvgArrowExchange,
@@ -18,14 +18,14 @@ const withTooltipProvider: Decorator = (Story) => (
 );
 
 const meta = {
-  title: "Layouts/CardHeaderLayout",
-  component: CardHeaderLayout,
+  title: "Layouts/Card.Header",
+  component: Card.Header,
   tags: ["autodocs"],
   decorators: [withTooltipProvider],
   parameters: {
     layout: "centered",
   },
-} satisfies Meta<typeof CardHeaderLayout>;
+} satisfies Meta<typeof Card.Header>;
 
 export default meta;
 
@@ -38,7 +38,7 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
-      <CardHeaderLayout
+      <Card.Header
         sizePreset="main-ui"
         variant="section"
         icon={SvgGlobe}
@@ -57,7 +57,7 @@ export const Default: Story = {
 export const WithBothSlots: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
-      <CardHeaderLayout
+      <Card.Header
         sizePreset="main-ui"
         variant="section"
         icon={SvgGlobe}
@@ -92,7 +92,7 @@ export const WithBothSlots: Story = {
 export const RightChildrenOnly: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
-      <CardHeaderLayout
+      <Card.Header
         sizePreset="main-ui"
         variant="section"
         icon={SvgGlobe}
@@ -111,7 +111,7 @@ export const RightChildrenOnly: Story = {
 export const NoRightChildren: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
-      <CardHeaderLayout
+      <Card.Header
         sizePreset="main-ui"
         variant="section"
         icon={SvgGlobe}
@@ -125,7 +125,7 @@ export const NoRightChildren: Story = {
 export const LongContent: Story = {
   render: () => (
     <div className="w-[28rem] border rounded-16">
-      <CardHeaderLayout
+      <Card.Header
         sizePreset="main-ui"
         variant="section"
         icon={SvgGlobe}

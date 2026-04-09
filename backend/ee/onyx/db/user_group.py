@@ -39,6 +39,7 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import fetch_user_by_id
 from onyx.utils.logger import setup_logger
@@ -952,3 +953,46 @@ def delete_user_group_cc_pair_relationship__no_commit(
         UserGroup__ConnectorCredentialPair.cc_pair_id == cc_pair_id,
     )
     db_session.execute(delete_stmt)
+
+
+def set_group_permission__no_commit(
+    group_id: int,
+    permission: Permission,
+    enabled: bool,
+    granted_by: UUID,
+    db_session: Session,
+) -> None:
+    """Grant or revoke a single permission for a group using soft-delete.
+
+    Does NOT commit — caller must commit the session.
+    """
+    existing = db_session.execute(
+        select(PermissionGrant)
+        .where(
+            PermissionGrant.group_id == group_id,
+            PermissionGrant.permission == permission,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+
+    if enabled:
+        if existing is not None:
+            if existing.is_deleted:
+                existing.is_deleted = False
+                existing.granted_by = granted_by
+                existing.granted_at = func.now()
+        else:
+            db_session.add(
+                PermissionGrant(
+                    group_id=group_id,
+                    permission=permission,
+                    grant_source=GrantSource.USER,
+                    granted_by=granted_by,
+                )
+            )
+    else:
+        if existing is not None and not existing.is_deleted:
+            existing.is_deleted = True
+
+    db_session.flush()
+    recompute_permissions_for_group__no_commit(group_id, db_session)

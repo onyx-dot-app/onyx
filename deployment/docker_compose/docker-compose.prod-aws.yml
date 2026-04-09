@@ -37,6 +37,8 @@ services:
       - AWS_REGION_NAME=${AWS_REGION_NAME:-us-east-1}
       # AWS IAM configuration
       - AWS_EC2_METADATA_DISABLED=false
+      - AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE=IPv4
+      - AWS_METADATA_SERVICE_NUM_ATTEMPTS=3
     env_file:
       - path: .env
         required: false
@@ -92,6 +94,8 @@ services:
       - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
       # AWS IAM configuration
       - AWS_EC2_METADATA_DISABLED=false
+      - AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE=IPv4
+      - AWS_METADATA_SERVICE_NUM_ATTEMPTS=3
     env_file:
       - path: .env
         required: false

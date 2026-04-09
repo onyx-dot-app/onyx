@@ -12,12 +12,13 @@ from ee.onyx.server.tenants.anonymous_user_path import (
 from ee.onyx.server.tenants.anonymous_user_path import modify_anonymous_user_path
 from ee.onyx.server.tenants.anonymous_user_path import validate_anonymous_user_path
 from ee.onyx.server.tenants.models import AnonymousUserPath
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import anonymous_user_enabled
-from onyx.auth.users import current_admin_user
 from onyx.auth.users import User
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.enums import Permission
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/tenants")
 
 @router.get("/anonymous-user-path")
 async def get_anonymous_user_path_api(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> AnonymousUserPath:
     tenant_id = get_current_tenant_id()
 
@@ -44,7 +45,7 @@ async def get_anonymous_user_path_api(
 @router.post("/anonymous-user-path")
 async def set_anonymous_user_path_api(
     anonymous_user_path: str,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     tenant_id = get_current_tenant_id()
     try:

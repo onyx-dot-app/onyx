@@ -2,8 +2,8 @@ from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
@@ -12,6 +12,7 @@ from onyx.context.search.preprocessing.access_filters import (
 )
 from onyx.context.search.utils import get_query_embedding
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import find_tags
@@ -81,7 +82,7 @@ def get_tags(
     sources: list[DocumentSource] | None = None,
     allow_prefix: bool = True,  # This is currently the only option
     limit: int = 50,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TagResponse:
     if not allow_prefix:

@@ -16,8 +16,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import UserRole
 from onyx.main import get_application
 from onyx.utils.logger import setup_logger
@@ -40,10 +41,11 @@ def mock_get_session() -> Generator[MagicMock, None, None]:
     yield MagicMock()
 
 
-def mock_current_admin_user() -> MagicMock:
-    """Mock admin user for endpoints protected by current_admin_user."""
+def mock_current_user() -> MagicMock:
+    """Mock admin user for endpoints protected by require_permission."""
     mock_admin = MagicMock()
     mock_admin.role = UserRole.ADMIN
+    mock_admin.effective_permissions = [Permission.FULL_ADMIN_PANEL_ACCESS.value]
     return mock_admin
 
 
@@ -59,7 +61,7 @@ def client() -> Generator[TestClient, None, None]:
     # Override the database session dependency with a mock
     # (these tests don't actually need DB access)
     app.dependency_overrides[get_session] = mock_get_session
-    app.dependency_overrides[current_admin_user] = mock_current_admin_user
+    app.dependency_overrides[current_user] = mock_current_user
 
     # Use TestClient as a context manager to properly trigger lifespan
     with TestClient(app) as client:

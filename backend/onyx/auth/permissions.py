@@ -47,6 +47,20 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     },
 }
 
+# Permissions that cannot be toggled via the group-permission API.
+# BASIC_ACCESS is always granted, FULL_ADMIN_PANEL_ACCESS is too broad,
+# and READ_* permissions are implied (never stored directly).
+NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
+    {
+        Permission.BASIC_ACCESS,
+        Permission.FULL_ADMIN_PANEL_ACCESS,
+        Permission.READ_CONNECTORS,
+        Permission.READ_DOCUMENT_SETS,
+        Permission.READ_AGENTS,
+        Permission.READ_USERS,
+    }
+)
+
 
 def resolve_effective_permissions(granted: set[str]) -> set[str]:
     """Expand granted permissions with their implied permissions.
@@ -107,4 +121,5 @@ def require_permission(
 
         return user
 
+    dependency._is_require_permission = True  # type: ignore[attr-defined]  # sentinel for auth_check detection
     return dependency

@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.oauth.api_router import router
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
@@ -26,6 +26,7 @@ from onyx.db.credentials import create_credential
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.credentials import update_credential_json
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
@@ -146,7 +147,7 @@ class ConfluenceCloudOAuth:
 def confluence_oauth_callback(
     code: str,
     state: str,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
@@ -258,7 +259,7 @@ def confluence_oauth_callback(
 @router.get("/connector/confluence/accessible-resources")
 def confluence_oauth_accessible_resources(
     credential_id: int,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:
@@ -325,7 +326,7 @@ def confluence_oauth_finalize(
     cloud_id: str,
     cloud_name: str,
     cloud_url: str,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:

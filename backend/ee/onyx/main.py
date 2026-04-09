@@ -155,7 +155,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, license_router)
 
     # Unified billing API - always registered in EE.
-    # Each endpoint is protected by the `current_admin_user` dependency (admin auth).
+    # Each endpoint is protected by admin permission checks.
     include_router_with_global_prefix_prepended(application, billing_router)
 
     if MULTI_TENANT:

@@ -2,7 +2,7 @@
 
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, SelectCard } from "@opal/components";
-import { Content, CardHeaderLayout } from "@opal/layouts";
+import { Content, Card } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgArrowRightCircle,
@@ -15,7 +15,7 @@ import {
  * ProviderCard — a stateful card for selecting / connecting / disconnecting
  * an external service provider (LLM, search engine, voice model, etc.).
  *
- * Built on opal `SelectCard` + `CardHeaderLayout`. Maps a three-state
+ * Built on opal `SelectCard` + `Card.Header`. Maps a three-state
  * status model to the `SelectCard` state system:
  *
  * | Status         | SelectCard state | Right action           |
@@ -92,7 +92,7 @@ export default function ProviderCard({
       aria-label={ariaLabel}
       onClick={isDisconnected && onConnect ? onConnect : undefined}
     >
-      <CardHeaderLayout
+      <Card.Header
         sizePreset="main-ui"
         variant="section"
         icon={icon}

@@ -127,6 +127,7 @@ from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.users import get_user_by_email
+from onyx.db.users import is_limited_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import log_onyx_error
 from onyx.error_handling.exceptions import onyx_error_to_json_response
@@ -1681,9 +1682,9 @@ async def current_user(
 ) -> User:
     user = await double_check_user(user)
 
-    if user.role == UserRole.LIMITED:
+    if is_limited_user(user):
         raise BasicAuthenticationError(
-            detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
+            detail="Access denied. User has limited permissions.",
         )
     return user
 
@@ -1695,15 +1696,6 @@ async def current_curator_or_admin_user(
     if user.role not in allowed_roles:
         raise BasicAuthenticationError(
             detail="Access denied. User is not a curator or admin.",
-        )
-
-    return user
-
-
-async def current_admin_user(user: User = Depends(current_user)) -> User:
-    if user.role != UserRole.ADMIN:
-        raise BasicAuthenticationError(
-            detail="Access denied. User must be an admin to perform this action.",
         )
 
     return user
@@ -1817,11 +1809,11 @@ async def current_user_from_websocket(
     # Apply same checks as HTTP auth (verification, OIDC expiry, role)
     user = await double_check_user(user)
 
-    # Block LIMITED users (same as current_user)
-    if user.role == UserRole.LIMITED:
-        logger.warning(f"WS auth: user {user.email} has LIMITED role")
+    # Block limited users (same as current_user)
+    if is_limited_user(user):
+        logger.warning(f"WS auth: user {user.email} is limited")
         raise BasicAuthenticationError(
-            detail="Access denied. User role is LIMITED. BASIC or higher permissions are required.",
+            detail="Access denied. User has limited permissions.",
         )
 
     logger.debug(f"WS auth: authenticated {user.email}")

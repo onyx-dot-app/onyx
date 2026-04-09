@@ -129,8 +129,9 @@ const InputComboBox = ({
   leftSearchIcon = false,
   rightSection,
   separatorLabel = "Other options",
-  showAddPrefix = false,
+  createPrefix,
   showOtherOptions = false,
+  dropdownMaxHeight,
   ...rest
 }: WithoutStyles<InputComboBoxProps>) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -446,7 +447,8 @@ const InputComboBox = ({
           inputValue={inputValue}
           allowCreate={!strict}
           showCreateOption={showCreateOption}
-          showAddPrefix={showAddPrefix}
+          createPrefix={createPrefix}
+          dropdownMaxHeight={dropdownMaxHeight}
         />
       </>
 

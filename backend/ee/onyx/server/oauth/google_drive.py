@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.oauth.api_router import router
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
@@ -34,6 +34,7 @@ from onyx.connectors.google_utils.shared_constants import (
 )
 from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
@@ -114,7 +115,7 @@ class GoogleDriveOAuth:
 def handle_google_drive_oauth_callback(
     code: str,
     state: str,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:

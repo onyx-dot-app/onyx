@@ -28,11 +28,10 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
-from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
 from onyx.auth.users import enforce_seat_limit
 from onyx.auth.users import optional_user
 from onyx.configs.app_configs import AUTH_BACKEND
@@ -52,6 +51,7 @@ from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType
+from onyx.db.enums import Permission
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import User
 from onyx.db.models import UserFile
@@ -126,7 +126,9 @@ USERS_PAGE_SIZE = 10
 @router.patch("/manage/set-user-role", tags=PUBLIC_API_TAGS)
 def set_user_role(
     user_role_update_request: UserRoleUpdateRequest,
-    current_user: User = Depends(current_admin_user),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_update = get_user_by_email(
@@ -143,7 +145,6 @@ def set_user_role(
     # This will raise an exception if the role update is invalid
     validate_user_role_update(
         requested_role=requested_role,
-        current_role=current_role,
         current_account_type=user_to_update.account_type,
         explicit_override=user_role_update_request.explicit_override,
     )
@@ -171,7 +172,7 @@ class TestUpsertRequest(BaseModel):
 @router.post("/manage/users/test-upsert-user")
 async def test_upsert_user(
     request: TestUpsertRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None | FullUserSnapshot:
     """Test endpoint for upsert_saml_user. Only used for integration testing."""
     user = await fetch_ee_implementation_or_noop(
@@ -187,7 +188,7 @@ def list_accepted_users(
     page_size: int = Query(10, ge=1, le=1000),
     roles: list[UserRole] = Query(default=[]),
     is_active: bool | None = Query(default=None),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[FullUserSnapshot]:
     filtered_accepted_users = get_page_of_filtered_users(
@@ -249,7 +250,7 @@ def list_accepted_users(
 
 @router.get("/manage/users/accepted/all", tags=PUBLIC_API_TAGS)
 def list_all_accepted_users(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[FullUserSnapshot]:
     """Returns all accepted users without pagination.
@@ -292,7 +293,7 @@ def list_all_accepted_users(
 
 @router.get("/manage/users/counts")
 def get_user_counts(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, dict[str, int]]:
     return get_user_counts_by_role_and_status(db_session)
@@ -300,7 +301,7 @@ def get_user_counts(
 
 @router.get("/manage/users/invited", tags=PUBLIC_API_TAGS)
 def list_invited_users(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[InvitedUserSnapshot]:
     invited_emails = get_invited_users()
@@ -388,7 +389,7 @@ def list_all_users(
 
 @router.get("/manage/users/download")
 def download_users_csv(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     """Download all users as a CSV file."""
@@ -426,7 +427,9 @@ def download_users_csv(
 @router.put("/manage/admin/users", tags=PUBLIC_API_TAGS)
 def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
-    current_user: User = Depends(current_admin_user),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> BulkInviteResponse:
     """emails are string validated. If any email fails validation, no emails are
@@ -526,7 +529,7 @@ def bulk_invite_users(
 @router.patch("/manage/admin/remove-invited-user", tags=PUBLIC_API_TAGS)
 def remove_invited_user(
     user_email: UserByEmail,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> int:
     tenant_id = get_current_tenant_id()
@@ -554,7 +557,9 @@ def remove_invited_user(
 @router.patch("/manage/admin/deactivate-user", tags=PUBLIC_API_TAGS)
 def deactivate_user_api(
     user_email: UserByEmail,
-    current_user: User = Depends(current_admin_user),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     if current_user.email == user_email.user_email:
@@ -583,7 +588,7 @@ def deactivate_user_api(
 @router.delete("/manage/admin/delete-user", tags=PUBLIC_API_TAGS)
 async def delete_user(
     user_email: UserByEmail,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_delete = get_user_by_email(
@@ -627,7 +632,7 @@ async def delete_user(
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
 def activate_user_api(
     user_email: UserByEmail,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_activate = get_user_by_email(
@@ -656,7 +661,7 @@ def activate_user_api(
 
 @router.get("/manage/admin/valid-domains")
 def get_valid_domains(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[str]:
     return VALID_EMAIL_DOMAINS
 
@@ -667,7 +672,7 @@ def get_valid_domains(
 @router.get("/users", tags=PUBLIC_API_TAGS)
 def list_all_users_basic_info(
     include_api_keys: bool = False,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
     users = get_all_users(db_session)
@@ -680,7 +685,9 @@ def list_all_users_basic_info(
 
 
 @router.get("/get-user-role", tags=PUBLIC_API_TAGS)
-async def get_user_role(user: User = Depends(current_user)) -> UserRoleResponse:
+async def get_user_role(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> UserRoleResponse:
     return UserRoleResponse(role=user.role)
 
 
@@ -779,7 +786,7 @@ def _get_token_created_at(
 
 @router.get("/me/permissions", tags=PUBLIC_API_TAGS)
 def get_current_user_permissions(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[str]:
     return sorted(p.value for p in get_effective_permissions(user))
 
@@ -861,7 +868,7 @@ def verify_user_logged_in(
 @router.patch("/temperature-override-enabled")
 def update_user_temperature_override_enabled_api(
     temperature_override_enabled: bool,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_temperature_override_enabled(
@@ -876,7 +883,7 @@ class ChosenDefaultModelRequest(BaseModel):
 @router.patch("/shortcut-enabled")
 def update_user_shortcut_enabled_api(
     shortcut_enabled: bool,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
@@ -885,7 +892,7 @@ def update_user_shortcut_enabled_api(
 @router.patch("/auto-scroll")
 def update_user_auto_scroll_api(
     request: AutoScrollRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_auto_scroll(user.id, request.auto_scroll, db_session)
@@ -894,7 +901,7 @@ def update_user_auto_scroll_api(
 @router.patch("/user/theme-preference")
 def update_user_theme_preference_api(
     request: ThemePreferenceRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_theme_preference(user.id, request.theme_preference, db_session)
@@ -903,7 +910,7 @@ def update_user_theme_preference_api(
 @router.patch("/user/chat-background")
 def update_user_chat_background_api(
     request: ChatBackgroundRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_chat_background(user.id, request.chat_background, db_session)
@@ -912,7 +919,7 @@ def update_user_chat_background_api(
 @router.patch("/user/default-app-mode")
 def update_user_default_app_mode_api(
     request: DefaultAppModeRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_default_app_mode(user.id, request.default_app_mode, db_session)
@@ -921,7 +928,7 @@ def update_user_default_app_mode_api(
 @router.patch("/user/default-model")
 def update_user_default_model_api(
     request: ChosenDefaultModelRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_default_model(user.id, request.default_model, db_session)
@@ -930,7 +937,7 @@ def update_user_default_model_api(
 @router.patch("/user/personalization")
 def update_user_personalization_api(
     request: PersonalizationUpdateRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     new_name = request.name if request.name is not None else user.personal_name
@@ -978,7 +985,7 @@ class ReorderPinnedAssistantsRequest(BaseModel):
 @router.patch("/user/pinned-assistants")
 def update_user_pinned_assistants_api(
     request: ReorderPinnedAssistantsRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     ordered_assistant_ids = request.ordered_assistant_ids
@@ -1015,7 +1022,7 @@ def update_assistant_visibility(
 def update_user_assistant_visibility_api(
     assistant_id: int,
     show: bool,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_preferences = UserInfo.from_model(user).preferences
@@ -1035,7 +1042,7 @@ def update_user_assistant_visibility_api(
 
 @router.get("/user/assistant/preferences")
 def get_user_assistant_preferences(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UserSpecificAssistantPreferences | None:
     """Fetch all assistant preferences for the user."""
@@ -1054,7 +1061,7 @@ def get_user_assistant_preferences(
 def update_assistant_preferences_for_user_api(
     assistant_id: int,
     new_assistant_preference: UserSpecificAssistantPreference,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_assistant_preferences(
@@ -1065,7 +1072,7 @@ def update_assistant_preferences_for_user_api(
 
 @router.get("/user/files/recent")
 def get_recent_files(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     user_id = user.id

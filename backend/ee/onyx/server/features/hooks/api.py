@@ -4,12 +4,13 @@ from fastapi import Depends
 from fastapi import Query
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import Permission
 from onyx.db.hook import create_hook__no_commit
 from onyx.db.hook import delete_hook__no_commit
 from onyx.db.hook import get_hook_by_id
@@ -178,7 +179,7 @@ router = APIRouter(prefix="/admin/hooks")
 
 @router.get("/specs")
 def get_hook_point_specs(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
 ) -> list[HookPointMetaResponse]:
     return [
@@ -199,7 +200,7 @@ def get_hook_point_specs(
 
 @router.get("")
 def list_hooks(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
 ) -> list[HookResponse]:
@@ -210,7 +211,7 @@ def list_hooks(
 @router.post("")
 def create_hook(
     req: HookCreateRequest,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
 ) -> HookResponse:
@@ -246,7 +247,7 @@ def create_hook(
 @router.get("/{hook_id}")
 def get_hook(
     hook_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
 ) -> HookResponse:
@@ -258,7 +259,7 @@ def get_hook(
 def update_hook(
     hook_id: int,
     req: HookUpdateRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
 ) -> HookResponse:
@@ -328,7 +329,7 @@ def update_hook(
 @router.delete("/{hook_id}")
 def delete_hook(
     hook_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
 ) -> None:
@@ -339,7 +340,7 @@ def delete_hook(
 @router.post("/{hook_id}/activate")
 def activate_hook(
     hook_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
 ) -> HookResponse:
@@ -381,7 +382,7 @@ def activate_hook(
 @router.post("/{hook_id}/validate")
 def validate_hook(
     hook_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
 ) -> HookValidateResponse:
@@ -409,7 +410,7 @@ def validate_hook(
 @router.post("/{hook_id}/deactivate")
 def deactivate_hook(
     hook_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
 ) -> HookResponse:
@@ -432,7 +433,7 @@ def deactivate_hook(
 def list_hook_execution_logs(
     hook_id: int,
     limit: int = Query(default=10, ge=1, le=100),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     _hook_enabled: None = Depends(require_hook_enabled),
     db_session: Session = Depends(get_session),
 ) -> list[HookExecutionRecord]:

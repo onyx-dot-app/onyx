@@ -34,9 +34,27 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 
+def is_limited_user(user: User) -> bool:
+    """Check if a user is effectively limited — i.e. should be denied
+    access by ``current_user`` and should not receive default-group
+    membership.
+
+    A user is limited when they are:
+    * an anonymous user, or
+    * a service account with no effective permissions (no group membership).
+    """
+    if user.account_type == AccountType.ANONYMOUS:
+        return True
+    if (
+        user.account_type == AccountType.SERVICE_ACCOUNT
+        and not user.effective_permissions
+    ):
+        return True
+    return False
+
+
 def validate_user_role_update(
     requested_role: UserRole,
-    current_role: UserRole,
     current_account_type: AccountType,
     explicit_override: bool = False,
 ) -> None:
@@ -50,7 +68,7 @@ def validate_user_role_update(
     - requested role is a limited user
     - current account type is BOT (slack user)
     - current account type is EXT_PERM_USER
-    - current role is a limited user
+    - current account type is ANONYMOUS or SERVICE_ACCOUNT
     """
 
     if current_account_type == AccountType.BOT:
@@ -65,10 +83,10 @@ def validate_user_role_update(
             detail="To change an External Permissioned User's role, they must first login to Onyx via the web app.",
         )
 
-    if current_role == UserRole.LIMITED:
+    if current_account_type in (AccountType.ANONYMOUS, AccountType.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=400,
-            detail="To change a Limited User's role, they must first login to Onyx via the web app.",
+            detail="Cannot change the role of an anonymous or service account user.",
         )
 
     if explicit_override:

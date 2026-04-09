@@ -33,6 +33,7 @@ import {
   FileDescriptor,
   Message,
   MessageResponseIDInfo,
+  MultiModelMessageResponseIDInfo,
   RegenerationState,
   RetrievalType,
   StreamingError,
@@ -69,6 +70,7 @@ import {
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
+import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
 import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
@@ -94,6 +96,8 @@ export interface OnSubmitProps {
   regenerationRequest?: RegenerationRequest | null;
   // Additional context injected into the LLM call but not stored/shown in chat.
   additionalContext?: string;
+  /** When 2+ models, triggers multi-model parallel generation via backend. */
+  selectedModels?: SelectedModel[];
 }
 
 interface RegenerationRequest {
@@ -370,7 +374,10 @@ export default function useChatController({
       modelOverride,
       regenerationRequest,
       additionalContext,
+      selectedModels,
     }: OnSubmitProps) => {
+      const isMultiModel =
+        !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
       const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
         const params = new URLSearchParams(searchParams?.toString() || "");
@@ -601,6 +608,7 @@ export default function useChatController({
       // immediately reflects the user message
       let initialUserNode: Message;
       let initialAgentNode: Message;
+      let initialAssistantNodes: Message[] = [];
 
       if (regenerationRequest) {
         // For regeneration: keep the existing user message, only create new agent
@@ -623,12 +631,33 @@ export default function useChatController({
         );
         initialUserNode = result.initialUserNode;
         initialAgentNode = result.initialAgentNode;
+
+        // In multi-model mode, create N assistant placeholder nodes (one per model).
+        // Set modelDisplayName/overridden_model immediately so ChatUI detects
+        // multi-model from the first render (before any packets arrive).
+        if (isMultiModel && selectedModels) {
+          initialAssistantNodes = selectedModels.map((model, i) => {
+            const node = buildEmptyMessage({
+              messageType: "assistant",
+              parentNodeId: initialUserNode.nodeId,
+              nodeIdOffset: i + 1,
+            });
+            node.modelDisplayName = model.displayName;
+            node.overridden_model = model.modelName;
+            return node;
+          });
+        }
       }
 
       // make messages appear + clear input bar
-      const messagesToUpsert = regenerationRequest
-        ? [initialAgentNode] // Only upsert the new agent for regeneration
-        : [initialUserNode, initialAgentNode]; // Upsert both for normal/edit flow
+      let messagesToUpsert: Message[];
+      if (regenerationRequest) {
+        messagesToUpsert = [initialAgentNode];
+      } else if (isMultiModel) {
+        messagesToUpsert = [initialUserNode, ...initialAssistantNodes];
+      } else {
+        messagesToUpsert = [initialUserNode, initialAgentNode];
+      }
       currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
@@ -661,6 +690,67 @@ export default function useChatController({
 
       let newUserMessageId: number | null = null;
       let newAgentMessageId: number | null = null;
+
+      // Multi-model per-model state (indexed by model_index from backend)
+      const numModels = selectedModels?.length ?? 0;
+      const assistantMessageIds: (number | null)[] = isMultiModel
+        ? Array(numModels).fill(null)
+        : [];
+      const packetsPerModel: Packet[][] = isMultiModel
+        ? Array.from({ length: numModels }, () => [])
+        : [];
+      const documentsPerModel: OnyxDocument[][] = isMultiModel
+        ? Array.from({ length: numModels }, () => [])
+        : [];
+      const citationsPerModel: (CitationMap | null)[] = isMultiModel
+        ? Array(numModels).fill(null)
+        : [];
+      // Track which models have errored so the bottom-of-loop upsert skips them
+      const erroredModelIndices = new Set<number>();
+      let modelDisplayNames: string[] = isMultiModel
+        ? selectedModels?.map((m) => m.displayName) ?? []
+        : [];
+
+      /** Build a non-errored multi-model assistant node for upsert. */
+      function buildAssistantNodeUpdate(
+        idx: number,
+        overrides?: Partial<Message>
+      ): Message {
+        return {
+          ...initialAssistantNodes[idx]!,
+          messageId: assistantMessageIds[idx] ?? undefined,
+          message: "",
+          type: "assistant" as const,
+          retrievalType,
+          query,
+          documents: documentsPerModel[idx] || [],
+          citations: citationsPerModel[idx] || {},
+          files: [] as FileDescriptor[],
+          toolCall: null,
+          stackTrace: null,
+          overridden_model: selectedModels?.[idx]?.modelName,
+          modelDisplayName:
+            modelDisplayNames[idx] ||
+            selectedModels?.[idx]?.displayName ||
+            null,
+          stopReason,
+          packets: packetsPerModel[idx] || [],
+          packetCount: packetsPerModel[idx]?.length || 0,
+          ...overrides,
+        };
+      }
+
+      /** Build updated nodes for all non-errored models. */
+      function buildNonErroredNodes(overrides?: Partial<Message>): Message[] {
+        const nodes: Message[] = [];
+        for (let idx = 0; idx < initialAssistantNodes.length; idx++) {
+          if (erroredModelIndices.has(idx)) continue;
+          nodes.push(buildAssistantNodeUpdate(idx, overrides));
+        }
+        return nodes;
+      }
+
+      let streamSucceeded = false;
 
       try {
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
@@ -710,13 +800,15 @@ export default function useChatController({
             filterManager.timeRange,
             filterManager.selectedTags
           ),
-          modelProvider:
-            modelOverride?.name || llmManager.currentLlm.name || undefined,
-          modelVersion:
-            modelOverride?.modelName ||
-            llmManager.currentLlm.modelName ||
-            searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
-            undefined,
+          modelProvider: isMultiModel
+            ? undefined
+            : modelOverride?.name || llmManager.currentLlm.name || undefined,
+          modelVersion: isMultiModel
+            ? undefined
+            : modelOverride?.modelName ||
+              llmManager.currentLlm.modelName ||
+              searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
+              undefined,
           temperature: llmManager.temperature || undefined,
           deepResearch,
           enabledToolIds:
@@ -728,6 +820,13 @@ export default function useChatController({
           forcedToolId: effectiveForcedToolId,
           origin: messageOrigin,
           additionalContext,
+          llmOverrides: isMultiModel
+            ? selectedModels!.map((m) => ({
+                model_provider: m.name,
+                model_version: m.modelName,
+                display_name: m.displayName,
+              }))
+            : undefined,
         });
 
         const delay = (ms: number) => {
@@ -780,6 +879,28 @@ export default function useChatController({
                 .reserved_assistant_message_id;
             }
 
+            // Multi-model: handle reserved IDs for N parallel model responses.
+            // This packet is metadata-only — skip the content-processing chain below.
+            if (
+              isMultiModel &&
+              Object.hasOwn(packet, "responses") &&
+              Array.isArray(
+                (packet as MultiModelMessageResponseIDInfo).responses
+              )
+            ) {
+              const multiPacket = packet as MultiModelMessageResponseIDInfo;
+              newUserMessageId =
+                multiPacket.user_message_id ?? newUserMessageId;
+              for (let mi = 0; mi < multiPacket.responses.length; mi++) {
+                const slot = multiPacket.responses[mi]!;
+                assistantMessageIds[mi] = slot.message_id;
+                if (slot.model_name) {
+                  modelDisplayNames[mi] = slot.model_name;
+                }
+              }
+              continue;
+            }
+
             if (Object.hasOwn(packet, "user_files")) {
               const userFiles = (packet as UserKnowledgeFilePacket).user_files;
               // Ensure files are unique by id
@@ -804,17 +925,61 @@ export default function useChatController({
               (packet as any).error != null
             ) {
               const streamingError = packet as StreamingError;
-              error = streamingError.error;
-              stackTrace = streamingError.stack_trace || null;
-              errorCode = streamingError.error_code || null;
-              isRetryable = streamingError.is_retryable ?? true;
-              errorDetails = streamingError.details || null;
 
-              setUncaughtError(frozenSessionId, streamingError.error);
-              updateChatStateAction(frozenSessionId, "input");
-              updateSubmittedMessage(getCurrentSessionId(), "");
+              // In multi-model mode, route per-model errors to the specific model's
+              // node instead of killing the entire stream. Other models keep streaming.
+              if (isMultiModel && streamingError.details?.model_index != null) {
+                const errorModelIndex = streamingError.details
+                  .model_index as number;
+                if (
+                  errorModelIndex >= 0 &&
+                  errorModelIndex < initialAssistantNodes.length
+                ) {
+                  const errorNode = initialAssistantNodes[errorModelIndex]!;
+                  erroredModelIndices.add(errorModelIndex);
+                  currentMessageTreeLocal = upsertToCompleteMessageTree({
+                    messages: [
+                      {
+                        ...errorNode,
+                        messageId:
+                          assistantMessageIds[errorModelIndex] ?? undefined,
+                        message: streamingError.error,
+                        type: "error",
+                        stackTrace: streamingError.stack_trace || null,
+                        errorCode: streamingError.error_code || null,
+                        isRetryable: streamingError.is_retryable ?? true,
+                        errorDetails: streamingError.details || null,
+                        overridden_model:
+                          selectedModels?.[errorModelIndex]?.modelName,
+                        modelDisplayName:
+                          modelDisplayNames[errorModelIndex] ||
+                          selectedModels?.[errorModelIndex]?.displayName ||
+                          null,
+                        packets: [],
+                        packetCount: 0,
+                        is_generating: false,
+                      },
+                    ],
+                    completeMessageTreeOverride: currentMessageTreeLocal,
+                    chatSessionId: frozenSessionId!,
+                  });
+                }
+                // Skip the normal per-packet upsert — we already upserted the error node
+                continue;
+              } else {
+                // Single-model: kill the stream
+                error = streamingError.error;
+                stackTrace = streamingError.stack_trace || null;
+                errorCode = streamingError.error_code || null;
+                isRetryable = streamingError.is_retryable ?? true;
+                errorDetails = streamingError.details || null;
 
-              throw new Error(streamingError.error);
+                setUncaughtError(frozenSessionId, streamingError.error);
+                updateChatStateAction(frozenSessionId, "input");
+                updateSubmittedMessage(getCurrentSessionId(), "");
+
+                throw new Error(streamingError.error);
+              }
             } else if (Object.hasOwn(packet, "message_id")) {
               finalMessage = packet as BackendMessage;
             } else if (Object.hasOwn(packet, "stop_reason")) {
@@ -823,32 +988,86 @@ export default function useChatController({
                 updateCanContinue(true, frozenSessionId);
               }
             } else if (Object.hasOwn(packet, "obj")) {
-              packets.push(packet as Packet);
-              packetsVersion++;
+              const typedPacket = packet as Packet;
+              const packetObj = typedPacket.obj;
 
-              // Check if the packet contains document information
-              const packetObj = (packet as Packet).obj;
+              if (isMultiModel) {
+                // Multi-model: route packet by placement.model_index.
+                // OverallStop (type "stop") has model_index=null — it's a global
+                // terminal packet that must be delivered to ALL models so each
+                // panel's AgentMessage sees the stop and exits "Thinking..." state.
+                const isGlobalStop =
+                  packetObj.type === "stop" &&
+                  typedPacket.placement?.model_index == null;
 
-              if (packetObj.type === "citation_info") {
-                // Individual citation packet from backend streaming
-                const citationInfo = packetObj as {
-                  type: "citation_info";
-                  citation_number: number;
-                  document_id: string;
-                };
-                // Incrementally build citations map
-                citations = {
-                  ...(citations || {}),
-                  [citationInfo.citation_number]: citationInfo.document_id,
-                };
-              } else if (packetObj.type === "message_start") {
-                const messageStart = packetObj as MessageStart;
-                if (messageStart.final_documents) {
-                  documents = messageStart.final_documents;
-                  updateSelectedNodeForDocDisplay(
-                    frozenSessionId,
-                    initialAgentNode.nodeId
-                  );
+                if (isGlobalStop) {
+                  for (let mi = 0; mi < packetsPerModel.length; mi++) {
+                    packetsPerModel[mi] = [
+                      ...packetsPerModel[mi]!,
+                      typedPacket,
+                    ];
+                  }
+                }
+
+                const modelIndex = typedPacket.placement?.model_index ?? 0;
+                if (
+                  !isGlobalStop &&
+                  modelIndex >= 0 &&
+                  modelIndex < packetsPerModel.length
+                ) {
+                  packetsPerModel[modelIndex] = [
+                    ...packetsPerModel[modelIndex]!,
+                    typedPacket,
+                  ];
+
+                  if (packetObj.type === "citation_info") {
+                    const citationInfo = packetObj as {
+                      type: "citation_info";
+                      citation_number: number;
+                      document_id: string;
+                    };
+                    citationsPerModel[modelIndex] = {
+                      ...(citationsPerModel[modelIndex] || {}),
+                      [citationInfo.citation_number]: citationInfo.document_id,
+                    };
+                  } else if (packetObj.type === "message_start") {
+                    const messageStart = packetObj as MessageStart;
+                    if (messageStart.final_documents) {
+                      documentsPerModel[modelIndex] =
+                        messageStart.final_documents;
+                      if (modelIndex === 0 && initialAssistantNodes[0]) {
+                        updateSelectedNodeForDocDisplay(
+                          frozenSessionId,
+                          initialAssistantNodes[0].nodeId
+                        );
+                      }
+                    }
+                  }
+                }
+              } else {
+                // Single-model
+                packets.push(typedPacket);
+                packetsVersion++;
+
+                if (packetObj.type === "citation_info") {
+                  const citationInfo = packetObj as {
+                    type: "citation_info";
+                    citation_number: number;
+                    document_id: string;
+                  };
+                  citations = {
+                    ...(citations || {}),
+                    [citationInfo.citation_number]: citationInfo.document_id,
+                  };
+                } else if (packetObj.type === "message_start") {
+                  const messageStart = packetObj as MessageStart;
+                  if (messageStart.final_documents) {
+                    documents = messageStart.final_documents;
+                    updateSelectedNodeForDocDisplay(
+                      frozenSessionId,
+                      initialAgentNode.nodeId
+                    );
+                  }
                 }
               }
             } else {
@@ -860,8 +1079,26 @@ export default function useChatController({
             parentMessage =
               parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
 
-            currentMessageTreeLocal = upsertToCompleteMessageTree({
-              messages: [
+            // Build the messages to upsert based on single vs multi-model mode
+            let messagesToUpsertInLoop: Message[];
+
+            if (isMultiModel) {
+              // Read the current user node from the tree to preserve childrenNodeIds
+              // (initialUserNode has stale/empty children from creation time).
+              const currentUserNode =
+                currentMessageTreeLocal.get(initialUserNode.nodeId) ||
+                initialUserNode;
+              const updatedUserNode: Message = {
+                ...currentUserNode,
+                messageId: newUserMessageId ?? undefined,
+                files: files,
+              };
+              messagesToUpsertInLoop = [
+                updatedUserNode,
+                ...buildNonErroredNodes(),
+              ];
+            } else {
+              messagesToUpsertInLoop = [
                 {
                   ...initialUserNode,
                   messageId: newUserMessageId ?? undefined,
@@ -894,8 +1131,11 @@ export default function useChatController({
                         : undefined;
                     })(),
                 },
-              ],
-              // Pass the latest map state
+              ];
+            }
+
+            currentMessageTreeLocal = upsertToCompleteMessageTree({
+              messages: messagesToUpsertInLoop,
               completeMessageTreeOverride: currentMessageTreeLocal,
               chatSessionId: frozenSessionId!,
             });
@@ -906,38 +1146,67 @@ export default function useChatController({
         if (stack.error) {
           throw new Error(stack.error);
         }
+        streamSucceeded = true;
       } catch (e: any) {
         console.log("Error:", e);
         const errorMsg = e.message;
-        currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: [
-            {
-              nodeId: initialUserNode.nodeId,
-              message: currMessage,
-              type: "user",
-              files: effectiveFileDescriptors,
-              toolCall: null,
-              parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
-              packets: [],
-              packetCount: 0,
-            },
-            {
-              nodeId: initialAgentNode.nodeId,
+        const userErrorNode: Message = {
+          nodeId: initialUserNode.nodeId,
+          message: currMessage,
+          type: "user",
+          files: effectiveFileDescriptors,
+          toolCall: null,
+          parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
+          packets: [],
+          packetCount: 0,
+        };
+
+        // In multi-model mode, mark non-errored assistant nodes as errors.
+        // Skip models that already have their own per-model error state.
+        // In single-model mode, mark the one agent node.
+        const errorAssistantNodes: Message[] = isMultiModel
+          ? buildNonErroredNodes({
               message: errorMsg,
-              type: "error",
-              files: aiMessageImages || [],
-              toolCall: null,
-              parentNodeId: initialUserNode.nodeId,
+              type: "error" as const,
               packets: [],
               packetCount: 0,
-              stackTrace: stackTrace,
-              errorCode: errorCode,
-              isRetryable: isRetryable,
-              errorDetails: errorDetails,
-            },
-          ],
+              stackTrace,
+              errorCode,
+              isRetryable,
+              errorDetails,
+            })
+          : [
+              {
+                nodeId: initialAgentNode.nodeId,
+                message: errorMsg,
+                type: "error" as const,
+                files: aiMessageImages || [],
+                toolCall: null,
+                parentNodeId: initialUserNode.nodeId,
+                packets: [],
+                packetCount: 0,
+                stackTrace: stackTrace,
+                errorCode: errorCode,
+                isRetryable: isRetryable,
+                errorDetails: errorDetails,
+              },
+            ];
+
+        currentMessageTreeLocal = upsertToCompleteMessageTree({
+          messages: [userErrorNode, ...errorAssistantNodes],
           completeMessageTreeOverride: currentMessageTreeLocal,
           chatSessionId: frozenSessionId,
+        });
+      }
+
+      // After streaming completes (normal or stop), mark all non-errored
+      // multi-model assistant nodes as done generating so panels exit
+      // "Thinking..." state.
+      if (isMultiModel && initialAssistantNodes.length > 0 && streamSucceeded) {
+        upsertToCompleteMessageTree({
+          messages: buildNonErroredNodes({ is_generating: false }),
+          completeMessageTreeOverride: currentMessageTreeLocal,
+          chatSessionId: frozenSessionId!,
         });
       }
 

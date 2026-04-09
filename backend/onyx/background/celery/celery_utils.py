@@ -1,3 +1,4 @@
+import time
 from collections.abc import Generator
 from collections.abc import Iterator
 from collections.abc import Sequence
@@ -30,6 +31,8 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.server.metrics.pruning_metrics import inc_pruning_rate_limit_error
+from onyx.server.metrics.pruning_metrics import observe_pruning_enumeration_duration
 from onyx.utils.logger import setup_logger
 
 
@@ -130,6 +133,7 @@ def _extract_from_batch(
 def extract_ids_from_runnable_connector(
     runnable_connector: BaseConnector,
     callback: IndexingHeartbeatInterface | None = None,
+    connector_type: str = "unknown",
 ) -> SlimConnectorExtractionResult:
     """
     Extract document IDs and hierarchy nodes from a runnable connector.
@@ -179,21 +183,38 @@ def extract_ids_from_runnable_connector(
     )
 
     # process raw batches to extract both IDs and hierarchy nodes
-    for doc_list in raw_batch_generator:
-        if callback and callback.should_stop():
-            raise RuntimeError(
-                "extract_ids_from_runnable_connector: Stop signal detected"
-            )
+    enumeration_start = time.monotonic()
+    try:
+        for doc_list in raw_batch_generator:
+            if callback and callback.should_stop():
+                raise RuntimeError(
+                    "extract_ids_from_runnable_connector: Stop signal detected"
+                )
 
-        batch_result = _extract_from_batch(doc_list)
-        batch_ids = batch_result.raw_id_to_parent
-        batch_nodes = batch_result.hierarchy_nodes
-        doc_batch_processing_func(batch_ids)
-        all_raw_id_to_parent.update(batch_ids)
-        all_hierarchy_nodes.extend(batch_nodes)
+            batch_result = _extract_from_batch(doc_list)
+            batch_ids = batch_result.raw_id_to_parent
+            batch_nodes = batch_result.hierarchy_nodes
+            doc_batch_processing_func(batch_ids)
+            all_raw_id_to_parent.update(batch_ids)
+            all_hierarchy_nodes.extend(batch_nodes)
 
-        if callback:
-            callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
+            if callback:
+                callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
+    except Exception as e:
+        # Best-effort rate limit detection via string matching.
+        # Connectors surface rate limits inconsistently — some raise HTTP 429,
+        # some use SDK-specific exceptions (e.g. google.api_core.exceptions.ResourceExhausted)
+        # that may or may not include "rate limit" or "429" in the message.
+        # TODO(Bo): replace with a standard ConnectorRateLimitError exception that all
+        # connectors raise when rate limited, making this check precise.
+        error_str = str(e)
+        if "rate limit" in error_str.lower() or "429" in error_str:
+            inc_pruning_rate_limit_error(connector_type)
+        raise
+    finally:
+        observe_pruning_enumeration_duration(
+            time.monotonic() - enumeration_start, connector_type
+        )
 
     return SlimConnectorExtractionResult(
         raw_id_to_parent=all_raw_id_to_parent,

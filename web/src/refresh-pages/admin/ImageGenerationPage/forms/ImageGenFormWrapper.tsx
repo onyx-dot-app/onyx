@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Form, Formik, FormikProps } from "formik";
 import ProviderModal from "@/components/modals/ProviderModal";
-import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
+import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
 import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import {
   testImageGenerationApiKey,
@@ -246,7 +246,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
 
   const icon = () => (
     <ConnectionProviderIcon
-      icon={<ProviderIcon provider={imageProvider.provider_name} size={24} />}
+      icon={<ModelIcon provider={imageProvider.provider_name} size={24} />}
     />
   );
 
