@@ -28,19 +28,6 @@ dependencies = [
     "kubernetes>=31.0.0",
 ]
 
-[project.optional-dependencies]
-# Model server specific dependencies (ML packages)
-model_server = [
-    "accelerate==1.6.0",
-    "einops==0.8.1",
-    "numpy==2.4.1",
-    "safetensors==0.5.3",
-    "sentence-transformers==4.0.2",
-    "torch==2.9.1",
-    "transformers==4.53.0",
-    "sentry-sdk[fastapi,celery,starlette]==2.14.0",
-]
-
 [dependency-groups]
 # Main backend application dependencies
 backend = [
@@ -196,8 +183,20 @@ ee = [
     "posthog==3.7.4",
 ]
 
+# Model server specific dependencies (ML packages)
+model_server = [
+    "accelerate==1.6.0",
+    "einops==0.8.1",
+    "numpy==2.4.1",
+    "safetensors==0.5.3",
+    "sentence-transformers==4.0.2",
+    "torch==2.9.1",
+    "transformers==4.53.0",
+    "sentry-sdk[fastapi,celery,starlette]==2.14.0",
+]
+
 [tool.uv]
-default-groups = ["backend", "dev", "ee"]
+default-groups = ["backend", "dev", "ee", "model_server"]
 
 [tool.mypy]
 plugins = "sqlalchemy.ext.mypy.plugin"

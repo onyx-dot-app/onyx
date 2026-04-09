@@ -57,7 +57,7 @@ repos:
             "--no-emit-project",
             "--no-default-groups",
             "--no-hashes",
-            "--extra",
+            "--group",
             "model_server",
             "-o",
             "backend/requirements/model_server.txt",

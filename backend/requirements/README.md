@@ -50,7 +50,7 @@ curl -LsSf https://astral.py/uv/install.sh | sh
    - `[dependency-groups.backend]` for backend-only dependencies
    - `[dependency-groups.dev]` for dev tools
    - `[dependency-groups.ee]` for EE features
-   - `[project.optional-dependencies.model_server]` for model_server-only dependencies (ML packages)
+   - `[dependency-groups.model_server]` for model_server-only dependencies (ML packages)
 3. Commit your changes - pre-commit hooks will automatically regenerate the lock file and requirements
 
 ### 3. Generating Lock File and Requirements
@@ -67,7 +67,7 @@ uv lock
 uv export --no-emit-project --no-default-groups --no-hashes --group backend -o backend/requirements/default.txt
 uv export --no-emit-project --no-default-groups --no-hashes --group dev -o backend/requirements/dev.txt
 uv export --no-emit-project --no-default-groups --no-hashes --group ee -o backend/requirements/ee.txt
-uv export --no-emit-project --no-default-groups --no-hashes --extra model_server -o backend/requirements/model_server.txt
+uv export --no-emit-project --no-default-groups --no-hashes --group model_server -o backend/requirements/model_server.txt
 ```
 
 ### 4. Installing Dependencies
@@ -83,7 +83,7 @@ uv sync
 uv sync --no-default-groups --group backend
 
 # For model server (shared + model_server, NO backend deps!)
-uv sync --no-default-groups --extra model_server
+uv sync --no-default-groups --group model_server
 ```
 
 ### 5. Upgrading Dependencies
