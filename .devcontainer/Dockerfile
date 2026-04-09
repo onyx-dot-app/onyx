@@ -1,6 +1,7 @@
 FROM ubuntu:25.10
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+  acl \
   curl \
   git \
   sudo \
@@ -20,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
+# Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \
   echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && \
   chmod 0440 /etc/sudoers.d/dev
@@ -36,13 +37,18 @@ WORKDIR /workspace
 ARG CLAUDE_CODE_VERSION=latest
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
-# Set zsh as root's shell and auto-activate Python venv
+# Configure zsh for both root and dev — auto-activate Python venv,
+# source host zshrc if bind-mounted.
 RUN chsh -s /bin/zsh root && \
-  echo 'if [ -f /workspace/.venv/bin/activate ]; then . /workspace/.venv/bin/activate; fi' >> /root/.zshrc && \
-  echo '[ -f /root/.zshrc.host ] && . /root/.zshrc.host' >> /root/.zshrc
+  for rc in /root/.zshrc /home/dev/.zshrc; do \
+    echo 'if [ -f /workspace/.venv/bin/activate ]; then . /workspace/.venv/bin/activate; fi' >> "$rc"; \
+    echo '[ -f /root/.zshrc.host ] && . /root/.zshrc.host' >> "$rc"; \
+  done && \
+  chown dev:dev /home/dev/.zshrc
 
-# Copy firewall script
-COPY init-firewall.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/init-firewall.sh
+# Copy init scripts
+COPY init-firewall.sh init-dev-user.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/init-dev-user.sh
 
-USER dev
+# Container starts as root so postStartCommand can run init scripts.
+# Terminal sessions use the dev user via remoteUser in devcontainer.json.

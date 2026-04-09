@@ -84,6 +84,19 @@ docker buildx bake devcontainer
 
 The `devcontainer` target is defined in `docker-bake.hcl` at the repo root.
 
+## User & permissions
+
+The container runs as the `dev` user by default (`remoteUser` in devcontainer.json).
+An init script (`init-dev-user.sh`) runs at container start to ensure `dev` has
+read/write access to the bind-mounted workspace:
+
+- **Standard Docker** — `dev`'s UID/GID is remapped to match the workspace owner,
+  so file permissions work seamlessly.
+- **Rootless Docker** — The workspace appears as root-owned (UID 0) inside the
+  container due to user-namespace mapping. The init script grants `dev` access via
+  POSIX ACLs (`setfacl`), which adds a few seconds to the first container start on
+  large repos.
+
 ## Firewall
 
 The container starts with a default-deny firewall (`init-firewall.sh`) that only allows outbound traffic to:

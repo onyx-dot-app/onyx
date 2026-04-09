@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Remap the dev user's UID/GID to match the workspace owner so that
+# bind-mounted files are accessible without running as root.
+#
+# Standard Docker:   Workspace is owned by the host user's UID (e.g. 1000).
+#                    We remap dev to that UID — fast and seamless.
+#
+# Rootless Docker:   Workspace appears as root-owned (UID 0) inside the
+#                    container due to user-namespace mapping.  We can't remap
+#                    dev to UID 0 (that's root), so we grant access with
+#                    POSIX ACLs instead.
+
+WORKSPACE=/workspace
+TARGET_USER=dev
+
+WS_UID=$(stat -c '%u' "$WORKSPACE")
+WS_GID=$(stat -c '%g' "$WORKSPACE")
+DEV_UID=$(id -u "$TARGET_USER")
+DEV_GID=$(id -g "$TARGET_USER")
+
+# Already matching — nothing to do.
+if [ "$WS_UID" = "$DEV_UID" ] && [ "$WS_GID" = "$DEV_GID" ]; then
+    exit 0
+fi
+
+if [ "$WS_UID" != "0" ]; then
+    # ── Standard Docker ──────────────────────────────────────────────
+    # Workspace is owned by a non-root UID (the host user).
+    # Remap dev's UID/GID to match.
+    if [ "$DEV_GID" != "$WS_GID" ]; then
+        groupmod -g "$WS_GID" "$TARGET_USER" 2>/dev/null || true
+    fi
+    if [ "$DEV_UID" != "$WS_UID" ]; then
+        usermod -u "$WS_UID" -g "$WS_GID" "$TARGET_USER" 2>/dev/null || true
+    fi
+    chown -R "$TARGET_USER":"$TARGET_USER" /home/"$TARGET_USER" 2>/dev/null || true
+else
+    # ── Rootless Docker ──────────────────────────────────────────────
+    # Workspace is root-owned inside the container.  Grant dev access
+    # via POSIX ACLs (preserves ownership, works across the namespace
+    # boundary).
+    if command -v setfacl &>/dev/null; then
+        setfacl -Rm  "u:${TARGET_USER}:rwX" "$WORKSPACE"
+        setfacl -Rdm "u:${TARGET_USER}:rwX" "$WORKSPACE"   # default ACL for new files
+    else
+        echo "warning: setfacl not found; dev user may not have write access to workspace" >&2
+        echo "         install the 'acl' package or set remoteUser to root" >&2
+    fi
+fi
