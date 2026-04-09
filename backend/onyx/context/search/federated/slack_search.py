@@ -419,6 +419,103 @@ class SlackQueryResult(BaseModel):
     filtered_channels: list[str]  # Channels filtered out during this query
 
 
+def _fetch_thread_from_url(
+    query_string: str,
+    access_token: str,
+    channel_metadata_dict: dict[str, ChannelMetadata] | None = None,
+) -> SlackQueryResult:
+    """Fetch a thread directly from a Slack URL via conversations.replies.
+
+    The query_string format is: __URL_OVERRIDE__{channel_id}_{thread_ts}
+    """
+    # Parse channel_id and thread_ts from the marker
+    marker_data = query_string.replace("__URL_OVERRIDE__", "")
+    parts = marker_data.split("_", 1)
+    if len(parts) != 2:
+        logger.warning(f"Invalid URL override format: {query_string}")
+        return SlackQueryResult(messages=[], filtered_channels=[])
+
+    channel_id, thread_ts = parts
+
+    slack_client = WebClient(token=access_token)
+    try:
+        response = slack_client.conversations_replies(
+            channel=channel_id,
+            ts=thread_ts,
+        )
+        response.validate()
+        messages: list[dict[str, Any]] = response.get("messages", [])
+    except SlackApiError as e:
+        logger.warning(
+            f"Failed to fetch thread from URL (channel={channel_id}, ts={thread_ts}): {e}"
+        )
+        return SlackQueryResult(messages=[], filtered_channels=[])
+
+    if not messages:
+        logger.warning(
+            f"No messages found for URL override (channel={channel_id}, ts={thread_ts})"
+        )
+        return SlackQueryResult(messages=[], filtered_channels=[])
+
+    # Build thread text from all messages
+    thread_text = _build_thread_text(messages, access_token, None, slack_client)
+
+    # Get channel name from metadata cache or API
+    channel_name = "unknown"
+    if channel_metadata_dict and channel_id in channel_metadata_dict:
+        channel_name = channel_metadata_dict[channel_id].get("name", "unknown")
+    else:
+        try:
+            ch_response = slack_client.conversations_info(channel=channel_id)
+            ch_response.validate()
+            channel_info: dict[str, Any] = ch_response.get("channel", {})
+            channel_name = channel_info.get("name", "unknown")
+        except SlackApiError:
+            pass
+
+    # Build the SlackMessage
+    parent_msg = messages[0]
+    message_ts = parent_msg.get("ts", thread_ts)
+    username = parent_msg.get("user", "unknown_user")
+    parent_text = parent_msg.get("text", "")
+    snippet = (
+        parent_text[:50].rstrip() + "..." if len(parent_text) > 50 else parent_text
+    ).replace("\n", " ")
+
+    doc_time = datetime.fromtimestamp(float(message_ts))
+    decay_factor = DOC_TIME_DECAY
+    doc_age_years = (datetime.now() - doc_time).total_seconds() / (365 * 24 * 60 * 60)
+    recency_bias = max(1 / (1 + decay_factor * doc_age_years), 0.75)
+
+    permalink = (
+        f"https://slack.com/archives/{channel_id}/p{message_ts.replace('.', '')}"
+    )
+
+    slack_message = SlackMessage(
+        document_id=f"{channel_id}_{message_ts}",
+        channel_id=channel_id,
+        message_id=message_ts,
+        thread_id=None,  # Prevent double-enrichment in thread context fetch
+        link=permalink,
+        metadata={
+            "channel": channel_name,
+            "time": doc_time.isoformat(),
+        },
+        timestamp=doc_time,
+        recency_bias=recency_bias,
+        semantic_identifier=f"{username} in #{channel_name}: {snippet}",
+        text=thread_text,
+        highlighted_texts=set(),
+        slack_score=100000.0,  # High priority — user explicitly asked for this thread
+    )
+
+    logger.info(
+        f"URL override: fetched thread from channel={channel_id}, ts={thread_ts}, {len(messages)} messages"
+    )
+
+    return SlackQueryResult(messages=[slack_message], filtered_channels=[])
+
+
 def query_slack(
     query_string: str,
     access_token: str,
@@ -430,6 +527,10 @@ def query_slack(
     available_channels: list[str] | None = None,
     channel_metadata_dict: dict[str, ChannelMetadata] | None = None,
 ) -> SlackQueryResult:
+    # Check if query is a URL override (direct thread fetch from Slack URL)
+    if query_string.startswith("__URL_OVERRIDE__"):
+        return _fetch_thread_from_url(query_string, access_token, channel_metadata_dict)
+
     # Check if query has channel override (user specified channels in query)
     has_channel_override = query_string.startswith("__CHANNEL_OVERRIDE__")
 
@@ -715,6 +816,7 @@ def _build_thread_text(
     if not replies:
         return thread_text
 
+    logger.debug(f"Thread {messages[0].get('ts')}: {len(replies)} replies included")
     thread_text += "\n\nReplies:"
 
     for msg in replies:
