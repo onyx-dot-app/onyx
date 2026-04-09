@@ -187,14 +187,20 @@ export default function MultiModelResponseView({
       const scrollTop = scrollContainer?.scrollTop ?? 0;
       if (scrollContainer) scrollContainer.style.overflow = "hidden";
 
-      // Restore scroll after the carousel animation completes
+      // Restore scroll after the carousel animation completes.
+      // Double-rAF ensures scrollTop is set after React commit + observers settle.
       setTimeout(() => {
-        requestAnimationFrame(() => {
-          if (scrollContainer) {
-            scrollContainer.scrollTop = scrollTop;
-            scrollContainer.style.overflow = "";
-          }
-        });
+        if (scrollContainer) {
+          scrollContainer.scrollTop = scrollTop;
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (scrollContainer) {
+                scrollContainer.scrollTop = scrollTop;
+                scrollContainer.style.overflow = "";
+              }
+            });
+          });
+        }
       }, 450);
 
       setPreferredIndex(modelIndex);
