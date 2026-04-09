@@ -15,7 +15,7 @@ import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { getProvider } from "@/lib/llmConfig/providers";
+import { getLLMProvider } from "@/lib/providers";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
@@ -86,7 +86,10 @@ function ExistingProviderCard({
     }
   };
 
-  const { icon, displayName, Modal } = getProvider(provider.provider, provider);
+  const { icon, companyName, Modal } = getLLMProvider(
+    provider.provider,
+    provider
+  );
 
   return (
     <>
@@ -146,7 +149,7 @@ function ExistingProviderCard({
           <CardLayout.Header
             icon={icon}
             title={provider.name}
-            description={displayName}
+            description={companyName}
             sizePreset="main-ui"
             variant="section"
             tag={isDefault ? { title: "Default", color: "blue" } : undefined}
@@ -195,7 +198,9 @@ interface NewProviderCardProps {
 
 function NewProviderCard({ provider, isFirstProvider }: NewProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { icon, productName, displayName, Modal } = getProvider(provider.name);
+  const { icon, productName, companyName, Modal } = getLLMProvider(
+    provider.name
+  );
 
   return (
     <SelectCard
@@ -207,7 +212,7 @@ function NewProviderCard({ provider, isFirstProvider }: NewProviderCardProps) {
       <CardLayout.Header
         icon={icon}
         title={productName}
-        description={displayName}
+        description={companyName}
         sizePreset="main-ui"
         variant="section"
         rightChildren={
@@ -242,7 +247,7 @@ function NewCustomProviderCard({
   isFirstProvider,
 }: NewCustomProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { icon, productName, displayName, Modal } = getProvider("custom");
+  const { icon, productName, companyName, Modal } = getLLMProvider("custom");
 
   return (
     <SelectCard
@@ -254,7 +259,7 @@ function NewCustomProviderCard({
       <CardLayout.Header
         icon={icon}
         title={productName}
-        description={displayName}
+        description={companyName}
         sizePreset="main-ui"
         variant="section"
         rightChildren={

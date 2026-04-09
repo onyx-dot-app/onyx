@@ -44,7 +44,7 @@ import useUsers from "@/hooks/useUsers";
 import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
 import Modal from "@/refresh-components/Modal";
-import { getProvider } from "@/lib/llmConfig/providers";
+import { getLLMProvider } from "@/lib/providers";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -715,9 +715,9 @@ function ModalWrapperInner({
 
   const {
     icon: providerIcon,
-    displayName: providerDisplayName,
+    companyName: providerDisplayName,
     productName: providerProductName,
-  } = getProvider(providerName);
+  } = getLLMProvider(providerName);
 
   const title = llmProvider
     ? `Configure "${llmProvider.name}"`

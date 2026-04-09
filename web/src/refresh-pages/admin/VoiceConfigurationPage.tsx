@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  AzureIcon,
-  ElevenLabsIcon,
-  IconProps,
-  OpenAIIcon,
-} from "@/components/icons/icons";
+import { getVoiceProvider } from "@/lib/providers";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import Message from "@/refresh-components/messages/Message";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -24,7 +19,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { toast } from "@/hooks/useToast";
 import { Callout } from "@/components/ui/callout";
 import { Content } from "@opal/layouts";
-import { SvgMicrophone, SvgSlash, SvgUnplug } from "@opal/icons";
+import { SvgSlash, SvgUnplug } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -114,39 +109,7 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
   },
 ];
 
-const FallbackMicrophoneIcon = ({ size, className }: IconProps) => (
-  <SvgMicrophone size={size} className={className} />
-);
-
-function getProviderIcon(
-  providerType: string
-): React.FunctionComponent<IconProps> {
-  switch (providerType) {
-    case "openai":
-      return OpenAIIcon;
-    case "azure":
-      return AzureIcon;
-    case "elevenlabs":
-      return ElevenLabsIcon;
-    default:
-      return FallbackMicrophoneIcon;
-  }
-}
-
 type ProviderMode = "stt" | "tts";
-
-function getProviderLabel(providerType: string): string {
-  switch (providerType) {
-    case "openai":
-      return "OpenAI";
-    case "azure":
-      return "Azure";
-    case "elevenlabs":
-      return "ElevenLabs";
-    default:
-      return providerType;
-  }
-}
 
 const NO_DEFAULT_VALUE = "__none__";
 
@@ -234,15 +197,18 @@ function VoiceDisconnectModal({
               >
                 <InputSelect.Trigger placeholder="Select a replacement provider" />
                 <InputSelect.Content>
-                  {replacementOptions.map((p) => (
-                    <InputSelect.Item
-                      key={p.id}
-                      value={String(p.id)}
-                      icon={getProviderIcon(p.provider_type)}
-                    >
-                      {getProviderLabel(p.provider_type)}
-                    </InputSelect.Item>
-                  ))}
+                  {replacementOptions.map((p) => {
+                    const vp = getVoiceProvider(p.provider_type);
+                    return (
+                      <InputSelect.Item
+                        key={p.id}
+                        value={String(p.id)}
+                        icon={vp.icon}
+                      >
+                        {vp.displayName}
+                      </InputSelect.Item>
+                    );
+                  })}
                   <InputSelect.Separator />
                   <InputSelect.Item value={NO_DEFAULT_VALUE} icon={SvgSlash}>
                     <span>
@@ -485,13 +451,13 @@ export default function VoiceConfigurationPage() {
   const renderModelSelect = (model: ModelDetails, mode: ProviderMode) => {
     const provider = providersByType.get(model.providerType);
     const status = getModelStatus(model, mode);
-    const Icon = getProviderIcon(model.providerType);
+    const voiceProvider = getVoiceProvider(model.providerType);
 
     return (
       <ProviderCard
         key={`${mode}-${model.id}`}
         aria-label={`voice-${mode}-${model.id}`}
-        icon={Icon}
+        icon={voiceProvider.icon}
         title={model.label}
         description={model.subtitle}
         status={status}
@@ -510,7 +476,7 @@ export default function VoiceConfigurationPage() {
             ? () =>
                 setDisconnectTarget({
                   providerId: provider.id,
-                  providerLabel: getProviderLabel(model.providerType),
+                  providerLabel: voiceProvider.displayName,
                   providerType: model.providerType,
                 })
             : undefined
