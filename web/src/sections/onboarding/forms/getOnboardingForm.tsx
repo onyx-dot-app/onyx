@@ -50,8 +50,8 @@ const PROVIDER_DISPLAY_INFO: Record<
     displayName: "LiteLLM Proxy",
   },
   [LLMProviderName.OPENAI_COMPATIBLE]: {
-    title: "OpenAI Compatible",
-    displayName: "OpenAI Compatible",
+    title: "OpenAI-Compatible",
+    displayName: "OpenAI-Compatible",
   },
 };
 

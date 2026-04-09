@@ -87,7 +87,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     await user.type(nameInput, options.name);
 
     // Select provider from the combo box dropdown
-    const providerInput = screen.getByPlaceholderText("Select a provider");
+    const providerInput = screen.getByPlaceholderText(
+      "Provider ID string as shown on LiteLLM"
+    );
     await user.click(providerInput);
     const providerOption = await screen.findByRole("option", {
       name: new RegExp(options.provider, "i"),
@@ -524,7 +526,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     await user.type(nameInput, "Cloudflare Provider");
 
     // Select provider from the combo box dropdown
-    const providerInput = screen.getByPlaceholderText("Select a provider");
+    const providerInput = screen.getByPlaceholderText(
+      "Provider ID string as shown on LiteLLM"
+    );
     await user.click(providerInput);
     const providerOption = await screen.findByRole("option", {
       name: /cloudflare/i,
@@ -538,7 +542,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     await user.click(addLineButton);
 
     // Fill in custom config key-value pair
-    const keyInputs = screen.getAllByRole("textbox", { name: /Key \d+/ });
+    const keyInputs = screen.getAllByRole("textbox", {
+      name: /e\.g\. OPENAI_ORGANIZATION \d+/,
+    });
     const valueInputs = screen.getAllByRole("textbox", { name: /Value \d+/ });
 
     await user.type(keyInputs[0]!, "CLOUDFLARE_ACCOUNT_ID");

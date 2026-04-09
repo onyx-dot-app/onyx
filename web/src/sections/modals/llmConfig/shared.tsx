@@ -640,6 +640,7 @@ export interface ModalWrapperProps<
   validationSchema: FormikConfig<T>["validationSchema"];
   onSubmit: FormikConfig<T>["onSubmit"];
   children: React.ReactNode;
+  description?: string;
 }
 export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
   providerName,
@@ -649,6 +650,7 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
   validationSchema,
   onSubmit,
   children,
+  description,
 }: ModalWrapperProps<T>) {
   return (
     <Formik
@@ -663,6 +665,7 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
           llmProvider={llmProvider}
           onClose={onClose}
           modelConfigurations={initialValues.model_configurations}
+          description={description}
         >
           {children}
         </ModalWrapperInner>
@@ -677,6 +680,7 @@ interface ModalWrapperInnerProps {
   onClose: () => void;
   modelConfigurations?: ModelConfiguration[];
   children: React.ReactNode;
+  description?: string;
 }
 function ModalWrapperInner({
   providerName,
@@ -684,6 +688,7 @@ function ModalWrapperInner({
   onClose,
   modelConfigurations,
   children,
+  description: descriptionOverride,
 }: ModalWrapperInnerProps) {
   const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
     useFormikContext<BaseLLMFormValues>();
@@ -719,7 +724,9 @@ function ModalWrapperInner({
   const title = llmProvider
     ? `Configure "${llmProvider.name}"`
     : `Set up ${providerProductName}`;
-  const description = `Connect to ${providerDisplayName} and set up your ${providerProductName} models.`;
+  const description =
+    descriptionOverride ??
+    `Connect to ${providerDisplayName} and set up your ${providerProductName} models.`;
 
   return (
     <Modal open onOpenChange={onClose}>

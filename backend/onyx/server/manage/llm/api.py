@@ -1674,7 +1674,7 @@ def get_openai_compatible_server_available_models(
                 )
                 for r in sorted_results
             ],
-            source_label="OpenAI Compatible",
+            source_label="OpenAI-Compatible",
         )
 
     return sorted_results
@@ -1693,6 +1693,6 @@ def _get_openai_compatible_server_response(
 
     return _get_openai_compatible_models_response(
         url=url,
-        source_name="OpenAI Compatible",
+        source_name="OpenAI-Compatible",
         api_key=api_key,
     )
