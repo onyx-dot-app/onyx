@@ -24,8 +24,8 @@ fi
 ipset create allowed-domains hash:net || true
 ipset flush allowed-domains
 
-# Fetch GitHub IP ranges
-GITHUB_IPS=$(curl -s https://api.github.com/meta | jq -r '.api[]' 2>/dev/null || echo "")
+# Fetch GitHub IP ranges (IPv4 only — ipset hash:net and iptables are IPv4)
+GITHUB_IPS=$(curl -s https://api.github.com/meta | jq -r '.api[]' 2>/dev/null | grep -v ':' || echo "")
 for ip in $GITHUB_IPS; do
     if ! ipset add allowed-domains "$ip" -exist 2>&1; then
         echo "warning: failed to add GitHub IP $ip to allowlist" >&2
@@ -43,7 +43,7 @@ ALLOWED_DOMAINS=(
 )
 
 for domain in "${ALLOWED_DOMAINS[@]}"; do
-    IPS=$(getent ahosts "$domain" 2>/dev/null | awk '{print $1}' | sort -u || echo "")
+    IPS=$(getent ahosts "$domain" 2>/dev/null | awk '{print $1}' | grep -v ':' | sort -u || echo "")
     for ip in $IPS; do
         if ! ipset add allowed-domains "$ip/32" -exist 2>&1; then
             echo "warning: failed to add $domain ($ip) to allowlist" >&2
@@ -72,9 +72,9 @@ iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 
-# Allow DNS only via Docker's embedded resolver
-iptables -A OUTPUT -d 127.0.0.11/32 -p udp --dport 53 -j ACCEPT
-iptables -A OUTPUT -d 127.0.0.11/32 -p tcp --dport 53 -j ACCEPT
+# Allow DNS
+iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
 
 # Allow outbound to allowed destinations
 iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
