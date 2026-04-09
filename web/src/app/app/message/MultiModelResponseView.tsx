@@ -197,22 +197,34 @@ export default function MultiModelResponseView({
   );
 
   const handleDeselectPreferred = useCallback(() => {
-    // Capture scroll position before layout change
     const scrollContainer = trackContainerElRef.current?.closest(
       "[data-chat-scroll]"
     ) as HTMLElement | null;
-    const scrollTop = scrollContainer?.scrollTop ?? 0;
 
     // Animate panels back to equal positions, then clear preferred after transition
     setSelectionExiting(true);
     setSelectionEntered(false);
     setTimeout(() => {
+      // Capture scroll position right before the state change
+      const scrollTop = scrollContainer?.scrollTop ?? 0;
+
+      // Temporarily freeze the scroll container so auto-scroll observers
+      // can't push to the bottom when panels uncap their height.
+      if (scrollContainer) {
+        scrollContainer.style.overflow = "hidden";
+      }
+
       setSelectionExiting(false);
       setPreferredIndex(null);
 
-      // Restore scroll position after layout recalculates (panels uncap height)
+      // Restore after React commits + observers settle
       requestAnimationFrame(() => {
-        if (scrollContainer) scrollContainer.scrollTop = scrollTop;
+        requestAnimationFrame(() => {
+          if (scrollContainer) {
+            scrollContainer.scrollTop = scrollTop;
+            scrollContainer.style.overflow = "";
+          }
+        });
       });
 
       // Clear preferredResponseId in the local tree so input bar re-gates
