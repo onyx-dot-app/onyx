@@ -360,10 +360,14 @@ export default function MultiModelResponseView({
       <div
         ref={trackContainerRef}
         className="w-full overflow-hidden"
-        style={{
-          maskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
-          WebkitMaskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
-        }}
+        style={
+          isActivelySelected
+            ? {
+                maskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
+                WebkitMaskImage: `linear-gradient(to right, transparent 0px, black ${PEEK_W}px, black calc(100% - ${PEEK_W}px), transparent 100%)`,
+              }
+            : undefined
+        }
       >
         <div
           className="flex items-start"
@@ -379,7 +383,7 @@ export default function MultiModelResponseView({
           {responses.map((r, i) => {
             const isHidden = hiddenPanels.has(r.modelIndex);
             const isPref = r.modelIndex === preferredIndex;
-            const isNonPref = !isHidden && !isPref;
+            const isNonPref = !isHidden && !isPref && preferredIndex !== null;
             const finalW = selectionWidths[i]!;
             const startW = isHidden ? HIDDEN_PANEL_W : SELECTION_PANEL_W;
             const capped = isNonPref && preferredPanelHeight != null;
