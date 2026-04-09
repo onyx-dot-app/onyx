@@ -702,37 +702,54 @@ export function useLlmManager(
 
   // Compute the resolved LLM synchronously so it's never one render behind.
   // This replaces the old llmUpdate() effect for model resolution.
+  // Wrapped with a ref for referential stability — returns the same object
+  // when the resolved name/provider/modelName haven't actually changed,
+  // preventing unnecessary re-creation of downstream callbacks (e.g. onSubmit).
+  const prevLlmRef = useRef<LlmDescriptor>({
+    name: "",
+    provider: "",
+    modelName: "",
+  });
   const currentLlm = useMemo((): LlmDescriptor => {
+    let resolved: LlmDescriptor;
+
     if (llmProviders === undefined || llmProviders === null) {
-      return manualLlm;
-    }
-
-    // If the user has overridden in this session and just switched to a brand
-    // new session, keep their manually specified model
-    if (userHasManuallyOverriddenLLM && !currentChatSession) {
-      return manualLlm;
-    }
-
-    if (currentChatSession?.current_alternate_model) {
-      return getValidLlmDescriptorForProviders(
+      resolved = manualLlm;
+    } else if (userHasManuallyOverriddenLLM && !currentChatSession) {
+      // User has overridden in this session and switched to a new session
+      resolved = manualLlm;
+    } else if (currentChatSession?.current_alternate_model) {
+      resolved = getValidLlmDescriptorForProviders(
         currentChatSession.current_alternate_model,
         llmProviders
       );
     } else if (liveAgent?.llm_model_version_override) {
-      return getValidLlmDescriptorForProviders(
+      resolved = getValidLlmDescriptorForProviders(
         liveAgent.llm_model_version_override,
         llmProviders
       );
     } else if (userHasManuallyOverriddenLLM) {
-      return manualLlm;
+      resolved = manualLlm;
     } else if (user?.preferences?.default_model) {
-      return getValidLlmDescriptorForProviders(
+      resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,
         llmProviders
       );
     } else {
-      return getDefaultLlmDescriptor(llmProviders, defaultText) ?? manualLlm;
+      resolved =
+        getDefaultLlmDescriptor(llmProviders, defaultText) ?? manualLlm;
     }
+
+    const prev = prevLlmRef.current;
+    if (
+      prev.name === resolved.name &&
+      prev.provider === resolved.provider &&
+      prev.modelName === resolved.modelName
+    ) {
+      return prev;
+    }
+    prevLlmRef.current = resolved;
+    return resolved;
   }, [
     llmProviders,
     defaultText,
