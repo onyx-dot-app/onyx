@@ -10,6 +10,7 @@
     "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig.host,type=bind,readonly",
     "source=${localEnv:HOME}/.ssh,target=/home/dev/.ssh.host,type=bind,readonly",
     "source=${localEnv:HOME}/.config/nvim,target=/home/dev/.config/nvim.host,type=bind,readonly",
+    "source=onyx-devcontainer-cache,target=/home/dev/.cache,type=volume",
     "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume"
   ],
   "remoteUser": "dev",
