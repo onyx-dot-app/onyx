@@ -29,6 +29,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Model server specific dependencies (ML packages)
+model_server = [
+    "accelerate==1.6.0",
+    "einops==0.8.1",
+    "numpy==2.4.1",
+    "safetensors==0.5.3",
+    "sentence-transformers==4.0.2",
+    "torch==2.9.1",
+    "transformers==4.53.0",
+    "sentry-sdk[fastapi,celery,starlette]==2.14.0",
+]
+
+[dependency-groups]
 # Main backend application dependencies
 backend = [
     "aiohttp==3.13.4",
@@ -183,17 +196,8 @@ ee = [
     "posthog==3.7.4",
 ]
 
-# Model server specific dependencies (ML packages)
-model_server = [
-    "accelerate==1.6.0",
-    "einops==0.8.1",
-    "numpy==2.4.1",
-    "safetensors==0.5.3",
-    "sentence-transformers==4.0.2",
-    "torch==2.9.1",
-    "transformers==4.53.0",
-    "sentry-sdk[fastapi,celery,starlette]==2.14.0",
-]
+[tool.uv]
+default-groups = ["backend", "dev", "ee"]
 
 [tool.mypy]
 plugins = "sqlalchemy.ext.mypy.plugin"
@@ -230,7 +234,7 @@ follow_imports = "skip"
 ignore_errors = true
 
 [tool.uv.workspace]
-members = ["backend", "tools/ods"]
+members = ["tools/ods"]
 
 [tool.basedpyright]
 include = ["backend"]
