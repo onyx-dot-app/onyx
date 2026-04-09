@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
 from onyx.context.search.federated.models import ChannelMetadata
+from onyx.context.search.federated.models import DirectThreadFetch
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.llm.interfaces import LLM
@@ -669,7 +670,7 @@ def build_slack_queries(
     llm: LLM,
     entities: dict[str, Any] | None = None,
     available_channels: list[str] | None = None,
-) -> list[str]:
+) -> list[str | DirectThreadFetch]:
     """Build Slack query strings with date filtering and query expansion."""
     default_search_days = 30
     if entities:
@@ -694,11 +695,13 @@ def build_slack_queries(
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
             time_filter = f" after:{cutoff_date.strftime('%Y-%m-%d')}"
 
-    # Check for Slack message URLs — if found, add direct fetch queries
-    url_queries: list[str] = []
+    # Check for Slack message URLs — if found, add direct fetch requests
+    url_fetches: list[DirectThreadFetch] = []
     slack_urls = extract_slack_message_urls(query.query)
     for channel_id, thread_ts in slack_urls:
-        url_queries.append(f"__URL_OVERRIDE__{channel_id}_{thread_ts}")
+        url_fetches.append(
+            DirectThreadFetch(channel_id=channel_id, thread_ts=thread_ts)
+        )
         logger.info(f"Detected Slack URL: channel={channel_id}, ts={thread_ts}")
 
     # ALWAYS extract channel references from the query (not just for recency queries)
@@ -717,7 +720,7 @@ def build_slack_queries(
 
             # If valid channels detected, use ONLY those channels with NO keywords
             # Return query with ONLY time filter + channel filter (no keywords)
-            return url_queries + [
+            return url_fetches + [
                 build_channel_override_query(channel_references, time_filter)
             ]
         except ValueError as e:
@@ -741,4 +744,4 @@ def build_slack_queries(
         rephrased_query.strip() + time_filter
         for rephrased_query in rephrased_queries[:MAX_SLACK_QUERY_EXPANSIONS]
     ]
-    return url_queries + search_queries
+    return url_fetches + search_queries

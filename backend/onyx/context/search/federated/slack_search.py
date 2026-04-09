@@ -19,6 +19,7 @@ from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
 from onyx.context.search.federated.models import ChannelMetadata
+from onyx.context.search.federated.models import DirectThreadFetch
 from onyx.context.search.federated.models import SlackMessage
 from onyx.context.search.federated.slack_search_utils import ALL_CHANNEL_TYPES
 from onyx.context.search.federated.slack_search_utils import build_channel_query_filter
@@ -420,22 +421,13 @@ class SlackQueryResult(BaseModel):
 
 
 def _fetch_thread_from_url(
-    query_string: str,
+    thread_fetch: DirectThreadFetch,
     access_token: str,
     channel_metadata_dict: dict[str, ChannelMetadata] | None = None,
 ) -> SlackQueryResult:
-    """Fetch a thread directly from a Slack URL via conversations.replies.
-
-    The query_string format is: __URL_OVERRIDE__{channel_id}_{thread_ts}
-    """
-    # Parse channel_id and thread_ts from the marker
-    marker_data = query_string.replace("__URL_OVERRIDE__", "")
-    parts = marker_data.split("_", 1)
-    if len(parts) != 2:
-        logger.warning(f"Invalid URL override format: {query_string}")
-        return SlackQueryResult(messages=[], filtered_channels=[])
-
-    channel_id, thread_ts = parts
+    """Fetch a thread directly from a Slack URL via conversations.replies."""
+    channel_id = thread_fetch.channel_id
+    thread_ts = thread_fetch.thread_ts
 
     slack_client = WebClient(token=access_token)
     try:
@@ -527,10 +519,6 @@ def query_slack(
     available_channels: list[str] | None = None,
     channel_metadata_dict: dict[str, ChannelMetadata] | None = None,
 ) -> SlackQueryResult:
-    # Check if query is a URL override (direct thread fetch from Slack URL)
-    if query_string.startswith("__URL_OVERRIDE__"):
-        return _fetch_thread_from_url(query_string, access_token, channel_metadata_dict)
-
     # Check if query has channel override (user specified channels in query)
     has_channel_override = query_string.startswith("__CHANNEL_OVERRIDE__")
 
@@ -1048,7 +1036,16 @@ def slack_retrieval(
 
     # Query slack with entity filtering
     llm = get_default_llm()
-    query_strings = build_slack_queries(query, llm, entities, available_channels)
+    query_items = build_slack_queries(query, llm, entities, available_channels)
+
+    # Partition into direct thread fetches and search query strings
+    direct_fetches: list[DirectThreadFetch] = []
+    query_strings: list[str] = []
+    for item in query_items:
+        if isinstance(item, DirectThreadFetch):
+            direct_fetches.append(item)
+        else:
+            query_strings.append(item)
 
     # Determine filtering based on entities OR context (bot)
     include_dm = False
@@ -1065,8 +1062,16 @@ def slack_retrieval(
                 f"Private channel context: will only allow messages from {allowed_private_channel} + public channels"
             )
 
-    # Build search tasks
-    search_tasks = [
+    # Build search tasks — direct thread fetches + keyword searches
+    search_tasks: list[tuple] = [
+        (
+            _fetch_thread_from_url,
+            (fetch, access_token, channel_metadata_dict),
+        )
+        for fetch in direct_fetches
+    ]
+
+    search_tasks.extend(
         (
             query_slack,
             (
@@ -1082,7 +1087,7 @@ def slack_retrieval(
             ),
         )
         for query_string in query_strings
-    ]
+    )
 
     # If include_dm is True AND we're not already searching all channels,
     # add additional searches without channel filters.

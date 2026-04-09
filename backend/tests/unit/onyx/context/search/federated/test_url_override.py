@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+from onyx.context.search.federated.models import DirectThreadFetch
 from onyx.context.search.federated.slack_search import _fetch_thread_from_url
 from onyx.context.search.federated.slack_search_utils import extract_slack_message_urls
 
@@ -76,10 +77,10 @@ class TestFetchThreadFromUrl:
             "U1: parent\n\nReplies:\n\nU2: reply 1\n\nU3: reply 2"
         )
 
-        result = _fetch_thread_from_url(
-            "__URL_OVERRIDE__C097NBWMY8Y_1775491616.524769",
-            "xoxp-token",
+        fetch = DirectThreadFetch(
+            channel_id="C097NBWMY8Y", thread_ts="1775491616.524769"
         )
+        result = _fetch_thread_from_url(fetch, "xoxp-token")
 
         assert len(result.messages) == 1
         msg = result.messages[0]
@@ -102,12 +103,6 @@ class TestFetchThreadFromUrl:
             response=MagicMock(status_code=404),
         )
 
-        result = _fetch_thread_from_url(
-            "__URL_OVERRIDE__CBAD_1234567890.123456",
-            "xoxp-token",
-        )
-        assert len(result.messages) == 0
-
-    def test_invalid_format_returns_empty(self) -> None:
-        result = _fetch_thread_from_url("__URL_OVERRIDE__badformat", "xoxp-token")
+        fetch = DirectThreadFetch(channel_id="CBAD", thread_ts="1234567890.123456")
+        result = _fetch_thread_from_url(fetch, "xoxp-token")
         assert len(result.messages) == 0
