@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -113,6 +115,39 @@ func detectDockerSock() string {
 	return "/var/run/docker.sock"
 }
 
+// worktreeGitMount returns a --mount flag value that makes a git worktree's
+// .git reference resolve inside the container. In a worktree, .git is a file
+// containing "gitdir: /path/to/main/.git/worktrees/<name>", so we need the
+// main repo's .git directory to exist at the same absolute host path inside
+// the container.
+//
+// Returns ("", false) when the workspace is not a worktree.
+func worktreeGitMount(root string) (string, bool) {
+	dotgit := filepath.Join(root, ".git")
+	info, err := os.Lstat(dotgit)
+	if err != nil || info.IsDir() {
+		return "", false // regular repo or no .git
+	}
+
+	// .git is a file — parse the gitdir path.
+	out, err := exec.Command("git", "-C", root, "rev-parse", "--git-common-dir").Output()
+	if err != nil {
+		log.Warnf("Failed to detect git common dir: %v", err)
+		return "", false
+	}
+	commonDir := strings.TrimSpace(string(out))
+
+	// Resolve to absolute path.
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(root, commonDir)
+	}
+	commonDir, _ = filepath.EvalSymlinks(commonDir)
+
+	mount := fmt.Sprintf("type=bind,source=%s,target=%s", commonDir, commonDir)
+	log.Debugf("Worktree detected — mounting main .git: %s", commonDir)
+	return mount, true
+}
+
 // runDevcontainer executes "devcontainer <action> --workspace-folder <root> [extraArgs...]".
 func runDevcontainer(action string, extraArgs []string) {
 	checkDevcontainerCLI()
@@ -124,6 +159,9 @@ func runDevcontainer(action string, extraArgs []string) {
 	}
 
 	args := []string{action, "--workspace-folder", root}
+	if mount, ok := worktreeGitMount(root); ok {
+		args = append(args, "--mount", mount)
+	}
 	args = append(args, extraArgs...)
 
 	log.Debugf("Running: devcontainer %v", args)

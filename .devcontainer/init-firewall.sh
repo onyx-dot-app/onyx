@@ -40,6 +40,8 @@ ALLOWED_DOMAINS=(
     "files.anthropic.com"
     "sentry.io"
     "update.code.visualstudio.com"
+    "pypi.org"
+    "files.pythonhosted.org"
 )
 
 for domain in "${ALLOWED_DOMAINS[@]}"; do

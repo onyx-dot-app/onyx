@@ -1,4 +1,4 @@
-FROM ubuntu:25.10@sha256:4a9232cc47bf99defcc8860ef6222c99773330367fcecbf21ba2edb0b810a31e
+FROM ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   acl \
@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   make \
   neovim \
   openssh-client \
+  python3-venv \
   ripgrep \
   sudo \
   ca-certificates \
