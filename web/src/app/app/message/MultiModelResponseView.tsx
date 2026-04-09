@@ -73,7 +73,9 @@ export default function MultiModelResponseView({
   // Measures the overflow-hidden carousel container for responsive preferred-panel sizing.
   const [trackContainerW, setTrackContainerW] = useState(0);
   const roRef = useRef<ResizeObserver | null>(null);
+  const trackContainerElRef = useRef<HTMLDivElement | null>(null);
   const trackContainerRef = useCallback((el: HTMLDivElement | null) => {
+    trackContainerElRef.current = el;
     if (roRef.current) {
       roRef.current.disconnect();
       roRef.current = null;
@@ -195,12 +197,23 @@ export default function MultiModelResponseView({
   );
 
   const handleDeselectPreferred = useCallback(() => {
+    // Capture scroll position before layout change
+    const scrollContainer = trackContainerElRef.current?.closest(
+      "[data-chat-scroll]"
+    ) as HTMLElement | null;
+    const scrollTop = scrollContainer?.scrollTop ?? 0;
+
     // Animate panels back to equal positions, then clear preferred after transition
     setSelectionExiting(true);
     setSelectionEntered(false);
     setTimeout(() => {
       setSelectionExiting(false);
       setPreferredIndex(null);
+
+      // Restore scroll position after layout recalculates (panels uncap height)
+      requestAnimationFrame(() => {
+        if (scrollContainer) scrollContainer.scrollTop = scrollTop;
+      });
 
       // Clear preferredResponseId in the local tree so input bar re-gates
       if (parentMessage && currentSessionId) {
