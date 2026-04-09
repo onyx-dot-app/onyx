@@ -58,8 +58,7 @@ SERVICE_ORDER=(
 validate_template() {
   local template_file=$1
   echo "Validating template: $template_file..."
-  aws cloudformation validate-template --template-body file://"$template_file" --region "$AWS_REGION" > /dev/null
-  if [ $? -ne 0 ]; then
+  if ! aws cloudformation validate-template --template-body file://"$template_file" --region "$AWS_REGION" > /dev/null; then
     echo "Error: Validation failed for $template_file. Exiting."
     exit 1
   fi
@@ -108,13 +107,15 @@ deploy_stack() {
   fi
   
   # Create temporary parameters file for this template
-  local temp_params_file=$(create_parameters_from_json "$template_file")
+  local temp_params_file
+  temp_params_file=$(create_parameters_from_json "$template_file")
   
   # Special handling for SubnetIDs parameter if needed
   if grep -q "SubnetIDs" "$template_file"; then
     echo "Template uses SubnetIDs parameter, ensuring it's properly formatted..."
     # Make sure we're passing SubnetIDs as a comma-separated list
-    local subnet_ids=$(remove_comments "$CONFIG_FILE" | jq -r '.SubnetIDs // empty')
+    local subnet_ids
+    subnet_ids=$(remove_comments "$CONFIG_FILE" | jq -r '.SubnetIDs // empty')
     if [ -n "$subnet_ids" ]; then
       echo "Using SubnetIDs from config: $subnet_ids"
     else
@@ -123,15 +124,13 @@ deploy_stack() {
   fi
   
   echo "Deploying stack: $stack_name with template: $template_file and generated config from: $CONFIG_FILE..."
-  aws cloudformation deploy \
+  if ! aws cloudformation deploy \
     --stack-name "$stack_name" \
     --template-file "$template_file" \
     --parameter-overrides file://"$temp_params_file" \
     --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
     --region "$AWS_REGION" \
-    --no-cli-auto-prompt > /dev/null
-
-  if [ $? -ne 0 ]; then
+    --no-cli-auto-prompt > /dev/null; then
     echo "Error: Deployment failed for $stack_name. Exiting."
     exit 1
   fi
