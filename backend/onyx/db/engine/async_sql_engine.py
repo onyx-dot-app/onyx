@@ -20,13 +20,13 @@ from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_REQUIRE_SSL
 from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
 from onyx.configs.app_configs import POSTGRES_USER
+from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.db.engine.iam_auth import get_iam_auth_token
 from onyx.db.engine.rds_ssl import get_rds_ssl_context_or_require
 from onyx.db.engine.sql_engine import ASYNC_DB_API
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.engine.sql_engine import USE_IAM_AUTH
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -41,6 +41,11 @@ _ASYNC_ENGINE: AsyncEngine | None = None
 def get_sqlalchemy_async_engine() -> AsyncEngine:
     global _ASYNC_ENGINE
     if _ASYNC_ENGINE is None:
+        logger.info(
+            f"Creating async engine: USE_IAM_AUTH={USE_IAM_AUTH}, "
+            f"POSTGRES_REQUIRE_SSL={POSTGRES_REQUIRE_SSL}"
+        )
+
         app_name = SqlEngine.get_app_name() + "_async"
         connection_string = build_connection_string(
             db_api=ASYNC_DB_API,
@@ -56,6 +61,11 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
         if USE_IAM_AUTH or POSTGRES_REQUIRE_SSL:
             ssl_context = get_rds_ssl_context_or_require()
             connect_args["ssl"] = ssl_context
+            logger.info(f"SSL configured for asyncpg: ssl={ssl_context}")
+        else:
+            logger.warning(
+                "SSL NOT configured - USE_IAM_AUTH and POSTGRES_REQUIRE_SSL are both False"
+            )
 
         engine_kwargs = {
             "connect_args": connect_args,
