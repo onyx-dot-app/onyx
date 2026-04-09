@@ -64,10 +64,20 @@ export default function MultiModelResponseView({
   onMessageSelection,
   onHiddenPanelsChange,
 }: MultiModelResponseViewProps) {
-  const [preferredIndex, setPreferredIndex] = useState<number | null>(null);
+  // Initialize preferredIndex from the backend's preferred_response_id when
+  // loading an existing conversation.
+  const [preferredIndex, setPreferredIndex] = useState<number | null>(() => {
+    if (!parentMessage?.preferredResponseId) return null;
+    const match = responses.find(
+      (r) => r.messageId === parentMessage.preferredResponseId
+    );
+    return match?.modelIndex ?? null;
+  });
   const [hiddenPanels, setHiddenPanels] = useState<Set<number>>(new Set());
   // Controls animation: false = panels at start position, true = panels at peek position
-  const [selectionEntered, setSelectionEntered] = useState(false);
+  const [selectionEntered, setSelectionEntered] = useState(
+    () => preferredIndex !== null
+  );
   // Tracks the deselect animation timeout so it can be cancelled if the user
   // re-selects a panel during the 450ms animation window.
   const deselectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -336,7 +346,9 @@ export default function MultiModelResponseView({
   // Track whether selection mode was ever entered — once it has been,
   // we stay in the selection layout (even after deselect) to avoid a
   // jarring DOM swap between the two layout strategies.
-  const [hasEnteredSelection, setHasEnteredSelection] = useState(false);
+  const [hasEnteredSelection, setHasEnteredSelection] = useState(
+    () => preferredIndex !== null
+  );
 
   const isActivelySelected =
     preferredIndex !== null &&
