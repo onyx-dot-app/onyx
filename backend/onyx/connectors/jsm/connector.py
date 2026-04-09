@@ -94,13 +94,14 @@ class JsmConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: JsmConnectorCheckpoint,
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
+        offset = checkpoint.offset
         stop_indexing = False
         while not stop_indexing:
             data = self._fetch_requests(offset, self.batch_size)
             requests_list = data.get("values", [])
             
             for req in requests_list:
-                created_date_str = req.get("createdDate", {}).get("iso8601")
+                created_date_str = (req.get("createdDate") or {}).get("iso8601")
                 if created_date_str:
                     try:
                         created_dt = datetime.fromisoformat(
