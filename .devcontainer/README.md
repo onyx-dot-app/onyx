@@ -4,7 +4,7 @@ A containerized development environment for working on Onyx.
 
 ## What's included
 
-- Ubuntu 25.10 base image
+- Ubuntu 26.04 base image
 - Node.js 20, uv, Claude Code
 - Docker CLI, GitHub CLI (`gh`)
 - Neovim, ripgrep, fd, fzf, jq, make, wget, unzip
@@ -103,11 +103,11 @@ read/write access to the bind-mounted workspace:
 The container mounts the host's Docker socket so you can run `docker` commands
 from inside. `ods dev` auto-detects the socket path and sets `DOCKER_SOCK`:
 
-| Environment | Socket path |
-|---|---|
+| Environment             | Socket path                    |
+| ----------------------- | ------------------------------ |
 | Linux (rootless Docker) | `$XDG_RUNTIME_DIR/docker.sock` |
-| macOS (Docker Desktop) | `~/.docker/run/docker.sock` |
-| Linux (standard Docker) | `/var/run/docker.sock` |
+| macOS (Docker Desktop)  | `~/.docker/run/docker.sock`    |
+| Linux (standard Docker) | `/var/run/docker.sock`         |
 
 To override, set `DOCKER_SOCK` before running `ods dev up`. When using the
 VS Code extension or `devcontainer` CLI directly (without `ods`), you must set
