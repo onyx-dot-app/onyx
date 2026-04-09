@@ -104,6 +104,7 @@ export default function ModelSelector({
       onRemove(existingIndex);
     } else if (!atMax) {
       onAdd(model);
+      setOpen(false);
     }
   };
 
@@ -214,15 +215,17 @@ export default function ModelSelector({
         )}
       </div>
 
-      <Popover.Content side="top" align="end" width="lg">
-        <ModelListContent
-          llmProviders={llmManager.llmProviders}
-          isLoading={llmManager.isLoadingProviders}
-          onSelect={handleSelect}
-          isSelected={isSelected}
-          isDisabled={isDisabled}
-        />
-      </Popover.Content>
+      {!(atMax && replacingIndex === null) && (
+        <Popover.Content side="top" align="end" width="lg">
+          <ModelListContent
+            llmProviders={llmManager.llmProviders}
+            isLoading={llmManager.isLoadingProviders}
+            onSelect={handleSelect}
+            isSelected={isSelected}
+            isDisabled={isDisabled}
+          />
+        </Popover.Content>
+      )}
     </Popover>
   );
 }
