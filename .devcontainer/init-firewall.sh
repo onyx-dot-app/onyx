@@ -24,7 +24,7 @@ fi
 ipset create allowed-domains hash:net || true
 ipset flush allowed-domains
 
-# Fetch GitHub IP ranges (IPv4 only — ipset hash:net and iptables are IPv4)
+# Fetch GitHub IP ranges (IPv4 only -- ipset hash:net and iptables are IPv4)
 GITHUB_IPS=$(curl -s https://api.github.com/meta | jq -r '.api[]' 2>/dev/null | grep -v ':' || echo "")
 for ip in $GITHUB_IPS; do
     if ! ipset add allowed-domains "$ip" -exist 2>&1; then

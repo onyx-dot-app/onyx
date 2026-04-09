@@ -5,7 +5,7 @@ set -euo pipefail
 # bind-mounted files are accessible without running as root.
 #
 # Standard Docker:   Workspace is owned by the host user's UID (e.g. 1000).
-#                    We remap dev to that UID — fast and seamless.
+#                    We remap dev to that UID -- fast and seamless.
 #
 # Rootless Docker:   Workspace appears as root-owned (UID 0) inside the
 #                    container due to user-namespace mapping.  We can't remap
@@ -23,9 +23,10 @@ DEV_GID=$(id -g "$TARGET_USER")
 DEV_HOME=/home/"$TARGET_USER"
 
 # Ensure directories that tools expect exist under ~dev.
-# ~/.local is a named Docker volume — ensure subdirs exist and are owned by dev.
+# ~/.local and ~/.cache are named Docker volumes -- ensure they are owned by dev.
 mkdir -p "$DEV_HOME"/.local/state "$DEV_HOME"/.local/share
 chown -R "$TARGET_USER":"$TARGET_USER" "$DEV_HOME"/.local
+chown -R "$TARGET_USER":"$TARGET_USER" "$DEV_HOME"/.cache
 
 # Copy host configs mounted as *.host into their real locations.
 # This gives the dev user owned copies without touching host originals.
@@ -41,7 +42,7 @@ if [ -d "$DEV_HOME/.config/nvim.host" ]; then
     chown -R "$TARGET_USER":"$TARGET_USER" "$DEV_HOME/.config/nvim"
 fi
 
-# Already matching — nothing to do.
+# Already matching -- nothing to do.
 if [ "$WS_UID" = "$DEV_UID" ] && [ "$WS_GID" = "$DEV_GID" ]; then
     exit 0
 fi
