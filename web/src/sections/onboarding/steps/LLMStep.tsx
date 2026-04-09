@@ -14,7 +14,7 @@ import {
   LLMProviderFormProps,
   WellKnownLLMProviderDescriptor,
 } from "@/interfaces/llm";
-import { getLLMProvider } from "@/lib/providers";
+import { getProvider } from "@/lib/llmConfig";
 import { Disabled } from "@opal/core";
 import ModelIcon from "@/app/admin/configuration/llm/ModelIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
@@ -126,7 +126,7 @@ const LLMStep = memo(
         ? "custom"
         : selectedProvider?.llmDescriptor?.name ?? "custom";
 
-      const { Modal: ModalComponent } = getLLMProvider(providerName);
+      const { Modal: ModalComponent } = getProvider(providerName);
 
       const modalProps: LLMProviderFormProps = {
         variant: "onboarding" as const,
@@ -189,7 +189,7 @@ const LLMStep = memo(
 
                   {/* Render provider cards */}
                   {llmDescriptors.map((llmDescriptor) => {
-                    const { productName, companyName } = getLLMProvider(
+                    const { productName, companyName } = getProvider(
                       llmDescriptor.name
                     );
                     return (

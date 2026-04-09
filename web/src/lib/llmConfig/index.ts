@@ -35,14 +35,14 @@ import OpenAICompatibleModal from "@/sections/modals/llmConfig/OpenAICompatibleM
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
-export interface LLMProviderEntry {
+export interface ProviderEntry {
   icon: IconFunctionComponent;
   productName: string;
   companyName: string;
   Modal: React.ComponentType<LLMProviderFormProps>;
 }
 
-const LLM_PROVIDERS: Record<string, LLMProviderEntry> = {
+const PROVIDERS: Record<string, ProviderEntry> = {
   [LLMProviderName.OPENAI]: {
     icon: SvgOpenai,
     productName: "GPT",
@@ -123,7 +123,7 @@ const LLM_PROVIDERS: Record<string, LLMProviderEntry> = {
   },
 };
 
-const DEFAULT_LLM_ENTRY: LLMProviderEntry = {
+const DEFAULT_ENTRY: ProviderEntry = {
   icon: SvgCpu,
   productName: "",
   companyName: "",
@@ -139,12 +139,12 @@ const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
   LLMProviderName.OPENROUTER,
 ]);
 
-export function getLLMProvider(
+export function getProvider(
   providerName: string,
   existingProvider?: LLMProviderView
-): LLMProviderEntry {
-  const entry = LLM_PROVIDERS[providerName] ?? {
-    ...DEFAULT_LLM_ENTRY,
+): ProviderEntry {
+  const entry = PROVIDERS[providerName] ?? {
+    ...DEFAULT_ENTRY,
     productName: providerName,
     companyName: providerName,
   };
@@ -163,7 +163,7 @@ export function getLLMProvider(
 // Providers that host models from multiple vendors (e.g. Bedrock hosts Claude,
 // Llama, etc.) Used by the model-icon resolver to prioritise vendor icons.
 
-export const LLM_AGGREGATOR_PROVIDERS = new Set([
+export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.BEDROCK,
   "bedrock_converse",
   LLMProviderName.OPENROUTER,
@@ -177,7 +177,7 @@ export const LLM_AGGREGATOR_PROVIDERS = new Set([
 
 // ─── Model-aware icon resolver ───────────────────────────────────────────────
 
-const LLM_MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
+const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OPENAI]: SvgOpenai,
   [LLMProviderName.ANTHROPIC]: SvgClaude,
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
@@ -212,16 +212,16 @@ const LLM_MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
  * Model-aware icon resolver that checks both provider name and model name
  * to pick the most specific icon (e.g. Claude icon for a Bedrock Claude model).
  */
-export function getLLMModelIcon(
+export function getModelIcon(
   providerName: string,
   modelName?: string
 ): IconFunctionComponent {
   const lowerProviderName = providerName.toLowerCase();
 
   // For aggregator providers, prioritise showing the vendor icon based on model name
-  if (LLM_AGGREGATOR_PROVIDERS.has(lowerProviderName) && modelName) {
+  if (AGGREGATOR_PROVIDERS.has(lowerProviderName) && modelName) {
     const lowerModelName = modelName.toLowerCase();
-    for (const [key, icon] of Object.entries(LLM_MODEL_ICON_MAP)) {
+    for (const [key, icon] of Object.entries(MODEL_ICON_MAP)) {
       if (lowerModelName.includes(key)) {
         return icon;
       }
@@ -229,8 +229,8 @@ export function getLLMModelIcon(
   }
 
   // Check if provider name directly matches an icon
-  if (lowerProviderName in LLM_MODEL_ICON_MAP) {
-    const icon = LLM_MODEL_ICON_MAP[lowerProviderName];
+  if (lowerProviderName in MODEL_ICON_MAP) {
+    const icon = MODEL_ICON_MAP[lowerProviderName];
     if (icon) {
       return icon;
     }
@@ -239,7 +239,7 @@ export function getLLMModelIcon(
   // For non-aggregator providers, check if model name contains any of the keys
   if (modelName) {
     const lowerModelName = modelName.toLowerCase();
-    for (const [key, icon] of Object.entries(LLM_MODEL_ICON_MAP)) {
+    for (const [key, icon] of Object.entries(MODEL_ICON_MAP)) {
       if (lowerModelName.includes(key)) {
         return icon;
       }

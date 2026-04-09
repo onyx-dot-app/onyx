@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef } from "react";
 import Popover from "@/refresh-components/Popover";
 import { LlmManager } from "@/lib/hooks";
-import { getLLMModelIcon } from "@/lib/providers";
+import { getModelIcon } from "@/lib/llmConfig";
 import { Button, SelectButton, OpenButton } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { LLMOption } from "@/refresh-components/popovers/interfaces";
@@ -153,7 +153,7 @@ export default function ModelSelector({
             )}
             <div className="flex items-center shrink-0">
               {selectedModels.map((model, index) => {
-                const ProviderIcon = getLLMModelIcon(
+                const ProviderIcon = getModelIcon(
                   model.provider,
                   model.modelName
                 );

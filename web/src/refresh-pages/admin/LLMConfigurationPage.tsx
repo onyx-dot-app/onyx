@@ -15,7 +15,7 @@ import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { getLLMProvider } from "@/lib/providers";
+import { getProvider } from "@/lib/llmConfig";
 import { refreshLlmProviderCaches } from "@/lib/llmConfig/cache";
 import { deleteLlmProvider, setDefaultLlmModel } from "@/lib/llmConfig/svc";
 import { Horizontal as HorizontalInput } from "@/layouts/input-layouts";
@@ -86,10 +86,7 @@ function ExistingProviderCard({
     }
   };
 
-  const { icon, companyName, Modal } = getLLMProvider(
-    provider.provider,
-    provider
-  );
+  const { icon, companyName, Modal } = getProvider(provider.provider, provider);
 
   return (
     <>
@@ -198,9 +195,7 @@ interface NewProviderCardProps {
 
 function NewProviderCard({ provider, isFirstProvider }: NewProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { icon, productName, companyName, Modal } = getLLMProvider(
-    provider.name
-  );
+  const { icon, productName, companyName, Modal } = getProvider(provider.name);
 
   return (
     <SelectCard
@@ -247,7 +242,7 @@ function NewCustomProviderCard({
   isFirstProvider,
 }: NewCustomProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { icon, productName, companyName, Modal } = getLLMProvider("custom");
+  const { icon, productName, companyName, Modal } = getProvider("custom");
 
   return (
     <SelectCard

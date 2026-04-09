@@ -5,7 +5,7 @@ import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { SvgEyeOff, SvgX } from "@opal/icons";
-import { getLLMModelIcon } from "@/lib/providers";
+import { getModelIcon } from "@/lib/llmConfig";
 import AgentMessage, {
   AgentMessageProps,
 } from "@/app/app/message/messageComponents/AgentMessage";
@@ -71,7 +71,7 @@ export default function MultiModelPanel({
   errorStackTrace,
   errorDetails,
 }: MultiModelPanelProps) {
-  const ModelIcon = getLLMModelIcon(provider, modelName);
+  const ModelIcon = getModelIcon(provider, modelName);
 
   const handlePanelClick = useCallback(() => {
     if (!isHidden && !isPreferred) onSelect();

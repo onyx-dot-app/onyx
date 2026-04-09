@@ -48,7 +48,7 @@ import NotAllowedModal from "@/app/craft/onboarding/components/NotAllowedModal";
 import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useUser } from "@/providers/UserProvider";
-import { getLLMModelIcon } from "@/lib/providers";
+import { getModelIcon } from "@/lib/llmConfig";
 import {
   getBuildUserPersona,
   getPersonaInfo,
@@ -475,7 +475,7 @@ export default function BuildConfigPage() {
                         >
                           {pendingLlmSelection?.provider &&
                             (() => {
-                              const ModelIcon = getLLMModelIcon(
+                              const ModelIcon = getModelIcon(
                                 pendingLlmSelection.provider
                               );
                               return <ModelIcon className="w-4 h-4" />;
