@@ -61,10 +61,3 @@ RUN chsh -s /bin/zsh root && \
     echo '[ -f /workspace/.devcontainer/zshrc ] && . /workspace/.devcontainer/zshrc' >> "$rc"; \
   done && \
   chown dev:dev /home/dev/.zshrc
-
-# Copy init scripts
-COPY init-firewall.sh init-dev-user.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/init-dev-user.sh
-
-# Container starts as root so postStartCommand can run init scripts.
-# Terminal sessions use the dev user via remoteUser in devcontainer.json.

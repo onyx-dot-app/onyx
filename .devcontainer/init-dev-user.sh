@@ -25,6 +25,11 @@ if [ "$WS_UID" = "$DEV_UID" ] && [ "$WS_GID" = "$DEV_GID" ]; then
     exit 0
 fi
 
+# Ensure directories that neovim/tools expect exist under ~dev
+# (they may not be bind-mounted and the image doesn't create them).
+mkdir -p /home/"$TARGET_USER"/.local/state /home/"$TARGET_USER"/.local/share
+chown -R "$TARGET_USER":"$TARGET_USER" /home/"$TARGET_USER"/.local
+
 if [ "$WS_UID" != "0" ]; then
     # ── Standard Docker ──────────────────────────────────────────────
     # Workspace is owned by a non-root UID (the host user).
@@ -50,6 +55,11 @@ else
     if command -v setfacl &>/dev/null; then
         setfacl -Rm  "u:${TARGET_USER}:rwX" "$WORKSPACE"
         setfacl -Rdm "u:${TARGET_USER}:rwX" "$WORKSPACE"   # default ACL for new files
+
+        # Also fix bind-mounted dirs under ~dev that appear root-owned.
+        for dir in /home/"$TARGET_USER"/.local /home/"$TARGET_USER"/.claude /home/"$TARGET_USER"/.config; do
+            [ -d "$dir" ] && setfacl -Rm "u:${TARGET_USER}:rwX" "$dir" && setfacl -Rdm "u:${TARGET_USER}:rwX" "$dir"
+        done
     else
         echo "warning: setfacl not found; dev user may not have write access to workspace" >&2
         echo "         install the 'acl' package or set remoteUser to root" >&2

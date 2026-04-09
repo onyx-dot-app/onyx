@@ -9,12 +9,13 @@
     "source=${localEnv:HOME}/.zshrc,target=/home/dev/.zshrc.host,type=bind,readonly",
     "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig,type=bind,readonly",
     "source=${localEnv:HOME}/.ssh,target=/home/dev/.ssh,type=bind,readonly",
-    "source=${localEnv:HOME}/.config/nvim,target=/home/dev/.config/nvim,type=bind,readonly"
+    "source=${localEnv:HOME}/.config/nvim,target=/home/dev/.config/nvim,type=bind,readonly",
+    "source=${localEnv:HOME}/.local/share/nvim,target=/home/dev/.local/share/nvim,type=bind"
   ],
   "remoteUser": "dev",
   "updateRemoteUserUID": false,
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
-  "postStartCommand": "sudo /usr/local/bin/init-dev-user.sh && sudo /usr/local/bin/init-firewall.sh",
+  "postStartCommand": "sudo bash /workspace/.devcontainer/init-dev-user.sh && sudo bash /workspace/.devcontainer/init-firewall.sh",
   "waitFor": "postStartCommand"
 }
