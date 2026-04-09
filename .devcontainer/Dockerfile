@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   fzf \
   git \
   jq \
+  less \
   make \
   neovim \
   openssh-client \

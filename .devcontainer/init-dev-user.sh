@@ -20,17 +20,31 @@ WS_GID=$(stat -c '%g' "$WORKSPACE")
 DEV_UID=$(id -u "$TARGET_USER")
 DEV_GID=$(id -g "$TARGET_USER")
 
+DEV_HOME=/home/"$TARGET_USER"
+
+# Ensure directories that tools expect exist under ~dev.
+# ~/.local is a named Docker volume — ensure subdirs exist and are owned by dev.
+mkdir -p "$DEV_HOME"/.local/state "$DEV_HOME"/.local/share
+chown -R "$TARGET_USER":"$TARGET_USER" "$DEV_HOME"/.local
+
+# Copy host configs mounted as *.host into their real locations.
+# This gives the dev user owned copies without touching host originals.
+if [ -d "$DEV_HOME/.ssh.host" ]; then
+    cp -a "$DEV_HOME/.ssh.host" "$DEV_HOME/.ssh"
+    chmod 700 "$DEV_HOME/.ssh"
+    chmod 600 "$DEV_HOME"/.ssh/id_* 2>/dev/null || true
+    chown -R "$TARGET_USER":"$TARGET_USER" "$DEV_HOME/.ssh"
+fi
+if [ -d "$DEV_HOME/.config/nvim.host" ]; then
+    mkdir -p "$DEV_HOME/.config"
+    cp -a "$DEV_HOME/.config/nvim.host" "$DEV_HOME/.config/nvim"
+    chown -R "$TARGET_USER":"$TARGET_USER" "$DEV_HOME/.config/nvim"
+fi
+
 # Already matching — nothing to do.
 if [ "$WS_UID" = "$DEV_UID" ] && [ "$WS_GID" = "$DEV_GID" ]; then
     exit 0
 fi
-
-# Ensure directories that neovim/tools expect exist under ~dev
-# (they may not be bind-mounted and the image doesn't create them).
-# chown only the dirs we create — bind-mounted dirs are handled below
-# via UID remapping (standard Docker) or ACLs (rootless Docker).
-mkdir -p /home/"$TARGET_USER"/.local/state /home/"$TARGET_USER"/.local/share
-chown "$TARGET_USER":"$TARGET_USER" /home/"$TARGET_USER"/.local /home/"$TARGET_USER"/.local/state
 
 if [ "$WS_UID" != "0" ]; then
     # ── Standard Docker ──────────────────────────────────────────────
@@ -58,9 +72,27 @@ else
         setfacl -Rm  "u:${TARGET_USER}:rwX" "$WORKSPACE"
         setfacl -Rdm "u:${TARGET_USER}:rwX" "$WORKSPACE"   # default ACL for new files
 
-        # Also fix writable bind-mounted dirs under ~dev that appear root-owned.
-        # Skip readonly mounts (e.g. ~/.config/nvim) — they're readable by all.
-        for dir in /home/"$TARGET_USER"/.local /home/"$TARGET_USER"/.claude; do
+        # Git refuses to operate in repos owned by a different UID.
+        # Host gitconfig is mounted readonly as ~/.gitconfig.host.
+        # Create a real ~/.gitconfig that includes it plus container overrides.
+        printf '[include]\n\tpath = %s/.gitconfig.host\n[safe]\n\tdirectory = %s\n' \
+            "$DEV_HOME" "$WORKSPACE" > "$DEV_HOME/.gitconfig"
+        chown "$TARGET_USER":"$TARGET_USER" "$DEV_HOME/.gitconfig"
+
+        # If this is a worktree, the main .git dir is bind-mounted at its
+        # host absolute path. Grant dev access so git operations work.
+        GIT_COMMON_DIR=$(git -C "$WORKSPACE" rev-parse --git-common-dir 2>/dev/null || true)
+        if [ -n "$GIT_COMMON_DIR" ] && [ "$GIT_COMMON_DIR" != "$WORKSPACE/.git" ]; then
+            [ ! -d "$GIT_COMMON_DIR" ] && GIT_COMMON_DIR="$WORKSPACE/$GIT_COMMON_DIR"
+            if [ -d "$GIT_COMMON_DIR" ]; then
+                setfacl -Rm "u:${TARGET_USER}:rwX" "$GIT_COMMON_DIR"
+                setfacl -Rdm "u:${TARGET_USER}:rwX" "$GIT_COMMON_DIR"
+                git config -f "$DEV_HOME/.gitconfig" --add safe.directory "$(dirname "$GIT_COMMON_DIR")"
+            fi
+        fi
+
+        # Also fix bind-mounted dirs under ~dev that appear root-owned.
+        for dir in /home/"$TARGET_USER"/.claude; do
             [ -d "$dir" ] && setfacl -Rm "u:${TARGET_USER}:rwX" "$dir" && setfacl -Rdm "u:${TARGET_USER}:rwX" "$dir"
         done
         [ -f /home/"$TARGET_USER"/.claude.json ] && \
