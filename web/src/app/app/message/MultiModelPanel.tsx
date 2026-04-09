@@ -28,6 +28,8 @@ export interface MultiModelPanelProps {
   isNonPreferredInSelection: boolean;
   /** Callback when user clicks this panel to select as preferred */
   onSelect: () => void;
+  /** Callback to deselect this panel as preferred */
+  onDeselect?: () => void;
   /** Callback to hide/show this panel */
   onToggleVisibility: () => void;
   /** Props to pass through to AgentMessage */
@@ -63,6 +65,7 @@ export default function MultiModelPanel({
   isHidden,
   isNonPreferredInSelection,
   onSelect,
+  onDeselect,
   onToggleVisibility,
   agentMessageProps,
   errorMessage,
@@ -93,11 +96,25 @@ export default function MultiModelPanel({
         rightChildren={
           <div className="flex items-center gap-1 px-2">
             {isPreferred && (
-              <span className="text-action-link-05 shrink-0">
-                <Text font="secondary-body" color="inherit" nowrap>
-                  Preferred Response
-                </Text>
-              </span>
+              <>
+                <span className="text-action-link-05 shrink-0">
+                  <Text font="secondary-body" color="inherit" nowrap>
+                    Preferred Response
+                  </Text>
+                </span>
+                {onDeselect && (
+                  <Button
+                    prominence="tertiary"
+                    icon={SvgX}
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeselect();
+                    }}
+                    tooltip="Deselect preferred response"
+                  />
+                )}
+              </>
             )}
             {!isPreferred && (
               <Button

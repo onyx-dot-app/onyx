@@ -192,6 +192,27 @@ export default function MultiModelResponseView({
     ]
   );
 
+  const handleDeselectPreferred = useCallback(() => {
+    setPreferredIndex(null);
+
+    // Clear preferredResponseId in the local tree so input bar re-gates
+    if (parentMessage && currentSessionId) {
+      const tree = useChatSessionStore.getState().sessions.get(currentSessionId)
+        ?.messageTree;
+      if (tree) {
+        const userMsg = tree.get(parentMessage.nodeId);
+        if (userMsg) {
+          const updated = new Map(tree);
+          updated.set(parentMessage.nodeId, {
+            ...userMsg,
+            preferredResponseId: undefined,
+          });
+          updateSessionMessageTree(currentSessionId, updated);
+        }
+      }
+    }
+  }, [parentMessage, currentSessionId, updateSessionMessageTree]);
+
   // Clear preferred selection when generation starts
   useEffect(() => {
     if (isGenerating) {
@@ -231,6 +252,7 @@ export default function MultiModelResponseView({
       isHidden: hiddenPanels.has(response.modelIndex),
       isNonPreferredInSelection: isNonPreferred,
       onSelect: () => handleSelectPreferred(response.modelIndex),
+      onDeselect: handleDeselectPreferred,
       onToggleVisibility: () => toggleVisibility(response.modelIndex),
       agentMessageProps: {
         rawPackets: response.packets,
@@ -255,6 +277,7 @@ export default function MultiModelResponseView({
       preferredIndex,
       hiddenPanels,
       handleSelectPreferred,
+      handleDeselectPreferred,
       toggleVisibility,
       chatState,
       llmManager,
