@@ -10,7 +10,7 @@ A containerized development environment for working on Onyx.
 - Neovim, ripgrep, fd, fzf, jq, make, wget, unzip
 - Zsh as default shell (sources host `~/.zshrc` if available)
 - Python venv auto-activation
-- Network firewall (default-deny, whitelists only npm, GitHub, and Anthropic APIs)
+- Network firewall (default-deny, whitelists npm, GitHub, Anthropic APIs, Sentry, and VS Code update servers)
 
 ## Usage
 
@@ -33,7 +33,7 @@ ods dev up
 ods dev into
 
 # Run a command
-ods dev exec -- npm test
+ods dev exec npm test
 
 # Stop the container
 ods dev stop

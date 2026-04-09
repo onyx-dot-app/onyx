@@ -58,7 +58,7 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 RUN chsh -s /bin/zsh root && \
   for rc in /root/.zshrc /home/dev/.zshrc; do \
     echo 'if [ -f /workspace/.venv/bin/activate ]; then . /workspace/.venv/bin/activate; fi' >> "$rc"; \
-    echo '[ -f /root/.zshrc.host ] && . /root/.zshrc.host' >> "$rc"; \
+    echo '[ -f ~/.zshrc.host ] && . ~/.zshrc.host' >> "$rc"; \
   done && \
   chown dev:dev /home/dev/.zshrc
 

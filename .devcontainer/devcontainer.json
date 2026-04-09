@@ -7,8 +7,8 @@
   ],
   "mounts": [
     "source=${localEnv:DOCKER_SOCK},target=/var/run/docker.sock,type=bind",
-    "source=${localEnv:HOME}/.claude,target=/home/dev/.claude,type=bind,readonly",
-    "source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind,readonly",
+    "source=${localEnv:HOME}/.claude,target=/home/dev/.claude,type=bind",
+    "source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind",
     "source=${localEnv:HOME}/.zshrc,target=/home/dev/.zshrc.host,type=bind,readonly"
   ],
   "remoteUser": "dev",

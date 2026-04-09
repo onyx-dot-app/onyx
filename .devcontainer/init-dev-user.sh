@@ -30,12 +30,18 @@ if [ "$WS_UID" != "0" ]; then
     # Workspace is owned by a non-root UID (the host user).
     # Remap dev's UID/GID to match.
     if [ "$DEV_GID" != "$WS_GID" ]; then
-        groupmod -g "$WS_GID" "$TARGET_USER" 2>/dev/null || true
+        if ! groupmod -g "$WS_GID" "$TARGET_USER" 2>&1; then
+            echo "warning: failed to remap $TARGET_USER GID to $WS_GID" >&2
+        fi
     fi
     if [ "$DEV_UID" != "$WS_UID" ]; then
-        usermod -u "$WS_UID" -g "$WS_GID" "$TARGET_USER" 2>/dev/null || true
+        if ! usermod -u "$WS_UID" -g "$WS_GID" "$TARGET_USER" 2>&1; then
+            echo "warning: failed to remap $TARGET_USER UID to $WS_UID" >&2
+        fi
     fi
-    chown -R "$TARGET_USER":"$TARGET_USER" /home/"$TARGET_USER" 2>/dev/null || true
+    if ! chown -R "$TARGET_USER":"$TARGET_USER" /home/"$TARGET_USER" 2>&1; then
+        echo "warning: failed to chown /home/$TARGET_USER" >&2
+    fi
 else
     # ── Rootless Docker ──────────────────────────────────────────────
     # Workspace is root-owned inside the container.  Grant dev access

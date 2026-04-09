@@ -81,7 +81,12 @@ func detectDockerSock() string {
 		if len(dh) > len(prefix) && dh[:len(prefix)] == prefix {
 			return dh[len(prefix):]
 		}
-		return dh
+		// Only bare paths (starting with /) are valid socket paths.
+		// Non-unix schemes (e.g. tcp://) can't be bind-mounted.
+		if len(dh) > 0 && dh[0] == '/' {
+			return dh
+		}
+		log.Warnf("DOCKER_HOST=%q is not a unix socket path; falling back to local socket detection", dh)
 	}
 
 	// Linux rootless Docker: $XDG_RUNTIME_DIR/docker.sock

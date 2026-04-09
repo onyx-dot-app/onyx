@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"os/exec"
 
 	log "github.com/sirupsen/logrus"
@@ -30,8 +31,8 @@ func runDevRebuild() {
 
 	log.Infof("Pulling %s...", image)
 	pull := exec.Command("docker", "pull", image)
-	pull.Stdout = nil
-	pull.Stderr = nil
+	pull.Stdout = os.Stdout
+	pull.Stderr = os.Stderr
 	if err := pull.Run(); err != nil {
 		log.Warnf("Failed to pull image (continuing with local copy): %v", err)
 	}
