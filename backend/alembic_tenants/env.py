@@ -108,6 +108,7 @@ async def run_async_migrations() -> None:
 
     # For IAM auth, set up event listener to generate fresh tokens
     if USE_IAM_AUTH:
+        logger.info("Alembic tenants: Setting up IAM auth event listener")
 
         @event.listens_for(connectable.sync_engine, "do_connect")
         def provide_iam_token_alembic_tenants(
@@ -116,6 +117,8 @@ async def run_async_migrations() -> None:
             cargs: Any,  # noqa: ARG001
             cparams: Any,
         ) -> None:
+            logger.info("Alembic tenants: IAM auth event listener TRIGGERED")
+            logger.info(f"Alembic tenants: cparams keys before: {list(cparams.keys())}")
             try:
                 token = get_iam_auth_token(
                     POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, AWS_REGION_NAME
@@ -124,17 +127,26 @@ async def run_async_migrations() -> None:
                     raise RuntimeError("IAM token is None after generation")
 
                 cparams["password"] = token
+                logger.info(
+                    f"Alembic tenants: Set IAM token as password (length={len(token)})"
+                )
 
                 # ALWAYS set SSL for IAM auth (required)
                 # connect_args may not propagate to cparams, so we must set it here
                 cparams["ssl"] = get_rds_ssl_context_or_require()
-                logger.debug(
-                    f"Alembic tenants IAM auth: set ssl={cparams['ssl']} for "
+                logger.info(
+                    f"Alembic tenants: Set ssl={cparams['ssl']} for "
                     f"{POSTGRES_HOST}:{POSTGRES_PORT}"
+                )
+                logger.info(
+                    f"Alembic tenants: cparams keys after: {list(cparams.keys())}"
                 )
 
             except Exception as e:
-                logger.error(f"Alembic tenants: Failed to configure IAM auth: {e}")
+                logger.error(
+                    f"Alembic tenants: Failed to configure IAM auth: {e}",
+                    exc_info=True,
+                )
                 raise
 
     async with connectable.connect() as connection:
