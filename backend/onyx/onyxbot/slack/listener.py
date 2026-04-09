@@ -90,6 +90,7 @@ from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
+from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
@@ -1206,6 +1207,7 @@ if __name__ == "__main__":
     tenant_handler = SlackbotHandler()
 
     set_is_ee_based_on_env_variable()
+    setup_tracing()
 
     try:
         # Keep the main thread alive
