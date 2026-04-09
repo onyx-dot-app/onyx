@@ -864,13 +864,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         agent={liveAgent}
                         isDefaultAgent={isDefaultAgent}
                       />
-                      <ModelSelector
-                        llmManager={llmManager}
-                        selectedModels={multiModel.selectedModels}
-                        onAdd={multiModel.addModel}
-                        onRemove={multiModel.removeModel}
-                        onReplace={multiModel.replaceModel}
-                      />
+                      {liveAgent && !llmManager.isLoadingProviders && (
+                        <ModelSelector
+                          llmManager={llmManager}
+                          selectedModels={multiModel.selectedModels}
+                          onAdd={multiModel.addModel}
+                          onRemove={multiModel.removeModel}
+                          onReplace={multiModel.replaceModel}
+                        />
+                      )}
                     </Section>
                     <Spacer rem={1.5} />
                   </Fade>
@@ -936,17 +938,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
-                      {appFocus.isChat() && (
-                        <div className="pb-1">
-                          <ModelSelector
-                            llmManager={llmManager}
-                            selectedModels={multiModel.selectedModels}
-                            onAdd={multiModel.addModel}
-                            onRemove={multiModel.removeModel}
-                            onReplace={multiModel.replaceModel}
-                          />
-                        </div>
-                      )}
+                      {appFocus.isChat() &&
+                        liveAgent &&
+                        !llmManager.isLoadingProviders && (
+                          <div className="pb-1">
+                            <ModelSelector
+                              llmManager={llmManager}
+                              selectedModels={multiModel.selectedModels}
+                              onAdd={multiModel.addModel}
+                              onRemove={multiModel.removeModel}
+                              onReplace={multiModel.replaceModel}
+                            />
+                          </div>
+                        )}
                       <AppInputBar
                         ref={chatInputBarRef}
                         deepResearchEnabled={
