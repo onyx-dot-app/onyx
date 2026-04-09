@@ -1,5 +1,5 @@
 import type { IconFunctionComponent } from "@opal/types";
-import { SvgCpu, SvgMicrophone, SvgPlug, SvgServer } from "@opal/icons";
+import { SvgCpu, SvgPlug, SvgServer } from "@opal/icons";
 import {
   SvgBifrost,
   SvgOpenai,
@@ -17,12 +17,7 @@ import {
   SvgQwen,
   SvgGoogle,
 } from "@opal/logos";
-import {
-  AzureIcon,
-  ElevenLabsIcon,
-  OpenAIIcon,
-  ZAIIcon,
-} from "@/components/icons/icons";
+import { ZAIIcon } from "@/components/icons/icons";
 import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
 import type { LLMProviderView } from "@/interfaces/llm";
 import OpenAIModal from "@/sections/modals/llmConfig/OpenAIModal";
@@ -162,42 +157,6 @@ export function getLLMProvider(
   }
 
   return entry;
-}
-
-// ─── Voice providers ─────────────────────────────────────────────────────────
-
-export interface VoiceProviderEntry {
-  icon: IconFunctionComponent;
-  displayName: string;
-}
-
-const VOICE_PROVIDERS: Record<string, VoiceProviderEntry> = {
-  openai: {
-    icon: OpenAIIcon,
-    displayName: "OpenAI",
-  },
-  azure: {
-    icon: AzureIcon,
-    displayName: "Azure",
-  },
-  elevenlabs: {
-    icon: ElevenLabsIcon,
-    displayName: "ElevenLabs",
-  },
-};
-
-const DEFAULT_VOICE_ENTRY: VoiceProviderEntry = {
-  icon: SvgMicrophone,
-  displayName: "",
-};
-
-export function getVoiceProvider(providerType: string): VoiceProviderEntry {
-  return (
-    VOICE_PROVIDERS[providerType] ?? {
-      ...DEFAULT_VOICE_ENTRY,
-      displayName: providerType,
-    }
-  );
 }
 
 // ─── Aggregator providers ────────────────────────────────────────────────────
