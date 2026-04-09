@@ -10,7 +10,7 @@ echo "========================================================================"
 echo ""
 
 # Run diagnostics
-python /app/backend/scripts/diagnose_db_connection.py
+python /app/scripts/diagnose_db_connection.py
 
 echo ""
 echo "========================================================================"
