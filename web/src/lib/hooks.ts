@@ -671,7 +671,8 @@ export function useLlmManager(
   const [userHasManuallyOverriddenLLM, setUserHasManuallyOverriddenLLM] =
     useState(false);
   const [chatSession, setChatSession] = useState<ChatSession | null>(null);
-  const [currentLlm, setCurrentLlm] = useState<LlmDescriptor>({
+  // Manual override value — only used when userHasManuallyOverriddenLLM is true
+  const [manualLlm, setManualLlm] = useState<LlmDescriptor>({
     name: "",
     provider: "",
     modelName: "",
@@ -693,54 +694,59 @@ export function useLlmManager(
     prevAgentIdRef.current = liveAgent?.id;
   }, [liveAgent?.id]);
 
-  const llmUpdate = () => {
-    /* Should be called when the live assistant or current chat session changes */
-
-    // Don't update if providers haven't loaded yet (undefined/null)
-    // Empty arrays are valid (user has no provider access for this assistant)
-    if (llmProviders === undefined || llmProviders === null) {
-      return;
-    }
-
-    // separate function so we can `return` to break out
-    const _llmUpdate = () => {
-      // if the user has overridden in this session and just switched to a brand
-      // new session, use their manually specified model
-      if (userHasManuallyOverriddenLLM && !currentChatSession) {
-        return;
-      }
-
-      if (currentChatSession?.current_alternate_model) {
-        setCurrentLlm(
-          getValidLlmDescriptor(currentChatSession.current_alternate_model)
-        );
-      } else if (liveAgent?.llm_model_version_override) {
-        setCurrentLlm(
-          getValidLlmDescriptor(liveAgent.llm_model_version_override)
-        );
-      } else if (userHasManuallyOverriddenLLM) {
-        // if the user has an override and there's nothing special about the
-        // current chat session, use the override
-        return;
-      } else if (user?.preferences?.default_model) {
-        setCurrentLlm(getValidLlmDescriptor(user.preferences.default_model));
-      } else {
-        const defaultLlm = getDefaultLlmDescriptor(llmProviders, defaultText);
-        if (defaultLlm) {
-          setCurrentLlm(defaultLlm);
-        }
-      }
-    };
-
-    _llmUpdate();
-    setChatSession(currentChatSession || null);
-  };
-
   function getValidLlmDescriptor(
     modelName: string | null | undefined
   ): LlmDescriptor {
     return getValidLlmDescriptorForProviders(modelName, llmProviders);
   }
+
+  // Compute the resolved LLM synchronously so it's never one render behind.
+  // This replaces the old llmUpdate() effect for model resolution.
+  const currentLlm = useMemo((): LlmDescriptor => {
+    if (llmProviders === undefined || llmProviders === null) {
+      return manualLlm;
+    }
+
+    // If the user has overridden in this session and just switched to a brand
+    // new session, keep their manually specified model
+    if (userHasManuallyOverriddenLLM && !currentChatSession) {
+      return manualLlm;
+    }
+
+    if (currentChatSession?.current_alternate_model) {
+      return getValidLlmDescriptorForProviders(
+        currentChatSession.current_alternate_model,
+        llmProviders
+      );
+    } else if (liveAgent?.llm_model_version_override) {
+      return getValidLlmDescriptorForProviders(
+        liveAgent.llm_model_version_override,
+        llmProviders
+      );
+    } else if (userHasManuallyOverriddenLLM) {
+      return manualLlm;
+    } else if (user?.preferences?.default_model) {
+      return getValidLlmDescriptorForProviders(
+        user.preferences.default_model,
+        llmProviders
+      );
+    } else {
+      return getDefaultLlmDescriptor(llmProviders, defaultText) ?? manualLlm;
+    }
+  }, [
+    llmProviders,
+    defaultText,
+    currentChatSession,
+    liveAgent?.llm_model_version_override,
+    userHasManuallyOverriddenLLM,
+    manualLlm,
+    user?.preferences?.default_model,
+  ]);
+
+  // Keep chatSession state in sync (used by temperature effect)
+  useEffect(() => {
+    setChatSession(currentChatSession || null);
+  }, [currentChatSession]);
 
   const [imageFilesPresent, setImageFilesPresent] = useState(false);
 
@@ -750,18 +756,18 @@ export function useLlmManager(
 
   // Manually set the LLM
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
-    setCurrentLlm(newLlm);
+    setManualLlm(newLlm);
     setUserHasManuallyOverriddenLLM(true);
   };
 
   const updateCurrentLlmToModelName = (modelName: string) => {
-    setCurrentLlm(getValidLlmDescriptor(modelName));
+    setManualLlm(getValidLlmDescriptor(modelName));
     setUserHasManuallyOverriddenLLM(true);
   };
 
   const updateModelOverrideBasedOnChatSession = (chatSession?: ChatSession) => {
     if (chatSession && chatSession.current_alternate_model?.length > 0) {
-      setCurrentLlm(getValidLlmDescriptor(chatSession.current_alternate_model));
+      setManualLlm(getValidLlmDescriptor(chatSession.current_alternate_model));
     }
   };
 
@@ -811,8 +817,6 @@ export function useLlmManager(
   }, [currentLlm]);
 
   useEffect(() => {
-    llmUpdate();
-
     if (!chatSession && currentChatSession) {
       if (temperature) {
         updateTemperatureOverrideForChatSession(
