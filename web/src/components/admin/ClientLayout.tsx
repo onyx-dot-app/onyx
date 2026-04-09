@@ -1,15 +1,19 @@
 "use client";
 
+import type { Route } from "next";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useUser } from "@/providers/UserProvider";
 import { ApplicationStatus } from "@/interfaces/settings";
 import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { ADMIN_ROUTES, AdminRouteEntry } from "@/lib/admin-routes";
+import { hasPermission, getFirstPermittedAdminRoute } from "@/lib/permissions";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar } from "@opal/icons";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { useEffect } from "react";
 
 export interface ClientLayoutProps {
   children: React.ReactNode;
@@ -56,7 +60,35 @@ export function ClientLayout({ children, enableCloud }: ClientLayoutProps) {
     useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
+  const router = useRouter();
   const settings = useSettingsContext();
+  const { user, permissions } = useUser();
+
+  // Enforce per-page permission: find the route that matches the current
+  // pathname and verify the user holds its requiredPermission.
+  useEffect(() => {
+    // Wait for user data to load before checking permissions —
+    // permissions default to [] while loading, which would cause a
+    // spurious redirect on every admin page.
+    if (!user) return;
+
+    const matchedRoute = Object.values(ADMIN_ROUTES).find(
+      (route: AdminRouteEntry) =>
+        route.sidebarLabel && pathname.startsWith(route.path)
+    );
+    if (
+      matchedRoute &&
+      !hasPermission(permissions, matchedRoute.requiredPermission)
+    ) {
+      const fallback = getFirstPermittedAdminRoute(permissions);
+      // Avoid redirect loop: if the fallback is the same page, go to /app
+      if (pathname.startsWith(fallback)) {
+        router.replace("/app" as Route);
+      } else {
+        router.replace(fallback as Route);
+      }
+    }
+  }, [user, pathname, permissions, router]);
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
