@@ -20,13 +20,14 @@ class JiraServiceManagementConnector(JiraConnector):
 
     def _enrich_with_jsm_data(self, issue_key: str, doc: Document) -> Document:
         """Call /rest/servicedeskapi/request/{issue_key} and add JSM metadata."""
+        if self._jsm_403_warned:
+            return doc
         try:
             url = f"{self.jira_base}/rest/servicedeskapi/request/{issue_key}"
             resp = self.jira_client._session.get(url)
             if resp.status_code == 403:
-                if not getattr(self, "_jsm_403_warned", False):
-                    logger.warning("JSM API returned 403 - insufficient permissions. Skipping JSM enrichment.")
-                    self._jsm_403_warned = True
+                logger.warning("JSM API returned 403 - insufficient permissions. Skipping JSM enrichment.")
+                self._jsm_403_warned = True
                 return doc
             resp.raise_for_status()
             data = resp.json()
