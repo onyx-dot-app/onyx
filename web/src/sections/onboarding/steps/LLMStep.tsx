@@ -123,37 +123,37 @@ const LLMStep = memo(
       }
     }, []);
 
-    const providerName = selectedProvider?.isCustomProvider
-      ? "custom"
-      : selectedProvider?.llmDescriptor?.name ?? "custom";
-
-    const ModalComponent =
-      selectedProvider?.llmDescriptor && !selectedProvider.isCustomProvider
-        ? PROVIDER_MODAL_COMPONENTS[selectedProvider.llmDescriptor.name] ??
-          CustomModal
-        : CustomModal;
-
-    const modalProps: LLMProviderFormProps = {
-      variant: "onboarding" as const,
-      shouldMarkAsDefault:
-        (onboardingState?.data.llmProviders ?? []).length === 0,
-      onboardingActions,
-      onOpenChange: handleModalClose,
-      onSuccess: () => {
-        onboardingActions.updateData({
-          llmProviders: [
-            ...(onboardingState?.data.llmProviders ?? []),
-            providerName,
-          ],
-        });
-        onboardingActions.setButtonActive(true);
-      },
-    };
-
     if (
       onboardingState.currentStep === OnboardingStep.LlmSetup ||
       onboardingState.currentStep === OnboardingStep.Name
     ) {
+      const providerName = selectedProvider?.isCustomProvider
+        ? "custom"
+        : selectedProvider?.llmDescriptor?.name ?? "custom";
+
+      const ModalComponent =
+        selectedProvider?.llmDescriptor && !selectedProvider.isCustomProvider
+          ? PROVIDER_MODAL_COMPONENTS[selectedProvider.llmDescriptor.name] ??
+            CustomModal
+          : CustomModal;
+
+      const modalProps: LLMProviderFormProps = {
+        variant: "onboarding" as const,
+        shouldMarkAsDefault:
+          (onboardingState?.data.llmProviders ?? []).length === 0,
+        onboardingActions,
+        onOpenChange: handleModalClose,
+        onSuccess: () => {
+          onboardingActions.updateData({
+            llmProviders: [
+              ...(onboardingState?.data.llmProviders ?? []),
+              providerName,
+            ],
+          });
+          onboardingActions.setButtonActive(true);
+        },
+      };
+
       return (
         <Disabled disabled={disabled} allowClick>
           <div
@@ -237,35 +237,35 @@ const LLMStep = memo(
           </div>
         </Disabled>
       );
-    } else {
-      return (
-        <button
-          type="button"
-          className="flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01 opacity-50"
-          onClick={() => {
-            onboardingActions.setButtonActive(true);
-            onboardingActions.goToStep(OnboardingStep.LlmSetup);
-          }}
-          aria-label="Edit LLM providers"
-        >
-          <div className="flex items-center gap-1">
-            <StackedProviderIcons
-              providers={onboardingState.data.llmProviders || []}
-            />
-            <Text as="p" text04 mainUiAction>
-              {onboardingState.data.llmProviders?.length || 0}{" "}
-              {(onboardingState.data.llmProviders?.length || 0) === 1
-                ? "model"
-                : "models"}{" "}
-              connected
-            </Text>
-          </div>
-          <div className="p-1">
-            <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-          </div>
-        </button>
-      );
     }
+
+    return (
+      <button
+        type="button"
+        className="flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01 opacity-50"
+        onClick={() => {
+          onboardingActions.setButtonActive(true);
+          onboardingActions.goToStep(OnboardingStep.LlmSetup);
+        }}
+        aria-label="Edit LLM providers"
+      >
+        <div className="flex items-center gap-1">
+          <StackedProviderIcons
+            providers={onboardingState.data.llmProviders || []}
+          />
+          <Text as="p" text04 mainUiAction>
+            {onboardingState.data.llmProviders?.length || 0}{" "}
+            {(onboardingState.data.llmProviders?.length || 0) === 1
+              ? "model"
+              : "models"}{" "}
+            connected
+          </Text>
+        </div>
+        <div className="p-1">
+          <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+        </div>
+      </button>
+    );
   }
 );
 LLMStep.displayName = "LLMStep";
