@@ -573,6 +573,8 @@ export const validAutoSyncSources = [
   ValidSources.GitHub,
   ValidSources.Sharepoint,
   ValidSources.Teams,
+  ValidSources.GoogleChat,
+  ValidSources.JiraServiceManagement,
 ] as const;
 
 // Create a type from the array elements

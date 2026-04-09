@@ -248,6 +248,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Jira Service Management",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/jira_service_management`,
+    isPopular: true,
   },
   zendesk: {
     icon: ZendeskIcon,
@@ -346,6 +347,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Google Chat",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_chat`,
+    isPopular: true,
   },
 
   // Sales
