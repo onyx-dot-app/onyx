@@ -59,7 +59,7 @@ function QueryHistoryTableRow({
   return (
     <TableRow
       key={chatSessionMinimal.id}
-      className="hover:bg-accent-background cursor-pointer relative select-none max-h-32 overflow-hidden"
+      className="hover:bg-accent-background cursor-pointer relative select-none"
     >
       <TableCell className="max-w-xs">
         <Text className="whitespace-normal line-clamp-5">
