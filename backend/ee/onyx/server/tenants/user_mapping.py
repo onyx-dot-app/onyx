@@ -320,7 +320,7 @@ def get_tenant_count(tenant_id: str) -> int:
     1. They have an active mapping to this tenant (UserTenantMapping.active == True)
     2. AND the User is active (User.is_active == True)
     3. AND the User is not the anonymous system user
-    4. AND the User is a human interactive account (not SERVICE_ACCOUNT or BOT)
+    4. AND the User is not a SERVICE_ACCOUNT (API key dummy user)
     """
     from onyx.configs.constants import ANONYMOUS_USER_EMAIL
     from onyx.db.enums import AccountType
@@ -349,9 +349,7 @@ def get_tenant_count(tenant_id: str) -> int:
             .filter(
                 User.email.in_(emails),  # type: ignore
                 User.is_active == True,  # type: ignore  # noqa: E712
-                User.account_type.notin_(  # type: ignore
-                    [AccountType.SERVICE_ACCOUNT, AccountType.BOT]
-                ),
+                User.account_type != AccountType.SERVICE_ACCOUNT,  # type: ignore
             )
             .count()
         )

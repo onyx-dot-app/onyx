@@ -110,9 +110,11 @@ def get_used_seats(tenant_id: str | None = None) -> int:
     For multi-tenant: counts users in UserTenantMapping for this tenant.
     For self-hosted: counts all active users.
 
-    Only human interactive accounts count toward seat limits.
-    SERVICE_ACCOUNT (API key dummy users), BOT (Slack users),
-    EXT_PERM_USER, and the anonymous system user are excluded.
+    Only human accounts count toward seat limits.
+    SERVICE_ACCOUNT (API key dummy users), EXT_PERM_USER, and the
+    anonymous system user are excluded. BOT (Slack users) ARE counted
+    because they represent real humans and get upgraded to STANDARD
+    when they log in via web.
     """
     if MULTI_TENANT:
         from ee.onyx.server.tenants.user_mapping import get_tenant_count
@@ -129,9 +131,7 @@ def get_used_seats(tenant_id: str | None = None) -> int:
                     User.is_active == True,  # type: ignore  # noqa: E712
                     User.role != UserRole.EXT_PERM_USER,
                     User.email != ANONYMOUS_USER_EMAIL,  # type: ignore
-                    User.account_type.notin_(  # type: ignore
-                        [AccountType.SERVICE_ACCOUNT, AccountType.BOT]
-                    ),
+                    User.account_type != AccountType.SERVICE_ACCOUNT,
                 )
             )
             return result.scalar() or 0
