@@ -4,14 +4,12 @@ Indexes messages from Google Chat spaces using the Google Chat API
 (part of Google Workspace).
 """
 
-import io
 import json
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
 
-from google.auth.transport.requests import Request  # type: ignore
 from google.oauth2 import service_account  # type: ignore
 from googleapiclient.discovery import build  # type: ignore
 

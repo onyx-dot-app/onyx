@@ -25,6 +25,7 @@ logger = setup_logger()
 class JsmConnectorCheckpoint(ConnectorCheckpoint):
     offset: int = 0
 
+
 class JsmConnector(
     CheckpointedConnectorWithPermSync[JsmConnectorCheckpoint],
     SlimConnectorWithPermSync,
@@ -56,7 +57,7 @@ class JsmConnector(
             "limit": limit,
         }
         auth = self._get_auth()
-        response = requests.get(url, params=params, auth=auth)
+        response = requests.get(url, params=params, auth=auth, timeout=60)
         response.raise_for_status()
         return response.json()
 
@@ -70,7 +71,7 @@ class JsmConnector(
             url = get_jsm_api_url(self.jira_base_url, f"request/{issue_key}/comment")
             params = {"startAt": start, "limit": limit}
             try:
-                response = requests.get(url, params=params, auth=auth)
+                response = requests.get(url, params=params, auth=auth, timeout=60)
                 response.raise_for_status()
                 data = response.json()
                 
