@@ -56,6 +56,7 @@ class OnyxErrorCode(Enum):
     DOCUMENT_NOT_FOUND = ("DOCUMENT_NOT_FOUND", 404)
     SESSION_NOT_FOUND = ("SESSION_NOT_FOUND", 404)
     USER_NOT_FOUND = ("USER_NOT_FOUND", 404)
+    DOCUMENT_SET_NOT_FOUND = ("DOCUMENT_SET_NOT_FOUND", 404)
 
     # ------------------------------------------------------------------
     # Conflict (409)

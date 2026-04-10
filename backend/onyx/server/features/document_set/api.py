@@ -1,11 +1,9 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority
@@ -20,6 +18,8 @@ from onyx.db.document_set import update_document_set
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.document_set.models import CheckDocSetPublicRequest
 from onyx.server.features.document_set.models import CheckDocSetPublicResponse
 from onyx.server.features.document_set.models import DocumentSetCreationRequest
@@ -35,7 +35,7 @@ router = APIRouter(prefix="/manage")
 @router.post("/admin/document-set")
 def create_document_set(
     document_set_creation_request: DocumentSetCreationRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_DOCUMENT_SETS)),
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> int:
@@ -55,7 +55,7 @@ def create_document_set(
             db_session=db_session,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     if not DISABLE_VECTOR_DB:
         client_app.send_task(
@@ -70,15 +70,15 @@ def create_document_set(
 @router.patch("/admin/document-set")
 def patch_document_set(
     document_set_update_request: DocumentSetUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_DOCUMENT_SETS)),
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
     document_set = get_document_set_by_id(db_session, document_set_update_request.id)
     if document_set is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Document set {document_set_update_request.id} does not exist",
+        raise OnyxError(
+            OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,
+            f"Document set {document_set_update_request.id} does not exist",
         )
 
     fetch_ee_implementation_or_noop(
@@ -98,7 +98,7 @@ def patch_document_set(
             user=user,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     if not DISABLE_VECTOR_DB:
         client_app.send_task(
@@ -111,15 +111,15 @@ def patch_document_set(
 @router.delete("/admin/document-set/{document_set_id}")
 def delete_document_set(
     document_set_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_DOCUMENT_SETS)),
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
     document_set = get_document_set_by_id(db_session, document_set_id)
     if document_set is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Document set {document_set_id} does not exist",
+        raise OnyxError(
+            OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,
+            f"Document set {document_set_id} does not exist",
         )
 
     # check if the user has "edit" access to the document set.
@@ -142,7 +142,7 @@ def delete_document_set(
             user=user,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     if DISABLE_VECTOR_DB:
         db_session.refresh(document_set)
