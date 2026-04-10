@@ -88,15 +88,27 @@ The `devcontainer` target is defined in `docker-bake.hcl` at the repo root.
 ## User & permissions
 
 The container runs as the `dev` user by default (`remoteUser` in devcontainer.json).
-An init script (`init-dev-user.sh`) runs at container start to ensure `dev` has
-read/write access to the bind-mounted workspace:
+An init script (`init-dev-user.sh`) runs at container start to ensure the active
+user has read/write access to the bind-mounted workspace:
 
 - **Standard Docker** — `dev`'s UID/GID is remapped to match the workspace owner,
   so file permissions work seamlessly.
 - **Rootless Docker** — The workspace appears as root-owned (UID 0) inside the
-  container due to user-namespace mapping. The init script grants `dev` access via
-  POSIX ACLs (`setfacl`), which adds a few seconds to the first container start on
-  large repos.
+  container due to user-namespace mapping. `ods dev up` auto-detects rootless Docker
+  and sets `DEVCONTAINER_REMOTE_USER=root` so the container runs as root — which
+  maps back to your host user via the user namespace. New files are owned by your
+  host UID and no ACL workarounds are needed.
+
+  If you use the `devcontainer` CLI directly (without `ods`), export the variable
+  yourself:
+
+  ```bash
+  export DEVCONTAINER_REMOTE_USER=root
+  devcontainer up --workspace-folder .
+  ```
+
+  To override the auto-detection, set `DEVCONTAINER_REMOTE_USER` before running
+  `ods dev up`.
 
 ## Docker socket
 

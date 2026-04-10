@@ -13,7 +13,7 @@
     "source=onyx-devcontainer-cache,target=/home/dev/.cache,type=volume",
     "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume"
   ],
-  "remoteUser": "dev",
+  "remoteUser": "${localEnv:DEVCONTAINER_REMOTE_USER:dev}",
   "updateRemoteUserUID": false,
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",

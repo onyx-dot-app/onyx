@@ -148,10 +148,32 @@ func worktreeGitMount(root string) (string, bool) {
 	return mount, true
 }
 
+// ensureRemoteUser sets DEVCONTAINER_REMOTE_USER when rootless Docker is
+// detected.  Container root maps to the host user in rootless mode, so running
+// as root inside the container avoids the UID mismatch on new files.
+// Must be called after ensureDockerSock.
+func ensureRemoteUser() {
+	if os.Getenv("DEVCONTAINER_REMOTE_USER") != "" {
+		return
+	}
+
+	if runtime.GOOS == "linux" {
+		sock := os.Getenv("DOCKER_SOCK")
+		xdg := os.Getenv("XDG_RUNTIME_DIR")
+		if xdg != "" && strings.HasPrefix(sock, xdg) {
+			log.Debug("Rootless Docker detected — setting DEVCONTAINER_REMOTE_USER=root")
+			if err := os.Setenv("DEVCONTAINER_REMOTE_USER", "root"); err != nil {
+				log.Warnf("Failed to set DEVCONTAINER_REMOTE_USER: %v", err)
+			}
+		}
+	}
+}
+
 // runDevcontainer executes "devcontainer <action> --workspace-folder <root> [extraArgs...]".
 func runDevcontainer(action string, extraArgs []string) {
 	checkDevcontainerCLI()
 	ensureDockerSock()
+	ensureRemoteUser()
 
 	root, err := paths.GitRoot()
 	if err != nil {
