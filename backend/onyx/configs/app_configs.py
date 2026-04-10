@@ -959,6 +959,11 @@ VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
 VESPA_MIGRATION_REQUEST_TIMEOUT_S = int(
     os.environ.get("VESPA_MIGRATION_REQUEST_TIMEOUT_S") or "120"
 )
+# Server-side timeout for Vespa queries (string format like "120s")
+VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = (
+    os.environ.get("VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT")
+    or f"{VESPA_MIGRATION_REQUEST_TIMEOUT_S}s"
+)
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
 
