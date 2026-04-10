@@ -50,7 +50,7 @@ if [ "$ACTIVE_HOME" != "$MOUNT_HOME" ]; then
         ln -sfn "$MOUNT_HOME/$item" "$ACTIVE_HOME/$item"
     done
     # Symlink files (not directories).
-    for file in .claude.json .gitconfig; do
+    for file in .claude.json .gitconfig .zshrc.host; do
         [ -f "$MOUNT_HOME/$file" ] && ln -sf "$MOUNT_HOME/$file" "$ACTIVE_HOME/$file"
     done
 
