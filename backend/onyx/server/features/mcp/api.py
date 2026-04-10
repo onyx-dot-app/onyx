@@ -392,6 +392,29 @@ async def _connect_oauth(
             detail=f"Server was configured with authentication type {auth_type_str}",
         )
 
+    # If the frontend sent back masked credentials (unchanged by the user),
+    # restore the real stored values so we don't overwrite them with masks.
+    if mcp_server.admin_connection_config:
+        existing_data = extract_connection_data(
+            mcp_server.admin_connection_config, apply_mask=False
+        )
+        existing_client_raw = existing_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        if existing_client_raw:
+            existing_client = OAuthClientInformationFull.model_validate(
+                existing_client_raw
+            )
+            if request.oauth_client_id and request.oauth_client_id == mask_string(
+                existing_client.client_id
+            ):
+                request.oauth_client_id = existing_client.client_id
+            if (
+                request.oauth_client_secret
+                and existing_client.client_secret
+                and request.oauth_client_secret
+                == mask_string(existing_client.client_secret)
+            ):
+                request.oauth_client_secret = existing_client.client_secret
+
     # Create admin config with client info if provided
     config_data = MCPConnectionData(headers={})
     if request.oauth_client_id and request.oauth_client_secret:
@@ -1355,6 +1378,22 @@ def _upsert_mcp_server(
             )
             if client_info_raw:
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
+
+        # If the frontend sent back masked credentials (unchanged by the user),
+        # restore the real stored values so the comparison below sees no change
+        # and the credentials aren't overwritten with masked strings.
+        if client_info and request.auth_type == MCPAuthenticationType.OAUTH:
+            if request.oauth_client_id and request.oauth_client_id == mask_string(
+                client_info.client_id
+            ):
+                request.oauth_client_id = client_info.client_id
+            if (
+                request.oauth_client_secret
+                and client_info.client_secret
+                and request.oauth_client_secret
+                == mask_string(client_info.client_secret)
+            ):
+                request.oauth_client_secret = client_info.client_secret
 
         changing_connection_config = (
             not mcp_server.admin_connection_config
