@@ -8,6 +8,7 @@ import {
   SvgBarChart,
   SvgBookOpen,
   SvgBubbleText,
+  SvgCheckSquare,
   SvgClipboard,
   SvgCpu,
   SvgDownload,
@@ -226,6 +227,12 @@ export const ADMIN_ROUTES = {
     icon: SvgShareWebhook,
     title: "Hook Extensions",
     sidebarLabel: "Hook Extensions",
+  },
+  PROPOSAL_REVIEW: {
+    path: "/admin/proposal-review",
+    icon: SvgCheckSquare,
+    title: "Proposal Review",
+    sidebarLabel: "Proposal Review",
   },
   SCIM: {
     path: "/admin/scim",

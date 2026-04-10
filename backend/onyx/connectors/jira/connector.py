@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from io import BytesIO
 from typing import Any
 
 import requests
@@ -40,6 +41,7 @@ from onyx.connectors.jira.utils import best_effort_basic_expert_info
 from onyx.connectors.jira.utils import best_effort_get_field_from_issue
 from onyx.connectors.jira.utils import build_jira_client
 from onyx.connectors.jira.utils import build_jira_url
+from onyx.connectors.jira.utils import CustomFieldExtractor
 from onyx.connectors.jira.utils import extract_text_from_adf
 from onyx.connectors.jira.utils import get_comment_strs
 from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
@@ -52,6 +54,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.db.enums import HierarchyNodeType
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -63,6 +66,7 @@ _MAX_RESULTS_FETCH_IDS = 5000
 _JIRA_FULL_PAGE_SIZE = 50
 # https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
 _JIRA_BULK_FETCH_LIMIT = 100
+_MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 
 # Constants for Jira field names
 _FIELD_REPORTER = "reporter"
@@ -389,6 +393,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    custom_fields_mapping: dict[str, str] | None = None,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -486,6 +491,24 @@ def process_jira_issue(
     else:
         logger.error("Project should exist but does not for %s", issue.key)
 
+    # Merge custom fields into metadata if a mapping was provided
+    if custom_fields_mapping:
+        try:
+            custom_fields = CustomFieldExtractor.get_issue_custom_fields(
+                issue, custom_fields_mapping
+            )
+            # Filter out custom fields that collide with existing metadata keys
+            for key in list(custom_fields.keys()):
+                if key in metadata_dict:
+                    logger.warning(
+                        f"Custom field '{key}' on {issue.key} collides with "
+                        f"standard metadata key; skipping custom field value"
+                    )
+                    del custom_fields[key]
+            metadata_dict.update(custom_fields)
+        except Exception as e:
+            logger.warning(f"Failed to extract custom fields for {issue.key}: {e}")
+
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
@@ -528,6 +551,12 @@ class JiraConnector(
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
         scoped_token: bool = False,
+        # When True, extract custom fields from Jira issues and include them
+        # in document metadata with human-readable field names.
+        extract_custom_fields: bool = False,
+        # When True, download attachments from Jira issues and yield them
+        # as separate Documents linked to the parent ticket.
+        fetch_attachments: bool = False,
     ) -> None:
         self.batch_size = batch_size
 
@@ -541,7 +570,11 @@ class JiraConnector(
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
         self.scoped_token = scoped_token
+        self.extract_custom_fields = extract_custom_fields
+        self.fetch_attachments = fetch_attachments
         self._jira_client: JIRA | None = None
+        # Mapping of custom field IDs to human-readable names (populated on load_credentials)
+        self._custom_fields_mapping: dict[str, str] = {}
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
 
@@ -702,12 +735,134 @@ class JiraConnector(
         # the document belongs directly under the project in the hierarchy
         return project_key
 
+    def _process_attachments(
+        self,
+        issue: Issue,
+        parent_hierarchy_raw_node_id: str | None,
+        include_permissions: bool = False,
+        project_key: str | None = None,
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """Download and yield Documents for each attachment on a Jira issue.
+
+        Each attachment becomes a separate Document whose text is extracted
+        from the downloaded file content. Failures on individual attachments
+        are logged and yielded as ConnectorFailure so they never break the
+        overall indexing run.
+        """
+        attachments = best_effort_get_field_from_issue(issue, "attachment")
+        if not attachments:
+            return
+
+        issue_url = build_jira_url(self.jira_base, issue.key)
+
+        for attachment in attachments:
+            try:
+                filename = getattr(attachment, "filename", "unknown")
+                try:
+                    size = int(getattr(attachment, "size", 0) or 0)
+                except (ValueError, TypeError):
+                    size = 0
+                content_url = getattr(attachment, "content", None)
+                attachment_id = getattr(attachment, "id", filename)
+                mime_type = getattr(attachment, "mimeType", "application/octet-stream")
+                created = getattr(attachment, "created", None)
+
+                if size > _MAX_ATTACHMENT_SIZE_BYTES:
+                    logger.warning(
+                        f"Skipping attachment '{filename}' on {issue.key}: "
+                        f"size {size} bytes exceeds {_MAX_ATTACHMENT_SIZE_BYTES} byte limit"
+                    )
+                    continue
+
+                if not content_url:
+                    logger.warning(
+                        f"Skipping attachment '{filename}' on {issue.key}: "
+                        f"no content URL available"
+                    )
+                    continue
+
+                # Download the attachment using the public API on the
+                # python-jira Attachment resource (avoids private _session access
+                # and the double-copy from response.content + BytesIO wrapping).
+                file_content = attachment.get()
+
+                # Extract text from the downloaded file
+                try:
+                    text = extract_file_text(
+                        file=BytesIO(file_content),
+                        file_name=filename,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Could not extract text from attachment '{filename}' "
+                        f"on {issue.key}: {e}"
+                    )
+                    continue
+
+                if not text or not text.strip():
+                    logger.info(
+                        f"Skipping attachment '{filename}' on {issue.key}: "
+                        f"no text content could be extracted"
+                    )
+                    continue
+
+                doc_id = f"{issue_url}/attachments/{attachment_id}"
+                attachment_doc = Document(
+                    id=doc_id,
+                    sections=[TextSection(link=issue_url, text=text)],
+                    source=DocumentSource.JIRA,
+                    semantic_identifier=f"{issue.key}: {filename}",
+                    title=filename,
+                    doc_updated_at=(time_str_to_utc(created) if created else None),
+                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    metadata={
+                        "parent_ticket": issue.key,
+                        "attachment_filename": filename,
+                        "attachment_mime_type": mime_type,
+                        "attachment_size": str(size),
+                    },
+                )
+                if include_permissions and project_key:
+                    attachment_doc.external_access = self._get_project_permissions(
+                        project_key,
+                        add_prefix=True,
+                    )
+                yield attachment_doc
+            except Exception as e:
+                logger.error(f"Failed to process attachment on {issue.key}: {e}")
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=f"{issue_url}/attachments/{getattr(attachment, 'id', 'unknown')}",
+                        document_link=issue_url,
+                    ),
+                    failure_message=f"Failed to process attachment '{getattr(attachment, 'filename', 'unknown')}': {str(e)}",
+                    exception=e,
+                )
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(
             credentials=credentials,
             jira_base=self.jira_base,
             scoped_token=self.scoped_token,
         )
+
+        # Fetch the custom field ID-to-name mapping once at credential load time.
+        # This avoids repeated API calls during issue processing.
+        if self.extract_custom_fields:
+            try:
+                self._custom_fields_mapping = (
+                    CustomFieldExtractor.get_all_custom_fields(self._jira_client)
+                )
+                logger.info(
+                    f"Loaded {len(self._custom_fields_mapping)} custom field definitions"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to fetch custom field definitions; "
+                    f"custom field extraction will be skipped: {e}"
+                )
+                self._custom_fields_mapping = {}
+
         return None
 
     def _get_jql_query(
@@ -838,6 +993,11 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    custom_fields_mapping=(
+                        self._custom_fields_mapping
+                        if self._custom_fields_mapping
+                        else None
+                    ),
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
@@ -846,6 +1006,15 @@ class JiraConnector(
                             add_prefix=True,  # Indexing path - prefix here
                         )
                     yield document
+
+                    # Yield attachment documents if enabled
+                    if self.fetch_attachments:
+                        yield from self._process_attachments(
+                            issue=issue,
+                            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                            include_permissions=include_permissions,
+                            project_key=project_key,
+                        )
 
             except Exception as e:
                 yield ConnectorFailure(
@@ -954,20 +1123,41 @@ class JiraConnector(
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
                 doc_id = build_jira_url(self.jira_base, issue_key)
 
+                parent_hierarchy_raw_node_id = (
+                    self._get_parent_hierarchy_raw_node_id(issue, project_key)
+                    if project_key
+                    else None
+                )
+                project_perms = self._get_project_permissions(
+                    project_key, add_prefix=False
+                )
+
                 slim_doc_batch.append(
                     SlimDocument(
                         id=doc_id,
                         # Permission sync path - don't prefix, upsert_document_external_perms handles it
-                        external_access=self._get_project_permissions(
-                            project_key, add_prefix=False
-                        ),
-                        parent_hierarchy_raw_node_id=(
-                            self._get_parent_hierarchy_raw_node_id(issue, project_key)
-                            if project_key
-                            else None
-                        ),
+                        external_access=project_perms,
+                        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                     )
                 )
+
+                # Also emit SlimDocument entries for each attachment
+                if self.fetch_attachments:
+                    attachments = best_effort_get_field_from_issue(issue, "attachment")
+                    if attachments:
+                        for attachment in attachments:
+                            attachment_id = getattr(
+                                attachment,
+                                "id",
+                                getattr(attachment, "filename", "unknown"),
+                            )
+                            slim_doc_batch.append(
+                                SlimDocument(
+                                    id=f"{doc_id}/attachments/{attachment_id}",
+                                    external_access=project_perms,
+                                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                                )
+                            )
                 current_offset += 1
                 if len(slim_doc_batch) >= JIRA_SLIM_PAGE_SIZE:
                     yield slim_doc_batch

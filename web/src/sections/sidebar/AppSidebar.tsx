@@ -57,6 +57,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
+  SvgCheckSquare,
   SvgDevKit,
   SvgEditBig,
   SvgFolderPlus,
@@ -526,6 +527,21 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
     [folded, posthog]
   );
 
+  const proposalReviewButton = useMemo(
+    () => (
+      <div data-testid="AppSidebar/proposal-review">
+        <SidebarTab
+          icon={SvgCheckSquare}
+          folded={folded}
+          href="/proposal-review"
+        >
+          Argus
+        </SidebarTab>
+      </div>
+    ),
+    [folded]
+  );
+
   const searchChatsButton = useMemo(
     () => (
       <ChatSearchCommandMenu
@@ -670,6 +686,10 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
           {newSessionButton}
           {searchChatsButton}
           {isOnyxCraftEnabled && buildButton}
+          {/* TODO: gate behind a dedicated ENABLE_PROPOSAL_REVIEW feature flag
+              once it is exposed to the frontend settings. For now, reuse the
+              Craft flag so it does not render unconditionally. */}
+          {isOnyxCraftEnabled && proposalReviewButton}
           {folded && moreAgentsButton}
           {folded && newProjectButton}
         </div>

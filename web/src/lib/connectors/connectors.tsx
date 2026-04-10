@@ -743,7 +743,27 @@ export const connectorConfigs: Record<
         optional: true,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Extract custom fields?",
+        label: "Extract Custom Fields",
+        name: "extract_custom_fields",
+        description:
+          "Include custom Jira fields in document metadata with human-readable names",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "checkbox",
+        query: "Fetch attachments?",
+        label: "Fetch Attachments",
+        name: "fetch_attachments",
+        description: "Download and index file attachments from Jira tickets",
+        optional: true,
+        default: false,
+      },
+    ],
   },
   salesforce: {
     description: "Configure Salesforce connector",
@@ -1964,6 +1984,8 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+  extract_custom_fields?: boolean;
+  fetch_attachments?: boolean;
 }
 
 export interface SalesforceConfig {
