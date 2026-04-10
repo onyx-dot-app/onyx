@@ -178,6 +178,9 @@ func ensureRemoteUser() {
 	if runtime.GOOS == "linux" {
 		sock := os.Getenv("DOCKER_SOCK")
 		xdg := os.Getenv("XDG_RUNTIME_DIR")
+		// Heuristic: rootless Docker on Linux typically places its socket
+		// under $XDG_RUNTIME_DIR. If DOCKER_SOCK was set to a custom path
+		// outside XDG_RUNTIME_DIR, set DEVCONTAINER_REMOTE_USER=root manually.
 		if xdg != "" && strings.HasPrefix(sock, xdg) {
 			log.Debug("Rootless Docker detected — setting DEVCONTAINER_REMOTE_USER=root")
 			if err := os.Setenv("DEVCONTAINER_REMOTE_USER", "root"); err != nil {

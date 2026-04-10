@@ -43,7 +43,10 @@ mkdir -p "$MOUNT_HOME"/.local/state "$MOUNT_HOME"/.local/share
 if [ "$ACTIVE_HOME" != "$MOUNT_HOME" ]; then
     for item in .claude .cache .local; do
         [ -d "$MOUNT_HOME/$item" ] || continue
-        [ -L "$ACTIVE_HOME/$item" ] || rm -rf "$ACTIVE_HOME/$item"
+        if [ -e "$ACTIVE_HOME/$item" ] && [ ! -L "$ACTIVE_HOME/$item" ]; then
+            echo "warning: replacing $ACTIVE_HOME/$item with symlink to $MOUNT_HOME/$item" >&2
+            rm -rf "$ACTIVE_HOME/$item"
+        fi
         ln -sfn "$MOUNT_HOME/$item" "$ACTIVE_HOME/$item"
     done
     [ -f "$MOUNT_HOME/.claude.json" ] && ln -sf "$MOUNT_HOME/.claude.json" "$ACTIVE_HOME/.claude.json"
@@ -51,7 +54,10 @@ if [ "$ACTIVE_HOME" != "$MOUNT_HOME" ]; then
     # Nested mount: .config/nvim
     if [ -d "$MOUNT_HOME/.config/nvim" ]; then
         mkdir -p "$ACTIVE_HOME/.config"
-        [ -L "$ACTIVE_HOME/.config/nvim" ] || rm -rf "$ACTIVE_HOME/.config/nvim"
+        if [ -e "$ACTIVE_HOME/.config/nvim" ] && [ ! -L "$ACTIVE_HOME/.config/nvim" ]; then
+            echo "warning: replacing $ACTIVE_HOME/.config/nvim with symlink" >&2
+            rm -rf "$ACTIVE_HOME/.config/nvim"
+        fi
         ln -sfn "$MOUNT_HOME/.config/nvim" "$ACTIVE_HOME/.config/nvim"
     fi
 
@@ -60,9 +66,14 @@ if [ "$ACTIVE_HOME" != "$MOUNT_HOME" ]; then
         "$MOUNT_HOME" "$WORKSPACE" > "$ACTIVE_HOME/.gitconfig"
 
     GIT_COMMON_DIR=$(git -C "$WORKSPACE" rev-parse --git-common-dir 2>/dev/null || true)
-    if [ -n "$GIT_COMMON_DIR" ] && [ "$GIT_COMMON_DIR" != "$WORKSPACE/.git" ]; then
-        [ ! -d "$GIT_COMMON_DIR" ] && GIT_COMMON_DIR="$WORKSPACE/$GIT_COMMON_DIR"
-        if [ -d "$GIT_COMMON_DIR" ]; then
+    if [ -n "$GIT_COMMON_DIR" ]; then
+        # Resolve to absolute before comparing — git returns a relative path
+        # for regular repos (.git) but absolute for worktrees.
+        case "$GIT_COMMON_DIR" in
+            /*) ;;
+            *)  GIT_COMMON_DIR="$WORKSPACE/$GIT_COMMON_DIR" ;;
+        esac
+        if [ "$GIT_COMMON_DIR" != "$WORKSPACE/.git" ] && [ -d "$GIT_COMMON_DIR" ]; then
             git config -f "$ACTIVE_HOME/.gitconfig" --add safe.directory "$(dirname "$GIT_COMMON_DIR")"
         fi
     fi
