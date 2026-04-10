@@ -8,6 +8,7 @@ services:
       dockerfile: Dockerfile
     command: >
       /bin/sh -c "
+      alembic upgrade head &&
       alembic -n schema_private upgrade head &&
       echo \"Starting Onyx Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
