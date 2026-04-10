@@ -39,9 +39,9 @@ fi
 mkdir -p "$MOUNT_HOME"/.local/state "$MOUNT_HOME"/.local/share
 
 # When running as root, symlink bind-mounts and named volumes into /root
-# so that $HOME-relative tools (Claude Code, git, ssh, etc.) find them.
+# so that $HOME-relative tools (Claude Code, git, etc.) find them.
 if [ "$ACTIVE_HOME" != "$MOUNT_HOME" ]; then
-    for item in .claude .ssh .cache .local; do
+    for item in .claude .cache .local; do
         [ -d "$MOUNT_HOME/$item" ] || continue
         [ -L "$ACTIVE_HOME/$item" ] || rm -rf "$ACTIVE_HOME/$item"
         ln -sfn "$MOUNT_HOME/$item" "$ACTIVE_HOME/$item"

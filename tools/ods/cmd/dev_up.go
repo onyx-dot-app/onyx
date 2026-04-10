@@ -148,6 +148,24 @@ func worktreeGitMount(root string) (string, bool) {
 	return mount, true
 }
 
+// sshAgentMount returns a --mount flag value that forwards the host's SSH agent
+// socket into the container.  Returns ("", false) when SSH_AUTH_SOCK is unset or
+// the socket is not accessible.
+func sshAgentMount() (string, bool) {
+	sock := os.Getenv("SSH_AUTH_SOCK")
+	if sock == "" {
+		log.Debug("SSH_AUTH_SOCK not set — skipping SSH agent forwarding")
+		return "", false
+	}
+	if _, err := os.Stat(sock); err != nil {
+		log.Debugf("SSH_AUTH_SOCK=%s not accessible: %v", sock, err)
+		return "", false
+	}
+	mount := fmt.Sprintf("type=bind,source=%s,target=/tmp/ssh-agent.sock", sock)
+	log.Debugf("Forwarding SSH agent: %s", sock)
+	return mount, true
+}
+
 // ensureRemoteUser sets DEVCONTAINER_REMOTE_USER when rootless Docker is
 // detected.  Container root maps to the host user in rootless mode, so running
 // as root inside the container avoids the UID mismatch on new files.
@@ -182,6 +200,9 @@ func runDevcontainer(action string, extraArgs []string) {
 
 	args := []string{action, "--workspace-folder", root}
 	if mount, ok := worktreeGitMount(root); ok {
+		args = append(args, "--mount", mount)
+	}
+	if mount, ok := sshAgentMount(); ok {
 		args = append(args, "--mount", mount)
 	}
 	args = append(args, extraArgs...)
