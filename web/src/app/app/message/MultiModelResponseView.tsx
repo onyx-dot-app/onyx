@@ -210,8 +210,10 @@ export default function MultiModelResponseView({
       const response = responses.find((r) => r.modelIndex === modelIndex);
       if (!response) return;
 
-      // Persist preferred response to backend + update local tree so the
-      // input bar unblocks (awaitingPreferredSelection clears).
+      // Persist preferred response + sync `latestChildNodeId`. Backend's
+      // `set_preferred_response` updates `latest_child_message_id`; if the
+      // frontend chain walk disagrees, the next follow-up fails with
+      // "not on the latest mainline".
       if (parentMessage?.messageId && response.messageId && currentSessionId) {
         setPreferredResponse(parentMessage.messageId, response.messageId).catch(
           (err) => console.error("Failed to persist preferred response:", err)
@@ -227,6 +229,7 @@ export default function MultiModelResponseView({
             updated.set(parentMessage.nodeId, {
               ...userMsg,
               preferredResponseId: response.messageId,
+              latestChildNodeId: response.nodeId,
             });
             updateSessionMessageTree(currentSessionId, updated);
           }
