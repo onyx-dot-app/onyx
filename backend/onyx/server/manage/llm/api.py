@@ -141,9 +141,9 @@ def _resolve_api_key(
             return api_key
 
         stored_key = existing_provider.api_key.get_value(apply_mask=False)
-        # Use the stored key when the incoming value is either absent or
-        # matches its masked form (i.e. the user hasn't typed a new key).
-        if not api_key or api_key == _mask_string(stored_key):
+        # Only resolve when the incoming value is the masked form of the
+        # stored key — i.e. the user hasn't typed a new key.
+        if api_key and api_key == _mask_string(stored_key):
             return stored_key
     return api_key
 
@@ -1344,13 +1344,18 @@ def get_lm_studio_available_models(
 
     # If provider_name is given and the api_key hasn't been changed by the user,
     # fall back to the stored API key from the database (the form value is masked).
+    # Only do so when the api_base matches what is stored.
     api_key = request.api_key
     if request.provider_name and not request.api_key_changed:
         existing_provider = fetch_existing_llm_provider(
             name=request.provider_name, db_session=db_session
         )
         if existing_provider and existing_provider.custom_config:
-            api_key = existing_provider.custom_config.get(LM_STUDIO_API_KEY_CONFIG_KEY)
+            stored_base = (existing_provider.api_base or "").strip().rstrip("/")
+            if stored_base == cleaned_api_base:
+                api_key = existing_provider.custom_config.get(
+                    LM_STUDIO_API_KEY_CONFIG_KEY
+                )
 
     url = f"{cleaned_api_base}/api/v1/models"
     headers: dict[str, str] = {}
