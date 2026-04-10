@@ -75,10 +75,6 @@ if [ "$REMOTE_USER" = "root" ]; then
     exit 0
 fi
 
-# Ensure ~dev owns its own home (volumes may have been created as root).
-chown -R "$TARGET_USER":"$TARGET_USER" "$MOUNT_HOME"/.local
-chown -R "$TARGET_USER":"$TARGET_USER" "$MOUNT_HOME"/.cache
-
 # Already matching -- nothing to do.
 if [ "$WS_UID" = "$DEV_UID" ] && [ "$WS_GID" = "$DEV_GID" ]; then
     exit 0
