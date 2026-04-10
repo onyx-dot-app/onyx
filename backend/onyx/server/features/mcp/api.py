@@ -96,6 +96,32 @@ def _truncate_description(description: str | None, max_length: int = 500) -> str
     return description[: max_length - 3] + "..."
 
 
+# TODO: Replace mask-comparison approach with an explicit Unset sentinel from the
+# frontend indicating whether each credential field was actually modified. The current
+# approach is brittle (e.g. short credentials produce a fixed-length mask that could
+# collide) and mutates request values, which is surprising. The frontend should signal
+# "unchanged" vs "new value" directly rather than relying on masked-string equality.
+def _restore_masked_oauth_credentials(
+    request_client_id: str | None,
+    request_client_secret: str | None,
+    existing_client: OAuthClientInformationFull,
+) -> tuple[str | None, str | None]:
+    """If the frontend sent back masked credentials, restore the real stored values."""
+    if (
+        request_client_id
+        and existing_client.client_id
+        and request_client_id == mask_string(existing_client.client_id)
+    ):
+        request_client_id = existing_client.client_id
+    if (
+        request_client_secret
+        and existing_client.client_secret
+        and request_client_secret == mask_string(existing_client.client_secret)
+    ):
+        request_client_secret = existing_client.client_secret
+    return request_client_id, request_client_secret
+
+
 router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 STATE_TTL_SECONDS = 60 * 5  # 5 minutes
@@ -391,6 +417,26 @@ async def _connect_oauth(
             status_code=400,
             detail=f"Server was configured with authentication type {auth_type_str}",
         )
+
+    # If the frontend sent back masked credentials (unchanged by the user),
+    # restore the real stored values so we don't overwrite them with masks.
+    if mcp_server.admin_connection_config:
+        existing_data = extract_connection_data(
+            mcp_server.admin_connection_config, apply_mask=False
+        )
+        existing_client_raw = existing_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        if existing_client_raw:
+            existing_client = OAuthClientInformationFull.model_validate(
+                existing_client_raw
+            )
+            (
+                request.oauth_client_id,
+                request.oauth_client_secret,
+            ) = _restore_masked_oauth_credentials(
+                request.oauth_client_id,
+                request.oauth_client_secret,
+                existing_client,
+            )
 
     # Create admin config with client info if provided
     config_data = MCPConnectionData(headers={})
@@ -1355,6 +1401,19 @@ def _upsert_mcp_server(
             )
             if client_info_raw:
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
+
+        # If the frontend sent back masked credentials (unchanged by the user),
+        # restore the real stored values so the comparison below sees no change
+        # and the credentials aren't overwritten with masked strings.
+        if client_info and request.auth_type == MCPAuthenticationType.OAUTH:
+            (
+                request.oauth_client_id,
+                request.oauth_client_secret,
+            ) = _restore_masked_oauth_credentials(
+                request.oauth_client_id,
+                request.oauth_client_secret,
+                client_info,
+            )
 
         changing_connection_config = (
             not mcp_server.admin_connection_config
