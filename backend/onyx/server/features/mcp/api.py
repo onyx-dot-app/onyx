@@ -96,6 +96,11 @@ def _truncate_description(description: str | None, max_length: int = 500) -> str
     return description[: max_length - 3] + "..."
 
 
+# TODO: Replace mask-comparison approach with an explicit Unset sentinel from the
+# frontend indicating whether each credential field was actually modified. The current
+# approach is brittle (e.g. short credentials produce a fixed-length mask that could
+# collide) and mutates request values, which is surprising. The frontend should signal
+# "unchanged" vs "new value" directly rather than relying on masked-string equality.
 def _restore_masked_oauth_credentials(
     request_client_id: str | None,
     request_client_secret: str | None,
