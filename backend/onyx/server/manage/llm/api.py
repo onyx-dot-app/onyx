@@ -111,6 +111,43 @@ def _mask_string(value: str) -> str:
     return value[:4] + "****" + value[-4:]
 
 
+def _resolve_api_key(
+    api_key: str | None,
+    provider_name: str | None,
+    api_base: str | None,
+    db_session: Session,
+) -> str | None:
+    """Return the real API key for model-fetch endpoints.
+
+    When editing an existing provider the form value is masked (e.g.
+    ``sk-a****b1c2``).  If *provider_name* is supplied we can look up
+    the unmasked key from the database so the external request succeeds.
+
+    The stored key is only returned when the request's *api_base*
+    matches the value stored in the database.
+    """
+    if not provider_name:
+        return api_key
+
+    existing_provider = fetch_existing_llm_provider(
+        name=provider_name, db_session=db_session
+    )
+    if existing_provider and existing_provider.api_key:
+        # Normalise both URLs before comparing so trailing-slash
+        # differences don't cause a false mismatch.
+        stored_base = (existing_provider.api_base or "").strip().rstrip("/")
+        request_base = (api_base or "").strip().rstrip("/")
+        if stored_base != request_base:
+            return api_key
+
+        stored_key = existing_provider.api_key.get_value(apply_mask=False)
+        # Use the stored key when the incoming value is either absent or
+        # matches its masked form (i.e. the user hasn't typed a new key).
+        if not api_key or api_key == _mask_string(stored_key):
+            return stored_key
+    return api_key
+
+
 def _sync_fetched_models(
     db_session: Session,
     provider_name: str,
@@ -1206,8 +1243,15 @@ def get_openrouter_available_models(
     Parses id, name (display), context_length, and architecture.input_modalities.
     """
 
+    api_key = (
+        _resolve_api_key(
+            request.api_key, request.provider_name, request.api_base, db_session
+        )
+        or request.api_key
+    )
+
     response_json = _get_openrouter_models_response(
-        api_base=request.api_base, api_key=request.api_key
+        api_base=request.api_base, api_key=api_key
     )
 
     data = response_json.get("data", [])
@@ -1390,8 +1434,12 @@ def get_litellm_available_models(
     db_session: Session = Depends(get_session),
 ) -> list[LitellmFinalModelResponse]:
     """Fetch available models from Litellm proxy /v1/models endpoint."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_name, request.api_base, db_session
+    )
+
     response_json = _get_litellm_models_response(
-        api_key=request.api_key, api_base=request.api_base
+        api_key=api_key or request.api_key, api_base=request.api_base
     )
 
     models = response_json.get("data", [])
@@ -1523,8 +1571,12 @@ def get_bifrost_available_models(
     db_session: Session = Depends(get_session),
 ) -> list[BifrostFinalModelResponse]:
     """Fetch available models from Bifrost gateway /v1/models endpoint."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_name, request.api_base, db_session
+    )
+
     response_json = _get_bifrost_models_response(
-        api_base=request.api_base, api_key=request.api_key
+        api_base=request.api_base, api_key=api_key
     )
 
     models = response_json.get("data", [])
@@ -1613,8 +1665,12 @@ def get_openai_compatible_server_available_models(
     db_session: Session = Depends(get_session),
 ) -> list[OpenAICompatibleFinalModelResponse]:
     """Fetch available models from a generic OpenAI-compatible /v1/models endpoint."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_name, request.api_base, db_session
+    )
+
     response_json = _get_openai_compatible_server_response(
-        api_base=request.api_base, api_key=request.api_key
+        api_base=request.api_base, api_key=api_key
     )
 
     models = response_json.get("data", [])
