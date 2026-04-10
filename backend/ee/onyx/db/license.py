@@ -13,6 +13,7 @@ from ee.onyx.server.license.models import LicenseSource
 from onyx.auth.schemas import UserRole
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.db.enums import AccountType
 from onyx.db.models import License
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
@@ -107,12 +108,11 @@ def get_used_seats(tenant_id: str | None = None) -> int:
     Get current seat usage directly from database.
 
     For multi-tenant: counts users in UserTenantMapping for this tenant.
-    For self-hosted: counts all active users (excludes EXT_PERM_USER role
-    and the anonymous system user).
+    For self-hosted: counts all active users.
 
-    TODO: Exclude API key dummy users from seat counting. API keys create
-    users with emails like `__DANSWER_API_KEY_*` that should not count toward
-    seat limits. See: https://linear.app/onyx-app/issue/ENG-3518
+    Only human interactive accounts count toward seat limits.
+    SERVICE_ACCOUNT (API key dummy users), BOT (Slack users),
+    EXT_PERM_USER, and the anonymous system user are excluded.
     """
     if MULTI_TENANT:
         from ee.onyx.server.tenants.user_mapping import get_tenant_count
@@ -129,6 +129,9 @@ def get_used_seats(tenant_id: str | None = None) -> int:
                     User.is_active == True,  # type: ignore  # noqa: E712
                     User.role != UserRole.EXT_PERM_USER,
                     User.email != ANONYMOUS_USER_EMAIL,  # type: ignore
+                    User.account_type.notin_(  # type: ignore
+                        [AccountType.SERVICE_ACCOUNT, AccountType.BOT]
+                    ),
                 )
             )
             return result.scalar() or 0
