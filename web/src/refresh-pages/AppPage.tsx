@@ -871,15 +871,20 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         agent={liveAgent}
                         isDefaultAgent={isDefaultAgent}
                       />
-                      {liveAgent && !llmManager.isLoadingProviders && (
-                        <ModelSelector
-                          llmManager={llmManager}
-                          selectedModels={multiModel.selectedModels}
-                          onAdd={multiModel.addModel}
-                          onRemove={multiModel.removeModel}
-                          onReplace={multiModel.replaceModel}
-                        />
-                      )}
+                      {!isSearch &&
+                        !(
+                          state.phase === "idle" && state.appMode === "search"
+                        ) &&
+                        liveAgent &&
+                        !llmManager.isLoadingProviders && (
+                          <ModelSelector
+                            llmManager={llmManager}
+                            selectedModels={multiModel.selectedModels}
+                            onAdd={multiModel.addModel}
+                            onRemove={multiModel.removeModel}
+                            onReplace={multiModel.replaceModel}
+                          />
+                        )}
                     </Section>
                     <Spacer rem={1.5} />
                   </Fade>
