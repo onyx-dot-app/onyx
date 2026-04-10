@@ -1211,16 +1211,17 @@ def get_ollama_available_models(
     return sorted_results
 
 
-def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
+def _get_openrouter_models_response(api_base: str, api_key: str | None) -> dict:
     """Perform GET to OpenRouter /models and return parsed JSON."""
     cleaned_api_base = api_base.strip().rstrip("/")
     url = f"{cleaned_api_base}/models"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
+    headers: dict[str, str] = {
         # Optional headers recommended by OpenRouter for attribution
         "HTTP-Referer": "https://onyx.app",
         "X-Title": "Onyx",
     }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     try:
         response = httpx.get(url, headers=headers, timeout=10.0)
         response.raise_for_status()
@@ -1243,11 +1244,8 @@ def get_openrouter_available_models(
     Parses id, name (display), context_length, and architecture.input_modalities.
     """
 
-    api_key = (
-        _resolve_api_key(
-            request.api_key, request.provider_name, request.api_base, db_session
-        )
-        or request.api_key
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_name, request.api_base, db_session
     )
 
     response_json = _get_openrouter_models_response(
@@ -1444,7 +1442,7 @@ def get_litellm_available_models(
     )
 
     response_json = _get_litellm_models_response(
-        api_key=api_key or request.api_key, api_base=request.api_base
+        api_key=api_key, api_base=request.api_base
     )
 
     models = response_json.get("data", [])
@@ -1501,7 +1499,7 @@ def get_litellm_available_models(
     return sorted_results
 
 
-def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
+def _get_litellm_models_response(api_key: str | None, api_base: str) -> dict:
     """Perform GET to Litellm proxy /api/v1/models and return parsed JSON."""
     cleaned_api_base = api_base.strip().rstrip("/")
     url = f"{cleaned_api_base}/v1/models"
