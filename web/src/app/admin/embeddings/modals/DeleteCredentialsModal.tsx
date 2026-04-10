@@ -28,7 +28,7 @@ export default function DeleteCredentialsModal({
           title={markdown(
             `Delete *${getFormattedProviderName(
               modelProvider.provider_type
-            )}* Credentials?`
+            )}* credentials?`
           )}
           onClose={onCancel}
         />

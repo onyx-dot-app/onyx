@@ -176,7 +176,7 @@ export default function ChangeCredentialsModal({
           title={markdown(
             `Modify your *${getFormattedProviderName(
               provider.provider_type
-            )}* ${isProxy ? "Configuration" : "key"}`
+            )}* ${isProxy ? "configuration" : "key"}`
           )}
           onClose={onCancel}
         />
