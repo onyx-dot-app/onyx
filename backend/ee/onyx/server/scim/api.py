@@ -66,15 +66,18 @@ from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 # Group names reserved for system default groups (seeded by migration).
 _RESERVED_GROUP_NAMES = frozenset({"Admin", "Basic"})
 
-# Arbitrary fixed ID for the pg_advisory_xact_lock that serializes
+# First key for the two-argument pg_advisory_xact_lock that serializes
 # seat-allocation checks during concurrent SCIM provisioning requests.
-_SEAT_LOCK_ID = 294837
+# The second key is derived from the tenant ID so that different tenants
+# do not block each other.
+_SEAT_LOCK_KEY1 = 294837
 
 
 class ScimJSONResponse(JSONResponse):
@@ -213,38 +216,38 @@ def _apply_exclusions(
     return data
 
 
-def _acquire_seat_lock(dal: ScimDAL) -> None:
-    """Acquire a transaction-scoped advisory lock for seat allocation.
-
-    IdPs (Okta, Azure AD) send SCIM provisioning requests in parallel
-    batches.  Without serialization the seat-availability check is
-    vulnerable to a TOCTOU race: N concurrent requests each see "seats
-    available", all insert, and the tenant ends up over its seat limit.
-
-    ``pg_advisory_xact_lock`` serializes these checks within the same
-    database transaction and is released automatically on COMMIT /
-    ROLLBACK — no explicit cleanup needed.
-    """
-    dal.session.execute(
-        text("SELECT pg_advisory_xact_lock(:lock_id)"),
-        {"lock_id": _SEAT_LOCK_ID},
-    )
-
-
 def _check_seat_availability(dal: ScimDAL) -> str | None:
     """Return an error message if seat limit is reached, else None.
 
-    Acquires a transaction-scoped advisory lock first so that
-    concurrent SCIM requests are serialized — the lock is held until
-    the caller commits or rolls back, preventing over-allocation.
-    """
-    _acquire_seat_lock(dal)
+    Acquires a transaction-scoped advisory lock so that concurrent
+    SCIM requests are serialized.  IdPs like Okta send provisioning
+    requests in parallel batches — without serialization the check is
+    vulnerable to a TOCTOU race where N concurrent requests each see
+    "seats available", all insert, and the tenant ends up over its
+    seat limit.
 
+    The lock is held until the caller's next COMMIT or ROLLBACK, which
+    means the seat count cannot change between the check here and the
+    subsequent INSERT/UPDATE.  Each call site in this module follows
+    the pattern: _check_seat_availability → write → dal.commit()
+    (which releases the lock for the next waiting request).
+    """
     check_fn = fetch_ee_implementation_or_noop(
         "onyx.db.license", "check_seat_availability", None
     )
     if check_fn is None:
         return None
+
+    # Transaction-scoped advisory lock — released on dal.commit() / dal.rollback().
+    # Uses the two-argument form so each tenant gets its own lock and
+    # unrelated tenants never block each other.
+    tenant_id = get_current_tenant_id()
+    tenant_key = hash(tenant_id) & 0x7FFFFFFF
+    dal.session.execute(
+        text("SELECT pg_advisory_xact_lock(:key1, :key2)"),
+        {"key1": _SEAT_LOCK_KEY1, "key2": tenant_key},
+    )
+
     result = check_fn(dal.session, seats_needed=1)
     if not result.available:
         return result.error_message or "Seat limit reached"

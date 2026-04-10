@@ -10,10 +10,9 @@ from uuid import uuid4
 from fastapi import Response
 from sqlalchemy.exc import IntegrityError
 
-from ee.onyx.server.scim.api import _acquire_seat_lock
 from ee.onyx.server.scim.api import _check_seat_availability
 from ee.onyx.server.scim.api import _scim_name_to_str
-from ee.onyx.server.scim.api import _SEAT_LOCK_ID
+from ee.onyx.server.scim.api import _SEAT_LOCK_KEY1
 from ee.onyx.server.scim.api import create_user
 from ee.onyx.server.scim.api import delete_user
 from ee.onyx.server.scim.api import get_user
@@ -750,8 +749,10 @@ class TestEmailCasePreservation:
 class TestSeatLock:
     """Tests for the advisory lock in _check_seat_availability."""
 
+    @patch("ee.onyx.server.scim.api.get_current_tenant_id", return_value="tenant_abc")
     def test_acquires_advisory_lock_before_checking(
         self,
+        _mock_tenant: MagicMock,
         mock_dal: MagicMock,
     ) -> None:
         """The advisory lock must be acquired before the seat check runs."""
@@ -781,16 +782,38 @@ class TestSeatLock:
 
         assert call_order == ["lock", "check"]
 
-    def test_lock_uses_correct_lock_id(
+    @patch("ee.onyx.server.scim.api.get_current_tenant_id", return_value="tenant_xyz")
+    def test_lock_uses_tenant_scoped_key(
+        self,
+        _mock_tenant: MagicMock,
+        mock_dal: MagicMock,
+    ) -> None:
+        """The lock must use the two-arg form with a tenant-derived key."""
+        mock_result = MagicMock()
+        mock_result.available = True
+        mock_check = MagicMock(return_value=mock_result)
+
+        with patch(
+            "ee.onyx.server.scim.api.fetch_ee_implementation_or_noop",
+            return_value=mock_check,
+        ):
+            _check_seat_availability(mock_dal)
+
+        mock_dal.session.execute.assert_called_once()
+        params = mock_dal.session.execute.call_args[0][1]
+        assert params["key1"] == _SEAT_LOCK_KEY1
+        assert params["key2"] == hash("tenant_xyz") & 0x7FFFFFFF
+
+    def test_no_lock_when_ee_absent(
         self,
         mock_dal: MagicMock,
     ) -> None:
-        """The lock ID must match the module constant."""
-        _acquire_seat_lock(mock_dal)
+        """No advisory lock should be acquired when the EE check is absent."""
+        with patch(
+            "ee.onyx.server.scim.api.fetch_ee_implementation_or_noop",
+            return_value=None,
+        ):
+            result = _check_seat_availability(mock_dal)
 
-        mock_dal.session.execute.assert_called_once()
-        call_args = mock_dal.session.execute.call_args
-        params = (
-            call_args[0][1] if len(call_args[0]) > 1 else call_args[1].get("params")
-        )
-        assert params == {"lock_id": _SEAT_LOCK_ID}
+        assert result is None
+        mock_dal.session.execute.assert_not_called()
