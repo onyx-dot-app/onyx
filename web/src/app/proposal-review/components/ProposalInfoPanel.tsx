@@ -35,18 +35,19 @@ const STATUS_TAG: Record<ProposalStatus, { color: TagColor; label: string }> = {
 
 interface MetadataRowProps {
   label: string;
-  value: string | undefined;
+  value: string | string[] | undefined;
 }
 
 function MetadataRow({ label, value }: MetadataRowProps) {
   if (!value) return null;
+  const display = Array.isArray(value) ? value.join(", ") : value;
   return (
     <div className="flex justify-between gap-2 py-1">
       <Text font="secondary-body" color="text-03" nowrap>
         {label}
       </Text>
-      <Text font="main-ui-body" color="text-01" as="span">
-        {value}
+      <Text font="main-ui-body" color="text-04" as="span">
+        {display}
       </Text>
     </div>
   );
@@ -87,7 +88,7 @@ export default function ProposalInfoPanel({
       <Card padding="md" border="solid" background="light">
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <Text font="main-ui-action" color="text-01">
+            <Text font="main-ui-action" color="text-04">
               Proposal Details
             </Text>
             <Tag title={statusConfig.label} color={statusConfig.color} />
@@ -113,22 +114,21 @@ export default function ProposalInfoPanel({
                     <SvgExternalLink className="h-3 w-3" />
                   </a>
                 ) : (
-                  <Text font="main-ui-body" color="text-01" as="span">
+                  <Text font="main-ui-body" color="text-04" as="span">
                     {metadata.jira_key}
                   </Text>
                 )}
               </div>
             )}
 
-            <MetadataRow label="Title" value={metadata.title} />
-            <MetadataRow label="PI" value={metadata.pi_name} />
-            <MetadataRow label="Sponsor" value={metadata.sponsor} />
-            <MetadataRow label="Deadline" value={metadata.deadline} />
-            <MetadataRow
-              label="Agreement Type"
-              value={metadata.agreement_type}
-            />
-            <MetadataRow label="Officer" value={metadata.officer} />
+            {Object.entries(metadata)
+              .filter(
+                ([key]) =>
+                  key !== "title" && key !== "link" && key !== "jira_key"
+              )
+              .map(([key, value]) => (
+                <MetadataRow key={key} label={key} value={value} />
+              ))}
           </div>
         </div>
       </Card>
@@ -136,7 +136,7 @@ export default function ProposalInfoPanel({
       {/* Documents section */}
       <Card padding="md" border="solid" background="light">
         <div className="flex flex-col gap-3">
-          <Text font="main-ui-action" color="text-01">
+          <Text font="main-ui-action" color="text-04">
             Documents
           </Text>
 
@@ -166,7 +166,7 @@ export default function ProposalInfoPanel({
                 >
                   <SvgFileText className="h-4 w-4 text-text-03 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <Text font="main-ui-body" color="text-01" nowrap>
+                    <Text font="main-ui-body" color="text-04" nowrap>
                       {doc.file_name}
                     </Text>
                   </div>
@@ -181,7 +181,7 @@ export default function ProposalInfoPanel({
             <Card padding="md" border="dashed" background="light">
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <Text font="secondary-action" color="text-02">
+                  <Text font="secondary-action" color="text-03">
                     {selectedDoc.file_name}
                   </Text>
                   <Button
@@ -194,7 +194,7 @@ export default function ProposalInfoPanel({
                 </div>
                 <div className="max-h-[300px] overflow-y-auto rounded-08 bg-background-neutral-01 p-3">
                   {selectedDoc.extracted_text ? (
-                    <Text font="secondary-mono" color="text-02" as="p">
+                    <Text font="secondary-mono" color="text-03" as="p">
                       {selectedDoc.extracted_text}
                     </Text>
                   ) : (

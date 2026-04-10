@@ -4,13 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.proposal_review.api.models import FindingDecisionCreate
 from onyx.server.features.proposal_review.api.models import FindingDecisionResponse
 from onyx.server.features.proposal_review.api.models import JiraSyncResponse
@@ -29,7 +30,6 @@ router = APIRouter()
 
 @router.post(
     "/findings/{finding_id}/decision",
-    response_model=FindingDecisionResponse,
 )
 def record_finding_decision(
     finding_id: UUID,
@@ -43,12 +43,12 @@ def record_finding_decision(
     # Verify finding exists
     finding = findings_db.get_finding(finding_id, db_session)
     if not finding:
-        raise HTTPException(status_code=404, detail="Finding not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Finding not found")
 
     # Verify the finding's proposal belongs to the current tenant
     proposal = proposals_db.get_proposal(finding.proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Finding not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Finding not found")
 
     decision = decisions_db.upsert_finding_decision(
         finding_id=finding_id,
@@ -76,7 +76,6 @@ def record_finding_decision(
 
 @router.post(
     "/proposals/{proposal_id}/decision",
-    response_model=ProposalDecisionResponse,
     status_code=201,
 )
 def record_proposal_decision(
@@ -89,7 +88,7 @@ def record_proposal_decision(
     tenant_id = get_current_tenant_id()
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     # Map decision to proposal status
     status_map = {
@@ -99,9 +98,9 @@ def record_proposal_decision(
     }
     new_status = status_map.get(request.decision)
     if not new_status:
-        raise HTTPException(
-            status_code=400,
-            detail="decision must be APPROVED, CHANGES_REQUESTED, or REJECTED",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "decision must be APPROVED, CHANGES_REQUESTED, or REJECTED",
         )
 
     # Update proposal status
@@ -134,7 +133,6 @@ def record_proposal_decision(
 
 @router.post(
     "/proposals/{proposal_id}/sync-jira",
-    response_model=JiraSyncResponse,
 )
 def sync_jira(
     proposal_id: UUID,
@@ -151,13 +149,13 @@ def sync_jira(
     tenant_id = get_current_tenant_id()
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     latest_decision = decisions_db.get_latest_proposal_decision(proposal_id, db_session)
     if not latest_decision:
-        raise HTTPException(
-            status_code=400,
-            detail="No decision to sync -- record a proposal decision first",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "No decision to sync -- record a proposal decision first",
         )
 
     if latest_decision.jira_synced:
@@ -171,7 +169,7 @@ def sync_jira(
         sync_decision_to_jira,
     )
 
-    sync_decision_to_jira.delay(str(proposal_id), tenant_id)
+    sync_decision_to_jira.apply_async(args=[str(proposal_id), tenant_id], expires=300)
 
     # Audit log
     decisions_db.create_audit_log(

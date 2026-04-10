@@ -303,10 +303,12 @@ def _find_child_documents(parent_doc: Document, db_session: Session) -> list[Doc
 
     # Child documents have IDs that start with the parent document's ID
     # followed by a path segment (e.g., /attachments/12345)
+    # Escape LIKE wildcards in the document ID
+    escaped_id = parent_doc.id.replace("%", r"\%").replace("_", r"\_")
     child_docs = (
         db_session.query(Document)
         .filter(
-            Document.id.like(f"{parent_doc.id}/%"),
+            Document.id.like(f"{escaped_id}/%"),
             Document.id != parent_doc.id,
         )
         .all()

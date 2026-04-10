@@ -168,13 +168,7 @@ def _get_jira_credentials(
 
     # Extract Jira base URL from connector config
     connector_config = connector.connector_specific_config or {}
-    jira_base_url = connector_config.get("jira_project_url", "")
-    if jira_base_url:
-        # The connector stores the full project URL; extract base
-        from urllib.parse import urlparse
-
-        parsed = urlparse(jira_base_url)
-        jira_base_url = f"{parsed.scheme}://{parsed.netloc}"
+    jira_base_url = connector_config.get("jira_base_url", "")
 
     if not jira_base_url:
         raise ValueError("Could not determine Jira base URL from connector config")

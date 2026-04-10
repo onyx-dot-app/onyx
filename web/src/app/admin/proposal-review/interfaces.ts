@@ -101,7 +101,7 @@ export interface ConfigResponse {
   tenant_id: string;
   jira_connector_id: number | null;
   jira_project_key: string | null;
-  field_mapping: Record<string, string> | null;
+  field_mapping: string[] | null;
   jira_writeback: Record<string, string> | null;
   created_at: string;
   updated_at: string;
@@ -110,8 +110,15 @@ export interface ConfigResponse {
 export interface ConfigUpdate {
   jira_connector_id?: number | null;
   jira_project_key?: string | null;
-  field_mapping?: Record<string, string> | null;
+  field_mapping?: string[] | null;
   jira_writeback?: Record<string, string> | null;
+}
+
+export interface JiraConnectorInfo {
+  id: number;
+  name: string;
+  project_key: string;
+  project_url: string;
 }
 
 /** Labels for display purposes. */

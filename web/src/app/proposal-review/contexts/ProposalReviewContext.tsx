@@ -1,6 +1,6 @@
 "use client";
 
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -29,10 +29,6 @@ interface ProposalReviewContextValue {
   /** Whether findings have been loaded after a completed review. */
   findingsLoaded: boolean;
   setFindingsLoaded: (loaded: boolean) => void;
-
-  /** Whether the left sidebar is folded (collapsed). */
-  leftSidebarFolded: boolean;
-  setLeftSidebarFolded: React.Dispatch<React.SetStateAction<boolean>>;
 
   /** Reset review state (for starting a new review). */
   resetReviewState: () => void;
@@ -65,7 +61,6 @@ export function ProposalReviewProvider({
     null
   );
   const [findingsLoaded, setFindingsLoaded] = useState(false);
-  const [leftSidebarFolded, setLeftSidebarFolded] = useState(false);
 
   const resetReviewState = useCallback(() => {
     setIsReviewRunning(false);
@@ -83,8 +78,6 @@ export function ProposalReviewProvider({
       setCurrentReviewRunId,
       findingsLoaded,
       setFindingsLoaded,
-      leftSidebarFolded,
-      setLeftSidebarFolded,
       resetReviewState,
     }),
     [
@@ -92,7 +85,6 @@ export function ProposalReviewProvider({
       isReviewRunning,
       currentReviewRunId,
       findingsLoaded,
-      leftSidebarFolded,
       resetReviewState,
     ]
   );

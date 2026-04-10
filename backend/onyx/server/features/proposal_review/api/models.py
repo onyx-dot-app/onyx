@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Any
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -70,11 +71,13 @@ class RuleCreate(BaseModel):
     name: str
     description: str | None = None
     category: str | None = None
-    rule_type: str  # DOCUMENT_CHECK | METADATA_CHECK | CROSS_REFERENCE | CUSTOM_NL
-    rule_intent: str = "CHECK"  # CHECK | HIGHLIGHT
+    rule_type: Literal[
+        "DOCUMENT_CHECK", "METADATA_CHECK", "CROSS_REFERENCE", "CUSTOM_NL"
+    ]
+    rule_intent: Literal["CHECK", "HIGHLIGHT"] = "CHECK"
     prompt_template: str
-    source: str = "MANUAL"  # IMPORTED | MANUAL
-    authority: str | None = None  # OVERRIDE | RETURN
+    source: Literal["IMPORTED", "MANUAL"] = "MANUAL"
+    authority: Literal["OVERRIDE", "RETURN"] | None = None
     is_hard_stop: bool = False
     priority: int = 0
 
@@ -133,7 +136,7 @@ class RuleResponse(BaseModel):
 class BulkRuleUpdateRequest(BaseModel):
     """Batch activate/deactivate/delete rules."""
 
-    action: str  # "activate" | "deactivate" | "delete"
+    action: Literal["activate", "deactivate", "delete"]
     rule_ids: list[UUID]
 
 
@@ -305,12 +308,12 @@ class FindingResponse(BaseModel):
 
 
 class FindingDecisionCreate(BaseModel):
-    action: str  # VERIFIED | ISSUE | NOT_APPLICABLE | OVERRIDDEN
+    action: Literal["VERIFIED", "ISSUE", "NOT_APPLICABLE", "OVERRIDDEN"]
     notes: str | None = None
 
 
 class ProposalDecisionCreate(BaseModel):
-    decision: str  # APPROVED | CHANGES_REQUESTED | REJECTED
+    decision: Literal["APPROVED", "CHANGES_REQUESTED", "REJECTED"]
     notes: str | None = None
 
 
@@ -346,7 +349,7 @@ class ProposalDecisionResponse(BaseModel):
 class ConfigUpdate(BaseModel):
     jira_connector_id: int | None = None
     jira_project_key: str | None = None
-    field_mapping: dict[str, Any] | None = None
+    field_mapping: list[str] | None = None  # List of visible metadata keys
     jira_writeback: dict[str, Any] | None = None
 
 
@@ -355,7 +358,7 @@ class ConfigResponse(BaseModel):
     tenant_id: str
     jira_connector_id: int | None
     jira_project_key: str | None
-    field_mapping: dict[str, Any] | None
+    field_mapping: list[str] | None
     jira_writeback: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
@@ -446,3 +449,15 @@ class AuditLogEntry(BaseModel):
 class JiraSyncResponse(BaseModel):
     success: bool
     message: str
+
+
+# =============================================================================
+# Jira Connector Discovery Schemas
+# =============================================================================
+
+
+class JiraConnectorInfo(BaseModel):
+    id: int
+    name: str
+    project_key: str
+    project_url: str

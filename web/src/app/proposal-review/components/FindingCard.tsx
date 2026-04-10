@@ -9,6 +9,7 @@ import {
   SvgShield,
 } from "@opal/icons";
 import { cn } from "@/lib/utils";
+import { Section } from "@/layouts/general-layouts";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { toast } from "@/hooks/useToast";
 import { submitFindingDecision } from "@/app/proposal-review/services/apiServices";
@@ -119,9 +120,12 @@ export default function FindingCard({
       border="solid"
       background={rule_is_hard_stop && isActionable ? "heavy" : "light"}
     >
-      <div
+      <Section
+        gap={0.75}
+        height="auto"
+        justifyContent="start"
+        alignItems="start"
         className={cn(
-          "flex flex-col gap-3",
           rule_is_hard_stop &&
             isActionable &&
             "border-l-2 border-status-error-03 pl-3"
@@ -141,7 +145,7 @@ export default function FindingCard({
           }}
         >
           <Tag title={verdictConfig.label} color={verdictConfig.color} />
-          <Text font="main-ui-action" color="text-01" as="span">
+          <Text font="main-ui-action" color="text-04" as="span">
             {rule_name ?? "Unnamed Rule"}
           </Text>
           {rule_is_hard_stop && isActionable && (
@@ -156,24 +160,30 @@ export default function FindingCard({
 
         {/* Expanded content */}
         {isExpanded && (
-          <div className="flex flex-col gap-3 pl-2">
+          <Section
+            gap={0.75}
+            height="auto"
+            justifyContent="start"
+            alignItems="start"
+            className="pl-2"
+          >
             {/* Explanation */}
             {explanation && (
-              <Text font="main-ui-body" color="text-02" as="p">
+              <Text font="main-ui-body" color="text-03" as="p">
                 {explanation}
               </Text>
             )}
 
             {/* Evidence */}
             {evidence && (
-              <div className="rounded-08 bg-background-neutral-02 p-3">
+              <Card padding="sm" rounding="sm" background="heavy">
                 <Text font="secondary-body" color="text-03" as="p">
                   Evidence:
                 </Text>
-                <Text font="main-ui-body" color="text-02" as="p">
+                <Text font="main-ui-body" color="text-03" as="p">
                   {`\u201C${evidence}\u201D`}
                 </Text>
-              </div>
+              </Card>
             )}
 
             {/* Suggested action */}
@@ -188,8 +198,20 @@ export default function FindingCard({
 
             {/* Action buttons + notes */}
             {(isActionable || isNeedsReview) && (
-              <div className="flex flex-col gap-2 pt-2 border-t border-border-01">
-                <div className="flex items-center gap-2">
+              <Section
+                gap={0.5}
+                height="auto"
+                justifyContent="start"
+                alignItems="start"
+                className="pt-2 border-t border-border-01"
+              >
+                <Section
+                  flexDirection="row"
+                  gap={0.5}
+                  height="auto"
+                  justifyContent="start"
+                  alignItems="center"
+                >
                   <Button
                     variant={
                       currentAction === "VERIFIED" ? "action" : "default"
@@ -231,7 +253,7 @@ export default function FindingCard({
                   >
                     N/A
                   </Button>
-                </div>
+                </Section>
 
                 <InputTextArea
                   placeholder="Notes (optional)"
@@ -240,11 +262,11 @@ export default function FindingCard({
                   onBlur={handleNotesBlur}
                   rows={2}
                 />
-              </div>
+              </Section>
             )}
-          </div>
+          </Section>
         )}
-      </div>
+      </Section>
     </Card>
   );
 }

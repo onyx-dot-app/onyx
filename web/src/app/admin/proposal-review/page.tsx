@@ -15,6 +15,7 @@ import {
   SvgCheckSquare,
   SvgEdit,
   SvgMoreHorizontal,
+  SvgSettings,
   SvgTrash,
 } from "@opal/icons";
 import { Form, Formik } from "formik";
@@ -119,7 +120,7 @@ function RulesetsPage() {
         header: "Rules",
         width: { weight: 10, minWidth: 80 },
         cell: (row) => (
-          <Text font="main-ui-body" color="text-02">
+          <Text font="main-ui-body" color="text-03">
             {String(row.rules.length)}
           </Text>
         ),
@@ -229,6 +230,15 @@ function RulesetsPage() {
         icon={route.icon}
         description="Manage review rulesets for automated proposal evaluation."
         separator
+        rightChildren={
+          <Button
+            icon={SvgSettings}
+            prominence="secondary"
+            onClick={() => router.push("/admin/proposal-review/settings")}
+          >
+            Jira Integration
+          </Button>
+        }
       />
 
       <SettingsLayouts.Body>

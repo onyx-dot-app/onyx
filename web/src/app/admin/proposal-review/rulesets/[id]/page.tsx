@@ -446,28 +446,30 @@ function RulesetDetailPage() {
         separator
       />
       <SettingsLayouts.Body>
-        {/* Ruleset toggles */}
-        <div className="flex items-center gap-4 pb-2">
-          <Button
-            prominence={ruleset.is_active ? "primary" : "secondary"}
-            size="sm"
-            onClick={handleToggleActive}
-          >
-            {ruleset.is_active ? "Active" : "Inactive"}
-          </Button>
-          <Button
-            prominence={ruleset.is_default ? "primary" : "secondary"}
-            size="sm"
-            onClick={handleToggleDefault}
-          >
-            {ruleset.is_default ? "Default Ruleset" : "Not Default"}
-          </Button>
-        </div>
+        {/* Ruleset toggles — only show when rules exist */}
+        {ruleset.rules.length > 0 && (
+          <div className="flex items-center gap-4 pb-2">
+            <Button
+              prominence={ruleset.is_active ? "primary" : "secondary"}
+              size="sm"
+              onClick={handleToggleActive}
+            >
+              {ruleset.is_active ? "Active" : "Inactive"}
+            </Button>
+            <Button
+              prominence={ruleset.is_default ? "primary" : "secondary"}
+              size="sm"
+              onClick={handleToggleDefault}
+            >
+              {ruleset.is_default ? "Default Ruleset" : "Not Default"}
+            </Button>
+          </div>
+        )}
 
         {/* Batch action bar */}
         {selectedRuleIds.size > 0 && (
           <div className="flex items-center gap-3 p-3 bg-background-neutral-02 rounded-08">
-            <Text font="main-ui-action" color="text-02">
+            <Text font="main-ui-action" color="text-03">
               {`${selectedRuleIds.size} selected`}
             </Text>
             <Button
@@ -508,7 +510,7 @@ function RulesetDetailPage() {
         ) : (
           Object.entries(groupedRules).map(([category, rules]) => (
             <div key={category} className="flex flex-col gap-2">
-              <Text font="main-ui-action" color="text-02">
+              <Text font="main-ui-action" color="text-03">
                 {category}
               </Text>
               <Table

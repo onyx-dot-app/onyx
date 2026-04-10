@@ -5,6 +5,7 @@ from datetime import timezone
 from uuid import UUID
 
 from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.server.features.proposal_review.db.models import ProposalReviewProposal
@@ -64,7 +65,14 @@ def get_or_create_proposal(
         tenant_id=tenant_id,
     )
     db_session.add(proposal)
-    db_session.flush()
+    try:
+        db_session.flush()
+    except IntegrityError:
+        db_session.rollback()
+        proposal = get_proposal_by_document_id(document_id, tenant_id, db_session)
+        if proposal is None:
+            raise
+        return proposal
     logger.info(f"Lazily created proposal {proposal.id} for document {document_id}")
     return proposal
 

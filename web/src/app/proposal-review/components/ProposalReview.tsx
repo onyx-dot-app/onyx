@@ -2,13 +2,13 @@
 
 import { useCallback } from "react";
 import { Text, Button } from "@opal/components";
-import { SvgArrowLeft, SvgSidebar } from "@opal/icons";
+import { SvgArrowLeft } from "@opal/icons";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useProposal } from "@/app/proposal-review/hooks/useProposal";
 import { useProposalReviewContext } from "@/app/proposal-review/contexts/ProposalReviewContext";
-import useScreenSize from "@/hooks/useScreenSize";
+
 import ProposalInfoPanel from "@/app/proposal-review/components/ProposalInfoPanel";
 import ChecklistPanel from "@/app/proposal-review/components/ChecklistPanel";
 import ReviewSidebar from "@/app/proposal-review/components/ReviewSidebar";
@@ -27,9 +27,7 @@ interface ProposalReviewProps {
 
 export default function ProposalReview({ proposalId }: ProposalReviewProps) {
   const { proposal, isLoading, error, mutate } = useProposal(proposalId);
-  const { leftSidebarFolded, setLeftSidebarFolded } =
-    useProposalReviewContext();
-  const { isMobile } = useScreenSize();
+  useProposalReviewContext(); // ensure we're inside the provider
 
   const handleDecisionSubmitted = useCallback(() => {
     mutate();
@@ -68,15 +66,6 @@ export default function ProposalReview({ proposalId }: ProposalReviewProps) {
     <div className="flex flex-col h-full w-full">
       {/* Top header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border-01 shrink-0">
-        {/* Mobile sidebar toggle */}
-        {isMobile && leftSidebarFolded && (
-          <Button
-            icon={SvgSidebar}
-            onClick={() => setLeftSidebarFolded(false)}
-            prominence="tertiary"
-            size="sm"
-          />
-        )}
         <Button
           variant="default"
           prominence="tertiary"
@@ -84,7 +73,7 @@ export default function ProposalReview({ proposalId }: ProposalReviewProps) {
           size="sm"
           href="/proposal-review"
         />
-        <Text font="main-ui-action" color="text-01">
+        <Text font="main-ui-action" color="text-04">
           {proposal.metadata.title ?? "Untitled Proposal"}
         </Text>
         {proposal.metadata.jira_key && (

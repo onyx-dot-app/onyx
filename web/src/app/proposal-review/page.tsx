@@ -1,11 +1,8 @@
 "use client";
 
-import { SvgShield, SvgSidebar } from "@opal/icons";
+import { SvgShield } from "@opal/icons";
 import { Content } from "@opal/layouts";
-import { Button } from "@opal/components";
 import ProposalQueue from "@/app/proposal-review/components/ProposalQueue";
-import { useProposalReviewContext } from "@/app/proposal-review/contexts/ProposalReviewContext";
-import useScreenSize from "@/hooks/useScreenSize";
 
 /**
  * Proposal Review Queue Page
@@ -14,23 +11,10 @@ import useScreenSize from "@/hooks/useScreenSize";
  * of proposals imported from Jira.
  */
 export default function ProposalReviewPage() {
-  const { leftSidebarFolded, setLeftSidebarFolded } =
-    useProposalReviewContext();
-  const { isMobile } = useScreenSize();
-
   return (
     <div className="flex flex-col h-full w-full">
       {/* Header */}
       <div className="flex items-center gap-3 px-6 py-4 border-b border-border-01 shrink-0">
-        {/* Mobile sidebar toggle */}
-        {isMobile && leftSidebarFolded && (
-          <Button
-            icon={SvgSidebar}
-            onClick={() => setLeftSidebarFolded(false)}
-            prominence="tertiary"
-            size="sm"
-          />
-        )}
         <Content
           sizePreset="section"
           variant="heading"

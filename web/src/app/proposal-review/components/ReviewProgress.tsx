@@ -17,7 +17,7 @@ export default function ReviewProgress({ reviewStatus }: ReviewProgressProps) {
   return (
     <div className="flex flex-col gap-2 p-4">
       <div className="flex items-center justify-between">
-        <Text font="main-ui-action" color="text-01">
+        <Text font="main-ui-action" color="text-04">
           {isFailed ? "Review failed" : "Evaluating rules..."}
         </Text>
         <Text font="secondary-body" color="text-03">

@@ -1,16 +1,19 @@
 """API endpoints for proposals and proposal documents."""
 
 import io
+from datetime import datetime
+from datetime import timezone
 from typing import Any
 from uuid import UUID
+from uuid import uuid4
 
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Form
-from fastapi import HTTPException
 from fastapi import UploadFile
 from sqlalchemy import func
 from sqlalchemy import or_
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -21,6 +24,8 @@ from onyx.db.models import Connector
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.server.features.proposal_review.api.models import ProposalDocumentResponse
 from onyx.server.features.proposal_review.api.models import ProposalListResponse
@@ -42,37 +47,54 @@ router = APIRouter()
 
 def _resolve_document_metadata(
     document: Document,
-    field_mapping: dict[str, Any] | None,
+    visible_fields: list[str] | None,
 ) -> dict[str, Any]:
-    """Resolve metadata from a Document row using the field_mapping config.
+    """Resolve metadata from a Document's tags, filtered to visible fields.
 
-    The field_mapping maps raw Jira metadata keys to display names, e.g.
-    {"customfield_10001": "PI Name", "customfield_10002": "Sponsor"}.
-
-    If no field_mapping, returns the raw document metadata.
+    Jira custom fields are stored as Tag rows (tag_key / tag_value)
+    linked to the document via document__tag.  visible_fields selects
+    which tag keys to include.  If None/empty, returns all tags.
     """
-    # Start with the JSONB doc_metadata column (the actual metadata values)
-    raw_metadata: dict[str, Any] = dict(document.doc_metadata or {})
+    # Build metadata from the document's tags
+    raw_metadata: dict[str, Any] = {}
+    for tag in document.tags:
+        key = tag.tag_key
+        value = tag.tag_value
+        # Tags with is_list=True can have multiple values for the same key
+        if tag.is_list:
+            raw_metadata.setdefault(key, [])
+            raw_metadata[key].append(value)
+        else:
+            raw_metadata[key] = value
 
-    # Always include title and link from the document row
-    raw_metadata["title"] = document.semantic_id
+    # Extract jira_key from tags and clean title from semantic_id.
+    # Jira semantic_id is "KEY-123: Summary Text" — split to isolate each.
+    jira_key = raw_metadata.get("key", "")
+    title = document.semantic_id or ""
+    if title and ": " in title:
+        title = title.split(": ", 1)[1]
+
+    raw_metadata["jira_key"] = jira_key
+    raw_metadata["title"] = title
     raw_metadata["link"] = document.link
 
-    if not field_mapping:
+    if not visible_fields:
         return raw_metadata
 
-    # Build a resolved dict with display names mapped from raw metadata keys
+    # Filter to only the selected fields, plus always include core fields
     resolved: dict[str, Any] = {
+        "jira_key": raw_metadata.get("jira_key"),
         "title": raw_metadata.get("title"),
         "link": raw_metadata.get("link"),
     }
-    for raw_key, display_name in field_mapping.items():
-        resolved[display_name] = raw_metadata.get(raw_key)
+    for key in visible_fields:
+        if key in raw_metadata:
+            resolved[key] = raw_metadata[key]
 
     return resolved
 
 
-@router.get("/proposals", response_model=ProposalListResponse)
+@router.get("/proposals")
 def list_proposals(
     status: str | None = None,
     limit: int = 100,
@@ -86,7 +108,8 @@ def list_proposals(
     LEFT JOINs proposal_review_proposal for review state, and resolves
     metadata field names via the field_mapping config.
 
-    Creates thin proposal_review_proposal records lazily if they don't exist.
+    Documents without a proposal record are returned with status PENDING
+    without persisting any new rows (read-only endpoint).
     """
     tenant_id = get_current_tenant_id()
 
@@ -102,16 +125,20 @@ def list_proposals(
             config_missing=True,
         )
 
-    field_mapping = config.field_mapping if config else None
+    visible_fields = config.field_mapping
 
     # Query documents from the configured Jira connector only,
     # LEFT JOIN proposal state for review tracking.
     # NOTE: Tenant isolation is handled at the schema level (schema-per-tenant).
     # The DB session is already scoped to the current tenant's schema, so
     # cross-tenant data leakage is prevented by the connection itself.
-    query = db_session.query(Document, ProposalReviewProposal).outerjoin(
-        ProposalReviewProposal,
-        Document.id == ProposalReviewProposal.document_id,
+    query = (
+        db_session.query(Document, ProposalReviewProposal)
+        .outerjoin(
+            ProposalReviewProposal,
+            Document.id == ProposalReviewProposal.document_id,
+        )
+        .options(selectinload(Document.tags))
     )
 
     # Filter to only documents from the configured Jira connector
@@ -140,8 +167,9 @@ def list_proposals(
             )
         )
 
-    # Deduplicate rows that can arise from multiple connector-credential pairs
-    query = query.distinct(Document.id)
+    # Exclude attachment documents — they are children of issue documents
+    # and have "/attachments/" in their document ID.
+    query = query.filter(~Document.id.contains("/attachments/"))
 
     # If status filter is specified, only show documents with matching proposal status.
     # PENDING is special: documents without a proposal record are implicitly pending.
@@ -156,31 +184,42 @@ def list_proposals(
         else:
             query = query.filter(ProposalReviewProposal.status == status)
 
-    # Use distinct count to avoid inflation from multi-row JOINs
-    # (a Document can appear in multiple ConnectorCredentialPairs).
+    # Count before adding DISTINCT ON — count(distinct(...)) handles
+    # deduplication on its own and conflicts with DISTINCT ON.
     total_count = (
         query.with_entities(func.count(func.distinct(Document.id))).scalar() or 0
     )
+
+    # Deduplicate rows that can arise from multiple connector-credential pairs.
+    # Applied after counting to avoid the DISTINCT ON + aggregate conflict.
+    # ORDER BY Document.id is required for DISTINCT ON to be deterministic.
+    query = query.distinct(Document.id).order_by(Document.id)
     results = query.offset(offset).limit(limit).all()
 
     proposals: list[ProposalResponse] = []
     for document, proposal in results:
-        # Lazily create proposal record if it doesn't exist
         if proposal is None:
-            proposal = proposals_db.get_or_create_proposal(
-                document_id=document.id,
-                tenant_id=tenant_id,
-                db_session=db_session,
+            # Don't create DB records during GET — treat as pending
+            metadata = _resolve_document_metadata(document, visible_fields)
+            proposals.append(
+                ProposalResponse(
+                    id=uuid4(),  # temporary, not persisted
+                    document_id=document.id,
+                    tenant_id=tenant_id,
+                    status="PENDING",
+                    created_at=document.doc_updated_at or datetime.now(timezone.utc),
+                    updated_at=document.doc_updated_at or datetime.now(timezone.utc),
+                    metadata=metadata,
+                )
             )
-
-        metadata = _resolve_document_metadata(document, field_mapping)
+            continue
+        metadata = _resolve_document_metadata(document, visible_fields)
         proposals.append(ProposalResponse.from_model(proposal, metadata=metadata))
 
-    db_session.commit()
     return ProposalListResponse(proposals=proposals, total_count=total_count)
 
 
-@router.get("/proposals/{proposal_id}", response_model=ProposalResponse)
+@router.get("/proposals/{proposal_id}")
 def get_proposal(
     proposal_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
@@ -190,20 +229,21 @@ def get_proposal(
     tenant_id = get_current_tenant_id()
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     # Load the linked Document for metadata
     document = (
         db_session.query(Document)
+        .options(selectinload(Document.tags))
         .filter(Document.id == proposal.document_id)
         .one_or_none()
     )
     config = config_db.get_config(tenant_id, db_session)
-    field_mapping = config.field_mapping if config else None
+    visible_fields = config.field_mapping if config else None
 
     metadata: dict[str, Any] = {}
     if document:
-        metadata = _resolve_document_metadata(document, field_mapping)
+        metadata = _resolve_document_metadata(document, visible_fields)
 
     return ProposalResponse.from_model(proposal, metadata=metadata)
 
@@ -215,7 +255,6 @@ def get_proposal(
 
 @router.post(
     "/proposals/{proposal_id}/documents",
-    response_model=ProposalDocumentResponse,
     status_code=201,
 )
 def upload_document(
@@ -229,25 +268,23 @@ def upload_document(
     tenant_id = get_current_tenant_id()
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     # Read file content
     try:
         file_bytes = file.file.read()
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to read uploaded file: {str(e)}",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Failed to read uploaded file: {str(e)}",
         )
 
     # Validate file size
     if len(file_bytes) > DOCUMENT_UPLOAD_MAX_FILE_SIZE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"File size {len(file_bytes)} bytes exceeds maximum "
-                f"allowed size of {DOCUMENT_UPLOAD_MAX_FILE_SIZE_BYTES} bytes"
-            ),
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            f"File size {len(file_bytes)} bytes exceeds maximum "
+            f"allowed size of {DOCUMENT_UPLOAD_MAX_FILE_SIZE_BYTES} bytes",
         )
 
     # Determine file type from filename
@@ -284,10 +321,7 @@ def upload_document(
     return ProposalDocumentResponse.from_model(doc)
 
 
-@router.get(
-    "/proposals/{proposal_id}/documents",
-    response_model=list[ProposalDocumentResponse],
-)
+@router.get("/proposals/{proposal_id}/documents")
 def list_documents(
     proposal_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
@@ -297,7 +331,7 @@ def list_documents(
     tenant_id = get_current_tenant_id()
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     docs = (
         db_session.query(ProposalReviewDocument)
@@ -320,7 +354,7 @@ def delete_document(
     tenant_id = get_current_tenant_id()
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     doc = (
         db_session.query(ProposalReviewDocument)
@@ -331,6 +365,6 @@ def delete_document(
         .one_or_none()
     )
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Document not found")
     db_session.delete(doc)
     db_session.commit()

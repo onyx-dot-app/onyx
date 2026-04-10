@@ -4,8 +4,12 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.db.models import Document__Tag
+from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import Tag
 from onyx.server.features.proposal_review.db.models import ProposalReviewConfig
 from onyx.utils.logger import setup_logger
 
@@ -29,7 +33,7 @@ def upsert_config(
     db_session: Session,
     jira_connector_id: int | None = None,
     jira_project_key: str | None = None,
-    field_mapping: dict[str, Any] | None = None,
+    field_mapping: list[str] | None = None,
     jira_writeback: dict[str, Any] | None = None,
 ) -> ProposalReviewConfig:
     """Create or update the tenant config."""
@@ -60,3 +64,30 @@ def upsert_config(
     db_session.flush()
     logger.info(f"Created proposal review config for tenant {tenant_id}")
     return config
+
+
+def get_connector_metadata_keys(
+    connector_id: int,
+    db_session: Session,
+) -> list[str]:
+    """Return distinct metadata tag keys for documents from a connector.
+
+    Jira custom fields are stored as tags (tag_key / tag_value) linked
+    to documents via the document__tag join table.
+    """
+    stmt = (
+        select(Tag.tag_key)
+        .select_from(Tag)
+        .join(Document__Tag, Tag.id == Document__Tag.tag_id)
+        .join(
+            DocumentByConnectorCredentialPair,
+            Document__Tag.document_id == DocumentByConnectorCredentialPair.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+        )
+        .distinct()
+        .limit(500)
+    )
+    rows = db_session.execute(stmt).all()
+    return sorted(row[0] for row in rows)

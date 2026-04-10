@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -16,6 +17,7 @@ import type {
 const API_URL = "/api/proposal-review/config";
 
 function ProposalReviewSettingsPage() {
+  const router = useRouter();
   const {
     data: config,
     isLoading,
@@ -39,9 +41,11 @@ function ProposalReviewSettingsPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgSettings}
-        title="Proposal Review Settings"
-        description="Configure Jira integration and field mappings."
+        title="Jira Integration"
+        description="Configure which Jira connector to use and how fields are mapped."
         separator
+        backButton
+        onBack={() => router.push("/admin/proposal-review")}
       />
       <SettingsLayouts.Body>
         {isLoading && <SimpleLoader />}
@@ -54,7 +58,13 @@ function ProposalReviewSettingsPage() {
             }
           />
         )}
-        {config && <SettingsForm config={config} onSave={handleSave} />}
+        {config && (
+          <SettingsForm
+            config={config}
+            onSave={handleSave}
+            onCancel={() => router.push("/admin/proposal-review")}
+          />
+        )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

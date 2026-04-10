@@ -4,6 +4,7 @@ import React, { useState, useRef } from "react";
 import { Text, Tag } from "@opal/components";
 import { Button } from "@opal/components/buttons/button/components";
 import { SvgUploadCloud } from "@opal/icons";
+import { IllustrationContent } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
@@ -168,7 +169,7 @@ function ImportFlow({
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <Modal.Content width="lg" height="lg">
+      <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgUploadCloud}
           title="Import from Checklist"
@@ -178,16 +179,12 @@ function ImportFlow({
 
         <Modal.Body>
           {step === "upload" && (
-            <div className="flex flex-col items-center gap-4 py-8">
-              <div className="flex flex-col items-center gap-2">
-                <SvgUploadCloud className="h-12 w-12 text-text-03" />
-                <Text font="main-ui-body" color="text-02">
-                  Upload a checklist document (.xlsx, .docx, or .pdf)
-                </Text>
-                <Text font="secondary-body" color="text-04">
-                  The document will be analyzed to extract review rules.
-                </Text>
-              </div>
+            <>
+              <IllustrationContent
+                illustration={SvgUploadCloud}
+                title="Upload a checklist document (.xlsx, .docx, or .pdf)"
+                description="The document will be analyzed to extract review rules."
+              />
 
               <input
                 ref={fileInputRef}
@@ -197,25 +194,27 @@ function ImportFlow({
                 className="hidden"
               />
 
-              <Button
-                icon={SvgUploadCloud}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Choose File
-              </Button>
-            </div>
+              <div className="flex justify-center w-full">
+                <Button
+                  icon={SvgUploadCloud}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Choose File
+                </Button>
+              </div>
+            </>
           )}
 
           {step === "processing" && (
-            <div className="flex flex-col items-center gap-4 py-12">
-              <SimpleLoader />
-              <Text font="main-ui-body" color="text-02">
-                Analyzing document and generating rules...
-              </Text>
-              <Text font="secondary-body" color="text-04">
-                This may take up to a minute.
-              </Text>
-            </div>
+            <>
+              <div className="flex justify-center w-full">
+                <SimpleLoader />
+              </div>
+              <IllustrationContent
+                title="Analyzing document and generating rules..."
+                description="This may take up to a minute."
+              />
+            </>
           )}
 
           {step === "review" && (
@@ -229,7 +228,7 @@ function ImportFlow({
               ) : (
                 <>
                   <div className="flex items-center justify-between">
-                    <Text font="main-ui-body" color="text-02">
+                    <Text font="main-ui-body" color="text-03">
                       {`${importedRules.length} rules generated - ${selectedRuleIds.size} selected`}
                     </Text>
                     <div className="flex gap-2">
@@ -293,7 +292,7 @@ function ImportFlow({
                               />
                             </div>
                             <div className="flex-1">
-                              <Text font="main-ui-body" color="text-01">
+                              <Text font="main-ui-body" color="text-04">
                                 {rule.name}
                               </Text>
                             </div>
@@ -313,7 +312,7 @@ function ImportFlow({
                             <div className="flex flex-col gap-2 px-4 py-3 bg-background-neutral-01 border-b border-border-01">
                               {rule.description && (
                                 <div>
-                                  <Text font="main-ui-action" color="text-02">
+                                  <Text font="main-ui-action" color="text-03">
                                     Description
                                   </Text>
                                   <Text
@@ -326,7 +325,7 @@ function ImportFlow({
                                 </div>
                               )}
                               <div>
-                                <Text font="main-ui-action" color="text-02">
+                                <Text font="main-ui-action" color="text-03">
                                   Prompt Template
                                 </Text>
                                 <pre className="p-2 bg-background-neutral-02 rounded-08 text-sm font-mono text-text-02 whitespace-pre-wrap overflow-x-auto">

@@ -146,6 +146,8 @@ export interface DataTableProps<TData> {
   initialSorting?: SortingState;
   /** Initial column visibility state. */
   initialColumnVisibility?: VisibilityState;
+  /** Called when column visibility changes. Receives the full visibility state. */
+  onColumnVisibilityChange?: (visibility: VisibilityState) => void;
   /** Initial row selection state. Keys are row IDs (from `getRowId`), values are `true`. */
   initialRowSelection?: Record<string, boolean>;
   /** When true AND `initialRowSelection` is non-empty, start in view-selected mode. @default false */

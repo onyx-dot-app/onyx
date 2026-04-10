@@ -1,7 +1,7 @@
 "use client";
 "use no memo";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -103,6 +103,8 @@ interface UseDataTableOptions<TData extends RowData> {
   initialSorting?: SortingState;
   /** Initial column visibility state. @default {} */
   initialColumnVisibility?: VisibilityState;
+  /** Called when column visibility changes. */
+  onColumnVisibilityChange?: (visibility: VisibilityState) => void;
   /** Initial row selection state. Keys are row IDs (from `getRowId`), values are `true`. @default {} */
   initialRowSelection?: RowSelectionState;
   /** When true AND `initialRowSelection` is non-empty, start in view-selected mode (filtered to selected rows). @default false */
@@ -199,6 +201,7 @@ export default function useDataTable<TData extends RowData>(
     columnResizeMode = "onChange",
     initialSorting = [],
     initialColumnVisibility = {},
+    onColumnVisibilityChange: onColumnVisibilityChangeProp,
     initialRowSelection = {},
     initialViewSelected = false,
     getRowId,
@@ -215,8 +218,18 @@ export default function useDataTable<TData extends RowData>(
   const [rowSelection, setRowSelection] =
     useState<RowSelectionState>(initialRowSelection);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
+  const [columnVisibility, setColumnVisibilityRaw] = useState<VisibilityState>(
     initialColumnVisibility
+  );
+  const setColumnVisibility: typeof setColumnVisibilityRaw = useCallback(
+    (updater) => {
+      setColumnVisibilityRaw((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        onColumnVisibilityChangeProp?.(next);
+        return next;
+      });
+    },
+    [onColumnVisibilityChangeProp]
   );
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,

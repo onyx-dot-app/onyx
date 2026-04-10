@@ -402,7 +402,7 @@ class ProposalReviewConfig(Base):
     tenant_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     jira_connector_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     jira_project_key: Mapped[str | None] = mapped_column(Text, nullable=True)
-    field_mapping: Mapped[dict | None] = mapped_column(PGJSONB(), nullable=True)
+    field_mapping: Mapped[list | None] = mapped_column(PGJSONB(), nullable=True)
     jira_writeback: Mapped[dict | None] = mapped_column(PGJSONB(), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

@@ -1,8 +1,7 @@
 "use client";
 
 import { Form, Formik } from "formik";
-import { Text } from "@opal/components";
-import { Button } from "@opal/components/buttons/button/components";
+import { Button, Text } from "@opal/components";
 import { SvgEdit, SvgPlus } from "@opal/icons";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -70,7 +69,12 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <Modal.Content width="lg" height="lg">
+      <Modal.Content
+        width="md"
+        height="lg"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <Modal.Header
           icon={existingRule ? SvgEdit : SvgPlus}
           title={existingRule ? "Edit Rule" : "Add Rule"}
@@ -112,7 +116,7 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
           }}
         >
           {({ isSubmitting, values }) => (
-            <Form className="w-full overflow-visible">
+            <Form className="w-full">
               <Modal.Body>
                 <VerticalInput
                   name="name"
@@ -171,8 +175,8 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                   />
                 </VerticalInput>
 
-                <div className="flex gap-4">
-                  <div className="flex-1">
+                <div className="flex gap-4 w-full">
+                  <div className="flex-1 min-w-0">
                     <VerticalInput
                       name="rule_type"
                       title="Rule Type"
@@ -233,8 +237,8 @@ function RuleEditor({ open, onClose, onSave, existingRule }: RuleEditorProps) {
                   </div>
                 </div>
 
-                <div className="flex gap-4">
-                  <div className="flex-1">
+                <div className="flex gap-4 w-full">
+                  <div className="flex-1 min-w-0">
                     <VerticalInput
                       name="authority"
                       title="Authority"

@@ -4,7 +4,6 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
@@ -12,6 +11,8 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.proposal_review.api.models import BulkRuleUpdateRequest
 from onyx.server.features.proposal_review.api.models import BulkRuleUpdateResponse
 from onyx.server.features.proposal_review.api.models import ImportResponse
@@ -33,7 +34,7 @@ router = APIRouter()
 # =============================================================================
 
 
-@router.get("/rulesets", response_model=list[RulesetResponse])
+@router.get("/rulesets")
 def list_rulesets(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
     db_session: Session = Depends(get_session),
@@ -44,7 +45,7 @@ def list_rulesets(
     return [RulesetResponse.from_model(rs) for rs in rulesets]
 
 
-@router.post("/rulesets", response_model=RulesetResponse, status_code=201)
+@router.post("/rulesets", status_code=201)
 def create_ruleset(
     request: RulesetCreate,
     user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
@@ -64,7 +65,7 @@ def create_ruleset(
     return RulesetResponse.from_model(ruleset, include_rules=False)
 
 
-@router.get("/rulesets/{ruleset_id}", response_model=RulesetResponse)
+@router.get("/rulesets/{ruleset_id}")
 def get_ruleset(
     ruleset_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
@@ -74,11 +75,11 @@ def get_ruleset(
     tenant_id = get_current_tenant_id()
     ruleset = rulesets_db.get_ruleset(ruleset_id, tenant_id, db_session)
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Ruleset not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
     return RulesetResponse.from_model(ruleset)
 
 
-@router.put("/rulesets/{ruleset_id}", response_model=RulesetResponse)
+@router.put("/rulesets/{ruleset_id}")
 def update_ruleset(
     ruleset_id: UUID,
     request: RulesetUpdate,
@@ -99,7 +100,7 @@ def update_ruleset(
         db_session=db_session,
     )
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Ruleset not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
     db_session.commit()
     return RulesetResponse.from_model(ruleset)
 
@@ -116,7 +117,7 @@ def delete_ruleset(
     tenant_id = get_current_tenant_id()
     deleted = rulesets_db.delete_ruleset(ruleset_id, tenant_id, db_session)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Ruleset not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
     db_session.commit()
 
 
@@ -127,7 +128,6 @@ def delete_ruleset(
 
 @router.post(
     "/rulesets/{ruleset_id}/rules",
-    response_model=RuleResponse,
     status_code=201,
 )
 def create_rule(
@@ -143,7 +143,7 @@ def create_rule(
     tenant_id = get_current_tenant_id()
     ruleset = rulesets_db.get_ruleset(ruleset_id, tenant_id, db_session)
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Ruleset not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
 
     rule = rulesets_db.create_rule(
         ruleset_id=ruleset_id,
@@ -163,7 +163,7 @@ def create_rule(
     return RuleResponse.from_model(rule)
 
 
-@router.put("/rules/{rule_id}", response_model=RuleResponse)
+@router.put("/rules/{rule_id}")
 def update_rule(
     rule_id: UUID,
     request: RuleUpdate,
@@ -177,10 +177,10 @@ def update_rule(
     tenant_id = get_current_tenant_id()
     rule = rulesets_db.get_rule(rule_id, db_session)
     if not rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
     ruleset = rulesets_db.get_ruleset(rule.ruleset_id, tenant_id, db_session)
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
 
     updated_rule = rulesets_db.update_rule(
         rule_id=rule_id,
@@ -197,7 +197,7 @@ def update_rule(
         db_session=db_session,
     )
     if not updated_rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
     db_session.commit()
     return RuleResponse.from_model(updated_rule)
 
@@ -215,20 +215,19 @@ def delete_rule(
     tenant_id = get_current_tenant_id()
     rule = rulesets_db.get_rule(rule_id, db_session)
     if not rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
     ruleset = rulesets_db.get_ruleset(rule.ruleset_id, tenant_id, db_session)
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
 
     deleted = rulesets_db.delete_rule(rule_id, db_session)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
     db_session.commit()
 
 
 @router.post(
     "/rulesets/{ruleset_id}/rules/bulk-update",
-    response_model=BulkRuleUpdateResponse,
 )
 def bulk_update_rules(
     ruleset_id: UUID,
@@ -243,12 +242,12 @@ def bulk_update_rules(
     tenant_id = get_current_tenant_id()
     ruleset = rulesets_db.get_ruleset(ruleset_id, tenant_id, db_session)
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Ruleset not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
 
     if request.action not in ("activate", "deactivate", "delete"):
-        raise HTTPException(
-            status_code=400,
-            detail="action must be 'activate', 'deactivate', or 'delete'",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "action must be 'activate', 'deactivate', or 'delete'",
         )
     # Only operate on rules that belong to this ruleset (tenant-scoped)
     count = rulesets_db.bulk_update_rules(
@@ -260,7 +259,6 @@ def bulk_update_rules(
 
 @router.post(
     "/rulesets/{ruleset_id}/import",
-    response_model=ImportResponse,
 )
 def import_checklist(
     ruleset_id: UUID,
@@ -279,28 +277,26 @@ def import_checklist(
     tenant_id = get_current_tenant_id()
     ruleset = rulesets_db.get_ruleset(ruleset_id, tenant_id, db_session)
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Ruleset not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
 
     # Read the uploaded file content
     try:
         file_content = file.file.read()
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to read uploaded file: {str(e)}",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Failed to read uploaded file: {str(e)}",
         )
 
     if not file_content:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Uploaded file is empty")
 
     # Validate file size
     if len(file_content) > IMPORT_MAX_FILE_SIZE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"File size {len(file_content)} bytes exceeds maximum "
-                f"allowed size of {IMPORT_MAX_FILE_SIZE_BYTES} bytes"
-            ),
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            f"File size {len(file_content)} bytes exceeds maximum "
+            f"allowed size of {IMPORT_MAX_FILE_SIZE_BYTES} bytes",
         )
 
     # Extract text from the file
@@ -322,15 +318,15 @@ def import_checklist(
                 file_name=filename,
             )
         except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to extract text from file: {str(e)}",
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Failed to extract text from file: {str(e)}",
             )
 
     if not extracted_text or not extracted_text.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="No text could be extracted from the uploaded file",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "No text could be extracted from the uploaded file",
         )
 
     # Call the LLM-based checklist importer
@@ -341,7 +337,7 @@ def import_checklist(
     try:
         rule_dicts = import_checklist(extracted_text)
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
     # Save parsed rules to the ruleset as inactive drafts
     created_rules = []
@@ -388,10 +384,10 @@ def test_rule(
     tenant_id = get_current_tenant_id()
     rule = rulesets_db.get_rule(rule_id, db_session)
     if not rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
     ruleset = rulesets_db.get_ruleset(rule.ruleset_id, tenant_id, db_session)
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
 
     from onyx.server.features.proposal_review.engine.context_assembler import (
         ProposalContext,

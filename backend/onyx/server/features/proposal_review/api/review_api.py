@@ -4,13 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.proposal_review.api.models import AuditLogEntry
 from onyx.server.features.proposal_review.api.models import FindingResponse
 from onyx.server.features.proposal_review.api.models import ReviewRunResponse
@@ -29,7 +30,6 @@ router = APIRouter()
 
 @router.post(
     "/proposals/{proposal_id}/review",
-    response_model=ReviewRunResponse,
     status_code=201,
 )
 def trigger_review(
@@ -48,18 +48,18 @@ def trigger_review(
     # Verify proposal exists
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     # Verify ruleset exists and count active rules
     ruleset = rulesets_db.get_ruleset(request.ruleset_id, tenant_id, db_session)
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Ruleset not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
 
     active_rule_count = rulesets_db.count_active_rules(request.ruleset_id, db_session)
     if active_rule_count == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Ruleset has no active rules",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Ruleset has no active rules",
         )
 
     # Update proposal status to IN_REVIEW
@@ -98,14 +98,13 @@ def trigger_review(
         run_proposal_review,
     )
 
-    run_proposal_review.delay(str(run.id), tenant_id)
+    run_proposal_review.apply_async(args=[str(run.id), tenant_id], expires=3600)
 
     return ReviewRunResponse.from_model(run)
 
 
 @router.get(
     "/proposals/{proposal_id}/review-status",
-    response_model=ReviewRunResponse,
 )
 def get_review_status(
     proposal_id: UUID,
@@ -116,18 +115,17 @@ def get_review_status(
     tenant_id = get_current_tenant_id()
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     run = findings_db.get_latest_review_run(proposal_id, db_session)
     if not run:
-        raise HTTPException(status_code=404, detail="No review runs found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No review runs found")
 
     return ReviewRunResponse.from_model(run)
 
 
 @router.get(
     "/proposals/{proposal_id}/findings",
-    response_model=list[FindingResponse],
 )
 def get_findings(
     proposal_id: UUID,
@@ -142,7 +140,7 @@ def get_findings(
     tenant_id = get_current_tenant_id()
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     # If no run specified, get the latest
     if review_run_id is None:
@@ -157,7 +155,6 @@ def get_findings(
 
 @router.get(
     "/proposals/{proposal_id}/audit-log",
-    response_model=list[AuditLogEntry],
 )
 def get_audit_log(
     proposal_id: UUID,
@@ -168,7 +165,7 @@ def get_audit_log(
     tenant_id = get_current_tenant_id()
     proposal = proposals_db.get_proposal(proposal_id, tenant_id, db_session)
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Proposal not found")
 
     entries = decisions_db.list_audit_log(proposal_id, db_session)
     return [AuditLogEntry.from_model(e) for e in entries]

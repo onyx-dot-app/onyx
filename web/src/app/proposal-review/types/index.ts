@@ -66,12 +66,8 @@ export type AuditAction =
 export interface ProposalMetadata {
   jira_key?: string;
   title?: string;
-  pi_name?: string;
-  sponsor?: string;
-  deadline?: string;
-  agreement_type?: string;
-  officer?: string;
-  [key: string]: string | undefined;
+  link?: string;
+  [key: string]: string | string[] | undefined;
 }
 
 export interface Proposal {

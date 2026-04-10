@@ -8,6 +8,7 @@ import {
   SvgXCircle,
   SvgRefreshCw,
 } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { toast } from "@/hooks/useToast";
 import {
@@ -91,13 +92,23 @@ export default function DecisionPanel({
 
   return (
     <Card padding="md" border="solid" background="light">
-      <div className="flex flex-col gap-3">
-        <Text font="main-ui-action" color="text-01">
+      <Section
+        gap={0.75}
+        height="auto"
+        justifyContent="start"
+        alignItems="start"
+      >
+        <Text font="main-ui-action" color="text-04">
           Final Decision
         </Text>
 
         {/* Decision buttons */}
-        <div className="flex flex-col gap-2">
+        <Section
+          gap={0.5}
+          height="auto"
+          justifyContent="start"
+          alignItems="start"
+        >
           <Button
             variant={selectedDecision === "APPROVED" ? "action" : "default"}
             prominence={
@@ -145,7 +156,7 @@ export default function DecisionPanel({
           >
             Reject
           </Button>
-        </div>
+        </Section>
 
         {/* Notes */}
         <InputTextArea
@@ -156,7 +167,12 @@ export default function DecisionPanel({
         />
 
         {/* Submit + Sync */}
-        <div className="flex flex-col gap-2">
+        <Section
+          gap={0.5}
+          height="auto"
+          justifyContent="start"
+          alignItems="start"
+        >
           <Button
             variant="action"
             prominence="primary"
@@ -175,14 +191,14 @@ export default function DecisionPanel({
           >
             {isSyncing ? "Syncing..." : "Sync to Jira"}
           </Button>
-        </div>
+        </Section>
 
         {submitError && (
           <Text font="secondary-body" color="text-03">
             {submitError}
           </Text>
         )}
-      </div>
+      </Section>
     </Card>
   );
 }

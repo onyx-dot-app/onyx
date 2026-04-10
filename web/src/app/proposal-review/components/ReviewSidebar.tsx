@@ -9,6 +9,7 @@ import {
   SvgAlertTriangle,
   SvgShield,
 } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useFindings } from "@/app/proposal-review/hooks/useFindings";
 import DecisionPanel from "@/app/proposal-review/components/DecisionPanel";
@@ -89,8 +90,13 @@ export default function ReviewSidebar({
     <div className="flex flex-col gap-4 h-full overflow-y-auto p-4">
       {/* Summary counts */}
       <Card padding="md" border="solid" background="light">
-        <div className="flex flex-col gap-2">
-          <Text font="main-ui-action" color="text-01">
+        <Section
+          gap={0.5}
+          height="auto"
+          justifyContent="start"
+          alignItems="start"
+        >
+          <Text font="main-ui-action" color="text-04">
             Summary
           </Text>
           <div className="grid grid-cols-3 gap-2">
@@ -113,34 +119,50 @@ export default function ReviewSidebar({
               iconClass="text-status-success-03"
             />
           </div>
-        </div>
+        </Section>
       </Card>
 
       {/* Progress by category */}
       <Card padding="md" border="solid" background="light">
-        <div className="flex flex-col gap-2">
-          <Text font="main-ui-action" color="text-01">
+        <Section
+          gap={0.5}
+          height="auto"
+          justifyContent="start"
+          alignItems="start"
+        >
+          <Text font="main-ui-action" color="text-04">
             Progress
           </Text>
           {findingsByCategory.map((group) => (
             <CategoryProgress key={group.category} group={group} />
           ))}
-        </div>
+        </Section>
       </Card>
 
       {/* Hard stops */}
       {stats.hardStops.length > 0 && (
         <Card padding="md" border="solid" background="heavy">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
+          <Section
+            gap={0.5}
+            height="auto"
+            justifyContent="start"
+            alignItems="start"
+          >
+            <Section
+              flexDirection="row"
+              gap={0.5}
+              height="auto"
+              justifyContent="start"
+              alignItems="center"
+            >
               <SvgShield className="h-4 w-4 text-status-error-03" />
-              <Text font="main-ui-action" color="text-01">
+              <Text font="main-ui-action" color="text-04">
                 {`Hard Stops (${stats.hardStops.length})`}
               </Text>
-            </div>
+            </Section>
             {stats.hardStops.map((finding) => (
               <div key={finding.id} className="flex items-center gap-2 py-1">
-                <Text font="secondary-body" color="text-02">
+                <Text font="secondary-body" color="text-03">
                   {finding.rule_name ?? "Unnamed Rule"}
                 </Text>
                 {finding.decision ? (
@@ -156,15 +178,20 @@ export default function ReviewSidebar({
                 )}
               </div>
             ))}
-          </div>
+          </Section>
         </Card>
       )}
 
       {/* Open flags / unresolved items */}
       {stats.unresolvedFindings.length > 0 && (
         <Card padding="md" border="solid" background="light">
-          <div className="flex flex-col gap-2">
-            <Text font="main-ui-action" color="text-01">
+          <Section
+            gap={0.5}
+            height="auto"
+            justifyContent="start"
+            alignItems="start"
+          >
+            <Text font="main-ui-action" color="text-04">
               {`Unresolved (${stats.unresolvedFindings.length})`}
             </Text>
             {stats.unresolvedFindings.map((finding) => (
@@ -177,19 +204,24 @@ export default function ReviewSidebar({
                   color={finding.verdict === "FAIL" ? "amber" : "blue"}
                   size="sm"
                 />
-                <Text font="secondary-body" color="text-02" nowrap>
+                <Text font="secondary-body" color="text-03" nowrap>
                   {finding.rule_name ?? "Unnamed Rule"}
                 </Text>
               </div>
             ))}
-          </div>
+          </Section>
         </Card>
       )}
 
       {/* Audit trail */}
       <Card padding="md" border="solid" background="light">
-        <div className="flex flex-col gap-2">
-          <Text font="main-ui-action" color="text-01">
+        <Section
+          gap={0.5}
+          height="auto"
+          justifyContent="start"
+          alignItems="start"
+        >
+          <Text font="main-ui-action" color="text-04">
             Audit Trail
           </Text>
           {auditLoading && (
@@ -203,7 +235,13 @@ export default function ReviewSidebar({
             </Text>
           )}
           {auditLog && auditLog.length > 0 && (
-            <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
+            <Section
+              gap={0.25}
+              height="auto"
+              justifyContent="start"
+              alignItems="start"
+              className="max-h-[200px] overflow-y-auto"
+            >
               {[...auditLog]
                 .sort(
                   (a, b) =>
@@ -213,9 +251,9 @@ export default function ReviewSidebar({
                 .map((entry) => (
                   <AuditEntry key={entry.id} entry={entry} />
                 ))}
-            </div>
+            </Section>
           )}
-        </div>
+        </Section>
       </Card>
 
       {/* Decision panel at the bottom */}
@@ -246,15 +284,21 @@ function SummaryCount({
   iconClass,
 }: SummaryCountProps) {
   return (
-    <div className="flex flex-col items-center gap-1 py-2">
+    <Section
+      gap={0.25}
+      height="auto"
+      padding={0.5}
+      alignItems="center"
+      justifyContent="center"
+    >
       <Icon className={`h-5 w-5 ${iconClass}`} />
-      <Text font="main-ui-action" color="text-01">
+      <Text font="main-ui-action" color="text-04">
         {String(count)}
       </Text>
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
-    </div>
+    </Section>
   );
 }
 
@@ -273,7 +317,7 @@ function CategoryProgress({ group }: CategoryProgressProps) {
 
   return (
     <div className="flex items-center justify-between py-1">
-      <Text font="secondary-body" color="text-02" nowrap>
+      <Text font="secondary-body" color="text-03" nowrap>
         {group.category}
       </Text>
       <div className="flex items-center gap-1">
@@ -311,7 +355,7 @@ function AuditEntry({ entry }: AuditEntryProps) {
   return (
     <div className="flex items-start justify-between gap-2 py-1">
       <div className="flex flex-col gap-0.5">
-        <Text font="secondary-body" color="text-02">
+        <Text font="secondary-body" color="text-03">
           {actionLabel}
         </Text>
         {entry.user_id && (

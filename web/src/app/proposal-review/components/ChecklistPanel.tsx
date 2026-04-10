@@ -226,7 +226,7 @@ function CategoryGroup({
             ) : (
               <SvgChevronDown className="h-4 w-4 text-text-03" />
             )}
-            <Text font="main-ui-action" color="text-01">
+            <Text font="main-ui-action" color="text-04">
               {category}
             </Text>
           </div>

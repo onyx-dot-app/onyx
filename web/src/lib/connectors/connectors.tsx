@@ -742,8 +742,6 @@ export const connectorConfigs: Record<
           "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
         optional: true,
       },
-    ],
-    advanced_values: [
       {
         type: "checkbox",
         query: "Extract custom fields?",
@@ -764,6 +762,7 @@ export const connectorConfigs: Record<
         default: false,
       },
     ],
+    advanced_values: [],
   },
   salesforce: {
     description: "Configure Salesforce connector",
