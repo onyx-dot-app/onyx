@@ -1,7 +1,6 @@
 FROM ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  acl \
   curl \
   fd-find \
   fzf \

@@ -8,10 +8,10 @@ set -euo pipefail
 #                    We remap dev to that UID -- fast and seamless.
 #
 # Rootless Docker:   Workspace appears as root-owned (UID 0) inside the
-#                    container due to user-namespace mapping.
-#                    • remoteUser=root  → symlink bind-mounts into /root
-#                      (container root IS the host user; no permission tricks)
-#                    • remoteUser=dev   → grant access with POSIX ACLs
+#                    container due to user-namespace mapping.  Requires
+#                    DEVCONTAINER_REMOTE_USER=root (set automatically by
+#                    ods dev up).  Container root IS the host user, so
+#                    bind-mounts and named volumes are symlinked into /root.
 
 WORKSPACE=/workspace
 TARGET_USER=dev
@@ -105,40 +105,12 @@ if [ "$WS_UID" != "0" ]; then
     fi
 else
     # ── Rootless Docker ──────────────────────────────────────────────
-    # Workspace is root-owned inside the container.  Grant dev access
-    # via POSIX ACLs (preserves ownership, works across the namespace
-    # boundary).
-    if command -v setfacl &>/dev/null; then
-        setfacl -Rm  "u:${TARGET_USER}:rwX" "$WORKSPACE"
-        setfacl -Rdm "u:${TARGET_USER}:rwX" "$WORKSPACE"   # default ACL for new files
-
-        # Git refuses to operate in repos owned by a different UID.
-        # Host gitconfig is mounted readonly as ~/.gitconfig.host.
-        # Create a real ~/.gitconfig that includes it plus container overrides.
-        printf '[include]\n\tpath = %s/.gitconfig.host\n[safe]\n\tdirectory = %s\n' \
-            "$DEV_HOME" "$WORKSPACE" > "$DEV_HOME/.gitconfig"
-        chown "$TARGET_USER":"$TARGET_USER" "$DEV_HOME/.gitconfig"
-
-        # If this is a worktree, the main .git dir is bind-mounted at its
-        # host absolute path. Grant dev access so git operations work.
-        GIT_COMMON_DIR=$(git -C "$WORKSPACE" rev-parse --git-common-dir 2>/dev/null || true)
-        if [ -n "$GIT_COMMON_DIR" ] && [ "$GIT_COMMON_DIR" != "$WORKSPACE/.git" ]; then
-            [ ! -d "$GIT_COMMON_DIR" ] && GIT_COMMON_DIR="$WORKSPACE/$GIT_COMMON_DIR"
-            if [ -d "$GIT_COMMON_DIR" ]; then
-                setfacl -Rm "u:${TARGET_USER}:rwX" "$GIT_COMMON_DIR"
-                setfacl -Rdm "u:${TARGET_USER}:rwX" "$GIT_COMMON_DIR"
-                git config -f "$DEV_HOME/.gitconfig" --add safe.directory "$(dirname "$GIT_COMMON_DIR")"
-            fi
-        fi
-
-        # Also fix bind-mounted dirs under ~dev that appear root-owned.
-        for dir in /home/"$TARGET_USER"/.claude; do
-            [ -d "$dir" ] && setfacl -Rm "u:${TARGET_USER}:rwX" "$dir" && setfacl -Rdm "u:${TARGET_USER}:rwX" "$dir"
-        done
-        [ -f /home/"$TARGET_USER"/.claude.json ] && \
-            setfacl -m "u:${TARGET_USER}:rw" /home/"$TARGET_USER"/.claude.json
-    else
-        echo "warning: setfacl not found; dev user may not have write access to workspace" >&2
-        echo "         install the 'acl' package or set DEVCONTAINER_REMOTE_USER=root" >&2
-    fi
+    # Workspace is root-owned (UID 0) due to user-namespace mapping.
+    # The supported path is remoteUser=root (set DEVCONTAINER_REMOTE_USER=root),
+    # which is handled above.  If we reach here, the user is running as dev
+    # under rootless Docker without the override.
+    echo "error: rootless Docker detected but remoteUser is not root." >&2
+    echo "       Set DEVCONTAINER_REMOTE_USER=root before starting the container," >&2
+    echo "       or use 'ods dev up' which sets it automatically." >&2
+    exit 1
 fi

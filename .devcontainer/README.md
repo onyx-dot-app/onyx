@@ -14,12 +14,6 @@ A containerized development environment for working on Onyx.
 
 ## Usage
 
-### VS Code
-
-1. Install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-2. Open this repo in VS Code
-3. "Reopen in Container" when prompted
-
 ### CLI (`ods dev`)
 
 The [`ods` devtools CLI](../tools/ods/README.md) provides workspace-aware wrappers
@@ -39,24 +33,7 @@ ods dev exec npm test
 ods dev stop
 ```
 
-If you don't have `ods` installed, use the `devcontainer` CLI directly:
-
-```bash
-npm install -g @devcontainers/cli
-
-devcontainer up --workspace-folder .
-devcontainer exec --workspace-folder . zsh
-```
-
 ## Restarting the container
-
-### VS Code
-
-Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and run:
-
-- **Dev Containers: Reopen in Container** — restarts the container without rebuilding
-
-### CLI
 
 ```bash
 # Restart the container
@@ -64,12 +41,6 @@ ods dev restart
 
 # Pull the latest published image and recreate
 ods dev rebuild
-```
-
-Or without `ods`:
-
-```bash
-devcontainer up --workspace-folder . --remove-existing-container
 ```
 
 ## Image
@@ -99,14 +70,6 @@ user has read/write access to the bind-mounted workspace:
   maps back to your host user via the user namespace. New files are owned by your
   host UID and no ACL workarounds are needed.
 
-  If you use the `devcontainer` CLI directly (without `ods`), export the variable
-  yourself:
-
-  ```bash
-  export DEVCONTAINER_REMOTE_USER=root
-  devcontainer up --workspace-folder .
-  ```
-
   To override the auto-detection, set `DEVCONTAINER_REMOTE_USER` before running
   `ods dev up`.
 
@@ -121,9 +84,7 @@ from inside. `ods dev` auto-detects the socket path and sets `DOCKER_SOCK`:
 | macOS (Docker Desktop)  | `~/.docker/run/docker.sock`    |
 | Linux (standard Docker) | `/var/run/docker.sock`         |
 
-To override, set `DOCKER_SOCK` before running `ods dev up`. When using the
-VS Code extension or `devcontainer` CLI directly (without `ods`), you must set
-`DOCKER_SOCK` yourself.
+To override, set `DOCKER_SOCK` before running `ods dev up`.
 
 ## Firewall
 
