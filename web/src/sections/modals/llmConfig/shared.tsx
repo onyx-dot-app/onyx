@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@/lib/utils";
+import { markdown } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useAgents } from "@/hooks/useAgents";
@@ -720,8 +721,8 @@ function ModalWrapperInner({
   } = getProvider(providerName);
 
   const title = llmProvider
-    ? `Configure "${llmProvider.name}"`
-    : `Set up ${providerProductName}`;
+    ? markdown(`Configure *${llmProvider.name}*`)
+    : markdown(`Set up *${providerProductName}*`);
   const description =
     descriptionOverride ??
     `Connect to ${providerDisplayName} and set up your ${providerProductName} models.`;

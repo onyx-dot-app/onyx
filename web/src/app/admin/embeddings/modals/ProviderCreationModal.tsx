@@ -12,6 +12,7 @@ import {
 } from "@/components/embedding/interfaces";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import Modal from "@/refresh-components/Modal";
+import { markdown } from "@opal/utils";
 import { SvgSettings } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 export interface ProviderCreationModalProps {
@@ -185,9 +186,11 @@ export default function ProviderCreationModal({
       <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgSettings}
-          title={`Configure ${getFormattedProviderName(
-            selectedProvider.provider_type
-          )}`}
+          title={markdown(
+            `Configure *${getFormattedProviderName(
+              selectedProvider.provider_type
+            )}*`
+          )}
           onClose={onCancel}
         />
         <Modal.Body>

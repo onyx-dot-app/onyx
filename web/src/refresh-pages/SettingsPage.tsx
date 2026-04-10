@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
 import { Content, ContentAction } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
@@ -1556,7 +1557,7 @@ function FederatedConnectorCard({
       {showDisconnectConfirmation && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={`Disconnect ${sourceMetadata.displayName}`}
+          title={markdown(`Disconnect *${sourceMetadata.displayName}*`)}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
             <Button

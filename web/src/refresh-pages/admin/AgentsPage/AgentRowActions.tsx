@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { cn } from "@opal/utils";
+import { cn, markdown } from "@opal/utils";
 import {
   SvgMoreHorizontal,
   SvgEdit,
@@ -341,7 +341,7 @@ export default function AgentRowActions({
       {unlistOpen && (
         <ConfirmationModalLayout
           icon={SvgEyeOff}
-          title={`Unlist ${agent.name}`}
+          title={markdown(`Unlist *${agent.name}*`)}
           onClose={isSubmitting ? undefined : () => setUnlistOpen(false)}
           submit={
             <Button
