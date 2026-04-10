@@ -38,26 +38,22 @@ fi
 # ~/.local and ~/.cache are named Docker volumes mounted under MOUNT_HOME.
 mkdir -p "$MOUNT_HOME"/.local/state "$MOUNT_HOME"/.local/share
 
-# Copy host configs mounted as *.host into the active user's home.
-if [ -d "$MOUNT_HOME/.ssh.host" ]; then
-    cp -a "$MOUNT_HOME/.ssh.host" "$ACTIVE_HOME/.ssh"
-    chmod 700 "$ACTIVE_HOME/.ssh"
-    chmod 600 "$ACTIVE_HOME"/.ssh/id_* 2>/dev/null || true
-fi
-if [ -d "$MOUNT_HOME/.config/nvim.host" ]; then
-    mkdir -p "$ACTIVE_HOME/.config"
-    cp -a "$MOUNT_HOME/.config/nvim.host" "$ACTIVE_HOME/.config/nvim"
-fi
-
 # When running as root, symlink bind-mounts and named volumes into /root
-# so that $HOME-relative tools (Claude Code, git, etc.) find them.
+# so that $HOME-relative tools (Claude Code, git, ssh, etc.) find them.
 if [ "$ACTIVE_HOME" != "$MOUNT_HOME" ]; then
-    for item in .claude .cache .local; do
+    for item in .claude .ssh .cache .local; do
         [ -d "$MOUNT_HOME/$item" ] || continue
         [ -L "$ACTIVE_HOME/$item" ] || rm -rf "$ACTIVE_HOME/$item"
         ln -sfn "$MOUNT_HOME/$item" "$ACTIVE_HOME/$item"
     done
     [ -f "$MOUNT_HOME/.claude.json" ] && ln -sf "$MOUNT_HOME/.claude.json" "$ACTIVE_HOME/.claude.json"
+
+    # Nested mount: .config/nvim
+    if [ -d "$MOUNT_HOME/.config/nvim" ]; then
+        mkdir -p "$ACTIVE_HOME/.config"
+        [ -L "$ACTIVE_HOME/.config/nvim" ] || rm -rf "$ACTIVE_HOME/.config/nvim"
+        ln -sfn "$MOUNT_HOME/.config/nvim" "$ACTIVE_HOME/.config/nvim"
+    fi
 
     # Git: include the host gitconfig and mark the workspace safe.
     printf '[include]\n\tpath = %s/.gitconfig.host\n[safe]\n\tdirectory = %s\n' \
