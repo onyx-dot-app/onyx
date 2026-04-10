@@ -29,6 +29,8 @@ Examples:
 // runDevExec executes "devcontainer exec --workspace-folder <root> <command...>".
 func runDevExec(command []string) {
 	checkDevcontainerCLI()
+	ensureDockerSock()
+	ensureRemoteUser()
 
 	root, err := paths.GitRoot()
 	if err != nil {
