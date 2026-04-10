@@ -118,6 +118,7 @@ export function isTypedFileField(fieldKey: string): boolean {
   const typedFileFields = new Set([
     "sp_private_key",
     "google_chat_service_account_key",
+    "google_service_account_key",
   ]);
   return typedFileFields.has(fieldKey);
 }

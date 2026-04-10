@@ -252,5 +252,3 @@ class GoogleChatConnector(PollConnector, LoadConnector):
             start=datetime.fromtimestamp(start, tz=timezone.utc),
             end=datetime.fromtimestamp(end, tz=timezone.utc),
         )
-
-
