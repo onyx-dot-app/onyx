@@ -68,6 +68,18 @@ async def lti_login(
     else:
         params_dict = dict(request.query_params)
 
+    logger.info(
+        "LTI login initiation: method=%s, params=%s, query=%s, headers=%s",
+        request.method,
+        params_dict,
+        dict(request.query_params),
+        {
+            k: v
+            for k, v in request.headers.items()
+            if k.lower() in ("content-type", "host", "referer", "origin")
+        },
+    )
+
     iss = str(params_dict.get("iss", ""))
     login_hint = str(params_dict.get("login_hint", ""))
     str(params_dict.get("target_link_uri", ""))

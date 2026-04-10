@@ -84,6 +84,12 @@ export const ADMIN_ROUTES = {
     title: "Agents",
     sidebarLabel: "Agents",
   },
+  VIRTUAL_TUTOR: {
+    path: "/admin/tutor",
+    icon: SvgBookOpen,
+    title: "Virtual Tutors",
+    sidebarLabel: "Virtual Tutors",
+  },
   SLACK_BOTS: {
     path: "/admin/bots",
     icon: SvgSlack,

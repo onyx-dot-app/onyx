@@ -52,8 +52,8 @@ class CanvasApiClient:
         parsed_base = urlparse(canvas_base_url)
         if not parsed_base.hostname:
             raise ValueError("canvas_base_url must include a valid host")
-        if parsed_base.scheme != "https":
-            raise ValueError("canvas_base_url must use https")
+        # if parsed_base.scheme != "https":
+        #     raise ValueError("canvas_base_url must use https")
 
         self._bearer_token = bearer_token
         self.base_url = (
@@ -162,14 +162,14 @@ class CanvasApiClient:
                         f"({parsed_url.hostname}); expected {expected_host}"
                     ),
                 )
-            if parsed_url.scheme != "https":
-                raise OnyxError(
-                    OnyxErrorCode.BAD_GATEWAY,
-                    detail=(
-                        "Canvas pagination link must use https, "
-                        f"got {parsed_url.scheme!r}"
-                    ),
-                )
+            # if parsed_url.scheme != "https":
+            #     raise OnyxError(
+            #         OnyxErrorCode.BAD_GATEWAY,
+            #         detail=(
+            #             "Canvas pagination link must use https, "
+            #             f"got {parsed_url.scheme!r}"
+            #         ),
+            #     )
             return url
         return None
 

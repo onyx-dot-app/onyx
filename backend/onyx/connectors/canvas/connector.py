@@ -33,6 +33,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.db.enums import HierarchyNodeType
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -58,25 +59,6 @@ def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
     elif e.status_code >= 500:
         raise UnexpectedValidationError(
             f"Unexpected Canvas HTTP error (status={e.status_code}): {e}"
-        )
-    else:
-        raise ConnectorValidationError(
-            f"Canvas API error (status={e.status_code}): {e}"
-        )
-
-def _handle_canvas_api_error(e: OnyxError) -> NoReturn:
-    """Map Canvas API errors to connector framework exceptions."""
-    if e.status_code == 401:
-        raise CredentialExpiredError(
-            "Canvas API token is invalid or expired (HTTP 401)."
-        )
-    elif e.status_code == 403:
-        raise InsufficientPermissionsError(
-            "Canvas API token does not have sufficient permissions (HTTP 403)."
-        )
-    elif e.status_code == 429:
-        raise ConnectorValidationError(
-            "Canvas rate-limit exceeded (HTTP 429). Please try again later."
         )
     else:
         raise ConnectorValidationError(
@@ -168,7 +150,134 @@ class CanvasAnnouncement(BaseModel):
         )
 
 
-CanvasStage: TypeAlias = Literal["pages", "assignments", "announcements"]
+class CanvasFile(BaseModel):
+    id: int
+    display_name: str
+    filename: str
+    url: str  # direct download URL
+    content_type: str | None = None
+    size: int | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    course_id: int
+
+    @classmethod
+    def from_api(cls, payload: dict[str, Any], course_id: int) -> "CanvasFile":
+        return cls(
+            id=payload["id"],
+            display_name=payload.get("display_name", payload.get("filename", "")),
+            filename=payload.get("filename", ""),
+            url=payload.get("url", ""),
+            content_type=payload.get("content-type") or payload.get("mime_class"),
+            size=payload.get("size"),
+            created_at=payload.get("created_at"),
+            updated_at=payload.get("updated_at"),
+            course_id=course_id,
+        )
+
+
+class CanvasModule(BaseModel):
+    id: int
+    name: str
+    position: int | None = None
+    published: bool | None = None
+    course_id: int
+
+    @classmethod
+    def from_api(cls, payload: dict[str, Any], course_id: int) -> "CanvasModule":
+        return cls(
+            id=payload["id"],
+            name=payload.get("name", ""),
+            position=payload.get("position"),
+            published=payload.get("published"),
+            course_id=course_id,
+        )
+
+
+class CanvasModuleItem(BaseModel):
+    id: int
+    title: str
+    item_type: str  # "Page", "Assignment", "File", "ExternalUrl", etc.
+    html_url: str | None = None
+    external_url: str | None = None
+    module_id: int
+    course_id: int
+
+    @classmethod
+    def from_api(
+        cls, payload: dict[str, Any], module_id: int, course_id: int
+    ) -> "CanvasModuleItem":
+        return cls(
+            id=payload["id"],
+            title=payload.get("title", ""),
+            item_type=payload.get("type", ""),
+            html_url=payload.get("html_url"),
+            external_url=payload.get("external_url"),
+            module_id=module_id,
+            course_id=course_id,
+        )
+
+
+class CanvasQuiz(BaseModel):
+    id: int
+    title: str
+    description: str | None = None
+    html_url: str
+    quiz_type: str | None = None
+    question_count: int | None = None
+    published: bool | None = None
+    course_id: int
+    created_at: str | None = None
+    updated_at: str | None = None  # Canvas quizzes don't always have updated_at
+
+    @classmethod
+    def from_api(cls, payload: dict[str, Any], course_id: int) -> "CanvasQuiz":
+        return cls(
+            id=payload["id"],
+            title=payload.get("title", ""),
+            description=payload.get("description"),
+            html_url=payload.get("html_url", ""),
+            quiz_type=payload.get("quiz_type"),
+            question_count=payload.get("question_count"),
+            published=payload.get("published"),
+            course_id=course_id,
+            created_at=payload.get("created_at"),
+            updated_at=payload.get("updated_at"),
+        )
+
+
+class CanvasDiscussion(BaseModel):
+    id: int
+    title: str
+    message: str | None = None
+    html_url: str
+    posted_at: str | None = None
+    course_id: int
+    published: bool | None = None
+
+    @classmethod
+    def from_api(cls, payload: dict[str, Any], course_id: int) -> "CanvasDiscussion":
+        return cls(
+            id=payload["id"],
+            title=payload.get("title", ""),
+            message=payload.get("message"),
+            html_url=payload.get("html_url", ""),
+            posted_at=payload.get("posted_at"),
+            course_id=course_id,
+            published=payload.get("published"),
+        )
+
+
+CanvasStage: TypeAlias = Literal[
+    "pages",
+    "assignments",
+    "announcements",
+    "files",
+    "modules",
+    "quizzes",
+    "discussions",
+    "syllabus",
+]
 
 
 class CanvasConnectorCheckpoint(ConnectorCheckpoint):
@@ -286,6 +395,107 @@ class CanvasConnector(
             )
         return announcements
 
+    @retry(tries=3, delay=1, backoff=2)
+    def _list_files(self, course_id: int) -> list[CanvasFile]:
+        """Fetch all files for a given course."""
+        logger.debug(f"Fetching files for course {course_id}")
+
+        files: list[CanvasFile] = []
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/files",
+            params={"per_page": "100"},
+        ):
+            files.extend(CanvasFile.from_api(f, course_id=course_id) for f in page)
+        return files
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _list_modules(self, course_id: int) -> list[CanvasModule]:
+        """Fetch all published modules for a given course."""
+        logger.debug(f"Fetching modules for course {course_id}")
+
+        modules: list[CanvasModule] = []
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/modules",
+            params={"per_page": "100"},
+        ):
+            for m in page:
+                module = CanvasModule.from_api(m, course_id=course_id)
+                if module.published is False:
+                    continue
+                modules.append(module)
+        return modules
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _list_module_items(
+        self, course_id: int, module_id: int
+    ) -> list[CanvasModuleItem]:
+        """Fetch all published items for a given module."""
+        logger.debug(
+            f"Fetching module items for module {module_id} in course {course_id}"
+        )
+
+        items: list[CanvasModuleItem] = []
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/modules/{module_id}/items",
+            params={"per_page": "100"},
+        ):
+            for item_payload in page:
+                item = CanvasModuleItem.from_api(
+                    item_payload, module_id=module_id, course_id=course_id
+                )
+                items.append(item)
+        return items
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _list_quizzes(self, course_id: int) -> list[CanvasQuiz]:
+        """Fetch all published quizzes for a given course."""
+        logger.debug(f"Fetching quizzes for course {course_id}")
+
+        quizzes: list[CanvasQuiz] = []
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/quizzes",
+            params={"per_page": "100"},
+        ):
+            for q in page:
+                quiz = CanvasQuiz.from_api(q, course_id=course_id)
+                if quiz.published is False:
+                    continue
+                quizzes.append(quiz)
+        return quizzes
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _list_discussions(self, course_id: int) -> list[CanvasDiscussion]:
+        """Fetch all published discussion topics for a given course."""
+        logger.debug(f"Fetching discussions for course {course_id}")
+
+        discussions: list[CanvasDiscussion] = []
+        for page in self.canvas_client.paginate(
+            f"courses/{course_id}/discussion_topics",
+            params={"per_page": "100"},
+        ):
+            for d in page:
+                disc = CanvasDiscussion.from_api(d, course_id=course_id)
+                if disc.published is False:
+                    continue
+                # Skip announcement-type discussions (already fetched separately)
+                if d.get("is_announcement"):
+                    continue
+                discussions.append(disc)
+        return discussions
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _get_syllabus(self, course_id: int) -> str | None:
+        """Fetch the syllabus body for a course. Returns None if empty."""
+        logger.debug(f"Fetching syllabus for course {course_id}")
+
+        data, _ = self.canvas_client.get(
+            f"courses/{course_id}",
+            params={"include[]": "syllabus_body"},
+        )
+        if isinstance(data, dict):
+            return data.get("syllabus_body")
+        return None
+
     def _build_document(
         self,
         doc_id: str,
@@ -295,8 +505,13 @@ class CanvasConnector(
         doc_updated_at: datetime | None,
         course_id: int,
         doc_type: str,
+        parent_hierarchy_raw_node_id: str | None = None,
     ) -> Document:
         """Build a Document with standard Canvas fields."""
+        # Default parent to the course hierarchy node
+        if parent_hierarchy_raw_node_id is None:
+            parent_hierarchy_raw_node_id = f"canvas-course-{course_id}"
+
         return Document(
             id=doc_id,
             sections=cast(
@@ -307,6 +522,7 @@ class CanvasConnector(
             semantic_identifier=semantic_identifier,
             doc_updated_at=doc_updated_at,
             metadata={"course_id": str(course_id), "type": doc_type},
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         )
 
     def _convert_page_to_document(self, page: CanvasPage) -> Document:
@@ -402,6 +618,109 @@ class CanvasConnector(
         )
         return document
 
+    def _convert_file_to_document(self, file: CanvasFile) -> Document:
+        """Convert a Canvas file to a Document.
+
+        The file URL points to the direct download. The indexing pipeline
+        handles extraction of text from PDFs, DOCX, PPTX, etc.
+        """
+        link = f"{self.canvas_base_url}/courses/{file.course_id}/files/{file.id}"
+
+        text_parts = [file.display_name]
+        if file.content_type:
+            text_parts.append(f"File type: {file.content_type}")
+
+        doc_updated_at = (
+            datetime.fromisoformat(file.updated_at.replace("Z", "+00:00")).astimezone(
+                timezone.utc
+            )
+            if file.updated_at
+            else None
+        )
+
+        return self._build_document(
+            doc_id=f"canvas-file-{file.course_id}-{file.id}",
+            link=link,
+            text="\n\n".join(text_parts),
+            semantic_identifier=file.display_name or f"File {file.id}",
+            doc_updated_at=doc_updated_at,
+            course_id=file.course_id,
+            doc_type="file",
+        )
+
+    def _convert_quiz_to_document(self, quiz: CanvasQuiz) -> Document:
+        """Convert a Canvas quiz to a Document."""
+        text_parts = [quiz.title]
+        desc_text = parse_html_page_basic(quiz.description) if quiz.description else ""
+        if desc_text:
+            text_parts.append(desc_text)
+        if quiz.quiz_type:
+            text_parts.append(f"Quiz type: {quiz.quiz_type}")
+        if quiz.question_count is not None:
+            text_parts.append(f"Questions: {quiz.question_count}")
+
+        doc_updated_at = (
+            datetime.fromisoformat(quiz.updated_at.replace("Z", "+00:00")).astimezone(
+                timezone.utc
+            )
+            if quiz.updated_at
+            else None
+        )
+
+        return self._build_document(
+            doc_id=f"canvas-quiz-{quiz.course_id}-{quiz.id}",
+            link=quiz.html_url,
+            text="\n\n".join(text_parts),
+            semantic_identifier=quiz.title or f"Quiz {quiz.id}",
+            doc_updated_at=doc_updated_at,
+            course_id=quiz.course_id,
+            doc_type="quiz",
+        )
+
+    def _convert_discussion_to_document(self, discussion: CanvasDiscussion) -> Document:
+        """Convert a Canvas discussion topic to a Document."""
+        text_parts = [discussion.title]
+        msg_text = (
+            parse_html_page_basic(discussion.message) if discussion.message else ""
+        )
+        if msg_text:
+            text_parts.append(msg_text)
+
+        doc_updated_at = (
+            datetime.fromisoformat(
+                discussion.posted_at.replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            if discussion.posted_at
+            else None
+        )
+
+        return self._build_document(
+            doc_id=f"canvas-discussion-{discussion.course_id}-{discussion.id}",
+            link=discussion.html_url,
+            text="\n\n".join(text_parts),
+            semantic_identifier=discussion.title or f"Discussion {discussion.id}",
+            doc_updated_at=doc_updated_at,
+            course_id=discussion.course_id,
+            doc_type="discussion",
+        )
+
+    def _convert_syllabus_to_document(
+        self, course_id: int, syllabus_body: str
+    ) -> Document:
+        """Convert a course syllabus to a Document."""
+        text = parse_html_page_basic(syllabus_body)
+        link = f"{self.canvas_base_url}/courses/{course_id}/assignments/syllabus"
+
+        return self._build_document(
+            doc_id=f"canvas-syllabus-{course_id}",
+            link=link,
+            text=f"Syllabus\n\n{text}" if text else "Syllabus",
+            semantic_identifier="Syllabus",
+            doc_updated_at=None,
+            course_id=course_id,
+            doc_type="syllabus",
+        )
+
     @override
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load and validate Canvas credentials."""
@@ -444,28 +763,30 @@ class CanvasConnector(
             new_checkpoint.course_ids = [c.id for c in courses]
             new_checkpoint.current_course_index = 0
             new_checkpoint.stage = "pages"
-            logger.info(
-                f"Found {len(courses)} Canvas courses to process"
-            )
+            logger.info(f"Found {len(courses)} Canvas courses to process")
             new_checkpoint.has_more = len(new_checkpoint.course_ids) > 0
             return new_checkpoint
 
         # All courses done
-        if new_checkpoint.current_course_index >= len(
-            new_checkpoint.course_ids
-        ):
+        if new_checkpoint.current_course_index >= len(new_checkpoint.course_ids):
             new_checkpoint.has_more = False
             return new_checkpoint
 
-        course_id = new_checkpoint.course_ids[
-            new_checkpoint.current_course_index
-        ]
+        course_id = new_checkpoint.course_ids[new_checkpoint.current_course_index]
         stage = new_checkpoint.stage
 
-        if stage not in ("pages", "assignments", "announcements"):
-            raise ValueError(
-                f"Invalid checkpoint stage: {stage!r}"
-            )
+        _VALID_STAGES: set[str] = {
+            "pages",
+            "assignments",
+            "announcements",
+            "files",
+            "modules",
+            "quizzes",
+            "discussions",
+            "syllabus",
+        }
+        if stage not in _VALID_STAGES:
+            raise ValueError(f"Invalid checkpoint stage: {stage!r}")
 
         def _in_time_window(timestamp_str: str) -> bool:
             ts = (
@@ -477,13 +798,80 @@ class CanvasConnector(
 
         def _maybe_attach_permissions(document: Document) -> Document:
             if include_permissions:
-                document.external_access = self._get_course_permissions(
-                    course_id
-                )
+                document.external_access = self._get_course_permissions(course_id)
             return document
 
         # Fetch one page of API results for the current stage.
         # If next_url is set, we're resuming mid-pagination.
+        # --- Syllabus is a special stage (single fetch, not paginated) ---
+        if stage == "syllabus":
+            try:
+                syllabus_body = self._get_syllabus(course_id)
+            except Exception as e:
+                logger.warning(f"Failed to fetch syllabus for course {course_id}: {e}")
+                # Syllabus is last stage — advance to next course
+                new_checkpoint.advance_course()
+                new_checkpoint.has_more = new_checkpoint.current_course_index < len(
+                    new_checkpoint.course_ids
+                )
+                return new_checkpoint
+
+            if syllabus_body:
+                try:
+                    doc = self._convert_syllabus_to_document(course_id, syllabus_body)
+                    yield _maybe_attach_permissions(doc)
+                except Exception as e:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=f"canvas-syllabus-{course_id}",
+                            document_link=(
+                                f"{self.canvas_base_url}/courses/{course_id}"
+                                "/assignments/syllabus"
+                            ),
+                        ),
+                        failure_message=f"Failed to process syllabus: {e}",
+                        exception=e,
+                    )
+
+            new_checkpoint.advance_course()
+            new_checkpoint.has_more = new_checkpoint.current_course_index < len(
+                new_checkpoint.course_ids
+            )
+            return new_checkpoint
+
+        # --- Modules stage: fetch modules + items (not paginated via stage_config) ---
+        if stage == "modules":
+            try:
+                modules = self._list_modules(course_id)
+            except Exception as e:
+                logger.warning(f"Failed to fetch modules for course {course_id}: {e}")
+                new_checkpoint.next_url = None
+                new_checkpoint.stage = "quizzes"
+                new_checkpoint.has_more = True
+                return new_checkpoint
+
+            for module in modules:
+                try:
+                    items = self._list_module_items(course_id, module.id)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to fetch items for module {module.id} "
+                        f"in course {course_id}: {e}"
+                    )
+                    continue
+                for mi in items:
+                    # Module items are structural references; we index
+                    # the actual content (pages, assignments, files) in
+                    # their own stages. Skip SubHeader items entirely.
+                    pass
+
+            # Modules stage complete — advance
+            new_checkpoint.next_url = None
+            new_checkpoint.stage = "quizzes"
+            new_checkpoint.has_more = True
+            return new_checkpoint
+
+        # --- Standard paginated stages ---
         stage_config: dict[str, dict[str, Any]] = {
             "pages": {
                 "endpoint": f"courses/{course_id}/pages",
@@ -500,6 +888,18 @@ class CanvasConnector(
                     "context_codes[]": f"course_{course_id}",
                     "active_only": "true",
                 },
+            },
+            "files": {
+                "endpoint": f"courses/{course_id}/files",
+                "params": {"per_page": "100"},
+            },
+            "quizzes": {
+                "endpoint": f"courses/{course_id}/quizzes",
+                "params": {"per_page": "100"},
+            },
+            "discussions": {
+                "endpoint": f"courses/{course_id}/discussion_topics",
+                "params": {"per_page": "100"},
             },
         }
         config = stage_config[stage]
@@ -521,15 +921,11 @@ class CanvasConnector(
             is_api_error = oe._status_code_override is not None
             if not is_api_error:
                 raise
-            logger.warning(
-                f"Failed to fetch {stage} for course {course_id}: {oe}"
-            )
+            logger.warning(f"Failed to fetch {stage} for course {course_id}: {oe}")
             new_checkpoint.has_more = True
             return new_checkpoint
         except Exception as e:
-            logger.warning(
-                f"Failed to fetch {stage} for course {course_id}: {e}"
-            )
+            logger.warning(f"Failed to fetch {stage} for course {course_id}: {e}")
             new_checkpoint.has_more = True
             return new_checkpoint
 
@@ -544,10 +940,10 @@ class CanvasConnector(
                     yield _maybe_attach_permissions(doc)
 
                 elif stage == "assignments":
-                    assignment = CanvasAssignment.from_api(
-                        item, course_id=course_id
-                    )
-                    if not assignment.updated_at or not _in_time_window(assignment.updated_at):
+                    assignment = CanvasAssignment.from_api(item, course_id=course_id)
+                    if not assignment.updated_at or not _in_time_window(
+                        assignment.updated_at
+                    ):
                         continue
                     doc = self._convert_assignment_to_document(assignment)
                     yield _maybe_attach_permissions(doc)
@@ -565,6 +961,35 @@ class CanvasConnector(
                     if not _in_time_window(announcement.posted_at):
                         continue
                     doc = self._convert_announcement_to_document(announcement)
+                    yield _maybe_attach_permissions(doc)
+
+                elif stage == "files":
+                    file = CanvasFile.from_api(item, course_id=course_id)
+                    if not file.updated_at or not _in_time_window(file.updated_at):
+                        continue
+                    doc = self._convert_file_to_document(file)
+                    yield _maybe_attach_permissions(doc)
+
+                elif stage == "quizzes":
+                    quiz = CanvasQuiz.from_api(item, course_id=course_id)
+                    if quiz.published is False:
+                        continue
+                    if not quiz.updated_at or not _in_time_window(quiz.updated_at):
+                        continue
+                    doc = self._convert_quiz_to_document(quiz)
+                    yield _maybe_attach_permissions(doc)
+
+                elif stage == "discussions":
+                    disc = CanvasDiscussion.from_api(item, course_id=course_id)
+                    if disc.published is False:
+                        continue
+                    if item.get("is_announcement"):
+                        continue
+                    if not disc.posted_at:
+                        continue
+                    if not _in_time_window(disc.posted_at):
+                        continue
+                    doc = self._convert_discussion_to_document(disc)
                     yield _maybe_attach_permissions(doc)
 
             except Exception as e:
@@ -594,7 +1019,12 @@ class CanvasConnector(
             next_stages: dict[str, CanvasStage | None] = {
                 "pages": "assignments",
                 "assignments": "announcements",
-                "announcements": None,
+                "announcements": "files",
+                "files": "modules",
+                # modules handled specially above; quizzes comes after
+                "quizzes": "discussions",
+                "discussions": "syllabus",
+                # syllabus handled specially above
             }
             next_stage = next_stages[stage]
             if next_stage:
@@ -655,6 +1085,16 @@ class CanvasConnector(
                 f"Unexpected error during Canvas settings validation: {exc}"
             )
 
+    def _flush_batch(
+        self,
+        _batch: list[SlimDocument | HierarchyNode],
+        callback: IndexingHeartbeatInterface | None,
+    ) -> list[SlimDocument | HierarchyNode]:
+        """Yield the batch if non-empty and check for stop signal."""
+        if callback and callback.should_stop():
+            raise RuntimeError("canvas_perm_sync: Stop signal detected")
+        return []
+
     @override
     def retrieve_all_slim_docs_perm_sync(
         self,
@@ -670,6 +1110,41 @@ class CanvasConnector(
             course_id = course.id
             permissions = self._get_course_permissions(course_id)
 
+            # Emit course hierarchy node
+            batch.append(
+                HierarchyNode(
+                    raw_node_id=f"canvas-course-{course_id}",
+                    raw_parent_id=None,
+                    display_name=course.name or f"Course {course_id}",
+                    link=f"{self.canvas_base_url}/courses/{course_id}",
+                    node_type=HierarchyNodeType.COURSE,
+                    external_access=permissions,
+                )
+            )
+
+            # Emit module hierarchy nodes
+            try:
+                modules = self._list_modules(course_id)
+                for module in modules:
+                    batch.append(
+                        HierarchyNode(
+                            raw_node_id=f"canvas-module-{course_id}-{module.id}",
+                            raw_parent_id=f"canvas-course-{course_id}",
+                            display_name=module.name,
+                            link=(
+                                f"{self.canvas_base_url}/courses/{course_id}"
+                                f"/modules#{module.id}"
+                            ),
+                            node_type=HierarchyNodeType.MODULE,
+                            external_access=permissions,
+                        )
+                    )
+                    if len(batch) >= self.batch_size:
+                        yield batch
+                        batch = self._flush_batch(batch, callback)
+            except Exception as e:
+                logger.warning(f"Failed to list modules for course {course_id}: {e}")
+
             # Pages — no try/except: if the API fails, the entire sync
             # must abort so generic_doc_sync doesn't treat missing docs
             # as deleted and mass-revoke permissions.
@@ -679,15 +1154,12 @@ class CanvasConnector(
                     SlimDocument(
                         id=f"canvas-page-{course_id}-{page.page_id}",
                         external_access=permissions,
+                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
                     )
                 )
                 if len(batch) >= self.batch_size:
                     yield batch
-                    batch = []
-                    if callback and callback.should_stop():
-                        raise RuntimeError(
-                            "canvas_perm_sync: Stop signal detected"
-                        )
+                    batch = self._flush_batch(batch, callback)
 
             # Assignments
             assignments = self._list_assignments(course_id)
@@ -696,15 +1168,12 @@ class CanvasConnector(
                     SlimDocument(
                         id=f"canvas-assignment-{course_id}-{assignment.id}",
                         external_access=permissions,
+                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
                     )
                 )
                 if len(batch) >= self.batch_size:
                     yield batch
-                    batch = []
-                    if callback and callback.should_stop():
-                        raise RuntimeError(
-                            "canvas_perm_sync: Stop signal detected"
-                        )
+                    batch = self._flush_batch(batch, callback)
 
             # Announcements
             announcements = self._list_announcements(course_id)
@@ -713,15 +1182,71 @@ class CanvasConnector(
                     SlimDocument(
                         id=f"canvas-announcement-{course_id}-{announcement.id}",
                         external_access=permissions,
+                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
                     )
                 )
                 if len(batch) >= self.batch_size:
                     yield batch
-                    batch = []
-                    if callback and callback.should_stop():
-                        raise RuntimeError(
-                            "canvas_perm_sync: Stop signal detected"
+                    batch = self._flush_batch(batch, callback)
+
+            # Files
+            files = self._list_files(course_id)
+            for file in files:
+                batch.append(
+                    SlimDocument(
+                        id=f"canvas-file-{course_id}-{file.id}",
+                        external_access=permissions,
+                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
+                    )
+                )
+                if len(batch) >= self.batch_size:
+                    yield batch
+                    batch = self._flush_batch(batch, callback)
+
+            # Quizzes
+            quizzes = self._list_quizzes(course_id)
+            for quiz in quizzes:
+                batch.append(
+                    SlimDocument(
+                        id=f"canvas-quiz-{course_id}-{quiz.id}",
+                        external_access=permissions,
+                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
+                    )
+                )
+                if len(batch) >= self.batch_size:
+                    yield batch
+                    batch = self._flush_batch(batch, callback)
+
+            # Discussions
+            discussions = self._list_discussions(course_id)
+            for disc in discussions:
+                batch.append(
+                    SlimDocument(
+                        id=f"canvas-discussion-{course_id}-{disc.id}",
+                        external_access=permissions,
+                        parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
+                    )
+                )
+                if len(batch) >= self.batch_size:
+                    yield batch
+                    batch = self._flush_batch(batch, callback)
+
+            # Syllabus
+            try:
+                syllabus_body = self._get_syllabus(course_id)
+                if syllabus_body:
+                    batch.append(
+                        SlimDocument(
+                            id=f"canvas-syllabus-{course_id}",
+                            external_access=permissions,
+                            parent_hierarchy_raw_node_id=f"canvas-course-{course_id}",
                         )
+                    )
+                    if len(batch) >= self.batch_size:
+                        yield batch
+                        batch = self._flush_batch(batch, callback)
+            except Exception as e:
+                logger.warning(f"Failed to fetch syllabus for course {course_id}: {e}")
 
             if callback:
                 callback.progress("canvas_perm_sync", 1)
