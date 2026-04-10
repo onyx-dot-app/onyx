@@ -320,10 +320,12 @@ def get_tenant_count(tenant_id: str) -> int:
     1. They have an active mapping to this tenant (UserTenantMapping.active == True)
     2. AND the User is active (User.is_active == True)
     3. AND the User is not the anonymous system user
-    4. AND the User is not a SERVICE_ACCOUNT (API key dummy user)
+
+    TODO: Exclude API key dummy users from seat counting. API keys create
+    users with emails like `__DANSWER_API_KEY_*` that should not count toward
+    seat limits. See: https://linear.app/onyx-app/issue/ENG-3518
     """
     from onyx.configs.constants import ANONYMOUS_USER_EMAIL
-    from onyx.db.enums import AccountType
     from onyx.db.models import User
 
     # First get all emails with active mappings to this tenant
@@ -349,7 +351,6 @@ def get_tenant_count(tenant_id: str) -> int:
             .filter(
                 User.email.in_(emails),  # type: ignore
                 User.is_active == True,  # type: ignore  # noqa: E712
-                User.account_type != AccountType.SERVICE_ACCOUNT,  # type: ignore
             )
             .count()
         )
