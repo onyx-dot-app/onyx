@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
@@ -9,7 +10,10 @@ from uuid import uuid4
 from fastapi import Response
 from sqlalchemy.exc import IntegrityError
 
+from ee.onyx.server.scim.api import _acquire_seat_lock
+from ee.onyx.server.scim.api import _check_seat_availability
 from ee.onyx.server.scim.api import _scim_name_to_str
+from ee.onyx.server.scim.api import _SEAT_LOCK_ID
 from ee.onyx.server.scim.api import create_user
 from ee.onyx.server.scim.api import delete_user
 from ee.onyx.server.scim.api import get_user
@@ -741,3 +745,52 @@ class TestEmailCasePreservation:
         resource = parse_scim_user(result)
         assert resource.userName == "Alice@Example.COM"
         assert resource.emails[0].value == "Alice@Example.COM"
+
+
+class TestSeatLock:
+    """Tests for the advisory lock in _check_seat_availability."""
+
+    def test_acquires_advisory_lock_before_checking(
+        self,
+        mock_dal: MagicMock,
+    ) -> None:
+        """The advisory lock must be acquired before the seat check runs."""
+        call_order: list[str] = []
+
+        def track_execute(stmt: Any, _params: Any = None) -> None:
+            if "pg_advisory_xact_lock" in str(stmt):
+                call_order.append("lock")
+
+        mock_dal.session.execute.side_effect = track_execute
+
+        with patch(
+            "ee.onyx.server.scim.api.fetch_ee_implementation_or_noop"
+        ) as mock_fetch:
+            mock_result = MagicMock()
+            mock_result.available = True
+            mock_fn = MagicMock(return_value=mock_result)
+            mock_fetch.return_value = mock_fn
+
+            def track_check(*_args: Any, **_kwargs: Any) -> Any:
+                call_order.append("check")
+                return mock_result
+
+            mock_fn.side_effect = track_check
+
+            _check_seat_availability(mock_dal)
+
+        assert call_order == ["lock", "check"]
+
+    def test_lock_uses_correct_lock_id(
+        self,
+        mock_dal: MagicMock,
+    ) -> None:
+        """The lock ID must match the module constant."""
+        _acquire_seat_lock(mock_dal)
+
+        mock_dal.session.execute.assert_called_once()
+        call_args = mock_dal.session.execute.call_args
+        params = (
+            call_args[0][1] if len(call_args[0]) > 1 else call_args[1].get("params")
+        )
+        assert params == {"lock_id": _SEAT_LOCK_ID}

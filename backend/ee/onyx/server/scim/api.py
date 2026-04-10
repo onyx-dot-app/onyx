@@ -22,6 +22,7 @@ from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import func
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -70,6 +71,10 @@ logger = setup_logger()
 
 # Group names reserved for system default groups (seeded by migration).
 _RESERVED_GROUP_NAMES = frozenset({"Admin", "Basic"})
+
+# Arbitrary fixed ID for the pg_advisory_xact_lock that serializes
+# seat-allocation checks during concurrent SCIM provisioning requests.
+_SEAT_LOCK_ID = 294837
 
 
 class ScimJSONResponse(JSONResponse):
@@ -208,8 +213,33 @@ def _apply_exclusions(
     return data
 
 
+def _acquire_seat_lock(dal: ScimDAL) -> None:
+    """Acquire a transaction-scoped advisory lock for seat allocation.
+
+    IdPs (Okta, Azure AD) send SCIM provisioning requests in parallel
+    batches.  Without serialization the seat-availability check is
+    vulnerable to a TOCTOU race: N concurrent requests each see "seats
+    available", all insert, and the tenant ends up over its seat limit.
+
+    ``pg_advisory_xact_lock`` serializes these checks within the same
+    database transaction and is released automatically on COMMIT /
+    ROLLBACK — no explicit cleanup needed.
+    """
+    dal.session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": _SEAT_LOCK_ID},
+    )
+
+
 def _check_seat_availability(dal: ScimDAL) -> str | None:
-    """Return an error message if seat limit is reached, else None."""
+    """Return an error message if seat limit is reached, else None.
+
+    Acquires a transaction-scoped advisory lock first so that
+    concurrent SCIM requests are serialized — the lock is held until
+    the caller commits or rolls back, preventing over-allocation.
+    """
+    _acquire_seat_lock(dal)
+
     check_fn = fetch_ee_implementation_or_noop(
         "onyx.db.license", "check_seat_availability", None
     )
