@@ -505,6 +505,7 @@ class TestGetLMStudioAvailableModels:
 
         mock_session = MagicMock()
         mock_provider = MagicMock()
+        mock_provider.api_base = "http://localhost:1234"
         mock_provider.custom_config = {"LM_STUDIO_API_KEY": "stored-secret"}
 
         response = {
