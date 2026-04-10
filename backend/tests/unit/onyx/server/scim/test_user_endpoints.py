@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -802,7 +803,10 @@ class TestSeatLock:
         mock_dal.session.execute.assert_called_once()
         params = mock_dal.session.execute.call_args[0][1]
         assert params["key1"] == _SEAT_LOCK_KEY1
-        assert params["key2"] == hash("tenant_xyz") & 0x7FFFFFFF
+        assert (
+            params["key2"]
+            == int(hashlib.sha256(b"tenant_xyz").hexdigest(), 16) & 0x7FFFFFFF
+        )
 
     def test_no_lock_when_ee_absent(
         self,

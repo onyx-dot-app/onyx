@@ -11,6 +11,7 @@ require a valid SCIM bearer token.
 
 from __future__ import annotations
 
+import hashlib
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -242,7 +243,7 @@ def _check_seat_availability(dal: ScimDAL) -> str | None:
     # Uses the two-argument form so each tenant gets its own lock and
     # unrelated tenants never block each other.
     tenant_id = get_current_tenant_id()
-    tenant_key = hash(tenant_id) & 0x7FFFFFFF
+    tenant_key = int(hashlib.sha256(tenant_id.encode()).hexdigest(), 16) & 0x7FFFFFFF
     dal.session.execute(
         text("SELECT pg_advisory_xact_lock(:key1, :key2)"),
         {"key1": _SEAT_LOCK_KEY1, "key2": tenant_key},
