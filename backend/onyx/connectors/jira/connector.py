@@ -62,6 +62,7 @@ ONE_HOUR = 3600
 
 _MAX_RESULTS_FETCH_IDS = 5000
 _JIRA_FULL_PAGE_SIZE = 50
+# https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
 _JIRA_BULK_FETCH_LIMIT = 100
 
 # Constants for Jira field names
