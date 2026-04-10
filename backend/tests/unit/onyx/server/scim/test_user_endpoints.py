@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -13,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ee.onyx.server.scim.api import _check_seat_availability
 from ee.onyx.server.scim.api import _scim_name_to_str
-from ee.onyx.server.scim.api import _SEAT_LOCK_KEY1
+from ee.onyx.server.scim.api import _seat_lock_id_for_tenant
 from ee.onyx.server.scim.api import create_user
 from ee.onyx.server.scim.api import delete_user
 from ee.onyx.server.scim.api import get_user
@@ -789,7 +788,7 @@ class TestSeatLock:
         _mock_tenant: MagicMock,
         mock_dal: MagicMock,
     ) -> None:
-        """The lock must use the two-arg form with a tenant-derived key."""
+        """The lock id must be derived from the tenant via _seat_lock_id_for_tenant."""
         mock_result = MagicMock()
         mock_result.available = True
         mock_check = MagicMock(return_value=mock_result)
@@ -802,11 +801,12 @@ class TestSeatLock:
 
         mock_dal.session.execute.assert_called_once()
         params = mock_dal.session.execute.call_args[0][1]
-        assert params["key1"] == _SEAT_LOCK_KEY1
-        assert (
-            params["key2"]
-            == int(hashlib.sha256(b"tenant_xyz").hexdigest(), 16) & 0x7FFFFFFF
-        )
+        assert params["lock_id"] == _seat_lock_id_for_tenant("tenant_xyz")
+
+    def test_seat_lock_id_is_stable_and_tenant_scoped(self) -> None:
+        """Lock id must be deterministic and differ across tenants."""
+        assert _seat_lock_id_for_tenant("t1") == _seat_lock_id_for_tenant("t1")
+        assert _seat_lock_id_for_tenant("t1") != _seat_lock_id_for_tenant("t2")
 
     def test_no_lock_when_ee_absent(
         self,

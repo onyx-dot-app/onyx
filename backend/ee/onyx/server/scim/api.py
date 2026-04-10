@@ -12,6 +12,7 @@ require a valid SCIM bearer token.
 from __future__ import annotations
 
 import hashlib
+import struct
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -74,11 +75,17 @@ logger = setup_logger()
 # Group names reserved for system default groups (seeded by migration).
 _RESERVED_GROUP_NAMES = frozenset({"Admin", "Basic"})
 
-# First key for the two-argument pg_advisory_xact_lock that serializes
-# seat-allocation checks during concurrent SCIM provisioning requests.
-# The second key is derived from the tenant ID so that different tenants
-# do not block each other.
-_SEAT_LOCK_KEY1 = 294837
+# Namespace prefix for the seat-allocation advisory lock. Hashed together
+# with the tenant ID so the lock is scoped per-tenant (unrelated tenants
+# never block each other) and cannot collide with unrelated advisory locks.
+_SEAT_LOCK_NAMESPACE = "onyx_scim_seat_lock"
+
+
+def _seat_lock_id_for_tenant(tenant_id: str) -> int:
+    """Derive a stable 64-bit signed int lock id for this tenant's seat lock."""
+    digest = hashlib.sha256(f"{_SEAT_LOCK_NAMESPACE}:{tenant_id}".encode()).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int; unpack as such.
+    return struct.unpack("q", digest[:8])[0]
 
 
 class ScimJSONResponse(JSONResponse):
@@ -240,13 +247,13 @@ def _check_seat_availability(dal: ScimDAL) -> str | None:
         return None
 
     # Transaction-scoped advisory lock — released on dal.commit() / dal.rollback().
-    # Uses the two-argument form so each tenant gets its own lock and
-    # unrelated tenants never block each other.
-    tenant_id = get_current_tenant_id()
-    tenant_key = int(hashlib.sha256(tenant_id.encode()).hexdigest(), 16) & 0x7FFFFFFF
+    # The lock id is derived from the tenant so unrelated tenants never block
+    # each other, and from a namespace string so it cannot collide with
+    # unrelated advisory locks elsewhere in the codebase.
+    lock_id = _seat_lock_id_for_tenant(get_current_tenant_id())
     dal.session.execute(
-        text("SELECT pg_advisory_xact_lock(:key1, :key2)"),
-        {"key1": _SEAT_LOCK_KEY1, "key2": tenant_key},
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": lock_id},
     )
 
     result = check_fn(dal.session, seats_needed=1)
