@@ -49,7 +49,10 @@ if [ "$ACTIVE_HOME" != "$MOUNT_HOME" ]; then
         fi
         ln -sfn "$MOUNT_HOME/$item" "$ACTIVE_HOME/$item"
     done
-    [ -f "$MOUNT_HOME/.claude.json" ] && ln -sf "$MOUNT_HOME/.claude.json" "$ACTIVE_HOME/.claude.json"
+    # Symlink files (not directories).
+    for file in .claude.json .gitconfig; do
+        [ -f "$MOUNT_HOME/$file" ] && ln -sf "$MOUNT_HOME/$file" "$ACTIVE_HOME/$file"
+    done
 
     # Nested mount: .config/nvim
     if [ -d "$MOUNT_HOME/.config/nvim" ]; then
@@ -59,23 +62,6 @@ if [ "$ACTIVE_HOME" != "$MOUNT_HOME" ]; then
             rm -rf "$ACTIVE_HOME/.config/nvim"
         fi
         ln -sfn "$MOUNT_HOME/.config/nvim" "$ACTIVE_HOME/.config/nvim"
-    fi
-
-    # Git: include the host gitconfig and mark the workspace safe.
-    printf '[include]\n\tpath = %s/.gitconfig.host\n[safe]\n\tdirectory = %s\n' \
-        "$MOUNT_HOME" "$WORKSPACE" > "$ACTIVE_HOME/.gitconfig"
-
-    GIT_COMMON_DIR=$(git -C "$WORKSPACE" rev-parse --git-common-dir 2>/dev/null || true)
-    if [ -n "$GIT_COMMON_DIR" ]; then
-        # Resolve to absolute before comparing — git returns a relative path
-        # for regular repos (.git) but absolute for worktrees.
-        case "$GIT_COMMON_DIR" in
-            /*) ;;
-            *)  GIT_COMMON_DIR="$WORKSPACE/$GIT_COMMON_DIR" ;;
-        esac
-        if [ "$GIT_COMMON_DIR" != "$WORKSPACE/.git" ] && [ -d "$GIT_COMMON_DIR" ]; then
-            git config -f "$ACTIVE_HOME/.gitconfig" --add safe.directory "$(dirname "$GIT_COMMON_DIR")"
-        fi
     fi
 fi
 
