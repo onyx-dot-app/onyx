@@ -13,7 +13,14 @@ import { paddingXVariants, paddingYVariants } from "@opal/shared";
 // Types
 // ---------------------------------------------------------------------------
 
-interface DividerNeverFields {
+interface DividerSharedProps {
+  ref?: React.Ref<HTMLDivElement>;
+  title?: never;
+  description?: never;
+  foldable?: false;
+  orientation?: never;
+  paddingX?: never;
+  paddingY?: never;
   open?: never;
   defaultOpen?: never;
   onOpenChange?: never;
@@ -21,42 +28,37 @@ interface DividerNeverFields {
 }
 
 /** Plain line — no title, no description. */
-interface DividerBareProps extends DividerNeverFields {
-  title?: never;
-  description?: never;
-  foldable?: false;
+type DividerBareProps = Omit<
+  DividerSharedProps,
+  "orientation" | "paddingX" | "paddingY"
+> & {
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: "horizontal" | "vertical";
   /** Horizontal padding. Default: `"sm"` (0.5rem). */
   paddingX?: PaddingVariants;
   /** Vertical padding. Default: `"xs"` (0.25rem). */
   paddingY?: PaddingVariants;
-  ref?: React.Ref<HTMLDivElement>;
-}
+};
 
 /** Line with a title to the left. */
-interface DividerTitledProps extends DividerNeverFields {
+type DividerTitledProps = Omit<DividerSharedProps, "title"> & {
   title: string | RichStr;
-  description?: never;
-  foldable?: false;
-  ref?: React.Ref<HTMLDivElement>;
-}
+};
 
 /** Line with a description below. */
-interface DividerDescribedProps extends DividerNeverFields {
-  title?: never;
+type DividerDescribedProps = Omit<DividerSharedProps, "description"> & {
   /** Description rendered below the divider line. */
   description: string | RichStr;
-  foldable?: false;
-  ref?: React.Ref<HTMLDivElement>;
-}
+};
 
 /** Foldable — requires title, reveals children. */
-interface DividerFoldableProps {
+type DividerFoldableProps = Omit<
+  DividerSharedProps,
+  "title" | "foldable" | "open" | "defaultOpen" | "onOpenChange" | "children"
+> & {
   /** Title is required when foldable. */
   title: string | RichStr;
   foldable: true;
-  description?: never;
   /** Controlled open state. */
   open?: boolean;
   /** Uncontrolled default open state. */
@@ -65,8 +67,7 @@ interface DividerFoldableProps {
   onOpenChange?: (open: boolean) => void;
   /** Content revealed when open. */
   children?: React.ReactNode;
-  ref?: React.Ref<HTMLDivElement>;
-}
+};
 
 type DividerProps =
   | DividerBareProps
@@ -83,13 +84,14 @@ function Divider(props: DividerProps) {
     return <FoldableDivider {...props} />;
   }
 
-  const { ref } = props;
-  const title = "title" in props ? props.title : undefined;
-  const description = "description" in props ? props.description : undefined;
-  const orientation =
-    "orientation" in props ? props.orientation ?? "horizontal" : "horizontal";
-  const paddingX = "paddingX" in props ? props.paddingX ?? "sm" : "sm";
-  const paddingY = "paddingY" in props ? props.paddingY ?? "xs" : "xs";
+  const {
+    ref,
+    title,
+    description,
+    orientation = "horizontal",
+    paddingX = "sm",
+    paddingY = "xs",
+  } = props;
 
   if (orientation === "vertical") {
     return (

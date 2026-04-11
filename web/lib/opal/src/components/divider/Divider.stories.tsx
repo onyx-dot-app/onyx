@@ -27,17 +27,21 @@ export const Vertical: Story = {
   ),
 };
 
-export const FitPadding: Story = {
-  render: () => <Divider padding="fit" />,
+export const NoPadding: Story = {
+  render: () => <Divider paddingX="fit" paddingY="fit" />,
 };
 
-export const VerticalFitPadding: Story = {
+export const CustomPadding: Story = {
+  render: () => <Divider paddingX="lg" paddingY="sm" />,
+};
+
+export const VerticalNoPadding: Story = {
   render: () => (
     <div
       style={{ display: "flex", alignItems: "stretch", height: 64, gap: 16 }}
     >
       <span>Left</span>
-      <Divider orientation="vertical" padding="fit" />
+      <Divider orientation="vertical" paddingX="fit" paddingY="fit" />
       <span>Right</span>
     </div>
   ),
