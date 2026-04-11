@@ -379,7 +379,7 @@ export const ADMIN_ROUTES = {
     icon: SvgHistory,
     title: "Query History",
     sidebarLabel: "Query History",
-    requiredPermission: "admin",
+    requiredPermission: "read:query_history",
     section: "Usage",
     requiresEnterprise: true,
     visibleWhen: (f: FeatureFlags) => f.queryHistoryEnabled,
