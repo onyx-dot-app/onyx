@@ -48,6 +48,8 @@ export default function CopyIconButton({
           "text/plain": new Blob([text], { type: "text/plain" }),
         });
         await navigator.clipboard.write([clipboardItem]);
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
       } else if (!copy(text)) {
         throw new Error("copy-to-clipboard returned false");
       }
