@@ -15,6 +15,34 @@ export const Plain: Story = {
   render: () => <Divider />,
 };
 
+export const Vertical: Story = {
+  render: () => (
+    <div
+      style={{ display: "flex", alignItems: "stretch", height: 64, gap: 16 }}
+    >
+      <span>Left</span>
+      <Divider orientation="vertical" />
+      <span>Right</span>
+    </div>
+  ),
+};
+
+export const FitPadding: Story = {
+  render: () => <Divider padding="fit" />,
+};
+
+export const VerticalFitPadding: Story = {
+  render: () => (
+    <div
+      style={{ display: "flex", alignItems: "stretch", height: 64, gap: 16 }}
+    >
+      <span>Left</span>
+      <Divider orientation="vertical" padding="fit" />
+      <span>Right</span>
+    </div>
+  ),
+};
+
 export const WithTitle: Story = {
   render: () => <Divider title="Section" />,
 };

@@ -1,6 +1,6 @@
 import "@opal/components/cards/select-card/styles.css";
 import type { PaddingVariants, RoundingVariants } from "@opal/types";
-import { cardPaddingVariants, cardRoundingVariants } from "@opal/shared";
+import { paddingVariants, cardRoundingVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 
@@ -78,7 +78,7 @@ function SelectCard({
   children,
   ...statefulProps
 }: SelectCardProps) {
-  const padding = cardPaddingVariants[paddingProp];
+  const padding = paddingVariants[paddingProp];
   const rounding = cardRoundingVariants[roundingProp];
 
   return (

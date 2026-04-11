@@ -2,10 +2,12 @@
 
 import "@opal/components/divider/styles.css";
 import { useState, useCallback } from "react";
-import type { RichStr } from "@opal/types";
+import type { PaddingVariants, RichStr } from "@opal/types";
 import { Button, Text } from "@opal/components";
 import { SvgChevronRight } from "@opal/icons";
 import { Interactive } from "@opal/core";
+import { cn } from "@opal/utils";
+import { paddingXVariants, paddingYVariants } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +25,12 @@ interface DividerBareProps extends DividerNeverFields {
   title?: never;
   description?: never;
   foldable?: false;
+  /** Orientation of the line. Default: `"horizontal"`. */
+  orientation?: "horizontal" | "vertical";
+  /** Horizontal padding. Default: `"sm"` (0.5rem). */
+  paddingX?: PaddingVariants;
+  /** Vertical padding. Default: `"xs"` (0.25rem). */
+  paddingY?: PaddingVariants;
   ref?: React.Ref<HTMLDivElement>;
 }
 
@@ -78,9 +86,35 @@ function Divider(props: DividerProps) {
   const { ref } = props;
   const title = "title" in props ? props.title : undefined;
   const description = "description" in props ? props.description : undefined;
+  const orientation =
+    "orientation" in props ? props.orientation ?? "horizontal" : "horizontal";
+  const paddingX = "paddingX" in props ? props.paddingX ?? "sm" : "sm";
+  const paddingY = "paddingY" in props ? props.paddingY ?? "xs" : "xs";
+
+  if (orientation === "vertical") {
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          "opal-divider-vertical",
+          paddingXVariants[paddingY],
+          paddingYVariants[paddingX]
+        )}
+      >
+        <div className="opal-divider-line-vertical" />
+      </div>
+    );
+  }
 
   return (
-    <div ref={ref} className="opal-divider">
+    <div
+      ref={ref}
+      className={cn(
+        "opal-divider",
+        paddingXVariants[paddingX],
+        paddingYVariants[paddingY]
+      )}
+    >
       <div className="opal-divider-row">
         {title && (
           <div className="opal-divider-title">
