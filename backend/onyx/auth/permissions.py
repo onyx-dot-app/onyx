@@ -137,14 +137,14 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
         id="manage_service_accounts",
         display_name="Manage Service Accounts",
         description="Add and update service accounts and their API keys.",
-        permissions=[Permission.CREATE_SERVICE_ACCOUNT_API_KEYS],
+        permissions=[Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS],
         group=1,
     ),
     PermissionRegistryEntry(
-        id="manage_slack_discord_bots",
+        id="manage_bots",
         display_name="Manage Slack/Discord Bots",
         description="Add and update Onyx integrations with Slack or Discord.",
-        permissions=[Permission.CREATE_SLACK_DISCORD_BOTS],
+        permissions=[Permission.MANAGE_BOTS],
         group=1,
     ),
     # Group 2 — Agents
