@@ -16,12 +16,17 @@ from googleapiclient.discovery import build  # type: ignore
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.access.models import ExternalAccess
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,6 +63,7 @@ def _convert_message_to_document(
     message: dict[str, Any],
     space_name: str,
     space_display_name: str,
+    external_access: ExternalAccess | None = None,
 ) -> Document | None:
     """Convert a single Google Chat message dict to a Document."""
     text = message.get("text", "")
@@ -99,6 +105,7 @@ def _convert_message_to_document(
         title="",
         sections=[TextSection(text=text, link=link)],
         metadata=metadata,
+        external_access=external_access,
     )
 
 
@@ -172,7 +179,39 @@ def _fetch_messages_from_space(
             break
 
 
-class GoogleChatConnector(PollConnector, LoadConnector):
+def _fetch_space_members(
+    service: Any,
+    space_name: str,
+) -> set[str]:
+    """Fetch all member emails from a Google Chat space."""
+    members: set[str] = set()
+    page_token = None
+
+    try:
+        while True:
+            response = (
+                service.spaces()
+                .members()
+                .list(parent=space_name, pageSize=1000, pageToken=page_token)
+                .execute()
+            )
+            for membership in response.get("memberships", []):
+                member = membership.get("member", {})
+                if member.get("type") == "HUMAN":
+                    email = member.get("email")
+                    if email:
+                        members.add(email)
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+    except Exception as e:
+        logger.error(f"Failed to fetch memberships for space {space_name}: {e}")
+
+    return members
+
+
+class GoogleChatConnector(PollConnector, LoadConnector, SlimConnectorWithPermSync):
     """Connector that indexes messages from Google Chat spaces."""
 
     def __init__(
@@ -210,6 +249,7 @@ class GoogleChatConnector(PollConnector, LoadConnector):
         self,
         start: datetime | None = None,
         end: datetime | None = None,
+        include_permissions: bool = False,
     ) -> GenerateDocumentsOutput:
         service = self._get_service()
         spaces = _fetch_spaces(
@@ -227,11 +267,20 @@ class GoogleChatConnector(PollConnector, LoadConnector):
                 f"Fetching messages from space: {space_display_name} ({space_name})"
             )
 
+            external_access = None
+            if include_permissions:
+                members = _fetch_space_members(service, space_name)
+                external_access = ExternalAccess(
+                    external_user_emails=members,
+                    external_user_group_ids=set(),
+                    is_public=False,
+                )
+
             for message in _fetch_messages_from_space(
                 service, space_name, start, end
             ):
                 doc = _convert_message_to_document(
-                    message, space_name, space_display_name
+                    message, space_name, space_display_name, external_access
                 )
                 if doc:
                     doc_batch.append(doc)
@@ -243,7 +292,7 @@ class GoogleChatConnector(PollConnector, LoadConnector):
             yield doc_batch
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        return self._fetch_documents()
+        return self._fetch_documents(include_permissions=True)
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
@@ -251,4 +300,96 @@ class GoogleChatConnector(PollConnector, LoadConnector):
         return self._fetch_documents(
             start=datetime.fromtimestamp(start, tz=timezone.utc),
             end=datetime.fromtimestamp(end, tz=timezone.utc),
+            include_permissions=True,
         )
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Return 'slim' docs (IDs only) for indexing."""
+        service = self._get_service()
+        spaces = _fetch_spaces(
+            service,
+            self.space_names if self.space_names else None,
+        )
+
+        slim_doc_batch: list[SlimDocument] = []
+
+        for space in spaces:
+            space_name = space["name"]
+
+            for message in _fetch_messages_from_space(
+                service,
+                space_name,
+                start=datetime.fromtimestamp(start, tz=timezone.utc) if start else None,
+                end=datetime.fromtimestamp(end, tz=timezone.utc) if end else None,
+            ):
+                msg_name = message.get("name", "")
+                if msg_name:
+                    slim_doc_batch.append(
+                        SlimDocument(
+                            id=f"{_GOOGLE_CHAT_DOC_ID_PREFIX}{msg_name}",
+                        )
+                    )
+
+                    if len(slim_doc_batch) >= self.batch_size:
+                        yield slim_doc_batch
+                        slim_doc_batch = []
+
+            if callback and callback.should_stop():
+                raise RuntimeError("retrieve_all_slim_docs: Stop signal detected")
+
+        if slim_doc_batch:
+            yield slim_doc_batch
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Return 'slim' docs (IDs + permissions) for synchronization."""
+        service = self._get_service()
+        spaces = _fetch_spaces(
+            service,
+            self.space_names if self.space_names else None,
+        )
+
+        slim_doc_batch: list[SlimDocument] = []
+
+        for space in spaces:
+            space_name = space["name"]
+            members = _fetch_space_members(service, space_name)
+            external_access = ExternalAccess(
+                external_user_emails=members,
+                external_user_group_ids=set(),
+                is_public=False,
+            )
+
+            for message in _fetch_messages_from_space(
+                service,
+                space_name,
+                start=datetime.fromtimestamp(start, tz=timezone.utc) if start else None,
+                end=datetime.fromtimestamp(end, tz=timezone.utc) if end else None,
+            ):
+                msg_name = message.get("name", "")
+                if msg_name:
+                    slim_doc_batch.append(
+                        SlimDocument(
+                            id=f"{_GOOGLE_CHAT_DOC_ID_PREFIX}{msg_name}",
+                            external_access=external_access,
+                        )
+                    )
+
+                    if len(slim_doc_batch) >= self.batch_size:
+                        yield slim_doc_batch
+                        slim_doc_batch = []
+
+            if callback and callback.should_stop():
+                raise RuntimeError("retrieve_all_slim_docs_perm_sync: Stop signal detected")
+
+        if slim_doc_batch:
+            yield slim_doc_batch

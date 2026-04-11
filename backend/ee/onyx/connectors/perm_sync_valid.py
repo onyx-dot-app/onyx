@@ -1,5 +1,6 @@
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_chat.connector import GoogleChatConnector
 from onyx.connectors.interfaces import BaseConnector
 
 
@@ -26,3 +27,6 @@ def validate_perm_sync(connector: BaseConnector) -> None:
         validate_confluence_perm_sync(connector)
     elif isinstance(connector, GoogleDriveConnector):
         validate_drive_perm_sync(connector)
+    elif isinstance(connector, GoogleChatConnector):
+        # Google Chat doesn't require special validation for now
+        pass
