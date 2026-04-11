@@ -6,7 +6,7 @@ A containerized development environment for working on Onyx.
 
 - Ubuntu 26.04 base image
 - Node.js 20, uv, Claude Code
-- Docker CLI, GitHub CLI (`gh`)
+- GitHub CLI (`gh`)
 - Neovim, ripgrep, fd, fzf, jq, make, wget, unzip
 - Zsh as default shell (sources host `~/.zshrc` if available)
 - Python venv auto-activation
