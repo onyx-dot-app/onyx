@@ -324,8 +324,8 @@ class GoogleChatConnector(PollConnector, LoadConnector, SlimConnectorWithPermSyn
             for message in _fetch_messages_from_space(
                 service,
                 space_name,
-                start=datetime.fromtimestamp(start, tz=timezone.utc) if start else None,
-                end=datetime.fromtimestamp(end, tz=timezone.utc) if end else None,
+                start=datetime.fromtimestamp(start, tz=timezone.utc) if start is not None else None,
+                end=datetime.fromtimestamp(end, tz=timezone.utc) if end is not None else None,
             ):
                 msg_name = message.get("name", "")
                 if msg_name:
@@ -372,8 +372,8 @@ class GoogleChatConnector(PollConnector, LoadConnector, SlimConnectorWithPermSyn
             for message in _fetch_messages_from_space(
                 service,
                 space_name,
-                start=datetime.fromtimestamp(start, tz=timezone.utc) if start else None,
-                end=datetime.fromtimestamp(end, tz=timezone.utc) if end else None,
+                start=datetime.fromtimestamp(start, tz=timezone.utc) if start is not None else None,
+                end=datetime.fromtimestamp(end, tz=timezone.utc) if end is not None else None,
             ):
                 msg_name = message.get("name", "")
                 if msg_name:
