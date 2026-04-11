@@ -73,19 +73,6 @@ user has read/write access to the bind-mounted workspace:
   To override the auto-detection, set `DEVCONTAINER_REMOTE_USER` before running
   `ods dev up`.
 
-## Docker socket
-
-The container mounts the host's Docker socket so you can run `docker` commands
-from inside. `ods dev` auto-detects the socket path and sets `DOCKER_SOCK`:
-
-| Environment             | Socket path                    |
-| ----------------------- | ------------------------------ |
-| Linux (rootless Docker) | `$XDG_RUNTIME_DIR/docker.sock` |
-| macOS (Docker Desktop)  | `~/.docker/run/docker.sock`    |
-| Linux (standard Docker) | `/var/run/docker.sock`         |
-
-To override, set `DOCKER_SOCK` before running `ods dev up`.
-
 ## Firewall
 
 The container starts with a default-deny firewall (`init-firewall.sh`) that only allows outbound traffic to:
