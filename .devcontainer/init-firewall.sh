@@ -58,7 +58,7 @@ done
 
 # Allow traffic to the Docker gateway so the container can reach host services
 # (e.g. the Onyx stack at localhost:3000, localhost:8080, etc.)
-DOCKER_GATEWAY=$(ip -4 route show | grep "^default" | awk '{print $3}')
+DOCKER_GATEWAY=$(ip -4 route show default | awk '{print $3}')
 if [ -n "$DOCKER_GATEWAY" ]; then
     if ! ipset add allowed-domains "$DOCKER_GATEWAY/32" -exist 2>&1; then
         echo "warning: failed to add Docker gateway $DOCKER_GATEWAY to allowlist" >&2
