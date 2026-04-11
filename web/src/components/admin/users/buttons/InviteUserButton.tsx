@@ -6,7 +6,6 @@ import {
 import { toast } from "@/hooks/useToast";
 import useSWRMutation from "swr/mutation";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 
@@ -109,11 +108,9 @@ export const InviteUserButton = ({
         />
       )}
 
-      <Disabled disabled={isMutating}>
-        <Button onClick={() => setShowInviteModal(true)}>
-          {invited ? "Uninvite" : "Invite"}
-        </Button>
-      </Disabled>
+      <Button disabled={isMutating} onClick={() => setShowInviteModal(true)}>
+        {invited ? "Uninvite" : "Invite"}
+      </Button>
     </>
   );
 };

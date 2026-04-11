@@ -1,42 +1,6 @@
-import { test, expect, Page, Locator } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-
-const WEB_SEARCH_URL = "/admin/configuration/web-search";
-
-// Helper to find a provider card by its label text
-async function findProviderCard(
-  page: Page,
-  providerLabel: string
-): Promise<Locator> {
-  // Find the card containing the provider label - cards are divs with rounded borders
-  // The label is in a Text component inside the card
-  const card = page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerLabel })
-    .first();
-  return card;
-}
-
-// Helper to open the provider setup modal - clicks Connect if available, otherwise clicks the Edit icon
-async function openProviderModal(
-  page: Page,
-  providerLabel: string
-): Promise<void> {
-  const card = await findProviderCard(page, providerLabel);
-  await card.waitFor({ state: "visible", timeout: 10000 });
-
-  // First try to find the Connect button
-  const connectButton = card.getByRole("button", { name: "Connect" });
-  if (await connectButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await connectButton.click();
-    return;
-  }
-
-  // If no Connect button, click the Edit icon button to update credentials
-  const editButton = card.getByRole("button", { name: /^Edit / });
-  await editButton.waitFor({ state: "visible", timeout: 5000 });
-  await editButton.click();
-}
+import { WEB_SEARCH_URL, findProviderCard, openProviderModal } from "./svc";
 
 test.describe("Web Search Provider Configuration", () => {
   test.beforeEach(async ({ page }) => {
@@ -99,7 +63,7 @@ test.describe("Web Search Provider Configuration", () => {
       await page.waitForLoadState("networkidle");
 
       // Verify Exa is now the current default - look for "Current Default" button in the Exa card
-      const exaCard = await findProviderCard(page, "Exa");
+      const exaCard = findProviderCard(page, "Exa");
       await expect(
         exaCard.getByRole("button", { name: "Current Default" })
       ).toBeVisible({ timeout: 15000 });
@@ -165,7 +129,7 @@ test.describe("Web Search Provider Configuration", () => {
       await page.waitForLoadState("networkidle");
 
       // Verify Google PSE is now the current default
-      const googleCard = await findProviderCard(page, "Google PSE");
+      const googleCard = findProviderCard(page, "Google PSE");
       await expect(
         googleCard.getByRole("button", { name: "Current Default" })
       ).toBeVisible({ timeout: 15000 });
@@ -179,7 +143,7 @@ test.describe("Web Search Provider Configuration", () => {
       page,
     }) => {
       // First, configure Google PSE if not already configured
-      const googleCard = await findProviderCard(page, "Google PSE");
+      const googleCard = findProviderCard(page, "Google PSE");
       await googleCard.waitFor({ state: "visible", timeout: 10000 });
 
       const connectButton = googleCard.getByRole("button", { name: "Connect" });
@@ -214,7 +178,7 @@ test.describe("Web Search Provider Configuration", () => {
       );
 
       // Now click the Edit icon button
-      const updatedGoogleCard = await findProviderCard(page, "Google PSE");
+      const updatedGoogleCard = findProviderCard(page, "Google PSE");
       const editButton = updatedGoogleCard.getByRole("button", {
         name: /^Edit /,
       });
@@ -256,7 +220,7 @@ test.describe("Web Search Provider Configuration", () => {
       await page.waitForLoadState("networkidle");
 
       // Verify Google PSE is still the current default
-      const finalGoogleCard = await findProviderCard(page, "Google PSE");
+      const finalGoogleCard = findProviderCard(page, "Google PSE");
       await expect(
         finalGoogleCard.getByRole("button", { name: "Current Default" })
       ).toBeVisible({ timeout: 15000 });
@@ -270,7 +234,7 @@ test.describe("Web Search Provider Configuration", () => {
       page,
     }) => {
       // First, configure Google PSE if not already configured
-      const googleCard = await findProviderCard(page, "Google PSE");
+      const googleCard = findProviderCard(page, "Google PSE");
       await googleCard.waitFor({ state: "visible", timeout: 10000 });
 
       const connectButton = googleCard.getByRole("button", { name: "Connect" });
@@ -305,7 +269,7 @@ test.describe("Web Search Provider Configuration", () => {
       );
 
       // Now click the Edit icon button
-      const updatedGoogleCard = await findProviderCard(page, "Google PSE");
+      const updatedGoogleCard = findProviderCard(page, "Google PSE");
       const editButton = updatedGoogleCard.getByRole("button", {
         name: /^Edit /,
       });
@@ -383,7 +347,7 @@ test.describe("Web Search Provider Configuration", () => {
       await expect(modalDialog).not.toBeVisible({ timeout: 30000 });
       await page.waitForLoadState("networkidle");
 
-      const braveCard = await findProviderCard(page, "Brave");
+      const braveCard = findProviderCard(page, "Brave");
       await expect(
         braveCard.getByRole("button", { name: "Current Default" })
       ).toBeVisible({ timeout: 15000 });
@@ -403,7 +367,7 @@ test.describe("Web Search Provider Configuration", () => {
 
     test("should switch between configured providers", async ({ page }) => {
       // First, configure Exa if needed
-      const exaCard = await findProviderCard(page, "Exa");
+      const exaCard = findProviderCard(page, "Exa");
       await exaCard.waitFor({ state: "visible", timeout: 10000 });
 
       let connectButton = exaCard.getByRole("button", { name: "Connect" });
@@ -426,7 +390,7 @@ test.describe("Web Search Provider Configuration", () => {
       }
 
       // Configure Google PSE if needed
-      const googleCard = await findProviderCard(page, "Google PSE");
+      const googleCard = findProviderCard(page, "Google PSE");
       await googleCard.waitFor({ state: "visible", timeout: 10000 });
 
       connectButton = googleCard.getByRole("button", { name: "Connect" });

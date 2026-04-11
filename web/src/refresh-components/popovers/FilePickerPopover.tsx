@@ -22,7 +22,7 @@ import {
   SvgImage,
   SvgLoader,
   SvgMoreHorizontal,
-  SvgPaperclip,
+  SvgUploadSquare,
 } from "@opal/icons";
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
@@ -125,7 +125,7 @@ function FilePickerPopoverContents({
         // Action button to upload more files
         <LineItem
           key="upload-files"
-          icon={SvgPaperclip}
+          icon={SvgUploadSquare}
           description="Upload a file from your device"
           onClick={triggerUploadPicker}
         >

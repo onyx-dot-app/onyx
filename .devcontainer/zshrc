@@ -1,0 +1,10 @@
+# Devcontainer zshrc — sourced automatically for both root and dev users.
+# Edit this file to customize the shell without rebuilding the image.
+
+# Auto-activate Python venv
+if [ -f /workspace/.venv/bin/activate ]; then
+  . /workspace/.venv/bin/activate
+fi
+
+# Source host zshrc if bind-mounted
+[ -f ~/.zshrc.host ] && . ~/.zshrc.host

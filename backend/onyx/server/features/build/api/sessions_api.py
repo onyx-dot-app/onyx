@@ -11,9 +11,10 @@ from fastapi import UploadFile
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import User
@@ -65,7 +66,7 @@ router = APIRouter(prefix="/sessions")
 
 @router.get("", response_model=SessionListResponse)
 def list_sessions(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SessionListResponse:
     """List all build sessions for the current user."""
@@ -88,7 +89,7 @@ SESSION_CREATE_LOCK_TIMEOUT_SECONDS = 300
 @router.post("", response_model=DetailedSessionResponse)
 def create_session(
     request: SessionCreateRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> DetailedSessionResponse:
     """
@@ -157,7 +158,7 @@ def create_session(
 @router.get("/{session_id}", response_model=DetailedSessionResponse)
 def get_session_details(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> DetailedSessionResponse:
     """
@@ -195,7 +196,7 @@ def get_session_details(
 )
 def check_pre_provisioned_session(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PreProvisionedCheckResponse:
     """
@@ -228,7 +229,7 @@ def check_pre_provisioned_session(
 @router.post("/{session_id}/generate-name", response_model=SessionNameGenerateResponse)
 def generate_session_name(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SessionNameGenerateResponse:
     """Generate a session name using LLM based on the first user message."""
@@ -248,7 +249,7 @@ def generate_session_name(
 def generate_suggestions(
     session_id: UUID,
     request: GenerateSuggestionsRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> GenerateSuggestionsResponse:
     """Generate follow-up suggestions based on the first exchange in a session."""
@@ -281,7 +282,7 @@ def generate_suggestions(
 def update_session_name(
     session_id: UUID,
     request: SessionUpdateRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SessionResponse:
     """Update the name of a build session."""
@@ -301,7 +302,7 @@ def update_session_name(
 def set_session_public(
     session_id: UUID,
     request: SetSessionSharingRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SetSessionSharingResponse:
     """Set the sharing scope of a build session's webapp."""
@@ -319,7 +320,7 @@ def set_session_public(
 @router.delete("/{session_id}", response_model=None)
 def delete_session(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Delete a build session and all associated data.
@@ -356,7 +357,7 @@ RESTORE_LOCK_TIMEOUT_SECONDS = 300
 @router.post("/{session_id}/restore", response_model=DetailedSessionResponse)
 def restore_session(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> DetailedSessionResponse:
     """Restore sandbox and load session snapshot. Blocks until complete.
@@ -536,7 +537,7 @@ def restore_session(
 )
 def list_artifacts(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[dict]:
     """List artifacts generated in the session."""
@@ -554,7 +555,7 @@ def list_artifacts(
 def list_directory(
     session_id: UUID,
     path: str = "",
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> DirectoryListing:
     """
@@ -592,7 +593,7 @@ def list_directory(
 def download_artifact(
     session_id: UUID,
     path: str,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Download a specific artifact file."""
@@ -643,7 +644,7 @@ def download_artifact(
 def export_docx(
     session_id: UUID,
     path: str,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Export a markdown file as DOCX."""
@@ -685,7 +686,7 @@ def export_docx(
 def get_pptx_preview(
     session_id: UUID,
     path: str,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PptxPreviewResponse:
     """Generate slide image previews for a PPTX file."""
@@ -711,7 +712,7 @@ def get_pptx_preview(
 @router.get("/{session_id}/webapp-info", response_model=WebappInfo)
 def get_webapp_info(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> WebappInfo:
     """
@@ -733,7 +734,7 @@ def get_webapp_info(
 @router.get("/{session_id}/webapp-download")
 def download_webapp(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """
@@ -764,7 +765,7 @@ def download_webapp(
 def download_directory(
     session_id: UUID,
     path: str,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """
@@ -801,7 +802,7 @@ def download_directory(
 def upload_file_endpoint(
     session_id: UUID,
     file: UploadFile = File(...),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UploadResponse:
     """Upload a file to the session's sandbox.
@@ -852,7 +853,7 @@ def upload_file_endpoint(
 def delete_file_endpoint(
     session_id: UUID,
     path: str,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Delete a file from the session's sandbox.

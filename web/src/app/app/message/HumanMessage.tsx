@@ -10,6 +10,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
+import { Hoverable } from "@opal/core";
 import FileDisplay from "./FileDisplay";
 
 interface MessageEditingProps {
@@ -170,9 +171,9 @@ const HumanMessage = React.memo(function HumanMessage({
     return undefined;
   };
 
-  const copyEditButton = useMemo(
+  const copyEditButtonContent = useMemo(
     () => (
-      <div className="flex flex-row flex-shrink px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex flex-row flex-shrink px-1">
         <CopyIconButton
           getCopyText={() => content}
           prominence="tertiary"
@@ -190,86 +191,94 @@ const HumanMessage = React.memo(function HumanMessage({
     [content]
   );
 
+  const copyEditButton = (
+    <Hoverable.Item group="humanMessage" variant="opacity-on-hover">
+      {copyEditButtonContent}
+    </Hoverable.Item>
+  );
+
   return (
-    <div
-      id="onyx-human-message"
-      className="group flex flex-col justify-end w-full relative"
-    >
-      <FileDisplay files={files || []} />
-      {isEditing ? (
-        <MessageEditing
-          content={content}
-          onSubmitEdit={(editedContent) => {
-            // Don't update UI for edits that can't be persisted
-            if (messageId === undefined || messageId === null) {
-              setIsEditing(false);
-              return;
-            }
-            onEdit?.(editedContent, messageId);
-            setContent(editedContent);
-            setIsEditing(false);
-          }}
-          onCancelEdit={() => setIsEditing(false)}
-        />
-      ) : (
-        <div className="flex justify-end">
-          {onEdit && !isMobile && copyEditButton}
-          <div className="md:max-w-[37.5rem]">
-            <div
-              className={
-                "max-w-[30rem] md:max-w-[37.5rem] whitespace-break-spaces break-anywhere rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+    <Hoverable.Root group="humanMessage" widthVariant="full">
+      <div
+        id="onyx-human-message"
+        className="flex flex-col justify-end w-full relative"
+      >
+        <FileDisplay files={files || []} />
+        {isEditing ? (
+          <MessageEditing
+            content={content}
+            onSubmitEdit={(editedContent) => {
+              // Don't update UI for edits that can't be persisted
+              if (messageId === undefined || messageId === null) {
+                setIsEditing(false);
+                return;
               }
-              onCopy={(e) => {
-                const selection = window.getSelection();
-                if (selection) {
-                  e.preventDefault();
-                  const text = selection
-                    .toString()
-                    .replace(/\n{2,}/g, "\n")
-                    .trim();
-                  e.clipboardData.setData("text/plain", text);
+              onEdit?.(editedContent, messageId);
+              setContent(editedContent);
+              setIsEditing(false);
+            }}
+            onCancelEdit={() => setIsEditing(false)}
+          />
+        ) : (
+          <div className="flex justify-end">
+            {onEdit && !isMobile && copyEditButton}
+            <div className="md:max-w-[37.5rem]">
+              <div
+                className={
+                  "max-w-[30rem] md:max-w-[37.5rem] whitespace-break-spaces break-anywhere rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
                 }
-              }}
-            >
-              <Text
-                as="p"
-                className="inline-block align-middle"
-                mainContentBody
+                onCopy={(e) => {
+                  const selection = window.getSelection();
+                  if (selection) {
+                    e.preventDefault();
+                    const text = selection
+                      .toString()
+                      .replace(/\n{2,}/g, "\n")
+                      .trim();
+                    e.clipboardData.setData("text/plain", text);
+                  }
+                }}
               >
-                {content}
-              </Text>
+                <Text
+                  as="p"
+                  className="inline-block align-middle"
+                  mainContentBody
+                >
+                  {content}
+                </Text>
+              </div>
             </div>
           </div>
+        )}
+        <div className="flex justify-end pt-1">
+          {!isEditing && onEdit && isMobile && copyEditButton}
+          {currentMessageInd !== undefined &&
+            onMessageSelection &&
+            otherMessagesCanSwitchTo &&
+            otherMessagesCanSwitchTo.length > 1 && (
+              <MessageSwitcher
+                disableForStreaming={disableSwitchingForStreaming}
+                currentPage={currentMessageInd + 1}
+                totalPages={otherMessagesCanSwitchTo.length}
+                handlePrevious={() => {
+                  stopGenerating();
+                  const prevMessage = getPreviousMessage();
+                  if (prevMessage !== undefined) {
+                    onMessageSelection(prevMessage);
+                  }
+                }}
+                handleNext={() => {
+                  stopGenerating();
+                  const nextMessage = getNextMessage();
+                  if (nextMessage !== undefined) {
+                    onMessageSelection(nextMessage);
+                  }
+                }}
+              />
+            )}
         </div>
-      )}
-      <div className="flex justify-end pt-1">
-        {!isEditing && onEdit && isMobile && copyEditButton}
-        {currentMessageInd !== undefined &&
-          onMessageSelection &&
-          otherMessagesCanSwitchTo &&
-          otherMessagesCanSwitchTo.length > 1 && (
-            <MessageSwitcher
-              disableForStreaming={disableSwitchingForStreaming}
-              currentPage={currentMessageInd + 1}
-              totalPages={otherMessagesCanSwitchTo.length}
-              handlePrevious={() => {
-                stopGenerating();
-                const prevMessage = getPreviousMessage();
-                if (prevMessage !== undefined) {
-                  onMessageSelection(prevMessage);
-                }
-              }}
-              handleNext={() => {
-                stopGenerating();
-                const nextMessage = getNextMessage();
-                if (nextMessage !== undefined) {
-                  onMessageSelection(nextMessage);
-                }
-              }}
-            />
-          )}
       </div>
-    </div>
+    </Hoverable.Root>
   );
 }, arePropsEqual);
 

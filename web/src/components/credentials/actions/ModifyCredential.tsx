@@ -16,7 +16,6 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];
@@ -120,14 +119,13 @@ function CredentialSelectionTable({
                     {new Date(credential.time_updated).toLocaleString()}
                   </td>
                   <td className="p-2 flex gap-x-2 content-center mt-auto">
-                    <Disabled disabled={selected || !editable}>
-                      <Button
-                        onClick={async () => {
-                          onDeleteCredential(credential);
-                        }}
-                        icon={SvgTrash}
-                      />
-                    </Disabled>
+                    <Button
+                      disabled={selected || !editable}
+                      onClick={async () => {
+                        onDeleteCredential(credential);
+                      }}
+                      icon={SvgTrash}
+                    />
                     {onEditCredential && (
                       <button
                         disabled={!editable}
@@ -268,28 +266,23 @@ export default function ModifyCredential({
               <div />
             )}
 
-            <Disabled disabled={selectedCredential == null}>
-              <Button
-                onClick={() => {
-                  if (onSwap && attachedConnector) {
-                    onSwap(
-                      selectedCredential!,
-                      attachedConnector.id,
-                      accessType
-                    );
-                    if (close) {
-                      close();
-                    }
+            <Button
+              disabled={selectedCredential == null}
+              onClick={() => {
+                if (onSwap && attachedConnector) {
+                  onSwap(selectedCredential!, attachedConnector.id, accessType);
+                  if (close) {
+                    close();
                   }
-                  if (onSwitch) {
-                    onSwitch(selectedCredential!);
-                  }
-                }}
-                icon={SvgArrowExchange}
-              >
-                Select
-              </Button>
-            </Disabled>
+                }
+                if (onSwitch) {
+                  onSwitch(selectedCredential!);
+                }
+              }}
+              icon={SvgArrowExchange}
+            >
+              Select
+            </Button>
           </div>
         )}
       </div>

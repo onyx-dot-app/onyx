@@ -203,6 +203,7 @@ prompt_or_default() {
     local default_value="$2"
     read_prompt_line "$prompt_text"
     [[ -z "$REPLY" ]] && REPLY="$default_value"
+    return 0
 }
 
 prompt_yn_or_default() {
@@ -210,6 +211,7 @@ prompt_yn_or_default() {
     local default_value="$2"
     read_prompt_char "$prompt_text"
     [[ -z "$REPLY" ]] && REPLY="$default_value"
+    return 0
 }
 
 confirm_action() {
@@ -1301,3 +1303,17 @@ print_info "Refer to the README in the ${INSTALL_ROOT} directory for more inform
 echo ""
 print_info "For help or issues, contact: founders@onyx.app"
 echo ""
+
+# --- GitHub star prompt (inspired by oh-my-codex) ---
+# Only prompt in interactive mode and only if gh CLI is available.
+# Uses the GitHub API directly (PUT /user/starred) like oh-my-codex.
+if is_interactive && command -v gh &>/dev/null; then
+    prompt_yn_or_default "Enjoying Onyx? Star the repo on GitHub? [Y/n] " "Y"
+    if [[ ! "$REPLY" =~ ^[Nn] ]]; then
+        if GH_PAGER= gh api -X PUT /user/starred/onyx-dot-app/onyx < /dev/null >/dev/null 2>&1; then
+            print_success "Thanks for the star!"
+        else
+            print_info "Star us at: https://github.com/onyx-dot-app/onyx"
+        fi
+    fi
+fi

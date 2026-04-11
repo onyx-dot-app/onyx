@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // stripANSI removes ANSI escape sequences for test comparisons.
@@ -14,7 +15,7 @@ func stripANSI(s string) string {
 }
 
 func TestAddUserMessage(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.addUserMessage("hello world")
 
 	if len(v.entries) != 1 {
@@ -37,7 +38,7 @@ func TestAddUserMessage(t *testing.T) {
 }
 
 func TestStartAndFinishAgent(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.startAgent()
 
 	if !v.streaming {
@@ -83,7 +84,7 @@ func TestStartAndFinishAgent(t *testing.T) {
 }
 
 func TestFinishAgentNoPadding(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.startAgent()
 	v.appendToken("Test message")
 	v.finishAgent()
@@ -98,7 +99,7 @@ func TestFinishAgentNoPadding(t *testing.T) {
 }
 
 func TestFinishAgentMultiline(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.startAgent()
 	v.appendToken("Line one\n\nLine three")
 	v.finishAgent()
@@ -115,7 +116,7 @@ func TestFinishAgentMultiline(t *testing.T) {
 }
 
 func TestFinishAgentEmpty(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.startAgent()
 	v.finishAgent()
 
@@ -128,7 +129,7 @@ func TestFinishAgentEmpty(t *testing.T) {
 }
 
 func TestAddInfo(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.addInfo("test info")
 
 	if len(v.entries) != 1 {
@@ -145,7 +146,7 @@ func TestAddInfo(t *testing.T) {
 }
 
 func TestAddError(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.addError("something broke")
 
 	if len(v.entries) != 1 {
@@ -162,7 +163,7 @@ func TestAddError(t *testing.T) {
 }
 
 func TestAddCitations(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.addCitations(map[int]string{1: "doc-a", 2: "doc-b"})
 
 	if len(v.entries) != 1 {
@@ -182,7 +183,7 @@ func TestAddCitations(t *testing.T) {
 }
 
 func TestAddCitationsEmpty(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.addCitations(map[int]string{})
 
 	if len(v.entries) != 0 {
@@ -191,7 +192,7 @@ func TestAddCitationsEmpty(t *testing.T) {
 }
 
 func TestCitationVisibility(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.addInfo("hello")
 	v.addCitations(map[int]string{1: "doc"})
 
@@ -211,7 +212,7 @@ func TestCitationVisibility(t *testing.T) {
 }
 
 func TestClearAll(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.addUserMessage("test")
 	v.startAgent()
 	v.appendToken("response")
@@ -230,7 +231,7 @@ func TestClearAll(t *testing.T) {
 }
 
 func TestClearDisplay(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.addUserMessage("test")
 	v.clearDisplay()
 
@@ -240,7 +241,7 @@ func TestClearDisplay(t *testing.T) {
 }
 
 func TestViewPadsShortContent(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	v.addInfo("hello")
 
 	view := v.view(10)
@@ -251,7 +252,7 @@ func TestViewPadsShortContent(t *testing.T) {
 }
 
 func TestViewTruncatesTallContent(t *testing.T) {
-	v := newViewport(80)
+	v := newViewport(80, false)
 	for i := 0; i < 20; i++ {
 		v.addInfo("line")
 	}
@@ -260,5 +261,95 @@ func TestViewTruncatesTallContent(t *testing.T) {
 	lines := strings.Split(view, "\n")
 	if len(lines) != 5 {
 		t.Errorf("expected 5 lines (truncated), got %d", len(lines))
+	}
+}
+
+func TestStreamMarkdownRendersOnThrottle(t *testing.T) {
+	v := newViewport(80, true)
+	v.startAgent()
+
+	// First token: no prior render, so it should render immediately
+	v.appendToken("**bold text**")
+
+	if v.streamRendered == "" {
+		t.Error("expected streamRendered to be populated after first token")
+	}
+	plain := stripANSI(v.streamRendered)
+	if !strings.Contains(plain, "bold text") {
+		t.Errorf("expected rendered to contain 'bold text', got %q", plain)
+	}
+	// Should not contain raw markdown asterisks
+	if strings.Contains(plain, "**") {
+		t.Errorf("expected markdown to be rendered (no **), got %q", plain)
+	}
+
+	// Second token within throttle window: should NOT re-render
+	v.lastRenderTime = time.Now() // simulate recent render
+	prevRendered := v.streamRendered
+	v.appendToken(" more")
+	if v.streamRendered != prevRendered {
+		t.Error("expected streamRendered to be unchanged within throttle window")
+	}
+
+	// After throttle interval: should re-render
+	v.lastRenderTime = time.Now().Add(-streamRenderInterval - time.Millisecond)
+	v.appendToken("!")
+	if v.streamRendered == prevRendered {
+		t.Error("expected streamRendered to update after throttle interval")
+	}
+	plain = stripANSI(v.streamRendered)
+	if !strings.Contains(plain, "bold text more!") {
+		t.Errorf("expected updated rendered content, got %q", plain)
+	}
+}
+
+func TestStreamMarkdownDisabledNoRender(t *testing.T) {
+	v := newViewport(80, false)
+	v.startAgent()
+	v.appendToken("**bold**")
+
+	if v.streamRendered != "" {
+		t.Error("expected no streamRendered when streamMarkdown is disabled")
+	}
+
+	// View should show raw markdown
+	view := v.view(10)
+	plain := stripANSI(view)
+	if !strings.Contains(plain, "**bold**") {
+		t.Errorf("expected raw markdown in view, got %q", plain)
+	}
+}
+
+func TestStreamMarkdownViewUsesRendered(t *testing.T) {
+	v := newViewport(80, true)
+	v.startAgent()
+	v.appendToken("**formatted**")
+
+	view := v.view(10)
+	plain := stripANSI(view)
+	// Should show rendered content, not raw **formatted**
+	if strings.Contains(plain, "**") {
+		t.Errorf("expected rendered markdown in view (no **), got %q", plain)
+	}
+	if !strings.Contains(plain, "formatted") {
+		t.Errorf("expected 'formatted' in view, got %q", plain)
+	}
+}
+
+func TestStreamMarkdownResetOnStart(t *testing.T) {
+	v := newViewport(80, true)
+
+	// First stream cycle
+	v.startAgent()
+	v.appendToken("first")
+	v.finishAgent()
+
+	// Start second stream - state should be clean
+	v.startAgent()
+	if v.streamRendered != "" {
+		t.Error("expected streamRendered cleared on startAgent")
+	}
+	if v.lastRenderLen != 0 {
+		t.Error("expected lastRenderLen reset on startAgent")
 	}
 }

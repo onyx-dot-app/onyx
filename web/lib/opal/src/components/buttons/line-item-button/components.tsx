@@ -33,7 +33,7 @@ type LineItemButtonOwnProps = Pick<
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
 
-  /** Corner rounding preset (height is always content-driven). @default "default" */
+  /** Corner rounding preset (height is always content-driven). @default "md" */
   roundingVariant?: InteractiveContainerRoundingVariant;
 
   /** Container width. @default "full" */
@@ -65,7 +65,7 @@ function LineItemButton({
   type = "button",
 
   // Sizing
-  roundingVariant = "default",
+  roundingVariant = "md",
   width = "full",
   tooltip,
   tooltipSide = "top",

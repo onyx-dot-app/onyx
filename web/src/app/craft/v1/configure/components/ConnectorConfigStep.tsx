@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import { ValidSources } from "@/lib/types";
 import { Credential } from "@/lib/connectors/credentials";
@@ -96,16 +95,16 @@ function ConnectorConfigForm({
             />
           ))}
         <Section flexDirection="row" justifyContent="between" height="fit">
-          <Disabled disabled={isSubmitting}>
-            <Button prominence="secondary" onClick={onBack}>
-              Back
-            </Button>
-          </Disabled>
-          <Disabled disabled={isSubmitting}>
-            <Button type="button" onClick={handleSubmit}>
-              {isSubmitting ? "Creating..." : "Create Connector"}
-            </Button>
-          </Disabled>
+          <Button
+            disabled={isSubmitting}
+            prominence="secondary"
+            onClick={onBack}
+          >
+            Back
+          </Button>
+          <Button disabled={isSubmitting} type="button" onClick={handleSubmit}>
+            {isSubmitting ? "Creating..." : "Create Connector"}
+          </Button>
         </Section>
       </CardSection>
     </Form>

@@ -193,9 +193,9 @@ hover, active, and disabled states.
 
 ### Disabled (`core/disabled/`)
 
-Propagates disabled state via React context. `Interactive.Stateless` and `Interactive.Stateful`
-consume this automatically, so wrapping a subtree in `<Disabled disabled={true}>` disables all
-interactive descendants.
+A pure CSS wrapper that applies disabled visuals (`opacity-50`, `cursor-not-allowed`,
+`pointer-events: none`) to a single child element via Radix `Slot`. Has no React context —
+Interactive primitives and buttons manage their own disabled state via a `disabled` prop.
 
 ### Hoverable (`core/animations/`)
 
@@ -230,6 +230,23 @@ import { Hoverable } from "@opal/core";
 ```
 
 # Best Practices
+
+## 0. Size Variant Defaults
+
+**When using `SizeVariants` (or any subset like `PaddingVariants`, `RoundingVariants`) as a prop
+type, always default to `"md"`.**
+
+**Reason:** `"md"` is the standard middle-of-the-road preset across the design system. Consistent
+defaults make components predictable — callers only need to specify a size when they want something
+other than the norm.
+
+```typescript
+// ✅ Good — default to "md"
+function MyCard({ padding = "md", rounding = "md" }: MyCardProps) { ... }
+
+// ❌ Bad — arbitrary or inconsistent defaults
+function MyCard({ padding = "sm", rounding = "lg" }: MyCardProps) { ... }
+```
 
 ## 1. Tailwind Dark Mode
 

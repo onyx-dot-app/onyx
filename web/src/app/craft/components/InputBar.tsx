@@ -364,14 +364,13 @@ const InputBar = memo(
               {/* Bottom left controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* (+) button for file upload */}
-                <Disabled disabled={disabled}>
-                  <Button
-                    icon={SvgPaperclip}
-                    tooltip="Attach Files"
-                    prominence="tertiary"
-                    onClick={() => fileInputRef.current?.click()}
-                  />
-                </Disabled>
+                <Button
+                  disabled={disabled}
+                  icon={SvgPaperclip}
+                  tooltip="Attach Files"
+                  prominence="tertiary"
+                  onClick={() => fileInputRef.current?.click()}
+                />
                 {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
                 {demoDataEnabled && isWelcomePage && (
                   <SimpleTooltip
@@ -379,18 +378,17 @@ const InputBar = memo(
                     side="top"
                   >
                     <span>
-                      <Disabled disabled={disabled}>
-                        <SelectButton
-                          leftIcon={SvgOrganization}
-                          engaged={demoDataEnabled}
-                          action
-                          folded
-                          onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
-                          className="bg-action-link-01"
-                        >
-                          Demo Data Active
-                        </SelectButton>
-                      </Disabled>
+                      <SelectButton
+                        disabled={disabled}
+                        leftIcon={SvgOrganization}
+                        engaged={demoDataEnabled}
+                        action
+                        folded
+                        onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
+                        className="bg-action-link-01"
+                      >
+                        Demo Data Active
+                      </SelectButton>
                     </span>
                   </SimpleTooltip>
                 )}

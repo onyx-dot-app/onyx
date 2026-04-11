@@ -56,6 +56,15 @@ ee_tasks_to_schedule: list[dict] = []
 if not MULTI_TENANT:
     ee_tasks_to_schedule = [
         {
+            "name": "hook-execution-log-cleanup",
+            "task": OnyxCeleryTask.HOOK_EXECUTION_LOG_CLEANUP_TASK,
+            "schedule": timedelta(days=1),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
+        {
             "name": "autogenerate-usage-report",
             "task": OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
             "schedule": timedelta(days=30),  # TODO: change this to config flag

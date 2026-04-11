@@ -35,7 +35,7 @@ Interactive.Stateful         <- selectVariant, state, interaction, onClick, href
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `roundingVariant` | `InteractiveContainerRoundingVariant` | `"default"` | Corner rounding preset (height is content-driven) |
+| `roundingVariant` | `InteractiveContainerRoundingVariant` | `"md"` | Corner rounding preset (height is content-driven) |
 | `width` | `WidthVariant` | `"full"` | Container width |
 | `type` | `"submit" \| "button" \| "reset"` | `"button"` | HTML button type |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
@@ -63,7 +63,7 @@ import { LineItemButton } from "@opal/components";
 <LineItemButton
   selectVariant="select-heavy"
   state={isSelected ? "selected" : "empty"}
-  roundingVariant="compact"
+  roundingVariant="sm"
   onClick={handleClick}
   title="gpt-4o"
   sizePreset="main-ui"

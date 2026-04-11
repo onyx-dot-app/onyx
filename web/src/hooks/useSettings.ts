@@ -1,5 +1,6 @@
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   Settings,
   EnterpriseSettings,
@@ -32,11 +33,12 @@ export function useSettings(): {
   error: Error | undefined;
 } {
   const { data, error, isLoading } = useSWR<Settings>(
-    "/api/settings",
+    SWR_KEYS.settings,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      revalidateIfStale: false,
       dedupingInterval: 30_000,
       errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
     }
@@ -61,11 +63,12 @@ export function useEnterpriseSettings(eeEnabledRuntime: boolean): {
   const shouldFetch = EE_ENABLED || eeEnabledRuntime;
 
   const { data, error, isLoading } = useSWR<EnterpriseSettings>(
-    shouldFetch ? "/api/enterprise-settings" : null,
+    shouldFetch ? SWR_KEYS.enterpriseSettings : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      revalidateIfStale: false,
       dedupingInterval: 30_000,
       errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
       // Referential equality instead of SWR's default deep comparison.
@@ -89,11 +92,12 @@ export function useCustomAnalyticsScript(
   const shouldFetch = EE_ENABLED || eeEnabledRuntime;
 
   const { data } = useSWR<string>(
-    shouldFetch ? "/api/enterprise-settings/custom-analytics-script" : null,
+    shouldFetch ? SWR_KEYS.customAnalyticsScript : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      revalidateIfStale: false,
       dedupingInterval: 60_000,
     }
   );

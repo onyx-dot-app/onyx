@@ -2,11 +2,11 @@
 
 **Import:** `import { SelectCard, type SelectCardProps } from "@opal/components";`
 
-A stateful interactive card — the card counterpart to [`SelectButton`](../../buttons/select-button/README.md). Built on `Interactive.Stateful` (Slot) with a structural `<div>` that owns padding, rounding, border, and overflow.
+A stateful interactive card — the card counterpart to [`SelectButton`](../../buttons/select-button/README.md). Built on `Interactive.Stateful` (Slot) with a structural `<div>` that owns padding, rounding, border, and overflow. Always uses the `select-card` Interactive.Stateful variant internally.
 
 ## Relationship to Card
 
-`Card` is a plain, non-interactive container. `SelectCard` adds stateful interactivity (hover, active, disabled, state-driven colors) by wrapping its root div with `Interactive.Stateful`. The relationship mirrors `Button` (stateless) vs `SelectButton` (stateful).
+`Card` is a plain, non-interactive container. `SelectCard` adds stateful interactivity (hover, active, disabled, state-driven colors) by wrapping its root div with `Interactive.Stateful`. Both share the same independent `padding` / `rounding` API.
 
 ## Relationship to SelectButton
 
@@ -18,15 +18,15 @@ Interactive.Stateful → structural element → content
 
 The key differences:
 
-- SelectCard renders a `<div>` (not `Interactive.Container`) — cards have their own rounding scale (one notch larger than buttons) and don't need Container's height/min-width.
+- SelectCard renders a `<div>` (not `Interactive.Container`) — cards have their own rounding scale and don't need Container's height/min-width.
 - SelectCard has no `foldable` prop — use `Interactive.Foldable` directly inside children.
 - SelectCard's children are fully composable — use `CardHeaderLayout`, `ContentAction`, `Content`, buttons, etc. inside.
 
 ## Architecture
 
 ```
-Interactive.Stateful              <- variant, state, interaction, disabled, onClick
-  └─ div.opal-select-card        <- padding, rounding, border, overflow
+Interactive.Stateful (variant="select-card")  <- state, interaction, disabled, onClick
+  └─ div.opal-select-card                    <- padding, rounding, border, overflow
        └─ children (composable)
 ```
 
@@ -34,28 +34,36 @@ The `Interactive.Stateful` Slot merges onto the div, producing a single DOM elem
 
 ## Props
 
-Inherits **all** props from `InteractiveStatefulProps` (variant, state, interaction, onClick, href, etc.) plus:
+Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which is hardcoded to `select-card`) plus:
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `sizeVariant` | `ContainerSizeVariants` | `"lg"` | Controls padding and border-radius |
+| `padding` | `PaddingVariants` | `"sm"` | Padding preset |
+| `rounding` | `RoundingVariants` | `"lg"` | Border-radius preset |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
 | `children` | `React.ReactNode` | — | Card content |
 
+### Padding scale
+
+| `padding` | Class   |
+|-----------|---------|
+| `"lg"`    | `p-6`   |
+| `"md"`    | `p-4`   |
+| `"sm"`    | `p-2`   |
+| `"xs"`    | `p-1`   |
+| `"2xs"`   | `p-0.5` |
+| `"fit"`   | `p-0`   |
+
 ### Rounding scale
 
-Cards use a bumped-up rounding scale compared to buttons:
+| `rounding` | Class        |
+|------------|--------------|
+| `"xs"`     | `rounded-04` |
+| `"sm"`     | `rounded-08` |
+| `"md"`     | `rounded-12` |
+| `"lg"`     | `rounded-16` |
 
-| Size | Rounding | Effective radius |
-|---|---|---|
-| `lg` | `rounded-16` | 1rem (16px) |
-| `md`–`sm` | `rounded-12` | 0.75rem (12px) |
-| `xs`–`2xs` | `rounded-08` | 0.5rem (8px) |
-| `fit` | `rounded-16` | 1rem (16px) |
-
-### Recommended variant: `select-card`
-
-The `select-card` Interactive.Stateful variant is specifically designed for cards. Unlike `select-heavy` (which only changes foreground color between empty and filled), `select-card` gives the filled state a visible background — important on larger surfaces where background carries more of the visual distinction.
+### State colors (`select-card` variant)
 
 | State | Rest background | Rest foreground |
 |---|---|---|
@@ -82,7 +90,7 @@ All background and foreground colors come from the Interactive.Stateful CSS, not
 import { SelectCard } from "@opal/components";
 import { CardHeaderLayout } from "@opal/layouts";
 
-<SelectCard variant="select-card" state="selected" onClick={handleClick}>
+<SelectCard state="selected" onClick={handleClick}>
   <CardHeaderLayout
     icon={SvgGlobe}
     title="Google"
@@ -100,7 +108,7 @@ import { CardHeaderLayout } from "@opal/layouts";
 ### Disconnected state (clickable)
 
 ```tsx
-<SelectCard variant="select-card" state="empty" onClick={handleConnect}>
+<SelectCard state="empty" onClick={handleConnect}>
   <CardHeaderLayout
     icon={SvgCloud}
     title="OpenAI"
@@ -115,7 +123,7 @@ import { CardHeaderLayout } from "@opal/layouts";
 ### With foldable hover-reveal
 
 ```tsx
-<SelectCard variant="select-card" state="filled">
+<SelectCard state="filled">
   <CardHeaderLayout
     icon={SvgCloud}
     title="OpenAI"

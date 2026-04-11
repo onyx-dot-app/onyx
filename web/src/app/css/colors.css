@@ -467,6 +467,10 @@
 
   /* Frost Overlay (for FrostedDiv component) - lighter in light mode */
   --frost-overlay: var(--alpha-grey-00-10);
+
+  /* Scrollbar */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: var(--alpha-grey-100-20);
 }
 
 /* Dark Colors */
@@ -671,4 +675,8 @@
 
   /* Frost Overlay (for FrostedDiv component) - darker in dark mode */
   --frost-overlay: var(--alpha-grey-100-10);
+
+  /* Scrollbar */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: var(--alpha-grey-00-20);
 }

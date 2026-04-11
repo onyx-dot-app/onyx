@@ -175,6 +175,28 @@ def _strip_tool_content_from_messages(
     return result
 
 
+def _fix_tool_user_message_ordering(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Insert a synthetic assistant message between tool and user messages.
+
+    Some models (e.g. Mistral on Azure) require strict message ordering where
+    a user message cannot immediately follow a tool message. This function
+    inserts a minimal assistant message to bridge the gap.
+    """
+    if len(messages) < 2:
+        return messages
+
+    result: list[dict[str, Any]] = [messages[0]]
+    for msg in messages[1:]:
+        prev_role = result[-1].get("role")
+        curr_role = msg.get("role")
+        if prev_role == "tool" and curr_role == "user":
+            result.append({"role": "assistant", "content": "Noted. Continuing."})
+        result.append(msg)
+    return result
+
+
 def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     """Check if any messages contain tool-related content blocks."""
     for msg in messages:
@@ -305,12 +327,19 @@ class LitellmLLM(LLM):
         ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
-        # Bifrost: OpenAI-compatible proxy that expects model names in
-        # provider/model format (e.g. "anthropic/claude-sonnet-4-6").
-        # We route through LiteLLM's openai provider with the Bifrost base URL,
-        # and ensure /v1 is appended.
-        if model_provider == LlmProviderNames.BIFROST:
+        # Bifrost and OpenAI-compatible: OpenAI-compatible proxies that send
+        # model names directly to the endpoint. We route through LiteLLM's
+        # openai provider with the server's base URL, and ensure /v1 is appended.
+        if model_provider in (
+            LlmProviderNames.BIFROST,
+            LlmProviderNames.OPENAI_COMPATIBLE,
+        ):
             self._custom_llm_provider = "openai"
+            # LiteLLM's OpenAI client requires an api_key to be set.
+            # Many OpenAI-compatible servers don't need auth, so supply a
+            # placeholder to prevent LiteLLM from raising AuthenticationError.
+            if not self._api_key:
+                model_kwargs.setdefault("api_key", "not-needed")
             if self._api_base is not None:
                 base = self._api_base.rstrip("/")
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
@@ -427,17 +456,20 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
-        is_bifrost = self._model_provider == LlmProviderNames.BIFROST
+        is_openai_compatible_proxy = self._model_provider in (
+            LlmProviderNames.BIFROST,
+            LlmProviderNames.OPENAI_COMPATIBLE,
+        )
         model_provider = (
             f"{self.config.model_provider}/responses"
             if is_openai_model  # Uses litellm's completions -> responses bridge
             else self.config.model_provider
         )
-        if is_bifrost:
-            # Bifrost expects model names in provider/model format
-            # (e.g. "anthropic/claude-sonnet-4-6") sent directly to its
-            # OpenAI-compatible endpoint. We use custom_llm_provider="openai"
-            # so LiteLLM doesn't try to route based on the provider prefix.
+        if is_openai_compatible_proxy:
+            # OpenAI-compatible proxies (Bifrost, generic OpenAI-compatible
+            # servers) expect model names sent directly to their endpoint.
+            # We use custom_llm_provider="openai" so LiteLLM doesn't try
+            # to route based on the provider prefix.
             model = self.config.deployment_name or self.config.model_name
         else:
             model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
@@ -528,7 +560,10 @@ class LitellmLLM(LLM):
         if structured_response_format:
             optional_kwargs["response_format"] = structured_response_format
 
-        if not (is_claude_model or is_ollama or is_mistral) or is_bifrost:
+        if (
+            not (is_claude_model or is_ollama or is_mistral)
+            or is_openai_compatible_proxy
+        ):
             # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
             # However, this param breaks Anthropic and Mistral models,
             # so it must be conditionally included unless the request is
@@ -575,6 +610,18 @@ class LitellmLLM(LLM):
                     and _messages_contain_tool_content(messages)
                 ):
                     messages = _strip_tool_content_from_messages(messages)
+
+                # Some models (e.g. Mistral) reject a user message
+                # immediately after a tool message. Insert a synthetic
+                # assistant bridge message to satisfy the ordering
+                # constraint. Check both the provider and the deployment/
+                # model name to catch Mistral hosted on Azure.
+                model_or_deployment = (
+                    self._deployment_name or self._model_version or ""
+                ).lower()
+                is_mistral_model = is_mistral or "mistral" in model_or_deployment
+                if is_mistral_model:
+                    messages = _fix_tool_user_message_ordering(messages)
 
                 # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
                 # reject requests where tool_choice is explicitly null.

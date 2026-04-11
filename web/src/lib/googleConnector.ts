@@ -4,6 +4,7 @@ import { Credential } from "@/lib/connectors/credentials";
 import { ConnectorSnapshot } from "@/lib/connectors/connectors";
 import { ValidSources } from "@/lib/types";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 // Constants for service names to avoid typos
 export const GOOGLE_SERVICES = {
@@ -115,6 +116,6 @@ export const refreshAllGoogleData = (
     source === ValidSources.Gmail
       ? GOOGLE_SERVICES.GMAIL
       : GOOGLE_SERVICES.GOOGLE_DRIVE;
-  mutate(`/api/manage/admin/connector/${service}/app-credential`);
-  mutate(`/api/manage/admin/connector/${service}/service-account-key`);
+  mutate(SWR_KEYS.googleConnectorAppCredential(service));
+  mutate(SWR_KEYS.googleConnectorServiceAccountKey(service));
 };

@@ -3,6 +3,8 @@
 from datetime import datetime
 from typing import Any
 
+import httpx
+
 from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import get_http_client
@@ -13,6 +15,21 @@ from onyx.utils.variable_functionality import build_api_server_url_for_http_requ
 from onyx.utils.variable_functionality import global_version
 
 logger = setup_logger()
+
+
+def _extract_error_detail(response: httpx.Response) -> str:
+    """Extract a human-readable error message from a failed backend response.
+
+    The backend returns OnyxError responses as
+    ``{"error_code": "...", "detail": "..."}``.
+    """
+    try:
+        body = response.json()
+        if detail := body.get("detail"):
+            return str(detail)
+    except Exception:
+        pass
+    return f"Request failed with status {response.status_code}"
 
 
 @mcp_server.tool()
@@ -158,7 +175,14 @@ async def search_indexed_documents(
             json=search_request,
             headers=auth_headers,
         )
-        response.raise_for_status()
+        if not response.is_success:
+            error_detail = _extract_error_detail(response)
+            return {
+                "documents": [],
+                "total_results": 0,
+                "query": query,
+                "error": error_detail,
+            }
         result = response.json()
 
         # Check for error in response
@@ -234,7 +258,13 @@ async def search_web(
             json=request_payload,
             headers={"Authorization": f"Bearer {access_token.token}"},
         )
-        response.raise_for_status()
+        if not response.is_success:
+            error_detail = _extract_error_detail(response)
+            return {
+                "error": error_detail,
+                "results": [],
+                "query": query,
+            }
         response_payload = response.json()
         results = response_payload.get("results", [])
         return {
@@ -280,7 +310,12 @@ async def open_urls(
             json={"urls": urls},
             headers={"Authorization": f"Bearer {access_token.token}"},
         )
-        response.raise_for_status()
+        if not response.is_success:
+            error_detail = _extract_error_detail(response)
+            return {
+                "error": error_detail,
+                "results": [],
+            }
         response_payload = response.json()
         results = response_payload.get("results", [])
         return {

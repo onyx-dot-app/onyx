@@ -54,6 +54,12 @@ class TestReadPdfFile:
         text, _, _ = read_pdf_file(_load("encrypted.pdf"), pdf_pass="wrong")
         assert text == ""
 
+    def test_owner_password_only_pdf_extracts_text(self) -> None:
+        """A PDF encrypted with only an owner password (no user password)
+        should still yield its text content. Regression for #9754."""
+        text, _, _ = read_pdf_file(_load("owner_protected.pdf"))
+        assert "Hello World" in text
+
     def test_empty_pdf(self) -> None:
         text, _, _ = read_pdf_file(_load("empty.pdf"))
         assert text.strip() == ""
@@ -116,6 +122,12 @@ class TestIsPdfProtected:
 
     def test_protected_pdf(self) -> None:
         assert is_pdf_protected(_load("encrypted.pdf")) is True
+
+    def test_owner_password_only_is_not_protected(self) -> None:
+        """A PDF with only an owner password (permission restrictions) but no
+        user password should NOT be considered protected — any viewer can open
+        it without prompting for a password."""
+        assert is_pdf_protected(_load("owner_protected.pdf")) is False
 
     def test_preserves_file_position(self) -> None:
         pdf = _load("simple.pdf")

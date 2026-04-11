@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchFileContent } from "@/app/craft/services/apiServices";
 import Text from "@/refresh-components/texts/Text";
 import { SvgFileText } from "@opal/icons";
@@ -154,7 +155,7 @@ function FetchedFilePreview({
   refreshKey,
 }: FetchedFilePreviewProps) {
   const { data, error, isLoading, mutate } = useSWR(
-    `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
+    SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     () => fetchFileContent(sessionId, filePath),
     {
       revalidateOnFocus: false,

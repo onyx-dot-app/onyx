@@ -352,6 +352,7 @@ const ChatScrollContainer = React.memo(
             key={sessionId}
             ref={scrollContainerRef}
             data-testid="chat-scroll-container"
+            data-chat-scroll
             className={cn(
               "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
               hideScrollbar ? "no-scrollbar" : "default-scrollbar"

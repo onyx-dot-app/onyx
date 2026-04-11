@@ -1,5 +1,6 @@
 import csv
 import json
+import queue
 import uuid
 from io import BytesIO
 from io import StringIO
@@ -11,7 +12,6 @@ import requests
 from requests import JSONDecodeError
 
 from onyx.chat.emitter import Emitter
-from onyx.chat.emitter import get_default_emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.query_and_chat.placement import Placement
@@ -296,9 +296,9 @@ def build_custom_tools_from_openapi_schema_and_headers(
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
 
-    # Use default emitter if none provided
+    # Use a discard emitter if none provided (packets go nowhere)
     if emitter is None:
-        emitter = get_default_emitter()
+        emitter = Emitter(merged_queue=queue.Queue())
 
     return [
         CustomTool(
@@ -367,7 +367,7 @@ if __name__ == "__main__":
     tools = build_custom_tools_from_openapi_schema_and_headers(
         tool_id=0,  # dummy tool id
         openapi_schema=openapi_schema,
-        emitter=get_default_emitter(),
+        emitter=Emitter(merged_queue=queue.Queue()),
         dynamic_schema_info=None,
     )
 

@@ -96,6 +96,54 @@ describe("LLM resolver helpers", () => {
     });
   });
 
+  test("prefers provider by name when multiple share the same type", () => {
+    const providers: LLMProviderDescriptor[] = [
+      makeProvider({
+        id: 1,
+        name: "Anthropic",
+        provider: "anthropic",
+        model_configurations: [
+          {
+            name: "claude-sonnet-4-5",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+          },
+        ],
+      }),
+      makeProvider({
+        id: 2,
+        name: "PersonalAnthropicToken",
+        provider: "anthropic",
+        model_configurations: [
+          {
+            name: "claude-sonnet-4-5",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+          },
+        ],
+      }),
+    ];
+
+    const descriptor = getValidLlmDescriptorForProviders(
+      structureValue(
+        "PersonalAnthropicToken",
+        "anthropic",
+        "claude-sonnet-4-5"
+      ),
+      providers
+    );
+
+    expect(descriptor).toEqual({
+      name: "PersonalAnthropicToken",
+      provider: "anthropic",
+      modelName: "claude-sonnet-4-5",
+    });
+  });
+
   test("uses first provider with models when no explicit default exists", () => {
     const providers: LLMProviderDescriptor[] = [
       makeProvider({

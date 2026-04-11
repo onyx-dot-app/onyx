@@ -1,6 +1,5 @@
 import { useFormContext } from "@/components/context/FormContext";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { SvgArrowLeft, SvgArrowRight, SvgPlusCircle } from "@opal/icons";
 
 const NavigationRow = ({
@@ -34,35 +33,35 @@ const NavigationRow = ({
       </div>
       <div className="flex justify-center">
         {(formStep > 0 || noCredentials) && (
-          <Disabled disabled={!isValid}>
-            <Button rightIcon={SvgPlusCircle} onClick={onSubmit}>
-              Create Connector
-            </Button>
-          </Disabled>
+          <Button
+            disabled={!isValid}
+            rightIcon={SvgPlusCircle}
+            onClick={onSubmit}
+          >
+            Create Connector
+          </Button>
         )}
       </div>
       <div className="flex justify-end">
         {formStep === 0 && (
-          <Disabled disabled={!activatedCredential}>
-            <Button
-              variant="action"
-              rightIcon={SvgArrowRight}
-              onClick={() => nextFormStep()}
-            >
-              Continue
-            </Button>
-          </Disabled>
+          <Button
+            disabled={!activatedCredential}
+            variant="action"
+            rightIcon={SvgArrowRight}
+            onClick={() => nextFormStep()}
+          >
+            Continue
+          </Button>
         )}
         {!noAdvanced && formStep === 1 && (
-          <Disabled disabled={!isValid}>
-            <Button
-              prominence="secondary"
-              rightIcon={SvgArrowRight}
-              onClick={() => nextFormStep()}
-            >
-              Advanced
-            </Button>
-          </Disabled>
+          <Button
+            disabled={!isValid}
+            prominence="secondary"
+            rightIcon={SvgArrowRight}
+            onClick={() => nextFormStep()}
+          >
+            Advanced
+          </Button>
         )}
       </div>
     </div>

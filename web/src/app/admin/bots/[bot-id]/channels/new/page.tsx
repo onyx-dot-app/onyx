@@ -5,7 +5,7 @@ import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channe
 import { ErrorCallout } from "@/components/ErrorCallout";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { SvgSlack } from "@opal/icons";
+import { SvgSlack } from "@opal/logos";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useAgents } from "@/hooks/useAgents";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";

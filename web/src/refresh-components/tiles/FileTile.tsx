@@ -3,6 +3,7 @@ import type { FunctionComponent } from "react";
 import { cn, noProp } from "@/lib/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
+import { Hoverable } from "@opal/core";
 import IconButton from "../buttons/IconButton";
 import Text from "../texts/Text";
 import Truncated from "../texts/Truncated";
@@ -32,25 +33,32 @@ interface RemoveButtonProps {
 
 function RemoveButton({ onRemove }: RemoveButtonProps) {
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onRemove();
-      }}
-      title="Remove"
-      aria-label="Remove"
+    <div
       className={cn(
-        "absolute -left-1 -top-1 z-10 h-4 w-4",
-        "flex items-center justify-center",
-        "rounded-full bg-theme-primary-05 text-text-inverted-05",
-        "opacity-0 group-hover/Tile:opacity-100 focus:opacity-100",
-        "pointer-events-none group-hover/Tile:pointer-events-auto focus:pointer-events-auto",
-        "transition-opacity duration-150"
+        "absolute -left-1 -top-1 z-10",
+        "pointer-events-none focus-within:pointer-events-auto"
       )}
     >
-      <SvgX size={10} />
-    </button>
+      <Hoverable.Item group="fileTile" variant="opacity-on-hover">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          title="Remove"
+          aria-label="Remove"
+          className={cn(
+            "h-4 w-4",
+            "flex items-center justify-center",
+            "rounded-full bg-theme-primary-05 text-text-inverted-05",
+            "pointer-events-auto"
+          )}
+        >
+          <SvgX size={10} />
+        </button>
+      </Hoverable.Item>
+    </div>
   );
 }
 
@@ -70,7 +78,7 @@ export default function FileTile({
   const isMuted = state === "processing" || state === "disabled";
 
   return (
-    <div className="group/Tile">
+    <Hoverable.Root group="fileTile" widthVariant="fit">
       <div
         onClick={onOpen && state !== "disabled" ? () => onOpen() : undefined}
         className={cn(
@@ -83,8 +91,8 @@ export default function FileTile({
             ? "bg-background-neutral-02 border-border-01"
             : "bg-background-tint-00 border-border-01",
           // Hover overrides (disabled gets none)
-          state !== "disabled" && "group-hover/Tile:border-border-02",
-          state === "default" && "group-hover/Tile:bg-background-tint-02",
+          state !== "disabled" && "hover:border-border-02",
+          state === "default" && "hover:bg-background-tint-02",
           // Clickable cursor when onOpen is provided and not disabled
           onOpen && state !== "disabled" && "cursor-pointer"
         )}
@@ -114,7 +122,7 @@ export default function FileTile({
                     text02
                     className={cn(
                       "truncate",
-                      state === "processing" && "group-hover/Tile:text-text-03"
+                      state === "processing" && "hover:text-text-03"
                     )}
                   >
                     {title}
@@ -126,7 +134,7 @@ export default function FileTile({
                     text02
                     className={cn(
                       "line-clamp-2",
-                      state === "processing" && "group-hover/Tile:text-text-03"
+                      state === "processing" && "hover:text-text-03"
                     )}
                   >
                     {description}
@@ -159,6 +167,6 @@ export default function FileTile({
           </div>
         )}
       </div>
-    </div>
+    </Hoverable.Root>
   );
 }

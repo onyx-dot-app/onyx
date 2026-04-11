@@ -264,7 +264,7 @@ monitoring:
       # The sidecar must be configured with label selector: grafana_dashboard=1
       enabled: false
   serviceMonitors:
-    # -- Set to true to deploy ServiceMonitor resources for Celery worker metrics endpoints.
+    # -- Set to true to deploy ServiceMonitor resources for API server and Celery worker metrics endpoints.
     # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
     # Use `labels` to match your Prometheus CR's serviceMonitorSelector (e.g. release: onyx-monitoring).
     enabled: false
@@ -503,6 +503,18 @@ api:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+
+  # Run update-ca-certificates before starting the server.
+  # Useful when mounting custom CA certificates via volumes/volumeMounts.
+  # NOTE: Requires the container to run as root (runAsUser: 0).
+  # CA certificate files must be mounted under /usr/local/share/ca-certificates/
+  # with a .crt extension (e.g. /usr/local/share/ca-certificates/my-ca.crt).
+  # NOTE: Python HTTP clients (requests, httpx) use certifi's bundle by default
+  # and will not pick up the system CA store automatically. Set the following
+  # environment variables via configMap values (loaded through envFrom) to make them use the updated system bundle:
+  #   REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+  #   SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+  runUpdateCaCertificates: false
 
 
 ######################################################################

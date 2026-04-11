@@ -1,7 +1,4 @@
-import type {
-  OnboardingState,
-  OnboardingActions,
-} from "@/interfaces/onboarding";
+import type { OnboardingActions } from "@/interfaces/onboarding";
 
 export enum LLMProviderName {
   OPENAI = "openai",
@@ -12,8 +9,10 @@ export enum LLMProviderName {
   OPENROUTER = "openrouter",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
+  LITELLM = "litellm",
   LITELLM_PROXY = "litellm_proxy",
   BIFROST = "bifrost",
+  OPENAI_COMPATIBLE = "openai_compatible",
   CUSTOM = "custom",
 }
 
@@ -121,16 +120,12 @@ export interface LLMProviderFormProps {
   variant?: LLMModalVariant;
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
-  open?: boolean;
   onOpenChange?: (open: boolean) => void;
-
-  /** The current default model name for this provider (from the global default). */
-  defaultModelName?: string;
+  /** Called after successful provider creation/update. */
+  onSuccess?: () => void | Promise<void>;
 
   // Onboarding-specific (only when variant === "onboarding")
-  onboardingState?: OnboardingState;
   onboardingActions?: OnboardingActions;
-  llmDescriptor?: WellKnownLLMProviderDescriptor;
 }
 
 // Param types for model fetching functions - use snake_case to match API structure
@@ -181,6 +176,21 @@ export interface BifrostModelResponse {
   supports_reasoning: boolean;
 }
 
+export interface OpenAICompatibleFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_name?: string;
+  signal?: AbortSignal;
+}
+
+export interface OpenAICompatibleModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
 export interface VertexAIFetchParams {
   model_configurations?: ModelConfiguration[];
 }
@@ -199,5 +209,6 @@ export type FetchModelsParams =
   | OpenRouterFetchParams
   | LiteLLMProxyFetchParams
   | BifrostFetchParams
+  | OpenAICompatibleFetchParams
   | VertexAIFetchParams
   | LMStudioFetchParams;

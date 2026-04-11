@@ -95,7 +95,6 @@ import { cn, noProp } from "@/lib/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { FieldMessage } from "../../messages/FieldMessage";
 
 // Hooks
@@ -130,8 +129,9 @@ const InputComboBox = ({
   leftSearchIcon = false,
   rightSection,
   separatorLabel = "Other options",
-  showAddPrefix = false,
+  createPrefix,
   showOtherOptions = false,
+  dropdownMaxHeight,
   ...rest
 }: WithoutStyles<InputComboBoxProps>) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -401,17 +401,16 @@ const InputComboBox = ({
                 </div>
               )}
               {hasOptions && (
-                <Disabled disabled={disabled}>
-                  <Button
-                    prominence="tertiary"
-                    size="sm"
-                    onClick={noProp(toggleDropdown)}
-                    icon={isOpen ? SvgChevronUp : SvgChevronDown}
-                    aria-label={isOpen ? "Close dropdown" : "Open dropdown"}
-                    tabIndex={-1}
-                    type="button"
-                  />
-                </Disabled>
+                <Button
+                  disabled={disabled}
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={noProp(toggleDropdown)}
+                  icon={isOpen ? SvgChevronUp : SvgChevronDown}
+                  aria-label={isOpen ? "Close dropdown" : "Open dropdown"}
+                  tabIndex={-1}
+                  type="button"
+                />
               )}
             </>
           }
@@ -448,7 +447,8 @@ const InputComboBox = ({
           inputValue={inputValue}
           allowCreate={!strict}
           showCreateOption={showCreateOption}
-          showAddPrefix={showAddPrefix}
+          createPrefix={createPrefix}
+          dropdownMaxHeight={dropdownMaxHeight}
         />
       </>
 

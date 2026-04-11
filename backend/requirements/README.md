@@ -46,11 +46,11 @@ curl -LsSf https://astral.py/uv/install.sh | sh
 
 1. Edit `pyproject.toml`
 2. Add/update/remove dependencies in the appropriate section:
-   - `[dependency-groups]` for dev tools
    - `[project.dependencies]` for **shared** dependencies (used by both backend and model_server)
-   - `[project.optional-dependencies.backend]` for backend-only dependencies
-   - `[project.optional-dependencies.model_server]` for model_server-only dependencies (ML packages)
-   - `[project.optional-dependencies.ee]` for EE features
+   - `[dependency-groups.backend]` for backend-only dependencies
+   - `[dependency-groups.dev]` for dev tools
+   - `[dependency-groups.ee]` for EE features
+   - `[dependency-groups.model_server]` for model_server-only dependencies (ML packages)
 3. Commit your changes - pre-commit hooks will automatically regenerate the lock file and requirements
 
 ### 3. Generating Lock File and Requirements
@@ -64,10 +64,10 @@ To manually regenerate:
 
 ```bash
 uv lock
-uv export --no-emit-project --no-default-groups --no-hashes --extra backend -o backend/requirements/default.txt
+uv export --no-emit-project --no-default-groups --no-hashes --group backend -o backend/requirements/default.txt
 uv export --no-emit-project --no-default-groups --no-hashes --group dev -o backend/requirements/dev.txt
-uv export --no-emit-project --no-default-groups --no-hashes --extra ee -o backend/requirements/ee.txt
-uv export --no-emit-project --no-default-groups --no-hashes --extra model_server -o backend/requirements/model_server.txt
+uv export --no-emit-project --no-default-groups --no-hashes --group ee -o backend/requirements/ee.txt
+uv export --no-emit-project --no-default-groups --no-hashes --group model_server -o backend/requirements/model_server.txt
 ```
 
 ### 4. Installing Dependencies
@@ -76,30 +76,14 @@ If enabled, all packages are installed automatically by the `uv-sync` pre-commit
 branches or pulling new changes.
 
 ```bash
-# For everything (most common)
-uv sync --all-extras
+# For development (most common) — installs shared + backend + dev + ee
+uv sync
 
-# For backend production (shared + backend dependencies)
-uv sync --extra backend
-
-# For backend development (shared + backend + dev tools)
-uv sync --extra backend --extra dev
-
-# For backend with EE (shared + backend + ee)
-uv sync --extra backend --extra ee
+# For backend production only (shared + backend dependencies)
+uv sync --no-default-groups --group backend
 
 # For model server (shared + model_server, NO backend deps!)
-uv sync --extra model_server
-```
-
-`uv` aggressively [ignores active virtual environments](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path) and prefers the root virtual environment.
-When working in workspace packages, be sure to pass `--active` when syncing the virtual environment:
-
-```bash
-cd backend/
-source .venv/bin/activate
-uv sync --active
-uv run --active ...
+uv sync --no-default-groups --group model_server
 ```
 
 ### 5. Upgrading Dependencies

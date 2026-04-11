@@ -2,7 +2,6 @@ import React, { useRef, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { Callout } from "@/components/ui/callout";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Label, TextFormField } from "@/components/Field";
@@ -297,19 +296,18 @@ export default function ProviderCreationModal({
                   </Callout>
                 )}
 
-                <Disabled disabled={isSubmitting}>
-                  <Button
-                    type="submit"
-                    width="full"
-                    icon={isSubmitting ? SimpleLoader : undefined}
-                  >
-                    {isSubmitting
-                      ? "Submitting"
-                      : existingProvider
-                        ? "Update"
-                        : "Create"}
-                  </Button>
-                </Disabled>
+                <Button
+                  disabled={isSubmitting}
+                  type="submit"
+                  width="full"
+                  icon={isSubmitting ? SimpleLoader : undefined}
+                >
+                  {isSubmitting
+                    ? "Submitting"
+                    : existingProvider
+                      ? "Update"
+                      : "Create"}
+                </Button>
               </Form>
             )}
           </Formik>

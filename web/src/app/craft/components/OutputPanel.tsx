@@ -2,6 +2,7 @@
 
 import { memo, useState, useEffect, useCallback } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useSession,
   useWebappNeedsRefresh,
@@ -203,7 +204,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     !isWebappReady && pollingDeadline !== null && Date.now() < pollingDeadline;
 
   const { data: webappInfo, mutate } = useSWR(
-    shouldFetchWebapp ? `/api/build/sessions/${session.id}/webapp-info` : null,
+    shouldFetchWebapp ? SWR_KEYS.buildSessionWebappInfo(session.id) : null,
     () => (session?.id ? fetchWebappInfo(session.id) : null),
     {
       refreshInterval: shouldPoll ? 2000 : 0,
@@ -350,7 +351,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     activeTab === "artifacts";
 
   const { data: polledArtifacts } = useSWR(
-    shouldFetchArtifacts ? `/api/build/sessions/${session.id}/artifacts` : null,
+    shouldFetchArtifacts ? SWR_KEYS.buildSessionArtifacts(session.id) : null,
     () => (session?.id ? fetchArtifacts(session.id) : null),
     {
       refreshInterval: 5000, // Refresh every 5 seconds to catch new artifacts

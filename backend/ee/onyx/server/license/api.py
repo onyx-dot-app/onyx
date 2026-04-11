@@ -17,7 +17,6 @@ from fastapi import File
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from ee.onyx.auth.users import current_admin_user
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import get_license
@@ -32,8 +31,10 @@ from ee.onyx.server.license.models import LicenseStatusResponse
 from ee.onyx.server.license.models import LicenseUploadResponse
 from ee.onyx.server.license.models import SeatUsageResponse
 from ee.onyx.utils.license import verify_license_signature
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -60,7 +61,7 @@ def _strip_pem_delimiters(content: str) -> str:
 
 @router.get("")
 async def get_license_status(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseStatusResponse:
     """Get current license status and seat usage."""
@@ -84,7 +85,7 @@ async def get_license_status(
 
 @router.get("/seats")
 async def get_seat_usage(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SeatUsageResponse:
     """Get detailed seat usage information."""
@@ -107,7 +108,7 @@ async def get_seat_usage(
 @router.post("/claim")
 async def claim_license(
     session_id: str | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseResponse:
     """
@@ -215,7 +216,7 @@ async def claim_license(
 @router.post("/upload")
 async def upload_license(
     license_file: UploadFile = File(...),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseUploadResponse:
     """
@@ -263,7 +264,7 @@ async def upload_license(
 
 @router.post("/refresh")
 async def refresh_license_cache_endpoint(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseStatusResponse:
     """
@@ -292,7 +293,7 @@ async def refresh_license_cache_endpoint(
 
 @router.delete("")
 async def delete_license(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, bool]:
     """

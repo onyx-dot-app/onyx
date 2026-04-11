@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
+import { Hoverable } from "@opal/core";
 
 export interface NameStepProps {
   state: OnboardingState;
@@ -65,49 +66,48 @@ const NameStep = React.memo(
         />
       </div>
     ) : (
-      <div
-        className={cn(containerClasses, "group")}
-        onClick={() => {
-          setButtonActive(true);
-          goToStep(OnboardingStep.Name);
-        }}
-        aria-label="Edit display name"
-        role="button"
-        tabIndex={0}
-      >
+      <Hoverable.Root group="nameStep" widthVariant="full">
         <div
-          className={cn("flex items-center gap-1", !isActive && "opacity-50")}
+          className={containerClasses}
+          onClick={() => {
+            setButtonActive(true);
+            goToStep(OnboardingStep.Name);
+          }}
+          aria-label="Edit display name"
+          role="button"
+          tabIndex={0}
         >
-          <InputAvatar
-            className={cn(
-              "flex items-center justify-center bg-background-neutral-inverted-00",
-              "w-5 h-5"
-            )}
+          <div
+            className={cn("flex items-center gap-1", !isActive && "opacity-50")}
           >
-            <Text as="p" inverted secondaryBody>
-              {userName?.[0]?.toUpperCase()}
+            <InputAvatar
+              className={cn(
+                "flex items-center justify-center bg-background-neutral-inverted-00",
+                "w-5 h-5"
+              )}
+            >
+              <Text as="p" inverted secondaryBody>
+                {userName?.[0]?.toUpperCase()}
+              </Text>
+            </InputAvatar>
+            <Text as="p" text04 mainUiAction>
+              {userName}
             </Text>
-          </InputAvatar>
-          <Text as="p" text04 mainUiAction>
-            {userName}
-          </Text>
+          </div>
+          <div className="p-1 flex items-center gap-1">
+            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+            <Hoverable.Item group="nameStep" variant="opacity-on-hover">
+              <IconButton internal icon={SvgEdit} tooltip="Edit" />
+            </Hoverable.Item>
+            <SvgCheckCircle
+              className={cn(
+                "w-4 h-4 stroke-status-success-05",
+                !isActive && "opacity-50"
+              )}
+            />
+          </div>
         </div>
-        <div className="p-1 flex items-center gap-1">
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <IconButton
-            internal
-            icon={SvgEdit}
-            tooltip="Edit"
-            className="opacity-0 group-hover:opacity-100 transition-opacity"
-          />
-          <SvgCheckCircle
-            className={cn(
-              "w-4 h-4 stroke-status-success-05",
-              !isActive && "opacity-50"
-            )}
-          />
-        </div>
-      </div>
+      </Hoverable.Root>
     );
   }
 );

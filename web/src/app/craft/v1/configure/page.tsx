@@ -36,7 +36,6 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { getSourceMetadata } from "@/lib/sources";
 import { deleteConnector } from "@/app/craft/services/apiServices";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import {
   OAUTH_STATE_KEY,
   getDemoDataEnabled,
@@ -49,7 +48,7 @@ import NotAllowedModal from "@/app/craft/onboarding/components/NotAllowedModal";
 import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import { useLLMProviders } from "@/hooks/useLLMProviders";
 import { useUser } from "@/providers/UserProvider";
-import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { getModelIcon } from "@/lib/llmConfig";
 import {
   getBuildUserPersona,
   getPersonaInfo,
@@ -377,18 +376,19 @@ export default function BuildConfigPage() {
           description="Select data sources and your default LLM"
           rightChildren={
             <div className="flex items-center gap-2">
-              <Disabled disabled={!hasChanges || isUpdating}>
-                <Button prominence="secondary" onClick={handleRestoreChanges}>
-                  Restore Changes
-                </Button>
-              </Disabled>
-              <Disabled
-                disabled={!hasChanges || isUpdating || isPreProvisioning}
+              <Button
+                disabled={!hasChanges || isUpdating}
+                prominence="secondary"
+                onClick={handleRestoreChanges}
               >
-                <Button onClick={handleUpdate}>
-                  {isUpdating || isPreProvisioning ? "Updating..." : "Update"}
-                </Button>
-              </Disabled>
+                Restore Changes
+              </Button>
+              <Button
+                disabled={!hasChanges || isUpdating || isPreProvisioning}
+                onClick={handleUpdate}
+              >
+                {isUpdating || isPreProvisioning ? "Updating..." : "Update"}
+              </Button>
             </div>
           }
         />
@@ -475,10 +475,10 @@ export default function BuildConfigPage() {
                         >
                           {pendingLlmSelection?.provider &&
                             (() => {
-                              const ProviderIcon = getProviderIcon(
+                              const ModelIcon = getModelIcon(
                                 pendingLlmSelection.provider
                               );
-                              return <ProviderIcon className="w-4 h-4" />;
+                              return <ModelIcon className="w-4 h-4" />;
                             })()}
                           <Text mainUiAction>{pendingLlmDisplayName}</Text>
                           <SvgChevronDown className="w-4 h-4 text-text-03" />

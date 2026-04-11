@@ -1,43 +1,52 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SlackBot, SlackChannelConfig } from "@/lib/types";
 import useSWR, { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const useSlackChannelConfigs = () => {
-  const url = "/api/manage/admin/slack-app/channel";
-  const swrResponse = useSWR<SlackChannelConfig[]>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<SlackChannelConfig[]>(
+    SWR_KEYS.slackChannels,
+    errorHandlingFetcher
+  );
 
   return {
     ...swrResponse,
-    refreshSlackChannelConfigs: () => mutate(url),
+    refreshSlackChannelConfigs: () => mutate(SWR_KEYS.slackChannels),
   };
 };
 
 export const useSlackBots = () => {
-  const url = "/api/manage/admin/slack-app/bots";
-  const swrResponse = useSWR<SlackBot[]>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<SlackBot[]>(
+    SWR_KEYS.slackBots,
+    errorHandlingFetcher
+  );
 
   return {
     ...swrResponse,
-    refreshSlackBots: () => mutate(url),
+    refreshSlackBots: () => mutate(SWR_KEYS.slackBots),
   };
 };
 
 export const useSlackBot = (botId: number) => {
-  const url = `/api/manage/admin/slack-app/bots/${botId}`;
-  const swrResponse = useSWR<SlackBot>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<SlackBot>(
+    SWR_KEYS.slackBot(botId),
+    errorHandlingFetcher
+  );
 
   return {
     ...swrResponse,
-    refreshSlackBot: () => mutate(url),
+    refreshSlackBot: () => mutate(SWR_KEYS.slackBot(botId)),
   };
 };
 
 export const useSlackChannelConfigsByBot = (botId: number) => {
-  const url = `/api/manage/admin/slack-app/bots/${botId}/config`;
-  const swrResponse = useSWR<SlackChannelConfig[]>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<SlackChannelConfig[]>(
+    SWR_KEYS.slackBotConfig(botId),
+    errorHandlingFetcher
+  );
 
   return {
     ...swrResponse,
-    refreshSlackChannelConfigs: () => mutate(url),
+    refreshSlackChannelConfigs: () => mutate(SWR_KEYS.slackBotConfig(botId)),
   };
 };

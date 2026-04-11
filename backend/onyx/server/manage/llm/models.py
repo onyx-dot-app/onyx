@@ -28,6 +28,13 @@ if TYPE_CHECKING:
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
 
 
+class CustomProviderOption(BaseModel):
+    """A provider slug + human-friendly label for the custom-provider picker."""
+
+    value: str
+    label: str
+
+
 class TestLLMRequest(BaseModel):
     # provider level
     id: int | None = None
@@ -79,7 +86,9 @@ class LLMProviderDescriptor(BaseModel):
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
             model_configurations=filter_model_configurations(
-                llm_provider_model.model_configurations, provider
+                llm_provider_model.model_configurations,
+                provider,
+                use_stored_display_name=llm_provider_model.custom_config is not None,
             ),
         )
 
@@ -156,7 +165,9 @@ class LLMProviderView(LLMProvider):
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=filter_model_configurations(
-                llm_provider_model.model_configurations, provider
+                llm_provider_model.model_configurations,
+                provider,
+                use_stored_display_name=llm_provider_model.custom_config is not None,
             ),
         )
 
@@ -198,13 +209,13 @@ class ModelConfigurationView(BaseModel):
         cls,
         model_configuration_model: "ModelConfigurationModel",
         provider_name: str,
+        use_stored_display_name: bool = False,
     ) -> "ModelConfigurationView":
-        # For dynamic providers (OpenRouter, Bedrock, Ollama), use the display_name
-        # stored in DB from the source API. Skip LiteLLM parsing entirely.
+        # For dynamic providers (OpenRouter, Bedrock, Ollama) and custom-config
+        # providers, use the display_name stored in DB. Skip LiteLLM parsing.
         if (
-            provider_name in DYNAMIC_LLM_PROVIDERS
-            and model_configuration_model.display_name
-        ):
+            provider_name in DYNAMIC_LLM_PROVIDERS or use_stored_display_name
+        ) and model_configuration_model.display_name:
             # Extract vendor from model name for grouping (e.g., "Anthropic", "OpenAI")
             vendor = extract_vendor_from_model_name(
                 model_configuration_model.name, provider_name
@@ -461,6 +472,21 @@ class BifrostModelsRequest(BaseModel):
 class BifrostFinalModelResponse(BaseModel):
     name: str  # Model ID in provider/model format (e.g. "anthropic/claude-sonnet-4-6")
     display_name: str  # Human-readable name from Bifrost API
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
+# OpenAI Compatible dynamic models fetch
+class OpenAICompatibleModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class OpenAICompatibleFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "meta-llama/Llama-3-8B-Instruct")
+    display_name: str  # Human-readable name from API
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool

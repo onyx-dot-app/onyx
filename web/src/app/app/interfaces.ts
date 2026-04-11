@@ -75,14 +75,14 @@ export enum ChatFileType {
   IMAGE = "image",
   DOCUMENT = "document",
   PLAIN_TEXT = "plain_text",
-  CSV = "csv",
+  TABULAR = "tabular",
   USER_KNOWLEDGE = "user_knowledge",
 }
 
 export const isTextFile = (fileType: ChatFileType) =>
   [
     ChatFileType.PLAIN_TEXT,
-    ChatFileType.CSV,
+    ChatFileType.TABULAR,
     ChatFileType.USER_KNOWLEDGE,
     ChatFileType.DOCUMENT,
   ].includes(fileType);
@@ -159,6 +159,10 @@ export interface Message {
   overridden_model?: string;
   stopReason?: StreamStopReason | null;
 
+  // Multi-model answer generation
+  preferredResponseId?: number | null;
+  modelDisplayName?: string | null;
+
   // new gen
   packets: Packet[];
   packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
@@ -231,11 +235,28 @@ export interface BackendMessage {
   parentMessageId: number | null;
   refined_answer_improvement: boolean | null;
   is_agentic: boolean | null;
+  // Multi-model answer generation
+  preferred_response_id: number | null;
+  model_display_name: string | null;
+  // Non-null when the model errored during generation
+  error: string | null;
 }
 
 export interface MessageResponseIDInfo {
+  type: "message_id_info";
   user_message_id: number | null;
   reserved_assistant_message_id: number; // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
+}
+
+export interface ModelResponseSlot {
+  message_id: number;
+  model_name: string;
+}
+
+export interface MultiModelMessageResponseIDInfo {
+  type: "multi_model_message_id_info";
+  user_message_id: number | null;
+  responses: ModelResponseSlot[];
 }
 
 export interface UserKnowledgeFilePacket {

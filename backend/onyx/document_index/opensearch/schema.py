@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -20,8 +21,12 @@ from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
 from onyx.document_index.opensearch.constants import EF_SEARCH
 from onyx.document_index.opensearch.constants import M
+from onyx.document_index.opensearch.string_filtering import DocumentIDTooLongError
 from onyx.document_index.opensearch.string_filtering import (
     filter_and_validate_document_id,
+)
+from onyx.document_index.opensearch.string_filtering import (
+    MAX_DOCUMENT_ID_ENCODED_LENGTH,
 )
 from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import MULTI_TENANT
@@ -75,17 +80,50 @@ def get_opensearch_doc_chunk_id(
 
     This will be the string used to identify the chunk in OpenSearch. Any direct
     chunk queries should use this function.
+
+    If the document ID is too long, a hash of the ID is used instead.
     """
-    sanitized_document_id = filter_and_validate_document_id(document_id)
-    opensearch_doc_chunk_id = (
-        f"{sanitized_document_id}__{max_chunk_size}__{chunk_index}"
+    opensearch_doc_chunk_id_suffix: str = f"__{max_chunk_size}__{chunk_index}"
+    encoded_suffix_length: int = len(opensearch_doc_chunk_id_suffix.encode("utf-8"))
+    max_encoded_permissible_doc_id_length: int = (
+        MAX_DOCUMENT_ID_ENCODED_LENGTH - encoded_suffix_length
     )
+    opensearch_doc_chunk_id_tenant_prefix: str = ""
     if tenant_state.multitenant:
+        short_tenant_id: str = get_tenant_id_short_string(tenant_state.tenant_id)
         # Use tenant ID because in multitenant mode each tenant has its own
         # Documents table, so there is a very small chance that doc IDs are not
         # actually unique across all tenants.
-        short_tenant_id = get_tenant_id_short_string(tenant_state.tenant_id)
-        opensearch_doc_chunk_id = f"{short_tenant_id}__{opensearch_doc_chunk_id}"
+        opensearch_doc_chunk_id_tenant_prefix = f"{short_tenant_id}__"
+        encoded_prefix_length: int = len(
+            opensearch_doc_chunk_id_tenant_prefix.encode("utf-8")
+        )
+        max_encoded_permissible_doc_id_length -= encoded_prefix_length
+
+    try:
+        sanitized_document_id: str = filter_and_validate_document_id(
+            document_id, max_encoded_length=max_encoded_permissible_doc_id_length
+        )
+    except DocumentIDTooLongError:
+        # If the document ID is too long, use a hash instead.
+        # We use blake2b because it is faster and equally secure as SHA256, and
+        # accepts digest_size which controls the number of bytes returned in the
+        # hash.
+        # digest_size is the size of the returned hash in bytes. Since we're
+        # decoding the hash bytes as a hex string, the digest_size should be
+        # half the max target size of the hash string.
+        # Subtract 1 because filter_and_validate_document_id compares on >= on
+        # max_encoded_length.
+        # 64 is the max digest_size blake2b returns.
+        digest_size: int = min((max_encoded_permissible_doc_id_length - 1) // 2, 64)
+        sanitized_document_id = hashlib.blake2b(
+            document_id.encode("utf-8"), digest_size=digest_size
+        ).hexdigest()
+
+    opensearch_doc_chunk_id: str = (
+        f"{opensearch_doc_chunk_id_tenant_prefix}{sanitized_document_id}{opensearch_doc_chunk_id_suffix}"
+    )
+
     # Do one more validation to ensure we haven't exceeded the max length.
     opensearch_doc_chunk_id = filter_and_validate_document_id(opensearch_doc_chunk_id)
     return opensearch_doc_chunk_id

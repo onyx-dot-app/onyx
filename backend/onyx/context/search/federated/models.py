@@ -1,9 +1,18 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TypedDict
 
 from pydantic import BaseModel
 
 from onyx.onyxbot.slack.models import ChannelType
+
+
+@dataclass(frozen=True)
+class DirectThreadFetch:
+    """Request to fetch a Slack thread directly by channel and timestamp."""
+
+    channel_id: str
+    thread_ts: str
 
 
 class ChannelMetadata(TypedDict):

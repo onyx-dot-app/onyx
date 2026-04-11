@@ -4,6 +4,7 @@ import { ImageShape } from "@/app/app/services/streamingModels";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Button } from "@opal/components";
+import { Hoverable } from "@opal/core";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_SHAPE: ImageShape = "square";
@@ -76,42 +77,42 @@ export const InMessageImage = memo(function InMessageImage({
         onOpenChange={(open) => setFullImageShowing(open)}
       />
 
-      <div className={cn("relative group", shapeContainerClasses)}>
-        {!imageLoaded && (
-          <div className="absolute inset-0 bg-background-tint-02 animate-pulse rounded-lg" />
-        )}
-
-        <img
-          width={1200}
-          height={1200}
-          alt="Chat Message Image"
-          onLoad={() => {
-            loadedImages.add(fileId);
-            setImageLoaded(true);
-          }}
-          className={cn(
-            "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
-            shapeImageClasses,
-            imageLoaded ? "opacity-100" : "opacity-0"
+      <Hoverable.Root group="messageImage" widthVariant="fit">
+        <div className={cn("relative", shapeContainerClasses)}>
+          {!imageLoaded && (
+            <div className="absolute inset-0 bg-background-tint-02 animate-pulse rounded-lg" />
           )}
-          onClick={() => setFullImageShowing(true)}
-          src={buildImgUrl(fileId)}
-          loading="lazy"
-        />
 
-        {/* Download button - appears on hover */}
-        <div
-          className={cn(
-            "absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 z-10"
-          )}
-        >
-          <Button
-            icon={SvgDownload}
-            tooltip="Download"
-            onClick={handleDownload}
+          <img
+            width={1200}
+            height={1200}
+            alt="Chat Message Image"
+            onLoad={() => {
+              loadedImages.add(fileId);
+              setImageLoaded(true);
+            }}
+            className={cn(
+              "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
+              shapeImageClasses,
+              imageLoaded ? "opacity-100" : "opacity-0"
+            )}
+            onClick={() => setFullImageShowing(true)}
+            src={buildImgUrl(fileId)}
+            loading="lazy"
           />
+
+          {/* Download button - appears on hover */}
+          <div className="absolute bottom-2 right-2 z-10">
+            <Hoverable.Item group="messageImage" variant="opacity-on-hover">
+              <Button
+                icon={SvgDownload}
+                tooltip="Download"
+                onClick={handleDownload}
+              />
+            </Hoverable.Item>
+          </div>
         </div>
-      </div>
+      </Hoverable.Root>
     </>
   );
 });

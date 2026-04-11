@@ -357,5 +357,5 @@ raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=e.respon
 ## Best Practices
 
 In addition to the other content in this file, best practices for contributing
-to the codebase can be found at `contributing_guides/best_practices.md`.
-Understand its contents and follow them.
+to the codebase can be found in the "Engineering Best Practices" section of
+`CONTRIBUTING.md`. Understand its contents and follow them.

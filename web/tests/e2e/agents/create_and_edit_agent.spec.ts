@@ -294,7 +294,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(agentId).not.toBeNull();
       await expectScreenshot(page, {
         name: "welcome-page-with-assistant",
-        hide: ["[data-testid='AppInputBar/llm-popover-trigger']"],
+        hide: ["[data-testid='model-selector']"],
       });
 
       // Store assistant ID for cleanup

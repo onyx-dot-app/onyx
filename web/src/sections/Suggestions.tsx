@@ -38,7 +38,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
         >
           <Interactive.Container
             widthVariant="full"
-            roundingVariant="compact"
+            roundingVariant="sm"
             heightVariant="lg"
           >
             <Content

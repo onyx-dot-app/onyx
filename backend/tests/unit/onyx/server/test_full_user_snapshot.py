@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 from onyx.auth.schemas import UserRole
+from onyx.db.enums import AccountType
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import UserGroupInfo
 
@@ -25,6 +26,7 @@ def _mock_user(
     user.updated_at = updated_at or datetime.datetime(
         2025, 6, 15, tzinfo=datetime.timezone.utc
     )
+    user.account_type = AccountType.STANDARD
     return user
 
 

@@ -10,6 +10,7 @@ const helpText = `Onyx CLI Commands
   /configure         Re-run connection setup
   /connectors        Open connectors page in browser
   /settings          Open Onyx settings in browser
+  /experiments       List experimental features and their status
   /quit              Exit Onyx CLI
 
 Keyboard Shortcuts

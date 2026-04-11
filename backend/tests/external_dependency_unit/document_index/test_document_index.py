@@ -186,7 +186,7 @@ class TestDocumentIndexNew:
             )
             document_index.index(chunks=[pre_chunk], indexing_metadata=pre_metadata)
 
-            time.sleep(1)
+            time.sleep(2)
 
             # Now index a batch with the existing doc and a new doc.
             chunks = [

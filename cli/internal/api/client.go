@@ -149,12 +149,12 @@ func (c *Client) TestConnection(ctx context.Context) error {
 
 	if resp2.StatusCode == 401 || resp2.StatusCode == 403 {
 		if isHTML || strings.Contains(respServer, "awselb") {
-			return fmt.Errorf("HTTP %d from a reverse proxy (not the Onyx backend).\n  Check your deployment's ingress / proxy configuration", resp2.StatusCode)
+			return &AuthError{Message: fmt.Sprintf("HTTP %d from a reverse proxy (not the Onyx backend).\n  Check your deployment's ingress / proxy configuration", resp2.StatusCode)}
 		}
 		if resp2.StatusCode == 401 {
-			return fmt.Errorf("invalid API key or token.\n  %s", body)
+			return &AuthError{Message: fmt.Sprintf("invalid API key or token.\n  %s", body)}
 		}
-		return fmt.Errorf("access denied — check that the API key is valid.\n  %s", body)
+		return &AuthError{Message: fmt.Sprintf("access denied — check that the API key is valid.\n  %s", body)}
 	}
 
 	detail := fmt.Sprintf("HTTP %d", resp2.StatusCode)
