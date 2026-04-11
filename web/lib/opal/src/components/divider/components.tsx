@@ -19,8 +19,8 @@ interface DividerSharedProps {
   description?: never;
   foldable?: false;
   orientation?: never;
-  paddingX?: never;
-  paddingY?: never;
+  paddingParallel?: never;
+  paddingPerpendicular?: never;
   open?: never;
   defaultOpen?: never;
   onOpenChange?: never;
@@ -30,14 +30,14 @@ interface DividerSharedProps {
 /** Plain line — no title, no description. */
 type DividerBareProps = Omit<
   DividerSharedProps,
-  "orientation" | "paddingX" | "paddingY"
+  "orientation" | "paddingParallel" | "paddingPerpendicular"
 > & {
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: "horizontal" | "vertical";
-  /** Horizontal padding. Default: `"sm"` (0.5rem). */
-  paddingX?: PaddingVariants;
-  /** Vertical padding. Default: `"xs"` (0.25rem). */
-  paddingY?: PaddingVariants;
+  /** Padding along the line direction. Default: `"sm"` (0.5rem). */
+  paddingParallel?: PaddingVariants;
+  /** Padding perpendicular to the line. Default: `"xs"` (0.25rem). */
+  paddingPerpendicular?: PaddingVariants;
 };
 
 /** Line with a title to the left. */
@@ -89,8 +89,8 @@ function Divider(props: DividerProps) {
     title,
     description,
     orientation = "horizontal",
-    paddingX = "sm",
-    paddingY = "xs",
+    paddingParallel = "sm",
+    paddingPerpendicular = "xs",
   } = props;
 
   if (orientation === "vertical") {
@@ -99,8 +99,8 @@ function Divider(props: DividerProps) {
         ref={ref}
         className={cn(
           "opal-divider-vertical",
-          paddingXVariants[paddingY],
-          paddingYVariants[paddingX]
+          paddingXVariants[paddingPerpendicular],
+          paddingYVariants[paddingParallel]
         )}
       >
         <div className="opal-divider-line-vertical" />
@@ -113,8 +113,8 @@ function Divider(props: DividerProps) {
       ref={ref}
       className={cn(
         "opal-divider",
-        paddingXVariants[paddingX],
-        paddingYVariants[paddingY]
+        paddingXVariants[paddingParallel],
+        paddingYVariants[paddingPerpendicular]
       )}
     >
       <div className="opal-divider-row">

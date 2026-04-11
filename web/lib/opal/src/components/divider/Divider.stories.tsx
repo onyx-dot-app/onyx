@@ -28,11 +28,11 @@ export const Vertical: Story = {
 };
 
 export const NoPadding: Story = {
-  render: () => <Divider paddingX="fit" paddingY="fit" />,
+  render: () => <Divider paddingParallel="fit" paddingPerpendicular="fit" />,
 };
 
 export const CustomPadding: Story = {
-  render: () => <Divider paddingX="lg" paddingY="sm" />,
+  render: () => <Divider paddingParallel="lg" paddingPerpendicular="sm" />,
 };
 
 export const VerticalNoPadding: Story = {
@@ -41,7 +41,11 @@ export const VerticalNoPadding: Story = {
       style={{ display: "flex", alignItems: "stretch", height: 64, gap: 16 }}
     >
       <span>Left</span>
-      <Divider orientation="vertical" paddingX="fit" paddingY="fit" />
+      <Divider
+        orientation="vertical"
+        paddingParallel="fit"
+        paddingPerpendicular="fit"
+      />
       <span>Right</span>
     </div>
   ),
