@@ -213,12 +213,9 @@ const ChatScrollContainer = React.memo(
         }
       }, [updateScrollState, getScrollState]);
 
-      // MutationObserver (structural) + ResizeObserver (height growth).
-      // NOT characterData — typewriter reveals don't change scrollHeight
-      // and firing per-char thrashed auto-scroll.
+      // Watch for content changes (MutationObserver + ResizeObserver)
       useEffect(() => {
         const container = scrollContainerRef.current;
-        const contentWrapper = contentWrapperRef.current;
         if (!container) return;
 
         let rafId: number | null = null;
@@ -247,17 +244,17 @@ const ChatScrollContainer = React.memo(
           });
         };
 
+        // MutationObserver for content changes
         const mutationObserver = new MutationObserver(onContentChange);
         mutationObserver.observe(container, {
           childList: true,
           subtree: true,
+          characterData: true,
         });
 
+        // ResizeObserver for container size changes
         const resizeObserver = new ResizeObserver(onContentChange);
         resizeObserver.observe(container);
-        if (contentWrapper) {
-          resizeObserver.observe(contentWrapper);
-        }
 
         return () => {
           mutationObserver.disconnect();
