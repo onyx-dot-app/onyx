@@ -15,14 +15,6 @@ from shared_configs.configs import STRICT_CHUNK_TOKEN_LIMIT
 
 
 class TextChunker(SectionChunker):
-    """Per-section chunker for text sections.
-
-    Stateless: all cross-section combining state is threaded through the
-    `accumulator` argument to `chunk_section`, and document-scoped
-    concerns (chunk_id assignment, title/metadata propagation, skip
-    logic, the empty-doc safety branch) are handled by the orchestrator.
-    """
-
     def __init__(
         self,
         tokenizer: BaseTokenizer,
@@ -41,7 +33,7 @@ class TextChunker(SectionChunker):
         section_link = section.link or ""
         section_token_count = len(self.tokenizer.encode(section_text))
 
-        # CASE A: the section alone exceeds the limit.
+        # Oversized — flush buffer and split the section
         if section_token_count > content_token_limit:
             return self._handle_oversized_section(
                 section_text=section_text,
@@ -55,11 +47,8 @@ class TextChunker(SectionChunker):
             len(self.tokenizer.encode(SECTION_SEPARATOR)) + section_token_count
         )
 
-        # CASE B: the section fits together with the current buffer.
+        # Fits — extend the accumulator
         if next_section_tokens + current_token_count <= content_token_limit:
-            # Offset is measured against the *pre-extension* buffer so
-            # link_offsets map onto the cleaned-text representation the
-            # rest of the pipeline uses for highlight matching.
             offset = len(shared_precompare_cleanup(accumulator.text))
             new_text = accumulator.text
             if new_text:
@@ -73,7 +62,7 @@ class TextChunker(SectionChunker):
                 ),
             )
 
-        # CASE C: the section doesn't fit — flush buffer and restart.
+        # Doesn't fit — flush buffer and restart with this section
         return SectionChunkerOutput(
             payloads=accumulator.flush_to_list(),
             accumulator=AccumulatorState(
@@ -99,11 +88,6 @@ class TextChunker(SectionChunker):
                 STRICT_CHUNK_TOKEN_LIMIT
                 and len(self.tokenizer.encode(split_text)) > content_token_limit
             ):
-                # NOTE: `j` is local to this inner loop, so the first
-                # sub-chunk of a strict-split always has
-                # is_continuation=False even when the outer `i > 0`.
-                # This matches the legacy behavior — the existing
-                # pinning tests depend on it.
                 smaller_chunks = self._split_oversized_chunk(
                     split_text, content_token_limit
                 )
@@ -132,8 +116,6 @@ class TextChunker(SectionChunker):
     def _split_oversized_chunk(
         self, text: str, content_token_limit: int
     ) -> list[str]:
-        """Split text by raw tokens when even the sentence-chunker output
-        is still too large."""
         tokens = self.tokenizer.tokenize(text)
         chunks: list[str] = []
         start = 0
