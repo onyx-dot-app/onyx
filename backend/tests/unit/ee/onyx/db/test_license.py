@@ -9,6 +9,7 @@ from unittest.mock import patch
 from ee.onyx.db.license import check_seat_availability
 from ee.onyx.db.license import delete_license
 from ee.onyx.db.license import get_license
+from ee.onyx.db.license import get_used_seats
 from ee.onyx.db.license import upsert_license
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
@@ -214,3 +215,43 @@ class TestCheckSeatAvailabilityMultiTenant:
         assert result.available is False
         assert result.error_message is not None
         mock_tenant_count.assert_called_once_with("tenant-abc")
+
+
+class TestGetUsedSeatsAccountTypeFiltering:
+    """Verify get_used_seats query excludes SERVICE_ACCOUNT but includes BOT."""
+
+    @patch("ee.onyx.db.license.MULTI_TENANT", False)
+    @patch("onyx.db.engine.sql_engine.get_session_with_current_tenant")
+    def test_excludes_service_accounts(self, mock_get_session: MagicMock) -> None:
+        """SERVICE_ACCOUNT users should not count toward seats."""
+        mock_session = MagicMock()
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+        mock_session.execute.return_value.scalar.return_value = 5
+
+        result = get_used_seats()
+
+        assert result == 5
+        # Inspect the compiled query to verify account_type filter
+        call_args = mock_session.execute.call_args
+        query = call_args[0][0]
+        compiled = str(query.compile(compile_kwargs={"literal_binds": True}))
+        assert "SERVICE_ACCOUNT" in compiled
+        # BOT should NOT be excluded
+        assert "BOT" not in compiled
+
+    @patch("ee.onyx.db.license.MULTI_TENANT", False)
+    @patch("onyx.db.engine.sql_engine.get_session_with_current_tenant")
+    def test_still_excludes_ext_perm_user(self, mock_get_session: MagicMock) -> None:
+        """EXT_PERM_USER exclusion should still be present."""
+        mock_session = MagicMock()
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+        mock_session.execute.return_value.scalar.return_value = 3
+
+        get_used_seats()
+
+        call_args = mock_session.execute.call_args
+        query = call_args[0][0]
+        compiled = str(query.compile(compile_kwargs={"literal_binds": True}))
+        assert "EXT_PERM_USER" in compiled

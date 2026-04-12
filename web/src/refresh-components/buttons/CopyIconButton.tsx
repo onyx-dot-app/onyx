@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import copy from "copy-to-clipboard";
 import { Button, ButtonProps } from "@opal/components";
 import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
 
@@ -40,26 +41,19 @@ export default function CopyIconButton({
     }
 
     try {
-      // Check if Clipboard API is available
-      if (!navigator.clipboard) {
-        throw new Error("Clipboard API not available");
-      }
-
-      // If HTML content getter is provided, copy both HTML and plain text
-      if (getHtmlContent) {
+      if (navigator.clipboard && getHtmlContent) {
         const htmlContent = getHtmlContent();
         const clipboardItem = new ClipboardItem({
           "text/html": new Blob([htmlContent], { type: "text/html" }),
           "text/plain": new Blob([text], { type: "text/plain" }),
         });
         await navigator.clipboard.write([clipboardItem]);
-      }
-      // Default: plain text only
-      else {
+      } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(text);
+      } else if (!copy(text)) {
+        throw new Error("copy-to-clipboard returned false");
       }
 
-      // Show "copied" state
       setCopyState("copied");
     } catch (err) {
       console.error("Failed to copy:", err);

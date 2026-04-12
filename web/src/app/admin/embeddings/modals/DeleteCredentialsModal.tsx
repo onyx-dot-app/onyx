@@ -7,6 +7,7 @@ import {
   getFormattedProviderName,
 } from "../../../../components/embedding/interfaces";
 import { SvgTrash } from "@opal/icons";
+import { markdown } from "@opal/utils";
 
 export interface DeleteCredentialsModalProps {
   modelProvider: CloudEmbeddingProvider;
@@ -24,9 +25,11 @@ export default function DeleteCredentialsModal({
       <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgTrash}
-          title={`Delete ${getFormattedProviderName(
-            modelProvider.provider_type
-          )} Credentials?`}
+          title={markdown(
+            `Delete *${getFormattedProviderName(
+              modelProvider.provider_type
+            )}* credentials?`
+          )}
           onClose={onCancel}
         />
         <Modal.Body>

@@ -11,6 +11,8 @@ require a valid SCIM bearer token.
 
 from __future__ import annotations
 
+import hashlib
+import struct
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -22,6 +24,7 @@ from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import func
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -65,11 +68,24 @@ from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 # Group names reserved for system default groups (seeded by migration).
 _RESERVED_GROUP_NAMES = frozenset({"Admin", "Basic"})
+
+# Namespace prefix for the seat-allocation advisory lock. Hashed together
+# with the tenant ID so the lock is scoped per-tenant (unrelated tenants
+# never block each other) and cannot collide with unrelated advisory locks.
+_SEAT_LOCK_NAMESPACE = "onyx_scim_seat_lock"
+
+
+def _seat_lock_id_for_tenant(tenant_id: str) -> int:
+    """Derive a stable 64-bit signed int lock id for this tenant's seat lock."""
+    digest = hashlib.sha256(f"{_SEAT_LOCK_NAMESPACE}:{tenant_id}".encode()).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int; unpack as such.
+    return struct.unpack("q", digest[:8])[0]
 
 
 class ScimJSONResponse(JSONResponse):
@@ -209,12 +225,37 @@ def _apply_exclusions(
 
 
 def _check_seat_availability(dal: ScimDAL) -> str | None:
-    """Return an error message if seat limit is reached, else None."""
+    """Return an error message if seat limit is reached, else None.
+
+    Acquires a transaction-scoped advisory lock so that concurrent
+    SCIM requests are serialized.  IdPs like Okta send provisioning
+    requests in parallel batches — without serialization the check is
+    vulnerable to a TOCTOU race where N concurrent requests each see
+    "seats available", all insert, and the tenant ends up over its
+    seat limit.
+
+    The lock is held until the caller's next COMMIT or ROLLBACK, which
+    means the seat count cannot change between the check here and the
+    subsequent INSERT/UPDATE.  Each call site in this module follows
+    the pattern: _check_seat_availability → write → dal.commit()
+    (which releases the lock for the next waiting request).
+    """
     check_fn = fetch_ee_implementation_or_noop(
         "onyx.db.license", "check_seat_availability", None
     )
     if check_fn is None:
         return None
+
+    # Transaction-scoped advisory lock — released on dal.commit() / dal.rollback().
+    # The lock id is derived from the tenant so unrelated tenants never block
+    # each other, and from a namespace string so it cannot collide with
+    # unrelated advisory locks elsewhere in the codebase.
+    lock_id = _seat_lock_id_for_tenant(get_current_tenant_id())
+    dal.session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": lock_id},
+    )
+
     result = check_fn(dal.session, seats_needed=1)
     if not result.available:
         return result.error_message or "Seat limit reached"

@@ -7,6 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Content, Card } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -146,7 +147,7 @@ function WebSearchDisconnectModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
-      title={`Disconnect ${disconnectTarget.label}`}
+      title={markdown(`Disconnect *${disconnectTarget.label}*`)}
       description="This will remove the stored credentials for this provider."
       onClose={onClose}
       submit={

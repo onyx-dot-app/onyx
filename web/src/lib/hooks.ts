@@ -694,6 +694,25 @@ export function useLlmManager(
     prevAgentIdRef.current = liveAgent?.id;
   }, [liveAgent?.id]);
 
+  // Clear manual override when arriving at a *different* existing session
+  // from any previously-seen defined session. Tracks only the last
+  // *defined* session id so a round-trip through new-chat (A → undefined
+  // → B) still resets, while A → undefined (new-chat) preserves it.
+  const prevDefinedSessionIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const nextId = currentChatSession?.id;
+    if (
+      nextId !== undefined &&
+      prevDefinedSessionIdRef.current !== undefined &&
+      nextId !== prevDefinedSessionIdRef.current
+    ) {
+      setUserHasManuallyOverriddenLLM(false);
+    }
+    if (nextId !== undefined) {
+      prevDefinedSessionIdRef.current = nextId;
+    }
+  }, [currentChatSession?.id]);
+
   function getValidLlmDescriptor(
     modelName: string | null | undefined
   ): LlmDescriptor {
@@ -715,8 +734,9 @@ export function useLlmManager(
 
     if (llmProviders === undefined || llmProviders === null) {
       resolved = manualLlm;
-    } else if (userHasManuallyOverriddenLLM && !currentChatSession) {
-      // User has overridden in this session and switched to a new session
+    } else if (userHasManuallyOverriddenLLM) {
+      // Manual override wins over session's `current_alternate_model`.
+      // Cleared on cross-session navigation by the effect above.
       resolved = manualLlm;
     } else if (currentChatSession?.current_alternate_model) {
       resolved = getValidLlmDescriptorForProviders(
@@ -728,8 +748,6 @@ export function useLlmManager(
         liveAgent.llm_model_version_override,
         llmProviders
       );
-    } else if (userHasManuallyOverriddenLLM) {
-      resolved = manualLlm;
     } else if (user?.preferences?.default_model) {
       resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,

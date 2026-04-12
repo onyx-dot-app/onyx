@@ -264,7 +264,7 @@ monitoring:
       # The sidecar must be configured with label selector: grafana_dashboard=1
       enabled: false
   serviceMonitors:
-    # -- Set to true to deploy ServiceMonitor resources for Celery worker metrics endpoints.
+    # -- Set to true to deploy ServiceMonitor resources for API server and Celery worker metrics endpoints.
     # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
     # Use `labels` to match your Prometheus CR's serviceMonitorSelector (e.g. release: onyx-monitoring).
     enabled: false
@@ -296,7 +296,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "3"
+      onyx.app/nginx-config-version: "4"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:

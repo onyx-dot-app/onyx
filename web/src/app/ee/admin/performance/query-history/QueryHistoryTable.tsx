@@ -61,7 +61,7 @@ function QueryHistoryTableRow({
       key={chatSessionMinimal.id}
       className="hover:bg-accent-background cursor-pointer relative select-none"
     >
-      <TableCell>
+      <TableCell className="max-w-xs">
         <Text className="whitespace-normal line-clamp-5">
           {chatSessionMinimal.first_user_message ||
             chatSessionMinimal.name ||

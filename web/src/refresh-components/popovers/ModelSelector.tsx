@@ -159,9 +159,12 @@ export default function ModelSelector({
                 );
 
                 if (!isMultiModel) {
+                  // Stable key — keying on model would unmount the pill
+                  // on change and leave Radix's anchorRef detached,
+                  // flashing the closing popover at (0,0).
                   return (
                     <OpenButton
-                      key={modelKey(model.provider, model.modelName)}
+                      key="single-model-pill"
                       icon={ProviderIcon}
                       onClick={(e: React.MouseEvent) =>
                         handlePillClick(index, e.currentTarget as HTMLElement)

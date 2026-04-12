@@ -60,8 +60,10 @@ logger = setup_logger()
 
 ONE_HOUR = 3600
 
-_MAX_RESULTS_FETCH_IDS = 5000  # 5000
+_MAX_RESULTS_FETCH_IDS = 5000
 _JIRA_FULL_PAGE_SIZE = 50
+# https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
+_JIRA_BULK_FETCH_LIMIT = 100
 
 # Constants for Jira field names
 _FIELD_REPORTER = "reporter"
@@ -255,15 +257,13 @@ def _bulk_fetch_request(
     return resp.json()["issues"]
 
 
-def bulk_fetch_issues(
-    jira_client: JIRA, issue_ids: list[str], fields: str | None = None
-) -> list[Issue]:
-    # TODO(evan): move away from this jira library if they continue to not support
-    # the endpoints we need. Using private fields is not ideal, but
-    # is likely fine for now since we pin the library version
-
+def _bulk_fetch_batch(
+    jira_client: JIRA, issue_ids: list[str], fields: str | None
+) -> list[dict[str, Any]]:
+    """Fetch a single batch (must be <= _JIRA_BULK_FETCH_LIMIT).
+    On JSONDecodeError, recursively bisects until it succeeds or reaches size 1."""
     try:
-        raw_issues = _bulk_fetch_request(jira_client, issue_ids, fields)
+        return _bulk_fetch_request(jira_client, issue_ids, fields)
     except requests.exceptions.JSONDecodeError:
         if len(issue_ids) <= 1:
             logger.exception(
@@ -277,12 +277,25 @@ def bulk_fetch_issues(
             f"Jira bulk-fetch JSON decode failed for batch of {len(issue_ids)} issues. "
             f"Splitting into sub-batches of {mid} and {len(issue_ids) - mid}."
         )
-        left = bulk_fetch_issues(jira_client, issue_ids[:mid], fields)
-        right = bulk_fetch_issues(jira_client, issue_ids[mid:], fields)
+        left = _bulk_fetch_batch(jira_client, issue_ids[:mid], fields)
+        right = _bulk_fetch_batch(jira_client, issue_ids[mid:], fields)
         return left + right
-    except Exception as e:
-        logger.error(f"Error fetching issues: {e}")
-        raise
+
+
+def bulk_fetch_issues(
+    jira_client: JIRA, issue_ids: list[str], fields: str | None = None
+) -> list[Issue]:
+    # TODO(evan): move away from this jira library if they continue to not support
+    # the endpoints we need. Using private fields is not ideal, but
+    # is likely fine for now since we pin the library version
+
+    raw_issues: list[dict[str, Any]] = []
+    for batch in chunked(issue_ids, _JIRA_BULK_FETCH_LIMIT):
+        try:
+            raw_issues.extend(_bulk_fetch_batch(jira_client, list(batch), fields))
+        except Exception as e:
+            logger.error(f"Error fetching issues: {e}")
+            raise
 
     return [
         Issue(jira_client._options, jira_client._session, raw=issue)

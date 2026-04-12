@@ -201,7 +201,7 @@ function VoiceDisconnectModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
-      title={`Disconnect ${disconnectTarget.providerLabel}`}
+      title={markdown(`Disconnect *${disconnectTarget.providerLabel}*`)}
       description="Voice models"
       onClose={onClose}
       submit={

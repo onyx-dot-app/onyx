@@ -12,4 +12,30 @@ metadata:
 data:
   onyx-indexing-pipeline.json: |
     {{- .Files.Get "dashboards/indexing-pipeline.json" | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "onyx.fullname" . }}-opensearch-search-latency-dashboard
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Onyx"
+data:
+  onyx-opensearch-search-latency.json: |
+    {{- .Files.Get "dashboards/opensearch-search-latency.json" | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "onyx.fullname" . }}-redis-queues-dashboard
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Onyx"
+data:
+  onyx-redis-queues.json: |
+    {{- .Files.Get "dashboards/redis-queues.json" | nindent 4 }}
 {{- end }}

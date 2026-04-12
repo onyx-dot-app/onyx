@@ -1,6 +1,6 @@
 import "@opal/components/cards/card/styles.css";
 import type { PaddingVariants, RoundingVariants } from "@opal/types";
-import { cardPaddingVariants, cardRoundingVariants } from "@opal/shared";
+import { paddingVariants, cardRoundingVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ function Card({
   ref,
   children,
 }: CardProps) {
-  const padding = cardPaddingVariants[paddingProp];
+  const padding = paddingVariants[paddingProp];
   const rounding = cardRoundingVariants[roundingProp];
 
   return (

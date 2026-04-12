@@ -54,6 +54,12 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Divider */
+export {
+  Divider,
+  type DividerProps,
+} from "@opal/components/divider/components";
+
 /* Card */
 export {
   Card,

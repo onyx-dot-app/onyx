@@ -137,7 +137,7 @@ function DeleteConfirmModal({ hook, onDelete }: DeleteConfirmModalProps) {
         <Modal.Header
           // TODO(@raunakab): replace the colour of this SVG with red.
           icon={SvgTrash}
-          title={`Delete ${hook.name}`}
+          title={markdown(`Delete *${hook.name}*`)}
           onClose={onClose}
         />
         <Modal.Body>

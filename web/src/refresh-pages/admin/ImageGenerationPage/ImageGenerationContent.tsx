@@ -347,7 +347,7 @@ export default function ImageGenerationContent() {
       {disconnectProvider && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={`Disconnect ${disconnectProvider.title}`}
+          title={markdown(`Disconnect *${disconnectProvider.title}*`)}
           description="This will remove the stored credentials for this provider."
           onClose={() => {
             setDisconnectProvider(null);

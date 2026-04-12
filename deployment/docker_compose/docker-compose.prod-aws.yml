@@ -63,6 +63,7 @@ services:
       dockerfile: Dockerfile
     command: /app/scripts/supervisord_entrypoint.sh
     depends_on:
+      - api_server
       - index
       - cache
       - inference_model_server

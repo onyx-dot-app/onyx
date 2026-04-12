@@ -52,7 +52,7 @@ function LiteLLMProxyModalInternals({
     const { models, error } = await fetchLiteLLMProxyModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key,
-      provider_name: LLMProviderName.LITELLM_PROXY,
+      provider_name: existingLlmProvider?.name,
     });
     if (error) {
       throw new Error(error);
