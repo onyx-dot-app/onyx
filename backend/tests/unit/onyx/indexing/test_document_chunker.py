@@ -3,6 +3,7 @@ from chonkie import SentenceChunker
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import SECTION_SEPARATOR
+from onyx.connectors.models import SectionKind
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
 from onyx.connectors.models import SectionType
