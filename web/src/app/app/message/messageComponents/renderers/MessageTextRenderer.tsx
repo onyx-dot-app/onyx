@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
@@ -99,6 +99,14 @@ export const MessageTextRenderer: MessageRenderer<
   const lastStableSyncedContentRef = useRef("");
   const lastVisibleContentRef = useRef("");
 
+  // Timeout guard: if TTS doesn't start within 5s of voice sync
+  // activating, fall back to normal streaming. Prevents permanent
+  // content suppression when the voice WebSocket fails to connect.
+  const [voiceSyncTimedOut, setVoiceSyncTimedOut] = useState(false);
+  const voiceSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
   const {
     revealedCharCount,
     autoPlayback,
@@ -121,11 +129,42 @@ export const MessageTextRenderer: MessageRenderer<
 
   const shouldUseAutoPlaybackSync =
     autoPlayback &&
+    !voiceSyncTimedOut &&
     typeof messageNodeId === "number" &&
     activeMessageNodeId === messageNodeId;
 
-  // Normal streaming hands full text to the typewriter. Voice-sync and
-  // cancel paths pre-slice and bypass.
+  // Start/clear the timeout when voice sync activates/deactivates.
+  useEffect(() => {
+    if (shouldUseAutoPlaybackSync && isAwaitingAutoPlaybackStart) {
+      if (!voiceSyncTimeoutRef.current) {
+        voiceSyncTimeoutRef.current = setTimeout(() => {
+          setVoiceSyncTimedOut(true);
+        }, 5000);
+      }
+    } else {
+      // TTS started or sync deactivated — clear timeout
+      if (voiceSyncTimeoutRef.current) {
+        clearTimeout(voiceSyncTimeoutRef.current);
+        voiceSyncTimeoutRef.current = null;
+      }
+      if (voiceSyncTimedOut && !autoPlayback) setVoiceSyncTimedOut(false);
+    }
+    return () => {
+      if (voiceSyncTimeoutRef.current) {
+        clearTimeout(voiceSyncTimeoutRef.current);
+        voiceSyncTimeoutRef.current = null;
+      }
+    };
+  }, [
+    shouldUseAutoPlaybackSync,
+    isAwaitingAutoPlaybackStart,
+    isAudioSyncActive,
+    voiceSyncTimedOut,
+  ]);
+
+  // Normal streaming hands full text to the typewriter. Voice-sync
+  // paths pre-slice and bypass. If shouldUseAutoPlaybackSync is false
+  // (including after the 5s timeout), all paths fall through to fullContent.
   const computedContent = useMemo(() => {
     if (shouldUseAutoPlaybackSync && isAwaitingAutoPlaybackStart) {
       return "";
@@ -359,7 +398,7 @@ export const MessageTextRenderer: MessageRenderer<
         ) : displayedContent.length > 0 ? (
           <div dir="auto">
             <ReactMarkdown
-              className="prose font-main-content-body max-w-full"
+              className="prose prose-onyx font-main-content-body max-w-full"
               components={markdownComponents}
               remarkPlugins={
                 streamFullyDisplayed
