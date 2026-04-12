@@ -1,11 +1,8 @@
 """API endpoints for proposals and proposal documents."""
 
 import io
-from datetime import datetime
-from datetime import timezone
 from typing import Any
 from uuid import UUID
-from uuid import uuid4
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -197,24 +194,22 @@ def list_proposals(
     results = query.offset(offset).limit(limit).all()
 
     proposals: list[ProposalResponse] = []
+    created_any = False
     for document, proposal in results:
         if proposal is None:
-            # Don't create DB records during GET — treat as pending
-            metadata = _resolve_document_metadata(document, visible_fields)
-            proposals.append(
-                ProposalResponse(
-                    id=uuid4(),  # temporary, not persisted
-                    document_id=document.id,
-                    tenant_id=tenant_id,
-                    status="PENDING",
-                    created_at=document.doc_updated_at or datetime.now(timezone.utc),
-                    updated_at=document.doc_updated_at or datetime.now(timezone.utc),
-                    metadata=metadata,
-                )
+            # Lazily create the proposal record so the frontend gets a
+            # stable UUID it can use for navigation and subsequent API calls.
+            proposal = proposals_db.get_or_create_proposal(
+                document_id=document.id,
+                tenant_id=tenant_id,
+                db_session=db_session,
             )
-            continue
+            created_any = True
         metadata = _resolve_document_metadata(document, visible_fields)
         proposals.append(ProposalResponse.from_model(proposal, metadata=metadata))
+
+    if created_any:
+        db_session.commit()
 
     return ProposalListResponse(proposals=proposals, total_count=total_count)
 
