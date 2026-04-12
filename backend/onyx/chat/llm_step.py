@@ -1168,6 +1168,7 @@ def run_llm_step_pkt_generator(
             nonlocal has_reasoned
             nonlocal turn_index
             nonlocal sub_turn_index
+            nonlocal answer_start
 
             if reasoning_start:
                 yield Packet(
@@ -1183,6 +1184,8 @@ def run_llm_step_pkt_generator(
                     turn_index, sub_turn_index
                 )
                 reasoning_start = False
+                # Reset so the new turn gets its own AgentResponseStart.
+                answer_start = False
 
         def _emit_content_chunk(content_chunk: str) -> Generator[Packet, None, None]:
             nonlocal accumulated_answer
