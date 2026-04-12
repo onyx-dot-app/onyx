@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState, useReducer } from "react";
+import { useTranslations } from "next-intl";
 import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
@@ -97,6 +98,7 @@ function WebSearchDisconnectModal({
   onClose: () => void;
   onDisconnect: () => void;
 }) {
+  const t = useTranslations("admin.webSearch");
   const isSearch = disconnectTarget.category === "search";
 
   // Determine if the target is currently the active/selected provider
@@ -132,9 +134,9 @@ function WebSearchDisconnectModal({
     return details?.label ?? p.name ?? p.provider_type;
   };
 
-  const categoryLabel = isSearch ? "search engine" : "web crawler";
-  const featureLabel = isSearch ? "web search" : "web crawling";
-  const disableLabel = isSearch ? "Disable Web Search" : "Disable Web Crawling";
+  const categoryLabel = isSearch ? t("searchEngineLabel") : t("webCrawlerLabel");
+  const featureLabel = isSearch ? t("webSearchLabel") : t("webCrawlingLabel");
+  const disableLabel = isSearch ? t("disableWebSearch") : t("disableWebCrawling");
 
   // Auto-select first replacement when modal opens
   useEffect(() => {
@@ -148,7 +150,7 @@ function WebSearchDisconnectModal({
     <ConfirmationModalLayout
       icon={SvgUnplug}
       title={markdown(`Disconnect *${disconnectTarget.label}*`)}
-      description="This will remove the stored credentials for this provider."
+      description={t("disconnectModalDescription")}
       onClose={onClose}
       submit={
         <Button
@@ -158,7 +160,7 @@ function WebSearchDisconnectModal({
             needsReplacement && hasReplacements && !replacementProviderId
           }
         >
-          Disconnect
+          {t("disconnect")}
         </Button>
       }
     >
@@ -166,18 +168,17 @@ function WebSearchDisconnectModal({
         hasReplacements ? (
           <Section alignItems="start">
             <Text as="p" text03>
-              <b>{disconnectTarget.label}</b> is currently the active{" "}
-              {categoryLabel}. Search history will be preserved.
+              <b>{disconnectTarget.label}</b> {isSearch ? t("searchEngineActive") : t("webCrawlerActive")} {categoryLabel}. {t("searchHistoryPreserved")}
             </Text>
             <Section alignItems="start" gap={0.25}>
               <Text as="p" secondaryBody text03>
-                Set New Default
+                {t("setNewDefault")}
               </Text>
               <InputSelect
                 value={replacementProviderId ?? undefined}
                 onValueChange={(v) => onReplacementChange(v)}
               >
-                <InputSelect.Trigger placeholder="Select a replacement provider" />
+                <InputSelect.Trigger placeholder={t("selectReplacement")} />
                 <InputSelect.Content>
                   {replacementOptions.map((p) => (
                     <InputSelect.Item key={p.id} value={String(p.id)}>
@@ -187,7 +188,7 @@ function WebSearchDisconnectModal({
                   <InputSelect.Separator />
                   <InputSelect.Item value={NO_DEFAULT_VALUE} icon={SvgSlash}>
                     <span>
-                      <b>No Default</b>
+                      <b>{t("noDefault")}</b>
                       <span className="text-text-03"> ({disableLabel})</span>
                     </span>
                   </InputSelect.Item>
@@ -198,22 +199,20 @@ function WebSearchDisconnectModal({
         ) : (
           <>
             <Text as="p" text03>
-              <b>{disconnectTarget.label}</b> is currently the active{" "}
-              {categoryLabel}.
+              <b>{disconnectTarget.label}</b> {isSearch ? t("searchEngineActive") : t("webCrawlerActive")} {categoryLabel}.
             </Text>
             <Text as="p" text03>
-              Connect another provider to continue using {featureLabel}.
+              {t("connectAnotherProvider", { feature: featureLabel })}
             </Text>
           </>
         )
       ) : (
         <>
           <Text as="p" text03>
-            {isSearch ? "Web search" : "Web crawling"} will no longer be routed
-            through <b>{disconnectTarget.label}</b>.
+            {isSearch ? t("webSearchLabel") : t("webCrawlingLabel")} {t("noLongerRouted", { label: disconnectTarget.label })}
           </Text>
           <Text as="p" text03>
-            Search history will be preserved.
+            {t("searchHistoryPreserved")}
           </Text>
         </>
       )}
@@ -256,8 +255,10 @@ function ProviderCard({
   onDeselect,
   onEdit,
   onDisconnect,
-  selectedLabel = "Current Default",
+  selectedLabel,
 }: ProviderCardProps) {
+  const t = useTranslations("admin.webSearch");
+  const resolvedSelectedLabel = selectedLabel ?? t("currentDefault");
   const isDisconnected = status === "disconnected";
   const isConnected = status === "connected";
   const isSelected = status === "selected";
@@ -292,7 +293,7 @@ function ProviderCard({
                   onConnect();
                 }}
               >
-                Connect
+                {t("connect")}
               </Button>
             ) : isConnected && onSelect ? (
               <Button
@@ -303,12 +304,12 @@ function ProviderCard({
                   onSelect();
                 }}
               >
-                Set as Default
+                {t("setAsDefault")}
               </Button>
             ) : isSelected ? (
               <div className="p-2">
                 <Content
-                  title={selectedLabel}
+                  title={resolvedSelectedLabel}
                   sizePreset="main-ui"
                   variant="section"
                   icon={SvgCheckSquare}
@@ -323,7 +324,7 @@ function ProviderCard({
                   <Hoverable.Item group="web-search/ProviderCard">
                     <Button
                       icon={SvgUnplug}
-                      tooltip="Disconnect"
+                      tooltip={t("disconnect")}
                       aria-label={`Disconnect ${title}`}
                       prominence="tertiary"
                       onClick={(e) => {
@@ -337,8 +338,8 @@ function ProviderCard({
                 {onEdit && (
                   <Button
                     icon={SvgSettings}
-                    tooltip="Edit"
-                    aria-label={`Edit ${title}`}
+                    tooltip={t("edit")}
+                    aria-label={t("edit") + " " + title}
                     prominence="tertiary"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -361,6 +362,7 @@ function ProviderCard({
 // ---------------------------------------------------------------------------
 
 export default function WebSearchPage() {
+  const t = useTranslations("admin.webSearch");
   const [searchModal, dispatchSearchModal] = useReducer(
     WebProviderModalReducer,
     initialWebProviderModalState
@@ -505,7 +507,7 @@ export default function WebSearchPage() {
           provider.provider_type,
           provider.name
         ),
-        subtitle: "Custom integration",
+        subtitle: t("customIntegration"),
         logoSrc: undefined,
         provider,
       }));
@@ -649,7 +651,7 @@ export default function WebSearchPage() {
     const message =
       searchProvidersError?.message ||
       contentProvidersError?.message ||
-      "Unable to load web search configuration.";
+      t("failedToLoad");
 
     const detail =
       (searchProvidersError instanceof FetchError &&
@@ -666,11 +668,11 @@ export default function WebSearchPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Search settings for external search across the internet."
+          description={t("description")}
           separator
         />
         <SettingsLayouts.Body>
-          <Callout type="danger" title="Failed to load web search settings">
+          <Callout type="danger" title={t("failedToLoadTitle")}>
             {message}
             {detail && (
               <Text as="p" className="mt-2 text-text-03" mainContentBody text03>
@@ -689,7 +691,7 @@ export default function WebSearchPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Search settings for external search across the internet."
+          description={t("description")}
           separator
         />
         <SettingsLayouts.Body>
@@ -776,7 +778,7 @@ export default function WebSearchPage() {
       await mutateSearchProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError");
       setActivationError(message);
     }
   };
@@ -788,7 +790,7 @@ export default function WebSearchPage() {
       await mutateSearchProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError");
       setActivationError(message);
     }
   };
@@ -802,7 +804,7 @@ export default function WebSearchPage() {
       await mutateContentProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError");
       setContentActivationError(message);
     }
   };
@@ -817,7 +819,7 @@ export default function WebSearchPage() {
       await mutateContentProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError");
       setContentActivationError(message);
     }
   };
@@ -900,7 +902,7 @@ export default function WebSearchPage() {
       contentModal.phase === "validating" ||
       contentModal.phase === "saving"
     ) {
-      return "Validating API key...";
+      return t("validatingApiKey");
     }
 
     const providerName = selectedContentProviderType
@@ -909,30 +911,12 @@ export default function WebSearchPage() {
       : "";
 
     if (selectedContentProviderType === "exa") {
-      return (
-        <>
-          Paste your{" "}
-          <a
-            href="https://dashboard.exa.ai/api-keys"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            API key
-          </a>{" "}
-          from Exa to enable crawling.
-        </>
-      );
+      return t("pasteApiKeyFromExa");
     }
 
-    return selectedContentProviderType === "firecrawl" ? (
-      <>
-        Paste your <span className="underline">API key</span> from Firecrawl to
-        access your search engine.
-      </>
-    ) : (
-      `Paste your API key from ${providerName} to enable crawling.`
-    );
+    return selectedContentProviderType === "firecrawl"
+      ? t("pasteApiKeyFromFirecrawl")
+      : t("pasteApiKeyFromProvider", { provider: providerName });
   };
 
   const getContentProviderHelperClass = () => {
@@ -951,13 +935,13 @@ export default function WebSearchPage() {
 
     try {
       await disconnectProvider(id, category, replacementProviderId);
-      toast.success(`${disconnectTarget.label} disconnected`);
+      toast.success(t("disconnected", { label: disconnectTarget.label }));
       await mutateSearchProviders();
       await mutateContentProviders();
     } catch (error) {
       console.error("Failed to disconnect web search provider:", error);
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError");
       if (category === "search") {
         setActivationError(message);
       } else {
@@ -975,21 +959,21 @@ export default function WebSearchPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Search settings for external search across the internet."
+          description={t("description")}
           separator
         />
 
         <SettingsLayouts.Body>
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Search Engine"
-              description="External search engine API used for web search result URLs, snippets, and metadata."
+              title={t("searchEngine")}
+              description={t("searchEngineDescription")}
               sizePreset="main-content"
               variant="section"
             />
 
             {activationError && (
-              <Callout type="danger" title="Unable to update default provider">
+              <Callout type="danger" title={t("unableToUpdateProvider")}>
                 {activationError}
               </Callout>
             )}
@@ -1015,8 +999,8 @@ export default function WebSearchPage() {
                   </div>
                   <Text as="p" className="flex-1 px-0.5" mainUiBody text04>
                     {hasConfiguredSearchProvider
-                      ? "Select a search engine to enable web search."
-                      : "Connect a search engine to set up web search."}
+                      ? t("selectSearchEngine")
+                      : t("connectSearchEngine")}
                   </Text>
                 </div>
               </div>
@@ -1111,14 +1095,14 @@ export default function WebSearchPage() {
 
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Web Crawler"
-              description="Used to read the full contents of search result pages."
+              title={t("webCrawler")}
+              description={t("webCrawlerDescription")}
               sizePreset="main-content"
               variant="section"
             />
 
             {contentActivationError && (
-              <Callout type="danger" title="Unable to update crawler">
+              <Callout type="danger" title={t("unableToUpdateCrawler")}>
                 {contentActivationError}
               </Callout>
             )}
@@ -1177,7 +1161,7 @@ export default function WebSearchPage() {
                     title={label}
                     description={subtitle}
                     status={status}
-                    selectedLabel="Current Crawler"
+                    selectedLabel={t("currentCrawler")}
                     onConnect={() => {
                       openContentModal(provider.provider_type, provider);
                       setContentActivationError(null);
@@ -1268,11 +1252,11 @@ export default function WebSearchPage() {
         optionalField={
           selectedProviderType === "google_pse"
             ? {
-                label: "Search Engine ID",
+                label: t("searchEngineId"),
                 value: searchModal.configValue,
                 onChange: (value) =>
                   dispatchSearchModal({ type: "SET_CONFIG_VALUE", value }),
-                placeholder: "Enter search engine ID",
+                placeholder: t("enterSearchEngineId"),
                 description: (
                   <>
                     Paste your{" "}
@@ -1290,7 +1274,7 @@ export default function WebSearchPage() {
               }
             : selectedProviderType === "searxng"
               ? {
-                  label: "SearXNG Base URL",
+                  label: t("searxngBaseUrl"),
                   value: searchModal.configValue,
                   onChange: (value) =>
                     dispatchSearchModal({ type: "SET_CONFIG_VALUE", value }),
@@ -1317,7 +1301,7 @@ export default function WebSearchPage() {
             searchModal.message.text
           ) : searchModal.phase === "validating" ||
             searchModal.phase === "saving" ? (
-            "Checking connection..."
+            t("checkingConnection")
           ) : (
             <>
               Paste your{" "}
@@ -1383,7 +1367,7 @@ export default function WebSearchPage() {
             ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]
                 ?.description ||
               CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.subtitle ||
-              `Provide credentials for ${contentProviderLabel} to enable crawling.`
+              t("provideCredentialsFor", { provider: contentProviderLabel })
             : ""
         }
         apiKeyValue={contentModal.apiKeyValue}
@@ -1394,12 +1378,12 @@ export default function WebSearchPage() {
         optionalField={
           selectedContentProviderType === "firecrawl"
             ? {
-                label: "API Base URL",
+                label: t("apiBaseUrl"),
                 value: contentModal.configValue,
                 onChange: (value) =>
                   dispatchContentModal({ type: "SET_CONFIG_VALUE", value }),
                 placeholder: "https://",
-                description: "Your Firecrawl API base URL.",
+                description: t("yourApiBaseUrl"),
                 showFirst: true,
               }
             : undefined

@@ -20,6 +20,7 @@ import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ThreeDotsLoader } from "@/components/Loading";
+import { useTranslations } from "next-intl";
 
 const DocumentDisplay = ({
   document,
@@ -28,6 +29,7 @@ const DocumentDisplay = ({
   document: OnyxDocument;
   refresh: () => void;
 }) => {
+  const t = useTranslations("admin.documents");
   return (
     <div
       key={document.document_id}
@@ -51,7 +53,7 @@ const DocumentDisplay = ({
       </div>
       <div className="flex flex-wrap gap-x-2 mt-1 text-xs">
         <div className="px-1 py-0.5 bg-accent-background-hovered rounded flex">
-          <p className="mr-1 my-auto">Boost:</p>
+          <p className="mr-1 my-auto">{t("boost")}</p>
           <ScoreSection
             documentId={document.document_id}
             initialScore={document.boost}
@@ -69,7 +71,7 @@ const DocumentDisplay = ({
               refresh();
             } else {
               toast.error(
-                `Failed to update document - ${getErrorMsg(response)}`
+                t("failedToUpdateDocument", { error: await getErrorMsg(response) })
               );
             }
           }}
@@ -77,9 +79,9 @@ const DocumentDisplay = ({
         >
           <div className="my-auto">
             {document.hidden ? (
-              <div className="text-error">Hidden</div>
+              <div className="text-error">{t("hidden")}</div>
             ) : (
-              "Visible"
+              t("visible")
             )}
           </div>
           <div className="ml-1 my-auto">
@@ -109,6 +111,7 @@ export function Explorer({
   documentSets: DocumentSetSummary[];
 }) {
   const router = useRouter();
+  const t = useTranslations("admin.documents");
 
   const [query, setQuery] = useState(initialSearchValue || "");
   const [timeoutId, setTimeoutId] = useState<number | null>(null);
@@ -165,7 +168,7 @@ export function Explorer({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col justify-center gap-2">
         <InputTypeIn
-          placeholder="Find documents based on title / content..."
+          placeholder={t("findDocumentsPlaceholder")}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);

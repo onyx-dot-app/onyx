@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from onyx.db.enums import DefaultAppMode
+from onyx.db.enums import LanguagePreference
 from onyx.db.enums import ThemePreference
 from onyx.db.models import AccessToken
 from onyx.db.models import Assistant__UserSpecificConfig
@@ -211,6 +212,20 @@ def update_user_chat_background(
         update(User)
         .where(User.id == user_id)  # type: ignore
         .values(chat_background=chat_background)
+    )
+    db_session.commit()
+
+
+def update_user_language_preference(
+    user_id: UUID,
+    language_preference: LanguagePreference,
+    db_session: Session,
+) -> None:
+    """Update user's language preference setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # type: ignore
+        .values(language_preference=language_preference)
     )
     db_session.commit()
 

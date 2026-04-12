@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
@@ -56,9 +57,10 @@ function FooterLinks({
   hideLicenseLink?: boolean;
 }) {
   const { user } = useUser();
+  const t = useTranslations("admin.billing");
   const licenseText = hasSubscription
-    ? "Update License Key"
-    : "Activate License Key";
+    ? t("updateLicenseKey")
+    : t("activateLicenseKey");
   const billingHelpHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
     `[Billing] support for ${user?.email ?? "unknown"}`
   )}`;
@@ -68,7 +70,7 @@ function FooterLinks({
       {onActivateLicense && !hideLicenseLink && (
         <>
           <Text secondaryBody text03>
-            Have a license key?
+            {t("haveLicenseKey")}
           </Text>
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button action tertiary onClick={onActivateLicense}>
@@ -86,7 +88,7 @@ function FooterLinks({
         className="billing-text-link"
       >
         <Text secondaryBody text03 className="underline">
-          Billing Help
+          {t("billingHelp")}
         </Text>
       </Button>
     </Section>
@@ -100,6 +102,7 @@ function FooterLinks({
 export default function BillingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useTranslations("admin.billing");
   // Start with null view to prevent flash - will be set once data loads
   const [view, setView] = useState<BillingView | null>(null);
   const [showLicenseActivationInput, setShowLicenseActivationInput] =
@@ -323,7 +326,7 @@ export default function BillingPage() {
     if (isLoading || view === null) {
       return {
         icon: SvgWallet,
-        title: "Plans & Billing",
+        title: t("plansAndBilling"),
         showBackButton: false,
       };
     }
@@ -331,13 +334,13 @@ export default function BillingPage() {
       case "checkout":
         return {
           icon: SvgArrowUpCircle,
-          title: "Upgrade Plan",
+          title: t("upgradePlan"),
           showBackButton: false,
         };
       case "plans":
         return {
           icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
-          title: hasSubscription ? "View Plans" : "Upgrade Plan",
+          title: hasSubscription ? t("viewPlans") : t("upgradePlan"),
           showBackButton: !!(
             hasSubscription ||
             (isSelfHosted && licenseData?.has_license)
@@ -346,7 +349,7 @@ export default function BillingPage() {
       case "details":
         return {
           icon: SvgWallet,
-          title: "Plans & Billing",
+          title: t("plansAndBilling"),
           showBackButton: false,
         };
     }
@@ -479,8 +482,8 @@ export default function BillingPage() {
               static
               warning
               large
-              text="Your license is still activating"
-              description="Your license is being processed. You'll be taken to billing details automatically once confirmed."
+              text={t("licenseActivating")}
+              description={t("licenseActivatingDescription")}
               icon
               close
               onClose={() => {

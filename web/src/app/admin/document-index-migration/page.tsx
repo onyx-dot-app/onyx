@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -31,6 +32,7 @@ function formatTimestamp(iso: string): string {
 }
 
 function MigrationStatusSection() {
+  const t = useTranslations("admin.migration");
   const { data, isLoading, error } = useSWR<MigrationStatus>(
     SWR_KEYS.opensearchMigrationStatus,
     errorHandlingFetcher
@@ -39,9 +41,9 @@ function MigrationStatusSection() {
   if (isLoading) {
     return (
       <Card>
-        <Text headingH3>Migration Status</Text>
+        <Text headingH3>{t("migrationStatus")}</Text>
         <Text mainUiBody text03>
-          Loading...
+          {t("loading")}
         </Text>
       </Card>
     );
@@ -50,9 +52,9 @@ function MigrationStatusSection() {
   if (error) {
     return (
       <Card>
-        <Text headingH3>Migration Status</Text>
+        <Text headingH3>{t("migrationStatus")}</Text>
         <Text mainUiBody text03>
-          Failed to load migration status.
+          {t("failedToLoad")}
         </Text>
       </Card>
     );
@@ -74,36 +76,34 @@ function MigrationStatusSection() {
 
   return (
     <Card>
-      <Text headingH3>Migration Status</Text>
+      <Text headingH3>{t("migrationStatus")}</Text>
 
       <ContentAction
-        title="Started"
+        title={t("started")}
         sizePreset="main-ui"
         variant="section"
         rightChildren={
           <Text mainUiBody>
-            {hasStarted ? formatTimestamp(data.created_at!) : "Not started"}
+            {hasStarted ? formatTimestamp(data.created_at!) : t("notStarted")}
           </Text>
         }
       />
 
       <ContentAction
-        title="Chunks Migrated"
+        title={t("chunksMigrated")}
         sizePreset="main-ui"
         variant="section"
         rightChildren={
           <Text mainUiBody>
             {progressPercentage !== null
-              ? `${totalChunksMigrated} (approx. progress ${Math.round(
-                  progressPercentage
-                )}%)`
+              ? t("approxProgress", { count: totalChunksMigrated, percent: Math.round(progressPercentage) })
               : String(totalChunksMigrated)}
           </Text>
         }
       />
 
       <ContentAction
-        title="Completed"
+        title={t("completed")}
         sizePreset="main-ui"
         variant="section"
         rightChildren={
@@ -111,8 +111,8 @@ function MigrationStatusSection() {
             {hasCompleted
               ? formatTimestamp(data.migration_completed_at!)
               : hasStarted
-                ? "In progress"
-                : "Not started"}
+                ? t("inProgress")
+                : t("notStarted")}
           </Text>
         }
       />
@@ -121,6 +121,7 @@ function MigrationStatusSection() {
 }
 
 function RetrievalSourceSection() {
+  const t = useTranslations("admin.migration");
   const { data, isLoading, error, mutate } = useSWR<RetrievalStatus>(
     SWR_KEYS.opensearchMigrationRetrieval,
     errorHandlingFetcher
@@ -157,9 +158,9 @@ function RetrievalSourceSection() {
   if (isLoading) {
     return (
       <Card>
-        <Text headingH3>Retrieval Source</Text>
+        <Text headingH3>{t("retrievalSource")}</Text>
         <Text mainUiBody text03>
-          Loading...
+          {t("loading")}
         </Text>
       </Card>
     );
@@ -168,9 +169,9 @@ function RetrievalSourceSection() {
   if (error) {
     return (
       <Card>
-        <Text headingH3>Retrieval Source</Text>
+        <Text headingH3>{t("retrievalSource")}</Text>
         <Text mainUiBody text03>
-          Failed to load retrieval settings.
+          {t("failedToLoadRetrieval")}
         </Text>
       </Card>
     );
@@ -179,8 +180,8 @@ function RetrievalSourceSection() {
   return (
     <Card>
       <Content
-        title="Retrieval Source"
-        description="Controls which document index is used for retrieval."
+        title={t("retrievalSource")}
+        description={t("retrievalDescription")}
         sizePreset="main-ui"
         variant="section"
       />
@@ -190,7 +191,7 @@ function RetrievalSourceSection() {
         onValueChange={setSelectedSource}
         disabled={updating}
       >
-        <InputSelect.Trigger placeholder="Select retrieval source" />
+        <InputSelect.Trigger placeholder={t("selectSource")} />
         <InputSelect.Content>
           <InputSelect.Item value="vespa">Vespa</InputSelect.Item>
           <InputSelect.Item value="opensearch">OpenSearch</InputSelect.Item>
@@ -204,7 +205,7 @@ function RetrievalSourceSection() {
           onClick={handleUpdate}
           disabled={updating}
         >
-          {updating ? "Updating..." : "Update Settings"}
+          {updating ? t("updating") : t("updateSettings")}
         </Button>
       )}
     </Card>
@@ -212,12 +213,13 @@ function RetrievalSourceSection() {
 }
 
 export default function Page() {
+  const t = useTranslations("admin.migration");
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description="Monitor the migration from Vespa to OpenSearch and control the active retrieval source."
+        description={t("description")}
         separator
       />
       <SettingsLayouts.Body>

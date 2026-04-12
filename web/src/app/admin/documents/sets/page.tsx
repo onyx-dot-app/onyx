@@ -44,6 +44,7 @@ import {
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 const numToDisplay = 50;
@@ -113,6 +114,7 @@ const EditRow = ({
   isEditable: boolean;
 }) => {
   const router = useRouter();
+  const t = useTranslations("admin.documents");
 
   if (!isEditable) {
     return (
@@ -147,8 +149,7 @@ const EditRow = ({
             <TooltipContent width="max-w-sm">
               <div className="flex break-words break-keep whitespace-pre-wrap items-start">
                 <InfoIcon className="mr-2 mt-0.5" />
-                Cannot update while syncing! Wait for the sync to finish, then
-                try again.
+                {t("cannotUpdateWhileSyncing")}
               </div>
             </TooltipContent>
           )}
@@ -172,6 +173,8 @@ const DocumentSetTable = ({
   refreshEditable,
 }: DocumentFeedbackTableProps) => {
   const [page, setPage] = useState(1);
+  const t = useTranslations("admin.documents");
+  const tc = useTranslations("common");
 
   // sort by name for consistent ordering
   documentSets.sort((a, b) => {
@@ -193,15 +196,15 @@ const DocumentSetTable = ({
 
   return (
     <div>
-      <Title>Existing Document Sets</Title>
+      <Title>{t("existingDocumentSets")}</Title>
       <Table className="overflow-visible mt-2">
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Connectors</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Public</TableHead>
-            <TableHead>Delete</TableHead>
+            <TableHead>{t("name")}</TableHead>
+            <TableHead>{t("connectors")}</TableHead>
+            <TableHead>{t("status")}</TableHead>
+            <TableHead>{t("public")}</TableHead>
+            <TableHead>{tc("delete")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

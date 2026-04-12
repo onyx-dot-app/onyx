@@ -5,11 +5,8 @@ export function isBuiltInGroup(group: UserGroup): boolean {
   return group.is_default;
 }
 
-/** Human-readable description for built-in groups. */
-const BUILT_IN_DESCRIPTIONS: Record<string, string> = {
-  Basic: "Default group for all users with basic permissions.",
-  Admin: "Built-in admin group with full access to manage all permissions.",
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TranslateFn = (key: string, params?: Record<string, any>) => string;
 
 /**
  * Build the description line(s) shown beneath the group name.
@@ -18,38 +15,40 @@ const BUILT_IN_DESCRIPTIONS: Record<string, string> = {
  * Custom groups list resource counts ("3 connectors · 2 document sets · 2 agents")
  * or fall back to "No private connectors / document sets / agents".
  */
-export function buildGroupDescription(group: UserGroup): string {
+export function buildGroupDescription(
+  group: UserGroup,
+  t: TranslateFn
+): string {
   if (isBuiltInGroup(group)) {
-    return BUILT_IN_DESCRIPTIONS[group.name] ?? "";
+    if (group.name === "Basic") return t("basicGroupDescription");
+    if (group.name === "Admin") return t("adminGroupDescription");
+    return "";
   }
 
   const parts: string[] = [];
   if (group.cc_pairs.length > 0) {
     parts.push(
-      `${group.cc_pairs.length} connector${
-        group.cc_pairs.length !== 1 ? "s" : ""
-      }`
+      t("connectorCount", { count: group.cc_pairs.length })
     );
   }
   if (group.document_sets.length > 0) {
     parts.push(
-      `${group.document_sets.length} document set${
-        group.document_sets.length !== 1 ? "s" : ""
-      }`
+      t("documentSetCount", { count: group.document_sets.length })
     );
   }
   if (group.personas.length > 0) {
-    parts.push(
-      `${group.personas.length} agent${group.personas.length !== 1 ? "s" : ""}`
-    );
+    parts.push(t("agentCount", { count: group.personas.length }));
   }
 
   return parts.length > 0
     ? parts.join(" · ")
-    : "No private connectors / document sets / agents";
+    : t("noPrivateResources");
 }
 
 /** Format the member count badge, e.g. "306 Members" or "1 Member". */
-export function formatMemberCount(count: number): string {
-  return `${count} ${count === 1 ? "Member" : "Members"}`;
+export function formatMemberCount(
+  count: number,
+  t: TranslateFn
+): string {
+  return `${count} ${count === 1 ? t("member") : t("members")}`;
 }

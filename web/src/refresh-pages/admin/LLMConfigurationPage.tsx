@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSWRConfig } from "swr";
+import { useTranslations } from "next-intl";
 import { toast } from "@/hooks/useToast";
 import {
   useAdminLLMProviders,
@@ -73,16 +74,17 @@ function ExistingProviderCard({
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
+  const t = useTranslations("llm");
 
   const handleDelete = async () => {
     try {
       await deleteLlmProvider(provider.id, isLastProvider);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
-      toast.success("Provider deleted successfully!");
+      toast.success(t("providerDeleted"));
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to delete provider: ${message}`);
+      const message = e instanceof Error ? e.message : t("unknownError");
+      toast.error(t("failedToDeleteProvider", { message }));
     }
   };
 
@@ -97,7 +99,7 @@ function ExistingProviderCard({
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={markdown(`Delete *${provider.name}*`)}
+          title={markdown(t("deleteProvider", { name: provider.name }))}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -105,26 +107,23 @@ function ExistingProviderCard({
               onClick={handleDelete}
               disabled={isDefault && !isLastProvider}
             >
-              Delete
+              {t("delete")}
             </Button>
           }
         >
           <Section alignItems="start" gap={0.5}>
             {isDefault && !isLastProvider ? (
               <Text font="main-ui-body" color="text-03">
-                Cannot delete the default provider. Select another provider as
-                the default prior to deleting this one.
+                {t("cannotDeleteDefault")}
               </Text>
             ) : (
               <>
                 <Text font="main-ui-body" color="text-03">
-                  {markdown(
-                    `All LLM models from provider **${provider.name}** will be removed and unavailable for future chats. Chat history will be preserved.`
-                  )}
+                  {markdown(t("deleteProviderWarning", { name: provider.name }))}
                 </Text>
                 {isLastProvider && (
                   <Text font="main-ui-body" color="text-03">
-                    Connect another provider to continue using chats.
+                    {t("connectAnotherProvider")}
                   </Text>
                 )}
               </>
@@ -149,7 +148,7 @@ function ExistingProviderCard({
             description={companyName}
             sizePreset="main-ui"
             variant="section"
-            tag={isDefault ? { title: "Default", color: "blue" } : undefined}
+            tag={isDefault ? { title: t("default"), color: "blue" } : undefined}
             rightChildren={
               <div className="flex flex-row">
                 <Hoverable.Item
@@ -196,6 +195,7 @@ interface NewProviderCardProps {
 function NewProviderCard({ provider, isFirstProvider }: NewProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider(provider.name);
+  const t = useTranslations("llm");
 
   return (
     <SelectCard
@@ -219,7 +219,7 @@ function NewProviderCard({ provider, isFirstProvider }: NewProviderCardProps) {
               setIsOpen(true);
             }}
           >
-            Connect
+            {t("connect")}
           </Button>
         }
       />
@@ -243,6 +243,7 @@ function NewCustomProviderCard({
 }: NewCustomProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider("custom");
+  const t = useTranslations("llm");
 
   return (
     <SelectCard
@@ -266,7 +267,7 @@ function NewCustomProviderCard({
               setIsOpen(true);
             }}
           >
-            Set Up
+            {t("setUp")}
           </Button>
         }
       />
@@ -286,6 +287,7 @@ export default function LLMConfigurationPage() {
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
   const { wellKnownLLMProviders } = useWellKnownLLMProviders();
+  const t = useTranslations("llm");
 
   if (!existingLlmProviders) {
     return <ThreeDotsLoader />;
@@ -324,10 +326,10 @@ export default function LLMConfigurationPage() {
     try {
       await setDefaultLlmModel(providerId, modelName);
       await refreshLlmProviderCaches(mutate);
-      toast.success("Default model updated successfully!");
+      toast.success(t("defaultModelUpdated"));
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to set default model: ${message}`);
+      const message = e instanceof Error ? e.message : t("unknownError");
+      toast.error(t("failedToSetDefault", { message }));
     }
   }
 
@@ -339,8 +341,8 @@ export default function LLMConfigurationPage() {
         {hasProviders ? (
           <Card border="solid" rounding="lg">
             <HorizontalInput
-              title="Default Model"
-              description="This model will be used by Onyx by default in your chats."
+              title={t("defaultModel")}
+              description={t("defaultModelDescription")}
               nonInteractive
               center
             >
@@ -348,7 +350,7 @@ export default function LLMConfigurationPage() {
                 value={currentDefaultValue}
                 onValueChange={handleDefaultModelChange}
               >
-                <InputSelect.Trigger placeholder="Select a default model" />
+                <InputSelect.Trigger placeholder={t("selectDefaultModel")} />
                 <InputSelect.Content>
                   {providersWithVisibleModels.map(
                     ({ provider, visibleModels }) => (
@@ -375,7 +377,7 @@ export default function LLMConfigurationPage() {
             large
             icon
             close={false}
-            text="Set up an LLM provider to start chatting."
+            text={t("setupProvider")}
             className="w-full"
           />
         )}
@@ -390,7 +392,7 @@ export default function LLMConfigurationPage() {
               justifyContent="start"
             >
               <Content
-                title="Available Providers"
+                title={t("availableProviders")}
                 sizePreset="main-content"
                 variant="section"
               />
@@ -419,8 +421,8 @@ export default function LLMConfigurationPage() {
           justifyContent="start"
         >
           <Content
-            title="Add Provider"
-            description="Onyx supports both popular providers and self-hosted models."
+            title={t("addProvider")}
+            description={t("addProviderDescription")}
             sizePreset="main-content"
             variant="section"
           />

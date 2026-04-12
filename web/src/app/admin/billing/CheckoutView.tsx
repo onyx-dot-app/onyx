@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Button } from "@opal/components";
@@ -34,6 +35,8 @@ function BillingOption({
   price,
   badge,
 }: BillingOptionProps) {
+  const t = useTranslations("admin.billing");
+
   return (
     <Card
       onClick={onClick}
@@ -63,7 +66,7 @@ function BillingOption({
               ${price}
             </Text>
             <Text secondaryBody text03 nowrap>
-              per seat/month
+              {t("perSeatPerMonth")}
             </Text>
           </div>
         </Section>
@@ -98,6 +101,7 @@ interface CheckoutViewProps {
 export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   const { user } = useUser();
   const { data: usersData } = useUsers({ includeApiKeys: false });
+  const t = useTranslations("admin.billing.checkout");
 
   // Calculate minimum required seats based on current active users
   const acceptedUsers =
@@ -142,12 +146,12 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
       if (response.stripe_checkout_url) {
         window.location.href = response.stripe_checkout_url;
       } else {
-        throw new Error("Invalid response from checkout session");
+        throw new Error(t("failedCheckout"));
       }
     } catch (err) {
       console.error("Error creating checkout session:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to create checkout session"
+        err instanceof Error ? err.message : t("failedCheckout")
       );
     } finally {
       setIsSubmitting(false);
@@ -177,7 +181,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           </Text>
         </Section>
         <Button prominence="secondary" onClick={onAdjustPlan}>
-          Adjust Plan
+          {t("adjustPlan")}
         </Button>
       </Section>
 
@@ -192,8 +196,8 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         >
           {/* Billing Cycle */}
           <InputLayouts.Horizontal
-            title="Billing Cycle"
-            description="after your 1-month free trial"
+            title={t("billingCycle")}
+            description={t("afterTrial")}
           >
             <Section
               flexDirection="row"
@@ -205,15 +209,15 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
               <BillingOption
                 selected={billingPeriod === "monthly"}
                 onClick={() => setBillingPeriod("monthly")}
-                title="Monthly"
+                title={t("monthly")}
                 price={monthlyPrice}
               />
               <BillingOption
                 selected={billingPeriod === "annual"}
                 onClick={() => setBillingPeriod("annual")}
-                title="Annual"
+                title={t("annual")}
                 price={annualPrice}
-                badge="Save 20%"
+                badge={t("save20")}
               />
             </Section>
           </InputLayouts.Horizontal>
@@ -222,10 +226,8 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
 
           {/* Seats */}
           <InputLayouts.Horizontal
-            title="Seats"
-            description={`Minimum ${minRequiredSeats} seat${
-              minRequiredSeats !== 1 ? "s" : ""
-            } required for your current users and Slack accounts.`}
+            title={t("seats")}
+            description={t("seatsRequired", { count: minRequiredSeats })}
           >
             <InputNumber
               value={seats}
@@ -252,18 +254,14 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           </Text>
         ) : !annualPriceSelected ? (
           <Text secondaryBody text03>
-            You will be billed on{" "}
-            <Text secondaryBody text04>
-              {trialEndDate}
-            </Text>{" "}
-            After your 1-month free trial ends.
+            {t("billedOn", { date: trialEndDate })}
           </Text>
         ) : (
           // Empty div to maintain space-between alignment
           <div></div>
         )}
         <Button disabled={isSubmitting} onClick={handleSubmit}>
-          {isSubmitting ? "Loading..." : "Continue to Payment"}
+          {isSubmitting ? t("loading") : t("continueToPayment")}
         </Button>
       </Section>
     </Card>

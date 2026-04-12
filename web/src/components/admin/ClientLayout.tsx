@@ -10,6 +10,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar } from "@opal/icons";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { useTranslations } from "next-intl";
 
 export interface ClientLayoutProps {
   children: React.ReactNode;
@@ -57,6 +58,7 @@ export function ClientLayout({ children, enableCloud }: ClientLayoutProps) {
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
   const settings = useSettingsContext();
+  const t = useTranslations("admin.trialWarning");
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
@@ -74,11 +76,11 @@ export function ClientLayout({ children, enableCloud }: ClientLayoutProps) {
       {settings.settings.application_status ===
         ApplicationStatus.PAYMENT_REMINDER && (
         <div className="fixed top-2 left-1/2 transform -translate-x-1/2 bg-amber-400 dark:bg-amber-500 text-gray-900 dark:text-gray-100 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
-          <strong className="font-bold">Warning:</strong> Your trial ends in
-          less than 5 days and no payment method has been added.
+          <strong className="font-bold">{t("title")}</strong>{" "}
+          {t("message")}
           <div className="mt-2">
             <Button width="full" href="/admin/billing">
-              Update Billing Information
+              {t("updateBilling")}
             </Button>
           </div>
         </div>

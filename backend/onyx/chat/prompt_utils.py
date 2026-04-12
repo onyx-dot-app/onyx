@@ -11,6 +11,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import FILE_REMINDER
+from onyx.prompts.chat_prompts import LANGUAGE_DIRECTIVES
 from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.prompt_utils import get_company_context
@@ -287,5 +288,13 @@ def build_system_prompt(
 
         if tool_guidance_sections:
             system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
+
+    # Inject language directive if user has a non-English language preference
+    if user_memory_context and user_memory_context.language_preference:
+        language_directive = LANGUAGE_DIRECTIVES.get(
+            user_memory_context.language_preference
+        )
+        if language_directive:
+            system_prompt += language_directive
 
     return system_prompt

@@ -6,6 +6,7 @@ import {
   AuthTypeMetadata,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import type { Route } from "next";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import LoginPage from "./LoginPage";
@@ -17,6 +18,7 @@ export interface PageProps {
 
 export default async function Page(props: PageProps) {
   const searchParams = await props.searchParams;
+  const t = await getTranslations("auth");
   const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
   const autoRedirectToSignupDisabled =
     searchParams?.autoRedirectToSignup === "false";
@@ -87,7 +89,7 @@ export default async function Page(props: PageProps) {
     (authTypeMetadata.authType === AuthType.GOOGLE_OAUTH ||
       authTypeMetadata.authType === AuthType.OIDC ||
       authTypeMetadata.authType === AuthType.SAML) ? (
-      <>Need access? Reach out to your IT admin to get access.</>
+      <>{t("needAccess")}</>
     ) : undefined;
 
   return (
@@ -95,6 +97,10 @@ export default async function Page(props: PageProps) {
       <AuthFlowContainer
         authState="login"
         footerContent={ssoLoginFooterContent}
+        loginFooterText={{
+          newToOnyx: t("newToOnyx"),
+          createAnAccount: t("createAnAccount"),
+        }}
       >
         <LoginPage
           authUrl={authUrl}

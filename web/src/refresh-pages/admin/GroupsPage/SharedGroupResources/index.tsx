@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -32,10 +33,10 @@ interface SharedGroupResourcesProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function SharedBadge() {
+function SharedBadge({ label }: { label: string }) {
   return (
     <Text as="span" secondaryBody text03>
-      Shared
+      {label}
     </Text>
   );
 }
@@ -88,6 +89,7 @@ function SharedGroupResources({
   selectedAgentIds,
   onAgentIdsChange,
 }: SharedGroupResourcesProps) {
+  const t = useTranslations("admin.groups");
   const [connectorSearch, setConnectorSearch] = useState("");
   const [agentSearch, setAgentSearch] = useState("");
 
@@ -147,10 +149,12 @@ function SharedGroupResources({
               muted={dimmed}
               icon={getSourceMetadata(p.connector.source).icon}
               rightChildren={
-                p.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
+                p.groups.length > 0 || dimmed ? (
+                  <SharedBadge label={t("shared")} />
+                ) : undefined
               }
             >
-              {p.name ?? `Connector #${p.cc_pair_id}`}
+              {p.name ?? t("connectorNumber", { id: p.cc_pair_id })}
             </LineItem>
           ),
         };
@@ -175,7 +179,9 @@ function SharedGroupResources({
               muted={dimmed}
               icon={SvgFiles}
               rightChildren={
-                ds.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
+                ds.groups.length > 0 || dimmed ? (
+                  <SharedBadge label={t("shared")} />
+                ) : undefined
               }
             >
               {ds.name}
@@ -186,10 +192,10 @@ function SharedGroupResources({
 
     return [
       ...(connectorItems.length > 0
-        ? [{ label: "Connectors", items: connectorItems }]
+        ? [{ label: t("connectors"), items: connectorItems }]
         : []),
       ...(docSetItems.length > 0
-        ? [{ label: "Document Sets", items: docSetItems }]
+        ? [{ label: t("documentSets"), items: docSetItems }]
         : []),
     ];
   }, [
@@ -202,6 +208,7 @@ function SharedGroupResources({
     selectedDocSetIds,
     onCcPairIdsChange,
     onDocSetIdsChange,
+    t,
   ]);
 
   const agentSections: PopoverSection[] = useMemo(() => {
@@ -223,9 +230,11 @@ function SharedGroupResources({
               interactive={!dimmed}
               muted={dimmed}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
-              description="agent"
+              description={t("agent")}
               rightChildren={
-                !a.is_public || dimmed ? <SharedBadge /> : undefined
+                !a.is_public || dimmed ? (
+                  <SharedBadge label={t("shared")} />
+                ) : undefined
               }
             >
               {a.name}
@@ -241,6 +250,7 @@ function SharedGroupResources({
     selectedAgentSet,
     selectedAgentIds,
     onAgentIdsChange,
+    t,
   ]);
 
   // --- Handlers ---
@@ -263,8 +273,8 @@ function SharedGroupResources({
   return (
     <SimpleCollapsible>
       <SimpleCollapsible.Header
-        title="Shared with This Group"
-        description="Share connectors, document sets, agents with members of this group."
+        title={t("sharedWithThisGroup")}
+        description={t("sharedWithThisGroupDescription")}
       />
       <SimpleCollapsible.Content>
         <Card>
@@ -289,10 +299,10 @@ function SharedGroupResources({
                 justifyContent="start"
               >
                 <Text mainUiAction text04>
-                  Connectors & Document Sets
+                  {t("connectorsAndDocumentSets")}
                 </Text>
                 <ResourcePopover
-                  placeholder="Add connectors, document sets"
+                  placeholder={t("addConnectorsDocSets")}
                   searchValue={connectorSearch}
                   onSearchChange={setConnectorSearch}
                   sections={connectorDocSetSections}
@@ -311,8 +321,8 @@ function SharedGroupResources({
                     <ResourceContent
                       key={`c-${pair.cc_pair_id}`}
                       icon={getSourceMetadata(pair.connector.source).icon}
-                      title={pair.name ?? `Connector #${pair.cc_pair_id}`}
-                      description="Connector"
+                      title={pair.name ?? t("connectorNumber", { id: pair.cc_pair_id })}
+                      description={t("connector")}
                       onRemove={() => removeConnector(pair.cc_pair_id)}
                     />
                   ))}
@@ -321,7 +331,7 @@ function SharedGroupResources({
                       key={`d-${ds.id}`}
                       icon={SvgFiles}
                       title={ds.name}
-                      description="Document Set"
+                      description={t("documentSet")}
                       infoContent={
                         <SourceIconStack sources={ds.cc_pair_summaries} />
                       }
@@ -332,8 +342,8 @@ function SharedGroupResources({
               ) : (
                 <Content
                   icon={SvgEmpty}
-                  title="No connectors or document sets added"
-                  description="Add connectors or document set to share with this group."
+                  title={t("noConnectorsOrDocSets")}
+                  description={t("noConnectorsOrDocSetsDescription")}
                   sizePreset="secondary"
                   variant="section"
                 />
@@ -356,10 +366,10 @@ function SharedGroupResources({
                 justifyContent="start"
               >
                 <Text mainUiAction text04>
-                  Agents
+                  {t("agents")}
                 </Text>
                 <ResourcePopover
-                  placeholder="Add agents"
+                  placeholder={t("addAgents")}
                   searchValue={agentSearch}
                   onSearchChange={setAgentSearch}
                   sections={agentSections}
@@ -383,7 +393,7 @@ function SharedGroupResources({
                         </div>
                       }
                       title={agent.name}
-                      description="agent"
+                      description={t("agent")}
                       onRemove={() => removeAgent(agent.id)}
                     />
                   ))}
@@ -391,8 +401,8 @@ function SharedGroupResources({
               ) : (
                 <Content
                   icon={SvgXOctagon}
-                  title="No agents added"
-                  description="Add agents to share with this group."
+                  title={t("noAgentsAdded")}
+                  description={t("noAgentsAddedDescription")}
                   sizePreset="secondary"
                   variant="section"
                 />

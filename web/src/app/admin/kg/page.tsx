@@ -32,6 +32,7 @@ import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgSettings } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useTranslations } from "next-intl";
 
 const route = ADMIN_ROUTES.KNOWLEDGE_GRAPH;
 
@@ -43,6 +44,7 @@ function createDomainField(
   minFields?: number
 ) {
   return function DomainFields({ disabled = false }: { disabled?: boolean }) {
+    const t = useTranslations("admin.kg");
     const { values } = useFormikContext<any>();
 
     return (
@@ -83,6 +85,8 @@ function KGConfiguration({
   onSubmitSuccess?: () => void;
   entityTypesMutate?: () => void;
 }) {
+  const t = useTranslations("admin.kg");
+  const tc = useTranslations("common");
   const initialValues: KGConfig = {
     enabled: kgConfig.enabled,
     vendor: kgConfig.vendor ?? "",
@@ -96,14 +100,14 @@ function KGConfiguration({
 
   const enabledSchema = Yup.object({
     enabled: Yup.boolean().required(),
-    vendor: Yup.string().required("Vendor is required."),
+    vendor: Yup.string().required(t("vendorRequired")),
     vendor_domains: Yup.array(
-      Yup.string().required("Vendor Domain is required.")
+      Yup.string().required(t("vendorDomainRequired"))
     )
       .min(1)
       .required(),
     ignore_domains: Yup.array(
-      Yup.string().required("Ignore Domain is required")
+      Yup.string().required(t("ignoreDomainRequired"))
     )
       .min(0)
       .required(),
@@ -140,11 +144,11 @@ function KGConfiguration({
     if (!response.ok) {
       const errorMsg = (await response.json()).detail;
       console.warn({ errorMsg });
-      toast.error("Failed to configure Knowledge Graph.");
+      toast.error(t("failedToConfigureKG"));
       return;
     }
 
-    toast.success("Successfully configured Knowledge Graph.");
+    toast.success(t("successfullyConfiguredKG"));
     resetForm({ values });
     onSubmitSuccess?.();
 
@@ -166,8 +170,8 @@ function KGConfiguration({
             <div className="flex flex-col gap-y-1">
               <FieldLabel
                 name="enabled"
-                label="Enabled"
-                subtext="Enable or disable Knowledge Graph."
+                label={t("enabled")}
+                subtext={t("enabledDescription")}
               />
               <SwitchField
                 name="enabled"
@@ -184,10 +188,10 @@ function KGConfiguration({
             >
               <TextFormField
                 name="vendor"
-                label="Vendor"
-                subtext="Your company name."
+                label={t("vendor")}
+                subtext={t("vendorDescription")}
                 className="flex flex-row flex-1 w-full"
-                placeholder="My Company Inc."
+                placeholder={t("vendorPlaceholder")}
                 disabled={!props.values.enabled}
               />
               <VendorDomains disabled={!props.values.enabled} />
@@ -201,7 +205,7 @@ function KGConfiguration({
               />
             </div>
             <Button disabled={!props.dirty} type="submit">
-              Submit
+              {tc("submit")}
             </Button>
           </div>
         </Form>
@@ -211,6 +215,7 @@ function KGConfiguration({
 }
 
 function Main() {
+  const t = useTranslations("admin.kg");
   // Data:
   const {
     data: configData,
@@ -244,48 +249,41 @@ function Main() {
     <div className="flex flex-col py-4 gap-y-8">
       <CardSection className="max-w-2xl shadow-01 rounded-08 flex flex-col gap-2">
         <Text as="p" headingH2>
-          Knowledge Graph Configuration (Private Beta)
+          {t("configurationPrivateBeta")}
         </Text>
         <div className="flex flex-col gap-y-6">
           <div>
             <Text as="p" text03>
-              The Knowledge Graph feature lets you explore your data in new
-              ways. Instead of searching through unstructured text, your data is
-              organized as entities and their relationships, enabling powerful
-              queries like:
+              {t("kgDescription")}
             </Text>
             <div className="p-4">
               <Text as="p" text03>
-                - &quot;Summarize my last 3 calls with account XYZ&quot;
+                {t("queryExample1")}
               </Text>
               <Text as="p" text03>
-                - &quot;How many open Jiras are assigned to John Smith, ranked
-                by priority&quot;
+                {t("queryExample2")}
               </Text>
             </div>
             <Text as="p" text03>
-              (To use Knowledge Graph queries, you&apos;ll need a dedicated
-              Assistant configured in a specific way. Please contact the Onyx
-              team for setup instructions.)
+              {t("kgSetupNote")}
             </Text>
           </div>
           <Text as="p" text03>
-            <Title>Getting Started:</Title>
-            Begin by configuring some high-level attributes, and then define the
-            entities you want to model afterwards.
+            <Title>{t("gettingStarted")}</Title>
+            {t("gettingStartedDescription")}
           </Text>
           <Button
             icon={SvgSettings}
             onClick={() => setConfigureModalShown(true)}
           >
-            Configure Knowledge Graph
+            {t("configureKnowledgeGraph")}
           </Button>
         </div>
       </CardSection>
       {kgConfig.enabled && (
         <>
           <Text as="p" headingH2>
-            Entity Types
+            {t("entityTypes")}
           </Text>
           <KGEntityTypes sourceAndEntityTypes={sourceAndEntityTypesData} />
         </>
@@ -295,7 +293,7 @@ function Main() {
           <Modal.Content>
             <Modal.Header
               icon={SvgSettings}
-              title="Configure Knowledge Graph"
+              title={t("configureKnowledgeGraph")}
               onClose={() => setConfigureModalShown(false)}
             />
             <Modal.Body>

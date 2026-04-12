@@ -12,9 +12,11 @@ import { useAgents } from "@/hooks/useAgents";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
+import { useTranslations } from "next-intl";
 
 function EditSlackChannelConfigContent({ id }: { id: string }) {
   const isPaidEnterprise = usePaidEnterpriseFeaturesEnabled();
+  const t = useTranslations("admin.slackBots");
 
   const {
     data: slackChannelConfigs,
@@ -51,8 +53,8 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
   );
 
   const title = slackChannelConfig?.is_default
-    ? "Edit Default Slack Config"
-    : "Edit Slack Channel Config";
+    ? t("editDefaultConfigTitle")
+    : t("editChannelConfigTitle");
 
   return (
     <SettingsLayouts.Root>

@@ -83,6 +83,7 @@ from onyx.db.enums import (
     GrantSource,
     LLMModelFlowType,
     ThemePreference,
+    LanguagePreference,
     DefaultAppMode,
     SwitchoverType,
     SharingScope,
@@ -328,6 +329,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         default=None,
     )
     chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
+    language_preference: Mapped[LanguagePreference | None] = mapped_column(
+        Enum(LanguagePreference, native_enum=False),
+        nullable=True,
+        default=None,
+    )
     default_app_mode: Mapped[DefaultAppMode] = mapped_column(
         Enum(DefaultAppMode, native_enum=False),
         nullable=False,

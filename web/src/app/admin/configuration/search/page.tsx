@@ -21,6 +21,7 @@ import CardSection from "@/components/admin/CardSection";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { useToastFromQuery } from "@/hooks/useToast";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useTranslations } from "next-intl";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
@@ -33,9 +34,11 @@ export interface EmbeddingDetails {
 
 function Main() {
   const settings = useContext(SettingsContext);
+  const t = useTranslations("admin.configuration");
+  const tc = useTranslations("common");
   useToastFromQuery({
     "search-settings": {
-      message: `Changed search settings successfully`,
+      message: t("searchSettingsChanged"),
       type: "success",
     },
   });
@@ -79,7 +82,7 @@ function Main() {
     !currentEmeddingModel ||
     futureEmeddingModelError
   ) {
-    return <ErrorCallout errorTitle="Failed to fetch embedding model status" />;
+    return <ErrorCallout errorTitle={t("failedToFetchEmbeddingStatus")} />;
   }
 
   return (
@@ -88,19 +91,18 @@ function Main() {
         <>
           {settings?.settings.needs_reindexing && (
             <p className="max-w-3xl">
-              Your search settings are currently out of date! We recommend
-              updating your search settings and re-indexing.
+              {t("searchSettingsOutdated")}
             </p>
           )}
-          <Title className="mb-6 mt-8 !text-2xl">Embedding Model</Title>
+          <Title className="mb-6 mt-8 !text-2xl">{t("embeddingModel")}</Title>
 
           {currentEmeddingModel ? (
             <ModelPreview model={currentEmeddingModel} display showDetails />
           ) : (
-            <Title className="mt-8 mb-4">Choose your Embedding Model</Title>
+            <Title className="mt-8 mb-4">{t("chooseEmbeddingModel")}</Title>
           )}
 
-          <Title className="mb-2 mt-8 !text-2xl">Post-processing</Title>
+          <Title className="mb-2 mt-8 !text-2xl">{t("postProcessing")}</Title>
 
           <CardSection className="!mr-auto mt-8 !w-96 shadow-lg bg-background-tint-00 rounded-16">
             {searchSettings && (
@@ -109,23 +111,23 @@ function Main() {
                   <div className="space-y-4">
                     <div>
                       <Text as="p" font="main-ui-action">
-                        Multipass Indexing
+                        {t("multipassIndexing")}
                       </Text>
                       <Text as="p">
                         {searchSettings.multipass_indexing
-                          ? "Enabled"
-                          : "Disabled"}
+                          ? tc("enabled")
+                          : tc("disabled")}
                       </Text>
                     </div>
 
                     <div>
                       <Text as="p" font="main-ui-action">
-                        Contextual RAG
+                        {t("contextualRag")}
                       </Text>
                       <Text as="p">
                         {searchSettings.enable_contextual_rag
-                          ? "Enabled"
-                          : "Disabled"}
+                          ? tc("enabled")
+                          : tc("disabled")}
                       </Text>
                     </div>
                   </div>
@@ -136,7 +138,7 @@ function Main() {
 
           <div className="mt-4">
             <Button variant="action" href="/admin/embeddings">
-              Update Index Settings
+              {t("updateIndexSettings")}
             </Button>
           </div>
         </>

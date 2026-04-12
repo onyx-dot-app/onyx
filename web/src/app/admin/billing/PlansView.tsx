@@ -25,6 +25,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
+import { useTranslations } from "next-intl";
 
 const SALES_URL = "https://www.onyx.app/contact-sales";
 
@@ -34,7 +35,7 @@ const SALES_URL = "https://www.onyx.app/contact-sales";
 
 interface PlanFeature {
   icon: React.FunctionComponent<IconProps>;
-  text: string;
+  textKey: string;
 }
 
 interface PlanConfig {
@@ -57,24 +58,24 @@ interface PlanConfig {
 // ----------------------------------------------------------------------------
 
 const BUSINESS_FEATURES: PlanFeature[] = [
-  { icon: SvgFiles, text: "Inherit Document Permissions" },
-  { icon: SvgHistory, text: "Query History and Usage Dashboard" },
-  { icon: SvgShield, text: "Role Based Access Control (RBAC)" },
-  { icon: SvgLock, text: "Encryption of Secrets" },
-  { icon: SvgKey, text: "Service Account API Keys" },
-  { icon: SvgHardDrive, text: "Self-hosting (Optional)" },
-  { icon: SvgPaintBrush, text: "Custom Theming" },
+  { icon: SvgFiles, textKey: "inheritPermissions" },
+  { icon: SvgHistory, textKey: "queryHistory" },
+  { icon: SvgShield, textKey: "rbac" },
+  { icon: SvgLock, textKey: "encryptionSecrets" },
+  { icon: SvgKey, textKey: "apiKeys" },
+  { icon: SvgHardDrive, textKey: "selfHosting" },
+  { icon: SvgPaintBrush, textKey: "customTheming" },
 ];
 
 const ENTERPRISE_FEATURES: PlanFeature[] = [
-  { icon: SvgUsers, text: "SCIM / Group Sync" },
-  { icon: SvgDashboard, text: "Full White-labeling" },
-  { icon: SvgUserManage, text: "Custom Roles and Permissions" },
-  { icon: SvgSliders, text: "Configurable Usage Limits" },
-  { icon: SvgShareWebhook, text: "Hook Extensions" },
-  { icon: SvgServer, text: "Custom Deployments" },
-  { icon: SvgGlobe, text: "Region-Specific Data Processing" },
-  { icon: SvgHeadsetMic, text: "Enterprise SLAs and Priority Support" },
+  { icon: SvgUsers, textKey: "scimSync" },
+  { icon: SvgDashboard, textKey: "whiteLabeling" },
+  { icon: SvgUserManage, textKey: "customRoles" },
+  { icon: SvgSliders, textKey: "usageLimits" },
+  { icon: SvgShareWebhook, textKey: "hookExtensions" },
+  { icon: SvgServer, textKey: "customDeployments" },
+  { icon: SvgGlobe, textKey: "regionData" },
+  { icon: SvgHeadsetMic, textKey: "enterpriseSla" },
 ];
 
 // ----------------------------------------------------------------------------
@@ -95,6 +96,8 @@ function PlanCard({
   isCurrentPlan,
   hideFeatures,
 }: PlanConfig & { hideFeatures?: boolean }) {
+  const t = useTranslations("admin.billing");
+
   return (
     <Card
       padding={0}
@@ -152,7 +155,7 @@ function PlanCard({
             // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
-                Your Current Plan
+                {t("currentPlan")}
               </Text>
             </Button>
           ) : href ? (
@@ -172,7 +175,7 @@ function PlanCard({
             // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
-                Included in your plan
+                {t("includedInPlan")}
               </Text>
             </Button>
           )}
@@ -202,7 +205,7 @@ function PlanCard({
           >
             {features.map((feature) => (
               <Section
-                key={feature.text}
+                key={feature.textKey}
                 flexDirection="row"
                 alignItems="start"
                 justifyContent="start"
@@ -214,7 +217,7 @@ function PlanCard({
                   <feature.icon size={16} className="stroke-text-03" />
                 </div>
                 <Text mainUiBody text03>
-                  {feature.text}
+                  {t(`features.${feature.textKey}`)}
                 </Text>
               </Section>
             ))}
@@ -242,30 +245,30 @@ export default function PlansView({
   onCheckout,
   hideFeatures,
 }: PlansViewProps) {
+  const t = useTranslations("admin.billing");
+
   const plans: PlanConfig[] = [
     {
       icon: SvgUsers,
-      title: "Business",
-      pricing: "$20",
-      description:
-        "per seat/month billed annually\nor $25 per seat if billed monthly",
-      buttonLabel: "Get Business Plan",
+      title: t("business.title"),
+      pricing: t("business.pricing"),
+      description: t("business.description"),
+      buttonLabel: t("business.buttonLabel"),
       buttonVariant: "primary",
       onClick: hasLicense ? undefined : onCheckout,
       features: BUSINESS_FEATURES,
-      featuresPrefix: "Get more work done with AI for your team.",
+      featuresPrefix: t("business.featuresPrefix"),
       isCurrentPlan: !!hasSubscription,
     },
     {
       icon: SvgOrganization,
-      title: "Enterprise",
-      description:
-        "Flexible pricing & deployment options\nfor large organizations",
-      buttonLabel: "Contact Sales",
+      title: t("enterprise.title"),
+      description: t("enterprise.description"),
+      buttonLabel: t("enterprise.buttonLabel"),
       buttonVariant: "secondary",
       href: SALES_URL,
       features: ENTERPRISE_FEATURES,
-      featuresPrefix: "Everything in Business Plan, plus:",
+      featuresPrefix: t("enterprise.featuresPrefix"),
       isCurrentPlan: !!hasLicense && !hasSubscription,
     },
   ];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ThreeDotsLoader } from "@/components/Loading";
 import {
@@ -22,6 +23,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 const route = ADMIN_ROUTES.DEBUG;
 
 function Main() {
+  const t = useTranslations("admin.debug");
   const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -77,9 +79,7 @@ function Main() {
       {isDownloading && <Spinner />}
       <div className="mb-8">
         <Text as="p">
-          {markdown(
-            "**Debug Logs** provide detailed information about system operations and events. You can download logs for each category to analyze system behavior or troubleshoot issues."
-          )}
+          {markdown(t("description"))}
         </Text>
         <Spacer rem={0.75} />
 
@@ -88,8 +88,8 @@ function Main() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>{t("category")}</TableHead>
+                  <TableHead>{t("actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -105,7 +105,7 @@ function Main() {
                         onClick={() => handleDownload(category)}
                         icon={SvgDownloadCloud}
                       >
-                        Download Logs
+                        {t("downloadLogs")}
                       </Button>
                     </TableCell>
                   </TableRow>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef } from "react";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import {
@@ -22,6 +23,7 @@ export interface NameStepProps {
 
 const NameStep = React.memo(
   ({ state: onboardingState, actions: onboardingActions }: NameStepProps) => {
+    const t = useTranslations("chat");
     const { userName } = onboardingState.data;
     const { updateName, goToStep, setButtonActive, nextStep } =
       onboardingActions;
@@ -48,15 +50,15 @@ const NameStep = React.memo(
       >
         <ContentAction
           icon={SvgUser}
-          title="What should Onyx call you?"
-          description="We will display this name in the app."
+          title={t("onboarding.whatShouldOnyxCallYou")}
+          description={t("onboarding.weWillDisplayName")}
           sizePreset="main-ui"
           variant="section"
           paddingVariant="fit"
           rightChildren={
             <InputTypeIn
               ref={inputRef}
-              placeholder="Your name"
+              placeholder={t("onboarding.yourNamePlaceholder")}
               value={userName || ""}
               onChange={(e) => updateName(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -73,7 +75,7 @@ const NameStep = React.memo(
             setButtonActive(true);
             goToStep(OnboardingStep.Name);
           }}
-          aria-label="Edit display name"
+          aria-label={t("onboarding.editDisplayName")}
           role="button"
           tabIndex={0}
         >
@@ -97,7 +99,7 @@ const NameStep = React.memo(
           <div className="p-1 flex items-center gap-1">
             {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Hoverable.Item group="nameStep" variant="opacity-on-hover">
-              <IconButton internal icon={SvgEdit} tooltip="Edit" />
+              <IconButton internal icon={SvgEdit} tooltip={t("onboarding.edit")} />
             </Hoverable.Item>
             <SvgCheckCircle
               className={cn(

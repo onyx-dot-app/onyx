@@ -60,6 +60,7 @@ import MicrophoneButton from "@/sections/input/MicrophoneButton";
 import Waveform from "@/components/voice/Waveform";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
+import { useTranslations } from "next-intl";
 
 const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 200;
@@ -146,6 +147,7 @@ const AppInputBar = React.memo(
       toggleTTSMute,
     } = useVoiceMode();
     const { sttEnabled } = useVoiceStatus();
+    const t = useTranslations("chat");
     // Show mic button: always if STT configured, or greyed-out for admins to prompt setup
     const showMicButton = sttEnabled || isAdmin;
     const isVoicePlaybackActive =
@@ -508,7 +510,7 @@ const AppInputBar = React.memo(
               <Button
                 disabled={disabled}
                 icon={SvgPaperclip}
-                tooltip="Attach Files"
+                tooltip={t("attachFiles")}
                 interaction={open ? "hover" : "rest"}
                 prominence="tertiary"
               />
@@ -548,8 +550,8 @@ const AppInputBar = React.memo(
                           return currentTabUrl;
                         }
                       })()
-                    : "Reading tab..."
-                  : "Read this tab"}
+                    : t("readingTab")
+                  : t("readThisTab")}
               </SelectButton>
             ) : (
               showDeepResearch && (
@@ -561,7 +563,7 @@ const AppInputBar = React.memo(
                   state={deepResearchEnabled ? "selected" : "empty"}
                   foldable={!deepResearchEnabled}
                 >
-                  Deep Research
+                  {t("deepResearch")}
                 </SelectButton>
               )
             )}
@@ -621,9 +623,9 @@ const AppInputBar = React.memo(
               <Button
                 disabled
                 icon={SvgMicrophone}
-                aria-label="Set up voice"
+                aria-label={t("setUpVoice")}
                 prominence="tertiary"
-                tooltip="Voice not configured. Set up in admin settings."
+                tooltip={t("voiceNotConfigured")}
               />
             ))}
 
@@ -755,12 +757,12 @@ const AppInputBar = React.memo(
                     aria-multiline={true}
                     placeholder={
                       isRecording
-                        ? "Listening..."
+                        ? t("listening")
                         : isVoicePlaybackActive
-                          ? "Onyx is speaking..."
+                          ? t("speaking")
                           : isSearchMode
-                            ? "Search connected sources"
-                            : "How can I help you today?"
+                            ? t("searchPlaceholder")
+                            : t("inputPlaceholder")
                     }
                     value={message}
                     onKeyDown={(event) => {
@@ -818,7 +820,7 @@ const AppInputBar = React.memo(
                         tabbingIconIndex === sortedFilteredPrompts.length
                       }
                     >
-                      Create New Prompt
+                      {t("createNewPrompt")}
                     </LineItem>,
                   ]}
                 </Popover.Menu>

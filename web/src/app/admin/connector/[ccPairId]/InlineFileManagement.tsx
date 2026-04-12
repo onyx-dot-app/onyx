@@ -30,6 +30,7 @@ import {
 } from "@opal/icons";
 import { formatBytes } from "@/lib/utils";
 import { timestampToReadableDate } from "@/lib/dateUtils";
+import { useTranslations } from "next-intl";
 
 interface InlineFileManagementProps {
   connectorId: number;
@@ -41,6 +42,8 @@ export default function InlineFileManagement({
   onRefresh,
 }: InlineFileManagementProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const t = useTranslations("admin.connectors");
+  const tc = useTranslations("common");
   const [selectedFilesToRemove, setSelectedFilesToRemove] = useState<
     Set<string>
   >(new Set());
@@ -97,7 +100,7 @@ export default function InlineFileManagement({
 
     if (remainingFiles === 0 && filesToAdd.length === 0) {
       toast.error(
-        "Cannot remove all files from a connector. Delete the connector if this is desired."
+        t("cannotRemoveAllFiles")
       );
       return;
     }
@@ -117,8 +120,7 @@ export default function InlineFileManagement({
       );
 
       toast.success(
-        "Files updated successfully! Document index is being updated in the background. " +
-          "New files are being indexed and removed files will be pruned from the search results."
+        t("filesUpdatedSuccess")
       );
 
       // Reset editing state
@@ -131,7 +133,7 @@ export default function InlineFileManagement({
       onRefresh();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to update files"
+        error instanceof Error ? error.message : t("failedToUpdateFiles")
       );
     } finally {
       setIsSaving(false);
@@ -155,7 +157,7 @@ export default function InlineFileManagement({
   if (error) {
     return (
       <Text as="p" className="text-error">
-        Error loading files: {error.message}
+        {t("errorLoadingFiles", { error: error.message })}
       </Text>
     );
   }
@@ -170,7 +172,7 @@ export default function InlineFileManagement({
       {/* Header with Edit/Save buttons */}
       <div className="flex justify-between items-center mb-4">
         <Text as="p" mainUiBody>
-          Files ({totalFiles} file{totalFiles !== 1 ? "s" : ""})
+          {totalFiles === 1 ? t("file") : t("files", { count: totalFiles })}
         </Text>
         <div className="flex gap-2">
           {!isEditing ? (
@@ -179,7 +181,7 @@ export default function InlineFileManagement({
               onClick={() => setIsEditing(true)}
               icon={SvgEdit}
             >
-              Edit
+              {tc("update")}
             </Button>
           ) : (
             <>
@@ -189,7 +191,7 @@ export default function InlineFileManagement({
                 onClick={handleCancel}
                 icon={SvgX}
               >
-                Cancel
+                {tc("cancel")}
               </Button>
               <Button
                 disabled={
@@ -199,7 +201,7 @@ export default function InlineFileManagement({
                 onClick={handleSaveClick}
                 icon={SvgCheck}
               >
-                {isSaving ? "Saving..." : "Save Changes"}
+                {isSaving ? t("saving") : t("saveChanges")}
               </Button>
             </>
           )}
@@ -209,7 +211,7 @@ export default function InlineFileManagement({
       {/* File List */}
       {files.length === 0 && filesToAdd.length === 0 ? (
         <Text as="p" mainUiMuted className="text-center py-8">
-          No files in this connector
+          {t("noFilesInConnector")}
         </Text>
       ) : (
         <div className="border rounded-lg overflow-hidden mb-4">
@@ -219,9 +221,9 @@ export default function InlineFileManagement({
               <TableHeader className="sticky top-0 bg-background z-10">
                 <TableRow>
                   {isEditing && <TableHead className="w-12"></TableHead>}
-                  <TableHead>File Name</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Upload Date</TableHead>
+                  <TableHead>{t("fileName")}</TableHead>
+                  <TableHead>{t("size")}</TableHead>
+                  <TableHead>{t("uploadDate")}</TableHead>
                   {isEditing && <TableHead className="w-12"></TableHead>}
                 </TableRow>
               </TableHeader>
@@ -260,7 +262,7 @@ export default function InlineFileManagement({
                         </span>
                         {isMarkedForRemoval && (
                           <span className="ml-2 text-xs font-semibold text-red-600 dark:text-red-400">
-                            Removing
+                            {t("removing")}
                           </span>
                         )}
                       </TableCell>
@@ -299,15 +301,15 @@ export default function InlineFileManagement({
                           prominence="tertiary"
                           size="sm"
                           onClick={() => handleRemoveNewFile(index)}
-                          tooltip="Remove file"
-                          title="Remove file"
+                          tooltip={t("removeFile")}
+                          title={t("removeFile")}
                         />
                       </TableCell>
                     )}
                     <TableCell className="font-medium">
                       {file.name}
                       <Text as="p" figureSmallValue>
-                        New
+                        {t("new")}
                       </Text>
                     </TableCell>
                     <TableCell>{formatBytes(file.size)}</TableCell>
@@ -338,7 +340,7 @@ export default function InlineFileManagement({
             onClick={() => fileInputRef.current?.click()}
             icon={SvgPlusCircle}
           >
-            Add Files
+            {t("addFiles")}
           </Button>
         </div>
       )}
@@ -348,8 +350,8 @@ export default function InlineFileManagement({
         <Modal.Content width="sm">
           <Modal.Header
             icon={SvgFolderPlus}
-            title="Confirm File Changes"
-            description="When you save these changes, the following will happen:"
+            title={t("confirmFileChanges")}
+            description={t("confirmFileChangesDescription")}
           />
 
           <Modal.Body>
@@ -360,15 +362,14 @@ export default function InlineFileManagement({
                   mainUiBody
                   className="font-semibold text-red-800 dark:text-red-200"
                 >
-                  🗑️ {selectedFilesToRemove.size} file(s) will be removed
+                  🗑️ {t("filesWillBeRemoved", { count: selectedFilesToRemove.size })}
                 </Text>
                 <Text
                   as="p"
                   secondaryBody
                   className="text-red-700 dark:text-red-300 mt-1"
                 >
-                  Documents from these files will be pruned from the Document
-                  Index
+                  {t("documentsPrunedFromIndex")}
                 </Text>
               </div>
             )}
@@ -380,15 +381,14 @@ export default function InlineFileManagement({
                   mainUiBody
                   className="font-semibold text-green-800 dark:text-green-200"
                 >
-                  {filesToAdd.length} file(s) will be added
+                  {t("filesWillBeAdded", { count: filesToAdd.length })}
                 </Text>
                 <Text
                   as="p"
                   secondaryBody
                   className="text-green-700 dark:text-green-300 mt-1"
                 >
-                  New files will be uploaded, chunked, embedded, and indexed in
-                  the Document Index
+                  {t("newFilesIndexed")}
                 </Text>
               </div>
             )}
@@ -400,10 +400,10 @@ export default function InlineFileManagement({
               prominence="secondary"
               onClick={() => setShowSaveConfirm(false)}
             >
-              Cancel
+              {tc("cancel")}
             </Button>
             <Button disabled={isSaving} onClick={handleConfirmSave}>
-              {isSaving ? "Saving..." : "Confirm & Save"}
+              {isSaving ? t("saving") : t("confirmAndSave")}
             </Button>
           </Modal.Footer>
         </Modal.Content>

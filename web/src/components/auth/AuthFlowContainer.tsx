@@ -1,15 +1,27 @@
 import Link from "next/link";
 import { OnyxIcon } from "../icons/icons";
 
+interface AuthFlowContainerProps {
+  children: React.ReactNode;
+  authState?: "signup" | "login" | "join";
+  footerContent?: React.ReactNode;
+  loginFooterText?: {
+    newToOnyx: string;
+    createAnAccount: string;
+  };
+  signupFooterText?: {
+    alreadyHaveAccount: string;
+    signIn: string;
+  };
+}
+
 export default function AuthFlowContainer({
   children,
   authState,
   footerContent,
-}: {
-  children: React.ReactNode;
-  authState?: "signup" | "login" | "join";
-  footerContent?: React.ReactNode;
-}) {
+  loginFooterText,
+  signupFooterText,
+}: AuthFlowContainerProps) {
   return (
     <div className="p-4 flex flex-col items-center justify-center min-h-screen bg-background">
       <div className="w-full max-w-md flex items-start flex-col bg-background-tint-00 rounded-16 shadow-lg shadow-02 p-6">
@@ -20,12 +32,12 @@ export default function AuthFlowContainer({
         <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
           {footerContent ?? (
             <>
-              New to Onyx?{" "}
+              {loginFooterText?.newToOnyx ?? "New to Onyx? "}
               <Link
                 href="/auth/signup"
                 className="text-text-05 mainUiAction underline transition-colors duration-200"
               >
-                Create an Account
+                {loginFooterText?.createAnAccount ?? "Create an Account"}
               </Link>
             </>
           )}
@@ -33,12 +45,12 @@ export default function AuthFlowContainer({
       )}
       {authState === "signup" && (
         <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
-          Already have an account?{" "}
+          {signupFooterText?.alreadyHaveAccount ?? "Already have an account? "}
           <Link
             href="/auth/login?autoRedirectToSignup=false"
             className="text-text-05 mainUiAction underline transition-colors duration-200"
           >
-            Sign In
+            {signupFooterText?.signIn ?? "Sign In"}
           </Link>
         </div>
       )}

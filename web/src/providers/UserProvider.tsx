@@ -14,6 +14,7 @@ import {
   UserPersonalization,
   UserRole,
   ThemePreference,
+  LanguagePreference,
 } from "@/lib/types";
 import { usePostHog } from "posthog-js/react";
 import { SettingsContext } from "@/providers/SettingsProvider";
@@ -25,6 +26,7 @@ import {
 } from "@/hooks/useAuthTypeMetadata";
 import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
 import { useTheme } from "next-themes";
+import { LOCALE_COOKIE_NAME } from "@/i18n/config";
 
 interface UserContextType {
   user: User | null;
@@ -50,6 +52,9 @@ interface UserContextType {
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
   updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
+  updateUserLanguagePreference: (
+    languagePreference: LanguagePreference
+  ) => Promise<void>;
   updateUserVoiceSettings: (settings: {
     auto_send?: boolean;
     auto_playback?: boolean;
@@ -121,6 +126,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // Sync user's theme preference from DB to next-themes on load
   const { setTheme, theme } = useTheme();
   const hasSyncedThemeRef = useRef(false);
+  const hasSyncedLanguageRef = useRef(false);
 
   useEffect(() => {
     // Only sync once per session
@@ -145,6 +151,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     theme,
     setTheme,
   ]);
+
+  // Sync user's language preference from DB to cookie on load
+  useEffect(() => {
+    if (hasSyncedLanguageRef.current) return;
+    if (!upToDateUser?.id) return;
+
+    const savedLanguage = upToDateUser?.preferences?.language_preference;
+    if (!savedLanguage) return;
+
+    // Only set if not already set (avoid unnecessary cookie writes)
+    const currentCookie = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith(`${LOCALE_COOKIE_NAME}=`));
+    const currentValue = currentCookie?.split("=")[1];
+
+    if (currentValue !== savedLanguage) {
+      document.cookie = `${LOCALE_COOKIE_NAME}=${savedLanguage};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
+    }
+    hasSyncedLanguageRef.current = true;
+  }, [upToDateUser?.id, upToDateUser?.preferences?.language_preference]);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
@@ -454,6 +480,44 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUserLanguagePreference = async (
+    languagePreference: LanguagePreference
+  ) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              language_preference: languagePreference,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/user/language-preference`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ language_preference: languagePreference }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update language preference");
+      }
+
+      // Sync the locale cookie so server-side rendering uses the correct locale
+      document.cookie = `${LOCALE_COOKIE_NAME}=${languagePreference};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
+    } catch (error) {
+      console.error("Error updating language preference:", error);
+      throw error;
+    }
+  };
+
   const updateUserVoiceSettings = async (settings: {
     auto_send?: boolean;
     auto_playback?: boolean;
@@ -516,6 +580,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserChatBackground,
         updateUserDefaultModel,
         updateUserDefaultAppMode,
+        updateUserLanguagePreference,
         updateUserVoiceSettings,
         toggleAgentPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,

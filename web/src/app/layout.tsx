@@ -19,6 +19,8 @@ import AppHealthBanner from "@/sections/AppHealthBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
@@ -60,14 +62,17 @@ export const metadata: Metadata = {
 // all data is fetched client-side via SWR in the provider tree.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
     <html
-      lang="en"
+      lang={locale}
       className={cn(hankenGrotesk.variable, dmMono.variable)}
       suppressHydrationWarning
     >
@@ -105,21 +110,23 @@ export default function RootLayout({
             <TooltipProvider>
               <PHProvider>
                 <SWRConfigProvider>
-                  <AppHealthBanner />
-                  <AppProvider>
-                    <DynamicMetadata />
-                    <CustomAnalyticsScript />
-                    <Suspense fallback={null}>
-                      <PostHogPageView />
-                    </Suspense>
-                    <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-                      <ProductGatingWrapper>{children}</ProductGatingWrapper>
-                    </div>
-                    {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
-                    {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
-                      <StatsOverlayLoader />
-                    )}
-                  </AppProvider>
+                  <NextIntlClientProvider messages={messages} locale={locale}>
+                    <AppHealthBanner />
+                    <AppProvider>
+                      <DynamicMetadata />
+                      <CustomAnalyticsScript />
+                      <Suspense fallback={null}>
+                        <PostHogPageView />
+                      </Suspense>
+                      <div id={MODAL_ROOT_ID} className="h-screen w-screen">
+                        <ProductGatingWrapper>{children}</ProductGatingWrapper>
+                      </div>
+                      {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
+                      {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
+                        <StatsOverlayLoader />
+                      )}
+                    </AppProvider>
+                  </NextIntlClientProvider>
                 </SWRConfigProvider>
               </PHProvider>
             </TooltipProvider>

@@ -10,6 +10,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import useUserCounts from "@/hooks/useUserCounts";
 import { UserStatus } from "@/lib/types";
 import type { StatusFilter } from "./interfaces";
+import { useTranslations } from "next-intl";
 
 import UsersSummary from "./UsersSummary";
 import UsersTable from "./UsersTable";
@@ -66,15 +67,16 @@ function UsersContent() {
 
 export default function UsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
+  const t = useTranslations("admin.users");
 
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
-        title="Users & Requests"
+        title={t("title")}
         icon={SvgUser}
         rightChildren={
           <Button icon={SvgUserPlus} onClick={() => setInviteOpen(true)}>
-            Invite Users
+            {t("inviteUsers")}
           </Button>
         }
       >
@@ -84,9 +86,9 @@ export default function UsersPage() {
           large
           close={false}
           icon
-          text="Upcoming changes to permissions"
-          description="Onyx is transitioning to group-based permissions for more granular access control. Curator and Global Curator roles will be replaced by configurable group permissions. We recommend reviewing current role assignments to ensure a smooth transition."
-          actions="Learn more"
+          text={t("upcomingChangesTitle")}
+          description={t("upcomingChangesDesc")}
+          actions={t("learnMore")}
           actionIcon={SvgExternalLink}
           onAction={() =>
             window.open(

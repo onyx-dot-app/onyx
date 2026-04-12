@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { SlackBot } from "@/lib/types";
 import { EditIcon } from "@/components/icons/icons";
+import { useTranslations } from "next-intl";
 
 const NUM_IN_PAGE = 20;
 
@@ -46,6 +47,8 @@ function ClickableTableRow({
 
 export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
   const [page, setPage] = useState(1);
+  const t = useTranslations("admin.slackBots");
+  const tc = useTranslations("common");
 
   // sort by id for consistent ordering
   slackBots.sort((a, b) => {
@@ -68,10 +71,10 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Default Config</TableHead>
-            <TableHead>Channel Count</TableHead>
+            <TableHead>{t("nameCol")}</TableHead>
+            <TableHead>{t("statusCol")}</TableHead>
+            <TableHead>{t("defaultConfig")}</TableHead>
+            <TableHead>{t("channelCount")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -90,13 +93,13 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 </TableCell>
                 <TableCell>
                   {slackBot.enabled ? (
-                    <Badge variant="success">Enabled</Badge>
+                    <Badge variant="success">{tc("enabled")}</Badge>
                   ) : (
-                    <Badge variant="destructive">Disabled</Badge>
+                    <Badge variant="destructive">{tc("disabled")}</Badge>
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary">Default Set</Badge>
+                  <Badge variant="secondary">{t("defaultSet")}</Badge>
                 </TableCell>
                 <TableCell>{slackBot.configs_count}</TableCell>
                 <TableCell>
@@ -111,7 +114,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 colSpan={5}
                 className="text-center text-muted-foreground"
               >
-                Please add a New Slack Bot to begin chatting with Danswer!
+                {t("noBots")}
               </TableCell>
             </TableRow>
           )}

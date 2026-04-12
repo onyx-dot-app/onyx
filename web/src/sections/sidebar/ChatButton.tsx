@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, memo, useMemo, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
@@ -53,6 +54,7 @@ export function PopoverSearchInput({
   setShowMoveOptions,
   onSearch,
 }: PopoverSearchInputProps) {
+  const t = useTranslations("sidebar");
   const [searchTerm, setSearchTerm] = useState("");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,7 +87,7 @@ export function PopoverSearchInput({
         value={searchTerm}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder="Search Projects"
+        placeholder={t("searchProjects")}
         onClick={noProp()}
         variant="internal"
         autoFocus
@@ -102,6 +104,8 @@ export interface ChatButtonProps {
 
 const ChatButton = memo(
   ({ chatSession, project, draggable = false }: ChatButtonProps) => {
+    const t = useTranslations("sidebar");
+    const tc = useTranslations("common");
     const route = useAppRouter();
     const activeSidebarTab = useAppFocus();
     const active = useMemo(
@@ -194,21 +198,21 @@ const ChatButton = memo(
             icon={SvgShare}
             onClick={noProp(() => setShowShareModal(true))}
           >
-            Share
+            {tc("share")}
           </LineItem>,
           <LineItem
             key="rename"
             icon={SvgEdit}
             onClick={noProp(() => setRenaming(true))}
           >
-            Rename
+            {tc("rename")}
           </LineItem>,
           <LineItem
             key="move"
             icon={SvgFolderIn}
             onClick={noProp(() => setShowMoveOptions(true))}
           >
-            Move to Project
+            {t("moveToProject")}
           </LineItem>,
           project && (
             <LineItem
@@ -216,7 +220,7 @@ const ChatButton = memo(
               icon={SvgFolder}
               onClick={noProp(() => handleRemoveFromProject())}
             >
-              {`Remove from ${project.name}`}
+              {t("removeFromProject", { project: project.name })}
             </LineItem>
           ),
           null,
@@ -226,7 +230,7 @@ const ChatButton = memo(
             danger
             onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
           >
-            Delete
+            {tc("delete")}
           </LineItem>,
         ];
         setPopoverItems(popoverItems);
@@ -315,7 +319,7 @@ const ChatButton = memo(
         await refreshChatSessions();
       } catch (error) {
         console.error("Failed to delete chat:", error);
-        showErrorNotification("Failed to delete chat. Please try again.");
+        showErrorNotification(t("toast.deleteFailed"));
       }
     }
 
@@ -388,7 +392,7 @@ const ChatButton = memo(
         setNavigateAfterMoveProjectId(null);
       } catch (error) {
         console.error("Failed to create project and move chat:", error);
-        showErrorNotification("Failed to create project. Please try again.");
+        showErrorNotification(t("toast.createProjectFailed"));
         setNavigateAfterMoveProjectId(null);
       }
     }
@@ -451,7 +455,7 @@ const ChatButton = memo(
       <>
         {deleteConfirmationModalOpen && (
           <ConfirmationModalLayout
-            title="Delete Chat"
+            title={t("deleteChat")}
             icon={SvgTrash}
             onClose={() => setDeleteConfirmationModalOpen(false)}
             submit={
@@ -462,12 +466,11 @@ const ChatButton = memo(
                   handleChatDelete();
                 }}
               >
-                Delete
+                {tc("delete")}
               </Button>
             }
           >
-            Are you sure you want to delete this chat? This action cannot be
-            undone.
+            {t("deleteChatConfirmation")}
           </ConfirmationModalLayout>
         )}
 

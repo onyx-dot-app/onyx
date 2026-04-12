@@ -23,6 +23,7 @@ import {
 } from "@/app/admin/discord-bot/lib";
 import { toast } from "@/hooks/useToast";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { useTranslations } from "next-intl";
 
 interface Props {
   guilds: DiscordGuildConfig[];
@@ -37,15 +38,16 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
   const [updatingGuildIds, setUpdatingGuildIds] = useState<Set<number>>(
     new Set()
   );
+  const t = useTranslations("admin.discordBots");
 
   const handleDelete = async (guildId: number) => {
     try {
       await deleteGuildConfig(guildId);
       onRefresh();
-      toast.success("Server configuration deleted");
+      toast.success(t("serverDeleted"));
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to delete server config"
+        err instanceof Error ? err.message : t("failedToDeleteServer")
       );
     } finally {
       setGuildToDelete(null);
@@ -54,7 +56,7 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
 
   const handleToggleEnabled = async (guild: DiscordGuildConfig) => {
     if (!guild.guild_id) {
-      toast.error("Server must be registered before it can be enabled");
+      toast.error(t("serverMustRegister"));
       return;
     }
 
@@ -65,10 +67,10 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
         default_persona_id: guild.default_persona_id,
       });
       onRefresh();
-      toast.success(`Server ${!guild.enabled ? "enabled" : "disabled"}`);
+      toast.success(!guild.enabled ? t("serverEnabled") : t("serverDisabled"));
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update server"
+        err instanceof Error ? err.message : t("failedToUpdateServer")
       );
     } finally {
       setUpdatingGuildIds((prev) => {
@@ -83,8 +85,8 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
     return (
       <EmptyMessage
         icon={SvgServer}
-        title="No Discord servers configured yet"
-        description="Create a server configuration to get started."
+        title={t("noServers")}
+        description={t("noServersDescription")}
       />
     );
   }
@@ -94,21 +96,21 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
       {guildToDelete && (
         <ConfirmEntityModal
           danger
-          entityType="Discord server configuration"
+          entityType={t("discordServerConfigType")}
           entityName={guildToDelete.guild_name || `Server #${guildToDelete.id}`}
           onClose={() => setGuildToDelete(null)}
           onSubmit={() => handleDelete(guildToDelete.id)}
-          additionalDetails="This will remove all settings for this Discord server."
+          additionalDetails={t("deleteServerConfirm")}
         />
       )}
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Server</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Registered</TableHead>
-            <TableHead>Enabled</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead>{t("server")}</TableHead>
+            <TableHead>{t("statusCol")}</TableHead>
+            <TableHead>{t("registeredCol")}</TableHead>
+            <TableHead>{t("enabledCol")}</TableHead>
+            <TableHead>{t("actionsCol")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -126,9 +128,9 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
               </TableCell>
               <TableCell>
                 {guild.guild_id ? (
-                  <Badge variant="success">Registered</Badge>
+                  <Badge variant="success">{t("registered")}</Badge>
                 ) : (
-                  <Badge variant="secondary">Pending</Badge>
+                  <Badge variant="secondary">{t("pending")}</Badge>
                 )}
               </TableCell>
               <TableCell>

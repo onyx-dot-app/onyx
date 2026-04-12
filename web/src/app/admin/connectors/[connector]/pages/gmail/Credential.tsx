@@ -25,11 +25,13 @@ import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/
 import { FiFile, FiCheck, FiLink, FiAlertTriangle } from "react-icons/fi";
 import { cn, truncateString } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
+import { useTranslations } from "next-intl";
 
 type GmailCredentialJsonTypes = "authorized_user" | "service_account";
 
 const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
   const { mutate } = useSWRConfig();
+  const t = useTranslations("admin.google");
   const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState<string | undefined>();
   const [isDragging, setIsDragging] = useState(false);
@@ -187,7 +189,7 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
                   : isDragging
                     ? "Drop JSON file here"
                     : truncateString(
-                        fileName || "Select or drag JSON credentials file...",
+                        fileName || t("selectOrDragJson"),
                         50
                       )}
               </span>
@@ -395,18 +397,17 @@ async function handleRevokeAccess(
   existingCredential:
     | Credential<GmailCredentialJson>
     | Credential<GmailServiceAccountCredentialJson>,
-  refreshCredentials: () => void
+  refreshCredentials: () => void,
+  revokeErrorMsg: string,
+  revokeSuccessMsg: string
 ) {
   if (connectorExists) {
-    const message =
-      "Cannot revoke the Gmail credential while any connector is still associated with the credential. " +
-      "Please delete all associated connectors, then try again.";
-    toast.error(message);
+    toast.error(revokeErrorMsg);
     return;
   }
 
   await adminDeleteCredential(existingCredential.id);
-  toast.success("Successfully revoked the Gmail credential!");
+  toast.success(revokeSuccessMsg);
 
   refreshCredentials();
 }
@@ -424,6 +425,7 @@ export const GmailAuthSection = ({
   onCredentialCreated,
 }: GmailCredentialSectionProps) => {
   const router = useRouter();
+  const t = useTranslations("admin.google");
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [localServiceAccountData, setLocalServiceAccountData] = useState(
     serviceAccountKeyData
@@ -460,10 +462,9 @@ export const GmailAuthSection = ({
           <div className="py-3 px-4 bg-blue-50/30 dark:bg-blue-900/5 rounded mb-4 flex items-start">
             <FiCheck className="text-blue-500 h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <span className="font-medium block">Authentication Complete</span>
+              <span className="font-medium block">{t("authComplete")}</span>
               <p className="text-sm mt-1 text-text-500 dark:text-text-400 break-words">
-                Your Gmail credentials have been successfully uploaded and
-                authenticated.
+                {t("credentialsSuccessfullyUploadedAuthenticated")}
               </p>
             </div>
           </div>
@@ -474,11 +475,13 @@ export const GmailAuthSection = ({
                 handleRevokeAccess(
                   connectorExists,
                   existingCredential,
-                  refreshCredentials
+                  refreshCredentials,
+                  t("deleteConnectorsFirst"),
+                  t("successfullyRevokedGmailCredential")
                 );
               }}
             >
-              Revoke Access
+              {t("revokeAccess")}
             </Button>
             {buildMode && onCredentialCreated && (
               <Button onClick={() => onCredentialCreated(existingCredential)}>
@@ -503,8 +506,7 @@ export const GmailAuthSection = ({
           <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded">
             <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
             <p className="text-sm">
-              Please complete Step 1 by uploading either OAuth credentials or a
-              Service Account key before proceeding with authentication.
+              {t("completeStep1First")}
             </p>
           </div>
         </div>
@@ -543,18 +545,18 @@ export const GmailAuthSection = ({
 
                 if (response.ok) {
                   toast.success(
-                    "Successfully created service account credential"
+                    t("successfullyCreatedServiceAccountCredential")
                   );
                   refreshCredentials();
                 } else {
                   const errorMsg = await response.text();
                   toast.error(
-                    `Failed to create service account credential - ${errorMsg}`
+                    t("failedToCreateServiceAccountCredential", { error: errorMsg })
                   );
                 }
               } catch (error) {
                 toast.error(
-                  `Failed to create service account credential - ${error}`
+                  t("failedToCreateServiceAccountCredential", { error: String(error) })
                 );
               } finally {
                 formikHelpers.setSubmitting(false);
@@ -565,12 +567,12 @@ export const GmailAuthSection = ({
               <Form>
                 <TextFormField
                   name="google_primary_admin"
-                  label="Primary Admin Email:"
-                  subtext="Enter the email of an admin/owner of the Google Organization that owns the Gmail account(s) you want to index."
+                  label={t("primaryAdminEmail")}
+                  subtext={t("adminEmailHint")}
                 />
                 <div className="flex">
                   <Button disabled={isSubmitting} type="submit">
-                    {isSubmitting ? "Creating..." : "Create Credential"}
+                    {isSubmitting ? t("creating") : t("createCredential")}
                   </Button>
                 </div>
               </Form>
@@ -586,8 +588,7 @@ export const GmailAuthSection = ({
       <div>
         <div className="bg-background-50/30 dark:bg-background-900/20 rounded mb-4">
           <p className="text-sm">
-            Next, you need to authenticate with Gmail via OAuth. This gives us
-            read access to the emails you have access to in your Gmail account.
+            {t("nextAuthenticateGmailOAuth")}
           </p>
         </div>
         <Button
@@ -612,12 +613,12 @@ export const GmailAuthSection = ({
                 setIsAuthenticating(false);
               }
             } catch (error) {
-              toast.error(`Failed to authenticate with Gmail - ${error}`);
+              toast.error(t("failedToAuthenticateWithGmail", { error: String(error) }));
               setIsAuthenticating(false);
             }
           }}
         >
-          {isAuthenticating ? "Authenticating..." : "Authenticate with Gmail"}
+          {isAuthenticating ? t("authenticating") : t("authenticateWith", { name: "Gmail" })}
         </Button>
       </div>
     );

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
+import { useTranslations } from "next-intl";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -58,6 +59,7 @@ const tc = createTableColumns<APIKey>();
 // ---------------------------------------------------------------------------
 
 export default function ServiceAccountsPage() {
+  const t = useTranslations("admin.serviceAccounts");
   const {
     data: apiKeys,
     isLoading,
@@ -96,13 +98,13 @@ export default function ServiceAccountsPage() {
       });
       if (!response.ok) {
         const errorMsg = await response.text();
-        toast.error(`Failed to update role: ${errorMsg}`);
+        toast.error(t("toast.roleUpdateFailed"));
         return;
       }
       mutate(API_KEY_SWR_KEY);
-      toast.success("Role updated.");
+      toast.success(t("toast.roleUpdated"));
     } catch {
-      toast.error("Failed to update role.");
+      toast.error(t("toast.roleUpdateFailed"));
     }
   };
 
@@ -111,7 +113,7 @@ export default function ServiceAccountsPage() {
       const response = await regenerateApiKey(apiKey);
       if (!response.ok) {
         const errorMsg = await response.text();
-        toast.error(`Failed to regenerate API Key: ${errorMsg}`);
+        toast.error(t("toast.regenerateFailed", { error: errorMsg }));
         return;
       }
       const newKey = (await response.json()) as APIKey;
@@ -119,7 +121,7 @@ export default function ServiceAccountsPage() {
       mutate(API_KEY_SWR_KEY);
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : "Failed to regenerate API Key."
+        e instanceof Error ? e.message : t("toast.regenerateFailed", { error: "" })
       );
     }
   };
@@ -129,12 +131,12 @@ export default function ServiceAccountsPage() {
       const response = await deleteApiKey(apiKey.api_key_id);
       if (!response.ok) {
         const errorMsg = await response.text();
-        toast.error(`Failed to delete API Key: ${errorMsg}`);
+        toast.error(t("toast.deleteFailed", { error: errorMsg }));
         return;
       }
       mutate(API_KEY_SWR_KEY);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete API Key.");
+      toast.error(e instanceof Error ? e.message : t("toast.deleteFailed", { error: "" }));
     }
   };
 
@@ -145,18 +147,18 @@ export default function ServiceAccountsPage() {
         getContent: () => SvgUserKey,
       }),
       tc.column("api_key_name", {
-        header: "Name",
+        header: t("nameCol"),
         weight: 25,
         cell: (value) => (
           <Content
-            title={value || "Unnamed"}
+            title={value || t("unnamed")}
             sizePreset="main-ui"
             variant="body"
           />
         ),
       }),
       tc.column("api_key_display", {
-        header: "API Key",
+        header: t("apiKeyCol"),
         weight: 30,
         cell: (value) => (
           <Text font="secondary-mono" color="text-03">
@@ -166,7 +168,7 @@ export default function ServiceAccountsPage() {
       }),
       tc.displayColumn({
         id: "account_type",
-        header: "Account Type",
+        header: t("accountTypeCol"),
         width: { weight: 25, minWidth: 160 },
         cell: (row) => (
           <InputSelect
@@ -178,21 +180,21 @@ export default function ServiceAccountsPage() {
               <InputSelect.Item
                 value={UserRole.ADMIN.toString()}
                 icon={SvgUserManage}
-                description="Unrestricted admin access to all endpoints."
+                description={t("adminRoleDescription")}
               >
                 {USER_ROLE_LABELS[UserRole.ADMIN]}
               </InputSelect.Item>
               <InputSelect.Item
                 value={UserRole.BASIC.toString()}
                 icon={SvgUser}
-                description="Standard user-level access to non-admin endpoints."
+                description={t("basicRoleDescription")}
               >
                 {USER_ROLE_LABELS[UserRole.BASIC]}
               </InputSelect.Item>
               <InputSelect.Item
                 value={UserRole.LIMITED.toString()}
                 icon={SvgLock}
-                description="For agents: chat posting and read-only access to other endpoints."
+                description={t("limitedRoleDescription")}
               >
                 {USER_ROLE_LABELS[UserRole.LIMITED]}
               </InputSelect.Item>
@@ -206,7 +208,7 @@ export default function ServiceAccountsPage() {
             <Button
               icon={SvgRefreshCw}
               prominence="tertiary"
-              tooltip="Regenerate"
+              tooltip={t("regenerate")}
               onClick={() => setRegenerateTarget(row)}
             />
             <Popover>
@@ -214,7 +216,7 @@ export default function ServiceAccountsPage() {
                 <Button
                   icon={SvgMoreHorizontal}
                   prominence="tertiary"
-                  tooltip="More"
+                  tooltip={t("more")}
                 />
               </Popover.Trigger>
               <Popover.Content side="bottom" align="end" width="md">
@@ -226,14 +228,14 @@ export default function ServiceAccountsPage() {
                       setShowCreateUpdateForm(true);
                     }}
                   >
-                    Edit Account
+                    {t("editAccount")}
                   </LineItem>
                   <LineItem
                     icon={SvgTrash}
                     danger
                     onClick={() => setDeleteTarget(row)}
                   >
-                    Delete Account
+                    {t("deleteAccountLabel")}
                   </LineItem>
                 </PopoverMenu>
               </Popover.Content>
@@ -242,7 +244,7 @@ export default function ServiceAccountsPage() {
         ),
       }),
     ],
-    [] // eslint-disable-line react-hooks/exhaustive-deps
+    [t] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   if (error) {
@@ -251,14 +253,14 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={route.title}
           icon={route.icon}
-          description="Use service accounts to programmatically access Onyx API."
+          description={t("description")}
           separator
         />
         <SettingsLayouts.Body>
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Failed to load service accounts."
-            description="Please check the console for more details."
+            title={t("failedToLoad")}
+            description={t("checkConsoleDetails")}
           />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -271,7 +273,7 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={route.title}
           icon={route.icon}
-          description="Use service accounts to programmatically access Onyx API."
+          description={t("description")}
           separator
         />
         <SettingsLayouts.Body>
@@ -288,7 +290,7 @@ export default function ServiceAccountsPage() {
       <SettingsLayouts.Header
         title={route.title}
         icon={route.icon}
-        description="Use service accounts to programmatically access Onyx API."
+        description={t("description")}
         separator
       />
 
@@ -299,8 +301,8 @@ export default function ServiceAccountsPage() {
             warning
             close={false}
             className="w-full"
-            text="Upgrade to a paid plan to create API keys."
-            description="Trial accounts do not include API key access — purchase a paid subscription to unlock this feature."
+            text={t("upgradePlan")}
+            description={t("upgradePlanDescription")}
           />
         )}
 
@@ -309,13 +311,13 @@ export default function ServiceAccountsPage() {
             hasItems={hasKeys}
             searchQuery={search}
             onSearchQueryChange={setSearch}
-            placeholder="Search service accounts..."
-            emptyStateText="Create service account API keys with user-level access."
+            placeholder={t("searchPlaceholder")}
+            emptyStateText={t("emptyStateText")}
             onAction={() => {
               setSelectedApiKey(undefined);
               setShowCreateUpdateForm(true);
             }}
-            actionLabel="New Service Account"
+            actionLabel={t("newServiceAccount")}
           />
 
           {hasKeys && (
@@ -332,10 +334,10 @@ export default function ServiceAccountsPage() {
       <Modal open={!!fullApiKey}>
         <Modal.Content width="sm" height="sm">
           <Modal.Header
-            title="Service Account API Key"
+            title={t("apiKeyModalTitle")}
             icon={SvgKey}
             onClose={() => setFullApiKey(null)}
-            description="Save this key before continuing. It won't be shown again."
+            description={t("apiKeyModalDescription")}
           />
           <Modal.Body>
             <Code showCopyButton={false}>{fullApiKey ?? ""}</Code>
@@ -359,7 +361,7 @@ export default function ServiceAccountsPage() {
                     URL.revokeObjectURL(url);
                   }}
                 >
-                  Download
+                  {t("download")}
                 </Button>
               }
               submit={
@@ -368,11 +370,11 @@ export default function ServiceAccountsPage() {
                   onClick={() => {
                     if (fullApiKey) {
                       navigator.clipboard.writeText(fullApiKey);
-                      toast.success("API key copied to clipboard.");
+                      toast.success(t("toast.apiKeyCopied"));
                     }
                   }}
                 >
-                  Copy API Key
+                  {t("copyApiKey")}
                 </Button>
               }
             />
@@ -397,7 +399,7 @@ export default function ServiceAccountsPage() {
       {regenerateTarget && (
         <ConfirmationModalLayout
           icon={SvgRefreshCw}
-          title="Regenerate API Key"
+          title={t("regenerateTitle")}
           onClose={() => setRegenerateTarget(null)}
           submit={
             <Button
@@ -408,17 +410,16 @@ export default function ServiceAccountsPage() {
                 await handleRegenerate(target);
               }}
             >
-              Regenerate Key
+              {t("regenerateKey")}
             </Button>
           }
         >
           <Text as="p" color="text-03">
             {markdown(
-              `Your current API key *${
-                regenerateTarget.api_key_name || "Unnamed"
-              }* (\`${
-                regenerateTarget.api_key_display
-              }\`) will be revoked and a new key will be generated. You will need to update any applications using this key with the new one.`
+              t("regenerateDescription", {
+                name: regenerateTarget.api_key_name || t("unnamed"),
+                display: regenerateTarget.api_key_display,
+              })
             )}
           </Text>
         </ConfirmationModalLayout>
@@ -427,7 +428,7 @@ export default function ServiceAccountsPage() {
       {deleteTarget && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete Account"
+          title={t("deleteTitle")}
           onClose={() => setDeleteTarget(null)}
           submit={
             <Button
@@ -437,22 +438,21 @@ export default function ServiceAccountsPage() {
                 setDeleteTarget(null);
               }}
             >
-              Delete
+              {t("deleteAccountLabel")}
             </Button>
           }
         >
           <Section alignItems="start" gap={0.5}>
             <Text as="p" color="text-03">
               {markdown(
-                `Any application using the API key of account *${
-                  deleteTarget.api_key_name || "Unnamed"
-                }* (\`${
-                  deleteTarget.api_key_display
-                }\`) will lose access to Onyx.`
+                t("deleteAccountDescription", {
+                  name: deleteTarget.api_key_name || t("unnamed"),
+                  display: deleteTarget.api_key_display,
+                })
               )}
             </Text>
             <Text as="p" color="text-03">
-              Deletion cannot be undone.
+              {t("deletionCannotBeUndone")}
             </Text>
           </Section>
         </ConfirmationModalLayout>

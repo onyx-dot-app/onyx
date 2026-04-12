@@ -9,10 +9,12 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
+import { useTranslations } from "next-intl";
 
 const route = ADMIN_ROUTES.SLACK_BOTS;
 
 function Main() {
+  const t = useTranslations("admin.slackBots");
   const {
     data: slackBots,
     isLoading: isSlackBotsLoading,
@@ -37,27 +39,19 @@ function Main() {
   return (
     <div className="mb-8">
       <p className="mb-2 text-sm text-muted-foreground">
-        Setup Slack bots that connect to Onyx. Once setup, you will be able to
-        ask questions to Onyx directly from Slack. Additionally, you can:
+        {t("description")}
       </p>
 
       <div className="mb-2">
         <ul className="list-disc mt-2 ml-4 text-sm text-muted-foreground">
-          <li>
-            Setup OnyxBot to automatically answer questions in certain channels.
-          </li>
-          <li>
-            Choose which document sets OnyxBot should answer from, depending on
-            the channel the question is being asked.
-          </li>
-          <li>
-            Directly message OnyxBot to search just as you would in the web UI.
-          </li>
+          <li>{t("feature1")}</li>
+          <li>{t("feature2")}</li>
+          <li>{t("feature3")}</li>
         </ul>
       </div>
 
       <p className="mb-6 text-sm text-muted-foreground">
-        Follow the{" "}
+        {t("followGuide")}{" "}
         <a
           className="text-blue-500 hover:underline"
           href={`${DOCS_ADMINS_PATH}/getting_started/slack_bot_setup`}
@@ -66,10 +60,10 @@ function Main() {
         >
           guide{" "}
         </a>
-        found in the Onyx documentation to get started!
+        {t("followGuide")}
       </p>
 
-      <CreateButton href="/admin/bots/new">New Slack Bot</CreateButton>
+      <CreateButton href="/admin/bots/new">{t("newSlackBot")}</CreateButton>
 
       <SlackBotTable slackBots={slackBots} />
     </div>

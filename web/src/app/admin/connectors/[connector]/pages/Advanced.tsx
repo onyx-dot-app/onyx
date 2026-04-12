@@ -3,40 +3,39 @@ import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField } from "@/components/Field";
 import { Button } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
+import { useTranslations } from "next-intl";
+
 export default function AdvancedFormPage() {
+  const t = useTranslations("admin.connectors");
+
   return (
     <div className="py-4 flex flex-col gap-y-6 rounded-lg max-w-2xl mx-auto">
       <h2 className="text-2xl font-bold mb-4 text-text-800">
-        Advanced Configuration
+        {t("advancedConfiguration")}
       </h2>
 
       <NumberInput
-        description={`
-          Checks all documents against the source to delete those that no longer exist.
-          Note: This process checks every document, so be cautious when increasing frequency.
-          Default is 720 hours (30 days). Decimal hours are supported (e.g., 0.1 hours = 6 minutes).
-          Enter 0 to disable pruning for this connector.
-        `}
-        label="Prune Frequency (hours)"
+        description={t("pruneFrequencyDescription")}
+        label={t("pruneFrequencyLabel")}
         name="pruneFreq"
       />
 
       <NumberInput
-        description="This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector."
-        label="Refresh Frequency (minutes)"
+        description={t("refreshFrequencyDescription")}
+        label={t("refreshFrequencyLabel")}
         name="refreshFreq"
       />
 
       <TextFormField
         type="date"
-        subtext="Documents prior to this date will not be pulled in"
+        subtext={t("indexingStartDateDescription")}
         optional
-        label="Indexing Start Date"
+        label={t("indexingStartDate")}
         name="indexingStart"
       />
       <div className="mt-4 flex w-full mx-auto max-w-2xl justify-start">
         <Button variant="danger" icon={SvgTrash} type="submit">
-          Reset
+          {t("reset")}
         </Button>
       </div>
     </div>
