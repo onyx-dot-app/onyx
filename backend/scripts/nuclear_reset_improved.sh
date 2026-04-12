@@ -190,7 +190,7 @@ get_db_connection() {
     local password=""
 
     if [ "${USE_IAM_AUTH:-false}" = "true" ]; then
-        echo -e "${GREEN}Generating IAM token...${NC}"
+        echo -e "${GREEN}Generating IAM token...${NC}" >&2
         password=$(python3 -c "
 import boto3
 import sys
@@ -207,13 +207,13 @@ except Exception as e:
     sys.exit(1)
 ")
         if [ $? -ne 0 ]; then
-            echo -e "${RED}Failed to generate IAM token${NC}"
+            echo -e "${RED}Failed to generate IAM token${NC}" >&2
             exit 1
         fi
     else
         password="${POSTGRES_PASSWORD:-}"
         if [ -z "$password" ]; then
-            echo -e "${RED}Error: POSTGRES_PASSWORD not set and USE_IAM_AUTH is not enabled${NC}"
+            echo -e "${RED}Error: POSTGRES_PASSWORD not set and USE_IAM_AUTH is not enabled${NC}" >&2
             exit 1
         fi
     fi
