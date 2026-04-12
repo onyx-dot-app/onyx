@@ -157,7 +157,8 @@ export async function submitProvider<T extends BaseLLMFormValues>({
     custom_config_changed: customConfigChanged,
   };
 
-  if (!isEqual(finalValues, initialValues)) {
+  // Only test if we have both changed values AND a valid model to test with
+  if (!isEqual(finalValues, initialValues) && testModelName) {
     setStatus({ isTesting: true });
 
     const testResult = await submitLlmTestRequest(
