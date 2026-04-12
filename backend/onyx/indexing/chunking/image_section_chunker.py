@@ -1,8 +1,8 @@
 from onyx.connectors.models import Section
-from onyx.indexing.document_chunker.section_chunker import AccumulatorState
-from onyx.indexing.document_chunker.section_chunker import ChunkPayload
-from onyx.indexing.document_chunker.section_chunker import SectionChunker
-from onyx.indexing.document_chunker.section_chunker import SectionChunkerOutput
+from onyx.indexing.chunking.section_chunker import AccumulatorState
+from onyx.indexing.chunking.section_chunker import ChunkPayload
+from onyx.indexing.chunking.section_chunker import SectionChunker
+from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
 from onyx.utils.text_processing import clean_text
 
 

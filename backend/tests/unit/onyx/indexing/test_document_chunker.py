@@ -6,8 +6,8 @@ from onyx.configs.constants import SECTION_SEPARATOR
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
 from onyx.connectors.models import SectionType
-from onyx.indexing.document_chunker import text_section_chunker as text_chunker_module
-from onyx.indexing.document_chunker.document_chunker import DocumentChunker
+from onyx.indexing.chunking import DocumentChunker
+from onyx.indexing.chunking import text_section_chunker as text_chunker_module
 from onyx.natural_language_processing.utils import BaseTokenizer
 
 

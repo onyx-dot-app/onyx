@@ -3,11 +3,11 @@ from chonkie import SentenceChunker
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
 from onyx.connectors.models import SectionKind
-from onyx.indexing.document_chunker.image_section_chunker import ImageChunker
-from onyx.indexing.document_chunker.section_chunker import AccumulatorState
-from onyx.indexing.document_chunker.section_chunker import ChunkPayload
-from onyx.indexing.document_chunker.section_chunker import SectionChunker
-from onyx.indexing.document_chunker.text_section_chunker import TextChunker
+from onyx.indexing.chunking.image_section_chunker import ImageChunker
+from onyx.indexing.chunking.section_chunker import AccumulatorState
+from onyx.indexing.chunking.section_chunker import ChunkPayload
+from onyx.indexing.chunking.section_chunker import SectionChunker
+from onyx.indexing.chunking.text_section_chunker import TextChunker
 from onyx.indexing.models import DocAwareChunk
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.logger import setup_logger

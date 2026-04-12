@@ -4,10 +4,10 @@ from chonkie import SentenceChunker
 
 from onyx.configs.constants import SECTION_SEPARATOR
 from onyx.connectors.models import Section
-from onyx.indexing.document_chunker.section_chunker import AccumulatorState
-from onyx.indexing.document_chunker.section_chunker import ChunkPayload
-from onyx.indexing.document_chunker.section_chunker import SectionChunker
-from onyx.indexing.document_chunker.section_chunker import SectionChunkerOutput
+from onyx.indexing.chunking.section_chunker import AccumulatorState
+from onyx.indexing.chunking.section_chunker import ChunkPayload
+from onyx.indexing.chunking.section_chunker import SectionChunker
+from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.text_processing import clean_text
 from onyx.utils.text_processing import shared_precompare_cleanup
