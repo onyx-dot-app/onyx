@@ -1244,6 +1244,28 @@ def run_llm_step_pkt_generator(
                     obj=AgentResponseDelta(content=content_chunk),
                 )
 
+        def _emit_thinking_segments(
+            segments: list[tuple[bool, str]],
+        ) -> Generator[Packet, None, None]:
+            nonlocal accumulated_reasoning, reasoning_start
+            for is_thinking, text in segments:
+                if is_thinking:
+                    accumulated_reasoning += text
+                    if state_container:
+                        state_container.set_reasoning_tokens(accumulated_reasoning)
+                    if not reasoning_start:
+                        yield Packet(
+                            placement=_current_placement(),
+                            obj=ReasoningStart(),
+                        )
+                    yield Packet(
+                        placement=_current_placement(),
+                        obj=ReasoningDelta(reasoning=text),
+                    )
+                    reasoning_start = True
+                else:
+                    yield from _emit_content_chunk(text)
+
         for packet in llm.stream(
             prompt=llm_msg_history,
             tools=tool_definitions,
@@ -1333,27 +1355,9 @@ def run_llm_step_pkt_generator(
                 # Then extract <thinking>/<think> tags, emitting segments
                 # in order so interleaved content keeps the right sequence.
                 if tool_filtered:
-                    for is_thinking, text in (
+                    yield from _emit_thinking_segments(
                         thinking_tag_content_filter.process(tool_filtered)
-                    ):
-                        if is_thinking:
-                            accumulated_reasoning += text
-                            if state_container:
-                                state_container.set_reasoning_tokens(
-                                    accumulated_reasoning
-                                )
-                            if not reasoning_start:
-                                yield Packet(
-                                    placement=_current_placement(),
-                                    obj=ReasoningStart(),
-                                )
-                            yield Packet(
-                                placement=_current_placement(),
-                                obj=ReasoningDelta(reasoning=text),
-                            )
-                            reasoning_start = True
-                        else:
-                            yield from _emit_content_chunk(text)
+                    )
 
             if delta.tool_calls:
                 yield from _close_reasoning_if_active()
@@ -1372,42 +1376,12 @@ def run_llm_step_pkt_generator(
         # the thinking filter so the pipeline order is preserved.
         xml_tail = xml_tool_call_content_filter.flush()
         if xml_tail:
-            for is_thinking, text in thinking_tag_content_filter.process(xml_tail):
-                if is_thinking:
-                    accumulated_reasoning += text
-                    if state_container:
-                        state_container.set_reasoning_tokens(accumulated_reasoning)
-                    if not reasoning_start:
-                        yield Packet(
-                            placement=_current_placement(),
-                            obj=ReasoningStart(),
-                        )
-                    yield Packet(
-                        placement=_current_placement(),
-                        obj=ReasoningDelta(reasoning=text),
-                    )
-                    reasoning_start = True
-                else:
-                    yield from _emit_content_chunk(text)
+            yield from _emit_thinking_segments(
+                thinking_tag_content_filter.process(xml_tail)
+            )
 
         # Flush thinking filter for any remaining buffered content.
-        for is_thinking, text in thinking_tag_content_filter.flush():
-            if is_thinking:
-                accumulated_reasoning += text
-                if state_container:
-                    state_container.set_reasoning_tokens(accumulated_reasoning)
-                if not reasoning_start:
-                    yield Packet(
-                        placement=_current_placement(),
-                        obj=ReasoningStart(),
-                    )
-                yield Packet(
-                    placement=_current_placement(),
-                    obj=ReasoningDelta(reasoning=text),
-                )
-                reasoning_start = True
-            else:
-                yield from _emit_content_chunk(text)
+        yield from _emit_thinking_segments(thinking_tag_content_filter.flush())
 
         # Flush custom token processor to get any final tool calls
         if custom_token_processor:
