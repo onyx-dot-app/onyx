@@ -39,6 +39,7 @@ class SectionType(str, Enum):
 
     TEXT = "text"
     IMAGE = "image"
+    TABULAR = "tabular"
 
 
 class Section(BaseModel):
@@ -68,6 +69,15 @@ class ImageSection(Section):
 
     def __sizeof__(self) -> int:
         return sys.getsizeof(self.image_file_id) + sys.getsizeof(self.link)
+
+
+class TabularSection(Section):
+    """Section containing tabular data (csv/tsv content, or one sheet of
+    an xlsx workbook rendered as CSV)."""
+
+    kind: SectionKind = SectionKind.TABULAR
+    text: str  # CSV representation in a string
+    link: str
 
 
 class BasicExpertInfo(BaseModel):
@@ -172,7 +182,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: list[TextSection | ImageSection]
+    sections: list[TextSection | ImageSection | TabularSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     # TODO(andrei): Ideally we could improve this to where each value is just a
