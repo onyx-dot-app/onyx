@@ -77,7 +77,7 @@ export async function submitConnector<T>(
   connector: ConnectorBase<T>,
   connectorId?: number,
   fakeCredential?: boolean
-): Promise<{ message: string; isSuccess: boolean; response?: Connector<T> }> {
+): Promise<{ detail?: string; isSuccess: boolean; response?: Connector<T> }> {
   const isUpdate = connectorId !== undefined;
   if (!connector.connector_specific_config) {
     connector.connector_specific_config = {} as T;
@@ -97,10 +97,10 @@ export async function submitConnector<T>(
       );
       if (response.ok) {
         const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
+        return { isSuccess: true, response: responseJson };
       } else {
         const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+        return { isSuccess: false, detail: errorData.detail };
       }
     } else {
       const response = await fetch(
@@ -116,14 +116,14 @@ export async function submitConnector<T>(
 
       if (response.ok) {
         const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
+        return { isSuccess: true, response: responseJson };
       } else {
         const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+        return { isSuccess: false, detail: errorData.detail };
       }
     }
   } catch (error) {
-    return { message: `Error: ${error}`, isSuccess: false };
+    return { isSuccess: false, detail: String(error) };
   }
 }
 
@@ -278,10 +278,10 @@ export default function AddConnector({
     } catch (error: unknown) {
       // Narrow the type of error
       if (error instanceof Error) {
-        toast.error(`Error: ${error.message}`);
+        toast.error(`${t("errorPrefix")} ${error.message}`);
       } else {
         // Handle non-standard errors
-        toast.error("An unknown error occurred");
+        toast.error(t("unknownError"));
       }
     } finally {
       setIsAuthorizing(false);
@@ -395,7 +395,7 @@ export default function AddConnector({
           );
 
           const connectorCreationPromise = (async () => {
-            const { message, isSuccess, response } = await submitConnector<any>(
+            const { detail, isSuccess, response } = await submitConnector<any>(
               {
                 connector_specific_config: transformedConnectorSpecificConfig,
                 input_type: isLoadState(connector) ? "load_state" : "poll", // single case
@@ -421,7 +421,7 @@ export default function AddConnector({
               if (isSuccess) {
                 onSuccess();
               } else {
-                toast.error(message);
+                toast.error(`${t("errorPrefix")} ${detail}`);
               }
             }
 
@@ -452,7 +452,7 @@ export default function AddConnector({
             } else if (isSuccess) {
               onSuccess();
             } else {
-              toast.error(message);
+              toast.error(`${t("errorPrefix")} ${detail}`);
             }
 
             timeoutErrorHappenedRef.current = false;

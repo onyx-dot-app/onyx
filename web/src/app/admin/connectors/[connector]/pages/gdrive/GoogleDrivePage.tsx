@@ -23,9 +23,11 @@ import {
   checkConnectorsExist,
   refreshAllGoogleData,
 } from "@/lib/googleConnector";
+import { useTranslations } from "next-intl";
 
 const GDriveMain = () => {
   const { isAdmin, user } = useUser();
+  const t = useTranslations("admin.google");
 
   // Get app credential and service account key
   const {
@@ -103,12 +105,12 @@ const GDriveMain = () => {
 
   // Error states
   if (credentialsError || !credentialsData) {
-    return <ErrorCallout errorTitle="Failed to load credentials." />;
+    return <ErrorCallout errorTitle={t("failedToLoadCredentials")} />;
   }
 
   if (googleDriveCredentialsError || !googleDriveCredentials) {
     return (
-      <ErrorCallout errorTitle="Failed to load Google Drive credentials." />
+      <ErrorCallout errorTitle={t("failedToLoadGdCredentials")} />
     );
   }
 
@@ -117,13 +119,13 @@ const GDriveMain = () => {
     !serviceAccountKeySuccessfullyFetched
   ) {
     return (
-      <ErrorCallout errorTitle="Error loading Google Drive app credentials. Contact an administrator." />
+      <ErrorCallout errorTitle={t("errorLoadingAppCredentials")} />
     );
   }
 
   if (googleDriveConnectorsError) {
     return (
-      <ErrorCallout errorTitle="Failed to load Google Drive associated connectors." />
+      <ErrorCallout errorTitle={t("failedToLoadAssociatedConnectors")} />
     );
   }
 
@@ -152,7 +154,7 @@ const GDriveMain = () => {
 
   return (
     <>
-      <Title className="mb-2 mt-6">Step 1: Provide your Credentials</Title>
+      <Title className="mb-2 mt-6">{t("step1ProvideCredentials")}</Title>
       <DriveJsonUploadSection
         appCredentialData={appCredentialData}
         serviceAccountCredentialData={serviceAccountKeyData}
@@ -168,7 +170,7 @@ const GDriveMain = () => {
         (appCredentialData?.client_id ||
           serviceAccountKeyData?.service_account_email) && (
           <>
-            <Title className="mb-2 mt-6">Step 2: Authenticate with Onyx</Title>
+            <Title className="mb-2 mt-6">{t("step2Authenticate")}</Title>
             <DriveAuthSection
               refreshCredentials={handleRefresh}
               googleDrivePublicUploadedCredential={
