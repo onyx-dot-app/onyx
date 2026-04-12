@@ -16,7 +16,7 @@ import {
 } from "../../../services/streamingModels";
 import { MessageRenderer, FullChatState } from "../interfaces";
 import { isFinalAnswerComplete } from "../../../services/packetUtils";
-import { processContent } from "../markdownUtils";
+import { processContent, ScrollableTable } from "../markdownUtils";
 import { BlinkingBar } from "../../BlinkingBar";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import {
@@ -338,11 +338,9 @@ export const MessageTextRenderer: MessageRenderer<
         </li>
       ),
       table: ({ className, children, ...rest }) => (
-        <div className="markdown-table-breakout">
-          <table className={cn(className, "min-w-full")} {...rest}>
-            {children}
-          </table>
-        </div>
+        <ScrollableTable className={className} {...rest}>
+          {children}
+        </ScrollableTable>
       ),
       code: ({ node, className, children }) => {
         const codeText = extractCodeText(
