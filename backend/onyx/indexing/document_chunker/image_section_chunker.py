@@ -7,22 +7,13 @@ from onyx.utils.text_processing import clean_text
 
 
 class ImageChunker(SectionChunker):
-    """Per-section chunker for image sections.
-
-    Image sections are structurally standalone: they always flush any
-    pending accumulator results, then emit exactly one chunk carrying
-    the `image_file_id` and the pre-generated image summary text.
-    """
-
     def chunk_section(
         self,
         section: Section,
         accumulator: AccumulatorState,
         content_token_limit: int,  # noqa: ARG002
     ) -> SectionChunkerOutput:
-        assert section.image_file_id is not None, (
-            "ImageChunker.chunk_section called on a non-image section"
-        )
+        assert section.image_file_id is not None
 
         section_text = clean_text(str(section.text or ""))
         section_link = section.link or ""

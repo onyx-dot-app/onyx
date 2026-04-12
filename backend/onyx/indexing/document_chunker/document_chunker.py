@@ -18,19 +18,7 @@ logger = setup_logger()
 class DocumentChunker:
     """Converts a document's processed sections into DocAwareChunks.
 
-    Drop-in replacement for `Chunker._chunk_document_with_sections` in
-    `onyx/indexing/chunker.py`. This class owns:
-
-    - The section dispatch loop (routing each section to the right
-      `SectionChunker` — text, image, future spreadsheet, etc.)
-    - The cross-section accumulator threading
-    - The empty-text skip guard
-    - The final-flush + empty-doc safety branch
-    - Chunk_id assignment and payload → `DocAwareChunk` conversion
-
-    Everything upstream of this — title prep, metadata prep, contextual-
-    RAG token negotiation, large-chunk multipass, heartbeat callbacks —
-    stays in the caller (`Chunker._handle_single_document`).
+    Drop-in replacement for `Chunker._chunk_document_with_sections`.
     """
 
     def __init__(
@@ -43,16 +31,11 @@ class DocumentChunker:
         self.blurb_splitter = blurb_splitter
         self.mini_chunk_splitter = mini_chunk_splitter
 
-        # Per-section chunker instances. Adding a new section type:
-        # subclass `SectionChunker`, instantiate it here, add a branch
-        # to `_select_chunker`.
         self._text_chunker = TextChunker(
             tokenizer=tokenizer,
             chunk_splitter=chunk_splitter,
         )
         self._image_chunker = ImageChunker()
-
-    # --- Public entry point ------------------------------------------------
 
     def chunk(
         self,
@@ -63,26 +46,15 @@ class DocumentChunker:
         metadata_suffix_keyword: str,
         content_token_limit: int,
     ) -> list[DocAwareChunk]:
-        """Convert a document's sections into chunks.
-
-        Matches the signature and behavior of
-        `Chunker._chunk_document_with_sections` so the caller
-        (`_handle_single_document`) can swap in this method with no
-        other changes.
-        """
         payloads = self._collect_section_payloads(
             document=document,
             sections=sections,
             content_token_limit=content_token_limit,
         )
 
-        # Safety branch: every document produces at least one chunk.
-        # Matches the legacy `if chunk_text.strip() or not chunks:`
-        # guard, keeping titled-but-empty documents indexable.
         if not payloads:
             payloads.append(ChunkPayload(text="", links={0: ""}))
 
-        # Upgrade payloads → DocAwareChunks with enumerated ids.
         return [
             payload.to_doc_aware_chunk(
                 document=document,
@@ -96,26 +68,18 @@ class DocumentChunker:
             for idx, payload in enumerate(payloads)
         ]
 
-    # --- Section dispatch loop --------------------------------------------
-
     def _collect_section_payloads(
         self,
         document: IndexingDocument,
         sections: list[Section],
         content_token_limit: int,
     ) -> list[ChunkPayload]:
-        """Iterate sections, dispatch each to the appropriate
-        `SectionChunker`, thread the accumulator state across calls, and
-        return the combined payload list (including the final flush).
-        """
         accumulator = AccumulatorState()
         payloads: list[ChunkPayload] = []
 
         for section_idx, section in enumerate(sections):
             section_text = clean_text(str(section.text or ""))
 
-            # Skip empty-text sections but ensure at least 1 chunk exists
-			# for the section
             if not section_text and (
                 not document.title or section_idx > 0
             ):
@@ -134,18 +98,10 @@ class DocumentChunker:
             payloads.extend(result.payloads)
             accumulator = result.accumulator
 
-        # Final flush — any leftover buffered text becomes one last payload.
         payloads.extend(accumulator.flush_to_list())
-
         return payloads
 
     def _select_chunker(self, section: Section) -> SectionChunker:
-        """Dispatch table for section → chunker routing.
-
-        Dispatches on section *content* (e.g. `image_file_id is not
-        None`) rather than section class, matching how the legacy code
-        detected image sections.
-        """
         if section.image_file_id is not None:
             return self._image_chunker
         return self._text_chunker
