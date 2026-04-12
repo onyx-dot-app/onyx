@@ -28,6 +28,7 @@ import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { SvgX } from "@opal/icons";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useTranslations } from "next-intl";
 
 export default function UpgradingPage({
   futureEmbeddingModel,
@@ -36,6 +37,8 @@ export default function UpgradingPage({
 }) {
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const vectorDbEnabled = useVectorDbEnabled();
+  const t = useTranslations("admin.configuration");
+  const tc = useTranslations("common");
 
   const { data: connectors, isLoading: isLoadingConnectors } = useSWR<
     Connector<any>[]
@@ -139,22 +142,21 @@ export default function UpgradingPage({
           <Modal.Content width="sm" height="sm">
             <Modal.Header
               icon={SvgX}
-              title="Cancel Embedding Model Switch"
+              title={t("cancelEmbeddingSwitch")}
               onClose={() => setIsCancelling(false)}
             />
             <Modal.Body>
               <div>
-                Are you sure you want to cancel? Cancelling will revert to the
-                previous model and all progress will be lost.
+                {t("cancelSwitchConfirm")}
               </div>
             </Modal.Body>
             <Modal.Footer>
-              <OpalButton onClick={onCancel}>Confirm</OpalButton>
+              <OpalButton onClick={onCancel}>{tc("confirm")}</OpalButton>
               <OpalButton
                 prominence="secondary"
                 onClick={() => setIsCancelling(false)}
               >
-                Cancel
+                {tc("cancel")}
               </OpalButton>
             </Modal.Footer>
           </Modal.Content>
@@ -163,11 +165,10 @@ export default function UpgradingPage({
 
       {futureEmbeddingModel && (
         <div>
-          <Title className="mt-8">Current Upgrade Status</Title>
+          <Title className="mt-8">{t("currentUpgradeStatus")}</Title>
           <div className="mt-4">
             <div className="italic text-lg mb-2">
-              Currently in the process of switching to:{" "}
-              {futureEmbeddingModel.model_name}
+              {t("currentlySwitchingTo", { model: futureEmbeddingModel.model_name })}
             </div>
 
             {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
@@ -176,22 +177,20 @@ export default function UpgradingPage({
               className="mt-4"
               onClick={() => setIsCancelling(true)}
             >
-              Cancel
+              {tc("cancel")}
             </Button>
 
             {connectors && connectors.length > 0 ? (
               futureEmbeddingModel.switchover_type === "instant" ? (
                 <div className="mt-8">
                   <h3 className="text-lg font-semibold mb-2">
-                    Switching Embedding Models
+                    {t("switchingModelsInstant")}
                   </h3>
                   <p className="mb-4 text-text-800">
-                    You&apos;re currently switching embedding models, and
-                    you&apos;ve selected the instant switch option. The
-                    transition will complete shortly.
+                    {t("switchingModelsInstantDesc")}
                   </p>
                   <p className="text-text-600">
-                    The new model will be active soon.
+                    {t("newModelActiveSoon")}
                   </p>
                 </div>
               ) : (
@@ -221,9 +220,7 @@ export default function UpgradingPage({
                           <>
                             <Spacer rem={1} />
                             <Text as="p">
-                              All connectors are currently paused, so none are
-                              blocking the switchover. Paused connectors will
-                              keep re-indexing in the background.
+                              {t("allConnectorsPausedSwitchover")}
                             </Text>
                           </>
                         )}
@@ -234,22 +231,20 @@ export default function UpgradingPage({
                       )}
                     </>
                   ) : (
-                    <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
+                    <ErrorCallout errorTitle={t("failedToFetchReindexingProgress")} />
                   )}
                 </>
               )
             ) : (
               <div className="mt-8 p-6 bg-background-100 border border-border-strong rounded-lg max-w-2xl">
                 <h3 className="text-lg font-semibold mb-2">
-                  Switching Embedding Models
+                  {t("switchingModelsInstant")}
                 </h3>
                 <p className="mb-4 text-text-800">
-                  You&apos;re currently switching embedding models, but there
-                  are no connectors to reindex. This means the transition will
-                  be quick and seamless!
+                  {t("switchingModelsNoConnectors")}
                 </p>
                 <p className="text-text-600">
-                  The new model will be active soon.
+                  {t("newModelActiveSoon")}
                 </p>
               </div>
             )}

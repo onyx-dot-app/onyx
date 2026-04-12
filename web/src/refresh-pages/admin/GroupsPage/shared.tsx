@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgUser, SvgUserManage, SvgGlobe } from "@opal/icons";
@@ -17,15 +18,18 @@ export const PAGE_SIZE = 10;
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function apiKeyToMemberRow(key: ApiKeyDescriptor): MemberRow {
+export function apiKeyToMemberRow(
+  key: ApiKeyDescriptor,
+  t: (key: string) => string
+): MemberRow {
   return {
     id: key.user_id,
-    email: "Service Account",
+    email: t("serviceAccount"),
     role: key.api_key_role,
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,
-    personal_name: key.api_key_name ?? "Unnamed Key",
+    personal_name: key.api_key_name ?? t("unnamedKey"),
     created_at: null,
     updated_at: null,
     groups: [],
@@ -76,32 +80,32 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
 
 export const tc = createTableColumns<MemberRow>();
 
-export const baseColumns = [
-  tc.qualifier(),
-  tc.column("email", {
-    header: "Name",
-    weight: 25,
-    cell: renderNameColumn,
-  }),
-  tc.column("api_key_display", {
-    header: "",
-    weight: 15,
-    enableSorting: false,
-    cell: (value) =>
-      value ? (
-        <Text as="span" secondaryBody text03>
-          {value}
-        </Text>
-      ) : null,
-  }),
-  tc.column("role", {
-    header: "Account Type",
-    weight: 15,
-    cell: renderAccountTypeColumn,
-  }),
-];
+export function useMemberTableColumns() {
+  const t = useTranslations("admin.groups");
 
-export const memberTableColumns = [
-  ...baseColumns,
-  tc.actions({ showSorting: false }),
-];
+  return [
+    tc.qualifier(),
+    tc.column("email", {
+      header: t("name"),
+      weight: 25,
+      cell: renderNameColumn,
+    }),
+    tc.column("api_key_display", {
+      header: "",
+      weight: 15,
+      enableSorting: false,
+      cell: (value: string | null | undefined) =>
+        value ? (
+          <Text as="span" secondaryBody text03>
+            {value}
+          </Text>
+        ) : null,
+    }),
+    tc.column("role", {
+      header: t("accountType"),
+      weight: 15,
+      cell: renderAccountTypeColumn,
+    }),
+    tc.actions({ showSorting: false }),
+  ];
+}

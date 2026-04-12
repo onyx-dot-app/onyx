@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslations } from "next-intl";
 import { STEP_CONFIG } from "@/sections/onboarding/constants";
 import {
   OnboardingActions,
@@ -18,6 +19,21 @@ interface OnboardingHeaderProps {
   handleHideOnboarding: () => void;
   handleFinishOnboarding: () => void;
 }
+
+const ONBOARDING_STEP_TITLE_KEYS: Record<OnboardingStep, string> = {
+  [OnboardingStep.Welcome]: "onboarding.welcomeTitle",
+  [OnboardingStep.Name]: "onboarding.welcomeTitle",
+  [OnboardingStep.LlmSetup]: "onboarding.llmSetupTitle",
+  [OnboardingStep.Complete]: "onboarding.completeTitle",
+};
+
+const ONBOARDING_STEP_BUTTON_KEYS: Record<OnboardingStep, string> = {
+  [OnboardingStep.Welcome]: "onboarding.welcomeButton",
+  [OnboardingStep.Name]: "onboarding.nextButton",
+  [OnboardingStep.LlmSetup]: "onboarding.nextButton",
+  [OnboardingStep.Complete]: "onboarding.finishSetupButton",
+};
+
 const OnboardingHeader = React.memo(
   ({
     state: onboardingState,
@@ -25,9 +41,11 @@ const OnboardingHeader = React.memo(
     handleHideOnboarding,
     handleFinishOnboarding,
   }: OnboardingHeaderProps) => {
+    const t = useTranslations("chat");
     const iconPercentage =
       STEP_CONFIG[onboardingState.currentStep].iconPercentage;
-    const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
+    const stepTitle = t(ONBOARDING_STEP_TITLE_KEYS[onboardingState.currentStep]);
+    const stepButtonText = t(ONBOARDING_STEP_BUTTON_KEYS[onboardingState.currentStep]);
     const isWelcomeStep =
       onboardingState.currentStep === OnboardingStep.Welcome;
     const isCompleteStep =
@@ -44,7 +62,7 @@ const OnboardingHeader = React.memo(
           icon={(props) => (
             <SvgProgressCircle value={iconPercentage} {...props} />
           )}
-          title={STEP_CONFIG[onboardingState.currentStep].title}
+          title={stepTitle}
           sizePreset="main-ui"
           variant="body"
           prominence="muted"
@@ -54,8 +72,10 @@ const OnboardingHeader = React.memo(
               <Section flexDirection="row">
                 {!isWelcomeStep && (
                   <Text as="p" text03 mainUiBody>
-                    Step {onboardingState.stepIndex} of{" "}
-                    {onboardingState.totalSteps}
+                    {t("onboarding.stepOf", {
+                      current: onboardingState.stepIndex,
+                      total: onboardingState.totalSteps,
+                    })}
                   </Text>
                 )}
                 <Button

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
 import Separator from "@/refresh-components/Separator";
 import GroupCard from "./GroupCard";
@@ -15,6 +16,8 @@ interface GroupsListProps {
 }
 
 function GroupsList({ groups, searchQuery }: GroupsListProps) {
+  const t = useTranslations("admin.groups");
+
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return groups;
     const q = searchQuery.toLowerCase();
@@ -25,8 +28,8 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
     return (
       <IllustrationContent
         illustration={SvgNoResult}
-        title="No groups found"
-        description={`No groups matching "${searchQuery}"`}
+        title={t("noGroupsFound")}
+        description={t("noGroupsMatch", { query: searchQuery })}
       />
     );
   }

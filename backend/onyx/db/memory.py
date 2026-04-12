@@ -31,6 +31,7 @@ class UserMemoryContext(BaseModel):
     user_info: UserInfo
     user_preferences: str | None = None
     memories: tuple[str, ...] = ()
+    language_preference: str | None = None
 
     def without_memories(self) -> "UserMemoryContext":
         """Return a copy with memories cleared but user info/preferences intact."""
@@ -39,6 +40,7 @@ class UserMemoryContext(BaseModel):
             user_info=self.user_info,
             user_preferences=self.user_preferences,
             memories=(),
+            language_preference=self.language_preference,
         )
 
     def as_formatted_list(self) -> list[str]:
@@ -77,6 +79,7 @@ def get_memories(user: User, db_session: Session) -> UserMemoryContext:
         user_info=user_info,
         user_preferences=user_preferences,
         memories=memories,
+        language_preference=user.language_preference,
     )
 
 

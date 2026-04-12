@@ -1,6 +1,7 @@
 "use client";
 
 import * as Yup from "yup";
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { useEffect, useState } from "react";
 import Modal from "@/refresh-components/Modal";
@@ -30,6 +31,7 @@ export default function CreateRateLimitModal({
   forSpecificScope,
   forSpecificUserGroup,
 }: CreateRateLimitModalProps) {
+  const t = useTranslations("admin.rateLimits");
   const [modalUserGroups, setModalUserGroups] = useState([]);
   const [shouldFetchUserGroups, setShouldFetchUserGroups] = useState(
     forSpecificScope === Scope.USER_GROUP
@@ -47,21 +49,21 @@ export default function CreateRateLimitModal({
         setModalUserGroups(options);
         setShouldFetchUserGroups(false);
       } catch (error) {
-        toast.error(`Failed to fetch user groups: ${error}`);
+        toast.error(t("failedToFetchGroups", { error: String(error) }));
       }
     };
 
     if (shouldFetchUserGroups) {
       fetchData();
     }
-  }, [shouldFetchUserGroups]);
+  }, [shouldFetchUserGroups, t]);
 
   return (
     <Modal open={isOpen} onOpenChange={() => setIsOpen(false)}>
       <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgSettings}
-          title="Create a Token Rate Limit"
+          title={t("createTitle")}
           onClose={() => setIsOpen(false)}
         />
         <Formik
@@ -74,17 +76,17 @@ export default function CreateRateLimitModal({
           }}
           validationSchema={Yup.object().shape({
             period_hours: Yup.number()
-              .required("Time Window is a required field")
-              .min(1, "Time Window must be at least 1 hour"),
+              .required(t("validationTimeRequired"))
+              .min(1, t("validationTimeMin")),
             token_budget: Yup.number()
-              .required("Token Budget is a required field")
-              .min(1, "Token Budget must be at least 1"),
+              .required(t("validationBudgetRequired"))
+              .min(1, t("validationBudgetMin")),
             target_scope: Yup.string().required(
-              "Target Scope is a required field"
+              t("validationScopeRequired")
             ),
             user_group_id: Yup.string().test(
               "user_group_id",
-              "User Group is a required field",
+              t("validationGroupRequired"),
               (value, context) => {
                 return (
                   context.parent.target_scope !== "user_group" ||
@@ -111,11 +113,11 @@ export default function CreateRateLimitModal({
                 {!forSpecificScope && (
                   <SelectorFormField
                     name="target_scope"
-                    label="Target Scope"
+                    label={t("targetScope")}
                     options={[
-                      { name: "Global", value: Scope.GLOBAL },
-                      { name: "User", value: Scope.USER },
-                      { name: "User Group", value: Scope.USER_GROUP },
+                      { name: t("scopeGlobal"), value: Scope.GLOBAL },
+                      { name: t("scopeUser"), value: Scope.USER },
+                      { name: t("scopeUserGroup"), value: Scope.USER_GROUP },
                     ]}
                     includeDefault={false}
                     onSelect={(selected) => {
@@ -130,27 +132,27 @@ export default function CreateRateLimitModal({
                   values.target_scope === Scope.USER_GROUP && (
                     <SelectorFormField
                       name="user_group_id"
-                      label="User Group"
+                      label={t("userGroup")}
                       options={modalUserGroups}
                       includeDefault={false}
                     />
                   )}
                 <TextFormField
                   name="period_hours"
-                  label="Time Window (Hours)"
+                  label={t("timeWindowField")}
                   type="number"
                   placeholder=""
                 />
                 <TextFormField
                   name="token_budget"
-                  label="Token Budget (Thousands)"
+                  label={t("tokenBudgetField")}
                   type="number"
                   placeholder=""
                 />
               </Modal.Body>
               <Modal.Footer>
                 <Button disabled={isSubmitting} type="submit">
-                  Create
+                  {t("create")}
                 </Button>
               </Modal.Footer>
             </Form>

@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { SvgDownload, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
@@ -24,19 +25,6 @@ interface ScimModalProps {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-async function copyToClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast.success("Token copied to clipboard");
-  } catch {
-    toast.error("Failed to copy token");
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -46,12 +34,23 @@ export default function ScimModal({
   onRegenerate,
   onClose,
 }: ScimModalProps) {
+  const t = useTranslations("admin.scim");
+
+  async function copyToClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(t("copiedToClipboard"));
+    } catch {
+      toast.error(t("failedToCopy"));
+    }
+  }
+
   switch (view.kind) {
     case "regenerate":
       return (
         <ConfirmationModalLayout
           icon={SvgRefreshCw}
-          title="Regenerate SCIM Token"
+          title={t("regenerateTitle")}
           onClose={onClose}
           submit={
             <Button
@@ -59,15 +58,13 @@ export default function ScimModal({
               variant="danger"
               onClick={onRegenerate}
             >
-              Regenerate Token
+              {t("regenerateButton")}
             </Button>
           }
         >
           <Section alignItems="start" gap={0.5}>
             <Text as="p" text03>
-              Your current SCIM token will be revoked and a new token will be
-              generated. You will need to update the token on your identity
-              provider before SCIM provisioning will resume.
+              {t("regenerateWarning")}
             </Text>
           </Section>
         </ConfirmationModalLayout>
@@ -79,8 +76,8 @@ export default function ScimModal({
           <Modal.Content width="sm">
             <Modal.Header
               icon={SvgKey}
-              title="SCIM Token"
-              description="Save this key before continuing. It won't be shown again."
+              title={t("tokenTitle")}
+              description={t("tokenDescription")}
               onClose={onClose}
             />
             <Modal.Body>
@@ -121,7 +118,7 @@ export default function ScimModal({
                       })
                     }
                   >
-                    Download
+                    {t("download")}
                   </Button>
                 }
                 submit={
@@ -129,7 +126,7 @@ export default function ScimModal({
                     autoFocus
                     onClick={() => copyToClipboard(view.rawToken)}
                   >
-                    Copy Token
+                    {t("copyToken")}
                   </Button>
                 }
               />

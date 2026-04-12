@@ -28,6 +28,7 @@ import {
   fetchVoicesByType,
   fetchLLMProviders,
 } from "@/lib/admin/voice/svc";
+import { useTranslations } from "next-intl";
 
 interface VoiceOption {
   value: string;
@@ -125,6 +126,8 @@ export default function VoiceProviderSetupModal({
   onClose,
   onSuccess,
 }: VoiceProviderSetupModalProps) {
+  const t = useTranslations("admin.configuration.voiceProvider");
+  const tc = useTranslations("common");
   // Map the card model ID to the actual API model ID
   // Prioritize defaultModelId (from the clicked card) over stored value
   const initialTtsModel = defaultModelId
@@ -283,7 +286,7 @@ export default function VoiceProviderSetupModal({
       // Test the connection first (skip if reusing LLM provider key - validated on save)
       if (!selectedLlmProviderId) {
         setPhase("validating");
-        setMessage({ kind: "status", text: "Validating API key..." });
+        setMessage({ kind: "status", text: t("validatingApiKey") });
 
         const testResponse = await testVoiceProvider({
           provider_type: providerType,
@@ -297,7 +300,7 @@ export default function VoiceProviderSetupModal({
           const detail =
             typeof data?.detail === "string"
               ? data.detail
-              : "Connection test failed";
+              : t("connectionTestFailed");
           setPhase("idle");
           setMessage({ kind: "error", text: detail });
           return;
@@ -305,7 +308,7 @@ export default function VoiceProviderSetupModal({
 
         setMessage({
           kind: "status",
-          text: "API key validated. Saving provider...",
+          text: t("apiKeyValidatedSaving"),
         });
       }
 
@@ -333,13 +336,13 @@ export default function VoiceProviderSetupModal({
         const detail =
           typeof data?.detail === "string"
             ? data.detail
-            : "Failed to save provider";
+            : t("failedToSaveProvider");
         setPhase("idle");
         setMessage({ kind: "error", text: detail });
       }
     } catch {
       setPhase("idle");
-      setMessage({ kind: "error", text: "Failed to save provider" });
+      setMessage({ kind: "error", text: t("failedToSaveProvider") });
     }
   };
 
@@ -348,30 +351,19 @@ export default function VoiceProviderSetupModal({
       <Modal.Content width="sm">
         <Modal.Header
           icon={LogoArrangement}
-          title={isEditing ? `Edit ${label}` : `Set up ${label}`}
-          description={`Connect to ${label} and set up your voice models.`}
+          title={isEditing ? t("editProvider", { label }) : t("setUpProvider", { label })}
+          description={t("connectDescription", { label })}
           onClose={onClose}
         />
         <Modal.Body>
           <Section gap={1} alignItems="stretch">
             <FormField name="api_key" state={formFieldState} className="w-full">
-              <FormField.Label>API Key</FormField.Label>
+              <FormField.Label>{t("apiKeyLabel")}</FormField.Label>
               <FormField.Description>
                 {isEditing ? (
-                  "Leave blank to keep existing key"
+                  t("leaveBlankExistingKey")
                 ) : (
-                  <>
-                    Paste your{" "}
-                    <a
-                      href={PROVIDER_API_KEY_URLS[providerType]}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      API key
-                    </a>{" "}
-                    from {label} to access your models.
-                  </>
+                  t("pasteApiKeyFrom", { label })
                 )}
               </FormField.Description>
               <FormField.Control asChild>
@@ -400,7 +392,7 @@ export default function VoiceProviderSetupModal({
                       setMessage(null);
                     }}
                     options={existingApiKeyOptions}
-                    separatorLabel="Reuse OpenAI API Keys"
+                    separatorLabel={t("reuseOpenAIKeys")}
                     strict={false}
                     createPrefix="Add"
                   />
@@ -421,7 +413,7 @@ export default function VoiceProviderSetupModal({
                 <FormField.APIMessage
                   state="loading"
                   messages={{
-                    loading: message?.text ?? "Validating API key...",
+                    loading: message?.text ?? t("validatingApiKey"),
                   }}
                 />
               ) : message ? (
@@ -437,7 +429,7 @@ export default function VoiceProviderSetupModal({
 
             {providerType === "azure" && (
               <Vertical
-                title="Target URI"
+                title={t("targetUri")}
                 subDescription={markdown(
                   "Paste the endpoint shown in [Azure Portal (Keys and Endpoint)](https://portal.azure.com/). Onyx extracts the speech region from this URL. Examples: https://westus.api.cognitive.microsoft.com/ or https://westus.tts.speech.microsoft.com/."
                 )}
@@ -456,7 +448,7 @@ export default function VoiceProviderSetupModal({
             )}
 
             {providerType === "openai" && mode === "stt" && (
-              <Horizontal title="STT Model" center nonInteractive>
+              <Horizontal title={t("sttModel")} center nonInteractive>
                 <InputSelect value={sttModel} onValueChange={setSttModel}>
                   <InputSelect.Trigger />
                   <InputSelect.Content>
@@ -472,8 +464,8 @@ export default function VoiceProviderSetupModal({
 
             {providerType === "openai" && mode === "tts" && (
               <Vertical
-                title="Default Model"
-                subDescription="This model will be used by Onyx by default for text-to-speech."
+                title={t("defaultModel")}
+                subDescription={t("defaultModelDescription")}
                 nonInteractive
               >
                 <InputSelect value={ttsModel} onValueChange={setTtsModel}>
@@ -491,7 +483,7 @@ export default function VoiceProviderSetupModal({
 
             {mode === "tts" && (
               <Vertical
-                title="Voice"
+                title={t("voice")}
                 subDescription={markdown(
                   `This voice will be used for spoken responses. See full list of supported languages and voices at [${
                     PROVIDER_VOICE_DOCS_URLS[providerType]?.label ?? label
@@ -508,8 +500,8 @@ export default function VoiceProviderSetupModal({
                   options={voiceOptions}
                   placeholder={
                     isLoadingVoices
-                      ? "Loading voices..."
-                      : "Select a voice or enter voice ID"
+                      ? t("loadingVoices")
+                      : t("selectVoice")
                   }
                   disabled={isLoadingVoices}
                   strict={false}
@@ -520,14 +512,14 @@ export default function VoiceProviderSetupModal({
         </Modal.Body>
         <Modal.Footer>
           <Button secondary onClick={onClose}>
-            Cancel
+            {tc("cancel")}
           </Button>
           <Disabled disabled={!canConnect || isProcessing}>
             <Button
               onClick={handleSubmit}
               disabled={!canConnect || isProcessing}
             >
-              {isProcessing ? "Connecting..." : isEditing ? "Save" : "Connect"}
+              {isProcessing ? t("connecting") : isEditing ? tc("save") : tc("connect")}
             </Button>
           </Disabled>
         </Modal.Footer>

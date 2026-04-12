@@ -17,6 +17,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
 import useScreenSize from "@/hooks/useScreenSize";
+import { useTranslations } from "next-intl";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
@@ -68,11 +69,13 @@ export default function NRFChrome() {
   const effectiveMode: AppMode =
     appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
 
+  const t = useTranslations("chat");
+
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
     `[Onyx ${
       settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - Open Source AI Platform`;
+    }](https://www.onyx.app/) - ${t("footerText")}`;
 
   const showModeToggle =
     isPaidEnterpriseFeaturesEnabled &&

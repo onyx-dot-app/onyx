@@ -13,6 +13,7 @@ import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
+import { useTranslations } from "next-intl";
 
 function Checkbox({
   label,
@@ -48,6 +49,8 @@ export const ExistingSlackBotForm = ({
   const router = useRouter();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const t = useTranslations("admin.slackBots");
+  const tc = useTranslations("common");
 
   const handleUpdateField = async (
     field: keyof SlackBot,
@@ -111,14 +114,14 @@ export const ExistingSlackBotForm = ({
               )}
               onClick={() => setIsExpanded(!isExpanded)}
             >
-              Update Tokens
+              {t("updateTokens")}
             </Button>
             <Button
               variant="danger"
               onClick={() => setShowDeleteModal(true)}
               icon={SvgTrash}
             >
-              Delete
+              {tc("delete")}
             </Button>
           </div>
 
@@ -141,16 +144,16 @@ export const ExistingSlackBotForm = ({
       <div className="mt-2">
         <div className="inline-block border rounded-lg border-background-200 p-2">
           <Checkbox
-            label="Enabled"
+            label={t("enabled")}
             checked={formValues.enabled}
             onChange={(e) => handleUpdateField("enabled", e.target.checked)}
           />
         </div>
         {showDeleteModal && (
           <GenericConfirmModal
-            title="Delete Slack Bot"
-            message="Are you sure you want to delete this Slack bot? This action cannot be undone."
-            confirmText="Delete"
+            title={t("deleteSlackBot")}
+            message={t("deleteConfirmMessage")}
+            confirmText={tc("delete")}
             onClose={() => setShowDeleteModal(false)}
             onConfirm={async () => {
               try {
@@ -158,10 +161,10 @@ export const ExistingSlackBotForm = ({
                 if (!response.ok) {
                   throw new Error(await response.text());
                 }
-                toast.success("Slack bot deleted successfully");
+                toast.success(t("deletedSuccessfully"));
                 router.push("/admin/bots");
               } catch (error) {
-                toast.error("Failed to delete Slack bot");
+                toast.error(t("failedToDelete"));
               }
               setShowDeleteModal(false);
             }}

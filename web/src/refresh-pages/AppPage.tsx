@@ -79,6 +79,7 @@ import { eeGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = eeGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
+import { useTranslations } from "next-intl";
 
 interface FadeProps {
   show: boolean;
@@ -128,10 +129,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const router = useRouter();
   const appFocus = useAppFocus();
+  const t = useTranslations("chat");
 
   useToastFromQuery({
     oauth_connected: {
-      message: "Authentication successful",
+      message: t("toast.authSuccessful"),
       type: "success",
     },
   });
@@ -283,8 +285,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
       toast.error(
         lastFailedFiles.length === 1
-          ? `File failed and was removed: ${names}`
-          : `Files failed and were removed: ${names}`
+          ? t("toast.fileFailed", { names })
+          : t("toast.filesFailed", { names })
       );
       clearLastFailedFiles();
     }
@@ -514,7 +516,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      toast.error("No previously-submitted user message found.");
+      toast.error(t("error.noPreviousMessage"));
       return;
     }
 
@@ -731,7 +733,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             <Modal.Content>
               <Modal.Header
                 icon={SvgFileText}
-                title="Sources"
+                title={t("sources")}
                 onClose={() => updateCurrentDocumentSidebarVisible(false)}
               />
               <Modal.Body>
@@ -833,21 +835,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           }
                           title={
                             sessionFetchError.type === "not_found"
-                              ? "Chat not found"
+                              ? t("error.notFound")
                               : sessionFetchError.type === "access_denied"
-                                ? "Access denied"
-                                : "Something went wrong"
+                                ? t("error.accessDenied")
+                                : t("error.somethingWentWrong")
                           }
                           description={
                             sessionFetchError.type === "not_found"
-                              ? "This chat session doesn't exist or has been deleted."
+                              ? t("error.notFoundDescription")
                               : sessionFetchError.type === "access_denied"
-                                ? "You don't have permission to view this chat session."
+                                ? t("error.accessDeniedDescription")
                                 : sessionFetchError.detail
                           }
                         />
                         <Button href="/app" prominence="secondary">
-                          Start a new chat
+                          {t("startNewChat")}
                         </Button>
                       </Section>
                     )}
@@ -915,7 +917,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         <Button
                           icon={SvgChevronDown}
                           onClick={handleScrollToBottom}
-                          aria-label="Scroll to bottom"
+                          aria-label={t("scrollToBottom")}
                           prominence="secondary"
                         />
                       </div>

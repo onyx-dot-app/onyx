@@ -3,6 +3,7 @@
 import type { Route } from "next";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SvgExternalLink, SvgUsers } from "@opal/icons";
 import Message from "@/refresh-components/messages/Message";
@@ -19,6 +20,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
 function GroupsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const t = useTranslations("admin.groups");
 
   const {
     data: groups,
@@ -29,16 +31,16 @@ function GroupsPage() {
   return (
     <SettingsLayouts.Root>
       <div data-testid="groups-page-heading">
-        <SettingsLayouts.Header icon={SvgUsers} title="Groups" separator>
+        <SettingsLayouts.Header icon={SvgUsers} title={t("title")} separator>
           <Message
             info
             static
             large
             close={false}
             icon
-            text="Upcoming changes to permissions"
-            description="Onyx is transitioning to group-based permissions, enabling more flexible access control through configurable permissions per group. We recommend reviewing your group structure to prepare for this update."
-            actions="Learn more"
+            text={t("upcomingChangesTitle")}
+            description={t("upcomingChangesDesc")}
+            actions={t("learnMore")}
             actionIcon={SvgExternalLink}
             onAction={() =>
               window.open(
@@ -57,10 +59,10 @@ function GroupsPage() {
           hasItems={!isLoading && !error && (groups?.length ?? 0) > 0}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          placeholder="Search groups..."
-          emptyStateText="Create groups to organize users and manage access."
+          placeholder={t("searchGroups")}
+          emptyStateText={t("createGroupsDescription")}
           onAction={() => router.push("/admin/groups/create" as Route)}
-          actionLabel="New Group"
+          actionLabel={t("newGroup")}
         />
 
         {isLoading && <SimpleLoader />}
@@ -68,8 +70,8 @@ function GroupsPage() {
         {error && (
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Failed to load groups."
-            description="Please check the console for more details."
+            title={t("failedToLoadGroups")}
+            description={t("checkConsoleDetails")}
           />
         )}
 

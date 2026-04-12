@@ -5,6 +5,7 @@ import { Button } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import { FilterComponent, FilterOptions } from "./FilterComponent";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { useTranslations } from "next-intl";
 
 interface SearchAndFilterControlsProps {
   searchQuery: string;
@@ -34,6 +35,7 @@ export function SearchAndFilterControls({
   resetPagination,
 }: SearchAndFilterControlsProps) {
   const [localSearchValue, setLocalSearchValue] = useState(searchQuery);
+  const t = useTranslations("admin.indexing");
 
   // Debounce the search query
   useEffect(() => {
@@ -53,7 +55,7 @@ export function SearchAndFilterControls({
   return (
     <div className="flex items-center gap-x-2">
       <InputTypeIn
-        placeholder="Search Connectors"
+        placeholder={t("searchConnectors")}
         type="text"
         value={localSearchValue}
         onChange={(event) => setLocalSearchValue(event.target.value)}
@@ -61,7 +63,7 @@ export function SearchAndFilterControls({
       />
 
       <Button onClick={hasExpandedSources ? onCollapseAll : onExpandAll}>
-        {hasExpandedSources ? "Collapse All" : "Expand All"}
+        {hasExpandedSources ? t("collapseAll") : t("expandAll")}
       </Button>
 
       <div className="flex items-center gap-2">
@@ -75,32 +77,28 @@ export function SearchAndFilterControls({
             {filterOptions.accessType &&
               filterOptions.accessType.length > 0 && (
                 <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                  Access: {filterOptions.accessType.join(", ")}
+                  {t("access", { value: filterOptions.accessType.join(", ") })}
                 </Badge>
               )}
 
             {filterOptions.lastStatus &&
               filterOptions.lastStatus.length > 0 && (
                 <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                  Status:{" "}
-                  {filterOptions.lastStatus
-                    .map((s) => s.replace(/_/g, " "))
-                    .join(", ")}
+                  {t("statusFilter", { value: filterOptions.lastStatus.map((s) => s.replace(/_/g, " ")).join(", ") })}
                 </Badge>
               )}
 
             {filterOptions.docsCountFilter.operator &&
               filterOptions.docsCountFilter.value !== null && (
                 <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                  Docs {filterOptions.docsCountFilter.operator}{" "}
-                  {filterOptions.docsCountFilter.value}
+                  {t("docsFilter", { operator: filterOptions.docsCountFilter.operator, value: filterOptions.docsCountFilter.value })}
                 </Badge>
               )}
 
             {filterOptions.docsCountFilter.operator &&
               filterOptions.docsCountFilter.value === null && (
                 <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                  Docs {filterOptions.docsCountFilter.operator} any
+                  {t("docsFilterAny", { operator: filterOptions.docsCountFilter.operator })}
                 </Badge>
               )}
 
@@ -109,7 +107,7 @@ export function SearchAndFilterControls({
               className="px-2 py-0.5 text-xs border-red-400  bg-red-100 hover:border-red-600 cursor-pointer hover:bg-red-100 dark:hover:bg-red-900"
               onClick={onClearFilters}
             >
-              <span className="text-red-500 dark:text-red-400">Clear</span>
+              <span className="text-red-500 dark:text-red-400">{t("clear")}</span>
             </Badge>
           </div>
         )}

@@ -2,6 +2,7 @@
 
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
@@ -26,6 +27,7 @@ interface GroupCardProps {
 function GroupCard({ group }: GroupCardProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
+  const t = useTranslations("admin.groups");
   const builtIn = isBuiltInGroup(group);
   const isAdmin = group.name === "Admin";
   const isBasic = group.name === "Basic";
@@ -35,10 +37,10 @@ function GroupCard({ group }: GroupCardProps) {
     try {
       await renameGroup(group.id, newName);
       mutate(SWR_KEYS.adminUserGroups);
-      toast.success(`Group renamed to "${newName}"`);
+      toast.success(t("groupRenamed", { name: newName }));
     } catch (e) {
       console.error("Failed to rename group:", e);
-      toast.error(e instanceof Error ? e.message : "Failed to rename group");
+      toast.error(e instanceof Error ? e.message : t("failedToRenameGroup"));
     }
   }
 
@@ -47,10 +49,10 @@ function GroupCard({ group }: GroupCardProps) {
       <ContentAction
         icon={isAdmin ? SvgUserManage : SvgUsers}
         title={group.name}
-        description={buildGroupDescription(group)}
+        description={buildGroupDescription(group, t)}
         sizePreset="main-content"
         variant="section"
-        tag={isBasic ? { title: "Default" } : undefined}
+        tag={isBasic ? { title: t("default") } : undefined}
         editable={!builtIn && !isSyncing}
         onTitleChange={!builtIn && !isSyncing ? handleRename : undefined}
         rightChildren={
@@ -58,15 +60,16 @@ function GroupCard({ group }: GroupCardProps) {
             <div className="py-1">
               <Text mainUiBody text03>
                 {formatMemberCount(
-                  group.users.filter((u) => u.is_active).length
+                  group.users.filter((u) => u.is_active).length,
+                  t
                 )}
               </Text>
             </div>
             <Button
               icon={SvgChevronRight}
               prominence="tertiary"
-              tooltip="View group"
-              aria-label="View group"
+              tooltip={t("viewGroup")}
+              aria-label={t("viewGroup")}
               onClick={() => router.push(`/admin/groups/${group.id}` as Route)}
             />
           </Section>

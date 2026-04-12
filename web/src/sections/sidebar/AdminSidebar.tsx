@@ -33,19 +33,56 @@ import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { useTranslations } from "next-intl";
 
-const SECTIONS = {
+// Section key mapping for translated labels
+const SECTION_KEY_MAP: Record<string, string> = {
   UNLABELED: "",
-  AGENTS_AND_ACTIONS: "Agents & Actions",
-  DOCUMENTS_AND_KNOWLEDGE: "Documents & Knowledge",
-  INTEGRATIONS: "Integrations",
-  PERMISSIONS: "Permissions",
-  ORGANIZATION: "Organization",
-  USAGE: "Usage",
+  AGENTS_AND_ACTIONS: "agentsAndActions",
+  DOCUMENTS_AND_KNOWLEDGE: "documentsAndKnowledge",
+  INTEGRATIONS: "integrations",
+  PERMISSIONS: "permissions",
+  ORGANIZATION: "organization",
+  USAGE: "usage",
+} as const;
+
+// Route path to admin.routes translation key mapping for sidebar labels
+const ROUTE_LABEL_KEY_MAP: Record<string, string> = {
+  "/admin/configuration/llm": "languageModels",
+  "/admin/configuration/web-search": "webSearch",
+  "/admin/configuration/image-generation": "imageGeneration",
+  "/admin/configuration/voice": "voice",
+  "/admin/configuration/code-interpreter": "codeInterpreter",
+  "/admin/configuration/chat-preferences": "chatPreferences",
+  "/admin/kg": "knowledgeGraph",
+  "/admin/performance/custom-analytics": "customAnalytics",
+  "/admin/agents": "agents",
+  "/admin/actions/mcp": "mcpActions",
+  "/admin/actions/open-api": "openapiActions",
+  "/admin/indexing/status": "existingConnectors",
+  "/admin/add-connector": "addConnector",
+  "/admin/documents/sets": "documentSets",
+  "/admin/configuration/search": "indexSettings",
+  "/admin/document-index-migration": "documentIndexMigration",
+  "/admin/service-accounts": "serviceAccounts",
+  "/admin/bots": "slackIntegration",
+  "/admin/discord-bot": "discordIntegration",
+  "/admin/hooks": "hookExtensions",
+  "/admin/users": "usersAndRequests",
+  "/admin/groups": "groups",
+  "/admin/scim": "scim",
+  "/admin/billing": "plansAndBilling",
+  "/admin/token-rate-limits": "spendingLimits",
+  "/admin/theme": "appearanceAndTheming",
+  "/admin/performance/usage": "usageStatistics",
+  "/admin/performance/query-history": "queryHistory",
+  "/admin/standard-answer": "standardAnswers",
+  "/admin/debug": "debugLogs",
+  "/admin/configuration/document-processing": "documentProcessing",
 } as const;
 
 interface SidebarItemEntry {
-  section: string;
+  sectionKey: string;
   name: string;
   icon: IconFunctionComponent;
   link: string;
@@ -67,7 +104,7 @@ function buildItems(
   const items: SidebarItemEntry[] = [];
 
   const add = (section: string, route: Parameters<typeof sidebarItem>[0]) => {
-    items.push({ ...sidebarItem(route), section });
+    items.push({ ...sidebarItem(route), sectionKey: section });
   };
 
   const addDisabled = (
@@ -75,25 +112,25 @@ function buildItems(
     route: Parameters<typeof sidebarItem>[0],
     isDisabled: boolean
   ) => {
-    items.push({ ...sidebarItem(route), section, disabled: isDisabled });
+    items.push({ ...sidebarItem(route), sectionKey: section, disabled: isDisabled });
   };
 
   // 1. No header — core configuration (admin only)
   if (!isCurator) {
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.LLM_MODELS);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.WEB_SEARCH);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.IMAGE_GENERATION);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.VOICE);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.CODE_INTERPRETER);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
+    add("UNLABELED", ADMIN_ROUTES.LLM_MODELS);
+    add("UNLABELED", ADMIN_ROUTES.WEB_SEARCH);
+    add("UNLABELED", ADMIN_ROUTES.IMAGE_GENERATION);
+    add("UNLABELED", ADMIN_ROUTES.VOICE);
+    add("UNLABELED", ADMIN_ROUTES.CODE_INTERPRETER);
+    add("UNLABELED", ADMIN_ROUTES.CHAT_PREFERENCES);
 
     if (vectorDbEnabled && kgExposed) {
-      add(SECTIONS.UNLABELED, ADMIN_ROUTES.KNOWLEDGE_GRAPH);
+      add("UNLABELED", ADMIN_ROUTES.KNOWLEDGE_GRAPH);
     }
 
     if (!enableCloud && customAnalyticsEnabled) {
       addDisabled(
-        SECTIONS.UNLABELED,
+        "UNLABELED",
         ADMIN_ROUTES.CUSTOM_ANALYTICS,
         !enableEnterprise
       );
@@ -101,96 +138,72 @@ function buildItems(
   }
 
   // 2. Agents & Actions
-  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.AGENTS);
-  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.MCP_ACTIONS);
-  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
+  add("AGENTS_AND_ACTIONS", ADMIN_ROUTES.AGENTS);
+  add("AGENTS_AND_ACTIONS", ADMIN_ROUTES.MCP_ACTIONS);
+  add("AGENTS_AND_ACTIONS", ADMIN_ROUTES.OPENAPI_ACTIONS);
 
   // 3. Documents & Knowledge
   if (vectorDbEnabled) {
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
+    add("DOCUMENTS_AND_KNOWLEDGE", ADMIN_ROUTES.INDEXING_STATUS);
+    add("DOCUMENTS_AND_KNOWLEDGE", ADMIN_ROUTES.ADD_CONNECTOR);
+    add("DOCUMENTS_AND_KNOWLEDGE", ADMIN_ROUTES.DOCUMENT_SETS);
     if (!isCurator && !enableCloud) {
       items.push({
         ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
-        section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
+        sectionKey: "DOCUMENTS_AND_KNOWLEDGE",
         error: settings?.settings.needs_reindexing,
       });
     }
     if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
-      add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEX_MIGRATION);
+      add("DOCUMENTS_AND_KNOWLEDGE", ADMIN_ROUTES.INDEX_MIGRATION);
     }
   }
 
   // 4. Integrations (admin only)
   if (!isCurator) {
-    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS);
-    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.SLACK_BOTS);
-    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.DISCORD_BOTS);
+    add("INTEGRATIONS", ADMIN_ROUTES.API_KEYS);
+    add("INTEGRATIONS", ADMIN_ROUTES.SLACK_BOTS);
+    add("INTEGRATIONS", ADMIN_ROUTES.DISCORD_BOTS);
     if (hooksEnabled) {
-      add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.HOOKS);
+      add("INTEGRATIONS", ADMIN_ROUTES.HOOKS);
     }
   }
 
   // 5. Permissions
   if (!isCurator) {
-    add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.USERS);
-    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, !enableEnterprise);
-    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, !enableEnterprise);
+    add("PERMISSIONS", ADMIN_ROUTES.USERS);
+    addDisabled("PERMISSIONS", ADMIN_ROUTES.GROUPS, !enableEnterprise);
+    addDisabled("PERMISSIONS", ADMIN_ROUTES.SCIM, !enableEnterprise);
   } else if (enableEnterprise) {
-    add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
+    add("PERMISSIONS", ADMIN_ROUTES.GROUPS);
   }
 
   // 6. Organization (admin only)
   if (!isCurator) {
     if (hasSubscription) {
-      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
+      add("ORGANIZATION", ADMIN_ROUTES.BILLING);
     }
     addDisabled(
-      SECTIONS.ORGANIZATION,
+      "ORGANIZATION",
       ADMIN_ROUTES.TOKEN_RATE_LIMITS,
       !enableEnterprise
     );
-    addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
+    addDisabled("ORGANIZATION", ADMIN_ROUTES.THEME, !enableEnterprise);
   }
 
   // 7. Usage (admin only)
   if (!isCurator) {
-    addDisabled(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, !enableEnterprise);
+    addDisabled("USAGE", ADMIN_ROUTES.USAGE, !enableEnterprise);
     if (settings?.settings.query_history_type !== "disabled") {
       addDisabled(
-        SECTIONS.USAGE,
+        "USAGE",
         ADMIN_ROUTES.QUERY_HISTORY,
         !enableEnterprise
       );
     }
   }
 
-  // 8. Upgrade Plan (admin only, no subscription)
-  if (!isCurator && !hasSubscription) {
-    items.push({
-      section: SECTIONS.UNLABELED,
-      name: "Upgrade Plan",
-      icon: SvgArrowUpCircle,
-      link: ADMIN_ROUTES.BILLING.path,
-    });
-  }
-
   return items;
-}
-
-/** Preserve section ordering while grouping consecutive items by section. */
-function groupBySection(items: SidebarItemEntry[]) {
-  const groups: { section: string; items: SidebarItemEntry[] }[] = [];
-  for (const item of items) {
-    const last = groups[groups.length - 1];
-    if (last && last.section === item.section) {
-      last.items.push(item);
-    } else {
-      groups.push({ section: item.section, items: [item] });
-    }
-  }
-  return groups;
 }
 
 interface AdminSidebarProps {
@@ -211,6 +224,9 @@ function AdminSidebarInner({
   const folded = useSidebarFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
+  const t = useTranslations("admin.sidebar");
+  const ts = useTranslations("admin.sidebar.sections");
+  const tr = useTranslations("admin.routes");
 
   useEffect(() => {
     if (focusSearch && !folded && searchRef.current) {
@@ -240,7 +256,7 @@ function AdminSidebarInner({
   const hooksEnabled =
     enableEnterprise && (settings?.settings.hooks_enabled ?? false);
 
-  const allItems = buildItems(
+  const baseItems = buildItems(
     isCurator,
     enableCloudSS,
     enableEnterprise,
@@ -251,14 +267,61 @@ function AdminSidebarInner({
     hooksEnabled
   );
 
+  // Translate sidebar item names using admin.routes namespace
+  const translatedBaseItems = baseItems.map((item) => {
+    const translationKey = ROUTE_LABEL_KEY_MAP[item.link];
+    if (translationKey) {
+      return { ...item, name: tr(translationKey) };
+    }
+    return item;
+  });
+
+  // Add Upgrade Plan item with translated name
+  const allItems: SidebarItemEntry[] = isCurator || hasSubscriptionOrLicense
+    ? translatedBaseItems
+    : [
+        ...translatedBaseItems,
+        {
+          sectionKey: "UNLABELED",
+          name: t("upgradePlan"),
+          icon: SvgArrowUpCircle,
+          link: ADMIN_ROUTES.BILLING.path,
+        },
+      ];
+
+  // Map sectionKey to translated section label
+  const getSectionLabel = (key: string) => {
+    const translationKey = SECTION_KEY_MAP[key];
+    return translationKey ? ts(translationKey) : "";
+  };
+
   const itemExtractor = useCallback((item: SidebarItemEntry) => item.name, []);
 
   const { query, setQuery, filtered } = useFilter(allItems, itemExtractor);
 
   const enabled = filtered.filter((item) => !item.disabled);
-  const disabled = filtered.filter((item) => item.disabled);
-  const enabledGroups = groupBySection(enabled);
-  const disabledGroups = groupBySection(disabled);
+  const disabledItems = filtered.filter((item) => item.disabled);
+
+  // Group by sectionKey but render translated labels
+  const groupItemsBySection = (items: SidebarItemEntry[]) => {
+    const groups: { sectionKey: string; sectionLabel: string; items: SidebarItemEntry[] }[] = [];
+    for (const item of items) {
+      const last = groups[groups.length - 1];
+      if (last && last.sectionKey === item.sectionKey) {
+        last.items.push(item);
+      } else {
+        groups.push({
+          sectionKey: item.sectionKey,
+          sectionLabel: getSectionLabel(item.sectionKey),
+          items: [item],
+        });
+      }
+    }
+    return groups;
+  };
+
+  const enabledGroups = groupItemsBySection(enabled);
+  const disabledGroups = groupItemsBySection(disabledItems);
 
   return (
     <>
@@ -272,14 +335,14 @@ function AdminSidebarInner({
               setFocusSearch(true);
             }}
           >
-            Search
+            {t("search")}
           </SidebarTab>
         ) : (
           <InputTypeIn
             ref={searchRef}
             variant="internal"
             leftSearchIcon
-            placeholder="Search..."
+            placeholder={t("search")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -299,12 +362,12 @@ function AdminSidebarInner({
             </SidebarTab>
           ));
 
-          if (!group.section) {
+          if (!group.sectionLabel) {
             return <div key={groupIndex}>{tabs}</div>;
           }
 
           return (
-            <SidebarSection key={groupIndex} title={group.section}>
+            <SidebarSection key={groupIndex} title={group.sectionLabel}>
               {tabs}
             </SidebarSection>
           );
@@ -315,7 +378,7 @@ function AdminSidebarInner({
         {disabledGroups.map((group, groupIndex) => (
           <SidebarSection
             key={`disabled-${groupIndex}`}
-            title={group.section}
+            title={group.sectionLabel}
             disabled
           >
             {group.items.map(({ link, icon, name }) => (
@@ -340,7 +403,7 @@ function AdminSidebarInner({
           variant="sidebar-light"
           folded={folded}
         >
-          Exit Admin Panel
+          {t("exitAdminPanel")}
         </SidebarTab>
         <AccountPopover folded={folded} />
       </SidebarLayouts.Footer>

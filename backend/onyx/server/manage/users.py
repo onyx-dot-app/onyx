@@ -65,6 +65,7 @@ from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
 from onyx.db.user_preferences import update_user_default_app_mode
+from onyx.db.user_preferences import update_user_language_preference
 from onyx.db.user_preferences import update_user_default_model
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
@@ -90,6 +91,7 @@ from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import BulkInviteResponse
 from onyx.server.manage.models import ChatBackgroundRequest
 from onyx.server.manage.models import DefaultAppModeRequest
+from onyx.server.manage.models import LanguagePreferenceRequest
 from onyx.server.manage.models import EmailInviteStatus
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
@@ -914,6 +916,15 @@ def update_user_chat_background_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_chat_background(user.id, request.chat_background, db_session)
+
+
+@router.patch("/user/language-preference")
+def update_user_language_preference_api(
+    request: LanguagePreferenceRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_language_preference(user.id, request.language_preference, db_session)
 
 
 @router.patch("/user/default-app-mode")

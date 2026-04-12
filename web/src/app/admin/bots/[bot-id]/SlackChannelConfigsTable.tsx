@@ -20,6 +20,7 @@ import { Card } from "@/components/ui/card";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button } from "@opal/components";
 import { SvgSettings, SvgTrash } from "@opal/icons";
+import { useTranslations } from "next-intl";
 const numToDisplay = 50;
 
 export interface SlackChannelConfigsTableProps {
@@ -34,6 +35,7 @@ export default function SlackChannelConfigsTable({
   refresh,
 }: SlackChannelConfigsTableProps) {
   const [page, setPage] = useState(1);
+  const t = useTranslations("admin.slackBots");
 
   const defaultConfig = slackChannelConfigs.find((config) => config.is_default);
   const channelConfigs = slackChannelConfigs.filter(
@@ -50,23 +52,23 @@ export default function SlackChannelConfigsTable({
           }}
           icon={SvgSettings}
         >
-          Edit Default Configuration
+          {t("editDefaultConfig")}
         </Button>
         <CreateButton href={`/admin/bots/${slackBotId}/channels/new`} secondary>
-          New Channel Configuration
+          {t("newChannelConfig")}
         </CreateButton>
       </div>
 
       <div>
-        <h2 className="text-2xl font- mb-4">Channel-Specific Configurations</h2>
+        <h2 className="text-2xl font- mb-4">{t("channelSpecificConfigs")}</h2>
         <Card>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Channel</TableHead>
-                <TableHead>Assistant</TableHead>
-                <TableHead>Document Sets</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>{t("channel")}</TableHead>
+                <TableHead>{t("assistant")}</TableHead>
+                <TableHead>{t("documentSets")}</TableHead>
+                <TableHead>{t("actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -128,12 +130,12 @@ export default function SlackChannelConfigsTable({
                             );
                             if (response.ok) {
                               toast.success(
-                                `Slack bot config "${slackChannelConfig.id}" deleted`
+                                t("configDeleted", { id: slackChannelConfig.id })
                               );
                             } else {
                               const errorMsg = await response.text();
                               toast.error(
-                                `Failed to delete Slack bot config - ${errorMsg}`
+                                `${t("failedToDeleteConfig")} - ${errorMsg}`
                               );
                             }
                             refresh();
@@ -153,8 +155,7 @@ export default function SlackChannelConfigsTable({
                     colSpan={4}
                     className="text-center text-muted-foreground"
                   >
-                    No channel-specific configurations. Add a new configuration
-                    to customize behavior for specific channels.
+                    {t("noChannelConfigs")}
                   </TableCell>
                 </TableRow>
               )}

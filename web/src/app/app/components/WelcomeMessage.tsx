@@ -3,7 +3,7 @@
 import Logo from "@/refresh-components/Logo";
 import {
   getRandomGreeting,
-  GREETING_MESSAGES,
+  getGreetingMessages,
 } from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
@@ -12,6 +12,7 @@ import { useState, useEffect } from "react";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import { Section } from "@/layouts/general-layouts";
+import { useTranslations } from "next-intl";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
@@ -24,17 +25,18 @@ export default function WelcomeMessage({
 }: WelcomeMessageProps) {
   const settings = useSettingsContext();
   const enterpriseSettings = settings?.enterpriseSettings;
+  const t = useTranslations("chat");
 
   // Use a stable default for SSR, then randomize on client after hydration
-  const [greeting, setGreeting] = useState(GREETING_MESSAGES[0]);
+  const [greeting, setGreeting] = useState(getGreetingMessages(t)[0]);
 
   useEffect(() => {
     if (enterpriseSettings?.custom_greeting_message) {
       setGreeting(enterpriseSettings.custom_greeting_message);
     } else {
-      setGreeting(getRandomGreeting());
+      setGreeting(getRandomGreeting(t));
     }
-  }, [enterpriseSettings?.custom_greeting_message]);
+  }, [enterpriseSettings?.custom_greeting_message, t]);
 
   let content: React.ReactNode = null;
 

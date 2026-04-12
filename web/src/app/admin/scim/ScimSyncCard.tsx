@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { SvgCheckCircle, SvgClock, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -34,11 +35,13 @@ export default function ScimSyncCard({
   onGenerate,
   onRegenerate,
 }: ScimSyncCardProps) {
+  const t = useTranslations("admin.scim");
+
   return (
     <Card gap={0.75}>
       <ContentAction
-        title="SCIM Sync"
-        description="Connect your identity provider to import and sync users and groups."
+        title={t("syncTitle")}
+        description={t("syncDescription")}
         sizePreset="main-ui"
         variant="section"
         paddingVariant="fit"
@@ -50,7 +53,7 @@ export default function ScimSyncCard({
               onClick={onRegenerate}
               icon={SvgRefreshCw}
             >
-              Regenerate Token
+              {t("regenerateToken")}
             </Button>
           ) : (
             <Button
@@ -58,7 +61,7 @@ export default function ScimSyncCard({
               rightIcon={SvgKey}
               onClick={onGenerate}
             >
-              Generate SCIM Token
+              {t("generateToken")}
             </Button>
           )
         }
@@ -81,7 +84,7 @@ export default function ScimSyncCard({
                 <SvgClock size={15} className="text-theme-amber-05" />
               )}
               <Text as="p" mainUiBody text04>
-                {isConnected ? "Connected" : "Waiting for Connection"}
+                {isConnected ? t("connected") : t("waitingForConnection")}
               </Text>
             </Section>
 
@@ -104,8 +107,7 @@ export default function ScimSyncCard({
                   text03
                   className="max-w-[240px] text-right"
                 >
-                  Provide the SCIM key to your identity provider to begin
-                  syncing users and groups.
+                  {t("provideKeyHint")}
                 </Text>
               )}
             </Section>

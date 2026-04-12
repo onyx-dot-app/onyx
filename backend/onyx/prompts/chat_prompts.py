@@ -29,6 +29,16 @@ You can use Markdown tables to format your responses for data, lists, and other 
 """.lstrip()
 
 
+LANGUAGE_DIRECTIVES: dict[str, str] = {
+    "zh": (
+        "\n\n# Language\n"
+        "Please respond in Simplified Chinese (简体中文). "
+        "Use Chinese for all responses, explanations, and formatting "
+        "unless the user explicitly writes in another language."
+    ),
+}
+
+
 COMPANY_NAME_BLOCK = """
 The user is at an organization called `{company_name}`.
 """

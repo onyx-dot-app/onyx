@@ -18,6 +18,11 @@ export enum ThemePreference {
   SYSTEM = "system",
 }
 
+export enum LanguagePreference {
+  EN = "en",
+  ZH = "zh",
+}
+
 interface UserPreferences {
   // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
   chosen_assistants: number[] | null;
@@ -31,6 +36,7 @@ interface UserPreferences {
   temperature_override_enabled: boolean;
   theme_preference: ThemePreference | null;
   chat_background: string | null;
+  language_preference: LanguagePreference | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
   // Voice preferences
   voice_auto_send?: boolean;

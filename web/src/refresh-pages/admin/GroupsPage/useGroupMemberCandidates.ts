@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -56,17 +57,18 @@ function snapshotToMemberRow(snapshot: FullUserSnapshot): MemberRow {
 
 function serviceAccountToMemberRow(
   snapshot: FullUserSnapshot,
-  apiKey: ApiKeyDescriptor | undefined
+  apiKey: ApiKeyDescriptor | undefined,
+  t: (key: string) => string
 ): MemberRow {
   return {
     id: snapshot.id,
-    email: "Service Account",
+    email: t("serviceAccount"),
     role: apiKey?.api_key_role ?? snapshot.role,
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,
     personal_name:
-      apiKey?.api_key_name ?? snapshot.personal_name ?? "Unnamed Key",
+      apiKey?.api_key_name ?? snapshot.personal_name ?? t("unnamedKey"),
     created_at: null,
     updated_at: null,
     groups: [],
@@ -98,6 +100,7 @@ interface UseGroupMemberCandidatesResult {
  */
 export default function useGroupMemberCandidates(): UseGroupMemberCandidatesResult {
   const { isAdmin } = useUser();
+  const t = useTranslations("admin.groups");
 
   const {
     data: usersData,
@@ -126,7 +129,7 @@ export default function useGroupMemberCandidates(): UseGroupMemberCandidatesResu
       if (!snapshot.is_active) continue;
       if (snapshot.account_type === AccountType.SERVICE_ACCOUNT) {
         serviceAccountRows.push(
-          serviceAccountToMemberRow(snapshot, apiKeysByUserId.get(snapshot.id))
+          serviceAccountToMemberRow(snapshot, apiKeysByUserId.get(snapshot.id), t)
         );
       } else {
         userRowsLocal.push(snapshotToMemberRow(snapshot));
@@ -136,7 +139,7 @@ export default function useGroupMemberCandidates(): UseGroupMemberCandidatesResu
       rows: [...userRowsLocal, ...serviceAccountRows],
       userRows: userRowsLocal,
     };
-  }, [usersData, apiKeysByUserId]);
+  }, [usersData, apiKeysByUserId, t]);
 
   return {
     rows,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/interfaces/settings";
 import useSWR, { preload } from "swr";
@@ -35,6 +36,7 @@ function SettingsPopover({
   onUserSettingsClick,
   onOpenNotifications,
 }: SettingsPopoverProps) {
+  const t = useTranslations("sidebar");
   const { user } = useUser();
   const { data: notifications } = useSWR<Notification[]>(
     SWR_KEYS.notifications,
@@ -63,7 +65,7 @@ function SettingsPopover({
     logout()
       .then((response) => {
         if (!response?.ok) {
-          alert("Failed to logout");
+          alert(t("toast.logoutFailed"));
           return;
         }
 
@@ -79,7 +81,7 @@ function SettingsPopover({
       })
 
       .catch(() => {
-        toast.error("Failed to logout");
+        toast.error(t("toast.logoutFailed"));
       });
   };
 
@@ -93,7 +95,7 @@ function SettingsPopover({
               href="/app/settings"
               onClick={onUserSettingsClick}
             >
-              User Settings
+              {t("userSettings")}
             </LineItem>
           </div>,
           <LineItem
@@ -101,7 +103,7 @@ function SettingsPopover({
             icon={SvgBell}
             onClick={onOpenNotifications}
           >
-            {`Notifications${
+            {`${t("notifications")}${
               undismissedCount > 0 ? ` (${undismissedCount})` : ""
             }`}
           </LineItem>,
@@ -112,12 +114,12 @@ function SettingsPopover({
             target="_blank"
             rel="noopener noreferrer"
           >
-            Help & FAQ
+            {t("helpFaq")}
           </LineItem>,
           null,
           showLogin && (
             <LineItem key="log-in" icon={SvgUser} onClick={handleLogin}>
-              Log in
+              {t("logIn")}
             </LineItem>
           ),
           showLogout && (
@@ -127,7 +129,7 @@ function SettingsPopover({
               danger
               onClick={handleLogout}
             >
-              Log out
+              {t("logOut")}
             </LineItem>
           ),
         ]}

@@ -18,6 +18,7 @@ import { HoverPopup } from "@/components/HoverPopup";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { ScoreSection } from "../ScoreEditor";
 import { truncateString } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 const IsVisibleSection = ({
   document,
@@ -26,6 +27,7 @@ const IsVisibleSection = ({
   document: DocumentBoostStatus;
   onUpdate: (response: Response) => void;
 }) => {
+  const t = useTranslations("admin.documents");
   return (
     <HoverPopup
       mainContent={
@@ -40,7 +42,7 @@ const IsVisibleSection = ({
             }}
             className="flex text-error cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="select-none">Hidden</div>
+            <div className="select-none">{t("hidden")}</div>
             <div className="ml-1 my-auto">
               <Checkbox checked={false} />
             </div>
@@ -56,7 +58,7 @@ const IsVisibleSection = ({
             }}
             className="flex cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="my-auto select-none">Visible</div>
+            <div className="my-auto select-none">{t("visible")}</div>
             <div className="ml-1 my-auto">
               <Checkbox checked={true} />
             </div>
@@ -67,12 +69,12 @@ const IsVisibleSection = ({
         <div className="text-xs">
           {document.hidden ? (
             <div className="flex">
-              <FiEye className="my-auto mr-1" /> Unhide
+              <FiEye className="my-auto mr-1" /> {t("unhide")}
             </div>
           ) : (
             <div className="flex">
               <FiEyeOff className="my-auto mr-1" />
-              Hide
+              {t("hide")}
             </div>
           )}
         </div>
@@ -90,15 +92,16 @@ export const DocumentFeedbackTable = ({
   refresh: () => void;
 }) => {
   const [page, setPage] = useState(1);
+  const t = useTranslations("admin.documents");
 
   return (
     <div>
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>Document Name</TableHead>
-            <TableHead>Is Searchable?</TableHead>
-            <TableHead>Score</TableHead>
+            <TableHead>{t("documentName")}</TableHead>
+            <TableHead>{t("isSearchable")}</TableHead>
+            <TableHead>{t("score")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -125,9 +128,9 @@ export const DocumentFeedbackTable = ({
                           refresh();
                         } else {
                           toast.error(
-                            `Error updating hidden status - ${getErrorMsg(
-                              response
-                            )}`
+                            t("errorUpdatingHiddenStatus", {
+                              error: await getErrorMsg(response),
+                            })
                           );
                         }
                       }}

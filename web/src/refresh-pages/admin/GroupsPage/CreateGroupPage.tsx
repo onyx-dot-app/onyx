@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Table, Button } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgUsers } from "@opal/icons";
@@ -20,13 +21,14 @@ import {
   updateDocSetGroupSharing,
   saveTokenLimits,
 } from "./svc";
-import { memberTableColumns, PAGE_SIZE } from "./shared";
+import { useMemberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
 
 function CreateGroupPage() {
   const router = useRouter();
+  const t = useTranslations("admin.groups");
   const [groupName, setGroupName] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -38,12 +40,14 @@ function CreateGroupPage() {
     { tokenBudget: null, periodHours: null },
   ]);
 
+  const memberTableColumns = useMemberTableColumns();
+
   const { rows: allRows, isLoading, error } = useGroupMemberCandidates();
 
   async function handleCreate() {
     const trimmed = groupName.trim();
     if (!trimmed) {
-      toast.error("Group name is required");
+      toast.error(t("groupNameRequired"));
       return;
     }
 
@@ -57,10 +61,10 @@ function CreateGroupPage() {
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
       await saveTokenLimits(groupId, tokenLimits, []);
-      toast.success(`Group "${trimmed}" created`);
+      toast.success(t("groupCreated", { name: trimmed }));
       router.push("/admin/groups");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to create group");
+      toast.error(e instanceof Error ? e.message : t("failedToCreateGroup"));
     } finally {
       setIsSubmitting(false);
     }
@@ -72,13 +76,13 @@ function CreateGroupPage() {
         prominence="secondary"
         onClick={() => router.push("/admin/groups")}
       >
-        Cancel
+        {t("cancel")}
       </Button>
       <Button
         onClick={handleCreate}
         disabled={!groupName.trim() || isSubmitting}
       >
-        Create
+        {t("create")}
       </Button>
     </Section>
   );
@@ -87,7 +91,7 @@ function CreateGroupPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUsers}
-        title="Create Group"
+        title={t("createGroup")}
         separator
         rightChildren={headerActions}
       />
@@ -101,10 +105,10 @@ function CreateGroupPage() {
           justifyContent="start"
         >
           <Text mainUiBody text04>
-            Group Name
+            {t("groupName")}
           </Text>
           <InputTypeIn
-            placeholder="Name your group"
+            placeholder={t("nameYourGroup")}
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
           />
@@ -117,7 +121,7 @@ function CreateGroupPage() {
 
         {error ? (
           <Text as="p" secondaryBody text03>
-            Failed to load users.
+            {t("failedToLoadUsers")}
           </Text>
         ) : null}
 
@@ -131,7 +135,7 @@ function CreateGroupPage() {
             <InputTypeIn
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search users and accounts..."
+              placeholder={t("searchUsersAndAccounts")}
               leftSearchIcon
             />
             <Table
@@ -146,8 +150,8 @@ function CreateGroupPage() {
               emptyState={
                 <IllustrationContent
                   illustration={SvgNoResult}
-                  title="No users found"
-                  description="No users match your search."
+                  title={t("noUsersFound")}
+                  description={t("noUsersMatchSearch")}
                 />
               }
             />

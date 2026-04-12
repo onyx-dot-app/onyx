@@ -18,6 +18,7 @@
 
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { AuthType } from "@/lib/constants";
 import { FcGoogle } from "react-icons/fc";
@@ -32,16 +33,17 @@ export default function SignInButton({
   authorizeUrl,
   authType,
 }: SignInButtonProps) {
+  const t = useTranslations("auth");
   let button: string | undefined;
   let icon: React.FunctionComponent<IconProps> | undefined;
 
   if (authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD) {
-    button = "Continue with Google";
+    button = t("continueWithGoogle");
     icon = FcGoogle;
   } else if (authType === AuthType.OIDC) {
-    button = "Continue with OIDC SSO";
+    button = t("continueWithOIDC");
   } else if (authType === AuthType.SAML) {
-    button = "Continue with SAML SSO";
+    button = t("continueWithSAML");
   }
 
   if (!button) {

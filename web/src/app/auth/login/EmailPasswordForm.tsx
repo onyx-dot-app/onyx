@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { toast } from "@/hooks/useToast";
 import { basicLogin, basicSignup } from "@/lib/user";
 import { Button } from "@opal/components";
@@ -38,6 +39,7 @@ export default function EmailPasswordForm({
   isJoin = false,
 }: EmailPasswordFormProps) {
   const { user, authTypeMetadata } = useUser();
+  const t = useTranslations("auth");
   const passwordMinLength = authTypeMetadata?.passwordMinLength ?? 8;
   const [isWorking, setIsWorking] = useState<boolean>(false);
   const [apiStatus, setApiStatus] = useState<APIFormFieldState>("loading");
@@ -49,15 +51,15 @@ export default function EmailPasswordForm({
     () => ({
       loading: isSignup
         ? isJoin
-          ? "Joining..."
-          : "Creating account..."
-        : "Signing in...",
+          ? t("joining")
+          : t("creatingAccount")
+        : t("signingIn"),
       success: isSignup
-        ? "Account created. Signing in..."
-        : "Signed in successfully.",
+        ? t("accountCreatedSigningIn")
+        : t("signedIn"),
       error: errorMessage,
     }),
-    [isSignup, isJoin, errorMessage]
+    [isSignup, isJoin, errorMessage, t]
   );
 
   return (
@@ -79,7 +81,7 @@ export default function EmailPasswordForm({
           password: Yup.string()
             .min(
               passwordMinLength,
-              `Password must be at least ${passwordMinLength} characters`
+              t("passwordMinLength", { minLength: passwordMinLength })
             )
             .required(),
         })}
@@ -109,24 +111,24 @@ export default function EmailPasswordForm({
 
               const errorBody: any = await response.json();
               const errorDetail = errorBody.detail;
-              let errorMsg: string = "Unknown error";
+              let errorMsg: string = t("error.unknown");
               if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
                 errorMsg =
-                  "An account already exists with the specified email.";
+                  t("error.accountExists");
               } else if (typeof errorDetail === "string" && errorDetail) {
                 errorMsg = errorDetail;
               }
               if (response.status === 429) {
-                errorMsg = "Too many requests. Please try again later.";
+                errorMsg = t("error.tooManyRequests");
               }
               setErrorMessage(errorMsg);
               setApiStatus("error");
-              toast.error(`Failed to sign up - ${errorMsg}`);
+              toast.error(`${t("toast.signUpFailed")} - ${errorMsg}`);
               setIsWorking(false);
               return;
             } else {
               setApiStatus("success");
-              toast.success("Account created successfully. Please log in.");
+              toast.success(t("accountCreatedSuccess"));
             }
           }
 
@@ -152,20 +154,20 @@ export default function EmailPasswordForm({
           } else {
             setIsWorking(false);
             const errorDetail: any = (await loginResponse.json()).detail;
-            let errorMsg: string = "Unknown error";
+            let errorMsg: string = t("error.unknown");
             if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
-              errorMsg = "Invalid email or password";
+              errorMsg = t("error.invalidCredentials");
             } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
-              errorMsg = "Create an account to set a password";
+              errorMsg = t("error.noPassword");
             } else if (typeof errorDetail === "string") {
               errorMsg = errorDetail;
             }
             if (loginResponse.status === 429) {
-              errorMsg = "Too many requests. Please try again later.";
+              errorMsg = t("error.tooManyRequests");
             }
             setErrorMessage(errorMsg);
             setApiStatus("error");
-            toast.error(`Failed to login - ${errorMsg}`);
+            toast.error(`${t("toast.loginFailed")} - ${errorMsg}`);
           }
         }}
       >
@@ -176,7 +178,7 @@ export default function EmailPasswordForm({
                 name="email"
                 render={(field, helper, meta, state) => (
                   <FormField name="email" state={state} className="w-full">
-                    <FormField.Label>Email Address</FormField.Label>
+                    <FormField.Label>{t("emailAddress")}</FormField.Label>
                     <FormField.Control>
                       <InputTypeIn
                         {...field}
@@ -188,7 +190,7 @@ export default function EmailPasswordForm({
                           }
                           field.onChange(e);
                         }}
-                        placeholder="email@yourcompany.com"
+                        placeholder={t("emailPlaceholder")}
                         onClear={() => helper.setValue("")}
                         data-testid="email"
                         variant={apiStatus === "error" ? "error" : undefined}
@@ -203,7 +205,7 @@ export default function EmailPasswordForm({
                 name="password"
                 render={(field, helper, meta, state) => (
                   <FormField name="password" state={state} className="w-full">
-                    <FormField.Label>Password</FormField.Label>
+                    <FormField.Label>{t("password")}</FormField.Label>
                     <FormField.Control>
                       <PasswordInputTypeIn
                         {...field}
@@ -215,7 +217,7 @@ export default function EmailPasswordForm({
                           }
                           field.onChange(e);
                         }}
-                        placeholder="∗∗∗∗∗∗∗∗∗∗∗∗∗∗"
+                        placeholder={t("passwordPlaceholder")}
                         onClear={() => helper.setValue("")}
                         data-testid="password"
                         error={apiStatus === "error"}
@@ -225,9 +227,9 @@ export default function EmailPasswordForm({
                     {isSignup && !showApiMessage && (
                       <FormField.Message
                         messages={{
-                          idle: `Password must be at least ${passwordMinLength} characters`,
+                          idle: t("passwordMinLength", { minLength: passwordMinLength }),
                           error: meta.error,
-                          success: `Password must be at least ${passwordMinLength} characters`,
+                          success: t("passwordMinLength", { minLength: passwordMinLength }),
                         }}
                       />
                     )}
@@ -248,7 +250,7 @@ export default function EmailPasswordForm({
                 width="full"
                 rightIcon={SvgArrowRightCircle}
               >
-                {isJoin ? "Join" : isSignup ? "Create Account" : "Sign In"}
+                {isJoin ? t("join") : isSignup ? t("createAccount") : t("signIn")}
               </Button>
               {user?.is_anonymous_user && (
                 <Link
@@ -256,7 +258,7 @@ export default function EmailPasswordForm({
                   className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
                 >
                   <span className="hover:border-b hover:border-dotted hover:border-action-link-05">
-                    or continue as guest
+                    {t("or")} {t("continueAsGuest")}
                   </span>
                 </Link>
               )}

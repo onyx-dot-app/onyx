@@ -9,6 +9,7 @@ import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgSlack } from "@opal/logos";
 import { getErrorMsg } from "@/lib/error";
+import { useTranslations } from "next-intl";
 
 function SlackBotEditContent({ botId }: { botId: string }) {
   const {
@@ -75,12 +76,13 @@ export default function Page({
   params: Promise<{ "bot-id": string }>;
 }) {
   const unwrappedParams = use(params);
+  const t = useTranslations("admin.slackBots");
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgSlack}
-        title="Edit Slack Bot"
+        title={t("editSlackBot")}
         backButton
         separator
       />

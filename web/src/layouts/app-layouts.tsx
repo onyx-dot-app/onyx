@@ -71,6 +71,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import { APP_SLOGAN } from "@/lib/constants";
+import { useTranslations } from "next-intl";
 
 /**
  * App Header Component
@@ -462,12 +463,13 @@ const footerMarkdownComponents = {
 function Footer() {
   const settings = useSettingsContext();
   const appFocus = useAppFocus();
+  const t = useTranslations("chat");
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
     `[Onyx ${
       settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - ${APP_SLOGAN}`;
+    }](https://www.onyx.app/) - ${t("footerText")}`;
 
   return (
     <footer

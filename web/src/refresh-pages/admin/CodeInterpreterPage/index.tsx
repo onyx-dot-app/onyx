@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import {
   SvgArrowExchange,
@@ -29,6 +30,7 @@ const route = ADMIN_ROUTES.CODE_INTERPRETER;
 // ---------------------------------------------------------------------------
 
 function CheckingStatus() {
+  const t = useTranslations("admin.codeInterpreter");
   return (
     <Section
       flexDirection="row"
@@ -38,7 +40,7 @@ function CheckingStatus() {
       padding={0.5}
     >
       <Text mainUiAction text03>
-        Checking...
+        {t("checking")}
       </Text>
       <SimpleLoader />
     </Section>
@@ -51,11 +53,13 @@ interface ConnectionStatusProps {
 }
 
 function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
+  const t = useTranslations("admin.codeInterpreter");
+
   if (isLoading) {
     return <CheckingStatus />;
   }
 
-  const label = healthy ? "Connected" : "Connection Lost";
+  const label = healthy ? t("connected") : t("connectionLost");
   const Icon = healthy ? SvgCheckCircle : SvgXOctagon;
   const iconColor = healthy ? "text-status-success-05" : "text-status-error-05";
 
@@ -80,17 +84,18 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
 // ---------------------------------------------------------------------------
 
 export default function CodeInterpreterPage() {
+  const t = useTranslations("admin.codeInterpreter");
   const { isHealthy, isEnabled, isLoading, refetch } = useCodeInterpreter();
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
 
   async function handleToggle(enabled: boolean) {
-    const action = enabled ? "reconnect" : "disconnect";
+    const action = enabled ? t("reconnect") : t("disconnect").toLowerCase();
     setIsReconnecting(enabled);
     try {
       const response = await updateCodeInterpreter({ enabled });
       if (!response.ok) {
-        toast.error(`Failed to ${action} Code Interpreter`);
+        toast.error(t("failedToAction", { action }));
         return;
       }
       setShowDisconnectModal(false);
@@ -105,7 +110,7 @@ export default function CodeInterpreterPage() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description="Safe and sandboxed Python runtime available to your LLM. See docs for more details."
+        description={t("description")}
         separator
       />
 
@@ -117,8 +122,8 @@ export default function CodeInterpreterPage() {
                 sizePreset="main-ui"
                 variant="section"
                 icon={SvgTerminal}
-                title="Code Interpreter"
-                description="Built-in Python runtime"
+                title={t("codeInterpreter")}
+                description={t("builtInPythonRuntime")}
                 rightChildren={
                   <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
                 }
@@ -137,7 +142,7 @@ export default function CodeInterpreterPage() {
                           size="sm"
                           icon={SvgUnplug}
                           onClick={() => setShowDisconnectModal(true)}
-                          tooltip="Disconnect"
+                          tooltip={t("disconnect")}
                         />
                       </Hoverable.Item>
                     </Disabled>
@@ -147,7 +152,7 @@ export default function CodeInterpreterPage() {
                       size="sm"
                       icon={SvgRefreshCw}
                       onClick={refetch}
-                      tooltip="Refresh"
+                      tooltip={t("refresh")}
                     />
                   </Section>
                 }
@@ -165,8 +170,8 @@ export default function CodeInterpreterPage() {
               sizePreset="main-ui"
               variant="section"
               icon={SvgTerminal}
-              title="Code Interpreter (Disconnected)"
-              description="Built-in Python runtime"
+              title={t("codeInterpreterDisconnected")}
+              description={t("builtInPythonRuntime")}
               rightChildren={
                 <Section flexDirection="row" alignItems="center" padding={0.5}>
                   {isReconnecting ? (
@@ -180,7 +185,7 @@ export default function CodeInterpreterPage() {
                         handleToggle(true);
                       }}
                     >
-                      Reconnect
+                      {t("reconnect")}
                     </Button>
                   )}
                 </Section>
@@ -193,21 +198,16 @@ export default function CodeInterpreterPage() {
       {showDisconnectModal && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title="Disconnect Code Interpreter"
+          title={t("disconnectCodeInterpreter")}
           onClose={() => setShowDisconnectModal(false)}
           submit={
             <Button variant="danger" onClick={() => handleToggle(false)}>
-              Disconnect
+              {t("disconnect")}
             </Button>
           }
         >
           <Text as="p" text03>
-            All running sessions connected to{" "}
-            <Text as="span" mainContentEmphasis text03>
-              Code Interpreter
-            </Text>{" "}
-            will stop working. Note that this will not remove any data from your
-            runtime. You can reconnect to this runtime later if needed.
+            {t("disconnectConfirmMessage")}
           </Text>
         </ConfirmationModalLayout>
       )}

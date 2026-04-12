@@ -15,6 +15,7 @@ from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import DefaultAppMode
+from onyx.db.enums import LanguagePreference
 from onyx.db.enums import ThemePreference
 from onyx.db.memory import MAX_MEMORIES_PER_USER
 from onyx.db.models import AllowedAnswerFilters
@@ -83,6 +84,7 @@ class UserPreferences(BaseModel):
     temperature_override_enabled: bool | None = None
     theme_preference: ThemePreference | None = None
     chat_background: str | None = None
+    language_preference: LanguagePreference | None = None
     default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
 
     # Voice preferences
@@ -169,6 +171,7 @@ class UserInfo(BaseModel):
                     temperature_override_enabled=user.temperature_override_enabled,
                     theme_preference=user.theme_preference,
                     chat_background=user.chat_background,
+                    language_preference=user.language_preference,
                     default_app_mode=user.default_app_mode,
                     voice_auto_send=user.voice_auto_send,
                     voice_auto_playback=user.voice_auto_playback,
@@ -244,6 +247,10 @@ class DefaultAppModeRequest(BaseModel):
 
 class ChatBackgroundRequest(BaseModel):
     chat_background: str | None
+
+
+class LanguagePreferenceRequest(BaseModel):
+    language_preference: LanguagePreference
 
 
 class VoiceSettingsUpdateRequest(BaseModel):

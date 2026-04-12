@@ -62,6 +62,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -135,6 +136,8 @@ export default function AddConnector({
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [isAuthorizeVisible, setIsAuthorizeVisible] = useState(false);
+  const t = useTranslations("admin.connectors");
+  const tc = useTranslations("common");
   useEffect(() => {
     if (typeof window !== "undefined") {
       setCurrentPageUrl(window.location.href);
@@ -236,7 +239,7 @@ export default function AddConnector({
   const onDeleteCredential = async (credential: Credential<any | null>) => {
     const response = await deleteCredential(credential.id, true);
     if (response.ok) {
-      toast.success("Credential deleted successfully!");
+      toast.success(t("credentialDeleted"));
     } else {
       const errorData = await response.json();
       toast.error(errorData.detail || errorData.message);
@@ -246,7 +249,7 @@ export default function AddConnector({
   const onSwap = async (selectedCredential: Credential<any>) => {
     setCurrentCredential(selectedCredential);
     setAllowCreate(true);
-    toast.success("Swapped credential successfully!");
+    toast.success(t("swappedCredential"));
     refresh();
   };
 
@@ -270,7 +273,7 @@ export default function AddConnector({
         setOauthUrl(response.url);
         window.open(response.url, "_blank", "noopener,noreferrer");
       } else {
-        toast.error("Failed to fetch OAuth URL");
+        toast.error(t("failedToFetchOAuthURL"));
       }
     } catch (error: unknown) {
       // Narrow the type of error
@@ -374,7 +377,7 @@ export default function AddConnector({
               onSuccess();
             }
           } catch (error) {
-            toast.error("Error uploading files");
+            toast.error(t("errorUploadingFiles"));
           } finally {
             setUploading(false);
           }
@@ -466,9 +469,9 @@ export default function AddConnector({
           if (result.isTimeout) {
             timeoutErrorHappenedRef.current = true;
             toast.error(
-              `Operation timed out after ${
-                CONNECTOR_CREATION_TIMEOUT_MS / 1000
-              } seconds. Check your configuration for errors?`
+              t("operationTimedOut", {
+                seconds: CONNECTOR_CREATION_TIMEOUT_MS / 1000,
+              })
             );
 
             if (connectorIdRef.current) {
@@ -499,15 +502,13 @@ export default function AddConnector({
                     tooltip={
                       <div className="flex flex-col gap-2">
                         <Text as="p" textLight05>
-                          A federated search option is available for this
-                          connector. It will result in greater latency and
-                          reduced search quality.
+                          {t("federatedOptionTooltip")}
                         </Text>
                         <Link
                           href={`/admin/connectors/${connector}?mode=federated`}
                           className="text-action-link-04 hover:underline text-sm"
                         >
-                          Use federated version instead →
+                          {t("useFederatedVersion")}
                         </Link>
                       </div>
                     }
@@ -527,7 +528,7 @@ export default function AddConnector({
           {formStep == 0 && (
             <CardSection>
               <Text as="p" headingH3 className="pb-2">
-                Select a credential
+                {t("selectCredential")}
               </Text>
 
               {connector == ValidSources.Gmail ? (
@@ -574,7 +575,7 @@ export default function AddConnector({
                           }
                         }}
                       >
-                        Create New
+                        {t("createNew")}
                       </Button>
                       {/* Button to sign in via OAuth */}
                       {oauthSupportedSources.includes(connector) &&
@@ -586,10 +587,10 @@ export default function AddConnector({
                             hidden={!isAuthorizeVisible}
                           >
                             {isAuthorizing
-                              ? "Authorizing..."
-                              : `Authorize with ${getSourceDisplayName(
-                                  connector
-                                )}`}
+                              ? t("authorizing")
+                              : t("authorizeWith", {
+                                  provider: getSourceDisplayName(connector) ?? connector,
+                                })}
                           </Button>
                         )}
                     </div>
@@ -603,9 +604,9 @@ export default function AddConnector({
                       <Modal.Content>
                         <Modal.Header
                           icon={SvgKey}
-                          title={`Create a ${getSourceDisplayName(
-                            connector
-                          )} credential`}
+                          title={t("createCredentialTitle", {
+                            provider: getSourceDisplayName(connector) ?? connector,
+                          })}
                           onClose={() => setCreateCredentialFormToggle(false)}
                         />
                         <Modal.Body>

@@ -12,6 +12,7 @@ import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hook
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   const isPaidEnterprise = usePaidEnterpriseFeaturesEnabled();
@@ -88,6 +89,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
 export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
   const unwrappedParams = use(props.params);
   const router = useRouter();
+  const t = useTranslations("admin.slackBots");
 
   const slack_bot_id_raw = unwrappedParams?.["bot-id"] || null;
   const slack_bot_id = slack_bot_id_raw
@@ -108,7 +110,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgSlack}
-        title="Configure OnyxBot for Slack Channel"
+        title={t("configureOnyxBot")}
         separator
         backButton
       />

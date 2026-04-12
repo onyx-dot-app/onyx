@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { useTranslations } from "next-intl";
 import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -31,6 +32,7 @@ interface TokenLimitSectionProps {
 function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
   const nextKeyRef = useRef(limits.length);
   const keysRef = useRef<number[]>(limits.map((_, i) => i));
+  const t = useTranslations("admin.groups");
 
   // Sync keys if the parent provides a different number of limits externally
   // (e.g. loaded from server after initial mount).
@@ -70,8 +72,8 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
   return (
     <SimpleCollapsible>
       <SimpleCollapsible.Header
-        title="Token Rate Limit"
-        description="Limit number of tokens this group can use within a given time period."
+        title={t("tokenRateLimit")}
+        description={t("tokenRateLimitDescription")}
       />
       <SimpleCollapsible.Content>
         <Card>
@@ -86,18 +88,18 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
             <div className="flex flex-wrap items-center gap-1 pr-[40px]">
               <div className="flex-1 flex items-center min-w-[160px]">
                 <Text mainUiAction text04>
-                  Token Limit
+                  {t("tokenLimit")}
                 </Text>
                 <Text mainUiMuted text03 className="ml-0.5">
-                  (thousand tokens)
+                  {t("thousandTokens")}
                 </Text>
               </div>
               <div className="flex-1 flex items-center min-w-[160px]">
                 <Text mainUiAction text04>
-                  Time Window
+                  {t("timeWindow")}
                 </Text>
                 <Text mainUiMuted text03 className="ml-0.5">
-                  (hours)
+                  {t("hours")}
                 </Text>
               </div>
             </div>
@@ -110,7 +112,7 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
                     value={limit.tokenBudget}
                     onChange={(v) => updateLimit(i, "tokenBudget", v)}
                     min={0}
-                    placeholder="Token limit in thousands"
+                    placeholder={t("tokenLimitPlaceholder")}
                   />
                 </div>
                 <div className="flex-1">
@@ -136,7 +138,7 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
               size="md"
               onClick={addLimit}
             >
-              Add Limit
+              {t("addLimit")}
             </Button>
           </Section>
         </Card>

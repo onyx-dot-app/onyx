@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   AzureIcon,
   ElevenLabsIcon,
@@ -151,8 +152,19 @@ function getProviderLabel(providerType: string): string {
 const NO_DEFAULT_VALUE = "__none__";
 
 const route = ADMIN_ROUTES.VOICE;
-const pageDescription =
-  "Configure speech-to-text and text-to-speech providers for voice input and spoken responses.";
+
+const STT_SUBTITLE_KEYS: Record<string, string> = {
+  whisper: "whisperDescription",
+  "azure-speech-stt": "azureSpeechSttDescription",
+  "elevenlabs-stt": "elevenApiSttDescription",
+};
+
+const TTS_SUBTITLE_KEYS: Record<string, string> = {
+  "tts-1": "tts1Description",
+  "tts-1-hd": "tts1HdDescription",
+  "azure-speech-tts": "azureSpeechTtsDescription",
+  "elevenlabs-tts": "elevenApiTtsDescription",
+};
 
 interface VoiceDisconnectModalProps {
   disconnectTarget: {
@@ -175,6 +187,7 @@ function VoiceDisconnectModal({
   onClose,
   onDisconnect,
 }: VoiceDisconnectModalProps) {
+  const t = useTranslations("voice");
   const targetProvider = providers.find(
     (p) => p.id === disconnectTarget.providerId
   );
@@ -201,8 +214,8 @@ function VoiceDisconnectModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
-      title={markdown(`Disconnect *${disconnectTarget.providerLabel}*`)}
-      description="Voice models"
+      title={markdown(t("disconnectProvider", { name: disconnectTarget.providerLabel }))}
+      description={t("voiceModels")}
       onClose={onClose}
       submit={
         <Button
@@ -212,7 +225,7 @@ function VoiceDisconnectModal({
             needsReplacement && hasReplacements && !replacementProviderId
           }
         >
-          Disconnect
+          {t("disconnect")}
         </Button>
       }
     >
@@ -221,18 +234,18 @@ function VoiceDisconnectModal({
           <Section alignItems="start">
             <Text as="p" color="text-03">
               {markdown(
-                `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`
+                t("disconnectWarning", { name: disconnectTarget.providerLabel })
               )}
             </Text>
             <Section alignItems="start" gap={0.25}>
               <Text as="p" color="text-04">
-                Set New Default
+                {t("setNewDefault")}
               </Text>
               <InputSelect
                 value={replacementProviderId ?? undefined}
                 onValueChange={(v) => onReplacementChange(v)}
               >
-                <InputSelect.Trigger placeholder="Select a replacement provider" />
+                <InputSelect.Trigger placeholder={t("selectReplacement")} />
                 <InputSelect.Content>
                   {replacementOptions.map((p) => (
                     <InputSelect.Item
@@ -246,8 +259,8 @@ function VoiceDisconnectModal({
                   <InputSelect.Separator />
                   <InputSelect.Item value={NO_DEFAULT_VALUE} icon={SvgSlash}>
                     <span>
-                      <b>No Default</b>
-                      <span className="text-text-03"> (Disable Voice)</span>
+                      <b>{t("noDefault")}</b>
+                      <span className="text-text-03"> {t("disableVoice")}</span>
                     </span>
                   </InputSelect.Item>
                 </InputSelect.Content>
@@ -258,11 +271,11 @@ function VoiceDisconnectModal({
           <>
             <Text as="p" color="text-03">
               {markdown(
-                `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default.`
+                t("disconnectNonDefaultWarning", { name: disconnectTarget.providerLabel })
               )}
             </Text>
             <Text as="p" color="text-03">
-              Connect another provider to continue using voice.
+              {t("connectAnotherProvider")}
             </Text>
           </>
         )
@@ -270,11 +283,11 @@ function VoiceDisconnectModal({
         <>
           <Text as="p" color="text-03">
             {markdown(
-              `**${disconnectTarget.providerLabel}** models will no longer be available for voice.`
+              t("disconnectNonDefaultWarning", { name: disconnectTarget.providerLabel })
             )}
           </Text>
           <Text as="p" color="text-03">
-            Session history will be preserved.
+            {t("sessionHistoryPreserved")}
           </Text>
         </>
       )}
@@ -283,6 +296,8 @@ function VoiceDisconnectModal({
 }
 
 export default function VoiceConfigurationPage() {
+  const t = useTranslations("voice");
+  const pageDescription = t("pageDescription");
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [editingProvider, setEditingProvider] =
@@ -441,7 +456,7 @@ export default function VoiceConfigurationPage() {
         );
       }
       await mutate();
-      toast.success(`${disconnectTarget.providerLabel} disconnected`);
+      toast.success(t("providerDisconnected", { name: disconnectTarget.providerLabel }));
     } catch (err) {
       console.error("Failed to disconnect voice provider:", err);
       toast.error(
@@ -486,6 +501,8 @@ export default function VoiceConfigurationPage() {
     const provider = providersByType.get(model.providerType);
     const status = getModelStatus(model, mode);
     const Icon = getProviderIcon(model.providerType);
+    const subtitleKey = (mode === "stt" ? STT_SUBTITLE_KEYS : TTS_SUBTITLE_KEYS)[model.id];
+    const translatedSubtitle = subtitleKey ? t(subtitleKey) : model.subtitle;
 
     return (
       <ProviderCard
@@ -493,7 +510,7 @@ export default function VoiceConfigurationPage() {
         aria-label={`voice-${mode}-${model.id}`}
         icon={Icon}
         title={model.label}
-        description={model.subtitle}
+        description={translatedSubtitle}
         status={status}
         onConnect={() => handleConnect(model.providerType, mode, model.id)}
         onSelect={() => {
@@ -520,7 +537,7 @@ export default function VoiceConfigurationPage() {
   };
 
   if (error) {
-    const message = error?.message || "Unable to load voice configuration.";
+    const message = error?.message || t("unableToLoadVoice");
     const detail =
       error instanceof FetchError && typeof error.info?.detail === "string"
         ? error.info.detail
@@ -534,7 +551,7 @@ export default function VoiceConfigurationPage() {
           description={pageDescription}
         />
         <SettingsLayouts.Body>
-          <Callout type="danger" title="Failed to load voice settings">
+          <Callout type="danger" title={t("failedToLoadVoice")}>
             {message}
             {detail && (
               <Text as="p" font="main-content-body" color="text-03">
@@ -572,14 +589,14 @@ export default function VoiceConfigurationPage() {
       <SettingsLayouts.Body>
         <div className="flex flex-col gap-6">
           <Content
-            title="Speech to Text"
-            description="Select a model to transcribe speech to text in chats."
+            title={t("speechToText")}
+            description={t("speechToTextDescription")}
             sizePreset="main-content"
             variant="section"
           />
 
           {sttActivationError && (
-            <Callout type="danger" title="Unable to update STT provider">
+            <Callout type="danger" title={t("unableToUpdateStt")}>
               {sttActivationError}
             </Callout>
           )}
@@ -590,7 +607,7 @@ export default function VoiceConfigurationPage() {
               static
               large
               close={false}
-              text="Connect a speech to text provider to use in chat."
+              text={t("connectSttProvider")}
               className="w-full"
             />
           )}
@@ -602,14 +619,14 @@ export default function VoiceConfigurationPage() {
 
         <div className="flex flex-col gap-6">
           <Content
-            title="Text to Speech"
-            description="Select a model to speak out chat responses."
+            title={t("textToSpeech")}
+            description={t("textToSpeechDescription")}
             sizePreset="main-content"
             variant="section"
           />
 
           {ttsActivationError && (
-            <Callout type="danger" title="Unable to update TTS provider">
+            <Callout type="danger" title={t("unableToUpdateTts")}>
               {ttsActivationError}
             </Callout>
           )}
@@ -620,7 +637,7 @@ export default function VoiceConfigurationPage() {
               static
               large
               close={false}
-              text="Connect a text to speech provider to use in chat."
+              text={t("connectTtsProvider")}
               className="w-full"
             />
           )}

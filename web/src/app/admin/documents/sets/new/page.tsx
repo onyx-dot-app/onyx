@@ -10,12 +10,14 @@ import { useRouter } from "next/navigation";
 import { refreshDocumentSets } from "../hooks";
 import CardSection from "@/components/admin/CardSection";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useTranslations } from "next-intl";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 function Main() {
   const router = useRouter();
   const vectorDbEnabled = useVectorDbEnabled();
+  const t = useTranslations("admin.documents");
 
   const {
     data: ccPairs,
@@ -37,7 +39,7 @@ function Main() {
   if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return (
       <ErrorCallout
-        errorTitle="Failed to fetch Connectors"
+        errorTitle={t("failedToFetchConnectorsShort")}
         errorMsg={ccPairsError}
       />
     );
@@ -60,11 +62,13 @@ function Main() {
 }
 
 export default function Page() {
+  const t = useTranslations("admin.documents");
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title="New Document Set"
+        title={t("newDocumentSetPage")}
         separator
         backButton
       />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { SvgUserSync } from "@opal/icons";
 import { toast } from "@/hooks/useToast";
@@ -20,6 +21,7 @@ import ScimModal from "./ScimModal";
 // ---------------------------------------------------------------------------
 
 function ScimContent() {
+  const t = useTranslations("admin.scim");
   const { data: token, error: tokenError, isLoading, mutate } = useScimToken();
 
   const modal = useCreateModal();
@@ -44,7 +46,7 @@ function ScimContent() {
   if (tokenError && !is404) {
     return (
       <Text as="p" text03>
-        Failed to load SCIM token status.
+        {t("failedToLoadToken")}
       </Text>
     );
   }
@@ -75,15 +77,15 @@ function ScimContent() {
         } catch {
           detail = await response.text();
         }
-        toast.error(`Failed to generate token: ${detail}`);
+        toast.error(t("failedToGenerate", { detail }));
         return;
       }
       const created: ScimTokenCreatedResponse = await response.json();
       await mutate();
       openModal({ kind: "token", rawToken: created.raw_token });
-      if (hasToken) toast.success("Token regenerated");
+      if (hasToken) toast.success(t("tokenRegenerated"));
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t("somethingWentWrong"));
     } finally {
       setIsSubmitting(false);
     }
@@ -124,12 +126,13 @@ function ScimContent() {
 // ---------------------------------------------------------------------------
 
 export default function Page() {
+  const t = useTranslations("admin.scim");
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUserSync}
-        title="SCIM"
-        description="Sync users and groups via System for Cross-domain Identity Management (SCIM) protocol."
+        title={t("title")}
+        description={t("description")}
         separator
       />
       <SettingsLayouts.Body>
