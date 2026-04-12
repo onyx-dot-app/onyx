@@ -60,7 +60,12 @@ from onyx.connectors.models import ExternalAccess
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    is_tabular_file,
+    tabular_file_to_sections,
+)
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import extract_text_and_images
@@ -586,7 +591,7 @@ def _convert_driveitem_to_document_with_permissions(
                 driveitem, f"Failed to download via graph api: {e}", e
             )
 
-    sections: list[TextSection | ImageSection] = []
+    sections: list[TextSection | ImageSection | TabularSection] = []
     file_ext = get_file_ext(driveitem.name)
 
     if not content_bytes:
@@ -602,6 +607,19 @@ def _convert_driveitem_to_document_with_permissions(
         )
         image_section.link = driveitem.web_url
         sections.append(image_section)
+    elif is_tabular_file(driveitem.name):
+        try:
+            sections.extend(
+                tabular_file_to_sections(
+                    file=io.BytesIO(content_bytes),
+                    file_name=driveitem.name,
+                    link=driveitem.web_url or "",
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to extract tabular sections for '{driveitem.name}': {e}"
+            )
     else:
 
         def _store_embedded_image(img_data: bytes, img_name: str) -> None:

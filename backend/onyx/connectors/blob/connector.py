@@ -26,6 +26,10 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
 )
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    is_tabular_file,
+    tabular_file_to_sections,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -449,6 +453,40 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                             batch = []
                     except Exception:
                         logger.exception(f"Error processing image {key}")
+                    continue
+
+                # Handle tabular files (xlsx, csv, tsv) — produce one
+                # TabularSection per sheet (or per file for csv/tsv)
+                # instead of a flat TextSection.
+                if is_tabular_file(file_name):
+                    try:
+                        downloaded_file = self._download_object(key)
+                        if downloaded_file is None:
+                            continue
+                        tabular_sections = tabular_file_to_sections(
+                            BytesIO(downloaded_file),
+                            file_name=file_name,
+                            link=link,
+                        )
+                        batch.append(
+                            Document(
+                                id=f"{self.bucket_type}:{self.bucket_name}:{key}",
+                                sections=(
+                                    tabular_sections
+                                    if tabular_sections
+                                    else [TextSection(link=link, text="")]
+                                ),
+                                source=DocumentSource(self.bucket_type.value),
+                                semantic_identifier=file_name,
+                                doc_updated_at=last_modified,
+                                metadata={},
+                            )
+                        )
+                        if len(batch) == self.batch_size:
+                            yield batch
+                            batch = []
+                    except Exception:
+                        logger.exception(f"Error processing tabular file {key}")
                     continue
 
                 # Handle text and document files

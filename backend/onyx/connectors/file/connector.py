@@ -12,6 +12,10 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
 )
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    is_tabular_file,
+    tabular_file_to_sections,
+)
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
@@ -144,6 +148,39 @@ def _process_file(
         except Exception as e:
             logger.error(f"Failed to process image file {file_name}: {e}")
             return []
+
+    # 1b) If the file is tabular (xlsx/csv/tsv), produce one
+    # TabularSection per sheet (or per file for csv/tsv) instead of
+    # flattening through the generic text extractor.
+    if is_tabular_file(file_name):
+        file.seek(0)
+        try:
+            tabular_sections = tabular_file_to_sections(
+                file=file,
+                file_name=file_name,
+                link=link or "",
+            )
+        except Exception as e:
+            logger.error(f"Failed to process tabular file {file_name}: {e}")
+            return []
+
+        if not tabular_sections:
+            logger.warning(f"No content extracted from tabular file {file_name}")
+            return []
+
+        return [
+            Document(
+                id=doc_id,
+                sections=list(tabular_sections),
+                source=source_type,
+                semantic_identifier=file_display_name,
+                title=title,
+                doc_updated_at=time_updated,
+                primary_owners=primary_owners,
+                secondary_owners=secondary_owners,
+                metadata=custom_tags,
+            )
+        ]
 
     # 2) Otherwise: text-based approach. Possibly with embedded images.
     file.seek(0)
