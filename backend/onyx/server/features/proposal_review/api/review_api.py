@@ -93,12 +93,14 @@ def trigger_review(
         f"with ruleset {request.ruleset_id} ({active_rule_count} rules)"
     )
 
-    # Dispatch Celery task to run the review asynchronously
-    from onyx.server.features.proposal_review.engine.review_engine import (
-        run_proposal_review,
-    )
+    # Dispatch Celery task via the client app (has Redis broker configured)
+    from onyx.background.celery.versioned_apps.client import app as celery_app
 
-    run_proposal_review.apply_async(args=[str(run.id), tenant_id], expires=3600)
+    celery_app.send_task(
+        "run_proposal_review",
+        args=[str(run.id), tenant_id],
+        expires=3600,
+    )
 
     return ReviewRunResponse.from_model(run)
 

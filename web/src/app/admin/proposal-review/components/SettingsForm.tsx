@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import useSWR from "swr";
 import { Text } from "@opal/components";
 import { Button } from "@opal/components/buttons/button/components";
@@ -14,6 +14,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SvgPlus, SvgTrash } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
+import { useAdminLLMProviders } from "@/hooks/useLLMProviders";
 import type {
   ConfigResponse,
   ConfigUpdate,
@@ -21,6 +22,7 @@ import type {
 } from "@/app/admin/proposal-review/interfaces";
 
 const CONNECTORS_URL = "/api/proposal-review/jira-connectors";
+const SYSTEM_DEFAULT_MODEL = "__system_default__";
 
 interface SettingsFormProps {
   config: ConfigResponse;
@@ -38,6 +40,12 @@ function SettingsForm({ config, onSave, onCancel }: SettingsFormProps) {
   const [jiraWriteback, setJiraWriteback] = useState<Record<string, string>>(
     (config.jira_writeback as Record<string, string>) || {}
   );
+  const [reviewModel, setReviewModel] = useState<string | null>(
+    config.review_model
+  );
+  const [importModel, setImportModel] = useState<string | null>(
+    config.import_model
+  );
   const [saving, setSaving] = useState(false);
   const [fieldSearch, setFieldSearch] = useState("");
 
@@ -49,7 +57,26 @@ function SettingsForm({ config, onSave, onCancel }: SettingsFormProps) {
     setConnectorId(config.jira_connector_id);
     setVisibleFields(config.field_mapping ?? []);
     setJiraWriteback((config.jira_writeback as Record<string, string>) || {});
+    setReviewModel(config.review_model);
+    setImportModel(config.import_model);
   }, [config]);
+
+  // Fetch configured LLM providers for model selection
+  const { llmProviders, isLoading: llmLoading } = useAdminLLMProviders();
+
+  const modelOptions = useMemo(() => {
+    if (!llmProviders) return [];
+    const options: { value: string; label: string }[] = [];
+    for (const provider of llmProviders) {
+      for (const model of provider.model_configurations) {
+        if (!model.is_visible) continue;
+        const displayName = model.display_name || model.name;
+        const label = `${provider.name} / ${displayName}`;
+        options.push({ value: model.name, label });
+      }
+    }
+    return options;
+  }, [llmProviders]);
 
   // Fetch available Jira connectors
   const { data: connectors, isLoading: connectorsLoading } = useSWR<
@@ -77,6 +104,8 @@ function SettingsForm({ config, onSave, onCancel }: SettingsFormProps) {
         field_mapping: visibleFields.length > 0 ? visibleFields : null,
         jira_writeback:
           Object.keys(jiraWriteback).length > 0 ? jiraWriteback : null,
+        review_model: reviewModel,
+        import_model: importModel,
       });
       toast.success("Settings saved.");
     } catch {
@@ -344,6 +373,84 @@ function SettingsForm({ config, onSave, onCancel }: SettingsFormProps) {
             />
           </Section>
         )}
+      </Section>
+
+      <Separator noPadding />
+
+      {/* LLM Configuration */}
+      <Section gap={1} alignItems="stretch" height="auto">
+        <Content
+          sizePreset="section"
+          variant="section"
+          title="LLM Configuration"
+          description="Select which models to use for rule evaluation and checklist import."
+        />
+
+        <Section gap={0.25} alignItems="start" height="auto">
+          <Text font="main-ui-action" color="text-04">
+            Review Model
+          </Text>
+          <Text font="secondary-body" color="text-03" as="p">
+            Model used for evaluating rules against proposals.
+          </Text>
+          {llmLoading ? (
+            <Text font="main-ui-body" color="text-03" as="p">
+              Loading models...
+            </Text>
+          ) : (
+            <InputSelect
+              value={reviewModel || SYSTEM_DEFAULT_MODEL}
+              onValueChange={(val) =>
+                setReviewModel(val === SYSTEM_DEFAULT_MODEL ? null : val)
+              }
+            >
+              <InputSelect.Trigger placeholder="Select a model..." />
+              <InputSelect.Content>
+                <InputSelect.Item value={SYSTEM_DEFAULT_MODEL}>
+                  Default (system)
+                </InputSelect.Item>
+                {modelOptions.map((opt) => (
+                  <InputSelect.Item key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </InputSelect.Item>
+                ))}
+              </InputSelect.Content>
+            </InputSelect>
+          )}
+        </Section>
+
+        <Section gap={0.25} alignItems="start" height="auto">
+          <Text font="main-ui-action" color="text-04">
+            Import Model
+          </Text>
+          <Text font="secondary-body" color="text-03" as="p">
+            Model used for parsing checklists into rules.
+          </Text>
+          {llmLoading ? (
+            <Text font="main-ui-body" color="text-03" as="p">
+              Loading models...
+            </Text>
+          ) : (
+            <InputSelect
+              value={importModel || SYSTEM_DEFAULT_MODEL}
+              onValueChange={(val) =>
+                setImportModel(val === SYSTEM_DEFAULT_MODEL ? null : val)
+              }
+            >
+              <InputSelect.Trigger placeholder="Select a model..." />
+              <InputSelect.Content>
+                <InputSelect.Item value={SYSTEM_DEFAULT_MODEL}>
+                  Default (system)
+                </InputSelect.Item>
+                {modelOptions.map((opt) => (
+                  <InputSelect.Item key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </InputSelect.Item>
+                ))}
+              </InputSelect.Content>
+            </InputSelect>
+          )}
+        </Section>
       </Section>
 
       <Separator noPadding />

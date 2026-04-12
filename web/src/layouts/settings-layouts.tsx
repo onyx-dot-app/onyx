@@ -176,6 +176,8 @@ export interface SettingsHeaderProps {
   backButton?: boolean;
   onBack?: () => void;
   divider?: boolean;
+  editable?: boolean;
+  onTitleChange?: (newTitle: string) => void;
 }
 function SettingsHeader({
   icon: Icon,
@@ -186,6 +188,8 @@ function SettingsHeader({
   backButton,
   onBack,
   divider,
+  editable,
+  onTitleChange,
 }: SettingsHeaderProps) {
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -241,6 +245,8 @@ function SettingsHeader({
               description={description}
               sizePreset="headline"
               variant="heading"
+              editable={editable}
+              onTitleChange={onTitleChange}
             />
           </div>
           {rightChildren}

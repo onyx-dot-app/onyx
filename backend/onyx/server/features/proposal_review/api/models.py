@@ -351,6 +351,9 @@ class ConfigUpdate(BaseModel):
     jira_project_key: str | None = None
     field_mapping: list[str] | None = None  # List of visible metadata keys
     jira_writeback: dict[str, Any] | None = None
+    # LLM configuration
+    review_model: str | None = None  # model name for rule evaluation
+    import_model: str | None = None  # model name for checklist import
 
 
 class ConfigResponse(BaseModel):
@@ -360,6 +363,8 @@ class ConfigResponse(BaseModel):
     jira_project_key: str | None
     field_mapping: list[str] | None
     jira_writeback: dict[str, Any] | None
+    review_model: str | None
+    import_model: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -372,6 +377,8 @@ class ConfigResponse(BaseModel):
             jira_project_key=config.jira_project_key,
             field_mapping=config.field_mapping,
             jira_writeback=config.jira_writeback,
+            review_model=config.review_model,
+            import_model=config.import_model,
             created_at=config.created_at,
             updated_at=config.updated_at,
         )
@@ -385,6 +392,28 @@ class ConfigResponse(BaseModel):
 class ImportResponse(BaseModel):
     rules_created: int
     rules: list[RuleResponse]
+
+
+class ImportJobResponse(BaseModel):
+    id: UUID
+    status: str
+    source_filename: str
+    rules_created: int
+    error_message: str | None
+    created_at: datetime
+    completed_at: datetime | None
+
+    @classmethod
+    def from_model(cls, job: Any) -> "ImportJobResponse":
+        return cls(
+            id=job.id,
+            status=job.status,
+            source_filename=job.source_filename,
+            rules_created=job.rules_created,
+            error_message=job.error_message,
+            created_at=job.created_at,
+            completed_at=job.completed_at,
+        )
 
 
 # =============================================================================

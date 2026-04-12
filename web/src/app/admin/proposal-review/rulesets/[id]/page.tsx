@@ -1,20 +1,21 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams } from "next/navigation";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import InputSearch from "@/refresh-components/inputs/InputSearch";
 import { toast } from "@/hooks/useToast";
-import { Button, Text, Tag, Table } from "@opal/components";
-import { Content, IllustrationContent } from "@opal/layouts";
+import { Button, Text, Tag, Card } from "@opal/components";
+import { ContentAction, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { createTableColumns } from "@opal/components/table/columns";
 import {
-  SvgCheckSquare,
+  SvgClipboard,
   SvgEdit,
   SvgMoreHorizontal,
+  SvgPlayCircle,
   SvgPlus,
   SvgTrash,
   SvgUploadCloud,
@@ -25,6 +26,8 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { markdown } from "@opal/utils";
 import RuleEditor from "@/app/admin/proposal-review/components/RuleEditor";
 import ImportFlow from "@/app/admin/proposal-review/components/ImportFlow";
+import { useImportStatus } from "@/app/admin/proposal-review/hooks/useImportStatus";
+import RuleTestModal from "@/app/admin/proposal-review/components/RuleTestModal";
 import type {
   RulesetResponse,
   RulesetUpdate,
@@ -32,19 +35,7 @@ import type {
   RuleCreate,
   RuleUpdate,
   BulkRuleUpdateRequest,
-  RuleIntent,
 } from "@/app/admin/proposal-review/interfaces";
-import {
-  RULE_TYPE_LABELS,
-  RULE_INTENT_LABELS,
-} from "@/app/admin/proposal-review/interfaces";
-import type { TagColor } from "@opal/components";
-
-const tc = createTableColumns<RuleResponse>();
-
-function intentColor(intent: RuleIntent): TagColor {
-  return intent === "CHECK" ? "green" : "purple";
-}
 
 function RulesetDetailPage() {
   const params = useParams();
@@ -62,6 +53,58 @@ function RulesetDetailPage() {
   const [editingRule, setEditingRule] = useState<RuleResponse | null>(null);
   const [showImportFlow, setShowImportFlow] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RuleResponse | null>(null);
+  const [testTarget, setTestTarget] = useState<RuleResponse | null>(null);
+  const [ruleSearch, setRuleSearch] = useState("");
+
+  // Import job tracking — persists across navigation via the hook's SWR polling
+  const [importJobId, setImportJobId] = useState<string | null>(null);
+  const { importJob, isProcessing, isComplete, isFailed } = useImportStatus(
+    rulesetId,
+    importJobId
+  );
+
+  // When import completes, refresh the ruleset and show toast
+  useEffect(() => {
+    if (isComplete && importJob) {
+      mutate(apiUrl);
+      toast.success(
+        `Imported ${importJob.rules_created} rule${
+          importJob.rules_created !== 1 ? "s" : ""
+        } from "${importJob.source_filename}" as inactive drafts.`
+      );
+      setImportJobId(null);
+    }
+    if (isFailed && importJob) {
+      toast.error(
+        `Import failed: ${importJob.error_message || "Unknown error"}`
+      );
+      setImportJobId(null);
+    }
+  }, [isComplete, isFailed, importJob]);
+
+  async function handleImportFile(file: File) {
+    setShowImportFlow(false);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(
+        `/api/proposal-review/rulesets/${rulesetId}/import`,
+        { method: "POST", body: formData }
+      );
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to import checklist");
+      }
+
+      const data = await res.json();
+      setImportJobId(data.import_job_id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    }
+  }
 
   // Batch selection
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(
@@ -69,57 +112,24 @@ function RulesetDetailPage() {
   );
   const [batchSaving, setBatchSaving] = useState(false);
 
-  // Toggle handlers
-  async function handleToggleActive() {
-    if (!ruleset) return;
+  // Update ruleset metadata (name, description)
+  async function handleUpdateRuleset(updates: Partial<RulesetUpdate>) {
     try {
-      const body: RulesetUpdate = { is_active: !ruleset.is_active };
       const res = await fetch(apiUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(updates),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to toggle active status");
-      }
+      if (!res.ok) throw new Error("Failed to update ruleset");
       await mutate(apiUrl);
-      toast.success(
-        ruleset.is_active ? "Ruleset deactivated." : "Ruleset activated."
-      );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to toggle active status"
+        err instanceof Error ? err.message : "Failed to update ruleset"
       );
     }
   }
 
-  async function handleToggleDefault() {
-    if (!ruleset) return;
-    try {
-      const body: RulesetUpdate = { is_default: !ruleset.is_default };
-      const res = await fetch(apiUrl, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to toggle default status");
-      }
-      await mutate(apiUrl);
-      toast.success(
-        ruleset.is_default
-          ? "Removed default status."
-          : "Set as default ruleset."
-      );
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to toggle default status"
-      );
-    }
-  }
-
+  // Toggle handlers (for individual rule active/inactive)
   async function handleToggleRuleActive(rule: RuleResponse) {
     try {
       const update: RuleUpdate = { is_active: !rule.is_active };
@@ -232,18 +242,6 @@ function RulesetDetailPage() {
     }
   }
 
-  // Group rules by category
-  const groupedRules = useMemo(() => {
-    if (!ruleset?.rules) return {};
-    const groups: Record<string, RuleResponse[]> = {};
-    for (const rule of ruleset.rules) {
-      const cat = rule.category || "Uncategorized";
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(rule);
-    }
-    return groups;
-  }, [ruleset?.rules]);
-
   const allRuleIds = useMemo(
     () => new Set(ruleset?.rules.map((r) => r.id) || []),
     [ruleset?.rules]
@@ -272,115 +270,88 @@ function RulesetDetailPage() {
     });
   }
 
-  const ruleColumns = useMemo(
-    () => [
-      tc.qualifier({
-        content: "icon",
-        getContent: () => SvgCheckSquare,
-      }),
-      tc.column("name", {
-        header: "Name",
-        weight: 25,
-        cell: (value, row) =>
-          row.description ? (
-            <Content
-              title={value}
-              description={row.description}
-              sizePreset="main-ui"
-              variant="section"
-            />
-          ) : (
-            <Content title={value} sizePreset="main-ui" variant="body" />
-          ),
-      }),
-      tc.column("rule_type", {
-        header: "Type",
-        weight: 15,
-        cell: (value) => <Tag title={RULE_TYPE_LABELS[value]} color="gray" />,
-      }),
-      tc.column("rule_intent", {
-        header: "Intent",
-        weight: 10,
-        cell: (value) => (
-          <Tag title={RULE_INTENT_LABELS[value]} color={intentColor(value)} />
-        ),
-      }),
-      tc.displayColumn({
-        id: "source",
-        header: "Source",
-        width: { weight: 10, minWidth: 80 },
-        cell: (row) => (
-          <Tag
-            title={row.source === "IMPORTED" ? "Imported" : "Manual"}
-            color={row.source === "IMPORTED" ? "blue" : "gray"}
-          />
-        ),
-      }),
-      tc.displayColumn({
-        id: "hard_stop",
-        header: "Hard Stop",
-        width: { weight: 10, minWidth: 80 },
-        cell: (row) =>
-          row.is_hard_stop ? <Tag title="Hard Stop" color="amber" /> : null,
-      }),
-      tc.displayColumn({
-        id: "active",
-        header: "Active",
-        width: { weight: 8, minWidth: 60 },
-        cell: (row) => (
-          <Tag
-            title={row.is_active ? "Yes" : "No"}
-            color={row.is_active ? "green" : "gray"}
-          />
-        ),
-      }),
-      tc.actions({
-        cell: (row) => (
-          <div className="flex flex-row gap-1">
-            <Popover>
-              <Popover.Trigger asChild>
-                <Button
-                  icon={SvgMoreHorizontal}
-                  prominence="tertiary"
-                  tooltip="More"
+  function RuleCard({ rule }: { rule: RuleResponse }) {
+    return (
+      <div
+        className="cursor-pointer"
+        onClick={() => {
+          setEditingRule(rule);
+          setShowRuleEditor(true);
+        }}
+      >
+        <Card padding="md" border="solid" background="light">
+          <ContentAction
+            sizePreset="main-ui"
+            variant="section"
+            title={rule.name}
+            description={rule.description || rule.category || undefined}
+            rightChildren={
+              <div
+                className="flex items-center gap-2"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {rule.category && (
+                  <Tag title={rule.category} color="gray" size="sm" />
+                )}
+                <Tag
+                  title={rule.is_active ? "Active" : "Inactive"}
+                  color={rule.is_active ? "green" : "gray"}
+                  size="sm"
                 />
-              </Popover.Trigger>
-              <Popover.Content side="bottom" align="end" width="md">
-                <PopoverMenu>
-                  <LineItem
-                    icon={SvgEdit}
-                    onClick={() => {
-                      setEditingRule(row);
-                      setShowRuleEditor(true);
-                    }}
-                  >
-                    Edit Rule
-                  </LineItem>
-                  <LineItem onClick={() => handleToggleRuleActive(row)}>
-                    {row.is_active ? "Deactivate" : "Activate"}
-                  </LineItem>
-                  <LineItem
-                    icon={SvgTrash}
-                    danger
-                    onClick={() => setDeleteTarget(row)}
-                  >
-                    Delete Rule
-                  </LineItem>
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
-          </div>
-        ),
-      }),
-    ],
-    [] // eslint-disable-line react-hooks/exhaustive-deps
-  );
+                {rule.is_hard_stop && (
+                  <Tag title="Hard Stop" color="amber" size="sm" />
+                )}
+                <Popover>
+                  <Popover.Trigger asChild>
+                    <Button
+                      icon={SvgMoreHorizontal}
+                      prominence="tertiary"
+                      tooltip="More"
+                    />
+                  </Popover.Trigger>
+                  <Popover.Content side="bottom" align="end" width="md">
+                    <PopoverMenu>
+                      <LineItem
+                        icon={SvgEdit}
+                        onClick={() => {
+                          setEditingRule(rule);
+                          setShowRuleEditor(true);
+                        }}
+                      >
+                        Edit Rule
+                      </LineItem>
+                      <LineItem
+                        icon={SvgPlayCircle}
+                        onClick={() => setTestTarget(rule)}
+                      >
+                        Test Rule
+                      </LineItem>
+                      <LineItem onClick={() => handleToggleRuleActive(rule)}>
+                        {rule.is_active ? "Deactivate" : "Activate"}
+                      </LineItem>
+                      <LineItem
+                        icon={SvgTrash}
+                        danger
+                        onClick={() => setDeleteTarget(rule)}
+                      >
+                        Delete Rule
+                      </LineItem>
+                    </PopoverMenu>
+                  </Popover.Content>
+                </Popover>
+              </div>
+            }
+          />
+        </Card>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
       <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Header
-          icon={SvgCheckSquare}
+          icon={SvgClipboard}
           title="Loading..."
           backButton
           separator
@@ -396,7 +367,7 @@ function RulesetDetailPage() {
     return (
       <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Header
-          icon={SvgCheckSquare}
+          icon={SvgClipboard}
           title="Ruleset"
           backButton
           separator
@@ -419,52 +390,53 @@ function RulesetDetailPage() {
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
-        icon={SvgCheckSquare}
+        icon={SvgClipboard}
         title={ruleset.name}
         description={ruleset.description || undefined}
         backButton
-        rightChildren={
-          <div className="flex items-center gap-2">
-            <Button
-              prominence="secondary"
-              icon={SvgUploadCloud}
-              onClick={() => setShowImportFlow(true)}
-            >
-              Import
-            </Button>
-            <Button
-              icon={SvgPlus}
-              onClick={() => {
-                setEditingRule(null);
-                setShowRuleEditor(true);
-              }}
-            >
-              Add Rule
-            </Button>
-          </div>
-        }
+        editable
+        onTitleChange={async (newName) => {
+          await handleUpdateRuleset({ name: newName });
+        }}
         separator
       />
       <SettingsLayouts.Body>
-        {/* Ruleset toggles — only show when rules exist */}
-        {ruleset.rules.length > 0 && (
-          <div className="flex items-center gap-4 pb-2">
-            <Button
-              prominence={ruleset.is_active ? "primary" : "secondary"}
-              size="sm"
-              onClick={handleToggleActive}
-            >
-              {ruleset.is_active ? "Active" : "Inactive"}
-            </Button>
-            <Button
-              prominence={ruleset.is_default ? "primary" : "secondary"}
-              size="sm"
-              onClick={handleToggleDefault}
-            >
-              {ruleset.is_default ? "Default Ruleset" : "Not Default"}
-            </Button>
+        {/* Import status banner */}
+        {isProcessing && importJob && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-08 bg-background-neutral-02">
+            <SimpleLoader className="h-4 w-4" />
+            <Text font="main-ui-body" color="text-04">
+              {`Analyzing "${importJob.source_filename}"...`}
+            </Text>
           </div>
         )}
+
+        {/* Search + action bar */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <InputSearch
+              placeholder="Search rules..."
+              value={ruleSearch}
+              onChange={(e) => setRuleSearch(e.target.value)}
+            />
+          </div>
+          <Button
+            prominence="secondary"
+            icon={SvgUploadCloud}
+            onClick={() => setShowImportFlow(true)}
+          >
+            Import
+          </Button>
+          <Button
+            icon={SvgPlus}
+            onClick={() => {
+              setEditingRule(null);
+              setShowRuleEditor(true);
+            }}
+          >
+            Add Rule
+          </Button>
+        </div>
 
         {/* Batch action bar */}
         {selectedRuleIds.size > 0 && (
@@ -500,7 +472,7 @@ function RulesetDetailPage() {
           </div>
         )}
 
-        {/* Rules table grouped by category */}
+        {/* Rules list */}
         {ruleset.rules.length === 0 ? (
           <IllustrationContent
             illustration={SvgNoResult}
@@ -508,18 +480,21 @@ function RulesetDetailPage() {
             description="Add rules manually or import from a checklist."
           />
         ) : (
-          Object.entries(groupedRules).map(([category, rules]) => (
-            <div key={category} className="flex flex-col gap-2">
-              <Text font="main-ui-action" color="text-03">
-                {category}
-              </Text>
-              <Table
-                data={rules}
-                getRowId={(row) => row.id}
-                columns={ruleColumns}
-              />
-            </div>
-          ))
+          <div className="flex flex-col gap-2">
+            {ruleset.rules
+              .filter((rule) => {
+                if (!ruleSearch) return true;
+                const q = ruleSearch.toLowerCase();
+                return (
+                  rule.name.toLowerCase().includes(q) ||
+                  (rule.category ?? "").toLowerCase().includes(q) ||
+                  (rule.description ?? "").toLowerCase().includes(q)
+                );
+              })
+              .map((rule) => (
+                <RuleCard key={rule.id} rule={rule} />
+              ))}
+          </div>
         )}
       </SettingsLayouts.Body>
 
@@ -538,8 +513,14 @@ function RulesetDetailPage() {
       <ImportFlow
         open={showImportFlow}
         onClose={() => setShowImportFlow(false)}
-        rulesetId={rulesetId}
-        onImportComplete={() => mutate(apiUrl)}
+        onFileSelected={handleImportFile}
+      />
+
+      {/* Rule Test Modal */}
+      <RuleTestModal
+        open={!!testTarget}
+        onClose={() => setTestTarget(null)}
+        rule={testTarget}
       />
 
       {/* Delete Rule Confirmation */}

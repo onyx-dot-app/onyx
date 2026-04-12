@@ -85,7 +85,7 @@ class TestRulesetCRUD:
             db_session=db_session,
             created_by=test_user.id,
         )
-        update_ruleset(rs_inactive.id, TENANT, db_session, is_active=False)
+        update_ruleset(rs_inactive.id, TENANT, db_session, {"is_active": False})
         db_session.commit()
 
         active_rulesets = list_rulesets(TENANT, db_session, active_only=True)
@@ -108,8 +108,7 @@ class TestRulesetCRUD:
             rs.id,
             TENANT,
             db_session,
-            name="Updated Name",
-            description="New desc",
+            {"name": "Updated Name", "description": "New desc"},
         )
         db_session.commit()
 
@@ -122,7 +121,7 @@ class TestRulesetCRUD:
         assert refetched.name == "Updated Name"
 
     def test_update_nonexistent_ruleset_returns_none(self, db_session: Session) -> None:
-        result = update_ruleset(uuid4(), TENANT, db_session, name="nope")
+        result = update_ruleset(uuid4(), TENANT, db_session, {"name": "nope"})
         assert result is None
 
     def test_delete_ruleset_returns_false_for_nonexistent(
@@ -234,8 +233,7 @@ class TestRuleCRUD:
         updated = update_rule(
             rule.id,
             db_session,
-            prompt_template="new template: {{proposal_text}}",
-            is_active=False,
+            {"prompt_template": "new template: {{proposal_text}}", "is_active": False},
         )
         db_session.commit()
 
@@ -249,7 +247,7 @@ class TestRuleCRUD:
         assert refetched.is_active is False
 
     def test_update_nonexistent_rule_returns_none(self, db_session: Session) -> None:
-        result = update_rule(uuid4(), db_session, name="nope")
+        result = update_rule(uuid4(), db_session, {"name": "nope"})
         assert result is None
 
     def test_delete_rule(self, db_session: Session, test_user: User) -> None:
@@ -299,7 +297,7 @@ class TestRuleCRUD:
             prompt_template="{{proposal_text}}",
             db_session=db_session,
         )
-        update_rule(r_inactive.id, db_session, is_active=False)
+        update_rule(r_inactive.id, db_session, {"is_active": False})
         db_session.commit()
 
         all_rules = list_rules_by_ruleset(rs.id, db_session)
@@ -418,7 +416,7 @@ class TestRuleCRUD:
             prompt_template="t2",
             db_session=db_session,
         )
-        update_rule(r2.id, db_session, is_active=False)
+        update_rule(r2.id, db_session, {"is_active": False})
         db_session.commit()
 
         assert count_active_rules(rs.id, db_session) == 1

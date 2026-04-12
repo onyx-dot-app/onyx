@@ -1,141 +1,288 @@
-"""Parses uploaded checklist documents into atomic review rules via LLM."""
+"""Parses uploaded checklist documents into atomic review rules via LLM.
+
+Uses a two-pass approach to handle checklists of any size without hitting
+output token limits:
+
+  Pass 1 — Enumerate:  Identify all distinct checklist items from the
+           document (names, categories, sub-checks). This produces a small,
+           bounded output regardless of document size.
+
+  Pass 2 — Decompose:  For each identified item, make a focused LLM call
+           to generate atomic review rules with full prompt templates.
+           Each call produces 1–5 rules, well within token limits.
+
+Callers orchestrate persistence — this module is pure LLM + parsing, no
+DB access, no callbacks, no threads.
+"""
 
 import json
 import re
+from dataclasses import dataclass
+from dataclasses import field
 
-from onyx.llm.factory import get_default_llm
+from onyx.llm.interfaces import LLM
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_IMPORT_SYSTEM_PROMPT = """\
-You are an expert at analyzing institutional review checklists for university grant \
-offices. Your task is to decompose a checklist document into atomic, self-contained \
-review rules that can each be independently evaluated by an AI against a grant proposal.
 
-Key principles:
-1. ATOMIC DECOMPOSITION: Each checklist item may contain multiple distinct requirements. \
-You MUST split compound items into separate atomic rules. Each rule should test exactly \
-ONE pass/fail criterion.
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
 
-2. CATEGORY PRESERVATION: All rules decomposed from the same source checklist item \
-should share the same category value. Use the checklist item's identifier and title \
-(e.g., "IR-2: Regulatory Compliance") as the category.
 
-3. SELF-CONTAINED PROMPTS: Each rule's prompt_template must be fully self-contained. \
-It should include all context needed to evaluate the criterion. Use {{variable}} \
-placeholders for dynamic content:
-   - {{proposal_text}} - full text of the proposal and supporting documents
-   - {{budget_text}} - budget/financial sections
-   - {{foa_text}} - funding opportunity announcement
-   - {{metadata}} - structured metadata (PI, sponsor, deadlines, etc.)
-   - {{metadata.FIELD_NAME}} - specific metadata field
+@dataclass
+class ChecklistItem:
+    """A single checklist item identified during pass 1."""
 
-4. REFINEMENT DETECTION: If a rule requires institution-specific information that is \
-NOT present in the source checklist (such as IDC rates, cost categories, institutional \
-policies, specific thresholds, or local procedures), mark it with:
-   - refinement_needed: true
-   - refinement_question: a clear question asking for the missing information
-   - Use a placeholder like {{INSTITUTION_IDC_RATES}} in the prompt_template
+    id: str
+    name: str
+    category: str
+    description: str
+    sub_checks: list[str] = field(default_factory=list)
 
-5. RULE TYPES:
-   - DOCUMENT_CHECK: Verifies presence/content of specific documents or sections
-   - METADATA_CHECK: Validates structured metadata fields
-   - CROSS_REFERENCE: Compares information across multiple documents (e.g., budget vs narrative)
-   - CUSTOM_NL: Natural language evaluation of content quality or compliance
 
-6. RULE INTENT:
-   - CHECK: Pass/fail criterion that must be satisfied
-   - HIGHLIGHT: Informational flag for officer attention (no pass/fail)"""
+# ---------------------------------------------------------------------------
+# Prompts — Pass 1 (Enumerate)
+# ---------------------------------------------------------------------------
 
-_IMPORT_USER_PROMPT = """\
-Analyze the following checklist document and decompose it into atomic review rules.
+_ENUMERATE_SYSTEM = """\
+You are an expert at analyzing institutional review checklists for university \
+grant offices. Your task is to read a checklist document and identify every \
+distinct checklist item or section that requires review."""
 
-CHECKLIST CONTENT:
+_ENUMERATE_USER = """\
+Read the checklist document below and list every distinct checklist item.
+
+CHECKLIST DOCUMENT:
 ---
 {checklist_text}
 ---
 
-Respond with ONLY a valid JSON array of rule objects. Each rule must have:
+For each item, provide:
+- **id**: A short identifier derived from the document (e.g., "IR-1", \
+"KR-3", "Section-A.2"). Invent one if the document doesn't assign one.
+- **name**: The item's title or heading.
+- **category**: A display label combining the id and name \
+(e.g., "IR-2: Regulatory Compliance").
+- **description**: One sentence summarizing what this item covers.
+- **sub_checks**: A list of the individual checks or requirements \
+mentioned under this item. Be thorough — include every distinct \
+requirement even if the document groups them together.
+
+Respond with ONLY a valid JSON array:
+[
+  {{
+    "id": "IR-1",
+    "name": "Institutional and PI Eligibility",
+    "category": "IR-1: Institutional and PI Eligibility Requirements",
+    "description": "Verify institution and PI meet sponsor eligibility.",
+    "sub_checks": ["Institutional eligibility", "PI eligibility", ...]
+  }},
+  ...
+]"""
+
+
+# ---------------------------------------------------------------------------
+# Prompts — Pass 2 (Decompose one item into rules)
+# ---------------------------------------------------------------------------
+
+_DECOMPOSE_SYSTEM = """\
+You are an expert at creating AI review rules for university grant proposal \
+review. Each rule you create will be independently evaluated by an LLM \
+against a grant proposal. Rules must be atomic (one criterion each) and \
+self-contained (the prompt template includes all context needed).
+
+Variable placeholders available for prompt templates:
+  {{{{proposal_text}}}}          — full proposal and supporting documents
+  {{{{budget_text}}}}            — budget / financial sections
+  {{{{foa_text}}}}               — funding opportunity announcement
+  {{{{metadata}}}}               — structured metadata (PI, sponsor, etc.)
+  {{{{metadata.FIELD_NAME}}}}    — a specific metadata field
+
+Rule types:
+  DOCUMENT_CHECK    — verify presence / content in documents
+  METADATA_CHECK    — validate a structured metadata field
+  CROSS_REFERENCE   — compare information across documents
+  CUSTOM_NL         — natural language evaluation
+
+Rule intents:
+  CHECK     — pass / fail criterion
+  HIGHLIGHT — informational flag (no pass / fail)
+
+If a rule requires institution-specific info NOT present in the checklist \
+(IDC rates, mandatory cost categories, local policies, etc.), set \
+refinement_needed=true and include a refinement_question."""
+
+_DECOMPOSE_USER = """\
+Create atomic review rules for the checklist item described below.
+
+ITEM TO DECOMPOSE:
+  ID: {item_id}
+  Name: {item_name}
+  Category: {item_category}
+  Description: {item_description}
+  Sub-checks: {sub_checks}
+
+FULL CHECKLIST (for context — only create rules for the item above):
+---
+{checklist_text}
+---
+
+Generate one rule per sub-check. Each rule object must have:
 {{
-  "name": "Short descriptive name for the rule (max 100 chars)",
-  "description": "Detailed description of what this rule checks",
-  "category": "Source checklist item identifier and title (e.g., 'IR-2: Regulatory Compliance')",
+  "name": "Short descriptive name (max 100 chars)",
+  "description": "What this rule checks",
+  "category": "{item_category}",
   "rule_type": "DOCUMENT_CHECK | METADATA_CHECK | CROSS_REFERENCE | CUSTOM_NL",
   "rule_intent": "CHECK | HIGHLIGHT",
-  "prompt_template": "Self-contained prompt with {{{{variable}}}} placeholders. Must clearly state the criterion and ask for evaluation.",
+  "prompt_template": "Self-contained prompt with {{{{variable}}}} placeholders.",
   "refinement_needed": false,
   "refinement_question": null
 }}
 
-For rules that need institution-specific info:
-{{
-  "name": "...",
-  "description": "...",
-  "category": "...",
-  "rule_type": "...",
-  "rule_intent": "CHECK",
-  "prompt_template": "... {{{{INSTITUTION_IDC_RATES}}}} ...",
-  "refinement_needed": true,
-  "refinement_question": "Please provide your institution's IDC rate schedule."
-}}
-
-Important:
-- Decompose compound checklist items into multiple atomic rules
-- Each rule tests exactly ONE criterion
-- Prompt templates must be specific and actionable
-- Include all relevant context placeholders in templates
-- Flag any rule requiring institution-specific knowledge"""
+Respond with ONLY a valid JSON array of rule objects."""
 
 
-def import_checklist(
-    extracted_text: str,
-) -> list[dict]:
-    """Parse a checklist document into atomic review rules via LLM.
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def enumerate_checklist_items(
+    checklist_text: str,
+    llm: LLM,
+) -> list[ChecklistItem]:
+    """Pass 1: Identify all distinct checklist items from the document.
+
+    One LLM call.  Output is small and bounded regardless of document size.
 
     Args:
-        extracted_text: The full text content extracted from the uploaded checklist file.
+        checklist_text: Full text extracted from the uploaded checklist file.
+        llm: The LLM instance to use.
 
     Returns:
-        List of rule dicts, each with: name, description, category, rule_type,
-        rule_intent, prompt_template, refinement_needed, refinement_question.
+        Ordered list of checklist items found in the document.
+
+    Raises:
+        RuntimeError: If the LLM call fails or returns unparseable output.
     """
-    if not extracted_text or not extracted_text.strip():
-        logger.warning("Empty checklist text provided for import")
-        return []
-
-    # Build the prompt
-    user_content = _IMPORT_USER_PROMPT.format(checklist_text=extracted_text)
-
-    prompt_messages = [
-        SystemMessage(content=_IMPORT_SYSTEM_PROMPT),
+    user_content = _ENUMERATE_USER.format(checklist_text=checklist_text)
+    messages = [
+        SystemMessage(content=_ENUMERATE_SYSTEM),
         UserMessage(content=user_content),
     ]
 
-    # Call LLM synchronously (this runs in the API request, not Celery)
     try:
-        llm = get_default_llm()
-        response = llm.invoke(prompt_messages)
+        with llm_generation_span(llm, "checklist_enumerate", messages) as gen_span:
+            response = llm.invoke(messages, timeout_override=300)
+            record_llm_response(gen_span, response)
         raw_text = llm_response_to_string(response)
     except Exception as e:
-        logger.error(f"LLM call failed during checklist import: {e}")
-        raise RuntimeError(f"Failed to parse checklist via LLM: {str(e)}") from e
+        logger.error(f"Pass 1 (enumerate) LLM call failed: {e}")
+        raise RuntimeError(f"Failed to enumerate checklist items: {str(e)}") from e
 
-    # Parse JSON response
-    rules = _parse_import_response(raw_text)
-    logger.info(f"Checklist import produced {len(rules)} atomic rules")
+    parsed = _parse_json_array(raw_text, context="enumerate")
+
+    items: list[ChecklistItem] = []
+    for i, raw in enumerate(parsed):
+        if not isinstance(raw, dict):
+            logger.warning(f"Enumerate: skipping non-dict at index {i}")
+            continue
+
+        item_id = str(raw.get("id", f"ITEM-{i + 1}"))
+        name = raw.get("name")
+        if not name:
+            logger.warning(f"Enumerate: skipping item at index {i} (no name)")
+            continue
+
+        items.append(
+            ChecklistItem(
+                id=item_id,
+                name=str(name),
+                category=str(raw.get("category", f"{item_id}: {name}")),
+                description=str(raw.get("description", "")),
+                sub_checks=[str(s) for s in raw.get("sub_checks", [])],
+            )
+        )
+
+    return items
+
+
+def decompose_checklist_item(
+    item: ChecklistItem,
+    checklist_text: str,
+    llm: LLM,
+) -> list[dict]:
+    """Pass 2: Decompose one checklist item into atomic review rules.
+
+    One LLM call.  Output is bounded (1–10 rules per item).
+
+    Args:
+        item: The checklist item to decompose.
+        checklist_text: Full checklist text (passed as context).
+        llm: The LLM instance to use.
+
+    Returns:
+        List of validated rule dicts for this item.
+
+    Raises:
+        RuntimeError: If the LLM call fails or returns unparseable output.
+    """
+    sub_checks_str = "\n".join(f"  - {s}" for s in item.sub_checks) or "  (none listed)"
+
+    user_content = _DECOMPOSE_USER.format(
+        item_id=item.id,
+        item_name=item.name,
+        item_category=item.category,
+        item_description=item.description,
+        sub_checks=sub_checks_str,
+        checklist_text=checklist_text,
+    )
+    messages = [
+        SystemMessage(content=_DECOMPOSE_SYSTEM),
+        UserMessage(content=user_content),
+    ]
+
+    try:
+        with llm_generation_span(
+            llm, f"checklist_decompose_{item.id}", messages
+        ) as gen_span:
+            response = llm.invoke(messages, timeout_override=300)
+            record_llm_response(gen_span, response)
+        raw_text = llm_response_to_string(response)
+    except Exception as e:
+        raise RuntimeError(f"LLM call failed for item '{item.name}': {str(e)}") from e
+
+    parsed = _parse_json_array(raw_text, context=f"decompose[{item.id}]")
+
+    rules: list[dict] = []
+    for i, raw_rule in enumerate(parsed):
+        if not isinstance(raw_rule, dict):
+            continue
+        rule = _validate_rule(raw_rule, i)
+        if rule:
+            if not rule["category"]:
+                rule["category"] = item.category
+            rules.append(rule)
 
     return rules
 
 
-def _parse_import_response(raw_text: str) -> list[dict]:
-    """Parse the LLM response text as a JSON array of rule dicts."""
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_json_array(raw_text: str, context: str) -> list:
+    """Parse an LLM response as a JSON array, stripping code fences."""
     text = raw_text.strip()
 
-    # Strip markdown code fences if present
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*\n?", "", text)
         text = re.sub(r"\n?```\s*$", "", text)
@@ -144,34 +291,29 @@ def _parse_import_response(raw_text: str) -> list[dict]:
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse import response as JSON: {e}")
-        logger.debug(f"Raw LLM response: {text[:500]}...")
+        logger.error(f"[{context}] Failed to parse JSON: {e}")
+        logger.debug(f"[{context}] Raw LLM response: {text[:500]}...")
         raise RuntimeError(
-            "LLM returned invalid JSON. Please try the import again."
+            f"LLM returned invalid JSON during {context}. "
+            "Please try the import again."
         ) from e
 
     if not isinstance(parsed, list):
         raise RuntimeError(
-            "LLM returned a non-array JSON. Expected a list of rule objects."
+            f"LLM returned non-array JSON during {context}. " "Expected a list."
         )
 
-    # Validate and normalize each rule
-    validated_rules: list[dict] = []
-    for i, raw_rule in enumerate(parsed):
-        if not isinstance(raw_rule, dict):
-            logger.warning(f"Skipping non-dict entry at index {i}")
-            continue
-
-        rule = _validate_rule(raw_rule, i)
-        if rule:
-            validated_rules.append(rule)
-
-    return validated_rules
+    return parsed
 
 
 def _validate_rule(raw_rule: dict, index: int) -> dict | None:
     """Validate and normalize a single parsed rule dict."""
-    valid_types = {"DOCUMENT_CHECK", "METADATA_CHECK", "CROSS_REFERENCE", "CUSTOM_NL"}
+    valid_types = {
+        "DOCUMENT_CHECK",
+        "METADATA_CHECK",
+        "CROSS_REFERENCE",
+        "CUSTOM_NL",
+    }
     valid_intents = {"CHECK", "HIGHLIGHT"}
 
     name = raw_rule.get("name")
@@ -193,7 +335,7 @@ def _validate_rule(raw_rule: dict, index: int) -> dict | None:
         rule_intent = "CHECK"
 
     return {
-        "name": str(name)[:200],  # Cap length
+        "name": str(name)[:200],
         "description": raw_rule.get("description"),
         "category": raw_rule.get("category"),
         "rule_type": rule_type,

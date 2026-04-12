@@ -102,17 +102,14 @@ export default function ProposalInfoPanel({
                   Jira Key
                 </Text>
                 {metadata.link ? (
-                  <a
-                    href={metadata.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-action-link-01 hover:text-action-link-02"
+                  <Button
+                    href={String(metadata.link)}
+                    prominence="tertiary"
+                    size="sm"
+                    rightIcon={SvgExternalLink}
                   >
-                    <Text font="main-ui-body" color="inherit" as="span">
-                      {metadata.jira_key}
-                    </Text>
-                    <SvgExternalLink className="h-3 w-3" />
-                  </a>
+                    {String(metadata.jira_key)}
+                  </Button>
                 ) : (
                   <Text font="main-ui-body" color="text-04" as="span">
                     {metadata.jira_key}

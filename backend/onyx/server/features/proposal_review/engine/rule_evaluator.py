@@ -13,6 +13,8 @@ from onyx.server.features.proposal_review.db.models import ProposalReviewRule
 from onyx.server.features.proposal_review.engine.context_assembler import (
     ProposalContext,
 )
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -81,7 +83,9 @@ def evaluate_rule(
     # 3. Call LLM
     try:
         llm = get_default_llm()
-        response = llm.invoke(prompt_messages)
+        with llm_generation_span(llm, "proposal_review", prompt_messages) as gen_span:
+            response = llm.invoke(prompt_messages)
+            record_llm_response(gen_span, response)
         raw_text = llm_response_to_string(response)
 
         # Extract model info

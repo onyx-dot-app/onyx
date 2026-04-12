@@ -164,12 +164,14 @@ def sync_jira(
             message="Decision already synced to Jira",
         )
 
-    # Dispatch Celery task for Jira sync
-    from onyx.server.features.proposal_review.engine.review_engine import (
-        sync_decision_to_jira,
-    )
+    # Dispatch Celery task via the client app (has Redis broker configured)
+    from onyx.background.celery.versioned_apps.client import app as celery_app
 
-    sync_decision_to_jira.apply_async(args=[str(proposal_id), tenant_id], expires=300)
+    celery_app.send_task(
+        "sync_decision_to_jira",
+        args=[str(proposal_id), tenant_id],
+        expires=300,
+    )
 
     # Audit log
     decisions_db.create_audit_log(

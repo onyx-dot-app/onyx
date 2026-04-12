@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import desc
@@ -13,6 +14,24 @@ from onyx.server.features.proposal_review.db.models import ProposalReviewRuleset
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_RULESET_UPDATABLE_FIELDS = frozenset(
+    {"name", "description", "is_default", "is_active"}
+)
+_RULE_UPDATABLE_FIELDS = frozenset(
+    {
+        "name",
+        "description",
+        "category",
+        "rule_type",
+        "rule_intent",
+        "prompt_template",
+        "authority",
+        "is_hard_stop",
+        "priority",
+        "is_active",
+    }
+)
 
 
 # =============================================================================
@@ -84,26 +103,19 @@ def update_ruleset(
     ruleset_id: UUID,
     tenant_id: str,
     db_session: Session,
-    name: str | None = None,
-    description: str | None = None,
-    is_default: bool | None = None,
-    is_active: bool | None = None,
+    updates: dict[str, Any],
 ) -> ProposalReviewRuleset | None:
     """Update a ruleset. Returns None if not found."""
     ruleset = get_ruleset(ruleset_id, tenant_id, db_session)
     if not ruleset:
         return None
 
-    if name is not None:
-        ruleset.name = name
-    if description is not None:
-        ruleset.description = description
-    if is_default is not None:
-        if is_default:
+    for field, value in updates.items():
+        if field not in _RULESET_UPDATABLE_FIELDS:
+            raise ValueError(f"Cannot update ruleset field: {field}")
+        if field == "is_default" and value:
             _clear_default_ruleset(tenant_id, db_session)
-        ruleset.is_default = is_default
-    if is_active is not None:
-        ruleset.is_active = is_active
+        setattr(ruleset, field, value)
 
     ruleset.updated_at = datetime.now(timezone.utc)
     db_session.flush()
@@ -204,42 +216,17 @@ def create_rule(
 def update_rule(
     rule_id: UUID,
     db_session: Session,
-    name: str | None = None,
-    description: str | None = None,
-    category: str | None = None,
-    rule_type: str | None = None,
-    rule_intent: str | None = None,
-    prompt_template: str | None = None,
-    authority: str | None = None,
-    is_hard_stop: bool | None = None,
-    priority: int | None = None,
-    is_active: bool | None = None,
+    updates: dict[str, Any],
 ) -> ProposalReviewRule | None:
     """Update a rule. Returns None if not found."""
     rule = get_rule(rule_id, db_session)
     if not rule:
         return None
 
-    if name is not None:
-        rule.name = name
-    if description is not None:
-        rule.description = description
-    if category is not None:
-        rule.category = category
-    if rule_type is not None:
-        rule.rule_type = rule_type
-    if rule_intent is not None:
-        rule.rule_intent = rule_intent
-    if prompt_template is not None:
-        rule.prompt_template = prompt_template
-    if authority is not None:
-        rule.authority = authority
-    if is_hard_stop is not None:
-        rule.is_hard_stop = is_hard_stop
-    if priority is not None:
-        rule.priority = priority
-    if is_active is not None:
-        rule.is_active = is_active
+    for field, value in updates.items():
+        if field not in _RULE_UPDATABLE_FIELDS:
+            raise ValueError(f"Cannot update rule field: {field}")
+        setattr(rule, field, value)
 
     rule.updated_at = datetime.now(timezone.utc)
     db_session.flush()
@@ -276,44 +263,20 @@ def bulk_update_rules(
     Returns:
         number of rules affected
     """
+    base_query = db_session.query(ProposalReviewRule).filter(
+        ProposalReviewRule.id.in_(rule_ids),
+        ProposalReviewRule.ruleset_id == ruleset_id,
+    )
+
     if action == "delete":
-        count = (
-            db_session.query(ProposalReviewRule)
-            .filter(
-                ProposalReviewRule.id.in_(rule_ids),
-                ProposalReviewRule.ruleset_id == ruleset_id,
-            )
-            .delete(synchronize_session="fetch")
-        )
-    elif action == "activate":
-        count = (
-            db_session.query(ProposalReviewRule)
-            .filter(
-                ProposalReviewRule.id.in_(rule_ids),
-                ProposalReviewRule.ruleset_id == ruleset_id,
-            )
-            .update(
-                {
-                    ProposalReviewRule.is_active: True,
-                    ProposalReviewRule.updated_at: datetime.now(timezone.utc),
-                },
-                synchronize_session="fetch",
-            )
-        )
-    elif action == "deactivate":
-        count = (
-            db_session.query(ProposalReviewRule)
-            .filter(
-                ProposalReviewRule.id.in_(rule_ids),
-                ProposalReviewRule.ruleset_id == ruleset_id,
-            )
-            .update(
-                {
-                    ProposalReviewRule.is_active: False,
-                    ProposalReviewRule.updated_at: datetime.now(timezone.utc),
-                },
-                synchronize_session="fetch",
-            )
+        count = base_query.delete(synchronize_session="fetch")
+    elif action in ("activate", "deactivate"):
+        count = base_query.update(
+            {
+                ProposalReviewRule.is_active: action == "activate",
+                ProposalReviewRule.updated_at: datetime.now(timezone.utc),
+            },
+            synchronize_session="fetch",
         )
     else:
         raise ValueError(f"Unknown bulk action: {action}")

@@ -15,7 +15,7 @@ import fastapi_users_db_sqlalchemy
 
 # revision identifiers, used by Alembic.
 revision = "61ea78857c97"
-down_revision = "c7bf5721733e"
+down_revision = "503883791c39"
 branch_labels: str | None = None
 depends_on: str | None = None
 
@@ -498,6 +498,56 @@ def upgrade() -> None:
         ["proposal_id"],
     )
 
+    # -- proposal_review_import_job --
+    op.create_table(
+        "proposal_review_import_job",
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "ruleset_id",
+            postgresql.UUID(as_uuid=True),
+            nullable=False,
+        ),
+        sa.Column("tenant_id", sa.Text(), nullable=False),
+        sa.Column(
+            "status",
+            sa.Text(),
+            server_default=sa.text("'PENDING'"),
+            nullable=False,
+        ),
+        sa.Column("source_filename", sa.Text(), nullable=False),
+        sa.Column("extracted_text", sa.Text(), nullable=False),
+        sa.Column(
+            "rules_created",
+            sa.Integer(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
+        sa.Column("error_message", sa.Text(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["ruleset_id"],
+            ["proposal_review_ruleset.id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "ix_proposal_review_import_job_ruleset_id",
+        "proposal_review_import_job",
+        ["ruleset_id"],
+    )
+
     # -- proposal_review_config --
     op.create_table(
         "proposal_review_config",
@@ -512,6 +562,8 @@ def upgrade() -> None:
         sa.Column("jira_project_key", sa.Text(), nullable=True),
         sa.Column("field_mapping", postgresql.JSONB(), nullable=True),
         sa.Column("jira_writeback", postgresql.JSONB(), nullable=True),
+        sa.Column("review_model", sa.Text(), nullable=True),
+        sa.Column("import_model", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -529,6 +581,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_table("proposal_review_import_job")
     op.drop_table("proposal_review_config")
     op.drop_table("proposal_review_audit_log")
     op.drop_table("proposal_review_document")

@@ -389,6 +389,40 @@ class ProposalReviewAuditLog(Base):
     )
 
 
+class ProposalReviewImportJob(Base):
+    """Tracks background checklist import jobs dispatched via Celery."""
+
+    __tablename__ = "proposal_review_import_job"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    ruleset_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("proposal_review_ruleset.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'PENDING'")
+    )
+    source_filename: Mapped[str] = mapped_column(Text, nullable=False)
+    extracted_text: Mapped[str] = mapped_column(Text, nullable=False)
+    rules_created: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class ProposalReviewConfig(Base):
     """Admin configuration (one row per tenant)."""
 
@@ -404,6 +438,8 @@ class ProposalReviewConfig(Base):
     jira_project_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     field_mapping: Mapped[list | None] = mapped_column(PGJSONB(), nullable=True)
     jira_writeback: Mapped[dict | None] = mapped_column(PGJSONB(), nullable=True)
+    review_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    import_model: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

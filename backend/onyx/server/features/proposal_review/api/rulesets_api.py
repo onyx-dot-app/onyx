@@ -15,7 +15,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.proposal_review.api.models import BulkRuleUpdateRequest
 from onyx.server.features.proposal_review.api.models import BulkRuleUpdateResponse
-from onyx.server.features.proposal_review.api.models import ImportResponse
+from onyx.server.features.proposal_review.api.models import ImportJobResponse
 from onyx.server.features.proposal_review.api.models import RuleCreate
 from onyx.server.features.proposal_review.api.models import RuleResponse
 from onyx.server.features.proposal_review.api.models import RulesetCreate
@@ -23,8 +23,12 @@ from onyx.server.features.proposal_review.api.models import RulesetResponse
 from onyx.server.features.proposal_review.api.models import RulesetUpdate
 from onyx.server.features.proposal_review.api.models import RuleUpdate
 from onyx.server.features.proposal_review.configs import IMPORT_MAX_FILE_SIZE_BYTES
+from onyx.server.features.proposal_review.db import imports as imports_db
 from onyx.server.features.proposal_review.db import rulesets as rulesets_db
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 router = APIRouter()
 
@@ -93,11 +97,8 @@ def update_ruleset(
     ruleset = rulesets_db.update_ruleset(
         ruleset_id=ruleset_id,
         tenant_id=tenant_id,
-        name=request.name,
-        description=request.description,
-        is_default=request.is_default,
-        is_active=request.is_active,
         db_session=db_session,
+        updates=request.model_dump(exclude_unset=True),
     )
     if not ruleset:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
@@ -184,17 +185,8 @@ def update_rule(
 
     updated_rule = rulesets_db.update_rule(
         rule_id=rule_id,
-        name=request.name,
-        description=request.description,
-        category=request.category,
-        rule_type=request.rule_type,
-        rule_intent=request.rule_intent,
-        prompt_template=request.prompt_template,
-        authority=request.authority,
-        is_hard_stop=request.is_hard_stop,
-        priority=request.priority,
-        is_active=request.is_active,
         db_session=db_session,
+        updates=request.model_dump(exclude_unset=True),
     )
     if not updated_rule:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Rule not found")
@@ -259,27 +251,29 @@ def bulk_update_rules(
 
 @router.post(
     "/rulesets/{ruleset_id}/import",
+    status_code=202,
 )
-def import_checklist(
+def import_checklist_endpoint(
     ruleset_id: UUID,
     file: UploadFile,
     user: User = Depends(  # noqa: ARG001
         require_permission(Permission.MANAGE_CONNECTORS)
     ),
     db_session: Session = Depends(get_session),
-) -> ImportResponse:
-    """Upload a checklist document and parse it into atomic review rules via LLM.
+) -> dict[str, str]:
+    """Upload a checklist document and parse it into rules via LLM.
 
-    Accepts a checklist file (.pdf, .docx, .xlsx, .txt), extracts its text,
-    and uses LLM to decompose it into atomic, self-contained rules.
-    Rules are saved to the ruleset as inactive drafts (is_active=false).
+    Text extraction happens synchronously (fast). The LLM decomposition
+    runs in a Celery task so the request returns 202 immediately.
+    Poll GET /rulesets/{ruleset_id}/import/{import_job_id}/status
+    to track progress.
     """
     tenant_id = get_current_tenant_id()
     ruleset = rulesets_db.get_ruleset(ruleset_id, tenant_id, db_session)
     if not ruleset:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
 
-    # Read the uploaded file content
+    # Read the uploaded file content (synchronous -- fast)
     try:
         file_content = file.file.read()
     except Exception as e:
@@ -291,7 +285,6 @@ def import_checklist(
     if not file_content:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Uploaded file is empty")
 
-    # Validate file size
     if len(file_content) > IMPORT_MAX_FILE_SIZE_BYTES:
         raise OnyxError(
             OnyxErrorCode.PAYLOAD_TOO_LARGE,
@@ -299,8 +292,7 @@ def import_checklist(
             f"allowed size of {IMPORT_MAX_FILE_SIZE_BYTES} bytes",
         )
 
-    # Extract text from the file
-    # For text files, decode directly; for other formats, use extract_file_text
+    # Extract text synchronously (fast -- no LLM involved)
     extracted_text = ""
     filename = file.filename or "untitled"
     file_ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -329,42 +321,50 @@ def import_checklist(
             "No text could be extracted from the uploaded file",
         )
 
-    # Call the LLM-based checklist importer
-    from onyx.server.features.proposal_review.engine.checklist_importer import (
-        import_checklist,
+    # Create the import job row
+    job = imports_db.create_import_job(
+        ruleset_id=ruleset_id,
+        tenant_id=tenant_id,
+        source_filename=filename,
+        extracted_text=extracted_text,
+        db_session=db_session,
     )
-
-    try:
-        rule_dicts = import_checklist(extracted_text)
-    except RuntimeError as e:
-        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
-
-    # Save parsed rules to the ruleset as inactive drafts
-    created_rules = []
-    for rd in rule_dicts:
-        rule = rulesets_db.create_rule(
-            ruleset_id=ruleset_id,
-            name=rd["name"],
-            description=rd.get("description"),
-            category=rd.get("category"),
-            rule_type=rd.get("rule_type", "CUSTOM_NL"),
-            rule_intent=rd.get("rule_intent", "CHECK"),
-            prompt_template=rd["prompt_template"],
-            source="IMPORTED",
-            is_hard_stop=False,
-            priority=0,
-            db_session=db_session,
-        )
-        # Rules start as inactive drafts — admin reviews and activates
-        rule.is_active = False
-        db_session.flush()
-        created_rules.append(rule)
-
     db_session.commit()
-    return ImportResponse(
-        rules_created=len(created_rules),
-        rules=[RuleResponse.from_model(r) for r in created_rules],
+
+    # Dispatch Celery task via the client app (has Redis broker configured)
+    from onyx.background.celery.versioned_apps.client import app as celery_app
+
+    celery_app.send_task(
+        "run_checklist_import",
+        args=[str(job.id), tenant_id],
+        expires=600,
     )
+
+    return {"import_job_id": str(job.id)}
+
+
+@router.get(
+    "/rulesets/{ruleset_id}/import/{import_job_id}/status",
+)
+def get_import_job_status(
+    ruleset_id: UUID,
+    import_job_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
+    db_session: Session = Depends(get_session),
+) -> ImportJobResponse:
+    """Get the status of a checklist import job."""
+    tenant_id = get_current_tenant_id()
+
+    # Verify ruleset belongs to tenant
+    ruleset = rulesets_db.get_ruleset(ruleset_id, tenant_id, db_session)
+    if not ruleset:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Ruleset not found")
+
+    job = imports_db.get_import_job(import_job_id, db_session)
+    if not job or job.ruleset_id != ruleset_id:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Import job not found")
+
+    return ImportJobResponse.from_model(job)
 
 
 @router.post("/rules/{rule_id}/test")

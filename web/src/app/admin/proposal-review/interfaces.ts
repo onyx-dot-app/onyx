@@ -103,6 +103,8 @@ export interface ConfigResponse {
   jira_project_key: string | null;
   field_mapping: string[] | null;
   jira_writeback: Record<string, string> | null;
+  review_model: string | null;
+  import_model: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -112,6 +114,8 @@ export interface ConfigUpdate {
   jira_project_key?: string | null;
   field_mapping?: string[] | null;
   jira_writeback?: Record<string, string> | null;
+  review_model?: string | null;
+  import_model?: string | null;
 }
 
 export interface JiraConnectorInfo {
