@@ -516,8 +516,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               ref={inputRef}
               className={cn(
                 "w-full flex flex-col",
-                !isSidePanel &&
-                  "max-w-[var(--app-page-main-content-width)] px-4"
+                !isSidePanel && "max-w-[var(--app-page-main-content-width)]"
               )}
             >
               {hasMessages && liveAgent && !llmManager.isLoadingProviders && (
