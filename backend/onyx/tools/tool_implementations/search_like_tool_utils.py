@@ -1,6 +1,7 @@
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
+from onyx.connectors.models import SectionKind
 
 
 FINAL_CONTEXT_DOCUMENTS_ID = "final_context_documents"
@@ -17,6 +18,7 @@ def documents_to_indexing_documents(
         processed_sections = []
         for section in document.sections:
             processed_section = Section(
+                kind=SectionKind.TEXT,
                 text=section.text or "",
                 link=section.link,
                 image_file_id=None,
