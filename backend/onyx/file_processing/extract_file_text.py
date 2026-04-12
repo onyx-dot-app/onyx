@@ -462,7 +462,6 @@ def _remove_empty_runs(
 
     return result
 
-
 def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
     """
     Converts each sheet in the excel file to a csv condensed string.
