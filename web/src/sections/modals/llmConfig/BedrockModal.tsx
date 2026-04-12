@@ -114,7 +114,8 @@ function BedrockModalInternals({
         formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY,
       aws_bearer_token_bedrock:
         formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
-      provider_name: LLMProviderName.BEDROCK,
+      // Only sync models to existing provider during updates, not initial creation
+      provider_name: existingLlmProvider?.name,
     });
     if (error) {
       throw new Error(error);
