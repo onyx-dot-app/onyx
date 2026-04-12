@@ -711,6 +711,13 @@ export default function useChatController({
         ? selectedModels?.map((m) => m.displayName) ?? []
         : [];
 
+      // rAF-batched flush state. One Zustand write per frame instead of
+      // one per packet.
+      const dirtyModelIndices = new Set<number>();
+      let singleModelDirty = false;
+      let userNodeDirty = false;
+      let pendingFlush = false;
+
       /** Build a non-errored multi-model assistant node for upsert. */
       function buildAssistantNodeUpdate(
         idx: number,
@@ -740,14 +747,122 @@ export default function useChatController({
         };
       }
 
-      /** Build updated nodes for all non-errored models. */
-      function buildNonErroredNodes(overrides?: Partial<Message>): Message[] {
+      /** With `onlyDirty`, rebuilds only those model nodes — unchanged
+       *  siblings keep their stable Message ref so React memo short-circuits. */
+      function buildNonErroredNodes(
+        overrides?: Partial<Message>,
+        onlyDirty?: Set<number> | null
+      ): Message[] {
         const nodes: Message[] = [];
         for (let idx = 0; idx < initialAssistantNodes.length; idx++) {
           if (erroredModelIndices.has(idx)) continue;
+          if (onlyDirty && !onlyDirty.has(idx)) continue;
           nodes.push(buildAssistantNodeUpdate(idx, overrides));
         }
         return nodes;
+      }
+
+      /** Flush accumulated packet state into the tree as one Zustand
+       *  update. No-op when nothing is pending. */
+      function flushPendingUpdates() {
+        if (!pendingFlush) return;
+        pendingFlush = false;
+
+        parentMessage =
+          parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
+
+        let messagesToUpsert: Message[];
+
+        if (isMultiModel) {
+          if (dirtyModelIndices.size === 0 && !userNodeDirty) return;
+
+          const dirtySnapshot = new Set(dirtyModelIndices);
+          dirtyModelIndices.clear();
+          const dirtyNodes = buildNonErroredNodes(undefined, dirtySnapshot);
+
+          if (userNodeDirty) {
+            userNodeDirty = false;
+            // Read current user node to preserve childrenNodeIds
+            // (initialUserNode's are stale from creation time).
+            const currentUserNode =
+              currentMessageTreeLocal.get(initialUserNode.nodeId) ||
+              initialUserNode;
+            const updatedUserNode: Message = {
+              ...currentUserNode,
+              messageId: newUserMessageId ?? undefined,
+              files: files,
+            };
+            messagesToUpsert = [updatedUserNode, ...dirtyNodes];
+          } else {
+            messagesToUpsert = dirtyNodes;
+          }
+
+          if (messagesToUpsert.length === 0) return;
+        } else {
+          if (!singleModelDirty) return;
+          singleModelDirty = false;
+
+          messagesToUpsert = [
+            {
+              ...initialUserNode,
+              messageId: newUserMessageId ?? undefined,
+              files: files,
+            },
+            {
+              ...initialAgentNode,
+              messageId: newAgentMessageId ?? undefined,
+              message: error || answer,
+              type: error ? "error" : "assistant",
+              retrievalType,
+              query: finalMessage?.rephrased_query || query,
+              documents: documents,
+              citations: finalMessage?.citations || citations || {},
+              files: finalMessage?.files || aiMessageImages || [],
+              toolCall: finalMessage?.tool_call || toolCall,
+              stackTrace: stackTrace,
+              overridden_model: finalMessage?.overridden_model,
+              stopReason: stopReason,
+              packets: packets,
+              packetCount: packets.length,
+              processingDurationSeconds:
+                finalMessage?.processing_duration_seconds ??
+                (() => {
+                  const startTime = useChatSessionStore
+                    .getState()
+                    .getStreamingStartTime(frozenSessionId);
+                  return startTime
+                    ? Math.floor((Date.now() - startTime) / 1000)
+                    : undefined;
+                })(),
+            },
+          ];
+        }
+
+        currentMessageTreeLocal = upsertToCompleteMessageTree({
+          messages: messagesToUpsert,
+          completeMessageTreeOverride: currentMessageTreeLocal,
+          chatSessionId: frozenSessionId!,
+        });
+      }
+
+      /** Awaits next animation frame (or a setTimeout fallback when the
+       *  tab is hidden — rAF is paused in background tabs, which would
+       *  otherwise hang the stream loop here), then flushes. Aligns
+       *  React updates with the paint cycle when visible. */
+      function flushViaRAF(): Promise<void> {
+        return new Promise<void>((resolve) => {
+          let done = false;
+          const flush = () => {
+            if (done) return;
+            done = true;
+            flushPendingUpdates();
+            resolve();
+          };
+          requestAnimationFrame(flush);
+          // Fallback for hidden tabs where rAF is paused. Throttled to
+          // ~1s by browsers, matching the previous setTimeout(500) cadence.
+          setTimeout(flush, 100);
+        });
       }
 
       let streamSucceeded = false;
@@ -836,7 +951,12 @@ export default function useChatController({
         await delay(50);
         while (!stack.isComplete || !stack.isEmpty()) {
           if (stack.isEmpty()) {
-            await delay(0.5);
+            // Flush the burst on the next paint, or idle briefly.
+            if (pendingFlush) {
+              await flushViaRAF();
+            } else {
+              await delay(0.5);
+            }
           }
 
           if (!stack.isEmpty() && !controller.signal.aborted) {
@@ -860,6 +980,7 @@ export default function useChatController({
             if ((packet as MessageResponseIDInfo).user_message_id) {
               newUserMessageId = (packet as MessageResponseIDInfo)
                 .user_message_id;
+              userNodeDirty = true;
 
               // Track extension queries in PostHog (reuses isExtension/extensionContext from above)
               if (isExtension) {
@@ -898,6 +1019,8 @@ export default function useChatController({
                   modelDisplayNames[mi] = slot.model_name;
                 }
               }
+              userNodeDirty = true;
+              pendingFlush = true;
               continue;
             }
 
@@ -909,6 +1032,7 @@ export default function useChatController({
                   !files.some((existingFile) => existingFile.id === newFile.id)
               );
               files = files.concat(newUserFiles);
+              if (newUserFiles.length > 0) userNodeDirty = true;
             }
 
             if (Object.hasOwn(packet, "file_ids")) {
@@ -937,6 +1061,7 @@ export default function useChatController({
                 ) {
                   const errorNode = initialAssistantNodes[errorModelIndex]!;
                   erroredModelIndices.add(errorModelIndex);
+                  dirtyModelIndices.delete(errorModelIndex);
                   currentMessageTreeLocal = upsertToCompleteMessageTree({
                     messages: [
                       {
@@ -993,19 +1118,21 @@ export default function useChatController({
 
               if (isMultiModel) {
                 // Multi-model: route packet by placement.model_index.
-                // OverallStop (type "stop") has model_index=null — it's a global
-                // terminal packet that must be delivered to ALL models so each
-                // panel's AgentMessage sees the stop and exits "Thinking..." state.
+                // OverallStop (type "stop") has model_index=null — it's a
+                // global terminal packet that must be delivered to ALL
+                // models so each panel's AgentMessage sees the stop and
+                // exits "Thinking..." state.
                 const isGlobalStop =
                   packetObj.type === "stop" &&
                   typedPacket.placement?.model_index == null;
 
                 if (isGlobalStop) {
                   for (let mi = 0; mi < packetsPerModel.length; mi++) {
-                    packetsPerModel[mi] = [
-                      ...packetsPerModel[mi]!,
-                      typedPacket,
-                    ];
+                    // Mutated in place — change detection uses packetCount, not array identity.
+                    packetsPerModel[mi]!.push(typedPacket);
+                    if (!erroredModelIndices.has(mi)) {
+                      dirtyModelIndices.add(mi);
+                    }
                   }
                 }
 
@@ -1015,10 +1142,10 @@ export default function useChatController({
                   modelIndex >= 0 &&
                   modelIndex < packetsPerModel.length
                 ) {
-                  packetsPerModel[modelIndex] = [
-                    ...packetsPerModel[modelIndex]!,
-                    typedPacket,
-                  ];
+                  packetsPerModel[modelIndex]!.push(typedPacket);
+                  if (!erroredModelIndices.has(modelIndex)) {
+                    dirtyModelIndices.add(modelIndex);
+                  }
 
                   if (packetObj.type === "citation_info") {
                     const citationInfo = packetObj as {
@@ -1048,6 +1175,7 @@ export default function useChatController({
                 // Single-model
                 packets.push(typedPacket);
                 packetsVersion++;
+                singleModelDirty = true;
 
                 if (packetObj.type === "citation_info") {
                   const citationInfo = packetObj as {
@@ -1074,73 +1202,16 @@ export default function useChatController({
               console.warn("Unknown packet:", JSON.stringify(packet));
             }
 
-            // on initial message send, we insert a dummy system message
-            // set this as the parent here if no parent is set
-            parentMessage =
-              parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
-
-            // Build the messages to upsert based on single vs multi-model mode
-            let messagesToUpsertInLoop: Message[];
-
-            if (isMultiModel) {
-              // Read the current user node from the tree to preserve childrenNodeIds
-              // (initialUserNode has stale/empty children from creation time).
-              const currentUserNode =
-                currentMessageTreeLocal.get(initialUserNode.nodeId) ||
-                initialUserNode;
-              const updatedUserNode: Message = {
-                ...currentUserNode,
-                messageId: newUserMessageId ?? undefined,
-                files: files,
-              };
-              messagesToUpsertInLoop = [
-                updatedUserNode,
-                ...buildNonErroredNodes(),
-              ];
-            } else {
-              messagesToUpsertInLoop = [
-                {
-                  ...initialUserNode,
-                  messageId: newUserMessageId ?? undefined,
-                  files: files,
-                },
-                {
-                  ...initialAgentNode,
-                  messageId: newAgentMessageId ?? undefined,
-                  message: error || answer,
-                  type: error ? "error" : "assistant",
-                  retrievalType,
-                  query: finalMessage?.rephrased_query || query,
-                  documents: documents,
-                  citations: finalMessage?.citations || citations || {},
-                  files: finalMessage?.files || aiMessageImages || [],
-                  toolCall: finalMessage?.tool_call || toolCall,
-                  stackTrace: stackTrace,
-                  overridden_model: finalMessage?.overridden_model,
-                  stopReason: stopReason,
-                  packets: packets,
-                  packetCount: packets.length,
-                  processingDurationSeconds:
-                    finalMessage?.processing_duration_seconds ??
-                    (() => {
-                      const startTime = useChatSessionStore
-                        .getState()
-                        .getStreamingStartTime(frozenSessionId);
-                      return startTime
-                        ? Math.floor((Date.now() - startTime) / 1000)
-                        : undefined;
-                    })(),
-                },
-              ];
-            }
-
-            currentMessageTreeLocal = upsertToCompleteMessageTree({
-              messages: messagesToUpsertInLoop,
-              completeMessageTreeOverride: currentMessageTreeLocal,
-              chatSessionId: frozenSessionId!,
-            });
+            // Mark dirty — flushViaRAF coalesces bursts into one React update per frame.
+            if (!isMultiModel) singleModelDirty = true;
+            pendingFlush = true;
           }
         }
+        // Flush any tail state from the final packet(s) before declaring
+        // the stream complete. Without this, the last ≤1 frame of packets
+        // could get stranded in local state.
+        flushPendingUpdates();
+
         // Surface FIFO errors (e.g. 429 before any packets arrive) so the
         // catch block replaces the thinking placeholder with an error message.
         if (stack.error) {

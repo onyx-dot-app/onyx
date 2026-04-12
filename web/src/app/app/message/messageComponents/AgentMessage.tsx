@@ -305,7 +305,7 @@ const AgentMessage = React.memo(function AgentMessage({
                     onRenderComplete();
                   }
                 }}
-                animate={false}
+                animate={!stopPacketSeen}
                 stopPacketSeen={stopPacketSeen}
                 stopReason={stopReason}
               >
