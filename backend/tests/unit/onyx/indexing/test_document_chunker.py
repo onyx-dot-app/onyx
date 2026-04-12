@@ -1,12 +1,13 @@
 import pytest
+from chonkie import SentenceChunker
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import SECTION_SEPARATOR
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
 from onyx.connectors.models import SectionType
-from onyx.indexing import chunker as chunker_module
-from onyx.indexing.chunker import Chunker
+from onyx.indexing.document_chunker import text_section_chunker as text_chunker_module
+from onyx.indexing.document_chunker.document_chunker import DocumentChunker
 from onyx.natural_language_processing.utils import BaseTokenizer
 
 
@@ -28,16 +29,26 @@ class CharTokenizer(BaseTokenizer):
 CHUNK_LIMIT = 200
 
 
-def _make_chunker(
+def _make_document_chunker(
     chunk_token_limit: int = CHUNK_LIMIT,
-    enable_multipass: bool = False,
-) -> Chunker:
-    return Chunker(
+) -> DocumentChunker:
+    def token_counter(text: str) -> int:
+        return len(text)
+
+    return DocumentChunker(
         tokenizer=CharTokenizer(),
-        enable_multipass=enable_multipass,
-        enable_large_chunks=False,
-        enable_contextual_rag=False,
-        chunk_token_limit=chunk_token_limit,
+        blurb_splitter=SentenceChunker(
+            tokenizer_or_token_counter=token_counter,
+            chunk_size=128,
+            chunk_overlap=0,
+            return_type="texts",
+        ),
+        chunk_splitter=SentenceChunker(
+            tokenizer_or_token_counter=token_counter,
+            chunk_size=chunk_token_limit,
+            chunk_overlap=0,
+            return_type="texts",
+        ),
     )
 
 
@@ -63,10 +74,10 @@ def _make_doc(
 def test_empty_processed_sections_returns_single_empty_safety_chunk() -> None:
     """No sections at all should still yield one empty chunk (the
     `or not chunks` safety branch at the end)."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(sections=[])
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=[],
         title_prefix="TITLE\n",
@@ -88,13 +99,13 @@ def test_empty_processed_sections_returns_single_empty_safety_chunk() -> None:
 def test_empty_section_on_first_position_without_title_is_skipped() -> None:
     """Doc has no title, first section has empty text — the guard
     `(not document.title or section_idx > 0)` means it IS skipped."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[Section(type=SectionType.TEXT, text="", link="l0")],
         title=None,
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -110,7 +121,7 @@ def test_empty_section_on_first_position_without_title_is_skipped() -> None:
 
 def test_empty_section_on_later_position_is_skipped_even_with_title() -> None:
     """Index > 0 empty sections are skipped regardless of title."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[
             Section(type=SectionType.TEXT, text="Alpha.", link="l0"),
@@ -119,7 +130,7 @@ def test_empty_section_on_later_position_is_skipped_even_with_title() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -139,12 +150,12 @@ def test_empty_section_on_later_position_is_skipped_even_with_title() -> None:
 
 
 def test_single_small_text_section_becomes_one_chunk() -> None:
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[Section(type=SectionType.TEXT, text="Hello world.", link="https://a")]
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="TITLE\n",
@@ -168,7 +179,7 @@ def test_single_small_text_section_becomes_one_chunk() -> None:
 
 
 def test_multiple_small_sections_combine_into_one_chunk() -> None:
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     sections = [
         Section(type=SectionType.TEXT, text="Part one.", link="l1"),
         Section(type=SectionType.TEXT, text="Part two.", link="l2"),
@@ -176,7 +187,7 @@ def test_multiple_small_sections_combine_into_one_chunk() -> None:
     ]
     doc = _make_doc(sections=sections)
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -200,7 +211,7 @@ def test_multiple_small_sections_combine_into_one_chunk() -> None:
 def test_sections_overflow_into_second_chunk() -> None:
     """Two sections that together exceed content_token_limit should
     finalize the first as one chunk and start a new one."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     # char-level: 120 char section → 120 tokens. 2 of these plus separator
     # exceed a 200-token limit, forcing a flush.
     a = "A" * 120
@@ -212,7 +223,7 @@ def test_sections_overflow_into_second_chunk() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -239,7 +250,7 @@ def test_sections_overflow_into_second_chunk() -> None:
 
 
 def test_image_only_section_produces_single_chunk_with_image_id() -> None:
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[
             Section(
@@ -251,7 +262,7 @@ def test_image_only_section_produces_single_chunk_with_image_id() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -269,7 +280,7 @@ def test_image_only_section_produces_single_chunk_with_image_id() -> None:
 def test_image_section_flushes_pending_text_and_creates_its_own_chunk() -> None:
     """A buffered text section followed by an image section:
     the pending text should be flushed first, then the image chunk."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[
             Section(type=SectionType.TEXT, text="Pending text.", link="ltext"),
@@ -283,7 +294,7 @@ def test_image_section_flushes_pending_text_and_creates_its_own_chunk() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -312,7 +323,7 @@ def test_image_section_flushes_pending_text_and_creates_its_own_chunk() -> None:
 
 def test_image_section_without_link_gets_empty_links_dict() -> None:
     """If an image section has no link, links param is {} (not {0: ""})."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[
             Section(
@@ -324,7 +335,7 @@ def test_image_section_without_link_gets_empty_links_dict() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -335,7 +346,7 @@ def test_image_section_without_link_gets_empty_links_dict() -> None:
 
     assert len(chunks) == 1
     assert chunks[0].image_file_id == "img-xyz"
-    # _create_chunk falls back to {0: ""} when given an empty dict
+    # to_doc_aware_chunk falls back to {0: ""} when given an empty dict
     assert chunks[0].source_links == {0: ""}
 
 
@@ -346,7 +357,7 @@ def test_oversized_section_is_split_across_multiple_chunks() -> None:
     """A section whose text exceeds content_token_limit should be passed
     through chunk_splitter and yield >1 chunks; only the first is not a
     continuation."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     # Build a section whose char-count is well over CHUNK_LIMIT (200), made
     # of many short sentences so chonkie's SentenceChunker can split cleanly.
     section_text = (
@@ -362,7 +373,7 @@ def test_oversized_section_is_split_across_multiple_chunks() -> None:
         sections=[Section(type=SectionType.TEXT, text=section_text, link="big-link")],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -389,7 +400,7 @@ def test_oversized_section_is_split_across_multiple_chunks() -> None:
 def test_oversized_section_flushes_pending_text_first() -> None:
     """A buffered text section followed by an oversized section should
     flush the pending chunk first, then emit the split chunks."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     pending = "Pending buffered text."
     big = (
         "Alpha beta gamma. Delta epsilon zeta. Eta theta iota. "
@@ -406,7 +417,7 @@ def test_oversized_section_flushes_pending_text_first() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -435,7 +446,7 @@ def test_oversized_section_flushes_pending_text_first() -> None:
 
 
 def test_title_prefix_and_metadata_propagate_to_all_chunks() -> None:
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[
             Section(type=SectionType.TEXT, text="A" * 120, link="la"),
@@ -443,7 +454,7 @@ def test_title_prefix_and_metadata_propagate_to_all_chunks() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="MY_TITLE\n",
@@ -463,7 +474,7 @@ def test_title_prefix_and_metadata_propagate_to_all_chunks() -> None:
 
 
 def test_chunk_ids_are_sequential_starting_at_zero() -> None:
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[
             Section(type=SectionType.TEXT, text="A" * 120, link="la"),
@@ -472,7 +483,7 @@ def test_chunk_ids_are_sequential_starting_at_zero() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -490,7 +501,7 @@ def test_chunk_ids_are_sequential_starting_at_zero() -> None:
 def test_overflow_flush_then_subsequent_section_joins_new_chunk() -> None:
     """After an overflow flush starts a new chunk, the next fitting section
     should combine into that same new chunk (not spawn a third)."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     # 120 + 120 > 200 → first two sections produce two chunks.
     # Third section is small (20 chars) → should fit with second.
     doc = _make_doc(
@@ -501,7 +512,7 @@ def test_overflow_flush_then_subsequent_section_joins_new_chunk() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -521,7 +532,7 @@ def test_small_section_after_oversized_starts_a_fresh_chunk() -> None:
     """After an oversized section is emitted as its own chunks, the internal
     accumulator should be empty so a following small section starts a new
     chunk instead of being swallowed."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     big = (
         "Alpha beta gamma. Delta epsilon zeta. Eta theta iota. "
         "Kappa lambda mu. Nu xi omicron. Pi rho sigma. Tau upsilon phi. "
@@ -536,7 +547,7 @@ def test_small_section_after_oversized_starts_a_fresh_chunk() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -565,14 +576,14 @@ def test_strict_chunk_token_limit_subdivides_oversized_split(
     """When STRICT_CHUNK_TOKEN_LIMIT is enabled and chonkie's chunk_splitter
     still produces a piece larger than content_token_limit (e.g. a single
     no-period run), the code must fall back to _split_oversized_chunk."""
-    monkeypatch.setattr(chunker_module, "STRICT_CHUNK_TOKEN_LIMIT", True)
-    chunker = _make_chunker()
+    monkeypatch.setattr(text_chunker_module, "STRICT_CHUNK_TOKEN_LIMIT", True)
+    dc = _make_document_chunker()
     # 500 non-whitespace chars with no sentence boundaries — chonkie will
     # return it as one oversized piece (>200) which triggers the fallback.
     run = "a" * 500
     doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=run, link="l-run")])
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -602,12 +613,12 @@ def test_strict_chunk_token_limit_disabled_allows_oversized_split(
 ) -> None:
     """Same pathological input, but with STRICT disabled: the oversized
     split is emitted verbatim as a single chunk (current behavior)."""
-    monkeypatch.setattr(chunker_module, "STRICT_CHUNK_TOKEN_LIMIT", False)
-    chunker = _make_chunker()
+    monkeypatch.setattr(text_chunker_module, "STRICT_CHUNK_TOKEN_LIMIT", False)
+    dc = _make_document_chunker()
     run = "a" * 500
     doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=run, link="l-run")])
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -629,7 +640,7 @@ def test_first_empty_section_with_title_is_processed_not_skipped() -> None:
     the doc has a title AND it's the first section, an empty text section
     is NOT skipped. This pins current behavior so a refactor can't silently
     change it."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[
             Section(
@@ -640,7 +651,7 @@ def test_first_empty_section_with_title_is_processed_not_skipped() -> None:
         title="Has A Title",
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -663,13 +674,13 @@ def test_first_empty_section_with_title_is_processed_not_skipped() -> None:
 def test_clean_text_strips_control_chars_from_section_content() -> None:
     """clean_text() should remove control chars before the text enters the
     accumulator — verifies the call isn't dropped by a refactor."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     # NUL + BEL are control chars below 0x20 and not \n or \t → should be
     # stripped by clean_text.
     dirty = "Hello\x00 World\x07!"
     doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=dirty, link="l1")])
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -689,7 +700,7 @@ def test_section_with_none_text_behaves_like_empty_string() -> None:
     """`section.text` may be None — the method coerces via
     `str(section.text or "")`, so a None-text section behaves identically
     to an empty one (skipped unless it's the first section of a titled doc)."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[
             Section(type=SectionType.TEXT, text="Alpha.", link="la"),
@@ -698,7 +709,7 @@ def test_section_with_none_text_behaves_like_empty_string() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -720,7 +731,7 @@ def test_no_trailing_empty_chunk_when_last_section_was_image() -> None:
     """If the final section was an image (which emits its own chunk and
     resets chunk_text), the safety `or not chunks` branch should NOT fire
     because chunks is non-empty. Pin this explicitly."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     doc = _make_doc(
         sections=[
             Section(type=SectionType.TEXT, text="Leading text.", link="ltext"),
@@ -733,7 +744,7 @@ def test_no_trailing_empty_chunk_when_last_section_was_image() -> None:
         ],
     )
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
@@ -753,7 +764,7 @@ def test_no_trailing_empty_chunk_when_last_section_was_image() -> None:
 def test_no_trailing_empty_chunk_when_last_section_was_oversized() -> None:
     """Same guarantee for oversized sections: their splits fully clear the
     accumulator, and the trailing safety branch should be a no-op."""
-    chunker = _make_chunker()
+    dc = _make_document_chunker()
     big = (
         "Alpha beta gamma. Delta epsilon zeta. Eta theta iota. "
         "Kappa lambda mu. Nu xi omicron. Pi rho sigma. Tau upsilon phi. "
@@ -763,7 +774,7 @@ def test_no_trailing_empty_chunk_when_last_section_was_oversized() -> None:
     assert len(big) > CHUNK_LIMIT
     doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=big, link="l-big")])
 
-    chunks = chunker._chunk_document_with_sections(
+    chunks = dc.chunk(
         document=doc,
         sections=doc.processed_sections,
         title_prefix="",
