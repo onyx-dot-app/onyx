@@ -25,6 +25,7 @@ from onyx.background.indexing.job_client import SimpleJobException
 from onyx.background.indexing.run_docfetching import run_docfetching_entrypoint
 from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.sentry import resolve_sentry_dsn
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -36,7 +37,6 @@ from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
 
@@ -134,9 +134,10 @@ def _docfetching_task(
 ) -> None:
     # Since connector_indexing_proxy_task spawns a new process using this function as
     # the entrypoint, we init Sentry here.
-    if SENTRY_DSN:
+    _sentry_dsn = resolve_sentry_dsn()
+    if _sentry_dsn:
         sentry_sdk.init(
-            dsn=SENTRY_DSN,
+            dsn=_sentry_dsn,
             traces_sample_rate=0.1,
             release=__version__,
         )

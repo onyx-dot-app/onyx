@@ -18,6 +18,7 @@ from model_server.encoders import router as encoders_router
 from model_server.management_endpoints import router as management_router
 from model_server.utils import get_gpu_type
 from onyx import __version__
+from onyx.configs.sentry import resolve_sentry_dsn
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_onyx_request_id_middleware
@@ -26,7 +27,6 @@ from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import MIN_THREADS_ML_MODELS
 from shared_configs.configs import MODEL_SERVER_ALLOWED_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
-from shared_configs.configs import SENTRY_DSN
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -95,9 +95,10 @@ def get_model_app() -> FastAPI:
     application = FastAPI(
         title="Onyx Model Server", version=__version__, lifespan=lifespan
     )
-    if SENTRY_DSN:
+    _sentry_dsn = resolve_sentry_dsn()
+    if _sentry_dsn:
         sentry_sdk.init(
-            dsn=SENTRY_DSN,
+            dsn=_sentry_dsn,
             integrations=[StarletteIntegration(), FastApiIntegration()],
             traces_sample_rate=0.1,
             release=__version__,

@@ -56,6 +56,7 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
+from onyx.configs.sentry import resolve_sentry_dsn
 from onyx.db.engine.async_sql_engine import get_sqlalchemy_async_engine
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -165,7 +166,6 @@ from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 from shared_configs.configs import CORS_ALLOWED_ORIGIN
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SENTRY_DSN
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 warnings.filterwarnings(
@@ -433,9 +433,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         ],
         lifespan=lifespan_override or lifespan,
     )
-    if SENTRY_DSN:
+    _sentry_dsn = resolve_sentry_dsn()
+    if _sentry_dsn:
         sentry_sdk.init(
-            dsn=SENTRY_DSN,
+            dsn=_sentry_dsn,
             integrations=[StarletteIntegration(), FastApiIntegration()],
             traces_sample_rate=0.1,
             release=__version__,

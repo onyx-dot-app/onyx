@@ -31,6 +31,7 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.sentry import resolve_sentry_dsn
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.document_index.opensearch.client import (
     wait_for_opensearch_with_timeout,
@@ -53,7 +54,6 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SENTRY_DSN
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -61,9 +61,10 @@ logger = setup_logger()
 
 task_logger = get_task_logger(__name__)
 
-if SENTRY_DSN:
+_sentry_dsn = resolve_sentry_dsn()
+if _sentry_dsn:
     sentry_sdk.init(
-        dsn=SENTRY_DSN,
+        dsn=_sentry_dsn,
         integrations=[CeleryIntegration()],
         traces_sample_rate=0.1,
         release=__version__,
