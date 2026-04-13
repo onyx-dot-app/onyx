@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Sequence
 from typing import cast
 
 from chonkie import SentenceChunker
@@ -23,7 +24,7 @@ def get_mini_chunk_texts(
     mini_chunk_splitter: SentenceChunker | None,
 ) -> list[str] | None:
     if mini_chunk_splitter and chunk_text.strip():
-        return cast(list[str], mini_chunk_splitter.chunk(chunk_text))
+        return list(cast(Sequence[str], mini_chunk_splitter.chunk(chunk_text)))
     return None
 
 

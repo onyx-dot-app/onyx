@@ -18,6 +18,7 @@ class ImageChunker(SectionChunker):
         section_text = clean_text(str(section.text or ""))
         section_link = section.link or ""
 
+        # Flush any partially built text chunks
         payloads = accumulator.flush_to_list()
         payloads.append(
             ChunkPayload(
