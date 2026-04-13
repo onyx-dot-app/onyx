@@ -319,8 +319,9 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await expect(messageSwitcher).toContainText("2/2");
 
     const regeneratedHumanMessage = page.locator("#onyx-human-message").first();
-    const regeneratedFileDisplay =
-      regeneratedHumanMessage.locator("#onyx-file").first();
+    const regeneratedFileDisplay = regeneratedHumanMessage
+      .locator("#onyx-file")
+      .first();
     await expect(regeneratedFileDisplay).toBeVisible();
     await expect(regeneratedFileDisplay.getByText(testFileName)).toBeVisible();
   });
@@ -376,8 +377,9 @@ test.describe("Message Edit and Regenerate Tests", () => {
     });
 
     const regeneratedHumanMessage = page.locator("#onyx-human-message").first();
-    const regeneratedFileDisplay =
-      regeneratedHumanMessage.locator("#onyx-file").first();
+    const regeneratedFileDisplay = regeneratedHumanMessage
+      .locator("#onyx-file")
+      .first();
     await expect(regeneratedFileDisplay).toBeVisible();
     await expect(regeneratedFileDisplay.getByText(testFileName)).toBeVisible();
   });
