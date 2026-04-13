@@ -320,7 +320,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         onSubmit({
           message: submittedMessage,
           currentMessageFiles: currentMessageFiles,
-          deepResearch: deepResearchEnabled,
+          deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
           selectedModels,
         });
@@ -332,7 +332,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         onSubmit({
           message: chatMessage,
           currentMessageFiles: currentMessageFiles,
-          deepResearch: deepResearchEnabled,
+          deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
           selectedModels,
         });
@@ -370,10 +370,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       currentMessageFiles: currentMessageFiles,
-      deepResearch: deepResearchEnabled,
+      deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
     });
-  }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  }, [
+    messageHistory,
+    onSubmit,
+    currentMessageFiles,
+    deepResearchEnabled,
+    multiModel.isMultiModelActive,
+  ]);
 
   // Start a new chat session in the side panel
   const handleNewChat = useCallback(() => {
@@ -534,6 +540,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
+                isMultiModelActive={multiModel.isMultiModelActive}
                 filterManager={filterManager}
                 llmManager={llmManager}
                 initialMessage={message}
