@@ -3,7 +3,6 @@ import uuid
 from typing import List
 from uuid import UUID
 
-from fastapi import HTTPException
 from fastapi import UploadFile
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -71,18 +70,12 @@ def create_user_files(
 ) -> CategorizedFilesResult:
     # Validate persona access before creating any file associations
     if persona_id is not None:
-        try:
-            fetch_persona_by_id_for_user(
-                db_session=db_session,
-                persona_id=persona_id,
-                user=user,
-                get_editable=False,
-            )
-        except HTTPException:
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "User does not have access to the specified persona",
-            )
+        fetch_persona_by_id_for_user(
+            db_session=db_session,
+            persona_id=persona_id,
+            user=user,
+            get_editable=False,
+        )
 
     # Categorize the files
     categorized_files = categorize_uploaded_files(files, db_session)

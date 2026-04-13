@@ -38,6 +38,8 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserFile
 from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -154,9 +156,9 @@ def fetch_persona_by_id_for_user(
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
     persona = db_session.scalars(stmt).one_or_none()
     if not persona:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Persona with ID {persona_id} does not exist or user is not authorized to access it",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            f"Persona with ID {persona_id} does not exist or user is not authorized to access it",
         )
     return persona
 
