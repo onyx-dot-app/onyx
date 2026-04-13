@@ -686,7 +686,7 @@ pyperclip==1.11.0
     # via fastmcp
 pyreadline3==3.5.4 ; sys_platform == 'win32'
     # via humanfriendly
-pytest==8.3.5
+pytest==9.0.3
     # via
     #   pytest-base-url
     #   pytest-mock

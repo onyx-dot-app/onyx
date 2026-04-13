@@ -343,7 +343,7 @@ pyjwt==2.12.0
     # via mcp
 pyparsing==3.2.5
     # via matplotlib
-pytest==8.3.5
+pytest==9.0.3
     # via
     #   pytest-alembic
     #   pytest-asyncio
