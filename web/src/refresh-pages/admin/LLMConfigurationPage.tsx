@@ -340,7 +340,6 @@ export default function LLMConfigurationPage() {
             <HorizontalInput
               title="Default Model"
               description="This model will be used by Onyx by default in your chats."
-              nonInteractive
               center
             >
               <InputSelect

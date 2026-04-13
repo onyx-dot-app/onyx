@@ -315,7 +315,6 @@ export default function HookFormModal({
                   <InputLayouts.Vertical
                     name="fail_strategy"
                     title="Fail Strategy"
-                    nonInteractive
                     subDescription={failStrategyDescription}
                   >
                     <InputSelect
