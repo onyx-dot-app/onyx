@@ -243,6 +243,11 @@ def transition_attempt_to_in_progress(
 
         attempt.status = IndexingStatus.IN_PROGRESS
         attempt.time_started = attempt.time_started or func.now()  # type: ignore
+        # Reset stall tracking so time spent scheduled does not count against active work.
+        attempt.last_progress_time = None
+        attempt.last_batches_completed_count = 0
+        attempt.last_heartbeat_time = None
+        attempt.last_heartbeat_value = attempt.heartbeat_counter or 0
         db_session.commit()
         return attempt
     except Exception:
