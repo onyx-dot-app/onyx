@@ -86,6 +86,8 @@ function Disabled({
 
   if (!showTooltip) return wrapper;
 
+  // TODO(@raunakab): Replace this raw Radix tooltip with the opalified
+  // Tooltip component once it lands.
   return (
     <TooltipPrimitive.Root>
       <TooltipPrimitive.Trigger asChild>{wrapper}</TooltipPrimitive.Trigger>
