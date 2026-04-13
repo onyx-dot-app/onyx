@@ -592,7 +592,7 @@ def connector_pruning_generator_task(
                     db_session=db_session,
                     nodes=extraction_result.hierarchy_nodes,
                     source=source,
-                    commit=True,
+                    commit=False,
                     is_connector_public=is_connector_public,
                 )
 
@@ -601,8 +601,12 @@ def connector_pruning_generator_task(
                     hierarchy_node_ids=[n.id for n in upserted_nodes],
                     connector_id=connector_id,
                     credential_id=credential_id,
-                    commit=True,
+                    commit=False,
                 )
+
+                # Single commit so the FK reference in the join table can never
+                # outrun the parent hierarchy_node insert.
+                db_session.commit()
 
                 cache_entries = [
                     HierarchyNodeCacheEntry.from_db_model(node)
