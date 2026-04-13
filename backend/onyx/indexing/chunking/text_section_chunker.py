@@ -1,3 +1,4 @@
+from onyx.natural_language_processing.utils import count_tokens
 from typing import cast
 
 from chonkie import SentenceChunker
@@ -23,6 +24,11 @@ class TextChunker(SectionChunker):
         self.tokenizer = tokenizer
         self.chunk_splitter = chunk_splitter
 
+        self.section_separator_token_count = count_tokens(
+            SECTION_SEPARATOR,
+            self.tokenizer,
+        )
+
     def chunk_section(
         self,
         section: Section,
@@ -42,10 +48,8 @@ class TextChunker(SectionChunker):
                 content_token_limit=content_token_limit,
             )
 
-        current_token_count = len(self.tokenizer.encode(accumulator.text))
-        next_section_tokens = (
-            len(self.tokenizer.encode(SECTION_SEPARATOR)) + section_token_count
-        )
+        current_token_count = count_tokens(accumulator.text, self.tokenizer)
+        next_section_tokens = self.section_separator_token_count + section_token_count
 
         # Fits — extend the accumulator
         if next_section_tokens + current_token_count <= content_token_limit:
@@ -86,7 +90,7 @@ class TextChunker(SectionChunker):
         for i, split_text in enumerate(split_texts):
             if (
                 STRICT_CHUNK_TOKEN_LIMIT
-                and len(self.tokenizer.encode(split_text)) > content_token_limit
+                and count_tokens(split_text, self.tokenizer) > content_token_limit
             ):
                 smaller_chunks = self._split_oversized_chunk(
                     split_text, content_token_limit
