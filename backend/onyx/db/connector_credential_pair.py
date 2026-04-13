@@ -14,6 +14,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import get_effective_permissions
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
@@ -21,6 +22,7 @@ from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import Permission
 from onyx.db.enums import ProcessingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
@@ -31,7 +33,6 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -49,48 +50,27 @@ class ConnectorType(str, Enum):
 def _add_user_filters(
     stmt: Select[tuple[*R]], user: User, get_editable: bool = True
 ) -> Select[tuple[*R]]:
-    if user.role == UserRole.ADMIN:
+    effective = get_effective_permissions(user)
+
+    if Permission.MANAGE_CONNECTORS in effective:
         return stmt
 
-    # If anonymous user, only show public cc_pairs
     if user.is_anonymous:
-        where_clause = ConnectorCredentialPair.access_type == AccessType.PUBLIC
-        return stmt.where(where_clause)
+        return stmt.where(ConnectorCredentialPair.access_type == AccessType.PUBLIC)
 
     stmt = stmt.distinct()
     UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)
     User__UG = aliased(User__UserGroup)
 
-    """
-    Here we select cc_pairs by relation:
-    User -> User__UserGroup -> UserGroup__ConnectorCredentialPair ->
-    ConnectorCredentialPair
-    """
     stmt = stmt.outerjoin(UG__CCpair).outerjoin(
         User__UG,
         User__UG.user_group_id == UG__CCpair.user_group_id,
     )
 
-    """
-    Filter cc_pairs by:
-    - if the user is in the user_group that owns the cc_pair
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out cc_pairs that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all cc_pairs in the groups the user is a curator
-    for (as well as public cc_pairs)
-    """
-
     where_clause = User__UG.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UG.is_curator == True  # noqa: E712
+
     if get_editable:
         user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(
-                User__UserGroup.is_curator == True  # noqa: E712
-            )
         where_clause &= (
             ~exists()
             .where(UG__CCpair.cc_pair_id == ConnectorCredentialPair.id)
