@@ -339,6 +339,7 @@ pygments==2.20.0
     # via
     #   ipython
     #   ipython-pygments-lexers
+    #   pytest
 pyjwt==2.12.0
     # via mcp
 pyparsing==3.2.5

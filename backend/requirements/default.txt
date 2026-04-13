@@ -666,7 +666,9 @@ pyee==13.0.0
     # via playwright
 pygithub==2.5.0
 pygments==2.20.0
-    # via rich
+    # via
+    #   pytest
+    #   rich
 pyjwt==2.12.0
     # via
     #   fastapi-users
@@ -694,7 +696,7 @@ pytest==9.0.3
 pytest-base-url==2.1.0
     # via pytest-playwright
 pytest-mock==3.12.0
-pytest-playwright==0.7.0
+pytest-playwright==0.7.2
 python-dateutil==2.8.2
     # via
     #   aiobotocore
