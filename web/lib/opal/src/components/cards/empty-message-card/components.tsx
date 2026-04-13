@@ -1,51 +1,79 @@
 import { Card } from "@opal/components/cards/card/components";
-import { Content } from "@opal/layouts";
+import { Content, SizePreset } from "@opal/layouts";
 import { SvgEmpty } from "@opal/icons";
-import type { ContainerSizeVariants } from "@opal/types";
-import type { IconFunctionComponent } from "@opal/types";
+import type {
+  IconFunctionComponent,
+  PaddingVariants,
+  RichStr,
+} from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type EmptyMessageCardProps = {
+type EmptyMessageCardBaseProps = {
   /** Icon displayed alongside the title. */
   icon?: IconFunctionComponent;
 
   /** Primary message text. */
-  title: string;
+  title: string | RichStr;
 
-  /** Size preset controlling padding and rounding of the card. */
-  sizeVariant?: ContainerSizeVariants;
+  /** Padding preset for the card. @default "md" */
+  padding?: PaddingVariants;
 
   /** Ref forwarded to the root Card div. */
   ref?: React.Ref<HTMLDivElement>;
 };
 
+type EmptyMessageCardProps =
+  | (EmptyMessageCardBaseProps & {
+      /** @default "secondary" */
+      sizePreset?: "secondary";
+    })
+  | (EmptyMessageCardBaseProps & {
+      sizePreset: "main-ui";
+      /** Description text. Only supported when `sizePreset` is `"main-ui"`. */
+      description?: string | RichStr;
+    });
+
 // ---------------------------------------------------------------------------
 // EmptyMessageCard
 // ---------------------------------------------------------------------------
 
-function EmptyMessageCard({
-  icon = SvgEmpty,
-  title,
-  sizeVariant = "lg",
-  ref,
-}: EmptyMessageCardProps) {
+function EmptyMessageCard(props: EmptyMessageCardProps) {
+  const {
+    sizePreset = "secondary",
+    icon = SvgEmpty,
+    title,
+    padding = "md",
+    ref,
+  } = props;
+
   return (
     <Card
       ref={ref}
-      backgroundVariant="none"
-      borderVariant="dashed"
-      sizeVariant={sizeVariant}
+      background="none"
+      border="dashed"
+      padding={padding}
+      rounding="md"
     >
-      <Content
-        icon={icon}
-        title={title}
-        sizePreset="secondary"
-        variant="body"
-        prominence="muted"
-      />
+      {sizePreset === "secondary" ? (
+        <Content
+          icon={icon}
+          title={title}
+          sizePreset="secondary"
+          variant="body"
+          prominence="muted"
+        />
+      ) : (
+        <Content
+          icon={icon}
+          title={title}
+          description={"description" in props ? props.description : undefined}
+          sizePreset={sizePreset}
+          variant="section"
+        />
+      )}
     </Card>
   );
 }

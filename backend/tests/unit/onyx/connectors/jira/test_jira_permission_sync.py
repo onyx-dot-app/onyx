@@ -1,3 +1,5 @@
+from datetime import datetime
+from datetime import timezone
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -31,6 +33,7 @@ def mock_jira_cc_pair(
         "jira_base_url": jira_base_url,
         "project_key": project_key,
     }
+    mock_cc_pair.connector.indexing_start = None
 
     return mock_cc_pair
 
@@ -65,3 +68,75 @@ def test_jira_permission_sync(
             fetch_all_existing_docs_ids_fn=mock_fetch_all_existing_docs_ids_fn,
         ):
             print(doc)
+
+
+def test_jira_doc_sync_passes_indexing_start(
+    jira_connector: JiraConnector,
+    mock_jira_cc_pair: MagicMock,
+    mock_fetch_all_existing_docs_fn: MagicMock,
+    mock_fetch_all_existing_docs_ids_fn: MagicMock,
+) -> None:
+    """Verify that generic_doc_sync derives indexing_start from cc_pair
+    and forwards it to retrieve_all_slim_docs_perm_sync."""
+    indexing_start_dt = datetime(2025, 6, 1, tzinfo=timezone.utc)
+    mock_jira_cc_pair.connector.indexing_start = indexing_start_dt
+
+    with patch("onyx.connectors.jira.connector.build_jira_client") as mock_build_client:
+        mock_build_client.return_value = jira_connector._jira_client
+        assert jira_connector._jira_client is not None
+        jira_connector._jira_client._options = MagicMock()
+        jira_connector._jira_client._options.return_value = {
+            "rest_api_version": JIRA_SERVER_API_VERSION
+        }
+
+        with patch.object(
+            type(jira_connector),
+            "retrieve_all_slim_docs_perm_sync",
+            return_value=iter([]),
+        ) as mock_retrieve:
+            list(
+                jira_doc_sync(
+                    cc_pair=mock_jira_cc_pair,
+                    fetch_all_existing_docs_fn=mock_fetch_all_existing_docs_fn,
+                    fetch_all_existing_docs_ids_fn=mock_fetch_all_existing_docs_ids_fn,
+                )
+            )
+
+            mock_retrieve.assert_called_once()
+            call_kwargs = mock_retrieve.call_args
+            assert call_kwargs.kwargs["start"] == indexing_start_dt.timestamp()
+
+
+def test_jira_doc_sync_passes_none_when_no_indexing_start(
+    jira_connector: JiraConnector,
+    mock_jira_cc_pair: MagicMock,
+    mock_fetch_all_existing_docs_fn: MagicMock,
+    mock_fetch_all_existing_docs_ids_fn: MagicMock,
+) -> None:
+    """Verify that indexing_start is None when the connector has no indexing_start set."""
+    mock_jira_cc_pair.connector.indexing_start = None
+
+    with patch("onyx.connectors.jira.connector.build_jira_client") as mock_build_client:
+        mock_build_client.return_value = jira_connector._jira_client
+        assert jira_connector._jira_client is not None
+        jira_connector._jira_client._options = MagicMock()
+        jira_connector._jira_client._options.return_value = {
+            "rest_api_version": JIRA_SERVER_API_VERSION
+        }
+
+        with patch.object(
+            type(jira_connector),
+            "retrieve_all_slim_docs_perm_sync",
+            return_value=iter([]),
+        ) as mock_retrieve:
+            list(
+                jira_doc_sync(
+                    cc_pair=mock_jira_cc_pair,
+                    fetch_all_existing_docs_fn=mock_fetch_all_existing_docs_fn,
+                    fetch_all_existing_docs_ids_fn=mock_fetch_all_existing_docs_ids_fn,
+                )
+            )
+
+            mock_retrieve.assert_called_once()
+            call_kwargs = mock_retrieve.call_args
+            assert call_kwargs.kwargs["start"] is None

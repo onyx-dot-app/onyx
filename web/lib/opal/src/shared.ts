@@ -11,6 +11,8 @@ import type {
   OverridableExtremaSizeVariants,
   ContainerSizeVariants,
   ExtremaSizeVariants,
+  PaddingVariants,
+  RoundingVariants,
 } from "@opal/types";
 
 /**
@@ -88,12 +90,60 @@ const heightVariants: Record<ExtremaSizeVariants, string> = {
   full: "h-full",
 } as const;
 
+// ---------------------------------------------------------------------------
+// Card Variants
+//
+// Shared padding and rounding scales for card components (Card, SelectCard).
+//
+// Consumers:
+//   - Card          (paddingVariant, roundingVariant)
+//   - SelectCard    (paddingVariant, roundingVariant)
+// ---------------------------------------------------------------------------
+
+const paddingVariants: Record<PaddingVariants, string> = {
+  lg: "p-6",
+  md: "p-4",
+  sm: "p-2",
+  xs: "p-1",
+  "2xs": "p-0.5",
+  fit: "p-0",
+};
+
+const paddingXVariants: Record<PaddingVariants, string> = {
+  lg: "px-6",
+  md: "px-4",
+  sm: "px-2",
+  xs: "px-1",
+  "2xs": "px-0.5",
+  fit: "px-0",
+};
+
+const paddingYVariants: Record<PaddingVariants, string> = {
+  lg: "py-6",
+  md: "py-4",
+  sm: "py-2",
+  xs: "py-1",
+  "2xs": "py-0.5",
+  fit: "py-0",
+};
+
+const cardRoundingVariants: Record<RoundingVariants, string> = {
+  lg: "rounded-16",
+  md: "rounded-12",
+  sm: "rounded-08",
+  xs: "rounded-04",
+};
+
 export {
   type ExtremaSizeVariants,
   type ContainerSizeVariants,
   type OverridableExtremaSizeVariants,
   type SizeVariants,
   containerSizeVariants,
+  paddingVariants,
+  paddingXVariants,
+  paddingYVariants,
+  cardRoundingVariants,
   widthVariants,
   heightVariants,
 };

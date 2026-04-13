@@ -12,12 +12,13 @@ from pydantic import BaseModel
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import OAuthConnector
 from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
@@ -89,7 +90,7 @@ def oauth_authorize(
     request: Request,
     source: DocumentSource,
     desired_return_url: Annotated[str | None, Query()] = None,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> AuthorizeResponse:
     """Initiates the OAuth flow by redirecting to the provider's auth page"""
 
@@ -141,7 +142,7 @@ def oauth_callback(
     code: Annotated[str, Query()],
     state: Annotated[str, Query()],
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> CallbackResponse:
     """Handles the OAuth callback and exchanges the code for tokens"""
     oauth_connectors = _discover_oauth_connectors()
@@ -201,7 +202,7 @@ class OAuthDetails(BaseModel):
 @router.get("/details/{source}")
 def oauth_details(
     source: DocumentSource,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> OAuthDetails:
     oauth_connectors = _discover_oauth_connectors()
 

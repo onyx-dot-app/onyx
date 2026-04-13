@@ -2,7 +2,6 @@ import React, { useRef, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { Callout } from "@/components/ui/callout";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Label, TextFormField } from "@/components/Field";
@@ -13,6 +12,7 @@ import {
 } from "@/components/embedding/interfaces";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/lib/llmConfig/constants";
 import Modal from "@/refresh-components/Modal";
+import { markdown } from "@opal/utils";
 import { SvgSettings } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 export interface ProviderCreationModalProps {
@@ -186,9 +186,11 @@ export default function ProviderCreationModal({
       <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgSettings}
-          title={`Configure ${getFormattedProviderName(
-            selectedProvider.provider_type
-          )}`}
+          title={markdown(
+            `Configure *${getFormattedProviderName(
+              selectedProvider.provider_type
+            )}*`
+          )}
           onClose={onCancel}
         />
         <Modal.Body>
@@ -297,19 +299,18 @@ export default function ProviderCreationModal({
                   </Callout>
                 )}
 
-                <Disabled disabled={isSubmitting}>
-                  <Button
-                    type="submit"
-                    width="full"
-                    icon={isSubmitting ? SimpleLoader : undefined}
-                  >
-                    {isSubmitting
-                      ? "Submitting"
-                      : existingProvider
-                        ? "Update"
-                        : "Create"}
-                  </Button>
-                </Disabled>
+                <Button
+                  disabled={isSubmitting}
+                  type="submit"
+                  width="full"
+                  icon={isSubmitting ? SimpleLoader : undefined}
+                >
+                  {isSubmitting
+                    ? "Submitting"
+                    : existingProvider
+                      ? "Update"
+                      : "Create"}
+                </Button>
               </Form>
             )}
           </Formik>

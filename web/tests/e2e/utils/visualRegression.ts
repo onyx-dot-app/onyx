@@ -136,6 +136,65 @@ export async function waitForAnimations(page: Page): Promise<void> {
 }
 
 /**
+ * Wait for every **visible** `<img>` on the page to finish loading (or error).
+ *
+ * This prevents screenshot flakiness caused by images that have been added to
+ * the DOM but haven't been decoded yet — `networkidle` only guarantees that
+ * fewer than 2 connections are in flight, not that every image is painted.
+ *
+ * Only images that are actually visible and in (or near) the viewport are
+ * waited on. Hidden images (e.g. the `dark:hidden` / `hidden dark:block`
+ * alternates created by `createLogoIcon`) and offscreen lazy-loaded images
+ * are skipped so they don't force a needless timeout.
+ *
+ * Times out after `timeoutMs` (default 5 000 ms) so a single broken image
+ * doesn't block the entire test forever.
+ */
+export async function waitForImages(
+  page: Page,
+  timeoutMs: number = 5_000
+): Promise<void> {
+  await page.evaluate(async (timeout) => {
+    const images = Array.from(document.querySelectorAll("img")).filter(
+      (img) => {
+        // Skip images hidden via CSS (display:none, visibility:hidden, etc.)
+        // This covers createLogoIcon's dark-mode alternates.
+        const style = getComputedStyle(img);
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          style.opacity === "0"
+        ) {
+          return false;
+        }
+
+        // Skip images that have no layout box (zero size or detached).
+        const rect = img.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return false;
+
+        // Skip images far below the viewport (lazy-loaded, not yet needed).
+        if (rect.top > window.innerHeight * 2) return false;
+
+        return true;
+      }
+    );
+
+    await Promise.race([
+      Promise.allSettled(
+        images.map((img) => {
+          if (img.complete) return Promise.resolve();
+          return new Promise<void>((resolve) => {
+            img.addEventListener("load", () => resolve(), { once: true });
+            img.addEventListener("error", () => resolve(), { once: true });
+          });
+        })
+      ),
+      new Promise<void>((resolve) => setTimeout(resolve, timeout)),
+    ]);
+  }, timeoutMs);
+}
+
+/**
  * Take a screenshot and optionally assert it matches the stored baseline.
  *
  * Behavior depends on the `VISUAL_REGRESSION` environment variable:
@@ -187,6 +246,10 @@ export async function expectScreenshot(
     const maskLocators = allMaskSelectors.map((selector) =>
       page.locator(selector)
     );
+
+    // Wait for images to finish loading / decoding so that logo icons
+    // and other <img> elements are fully painted before the screenshot.
+    await waitForImages(page);
 
     // Wait for any in-flight CSS animations / transitions to settle so that
     // screenshots are deterministic (e.g. slide-in card animations on the
@@ -278,6 +341,9 @@ export async function expectElementScreenshot(
     const maskLocators = allMaskSelectors.map((selector) =>
       page.locator(selector)
     );
+
+    // Wait for images to finish loading / decoding.
+    await waitForImages(page);
 
     // Wait for any in-flight CSS animations / transitions to settle so that
     // element screenshots are deterministic (same reasoning as expectScreenshot).

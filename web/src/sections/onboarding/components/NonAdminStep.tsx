@@ -8,11 +8,11 @@ import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
+import { Hoverable } from "@opal/core";
 
 export default function NonAdminStep() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -117,50 +117,49 @@ export default function NonAdminStep() {
                   }}
                   className="w-[26%] min-w-40"
                 />
-                <Disabled disabled={name === ""}>
-                  <Button onClick={handleSave}>Save</Button>
-                </Disabled>
+                <Button disabled={name === ""} onClick={handleSave}>
+                  Save
+                </Button>
               </div>
             }
           />
         </div>
       ) : (
-        <div
-          className={cn(containerClasses, "group")}
-          aria-label="Edit display name"
-          role="button"
-          tabIndex={0}
-          onClick={() => {
-            setIsEditing(true);
-            setName(savedName);
-          }}
-        >
-          <div className="flex items-center gap-1">
-            <InputAvatar
-              className={cn(
-                "flex items-center justify-center bg-background-neutral-inverted-00",
-                "w-5 h-5"
-              )}
-            >
-              <Text as="p" inverted secondaryBody>
-                {savedName?.[0]?.toUpperCase()}
+        <Hoverable.Root group="nonAdminName" widthVariant="full">
+          <div
+            className={containerClasses}
+            aria-label="Edit display name"
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              setIsEditing(true);
+              setName(savedName);
+            }}
+          >
+            <div className="flex items-center gap-1">
+              <InputAvatar
+                className={cn(
+                  "flex items-center justify-center bg-background-neutral-inverted-00",
+                  "w-5 h-5"
+                )}
+              >
+                <Text as="p" inverted secondaryBody>
+                  {savedName?.[0]?.toUpperCase()}
+                </Text>
+              </InputAvatar>
+              <Text as="p" text04 mainUiAction>
+                {savedName}
               </Text>
-            </InputAvatar>
-            <Text as="p" text04 mainUiAction>
-              {savedName}
-            </Text>
+            </div>
+            <div className="p-1 flex items-center gap-1">
+              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              <Hoverable.Item group="nonAdminName" variant="opacity-on-hover">
+                <IconButton internal icon={SvgEdit} tooltip="Edit" />
+              </Hoverable.Item>
+              <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+            </div>
           </div>
-          <div className="p-1 flex items-center gap-1">
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <IconButton
-              internal
-              icon={SvgEdit}
-              tooltip="Edit"
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
-            />
-            <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-          </div>
-        </div>
+        </Hoverable.Root>
       )}
     </>
   );

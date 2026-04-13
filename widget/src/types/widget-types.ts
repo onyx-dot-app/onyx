@@ -2,6 +2,8 @@
  * Widget-specific types
  */
 
+import { ResolvedCitation } from "@/types/api-types";
+
 export interface WidgetConfig {
   // Required
   backendUrl: string;
@@ -37,4 +39,5 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   isStreaming?: boolean;
+  citations?: ResolvedCitation[];
 }

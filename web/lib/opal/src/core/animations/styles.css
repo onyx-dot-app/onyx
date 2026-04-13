@@ -7,8 +7,20 @@
   opacity: 0;
 }
 
-/* Group mode — Root controls visibility via React context */
-.hoverable-item[data-hoverable-variant="opacity-on-hover"][data-hoverable-active="true"] {
+/* Group mode — Root :hover controls descendant item visibility via CSS.
+   Exclude local-mode items so they aren't revealed by an ancestor root. */
+[data-hover-group]:hover
+  .hoverable-item[data-hoverable-variant="opacity-on-hover"]:not(
+    [data-hoverable-local]
+  ) {
+  opacity: 1;
+}
+
+/* Interaction override — force items visible via JS */
+[data-hover-group][data-interaction="hover"]
+  .hoverable-item[data-hoverable-variant="opacity-on-hover"]:not(
+    [data-hoverable-local]
+  ) {
   opacity: 1;
 }
 
@@ -17,7 +29,16 @@
   opacity: 1;
 }
 
-/* Focus — item (or a focusable descendant) receives keyboard focus */
+/* Group focus — any focusable descendant of the Root receives keyboard focus,
+   revealing all group items (same behavior as hover). */
+[data-hover-group]:focus-within
+  .hoverable-item[data-hoverable-variant="opacity-on-hover"]:not(
+    [data-hoverable-local]
+  ) {
+  opacity: 1;
+}
+
+/* Local focus — item (or a focusable descendant) receives keyboard focus */
 .hoverable-item[data-hoverable-variant="opacity-on-hover"]:has(:focus-visible) {
   opacity: 1;
 }

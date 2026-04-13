@@ -4,11 +4,12 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_accessible_documents_for_hierarchy_node_paginated
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.hierarchy import get_accessible_hierarchy_nodes_for_source
 from onyx.db.models import User
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
@@ -58,7 +59,7 @@ def _get_user_access_info(user: User, db_session: Session) -> tuple[str, list[st
 @router.get(HIERARCHY_NODES_LIST_PATH)
 def list_accessible_hierarchy_nodes(
     source: DocumentSource,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodesResponse:
     _require_opensearch(db_session)
@@ -85,7 +86,7 @@ def list_accessible_hierarchy_nodes(
 @router.post(HIERARCHY_NODE_DOCUMENTS_PATH)
 def list_accessible_hierarchy_node_documents(
     documents_request: HierarchyNodeDocumentsRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodeDocumentsResponse:
     _require_opensearch(db_session)

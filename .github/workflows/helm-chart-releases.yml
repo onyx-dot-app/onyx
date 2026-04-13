@@ -21,7 +21,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Helm CLI
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # ratchet:azure/setup-helm@v4
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # ratchet:azure/setup-helm@v5.0.0
         with:
           version: v3.12.1
 
@@ -47,7 +47,8 @@ jobs:
           done
 
       - name: Publish Helm charts to gh-pages
-        uses: stefanprodan/helm-gh-pages@0ad2bb377311d61ac04ad9eb6f252fb68e207260 # ratchet:stefanprodan/helm-gh-pages@v1.7.0
+        # NOTE: HEAD of https://github.com/stefanprodan/helm-gh-pages/pull/43
+        uses: stefanprodan/helm-gh-pages@ad32ad3b8720abfeaac83532fd1e9bdfca5bbe27 # zizmor: ignore[impostor-commit]
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           charts_dir: deployment/helm/charts

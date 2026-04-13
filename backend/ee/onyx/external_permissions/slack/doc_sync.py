@@ -8,6 +8,7 @@ from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import make_paginated_slack_api_call
@@ -105,9 +106,11 @@ def _get_slack_document_access(
     slack_connector: SlackConnector,
     channel_permissions: dict[str, ExternalAccess],  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None,
+    indexing_start: SecondsSinceUnixEpoch | None = None,
 ) -> Generator[DocExternalAccess, None, None]:
     slim_doc_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
-        callback=callback
+        callback=callback,
+        start=indexing_start,
     )
 
     for doc_metadata_batch in slim_doc_generator:
@@ -180,9 +183,15 @@ def slack_doc_sync(
 
     slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
     slack_connector.set_credentials_provider(provider)
+    indexing_start_ts: SecondsSinceUnixEpoch | None = (
+        cc_pair.connector.indexing_start.timestamp()
+        if cc_pair.connector.indexing_start is not None
+        else None
+    )
 
     yield from _get_slack_document_access(
-        slack_connector,
+        slack_connector=slack_connector,
         channel_permissions=channel_permissions,
         callback=callback,
+        indexing_start=indexing_start_ts,
     )

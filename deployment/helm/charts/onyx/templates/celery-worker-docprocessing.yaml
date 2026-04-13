@@ -73,6 +73,10 @@ spec:
               "-Q",
               "docprocessing",
             ]
+          ports:
+            - name: metrics
+              containerPort: 9093
+              protocol: TCP
           resources:
             {{- toYaml .Values.celery_worker_docprocessing.resources | nindent 12 }}
           envFrom:

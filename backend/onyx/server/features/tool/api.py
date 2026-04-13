@@ -6,11 +6,12 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
@@ -219,7 +220,7 @@ def validate_tool(
 @router.get("/openapi", tags=PUBLIC_API_TAGS)
 def list_openapi_tools(
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_openapi=True)
 
@@ -237,7 +238,7 @@ def list_openapi_tools(
 def get_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> ToolSnapshot:
     try:
         tool = get_tool_by_id(tool_id, db_session)
@@ -249,7 +250,7 @@ def get_custom_tool(
 @router.get("", tags=PUBLIC_API_TAGS)
 def list_tools(
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_enabled=True, only_connected_mcp=True)
 

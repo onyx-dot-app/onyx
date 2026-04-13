@@ -28,7 +28,6 @@ import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "@/app/admin/agents/interfaces";
 
@@ -353,16 +352,21 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
             ) : undefined
           }
           cancel={
-            <Disabled disabled={isSubmitting}>
-              <Button prominence="secondary" onClick={handleClose}>
-                Cancel
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isSubmitting}
+              prominence="secondary"
+              onClick={handleClose}
+            >
+              Cancel
+            </Button>
           }
           submit={
-            <Disabled disabled={!dirty || isSubmitting}>
-              <Button onClick={() => handleSubmit()}>Save</Button>
-            </Disabled>
+            <Button
+              disabled={!dirty || isSubmitting}
+              onClick={() => handleSubmit()}
+            >
+              Save
+            </Button>
           }
         />
       </Modal.Footer>

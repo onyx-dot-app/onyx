@@ -2,9 +2,10 @@ from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.token_limit import delete_token_rate_limit
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
@@ -24,7 +25,7 @@ Global Token Limit Settings
 
 @router.get("/global")
 def get_global_token_limit_settings(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[TokenRateLimitDisplay]:
     return [
@@ -36,7 +37,7 @@ def get_global_token_limit_settings(
 @router.post("/global")
 def create_global_token_limit_settings(
     token_limit_settings: TokenRateLimitArgs,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
     rate_limit_display = TokenRateLimitDisplay.from_db(
@@ -56,7 +57,7 @@ General Token Limit Settings
 def update_token_limit_settings(
     token_rate_limit_id: int,
     token_limit_settings: TokenRateLimitArgs,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
     return TokenRateLimitDisplay.from_db(
@@ -71,7 +72,7 @@ def update_token_limit_settings(
 @router.delete("/rate-limit/{token_rate_limit_id}")
 def delete_token_limit_settings(
     token_rate_limit_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     return delete_token_rate_limit(

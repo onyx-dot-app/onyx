@@ -33,6 +33,12 @@ export {
   type LineItemButtonProps,
 } from "@opal/components/buttons/line-item-button/components";
 
+/* SidebarTab */
+export {
+  SidebarTab,
+  type SidebarTabProps,
+} from "@opal/components/buttons/sidebar-tab/components";
+
 /* Text */
 export {
   Text,
@@ -48,6 +54,12 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Divider */
+export {
+  Divider,
+  type DividerProps,
+} from "@opal/components/divider/components";
+
 /* Card */
 export {
   Card,
@@ -55,6 +67,12 @@ export {
   type BackgroundVariant,
   type BorderVariant,
 } from "@opal/components/cards/card/components";
+
+/* SelectCard */
+export {
+  SelectCard,
+  type SelectCardProps,
+} from "@opal/components/cards/select-card/components";
 
 /* EmptyMessageCard */
 export {

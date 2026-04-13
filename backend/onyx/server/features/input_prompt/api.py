@@ -3,9 +3,9 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.input_prompt import disable_input_prompt_for_user
 from onyx.db.input_prompt import fetch_input_prompt_by_id
 from onyx.db.input_prompt import fetch_input_prompts_by_user
@@ -28,7 +28,7 @@ admin_router = APIRouter(prefix="/admin/input_prompt")
 
 @basic_router.get("")
 def list_input_prompts(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     include_public: bool = True,
     db_session: Session = Depends(get_session),
 ) -> list[InputPromptSnapshot]:
@@ -43,7 +43,7 @@ def list_input_prompts(
 @basic_router.get("/{input_prompt_id}")
 def get_input_prompt(
     input_prompt_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> InputPromptSnapshot:
     input_prompt = fetch_input_prompt_by_id(
@@ -58,7 +58,7 @@ def get_input_prompt(
 @basic_router.post("")
 def create_input_prompt(
     create_input_prompt_request: CreateInputPromptRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> InputPromptSnapshot:
     input_prompt = insert_input_prompt(
@@ -82,7 +82,7 @@ def create_input_prompt(
 def patch_input_prompt(
     input_prompt_id: int,
     update_input_prompt_request: UpdateInputPromptRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> InputPromptSnapshot:
     try:
@@ -105,7 +105,7 @@ def patch_input_prompt(
 @basic_router.delete("/{input_prompt_id}")
 def delete_input_prompt(
     input_prompt_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
     delete_public: bool = False,
 ) -> None:
@@ -123,7 +123,7 @@ def delete_input_prompt(
 @admin_router.delete("/{input_prompt_id}")
 def delete_public_input_prompt(
     input_prompt_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -138,7 +138,7 @@ def delete_public_input_prompt(
 @basic_router.post("/{input_prompt_id}/hide")
 def hide_input_prompt_for_user(
     input_prompt_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """

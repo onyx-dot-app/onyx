@@ -3,8 +3,9 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.notification import dismiss_notification
 from onyx.db.notification import get_notification_by_id
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/notifications")
 
 @router.get("")
 def get_notifications_api(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[NotificationModel]:
     """
@@ -58,7 +59,7 @@ def get_notifications_api(
 @router.post("/{notification_id}/dismiss")
 def dismiss_notification_endpoint(
     notification_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:

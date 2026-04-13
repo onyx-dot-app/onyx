@@ -9,6 +9,7 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 
+from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
@@ -137,6 +138,7 @@ def _docfetching_task(
         sentry_sdk.init(
             dsn=SENTRY_DSN,
             traces_sample_rate=0.1,
+            release=__version__,
         )
         logger.info("Sentry initialized")
     else:

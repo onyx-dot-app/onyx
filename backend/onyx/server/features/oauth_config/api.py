@@ -6,10 +6,11 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import OAuthConfig
 from onyx.db.models import User
 from onyx.db.oauth_config import create_oauth_config
@@ -155,7 +156,7 @@ def delete_oauth_config_endpoint(
 def initiate_oauth_flow(
     request: OAuthInitiateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> OAuthInitiateResponse:
     """
     Initiate OAuth flow for the current user.
@@ -192,7 +193,7 @@ def handle_oauth_callback(
     code: str,
     state: str,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> OAuthCallbackResponse:
     """
     Handle OAuth callback after user authorizes the application.
@@ -253,7 +254,7 @@ def handle_oauth_callback(
 def revoke_oauth_token(
     oauth_config_id: int,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> dict[str, str]:
     """
     Revoke (delete) the current user's OAuth token for a specific OAuth config.

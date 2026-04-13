@@ -12,6 +12,7 @@ import BackButton from "@/refresh-components/buttons/BackButton";
 import { FeedbackBadge } from "../FeedbackBadge";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import CardSection from "@/components/admin/CardSection";
@@ -72,7 +73,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
     isLoading,
     error,
   } = useSWR<ChatSessionSnapshot>(
-    `/api/admin/chat-session-history/${params.id}`,
+    SWR_KEYS.adminChatSession(params.id),
     errorHandlingFetcher
   );
 

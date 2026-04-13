@@ -7,6 +7,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/spf13/cobra"
 )
 
@@ -16,16 +17,23 @@ func newAgentsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agents",
 		Short: "List available agents",
+		Long: `List all visible agents configured on the Onyx server.
+
+By default, output is a human-readable table with ID, name, and description.
+Use --json for machine-readable output.`,
+		Example: `  onyx-cli agents
+  onyx-cli agents --json
+  onyx-cli agents --json | jq '.[].name'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Load()
 			if !cfg.IsConfigured() {
-				return fmt.Errorf("onyx CLI is not configured — run 'onyx-cli configure' first")
+				return exitcodes.New(exitcodes.NotConfigured, "onyx CLI is not configured\n  Run: onyx-cli configure")
 			}
 
 			client := api.NewClient(cfg)
 			agents, err := client.ListAgents(cmd.Context())
 			if err != nil {
-				return fmt.Errorf("failed to list agents: %w", err)
+				return fmt.Errorf("failed to list agents: %w\n  Check your connection with: onyx-cli validate-config", err)
 			}
 
 			if agentsJSON {

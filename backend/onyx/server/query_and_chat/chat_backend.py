@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_user
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
@@ -28,6 +28,7 @@ from onyx.chat.chat_utils import extract_headers
 from onyx.chat.models import ChatFullResponse
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.process_message import gather_stream_full
+from onyx.chat.process_message import handle_multi_model_stream
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
@@ -46,11 +47,13 @@ from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.chat import set_as_latest_chat_message
+from onyx.db.chat import set_preferred_response
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import Permission
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import remove_chat_message_feedback
 from onyx.db.models import ChatSessionSharedStatus
@@ -60,6 +63,8 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import increment_usage
 from onyx.db.usage import UsageType
 from onyx.db.user_file import get_file_id_by_user_file_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_default_llm
@@ -81,6 +86,7 @@ from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
 from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import SetPreferredResponseRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
 from onyx.server.query_and_chat.session_loading import (
@@ -144,7 +150,7 @@ def _get_available_tokens_for_persona(
 
 @router.get("/get-user-chat-sessions", tags=PUBLIC_API_TAGS)
 def get_user_chat_sessions(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
     project_id: int | None = None,
     only_non_project_chats: bool = True,
@@ -201,7 +207,7 @@ def get_user_chat_sessions(
 @router.put("/update-chat-session-temperature")
 def update_chat_session_temperature(
     update_thread_req: UpdateChatSessionTemperatureRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     chat_session = get_chat_session_by_id(
@@ -241,7 +247,7 @@ def update_chat_session_temperature(
 @router.put("/update-chat-session-model")
 def update_chat_session_model(
     update_thread_req: UpdateChatSessionThreadRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     chat_session = get_chat_session_by_id(
@@ -396,7 +402,7 @@ def create_new_chat_session(
 def rename_chat_session(
     rename_req: ChatRenameRequest,
     request: Request,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> RenameChatSessionResponse:
     # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
@@ -465,7 +471,7 @@ def rename_chat_session(
 def patch_chat_session(
     session_id: UUID,
     chat_session_update_req: ChatSessionUpdateRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id
@@ -480,7 +486,7 @@ def patch_chat_session(
 
 @router.delete("/delete-all-chat-sessions", tags=PUBLIC_API_TAGS)
 def delete_all_chat_sessions(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -493,7 +499,7 @@ def delete_all_chat_sessions(
 def delete_chat_session_by_id(
     session_id: UUID,
     hard_delete: bool | None = None,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id
@@ -570,6 +576,46 @@ def handle_send_chat_message(
     if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
         chat_message_req.origin = MessageOrigin.API
 
+    # Multi-model streaming path: 2-3 LLMs in parallel (streaming only)
+    is_multi_model = (
+        chat_message_req.llm_overrides is not None
+        and len(chat_message_req.llm_overrides) > 1
+    )
+    if is_multi_model and chat_message_req.stream:
+        # Narrowed here; is_multi_model already checked llm_overrides is not None
+        llm_overrides = chat_message_req.llm_overrides or []
+
+        def multi_model_stream_generator() -> Generator[str, None, None]:
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    for obj in handle_multi_model_stream(
+                        new_msg_req=chat_message_req,
+                        user=user,
+                        db_session=db_session,
+                        llm_overrides=llm_overrides,
+                        litellm_additional_headers=extract_headers(
+                            request.headers, LITELLM_PASS_THROUGH_HEADERS
+                        ),
+                        custom_tool_additional_headers=get_custom_tool_additional_request_headers(
+                            request.headers
+                        ),
+                        mcp_headers=chat_message_req.mcp_headers,
+                    ):
+                        yield get_json_line(obj.model_dump())
+            except Exception as e:
+                logger.exception("Error in multi-model streaming")
+                yield json.dumps({"error": str(e)})
+
+        return StreamingResponse(
+            multi_model_stream_generator(), media_type="text/event-stream"
+        )
+
+    if is_multi_model and not chat_message_req.stream:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Multi-model mode (llm_overrides with >1 entry) requires stream=True.",
+        )
+
     # Non-streaming path: consume all packets and return complete response
     if not chat_message_req.stream:
         with get_session_with_current_tenant() as db_session:
@@ -642,7 +688,7 @@ def handle_send_chat_message(
 @router.put("/set-message-as-latest")
 def set_message_as_latest(
     message_identifier: ChatMessageIdentifier,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id
@@ -658,6 +704,30 @@ def set_message_as_latest(
         user_id=user_id,
         db_session=db_session,
     )
+
+
+@router.put("/set-preferred-response")
+def set_preferred_response_endpoint(
+    request_body: SetPreferredResponseRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Set the preferred assistant response for a multi-model turn."""
+    try:
+        # Ownership check: get_chat_message raises ValueError if the message
+        # doesn't belong to this user, preventing cross-user mutation.
+        get_chat_message(
+            chat_message_id=request_body.user_message_id,
+            user_id=user.id,
+            db_session=db_session,
+        )
+        set_preferred_response(
+            db_session=db_session,
+            user_message_id=request_body.user_message_id,
+            preferred_assistant_message_id=request_body.preferred_response_id,
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
 
 @router.post("/create-chat-message-feedback")
@@ -700,7 +770,7 @@ class MaxSelectedDocumentTokens(BaseModel):
 @router.get("/max-selected-document-tokens")
 def get_max_document_tokens(
     persona_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MaxSelectedDocumentTokens:
     try:
@@ -771,7 +841,7 @@ class SeedChatFromSlackResponse(BaseModel):
 @router.post("/seed-chat-session-from-slack")
 def seed_chat_from_slack(
     chat_seed_request: SeedChatFromSlackRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SeedChatFromSlackResponse:
     slack_chat_session_id = chat_seed_request.chat_session_id
@@ -796,7 +866,7 @@ def seed_chat_from_slack(
 def fetch_chat_file(
     file_id: str,
     request: Request,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
 
@@ -833,7 +903,7 @@ async def search_chats(
     query: str | None = Query(None),
     page: int = Query(1),
     page_size: int = Query(10),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ChatSearchResponse:
     """
@@ -911,7 +981,7 @@ async def search_chats(
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
-    user: User = Depends(current_user),  # noqa: ARG001
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),  # noqa: ARG001
 ) -> dict[str, str]:
     """
     Stop a chat session by setting a stop signal.

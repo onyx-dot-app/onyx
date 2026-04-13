@@ -4,12 +4,13 @@ from fastapi import HTTPException
 from fastapi import Query
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
@@ -29,7 +30,7 @@ router = APIRouter(prefix="/document")
 @router.get("/document-size-info", dependencies=[Depends(require_vector_db)])
 def get_document_info(
     document_id: str = Query(...),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> DocumentInfo:
     search_settings = get_current_search_settings(db_session)
@@ -74,7 +75,7 @@ def get_document_info(
 def get_chunk_info(
     document_id: str = Query(...),
     chunk_id: int = Query(...),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ChunkInfo:
     search_settings = get_current_search_settings(db_session)

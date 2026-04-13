@@ -1,26 +1,29 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import useSWR, { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const useStandardAnswerCategories = () => {
-  const url = "/api/manage/admin/standard-answer/category";
   const swrResponse = useSWR<StandardAnswerCategory[]>(
-    url,
+    SWR_KEYS.standardAnswerCategories,
     errorHandlingFetcher
   );
 
   return {
     ...swrResponse,
-    refreshStandardAnswerCategories: () => mutate(url),
+    refreshStandardAnswerCategories: () =>
+      mutate(SWR_KEYS.standardAnswerCategories),
   };
 };
 
 export const useStandardAnswers = () => {
-  const url = "/api/manage/admin/standard-answer";
-  const swrResponse = useSWR<StandardAnswer[]>(url, errorHandlingFetcher);
+  const swrResponse = useSWR<StandardAnswer[]>(
+    SWR_KEYS.standardAnswers,
+    errorHandlingFetcher
+  );
 
   return {
     ...swrResponse,
-    refreshStandardAnswers: () => mutate(url),
+    refreshStandardAnswers: () => mutate(SWR_KEYS.standardAnswers),
   };
 };

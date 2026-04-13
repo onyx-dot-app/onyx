@@ -9,7 +9,6 @@ repos:
     rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
       - id: uv-sync
-        args: ["--locked", "--all-extras"]
       - id: uv-lock
       - id: uv-export
         name: uv-export default.txt
@@ -18,7 +17,7 @@ repos:
             "--no-emit-project",
             "--no-default-groups",
             "--no-hashes",
-            "--extra",
+            "--group",
             "backend",
             "-o",
             "backend/requirements/default.txt",
@@ -31,7 +30,7 @@ repos:
             "--no-emit-project",
             "--no-default-groups",
             "--no-hashes",
-            "--extra",
+            "--group",
             "dev",
             "-o",
             "backend/requirements/dev.txt",
@@ -44,7 +43,7 @@ repos:
             "--no-emit-project",
             "--no-default-groups",
             "--no-hashes",
-            "--extra",
+            "--group",
             "ee",
             "-o",
             "backend/requirements/ee.txt",
@@ -57,7 +56,7 @@ repos:
             "--no-emit-project",
             "--no-default-groups",
             "--no-hashes",
-            "--extra",
+            "--group",
             "model_server",
             "-o",
             "backend/requirements/model_server.txt",
@@ -122,7 +121,7 @@ repos:
     rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
     hooks:
       - id: golangci-lint
-        language_version: "1.26.0"
+        language_version: "1.26.1"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/astral-sh/ruff-pre-commit

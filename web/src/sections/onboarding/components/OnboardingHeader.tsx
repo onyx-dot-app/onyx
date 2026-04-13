@@ -7,7 +7,6 @@ import {
 } from "@/interfaces/onboarding";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { SvgProgressCircle, SvgX } from "@opal/icons";
 import { Card } from "@/refresh-components/cards";
 import { Section } from "@/layouts/general-layouts";
@@ -59,9 +58,12 @@ const OnboardingHeader = React.memo(
                     {onboardingState.totalSteps}
                   </Text>
                 )}
-                <Disabled disabled={!onboardingState.isButtonActive}>
-                  <Button onClick={handleButtonClick}>{stepButtonText}</Button>
-                </Disabled>
+                <Button
+                  disabled={!onboardingState.isButtonActive}
+                  onClick={handleButtonClick}
+                >
+                  {stepButtonText}
+                </Button>
               </Section>
             ) : (
               <Button

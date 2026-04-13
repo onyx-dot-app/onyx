@@ -1,5 +1,6 @@
 import React, { memo } from "react";
-import { SvgArrowExchange, SvgOnyxLogo } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
+import { SvgOnyxLogo } from "@opal/logos";
 
 type ConnectionProviderIconProps = {
   icon: React.ReactNode;

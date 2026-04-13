@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Button } from "@opal/components";
 import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
-import { Disabled } from "@opal/core";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
@@ -62,24 +61,23 @@ export function CancelInviteModal({
       title="Cancel Invite"
       onClose={isSubmitting ? undefined : onClose}
       submit={
-        <Disabled disabled={isSubmitting}>
-          <Button
-            variant="danger"
-            onClick={() =>
-              runAction(
-                () => cancelInvite(email),
-                "Invite cancelled",
-                () => {
-                  onMutate();
-                  onClose();
-                },
-                setIsSubmitting
-              )
-            }
-          >
-            Cancel Invite
-          </Button>
-        </Disabled>
+        <Button
+          disabled={isSubmitting}
+          variant="danger"
+          onClick={() =>
+            runAction(
+              () => cancelInvite(email),
+              "Invite cancelled",
+              () => {
+                onMutate();
+                onClose();
+              },
+              setIsSubmitting
+            )
+          }
+        >
+          Cancel Invite
+        </Button>
       }
     >
       <Text as="p" text03>
@@ -117,24 +115,23 @@ export function DeactivateUserModal({
       title="Deactivate User"
       onClose={isSubmitting ? undefined : onClose}
       submit={
-        <Disabled disabled={isSubmitting}>
-          <Button
-            variant="danger"
-            onClick={() =>
-              runAction(
-                () => deactivateUser(email),
-                "User deactivated",
-                () => {
-                  onMutate();
-                  onClose();
-                },
-                setIsSubmitting
-              )
-            }
-          >
-            Deactivate
-          </Button>
-        </Disabled>
+        <Button
+          disabled={isSubmitting}
+          variant="danger"
+          onClick={() =>
+            runAction(
+              () => deactivateUser(email),
+              "User deactivated",
+              () => {
+                onMutate();
+                onClose();
+              },
+              setIsSubmitting
+            )
+          }
+        >
+          Deactivate
+        </Button>
       }
     >
       <Text as="p" text03>
@@ -172,23 +169,22 @@ export function ActivateUserModal({
       title="Activate User"
       onClose={isSubmitting ? undefined : onClose}
       submit={
-        <Disabled disabled={isSubmitting}>
-          <Button
-            onClick={() =>
-              runAction(
-                () => activateUser(email),
-                "User activated",
-                () => {
-                  onMutate();
-                  onClose();
-                },
-                setIsSubmitting
-              )
-            }
-          >
-            Activate
-          </Button>
-        </Disabled>
+        <Button
+          disabled={isSubmitting}
+          onClick={() =>
+            runAction(
+              () => activateUser(email),
+              "User activated",
+              () => {
+                onMutate();
+                onClose();
+              },
+              setIsSubmitting
+            )
+          }
+        >
+          Activate
+        </Button>
       }
     >
       <Text as="p" text03>
@@ -226,24 +222,23 @@ export function DeleteUserModal({
       title="Delete User"
       onClose={isSubmitting ? undefined : onClose}
       submit={
-        <Disabled disabled={isSubmitting}>
-          <Button
-            variant="danger"
-            onClick={() =>
-              runAction(
-                () => deleteUser(email),
-                "User deleted",
-                () => {
-                  onMutate();
-                  onClose();
-                },
-                setIsSubmitting
-              )
-            }
-          >
-            Delete
-          </Button>
-        </Disabled>
+        <Button
+          disabled={isSubmitting}
+          variant="danger"
+          onClick={() =>
+            runAction(
+              () => deleteUser(email),
+              "User deleted",
+              () => {
+                onMutate();
+                onClose();
+              },
+              setIsSubmitting
+            )
+          }
+        >
+          Delete
+        </Button>
       }
     >
       <Text as="p" text03>
@@ -287,28 +282,27 @@ export function ResetPasswordModal({
         newPassword ? (
           <Button onClick={handleClose}>Done</Button>
         ) : (
-          <Disabled disabled={isSubmitting}>
-            <Button
-              variant="danger"
-              onClick={async () => {
-                setIsSubmitting(true);
-                try {
-                  const result = await resetPassword(email);
-                  setNewPassword(result.new_password);
-                } catch (err) {
-                  toast.error(
-                    err instanceof Error
-                      ? err.message
-                      : "Failed to reset password"
-                  );
-                } finally {
-                  setIsSubmitting(false);
-                }
-              }}
-            >
-              Reset Password
-            </Button>
-          </Disabled>
+          <Button
+            disabled={isSubmitting}
+            variant="danger"
+            onClick={async () => {
+              setIsSubmitting(true);
+              try {
+                const result = await resetPassword(email);
+                setNewPassword(result.new_password);
+              } catch (err) {
+                toast.error(
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to reset password"
+                );
+              } finally {
+                setIsSubmitting(false);
+              }
+            }}
+          >
+            Reset Password
+          </Button>
         )
       }
     >

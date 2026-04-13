@@ -403,7 +403,7 @@ test.describe("LLM Runtime Selection", () => {
 
     await openChat(page);
 
-    await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+    await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const dialog = page.locator('[role="dialog"]');
     await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
@@ -411,7 +411,8 @@ test.describe("LLM Runtime Selection", () => {
     const sharedModelOptions = dialog.locator("[data-selected]");
     await expect(sharedModelOptions).toHaveCount(2);
     const openAiModelOption = dialog
-      .getByRole("region", { name: /openai/i })
+      .getByRole("button", { name: /openai/i })
+      .locator("..")
       .locator("[data-selected]")
       .first();
     await expect(openAiModelOption).toBeVisible();
@@ -426,7 +427,7 @@ test.describe("LLM Runtime Selection", () => {
     await startNewChat(page);
     await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
 
-    await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+    await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const secondDialog = page.locator('[role="dialog"]');
     await secondDialog
@@ -436,18 +437,20 @@ test.describe("LLM Runtime Selection", () => {
     const secondSharedModelOptions = secondDialog.locator("[data-selected]");
     await expect(secondSharedModelOptions).toHaveCount(2);
     const anthropicModelOption = secondDialog
-      .getByRole("region", { name: /anthropic/i })
+      .getByRole("button", { name: /anthropic/i })
+      .locator("..")
       .locator("[data-selected]")
       .first();
     await expect(anthropicModelOption).toBeVisible();
     await anthropicModelOption.click();
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
 
-    await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+    await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
     const verifyDialog = page.locator('[role="dialog"]');
     const selectedAnthropicOption = verifyDialog
-      .getByRole("region", { name: /anthropic/i })
+      .getByRole("button", { name: /anthropic/i })
+      .locator("..")
       .locator('[data-selected="true"]');
     await expect(selectedAnthropicOption).toHaveCount(1);
     await page.keyboard.press("Escape");
@@ -508,7 +511,7 @@ test.describe("LLM Runtime Selection", () => {
     await loginWithCleanCookies(page, testInfo.workerIndex);
     await openChat(page);
 
-    await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+    await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
     const dialog = page.locator('[role="dialog"]');

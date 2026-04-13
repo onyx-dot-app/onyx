@@ -20,6 +20,7 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from onyx import __version__
 from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
@@ -65,6 +66,7 @@ if SENTRY_DSN:
         dsn=SENTRY_DSN,
         integrations=[CeleryIntegration()],
         traces_sample_rate=0.1,
+        release=__version__,
     )
     logger.info("Sentry initialized")
 else:
@@ -515,7 +517,8 @@ def reset_tenant_id(
 
 
 def wait_for_vespa_or_shutdown(
-    sender: Any, **kwargs: Any  # noqa: ARG001
+    sender: Any,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
 ) -> None:  # noqa: ARG001
     """Waits for Vespa to become ready subject to a timeout.
     Raises WorkerShutdown if the timeout is reached."""

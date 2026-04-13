@@ -19,6 +19,10 @@
   background-color: var(--background-neutral-00);
   border: 1px solid var(--status-error-05);
 }
+.input-error:focus:not(:active),
+.input-error:focus-within:not(:active) {
+  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
+}
 
 .input-disabled {
   background-color: var(--background-neutral-03);

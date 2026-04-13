@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
+import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import { Table, Button } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgUsers, SvgTrash, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
@@ -19,22 +20,10 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import Separator from "@/refresh-components/Separator";
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import useAdminUsers from "@/hooks/useAdminUsers";
 import type { UserGroup } from "@/lib/types";
-import type {
-  ApiKeyDescriptor,
-  MemberRow,
-  TokenRateLimitDisplay,
-} from "./interfaces";
+import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
+import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
 import {
-  apiKeyToMemberRow,
-  baseColumns,
-  memberTableColumns,
-  tc,
-  PAGE_SIZE,
-} from "./shared";
-import {
-  USER_GROUP_URL,
   renameGroup,
   updateGroup,
   deleteGroup,
@@ -42,6 +31,7 @@ import {
   updateDocSetGroupSharing,
   saveTokenLimits,
 } from "./svc";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
@@ -66,7 +56,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     data: groups,
     isLoading: groupLoading,
     error: groupError,
-  } = useSWR<UserGroup[]>(USER_GROUP_URL, errorHandlingFetcher, {
+  } = useSWR<UserGroup[]>(SWR_KEYS.adminUserGroups, errorHandlingFetcher, {
     refreshInterval: (latestData) => {
       const g = latestData?.find((g) => g.id === groupId);
       return g && !g.is_up_to_date ? 5000 : 0;
@@ -83,7 +73,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   // Fetch token rate limits for this group
   const { data: tokenRateLimits, isLoading: tokenLimitsLoading } = useSWR<
     TokenRateLimitDisplay[]
-  >(`/api/admin/token-rate-limits/user-group/${groupId}`, errorHandlingFetcher);
+  >(SWR_KEYS.userGroupTokenRateLimit(groupId), errorHandlingFetcher);
 
   // Form state
   const [groupName, setGroupName] = useState("");
@@ -104,18 +94,15 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const initialAgentIdsRef = useRef<number[]>([]);
   const initialDocSetIdsRef = useRef<number[]>([]);
 
-  // Users and API keys
-  const { users, isLoading: usersLoading, error: usersError } = useAdminUsers();
-
+  // Users + service accounts (curator-accessible — see hook docs).
   const {
-    data: apiKeys,
-    isLoading: apiKeysLoading,
-    error: apiKeysError,
-  } = useSWR<ApiKeyDescriptor[]>("/api/admin/api-key", errorHandlingFetcher);
+    rows: allRows,
+    isLoading: candidatesLoading,
+    error: candidatesError,
+  } = useGroupMemberCandidates();
 
-  const isLoading =
-    groupLoading || usersLoading || apiKeysLoading || tokenLimitsLoading;
-  const error = groupError ?? usersError ?? apiKeysError;
+  const isLoading = groupLoading || candidatesLoading || tokenLimitsLoading;
+  const error = groupError ?? candidatesError;
 
   // Pre-populate form when group data loads
   useEffect(() => {
@@ -144,12 +131,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       );
     }
   }, [tokenRateLimits]);
-
-  const allRows = useMemo(() => {
-    const activeUsers = users.filter((u) => u.is_active);
-    const serviceAccountRows = (apiKeys ?? []).map(apiKeyToMemberRow);
-    return [...activeUsers, ...serviceAccountRows];
-  }, [users, apiKeys]);
 
   const memberRows = useMemo(() => {
     const selected = new Set(selectedUserIds);
@@ -216,7 +197,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
 
     // Re-fetch group to check sync status before saving
-    const freshGroups = await fetch(USER_GROUP_URL).then((r) => r.json());
+    const freshGroups = await fetch(SWR_KEYS.adminUserGroups).then((r) =>
+      r.json()
+    );
     const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
     if (freshGroup && !freshGroup.is_up_to_date) {
       toast.error(
@@ -257,8 +240,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       initialAgentIdsRef.current = selectedAgentIds;
       initialDocSetIdsRef.current = selectedDocSetIds;
 
-      mutate(USER_GROUP_URL);
-      mutate(`/api/admin/token-rate-limits/user-group/${groupId}`);
+      mutate(SWR_KEYS.adminUserGroups);
+      mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
       toast.success(`Group "${trimmed}" updated`);
       router.push("/admin/groups");
     } catch (e) {
@@ -273,7 +256,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     setIsDeleting(true);
     try {
       await deleteGroup(groupId);
-      mutate(USER_GROUP_URL);
+      mutate(SWR_KEYS.adminUserGroups);
       toast.success(`Group "${group?.name}" deleted`);
       router.push("/admin/groups");
     } catch (e) {
@@ -287,7 +270,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   // 404 state
   if (!isLoading && !error && !group) {
     return (
-      <SettingsLayouts.Root width="sm">
+      <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgUsers}
           title="Group Not Found"
@@ -307,7 +290,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const headerActions = (
     <Section flexDirection="row" gap={0.5} width="auto" height="auto">
       <Button
-        prominence="tertiary"
+        prominence="secondary"
         onClick={() => router.push("/admin/groups")}
       >
         Cancel
@@ -328,7 +311,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   return (
     <>
-      <SettingsLayouts.Root width="sm">
+      <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgUsers}
           title="Edit Group"

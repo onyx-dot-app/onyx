@@ -52,6 +52,14 @@ export interface UserPersonalization {
   user_preferences: string;
 }
 
+export enum AccountType {
+  STANDARD = "STANDARD",
+  BOT = "BOT",
+  EXT_PERM_USER = "EXT_PERM_USER",
+  SERVICE_ACCOUNT = "SERVICE_ACCOUNT",
+  ANONYMOUS = "ANONYMOUS",
+}
+
 export enum UserRole {
   LIMITED = "limited",
   BASIC = "basic",
@@ -479,6 +487,7 @@ export interface UserGroup {
   personas: Persona[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
+  is_default: boolean;
 }
 
 export enum ValidSources {

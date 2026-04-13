@@ -4,7 +4,8 @@ import { markdown } from "@opal/utils";
 import React, { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Formik, Form, useFormikContext } from "formik";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -25,6 +26,7 @@ import {
   SvgFold,
   SvgExternalLink,
   SvgAlertCircle,
+  SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Content } from "@opal/layouts";
@@ -53,7 +55,8 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { Disabled } from "@opal/core";
+import { Disabled, Hoverable } from "@opal/core";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
@@ -81,6 +84,10 @@ interface ChatPreferencesFormValues {
   maximum_chat_retention_days: string;
   anonymous_user_enabled: boolean;
   disable_default_assistant: boolean;
+
+  // File limits
+  user_file_max_upload_size_mb: string;
+  file_token_count_threshold_k: string;
 }
 
 interface MCPServerCardTool {
@@ -185,6 +192,173 @@ function MCPServerCard({
   );
 }
 
+type FileLimitFieldName =
+  | "user_file_max_upload_size_mb"
+  | "file_token_count_threshold_k";
+
+interface NumericLimitFieldProps {
+  name: FileLimitFieldName;
+  defaultValue: string;
+  saveSettings: (updates: Partial<Settings>) => Promise<void>;
+  maxValue?: number;
+  allowZero?: boolean;
+}
+
+function NumericLimitField({
+  name,
+  defaultValue,
+  saveSettings,
+  maxValue,
+  allowZero = false,
+}: NumericLimitFieldProps) {
+  const { values, setFieldValue } =
+    useFormikContext<ChatPreferencesFormValues>();
+  const initialValue = useRef(values[name]);
+  const restoringRef = useRef(false);
+  const value = values[name];
+
+  const parsed = parseInt(value, 10);
+  const isOverMax =
+    maxValue !== undefined && !isNaN(parsed) && parsed > maxValue;
+
+  const handleRestore = () => {
+    restoringRef.current = true;
+    initialValue.current = defaultValue;
+    void setFieldValue(name, defaultValue);
+    void saveSettings({ [name]: parseInt(defaultValue, 10) });
+  };
+
+  const handleBlur = () => {
+    // The restore button triggers a blur — skip since handleRestore already saved.
+    if (restoringRef.current) {
+      restoringRef.current = false;
+      return;
+    }
+
+    const parsed = parseInt(value, 10);
+    const isValid = !isNaN(parsed) && (allowZero ? parsed >= 0 : parsed > 0);
+
+    // Revert invalid input (empty, NaN, negative).
+    if (!isValid) {
+      if (allowZero) {
+        // Empty/invalid means "no limit" — persist 0 and clear the field.
+        void setFieldValue(name, "");
+        void saveSettings({ [name]: 0 });
+        initialValue.current = "";
+      } else {
+        void setFieldValue(name, initialValue.current);
+      }
+      return;
+    }
+
+    // Block save when the value exceeds the hard ceiling.
+    if (maxValue !== undefined && parsed > maxValue) {
+      return;
+    }
+
+    // For allowZero fields, 0 means "no limit" — clear the display
+    // so the "No limit" placeholder is visible, but still persist 0.
+    if (allowZero && parsed === 0) {
+      void setFieldValue(name, "");
+      if (initialValue.current !== "") {
+        void saveSettings({ [name]: 0 });
+        initialValue.current = "";
+      }
+      return;
+    }
+
+    const normalizedDisplay = String(parsed);
+
+    // Update the display to the canonical form (e.g. strip leading zeros).
+    if (value !== normalizedDisplay) {
+      void setFieldValue(name, normalizedDisplay);
+    }
+
+    // Persist only when the value actually changed.
+    if (normalizedDisplay !== initialValue.current) {
+      void saveSettings({ [name]: parsed });
+      initialValue.current = normalizedDisplay;
+    }
+  };
+
+  return (
+    <Hoverable.Root group="numericLimit" widthVariant="full">
+      <InputTypeInField
+        name={name}
+        inputMode="numeric"
+        showClearButton={false}
+        pattern="[0-9]*"
+        placeholder={allowZero ? "No limit" : `Default: ${defaultValue}`}
+        variant={isOverMax ? "error" : undefined}
+        rightSection={
+          (value || "") !== defaultValue ? (
+            <Hoverable.Item group="numericLimit" variant="opacity-on-hover">
+              <IconButton
+                icon={SvgRefreshCw}
+                tooltip="Restore default"
+                internal
+                type="button"
+                onClick={handleRestore}
+              />
+            </Hoverable.Item>
+          ) : undefined
+        }
+        onBlur={handleBlur}
+      />
+    </Hoverable.Root>
+  );
+}
+
+interface FileSizeLimitFieldsProps {
+  saveSettings: (updates: Partial<Settings>) => Promise<void>;
+  defaultUploadSizeMb: string;
+  defaultTokenThresholdK: string;
+  maxAllowedUploadSizeMb?: number;
+}
+
+function FileSizeLimitFields({
+  saveSettings,
+  defaultUploadSizeMb,
+  defaultTokenThresholdK,
+  maxAllowedUploadSizeMb,
+}: FileSizeLimitFieldsProps) {
+  return (
+    <div className="flex gap-4 w-full items-start">
+      <div className="flex-1">
+        <InputLayouts.Vertical
+          title="File Size Limit (MB)"
+          subDescription={
+            maxAllowedUploadSizeMb
+              ? `Max: ${maxAllowedUploadSizeMb} MB`
+              : undefined
+          }
+          nonInteractive
+        >
+          <NumericLimitField
+            name="user_file_max_upload_size_mb"
+            defaultValue={defaultUploadSizeMb}
+            saveSettings={saveSettings}
+            maxValue={maxAllowedUploadSizeMb}
+          />
+        </InputLayouts.Vertical>
+      </div>
+      <div className="flex-1">
+        <InputLayouts.Vertical
+          title="File Token Limit (thousand tokens)"
+          nonInteractive
+        >
+          <NumericLimitField
+            name="file_token_count_threshold_k"
+            defaultValue={defaultTokenThresholdK}
+            saveSettings={saveSettings}
+            allowZero
+          />
+        </InputLayouts.Vertical>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Inner form component that uses useFormikContext to access values
  * and create save handlers for settings fields.
@@ -201,6 +375,7 @@ function ChatPreferencesForm() {
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
   const vectorDbEnabled = useVectorDbEnabled();
+
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -242,7 +417,7 @@ function ChatPreferencesForm() {
   // Default agent configuration (system prompt)
   const { data: defaultAgentConfig, mutate: mutateDefaultAgent } =
     useSWR<DefaultAgentConfiguration>(
-      "/api/admin/default-assistant/configuration",
+      SWR_KEYS.defaultAssistantConfig,
       errorHandlingFetcher
     );
 
@@ -326,6 +501,7 @@ function ChatPreferencesForm() {
         }
 
         router.refresh();
+        await mutate(SWR_KEYS.settings);
         toast.success("Settings updated");
       } catch (error) {
         toast.error("Failed to update settings");
@@ -724,6 +900,28 @@ function ChatPreferencesForm() {
                 </Card>
 
                 <Card>
+                  <InputLayouts.Vertical
+                    title="File Attachment Size Limit"
+                    description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
+                  >
+                    <FileSizeLimitFields
+                      saveSettings={saveSettings}
+                      defaultUploadSizeMb={
+                        settings?.settings.default_user_file_max_upload_size_mb?.toString() ??
+                        "100"
+                      }
+                      defaultTokenThresholdK={
+                        settings?.settings.default_file_token_count_threshold_k?.toString() ??
+                        "200"
+                      }
+                      maxAllowedUploadSizeMb={
+                        settings?.settings.max_allowed_upload_size_mb
+                      }
+                    />
+                  </InputLayouts.Vertical>
+                </Card>
+
+                <Card>
                   <InputLayouts.Horizontal
                     title="Allow Anonymous Users"
                     description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
@@ -810,7 +1008,7 @@ function ChatPreferencesForm() {
                       )}
                     </Text>
                   </Section>
-                  <OpalCard backgroundVariant="none" borderVariant="solid">
+                  <OpalCard background="none" border="solid" padding="sm">
                     <Content
                       sizePreset="main-ui"
                       icon={SvgAlertCircle}
@@ -862,6 +1060,21 @@ export default function ChatPreferencesPage() {
     anonymous_user_enabled: settings.settings.anonymous_user_enabled ?? false,
     disable_default_assistant:
       settings.settings.disable_default_assistant ?? false,
+
+    // File limits — for upload size: 0/null means "use default";
+    // for token threshold: null means "use default", 0 means "no limit".
+    user_file_max_upload_size_mb:
+      (settings.settings.user_file_max_upload_size_mb ?? 0) <= 0
+        ? settings.settings.default_user_file_max_upload_size_mb?.toString() ??
+          "100"
+        : settings.settings.user_file_max_upload_size_mb!.toString(),
+    file_token_count_threshold_k:
+      settings.settings.file_token_count_threshold_k == null
+        ? settings.settings.default_file_token_count_threshold_k?.toString() ??
+          "200"
+        : settings.settings.file_token_count_threshold_k === 0
+          ? ""
+          : settings.settings.file_token_count_threshold_k.toString(),
   };
 
   return (

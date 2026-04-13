@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import build_access_for_user_files
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
@@ -105,7 +106,7 @@ def _user_file_delete_queued_key(user_file_id: str | UUID) -> str:
 
 
 def get_user_file_project_sync_queue_depth(celery_app: Celery) -> int:
-    redis_celery: Redis = celery_app.broker_connection().channel().client  # type: ignore
+    redis_celery = celery_get_broker_client(celery_app)
     return celery_get_queue_length(
         OnyxCeleryQueues.USER_FILE_PROJECT_SYNC, redis_celery
     )
@@ -238,7 +239,7 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
     skipped_guard = 0
     try:
         # --- Protection 1: queue depth backpressure ---
-        r_celery = self.app.broker_connection().channel().client  # type: ignore
+        r_celery = celery_get_broker_client(self.app)
         queue_len = celery_get_queue_length(
             OnyxCeleryQueues.USER_FILE_PROCESSING, r_celery
         )
@@ -591,7 +592,7 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
         # --- Protection 1: queue depth backpressure ---
         # NOTE: must use the broker's Redis client (not redis_client) because
         # Celery queues live on a separate Redis DB with CELERY_SEPARATOR keys.
-        r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
+        r_celery = celery_get_broker_client(self.app)
         queue_len = celery_get_queue_length(OnyxCeleryQueues.USER_FILE_DELETE, r_celery)
         if queue_len > USER_FILE_DELETE_MAX_QUEUE_DEPTH:
             task_logger.warning(

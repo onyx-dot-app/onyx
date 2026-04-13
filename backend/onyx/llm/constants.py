@@ -26,6 +26,7 @@ class LlmProviderNames(str, Enum):
     MISTRAL = "mistral"
     LITELLM_PROXY = "litellm_proxy"
     BIFROST = "bifrost"
+    OPENAI_COMPATIBLE = "openai_compatible"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -46,6 +47,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.LM_STUDIO,
     LlmProviderNames.LITELLM_PROXY,
     LlmProviderNames.BIFROST,
+    LlmProviderNames.OPENAI_COMPATIBLE,
 ]
 
 
@@ -64,6 +66,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.LM_STUDIO: "LM Studio",
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
     LlmProviderNames.BIFROST: "Bifrost",
+    LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -84,6 +87,44 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "gemini": "Gemini",
     "stability": "Stability",
     "writer": "Writer",
+    # Custom provider display names (used in the custom provider picker)
+    "aiml": "AI/ML",
+    "assemblyai": "AssemblyAI",
+    "aws_polly": "AWS Polly",
+    "azure_ai": "Azure AI",
+    "chatgpt": "ChatGPT",
+    "cohere_chat": "Cohere Chat",
+    "datarobot": "DataRobot",
+    "deepgram": "Deepgram",
+    "deepinfra": "DeepInfra",
+    "elevenlabs": "ElevenLabs",
+    "fal_ai": "fal.ai",
+    "featherless_ai": "Featherless AI",
+    "fireworks_ai": "Fireworks AI",
+    "friendliai": "FriendliAI",
+    "gigachat": "GigaChat",
+    "github_copilot": "GitHub Copilot",
+    "gradient_ai": "Gradient AI",
+    "huggingface": "HuggingFace",
+    "jina_ai": "Jina AI",
+    "lambda_ai": "Lambda AI",
+    "llamagate": "LlamaGate",
+    "meta_llama": "Meta Llama",
+    "minimax": "MiniMax",
+    "nlp_cloud": "NLP Cloud",
+    "nvidia_nim": "NVIDIA NIM",
+    "oci": "OCI",
+    "ovhcloud": "OVHcloud",
+    "palm": "PaLM",
+    "publicai": "PublicAI",
+    "runwayml": "RunwayML",
+    "sambanova": "SambaNova",
+    "together_ai": "Together AI",
+    "vercel_ai_gateway": "Vercel AI Gateway",
+    "volcengine": "Volcengine",
+    "wandb": "W&B",
+    "watsonx": "IBM watsonx",
+    "zai": "ZAI",
 }
 
 # Map vendors to their brand names (used for provider_display_name generation)
@@ -116,6 +157,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.AZURE,
     LlmProviderNames.LITELLM_PROXY,
     LlmProviderNames.BIFROST,
+    LlmProviderNames.OPENAI_COMPATIBLE,
 }
 
 # Model family name mappings for display name generation

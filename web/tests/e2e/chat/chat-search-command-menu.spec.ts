@@ -142,8 +142,6 @@ test.describe("Chat Search Command Menu", () => {
     }
 
     await expect(dialog.getByText("Sessions")).toBeVisible();
-
-    await expectScreenshot(page, { name: "command-menu-sessions-filter" });
   });
 
   test('"Projects" filter expands to show all 4 projects', async ({ page }) => {

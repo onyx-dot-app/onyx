@@ -3,10 +3,10 @@ import datetime
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccountType
 from onyx.db.models import SlackChannelConfig
 from onyx.db.user_preferences import activate_user
 from onyx.db.users import add_slack_user_if_not_exists
@@ -247,7 +247,7 @@ def handle_message(
 
             elif (
                 not existing_user.is_active
-                and existing_user.role == UserRole.SLACK_USER
+                and existing_user.account_type == AccountType.BOT
             ):
                 check_seat_fn = fetch_ee_implementation_or_noop(
                     "onyx.db.license",

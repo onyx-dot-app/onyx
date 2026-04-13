@@ -4,8 +4,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { Disabled } from "@opal/core";
-import { cn } from "@opal/utils";
+import { cn, markdown } from "@opal/utils";
 import {
   SvgMoreHorizontal,
   SvgEdit,
@@ -279,19 +278,18 @@ export default function AgentRowActions({
           title="Delete Agent"
           onClose={isSubmitting ? undefined : () => setDeleteOpen(false)}
           submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  handleAction(
-                    () => deleteAgent(agent.id),
-                    () => setDeleteOpen(false)
-                  );
-                }}
-              >
-                Delete
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isSubmitting}
+              variant="danger"
+              onClick={() => {
+                handleAction(
+                  () => deleteAgent(agent.id),
+                  () => setDeleteOpen(false)
+                );
+              }}
+            >
+              Delete
+            </Button>
           }
         >
           <Text as="p" text03>
@@ -314,18 +312,17 @@ export default function AgentRowActions({
           }
           onClose={isSubmitting ? undefined : () => setFeaturedOpen(false)}
           submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                onClick={() => {
-                  handleAction(
-                    () => toggleAgentFeatured(agent.id, agent.is_featured),
-                    () => setFeaturedOpen(false)
-                  );
-                }}
-              >
-                {agent.is_featured ? "Unfeature" : "Feature"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isSubmitting}
+              onClick={() => {
+                handleAction(
+                  () => toggleAgentFeatured(agent.id, agent.is_featured),
+                  () => setFeaturedOpen(false)
+                );
+              }}
+            >
+              {agent.is_featured ? "Unfeature" : "Feature"}
+            </Button>
           }
         >
           <div className="flex flex-col gap-2">
@@ -344,21 +341,20 @@ export default function AgentRowActions({
       {unlistOpen && (
         <ConfirmationModalLayout
           icon={SvgEyeOff}
-          title={`Unlist ${agent.name}`}
+          title={markdown(`Unlist *${agent.name}*`)}
           onClose={isSubmitting ? undefined : () => setUnlistOpen(false)}
           submit={
-            <Disabled disabled={isSubmitting}>
-              <Button
-                onClick={() => {
-                  handleAction(
-                    () => toggleAgentListed(agent.id, agent.is_listed),
-                    () => setUnlistOpen(false)
-                  );
-                }}
-              >
-                Unlist
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isSubmitting}
+              onClick={() => {
+                handleAction(
+                  () => toggleAgentListed(agent.id, agent.is_listed),
+                  () => setUnlistOpen(false)
+                );
+              }}
+            >
+              Unlist
+            </Button>
           }
         >
           <div className="flex flex-col gap-2">

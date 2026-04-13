@@ -20,7 +20,7 @@ from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import MessageSnapshot
 from ee.onyx.server.query_history.models import QueryHistoryExport
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import get_display_email
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
@@ -39,6 +39,7 @@ from onyx.configs.constants import SessionType
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.enums import TaskStatus
 from onyx.db.file_record import get_query_history_export_files
 from onyx.db.models import ChatSession
@@ -153,7 +154,7 @@ def snapshot_from_chat_session(
 @router.get("/admin/chat-sessions")
 def admin_get_chat_sessions(
     user_id: UUID,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionsResponse:
     # we specifically don't allow this endpoint if "anonymized" since
@@ -196,7 +197,7 @@ def get_chat_session_history(
     feedback_type: QAFeedbackType | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ChatSessionMinimal]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -234,7 +235,7 @@ def get_chat_session_history(
 @router.get("/admin/chat-session-history/{chat_session_id}")
 def get_chat_session_admin(
     chat_session_id: UUID,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -269,7 +270,7 @@ def get_chat_session_admin(
 
 @router.get("/admin/query-history/list")
 def list_all_query_history_exports(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[QueryHistoryExport]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -297,7 +298,7 @@ def list_all_query_history_exports(
 
 @router.post("/admin/query-history/start-export", tags=PUBLIC_API_TAGS)
 def start_query_history_export(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
     start: datetime | None = None,
     end: datetime | None = None,
@@ -344,7 +345,7 @@ def start_query_history_export(
 @router.get("/admin/query-history/export-status", tags=PUBLIC_API_TAGS)
 def get_query_history_export_status(
     request_id: str,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -378,7 +379,7 @@ def get_query_history_export_status(
 @router.get("/admin/query-history/download", tags=PUBLIC_API_TAGS)
 def download_query_history_csv(
     request_id: str,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])

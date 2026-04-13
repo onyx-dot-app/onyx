@@ -183,6 +183,7 @@ jobs:
       - cherry-pick-to-latest-release
     if: needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && needs.resolve-cherry-pick-request.result == 'success' && needs.cherry-pick-to-latest-release.result == 'success'
     runs-on: ubuntu-slim
+    environment: ci-protected
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -232,6 +233,7 @@ jobs:
       - cherry-pick-to-latest-release
     if: always() && needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && (needs.resolve-cherry-pick-request.result == 'failure' || needs.cherry-pick-to-latest-release.result == 'failure')
     runs-on: ubuntu-slim
+    environment: ci-protected
     timeout-minutes: 10
     steps:
       - name: Checkout

@@ -2,7 +2,6 @@
 
 import { useState, useRef } from "react";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import {
   Table,
   TableBody,
@@ -184,25 +183,24 @@ export default function InlineFileManagement({
             </Button>
           ) : (
             <>
-              <Disabled disabled={isSaving}>
-                <Button
-                  prominence="secondary"
-                  onClick={handleCancel}
-                  icon={SvgX}
-                >
-                  Cancel
-                </Button>
-              </Disabled>
-              <Disabled
+              <Button
+                disabled={isSaving}
+                prominence="secondary"
+                onClick={handleCancel}
+                icon={SvgX}
+              >
+                Cancel
+              </Button>
+              <Button
                 disabled={
                   isSaving ||
                   (selectedFilesToRemove.size === 0 && filesToAdd.length === 0)
                 }
+                onClick={handleSaveClick}
+                icon={SvgCheck}
               >
-                <Button onClick={handleSaveClick} icon={SvgCheck}>
-                  {isSaving ? "Saving..." : "Save Changes"}
-                </Button>
-              </Disabled>
+                {isSaving ? "Saving..." : "Save Changes"}
+              </Button>
             </>
           )}
         </div>
@@ -334,15 +332,14 @@ export default function InlineFileManagement({
             className="hidden"
             id={`file-upload-${connectorId}`}
           />
-          <Disabled disabled={isSaving}>
-            <Button
-              prominence="secondary"
-              onClick={() => fileInputRef.current?.click()}
-              icon={SvgPlusCircle}
-            >
-              Add Files
-            </Button>
-          </Disabled>
+          <Button
+            disabled={isSaving}
+            prominence="secondary"
+            onClick={() => fileInputRef.current?.click()}
+            icon={SvgPlusCircle}
+          >
+            Add Files
+          </Button>
         </div>
       )}
 
@@ -398,19 +395,16 @@ export default function InlineFileManagement({
           </Modal.Body>
 
           <Modal.Footer>
-            <Disabled disabled={isSaving}>
-              <Button
-                prominence="secondary"
-                onClick={() => setShowSaveConfirm(false)}
-              >
-                Cancel
-              </Button>
-            </Disabled>
-            <Disabled disabled={isSaving}>
-              <Button onClick={handleConfirmSave}>
-                {isSaving ? "Saving..." : "Confirm & Save"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isSaving}
+              prominence="secondary"
+              onClick={() => setShowSaveConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button disabled={isSaving} onClick={handleConfirmSave}>
+              {isSaving ? "Saving..." : "Confirm & Save"}
+            </Button>
           </Modal.Footer>
         </Modal.Content>
       </Modal>

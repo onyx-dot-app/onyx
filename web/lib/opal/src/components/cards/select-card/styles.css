@@ -1,0 +1,9 @@
+/* SelectCard — structural styles; colors handled by Interactive.Stateful */
+
+.opal-select-card {
+  @apply w-full overflow-clip border;
+}
+
+.opal-select-card[data-interactive-state="selected"] {
+  @apply border-action-link-05;
+}

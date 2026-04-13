@@ -26,6 +26,7 @@ DYNAMIC_LLM_PROVIDERS = frozenset(
         LlmProviderNames.OLLAMA_CHAT,
         LlmProviderNames.LM_STUDIO,
         LlmProviderNames.BIFROST,
+        LlmProviderNames.OPENAI_COMPATIBLE,
     }
 )
 
@@ -308,12 +309,15 @@ def should_filter_as_dated_duplicate(
 def filter_model_configurations(
     model_configurations: list,
     provider: str,
+    use_stored_display_name: bool = False,
 ) -> list:
     """Filter out obsolete and dated duplicate models from configurations.
 
     Args:
         model_configurations: List of ModelConfiguration DB models
         provider: The provider name (e.g., "openai", "anthropic")
+        use_stored_display_name: If True, prefer the display_name stored in the
+            DB over LiteLLM enrichments. Set for custom-config providers.
 
     Returns:
         List of ModelConfigurationView objects with obsolete/duplicate models removed
@@ -333,7 +337,9 @@ def filter_model_configurations(
         if should_filter_as_dated_duplicate(model_configuration.name, all_model_names):
             continue
         filtered_configs.append(
-            ModelConfigurationView.from_model(model_configuration, provider)
+            ModelConfigurationView.from_model(
+                model_configuration, provider, use_stored_display_name
+            )
         )
 
     return filtered_configs

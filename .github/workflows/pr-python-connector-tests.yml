@@ -22,132 +22,40 @@ on:
     - cron: "0 16 * * *"
 
 permissions:
+  id-token: write # Required for OIDC-based AWS credential exchange
   contents: read
 
 env:
-  # AWS
-  AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS: ${{ secrets.AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS }}
-  AWS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS: ${{ secrets.AWS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS }}
-
-  # Cloudflare R2
+  PYTHONPATH: ./backend
+  DISABLE_TELEMETRY: "true"
   R2_ACCOUNT_ID_DAILY_CONNECTOR_TESTS: ${{ vars.R2_ACCOUNT_ID_DAILY_CONNECTOR_TESTS }}
-  R2_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS: ${{ secrets.R2_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS }}
-  R2_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS: ${{ secrets.R2_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS }}
-
-  # Google Cloud Storage
-  GCS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS: ${{ secrets.GCS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS }}
-  GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS: ${{ secrets.GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS }}
-
-  # Confluence
   CONFLUENCE_TEST_SPACE_URL: ${{ vars.CONFLUENCE_TEST_SPACE_URL }}
   CONFLUENCE_TEST_SPACE: ${{ vars.CONFLUENCE_TEST_SPACE }}
-  CONFLUENCE_TEST_PAGE_ID: ${{ secrets.CONFLUENCE_TEST_PAGE_ID }}
   CONFLUENCE_USER_NAME: ${{ vars.CONFLUENCE_USER_NAME }}
-  CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
-  CONFLUENCE_ACCESS_TOKEN_SCOPED: ${{ secrets.CONFLUENCE_ACCESS_TOKEN_SCOPED }}
-
-  # Jira
-  JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-  JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
-  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-  JIRA_API_TOKEN_SCOPED: ${{ secrets.JIRA_API_TOKEN_SCOPED }}
-
-  # Gong
-  GONG_ACCESS_KEY: ${{ secrets.GONG_ACCESS_KEY }}
-  GONG_ACCESS_KEY_SECRET: ${{ secrets.GONG_ACCESS_KEY_SECRET }}
-
-  # Google
-  GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR }}
-  GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR_TEST_USER_1: ${{ secrets.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR_TEST_USER_1 }}
-  GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR: ${{ secrets.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR }}
-  GOOGLE_GMAIL_SERVICE_ACCOUNT_JSON_STR: ${{ secrets.GOOGLE_GMAIL_SERVICE_ACCOUNT_JSON_STR }}
-  GOOGLE_GMAIL_OAUTH_CREDENTIALS_JSON_STR: ${{ secrets.GOOGLE_GMAIL_OAUTH_CREDENTIALS_JSON_STR }}
-
-  # Slab
-  SLAB_BOT_TOKEN: ${{ secrets.SLAB_BOT_TOKEN }}
-
-  # Zendesk
-  ZENDESK_SUBDOMAIN: ${{ secrets.ZENDESK_SUBDOMAIN }}
-  ZENDESK_EMAIL: ${{ secrets.ZENDESK_EMAIL }}
-  ZENDESK_TOKEN: ${{ secrets.ZENDESK_TOKEN }}
-
-  # Salesforce
   SF_USERNAME: ${{ vars.SF_USERNAME }}
-  SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
-  SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
-
-  # Hubspot
-  HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
-
-  # IMAP
   IMAP_HOST: ${{ vars.IMAP_HOST }}
   IMAP_USERNAME: ${{ vars.IMAP_USERNAME }}
-  IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
   IMAP_MAILBOXES: ${{ vars.IMAP_MAILBOXES }}
-
-  # Airtable
   AIRTABLE_TEST_BASE_ID: ${{ vars.AIRTABLE_TEST_BASE_ID }}
   AIRTABLE_TEST_TABLE_ID: ${{ vars.AIRTABLE_TEST_TABLE_ID }}
   AIRTABLE_TEST_TABLE_NAME: ${{ vars.AIRTABLE_TEST_TABLE_NAME }}
-  AIRTABLE_ACCESS_TOKEN: ${{ secrets.AIRTABLE_ACCESS_TOKEN }}
-
-  # Sharepoint
   SHAREPOINT_CLIENT_ID: ${{ vars.SHAREPOINT_CLIENT_ID }}
-  SHAREPOINT_CLIENT_SECRET: ${{ secrets.SHAREPOINT_CLIENT_SECRET }}
   SHAREPOINT_CLIENT_DIRECTORY_ID: ${{ vars.SHAREPOINT_CLIENT_DIRECTORY_ID }}
   SHAREPOINT_SITE: ${{ vars.SHAREPOINT_SITE }}
-  PERM_SYNC_SHAREPOINT_CLIENT_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_CLIENT_ID }}
-  PERM_SYNC_SHAREPOINT_PRIVATE_KEY: ${{ secrets.PERM_SYNC_SHAREPOINT_PRIVATE_KEY }}
-  PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD }}
-  PERM_SYNC_SHAREPOINT_DIRECTORY_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_DIRECTORY_ID }}
-
-  # Github
-  ACCESS_TOKEN_GITHUB: ${{ secrets.ACCESS_TOKEN_GITHUB }}
-
-  # Gitlab
-  GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
-
-  # Gitbook
-  GITBOOK_SPACE_ID: ${{ secrets.GITBOOK_SPACE_ID }}
-  GITBOOK_API_KEY: ${{ secrets.GITBOOK_API_KEY }}
-
-  # Notion
-  NOTION_INTEGRATION_TOKEN: ${{ secrets.NOTION_INTEGRATION_TOKEN }}
-
-  # Highspot
-  HIGHSPOT_KEY: ${{ secrets.HIGHSPOT_KEY }}
-  HIGHSPOT_SECRET: ${{ secrets.HIGHSPOT_SECRET }}
-
-  # Slack
-  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-
-  # Discord
-  DISCORD_CONNECTOR_BOT_TOKEN: ${{ secrets.DISCORD_CONNECTOR_BOT_TOKEN }}
-
-  # Teams
-  TEAMS_APPLICATION_ID: ${{ secrets.TEAMS_APPLICATION_ID }}
-  TEAMS_DIRECTORY_ID: ${{ secrets.TEAMS_DIRECTORY_ID }}
-  TEAMS_SECRET: ${{ secrets.TEAMS_SECRET }}
-
-  # Bitbucket
-  BITBUCKET_WORKSPACE: ${{ secrets.BITBUCKET_WORKSPACE }}
-  BITBUCKET_REPOSITORIES: ${{ secrets.BITBUCKET_REPOSITORIES }}
-  BITBUCKET_PROJECTS: ${{ secrets.BITBUCKET_PROJECTS }}
   BITBUCKET_EMAIL: ${{ vars.BITBUCKET_EMAIL }}
-  BITBUCKET_API_TOKEN: ${{ secrets.BITBUCKET_API_TOKEN }}
-
-  # Fireflies
-  FIREFLIES_API_KEY: ${{ secrets.FIREFLIES_API_KEY }}
 
 jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-connectors-check", "extras=s3-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=8cpu-linux-x64,
+        "run-id=${{ github.run_id }}-connectors-check",
+        "extras=s3-cache",
+      ]
     timeout-minutes: 45
-
-    env:
-      PYTHONPATH: ./backend
-      DISABLE_TELEMETRY: "true"
+    environment: ci-protected
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -187,6 +95,66 @@ jobs:
             file_processing:
               - 'backend/onyx/file_processing/**'
               - 'uv.lock'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # ratchet:aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get connector test secrets from AWS Secrets Manager
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802 # ratchet:aws-actions/aws-secretsmanager-get-secrets@v2
+        with:
+          parse-json-secrets: false
+          secret-ids: |
+            AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS, test/aws-access-key-id
+            AWS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS, test/aws-secret-access-key
+            R2_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS, test/r2-access-key-id
+            R2_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS, test/r2-secret-access-key
+            GCS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS, test/gcs-access-key-id
+            GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS, test/gcs-secret-access-key
+            CONFLUENCE_ACCESS_TOKEN, test/confluence-access-token
+            CONFLUENCE_ACCESS_TOKEN_SCOPED, test/confluence-access-token-scoped
+            JIRA_BASE_URL, test/jira-base-url
+            JIRA_USER_EMAIL, test/jira-user-email
+            JIRA_API_TOKEN, test/jira-api-token
+            JIRA_API_TOKEN_SCOPED, test/jira-api-token-scoped
+            GONG_ACCESS_KEY, test/gong-access-key
+            GONG_ACCESS_KEY_SECRET, test/gong-access-key-secret
+            GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR, test/google-drive-service-account-json
+            GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR_TEST_USER_1, test/google-drive-oauth-creds-test-user-1
+            GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR, test/google-drive-oauth-creds
+            GOOGLE_GMAIL_SERVICE_ACCOUNT_JSON_STR, test/google-gmail-service-account-json
+            GOOGLE_GMAIL_OAUTH_CREDENTIALS_JSON_STR, test/google-gmail-oauth-creds
+            SLAB_BOT_TOKEN, test/slab-bot-token
+            ZENDESK_SUBDOMAIN, test/zendesk-subdomain
+            ZENDESK_EMAIL, test/zendesk-email
+            ZENDESK_TOKEN, test/zendesk-token
+            SF_PASSWORD, test/sf-password
+            SF_SECURITY_TOKEN, test/sf-security-token
+            HUBSPOT_ACCESS_TOKEN, test/hubspot-access-token
+            IMAP_PASSWORD, test/imap-password
+            AIRTABLE_ACCESS_TOKEN, test/airtable-access-token
+            SHAREPOINT_CLIENT_SECRET, test/sharepoint-client-secret
+            PERM_SYNC_SHAREPOINT_CLIENT_ID, test/perm-sync-sharepoint-client-id
+            PERM_SYNC_SHAREPOINT_PRIVATE_KEY, test/perm-sync-sharepoint-private-key
+            PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD, test/perm-sync-sharepoint-cert-password
+            PERM_SYNC_SHAREPOINT_DIRECTORY_ID, test/perm-sync-sharepoint-directory-id
+            ACCESS_TOKEN_GITHUB, test/github-access-token
+            GITLAB_ACCESS_TOKEN, test/gitlab-access-token
+            GITBOOK_SPACE_ID, test/gitbook-space-id
+            GITBOOK_API_KEY, test/gitbook-api-key
+            NOTION_INTEGRATION_TOKEN, test/notion-integration-token
+            HIGHSPOT_KEY, test/highspot-key
+            HIGHSPOT_SECRET, test/highspot-secret
+            SLACK_BOT_TOKEN, test/slack-bot-token
+            DISCORD_CONNECTOR_BOT_TOKEN, test/discord-bot-token
+            TEAMS_APPLICATION_ID, test/teams-application-id
+            TEAMS_DIRECTORY_ID, test/teams-directory-id
+            TEAMS_SECRET, test/teams-secret
+            BITBUCKET_WORKSPACE, test/bitbucket-workspace
+            BITBUCKET_API_TOKEN, test/bitbucket-api-token
+            FIREFLIES_API_KEY, test/fireflies-api-key
 
       - name: Run Tests (excluding HubSpot, Salesforce, GitHub, and Coda)
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"

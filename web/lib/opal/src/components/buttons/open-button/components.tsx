@@ -1,6 +1,5 @@
 import {
   Interactive,
-  useDisabled,
   type InteractiveStatefulProps,
   type InteractiveStatefulInteraction,
 } from "@opal/core";
@@ -74,6 +73,9 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
 
     /** Override the default rounding derived from `size`. */
     roundingVariant?: InteractiveContainerRoundingVariant;
+
+    /** Applies disabled styling and suppresses clicks. */
+    disabled?: boolean;
   };
 
 // ---------------------------------------------------------------------------
@@ -92,10 +94,9 @@ function OpenButton({
   roundingVariant: roundingVariantOverride,
   interaction,
   variant = "select-heavy",
+  disabled,
   ...statefulProps
 }: OpenButtonProps) {
-  const { isDisabled } = useDisabled();
-
   // Derive open state: explicit prop → Radix data-state (injected via Slot chain)
   const dataState = (statefulProps as Record<string, unknown>)["data-state"] as
     | string
@@ -119,6 +120,7 @@ function OpenButton({
     <Interactive.Stateful
       variant={variant}
       interaction={resolvedInteraction}
+      disabled={disabled}
       {...statefulProps}
     >
       <Interactive.Container
@@ -127,12 +129,12 @@ function OpenButton({
         widthVariant={width}
         roundingVariant={
           roundingVariantOverride ??
-          (isLarge ? "default" : size === "2xs" ? "mini" : "compact")
+          (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
         }
       >
         <div
           className={cn(
-            "interactive-foreground flex flex-row items-center",
+            "flex flex-row items-center",
             justifyContent === "between" ? "w-full justify-between" : "gap-1",
             foldable &&
               justifyContent !== "between" &&
@@ -168,7 +170,7 @@ function OpenButton({
   );
 
   const resolvedTooltip =
-    tooltip ?? (foldable && isDisabled && children ? children : undefined);
+    tooltip ?? (foldable && disabled && children ? children : undefined);
 
   if (!resolvedTooltip) return button;
 

@@ -1,6 +1,8 @@
 /** API helpers for the Groups pages. */
 
-const USER_GROUP_URL = "/api/manage/admin/user-group";
+import { SWR_KEYS } from "@/lib/swr-keys";
+
+const USER_GROUP_URL = SWR_KEYS.adminUserGroups;
 
 async function renameGroup(groupId: number, newName: string): Promise<void> {
   const res = await fetch(`${USER_GROUP_URL}/rename`, {
@@ -280,7 +282,6 @@ async function saveTokenLimits(
 }
 
 export {
-  USER_GROUP_URL,
   renameGroup,
   createGroup,
   updateGroup,

@@ -127,6 +127,15 @@ class UserManager:
         return test_user
 
     @staticmethod
+    def get_permissions(user: DATestUser) -> list[str]:
+        response = requests.get(
+            url=f"{API_SERVER_URL}/me/permissions",
+            headers=user.headers,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
     def is_role(
         user_to_verify: DATestUser,
         target_role: UserRole,

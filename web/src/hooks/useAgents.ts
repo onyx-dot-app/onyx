@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   MinimalPersonaSnapshot,
   FullPersona,
@@ -36,10 +37,11 @@ import useChatSessions from "./useChatSessions";
  */
 export function useAgents() {
   const { data, error, mutate } = useSWR<MinimalPersonaSnapshot[]>(
-    "/api/persona",
+    SWR_KEYS.personas,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );
@@ -76,10 +78,11 @@ export function useAgents() {
  */
 export function useAgent(agentId: number | null) {
   const { data, error, isLoading, mutate } = useSWR<FullPersona>(
-    agentId ? `/api/persona/${agentId}` : null,
+    agentId ? SWR_KEYS.persona(agentId) : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateIfStale: false,
       dedupingInterval: 60000,
     }
   );

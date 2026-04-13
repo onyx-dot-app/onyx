@@ -10,7 +10,6 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "@/interfaces/onboarding";
-import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import NonAdminStep from "./components/NonAdminStep";
@@ -21,7 +20,6 @@ type OnboardingFlowProps = {
   handleFinishOnboarding: () => void;
   state: OnboardingState;
   actions: OnboardingActions;
-  llmDescriptors: WellKnownLLMProviderDescriptor[];
 };
 
 const OnboardingFlowInner = ({
@@ -30,7 +28,6 @@ const OnboardingFlowInner = ({
   handleFinishOnboarding,
   state: onboardingState,
   actions: onboardingActions,
-  llmDescriptors,
 }: OnboardingFlowProps) => {
   const { user } = useUser();
 
@@ -57,7 +54,6 @@ const OnboardingFlowInner = ({
               <LLMStep
                 state={onboardingState}
                 actions={onboardingActions}
-                llmDescriptors={llmDescriptors}
                 disabled={
                   onboardingState.currentStep !== OnboardingStep.LlmSetup
                 }

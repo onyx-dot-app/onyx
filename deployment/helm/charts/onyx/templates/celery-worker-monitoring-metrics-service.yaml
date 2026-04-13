@@ -1,0 +1,26 @@
+{{- /* Metrics port must match the default in metrics_server.py (_DEFAULT_PORTS).
+       Do NOT use PROMETHEUS_METRICS_PORT env var in Helm — each worker needs its own port. */ -}}
+{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_monitoring.replicaCount) 0) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.fullname" . }}-celery-worker-monitoring-metrics
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- if .Values.celery_worker_monitoring.deploymentLabels }}
+    {{- toYaml .Values.celery_worker_monitoring.deploymentLabels | nindent 4 }}
+    {{- end }}
+    metrics: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9096
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    {{- if .Values.celery_worker_monitoring.deploymentLabels }}
+    {{- toYaml .Values.celery_worker_monitoring.deploymentLabels | nindent 4 }}
+    {{- end }}
+{{- end }}

@@ -6,6 +6,7 @@ from onyx.access.models import ElementExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.access.models import NodeExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
@@ -40,10 +41,19 @@ def generic_doc_sync(
 
     logger.info(f"Starting {doc_source} doc sync for CC Pair ID: {cc_pair.id}")
 
+    indexing_start: SecondsSinceUnixEpoch | None = (
+        cc_pair.connector.indexing_start.timestamp()
+        if cc_pair.connector.indexing_start is not None
+        else None
+    )
+
     newly_fetched_doc_ids: set[str] = set()
 
     logger.info(f"Fetching all slim documents from {doc_source}")
-    for doc_batch in slim_connector.retrieve_all_slim_docs_perm_sync(callback=callback):
+    for doc_batch in slim_connector.retrieve_all_slim_docs_perm_sync(
+        start=indexing_start,
+        callback=callback,
+    ):
         logger.info(f"Got {len(doc_batch)} slim documents from {doc_source}")
 
         if callback:

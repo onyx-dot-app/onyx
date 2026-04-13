@@ -890,8 +890,8 @@ class ConfluenceConnector(
 
     def _retrieve_all_slim_docs(
         self,
-        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:
@@ -915,8 +915,8 @@ class ConfluenceConnector(
                 self.confluence_client, doc_id, restrictions, ancestors
             ) or space_level_access_info.get(page_space_key)
 
-        # Query pages
-        page_query = self.base_cql_page_query + self.cql_label_filter
+        # Query pages (with optional time filtering for indexing_start)
+        page_query = self._construct_page_cql_query(start, end)
         for page in self.confluence_client.cql_paginate_all_expansions(
             cql=page_query,
             expand=restrictions_expand,
@@ -950,7 +950,9 @@ class ConfluenceConnector(
 
             # Query attachments for each page
             page_hierarchy_node_yielded = False
-            attachment_query = self._construct_attachment_query(_get_page_id(page))
+            attachment_query = self._construct_attachment_query(
+                _get_page_id(page), start, end
+            )
             for attachment in self.confluence_client.cql_paginate_all_expansions(
                 cql=attachment_query,
                 expand=restrictions_expand,

@@ -6,6 +6,7 @@ import re
 import time
 import urllib
 import zipfile
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timedelta
@@ -461,7 +462,7 @@ class VespaIndex(DocumentIndex):
 
     def index(
         self,
-        chunks: list[DocMetadataAwareIndexChunk],
+        chunks: Iterable[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[OldDocumentInsertionRecord]:
         """

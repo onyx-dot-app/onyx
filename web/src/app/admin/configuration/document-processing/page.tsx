@@ -5,6 +5,7 @@ import CardSection from "@/components/admin/CardSection";
 import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -22,7 +23,7 @@ function Main() {
     isLoading,
   } = useSWR<{
     unstructured_api_key: string | null;
-  }>("/api/search-settings/unstructured-api-key-set", (url: string) =>
+  }>(SWR_KEYS.unstructuredApiKeySet, (url: string) =>
     fetch(url).then((res) => res.json())
   );
 
@@ -126,13 +127,13 @@ function Main() {
                 />
               )}
             </div>
-            <div className="flex flex-col gap-2 desktop:flex-row desktop:items-center desktop:gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
               {isApiKeySet ? (
                 <>
                   <Button variant="danger" onClick={handleDelete}>
                     Delete API Key
                   </Button>
-                  <Text as="p" mainContentBody text04 className="desktop:mt-0">
+                  <Text as="p" mainContentBody text04 className="sm:mt-0">
                     Delete the current API key before updating.
                   </Text>
                 </>

@@ -5,7 +5,6 @@ import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import Separator from "@/refresh-components/Separator";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
@@ -127,16 +126,17 @@ export const SlackTokensForm = ({
             subtext="Optional: User OAuth token for enhanced private channel access"
           />
           <div className="flex justify-end w-full mt-4">
-            <Disabled
+            <Button
               disabled={
                 isSubmitting ||
                 !values.bot_token ||
                 !values.app_token ||
                 !values.name
               }
+              type="submit"
             >
-              <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-            </Disabled>
+              {isUpdate ? "Update" : "Create"}
+            </Button>
           </div>
         </Form>
       )}

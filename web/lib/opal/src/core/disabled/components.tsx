@@ -1,32 +1,6 @@
-"use client";
-
 import "@opal/core/disabled/styles.css";
-import React, { createContext, useContext } from "react";
+import React from "react";
 import { Slot } from "@radix-ui/react-slot";
-
-// ---------------------------------------------------------------------------
-// Context
-// ---------------------------------------------------------------------------
-
-interface DisabledContextValue {
-  isDisabled: boolean;
-  allowClick: boolean;
-}
-
-const DisabledContext = createContext<DisabledContextValue>({
-  isDisabled: false,
-  allowClick: false,
-});
-
-/**
- * Returns the current disabled state from the nearest `<Disabled>` ancestor.
- *
- * Used internally by `Interactive.Stateless` and `Interactive.Stateful` to
- * derive `data-disabled` and `aria-disabled` attributes automatically.
- */
-function useDisabled(): DisabledContextValue {
-  return useContext(DisabledContext);
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,8 +30,8 @@ interface DisabledProps extends React.HTMLAttributes<HTMLElement> {
 // ---------------------------------------------------------------------------
 
 /**
- * Wrapper component that propagates disabled state via context and applies
- * baseline disabled CSS (opacity, cursor, pointer-events) to its child.
+ * Wrapper component that applies baseline disabled CSS (opacity, cursor,
+ * pointer-events) to its child element.
  *
  * Uses Radix `Slot` — merges props onto the single child element without
  * adding any DOM node. Works correctly inside Radix `asChild` chains.
@@ -65,7 +39,7 @@ interface DisabledProps extends React.HTMLAttributes<HTMLElement> {
  * @example
  * ```tsx
  * <Disabled disabled={!canSubmit}>
- *   <Button onClick={handleSubmit}>Save</Button>
+ *   <div>...</div>
  * </Disabled>
  * ```
  */
@@ -77,20 +51,16 @@ function Disabled({
   ...rest
 }: DisabledProps) {
   return (
-    <DisabledContext.Provider
-      value={{ isDisabled: !!disabled, allowClick: !!allowClick }}
+    <Slot
+      ref={ref}
+      {...rest}
+      aria-disabled={disabled || undefined}
+      data-opal-disabled={disabled || undefined}
+      data-allow-click={disabled && allowClick ? "" : undefined}
     >
-      <Slot
-        ref={ref}
-        {...rest}
-        aria-disabled={disabled || undefined}
-        data-opal-disabled={disabled || undefined}
-        data-allow-click={disabled && allowClick ? "" : undefined}
-      >
-        {children}
-      </Slot>
-    </DisabledContext.Provider>
+      {children}
+    </Slot>
   );
 }
 
-export { Disabled, useDisabled, type DisabledProps, type DisabledContextValue };
+export { Disabled, type DisabledProps };

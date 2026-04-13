@@ -1,9 +1,5 @@
 import "@opal/components/tooltip.css";
-import {
-  Disabled,
-  Interactive,
-  type InteractiveStatelessProps,
-} from "@opal/core";
+import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
@@ -49,7 +45,7 @@ type ButtonProps = InteractiveStatelessProps &
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
 
-    /** Wraps the button in a Disabled context. `false` overrides parent contexts. */
+    /** Applies disabled styling and suppresses clicks. */
     disabled?: boolean;
   };
 
@@ -94,17 +90,19 @@ function Button({
   ) : null;
 
   const button = (
-    <Interactive.Stateless type={type} {...interactiveProps}>
+    <Interactive.Stateless
+      type={type}
+      disabled={disabled}
+      {...interactiveProps}
+    >
       <Interactive.Container
         type={type}
         border={interactiveProps.prominence === "secondary"}
         heightVariant={size}
         widthVariant={width}
-        roundingVariant={
-          isLarge ? "default" : size === "2xs" ? "mini" : "compact"
-        }
+        roundingVariant={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
       >
-        <div className="flex flex-row items-center gap-1 interactive-foreground">
+        <div className="flex flex-row items-center gap-1">
           {iconWrapper(Icon, size, !!children)}
 
           {labelEl}
@@ -120,28 +118,24 @@ function Button({
     </Interactive.Stateless>
   );
 
-  const result = tooltip ? (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={tooltipSide}
-          sideOffset={4}
-        >
-          {tooltip}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
-  ) : (
-    button
-  );
-
-  if (disabled != null) {
-    return <Disabled disabled={disabled}>{result}</Disabled>;
+  if (tooltip) {
+    return (
+      <TooltipPrimitive.Root>
+        <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
+        <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Content
+            className="opal-tooltip"
+            side={tooltipSide}
+            sideOffset={4}
+          >
+            {tooltip}
+          </TooltipPrimitive.Content>
+        </TooltipPrimitive.Portal>
+      </TooltipPrimitive.Root>
+    );
   }
 
-  return result;
+  return button;
 }
 
 export { Button, type ButtonProps };

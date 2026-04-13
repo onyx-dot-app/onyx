@@ -19,9 +19,9 @@ export default function AgentsPage() {
         description="Customize AI behavior and knowledge with agents. Manage agents in your organization."
         icon={SvgOnyxOctagon}
         rightChildren={
-          <Link href="/app/agents/create?admin=true">
-            <Button icon={SvgPlus}>New Agent</Button>
-          </Link>
+          <Button href="/app/agents/create?admin=true" icon={SvgPlus}>
+            New Agent
+          </Button>
         }
       />
       <SettingsLayouts.Body>

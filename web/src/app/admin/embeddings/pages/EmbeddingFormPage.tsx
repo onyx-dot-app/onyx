@@ -1,13 +1,13 @@
 "use client";
 
 import { toast } from "@/hooks/useToast";
+import { markdown } from "@opal/utils";
 
 import EmbeddingModelSelection from "../EmbeddingModelSelectionForm";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { WarningCircle, Warning, CaretDownIcon } from "@phosphor-icons/react";
 import {
   CloudEmbeddingModel,
@@ -17,6 +17,7 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
 import {
@@ -119,7 +120,7 @@ export default function EmbeddingForm() {
     isLoading: isLoadingCurrentModel,
     error: currentEmbeddingModelError,
   } = useSWR<CloudEmbeddingModel | HostedEmbeddingModel | null>(
-    "/api/search-settings/get-current-search-settings",
+    SWR_KEYS.currentSearchSettings,
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
   );
@@ -130,7 +131,7 @@ export default function EmbeddingForm() {
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useSWR<SavedSearchSettings | null>(
-      "/api/search-settings/get-current-search-settings",
+      SWR_KEYS.currentSearchSettings,
       errorHandlingFetcher,
       { refreshInterval: 5000 } // 5 seconds
     );
@@ -377,16 +378,15 @@ export default function EmbeddingForm() {
         </div>
       ) : (
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
-          <Disabled disabled={!isOverallFormValid}>
-            <OpalButton
-              onClick={() => {
-                updateSearch();
-                navigateToEmbeddingPage("search settings");
-              }}
-            >
-              Update Search
-            </OpalButton>
-          </Disabled>
+          <OpalButton
+            disabled={!isOverallFormValid}
+            onClick={() => {
+              updateSearch();
+              navigateToEmbeddingPage("search settings");
+            }}
+          >
+            Update Search
+          </OpalButton>
           {!isOverallFormValid &&
             Object.keys(combinedFormErrors).length > 0 && (
               <div className="relative group">
@@ -539,7 +539,9 @@ export default function EmbeddingForm() {
             <Modal.Content>
               <Modal.Header
                 icon={SvgAlertTriangle}
-                title={`Are you sure you want to select ${selectedProvider.model_name}?`}
+                title={markdown(
+                  `Are you sure you want to select *${selectedProvider.model_name}*?`
+                )}
                 onClose={() => setShowPoorModel(false)}
               />
               <Modal.Body>

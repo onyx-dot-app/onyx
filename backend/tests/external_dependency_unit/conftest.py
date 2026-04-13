@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.file_store.file_store import get_default_file_store
@@ -52,7 +53,12 @@ def tenant_context() -> Generator[None, None, None]:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
-def create_test_user(db_session: Session, email_prefix: str) -> User:
+def create_test_user(
+    db_session: Session,
+    email_prefix: str,
+    role: UserRole = UserRole.BASIC,
+    account_type: AccountType = AccountType.STANDARD,
+) -> User:
     """Helper to create a test user with a unique email"""
     # Use UUID to ensure unique email addresses
     unique_email = f"{email_prefix}_{uuid4().hex[:8]}@example.com"
@@ -68,7 +74,8 @@ def create_test_user(db_session: Session, email_prefix: str) -> User:
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.EXT_PERM_USER,
+        role=role,
+        account_type=account_type,
     )
     db_session.add(user)
     db_session.commit()

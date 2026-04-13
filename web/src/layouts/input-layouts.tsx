@@ -1,8 +1,9 @@
 "use client";
 
-import type { RichStr } from "@opal/types";
+import type { RichStr, WithoutStyles } from "@opal/types";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
 import Text from "@/refresh-components/texts/Text";
+import Separator from "@/refresh-components/Separator";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
@@ -15,9 +16,8 @@ interface OrientationLayoutProps {
   nonInteractive?: boolean;
   children?: React.ReactNode;
   title: string | RichStr;
-  titleSuffix?: string;
   description?: string | RichStr;
-  optional?: boolean;
+  suffix?: "optional" | (string & {});
   sizePreset?: "main-content" | "main-ui";
 }
 
@@ -53,18 +53,16 @@ function VerticalInputLayout({
   children,
   subDescription,
   title,
-  titleSuffix,
   description,
-  optional,
+  suffix,
   sizePreset = "main-content",
 }: VerticalLayoutProps) {
   const content = (
     <Section gap={0.25} alignItems="start">
       <Content
         title={title}
-        titleSuffix={titleSuffix}
         description={description}
-        optional={optional}
+        suffix={suffix}
         sizePreset={sizePreset}
         variant="section"
       />
@@ -130,9 +128,8 @@ function HorizontalInputLayout({
   children,
   center,
   title,
-  titleSuffix,
   description,
-  optional,
+  suffix,
   sizePreset = "main-content",
 }: HorizontalLayoutProps) {
   const content = (
@@ -145,9 +142,8 @@ function HorizontalInputLayout({
         <div className="flex flex-col flex-1 min-w-0 self-stretch">
           <Content
             title={title}
-            titleSuffix={titleSuffix}
             description={description}
-            optional={optional}
+            suffix={suffix}
             sizePreset={sizePreset}
             variant="section"
             widthVariant="full"
@@ -234,9 +230,27 @@ function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {
   );
 }
 
+/**
+ * FieldSeparator - A horizontal rule with inline padding, used to visually separate field groups.
+ */
+function FieldSeparator() {
+  return <Separator noPadding className="p-2" />;
+}
+
+/**
+ * FieldPadder -  Wraps a field in standard horizontal + vertical padding (`p-2 w-full`).
+ */
+type FieldPadderProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
+function FieldPadder(props: FieldPadderProps) {
+  return <div {...props} className="p-2 w-full" />;
+}
+
 export {
   VerticalInputLayout as Vertical,
   HorizontalInputLayout as Horizontal,
   ErrorLayout as Error,
   ErrorTextLayout,
+  FieldSeparator,
+  FieldPadder,
+  type FieldPadderProps,
 };

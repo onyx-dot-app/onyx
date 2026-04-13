@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -9,7 +10,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
+import { markdown } from "@opal/utils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
@@ -124,7 +125,7 @@ export default function MCPAuthenticationModal({
 
   // Get the current frontend URL for redirect URI
   const { data: fullServer } = useSWR<MCPServer>(
-    mcpServer ? `/api/admin/mcp/servers/${mcpServer.id}` : null,
+    mcpServer ? SWR_KEYS.adminMcpServer(mcpServer.id) : null,
     errorHandlingFetcher
   );
 
@@ -317,7 +318,11 @@ export default function MCPAuthenticationModal({
       <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
         <Modal.Header
           icon={SvgArrowExchange}
-          title={`Authenticate ${mcpServer?.name || "MCP Server"}`}
+          title={
+            mcpServer
+              ? markdown(`Authenticate *${mcpServer.name}*`)
+              : "Authenticate MCP Server"
+          }
           description="Authenticate your connection to start using the MCP server."
         />
 
@@ -640,11 +645,13 @@ export default function MCPAuthenticationModal({
                   >
                     Cancel
                   </Button>
-                  <Disabled disabled={!isValid || isSubmitting}>
-                    <Button type="submit" data-testid="mcp-auth-connect-button">
-                      {isSubmitting ? "Connecting..." : "Connect"}
-                    </Button>
-                  </Disabled>
+                  <Button
+                    disabled={!isValid || isSubmitting}
+                    type="submit"
+                    data-testid="mcp-auth-connect-button"
+                  >
+                    {isSubmitting ? "Connecting..." : "Connect"}
+                  </Button>
                 </Modal.Footer>
               </Form>
             );

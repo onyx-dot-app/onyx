@@ -129,6 +129,10 @@ def _patch_task_app(task: Any, mock_app: MagicMock) -> Generator[None, None, Non
             return_value=mock_app,
         ),
         patch(_PATCH_QUEUE_DEPTH, return_value=0),
+        patch(
+            "onyx.background.celery.tasks.user_file_processing.tasks.celery_get_broker_client",
+            return_value=MagicMock(),
+        ),
     ):
         yield
 

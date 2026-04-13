@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronLeft, SvgChevronRight, SvgFileText } from "@opal/icons";
@@ -29,7 +30,7 @@ export default function PptxPreview({
   const [imageLoading, setImageLoading] = useState(true);
 
   const { data, error, isLoading, mutate } = useSWR(
-    `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
+    SWR_KEYS.buildSessionPptxPreview(sessionId, filePath),
     () => fetchPptxPreview(sessionId, filePath),
     {
       revalidateOnFocus: false,

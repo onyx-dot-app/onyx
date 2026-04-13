@@ -1,8 +1,8 @@
 "use client";
 
-import React from "react";
 import { cn, noProp } from "@/lib/utils";
 import { SvgPlus, SvgX } from "@opal/icons";
+import { Hoverable } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";
@@ -173,103 +173,106 @@ export default function InputImage({
   const dropzoneProps = onDrop ? getRootProps() : {};
 
   return (
-    <div
-      className={cn("relative group", className)}
-      style={{ width: size, height: size }}
-      {...dropzoneProps}
-    >
-      {/* Hidden input for file selection */}
-      {onDrop && <input {...getInputProps()} />}
-
-      {/* Main container */}
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={disabled}
-        className={cn(
-          "relative w-full h-full rounded-full overflow-hidden",
-          "border flex items-center justify-center",
-          "transition-all duration-150",
-          containerClass
-        )}
-        aria-label={
-          isInteractive ? (hasImage ? "Edit image" : "Upload image") : undefined
-        }
+    <Hoverable.Root group="inputImage" widthVariant="fit">
+      <div
+        className={cn("relative", className)}
+        style={{ width: size, height: size }}
+        {...dropzoneProps}
       >
-        {/* Content */}
-        {hasImage ? (
-          <img
-            src={src}
-            alt={alt}
-            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-          />
-        ) : (
-          <SvgPlus
-            className={cn("w-6 h-6", placeholderClass, "pointer-events-none")}
-          />
-        )}
+        {/* Hidden input for file selection */}
+        {onDrop && <input {...getInputProps()} />}
 
-        {/* Drag overlay indicator */}
-        {isDragActive && (
-          <div className="absolute inset-0 bg-action-link-05/10 flex items-center justify-center rounded-full pointer-events-none">
-            <SvgPlus className="w-8 h-8 stroke-action-link-05" />
-          </div>
-        )}
+        {/* Main container */}
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={disabled}
+          className={cn(
+            "group relative w-full h-full rounded-full overflow-hidden",
+            "border flex items-center justify-center",
+            "transition-all duration-150",
+            containerClass
+          )}
+          aria-label={
+            isInteractive
+              ? hasImage
+                ? "Edit image"
+                : "Upload image"
+              : undefined
+          }
+        >
+          {/* Content */}
+          {hasImage ? (
+            <img
+              src={src}
+              alt={alt}
+              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            />
+          ) : (
+            <SvgPlus
+              className={cn("w-6 h-6", placeholderClass, "pointer-events-none")}
+            />
+          )}
 
-        {/* Edit overlay - shows on hover/focus when image is uploaded */}
-        {showEditOverlay && isInteractive && hasImage && !isDragActive && (
-          <div
-            className={cn(
-              "absolute bottom-0 left-0 right-0",
-              "flex items-center justify-center",
-              "pb-2.5 pt-1.5",
-              "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
-              "transition-opacity duration-150",
-              "backdrop-blur-sm bg-mask-01",
-              "pointer-events-none"
-            )}
-          >
-            <div className="pointer-events-auto">
-              <SimpleTooltip tooltip="Edit" side="top">
+          {/* Drag overlay indicator */}
+          {isDragActive && (
+            <div className="absolute inset-0 bg-action-link-05/10 flex items-center justify-center rounded-full pointer-events-none">
+              <SvgPlus className="w-8 h-8 stroke-action-link-05" />
+            </div>
+          )}
+
+          {/* Edit overlay - shows on hover/focus when image is uploaded */}
+          {showEditOverlay && isInteractive && hasImage && !isDragActive && (
+            <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
+              <Hoverable.Item group="inputImage" variant="opacity-on-hover">
                 <div
                   className={cn(
                     "flex items-center justify-center",
-                    "px-1 py-0.5 rounded-08"
+                    "pb-2.5 pt-1.5",
+                    "backdrop-blur-sm bg-mask-01",
+                    "pointer-events-none"
                   )}
                 >
-                  <Text
-                    className="text-text-03 font-secondary-action"
-                    style={{ fontSize: "12px", lineHeight: "16px" }}
-                  >
-                    Edit
-                  </Text>
+                  <div className="pointer-events-auto">
+                    <SimpleTooltip tooltip="Edit" side="top">
+                      <div
+                        className={cn(
+                          "flex items-center justify-center",
+                          "px-1 py-0.5 rounded-08"
+                        )}
+                      >
+                        <Text
+                          className="text-text-03 font-secondary-action"
+                          style={{ fontSize: "12px", lineHeight: "16px" }}
+                        >
+                          Edit
+                        </Text>
+                      </div>
+                    </SimpleTooltip>
+                  </div>
                 </div>
-              </SimpleTooltip>
+              </Hoverable.Item>
             </div>
+          )}
+        </button>
+
+        {/* Remove button - top left corner (only when image is uploaded) */}
+        {isInteractive && hasImage && onRemove && (
+          <div className="absolute top-1 left-1">
+            <Hoverable.Item group="inputImage" variant="opacity-on-hover">
+              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              <IconButton
+                icon={SvgX}
+                onClick={noProp(onRemove)}
+                type="button"
+                primary
+                className="!w-5 !h-5 !p-0.5 !rounded-04"
+                aria-label="Remove image"
+              />
+            </Hoverable.Item>
           </div>
         )}
-      </button>
-
-      {/* Remove button - top left corner (only when image is uploaded) */}
-      {isInteractive && hasImage && onRemove && (
-        <div
-          className={cn(
-            "absolute top-1 left-1",
-            "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
-            "transition-opacity duration-150"
-          )}
-        >
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <IconButton
-            icon={SvgX}
-            onClick={noProp(onRemove)}
-            type="button"
-            primary
-            className="!w-5 !h-5 !p-0.5 !rounded-04"
-            aria-label="Remove image"
-          />
-        </div>
-      )}
-    </div>
+      </div>
+    </Hoverable.Root>
   );
 }

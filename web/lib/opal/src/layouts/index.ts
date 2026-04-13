@@ -12,6 +12,9 @@ export {
   type ContentActionProps,
 } from "@opal/layouts/content-action/components";
 
+/* Card */
+export { Card, type CardHeaderProps } from "@opal/layouts/cards/components";
+
 /* IllustrationContent */
 export {
   IllustrationContent,

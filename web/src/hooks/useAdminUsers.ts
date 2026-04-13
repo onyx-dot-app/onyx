@@ -4,7 +4,8 @@ import { useCallback } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { UserStatus } from "@/lib/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { AccountType, UserStatus } from "@/lib/types";
 import type { UserRole, InvitedUserSnapshot } from "@/lib/types";
 import type {
   UserRow,
@@ -19,6 +20,7 @@ interface FullUserSnapshot {
   id: string;
   email: string;
   role: UserRole;
+  account_type: AccountType;
   is_active: boolean;
   password_configured: boolean;
   personal_name: string | null;
@@ -75,10 +77,7 @@ export default function useAdminUsers() {
     isLoading: acceptedLoading,
     error: acceptedError,
     mutate: acceptedMutate,
-  } = useSWR<FullUserSnapshot[]>(
-    "/api/manage/users/accepted/all",
-    errorHandlingFetcher
-  );
+  } = useSWR<FullUserSnapshot[]>(SWR_KEYS.acceptedUsers, errorHandlingFetcher);
 
   const {
     data: invitedData,
@@ -86,7 +85,7 @@ export default function useAdminUsers() {
     error: invitedError,
     mutate: invitedMutate,
   } = useSWR<InvitedUserSnapshot[]>(
-    "/api/manage/users/invited",
+    SWR_KEYS.invitedUsers,
     errorHandlingFetcher
   );
 
@@ -96,7 +95,7 @@ export default function useAdminUsers() {
     error: requestedError,
     mutate: requestedMutate,
   } = useSWR<InvitedUserSnapshot[]>(
-    NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants/users/pending" : null,
+    NEXT_PUBLIC_CLOUD_ENABLED ? SWR_KEYS.pendingTenantUsers : null,
     errorHandlingFetcher
   );
 

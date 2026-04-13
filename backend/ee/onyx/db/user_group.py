@@ -19,6 +19,8 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import GrantSource
+from onyx.db.enums import Permission
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Credential__UserGroup
@@ -28,6 +30,7 @@ from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__UserGroup
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import LLMProvider__UserGroup
+from onyx.db.models import PermissionGrant
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import TokenRateLimit__UserGroup
@@ -36,6 +39,8 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.db.permissions import recompute_permissions_for_group__no_commit
+from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import fetch_user_by_id
 from onyx.utils.logger import setup_logger
 
@@ -255,6 +260,7 @@ def fetch_user_groups(
     db_session: Session,
     only_up_to_date: bool = True,
     eager_load_for_snapshot: bool = False,
+    include_default: bool = True,
 ) -> Sequence[UserGroup]:
     """
     Fetches user groups from the database.
@@ -269,6 +275,7 @@ def fetch_user_groups(
             to include only up to date user groups. Defaults to `True`.
         eager_load_for_snapshot: If True, adds eager loading for all relationships
             needed by UserGroup.from_model snapshot creation.
+        include_default: If False, excludes system default groups (is_default=True).
 
     Returns:
         Sequence[UserGroup]: A sequence of `UserGroup` objects matching the query criteria.
@@ -276,6 +283,8 @@ def fetch_user_groups(
     stmt = select(UserGroup)
     if only_up_to_date:
         stmt = stmt.where(UserGroup.is_up_to_date == True)  # noqa: E712
+    if not include_default:
+        stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
     if eager_load_for_snapshot:
         stmt = _add_user_group_snapshot_eager_loads(stmt)
     return db_session.scalars(stmt).unique().all()
@@ -286,6 +295,7 @@ def fetch_user_groups_for_user(
     user_id: UUID,
     only_curator_groups: bool = False,
     eager_load_for_snapshot: bool = False,
+    include_default: bool = True,
 ) -> Sequence[UserGroup]:
     stmt = (
         select(UserGroup)
@@ -295,6 +305,8 @@ def fetch_user_groups_for_user(
     )
     if only_curator_groups:
         stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
+    if not include_default:
+        stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
     if eager_load_for_snapshot:
         stmt = _add_user_group_snapshot_eager_loads(stmt)
     return db_session.scalars(stmt).unique().all()
@@ -478,6 +490,16 @@ def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserG
     db_session.add(db_user_group)
     db_session.flush()  # give the group an ID
 
+    # Every group gets the "basic" permission by default
+    db_session.add(
+        PermissionGrant(
+            group_id=db_user_group.id,
+            permission=Permission.BASIC_ACCESS,
+            grant_source=GrantSource.SYSTEM,
+        )
+    )
+    db_session.flush()
+
     _add_user__user_group_relationships__no_commit(
         db_session=db_session,
         user_group_id=db_user_group.id,
@@ -488,6 +510,8 @@ def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserG
         user_group_id=db_user_group.id,
         cc_pair_ids=user_group.cc_pair_ids,
     )
+
+    recompute_user_permissions__no_commit(user_group.user_ids, db_session)
 
     db_session.commit()
     return db_user_group
@@ -796,6 +820,10 @@ def update_user_group(
     # update "time_updated" to now
     db_user_group.time_last_modified_by_user = func.now()
 
+    recompute_user_permissions__no_commit(
+        list(set(added_user_ids) | set(removed_user_ids)), db_session
+    )
+
     db_session.commit()
     return db_user_group
 
@@ -835,6 +863,19 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
 
     _check_user_group_is_modifiable(db_user_group)
 
+    # Collect affected user IDs before cleanup deletes the relationships
+    affected_user_ids: list[UUID] = [
+        uid
+        for uid in db_session.execute(
+            select(User__UserGroup.user_id).where(
+                User__UserGroup.user_group_id == user_group_id
+            )
+        )
+        .scalars()
+        .all()
+        if uid is not None
+    ]
+
     _mark_user_group__cc_pair_relationships_outdated__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
@@ -862,6 +903,10 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
     _cleanup_llm_provider__user_group_relationships__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
+
+    # Recompute permissions for affected users now that their
+    # membership in this group has been removed
+    recompute_user_permissions__no_commit(affected_user_ids, db_session)
 
     db_user_group.is_up_to_date = False
     db_user_group.is_up_for_deletion = True
@@ -908,3 +953,46 @@ def delete_user_group_cc_pair_relationship__no_commit(
         UserGroup__ConnectorCredentialPair.cc_pair_id == cc_pair_id,
     )
     db_session.execute(delete_stmt)
+
+
+def set_group_permission__no_commit(
+    group_id: int,
+    permission: Permission,
+    enabled: bool,
+    granted_by: UUID,
+    db_session: Session,
+) -> None:
+    """Grant or revoke a single permission for a group using soft-delete.
+
+    Does NOT commit — caller must commit the session.
+    """
+    existing = db_session.execute(
+        select(PermissionGrant)
+        .where(
+            PermissionGrant.group_id == group_id,
+            PermissionGrant.permission == permission,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+
+    if enabled:
+        if existing is not None:
+            if existing.is_deleted:
+                existing.is_deleted = False
+                existing.granted_by = granted_by
+                existing.granted_at = func.now()
+        else:
+            db_session.add(
+                PermissionGrant(
+                    group_id=group_id,
+                    permission=permission,
+                    grant_source=GrantSource.USER,
+                    granted_by=granted_by,
+                )
+            )
+    else:
+        if existing is not None and not existing.is_deleted:
+            existing.is_deleted = True
+
+    db_session.flush()
+    recompute_permissions_for_group__no_commit(group_id, db_session)

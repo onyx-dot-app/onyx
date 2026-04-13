@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
 import { logout } from "@/lib/user";
@@ -145,29 +144,30 @@ export default function NewTenantModal({
           <BasicModalFooter
             cancel={
               isInvite ? (
-                <Disabled disabled={isLoading}>
-                  <Button
-                    prominence="secondary"
-                    onClick={handleRejectInvite}
-                    icon={SvgX}
-                  >
-                    Decline
-                  </Button>
-                </Disabled>
+                <Button
+                  disabled={isLoading}
+                  prominence="secondary"
+                  onClick={handleRejectInvite}
+                  icon={SvgX}
+                >
+                  Decline
+                </Button>
               ) : undefined
             }
             submit={
-              <Disabled disabled={isLoading}>
-                <Button onClick={handleJoinTenant} rightIcon={SvgArrowRight}>
-                  {isLoading
-                    ? isInvite
-                      ? "Accepting..."
-                      : "Joining..."
-                    : isInvite
-                      ? "Accept Invitation"
-                      : "Reauthenticate"}
-                </Button>
-              </Disabled>
+              <Button
+                disabled={isLoading}
+                onClick={handleJoinTenant}
+                rightIcon={SvgArrowRight}
+              >
+                {isLoading
+                  ? isInvite
+                    ? "Accepting..."
+                    : "Joining..."
+                  : isInvite
+                    ? "Accept Invitation"
+                    : "Reauthenticate"}
+              </Button>
             }
           />
         </Modal.Footer>

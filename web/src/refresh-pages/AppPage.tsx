@@ -33,6 +33,8 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
+import useMultiModelChat from "@/hooks/useMultiModelChat";
+import ModelSelector from "@/refresh-components/popovers/ModelSelector";
 import useAgentController from "@/hooks/useAgentController";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
@@ -41,6 +43,7 @@ import AgentDescription from "@/app/app/components/AgentDescription";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
+  useCurrentMessageTree,
 } from "@/app/app/stores/useChatSessionStore";
 import {
   useCurrentChatState,
@@ -68,6 +71,7 @@ import SvgNotFound from "@opal/illustrations/not-found";
 import SvgNoAccess from "@opal/illustrations/no-access";
 import Spacer from "@/refresh-components/Spacer";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useSidebarState } from "@/layouts/sidebar-layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
@@ -232,7 +236,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onboardingDismissed,
     onboardingState,
     onboardingActions,
-    llmDescriptors,
     isLoadingOnboarding,
     finishOnboarding,
     hideOnboarding,
@@ -358,6 +361,33 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (state) => state.updateCurrentDocumentSidebarVisible
   );
   const messageHistory = useCurrentMessageHistory();
+  const messageTree = useCurrentMessageTree();
+
+  // Block input when the last turn is multi-model and the user hasn't
+  // selected a preferred response yet. Without a selection, it's ambiguous
+  // which model's response should be used as context for the next message.
+  const awaitingPreferredSelection = useMemo(() => {
+    if (!messageTree || currentChatState !== "input") return false;
+    // Find the last user message in the history
+    const lastUserMsg = [...messageHistory]
+      .reverse()
+      .find((m) => m.type === "user");
+    if (!lastUserMsg) return false;
+    const childIds = lastUserMsg.childrenNodeIds ?? [];
+    if (childIds.length < 2) return false;
+    // Check if children are multi-model (have modelDisplayName)
+    const multiModelChildren = childIds
+      .map((id) => messageTree.get(id))
+      .filter(
+        (m) =>
+          m &&
+          (m.type === "assistant" || m.type === "error") &&
+          (m.modelDisplayName || m.overridden_model)
+      );
+    if (multiModelChildren.length < 2) return false;
+    // Check if a preferred response has been set on this user message
+    return lastUserMsg.preferredResponseId == null;
+  }, [messageHistory, messageTree, currentChatState]);
 
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
@@ -367,6 +397,57 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Auto-scroll preference from user settings
   const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
   const isStreaming = currentChatState === "streaming";
+
+  const multiModel = useMultiModelChat(llmManager);
+
+  // Auto-fold sidebar when a multi-model message is submitted.
+  // Stays collapsed until the user exits multi-model mode (removes models).
+  const { folded: sidebarFolded, setFolded: setSidebarFolded } =
+    useSidebarState();
+  const preMultiModelFoldedRef = useRef<boolean | null>(null);
+
+  const foldSidebarForMultiModel = useCallback(() => {
+    if (preMultiModelFoldedRef.current === null) {
+      preMultiModelFoldedRef.current = sidebarFolded;
+      setSidebarFolded(true);
+    }
+  }, [sidebarFolded, setSidebarFolded]);
+
+  // Restore sidebar when user exits multi-model mode
+  useEffect(() => {
+    if (
+      !multiModel.isMultiModelActive &&
+      preMultiModelFoldedRef.current !== null
+    ) {
+      setSidebarFolded(preMultiModelFoldedRef.current);
+      preMultiModelFoldedRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiModel.isMultiModelActive]);
+
+  // Sync single-model selection to llmManager so the submission path uses
+  // the correct provider/version. Guard against echoing derived state back
+  // — only call updateCurrentLlm when the selection actually differs from
+  // currentLlm, otherwise the initial [] → [currentLlmModel] sync would
+  // pin `userHasManuallyOverriddenLLM=true` with whatever was resolved
+  // first (often the default model before the session's alt_model loads).
+  useEffect(() => {
+    if (multiModel.selectedModels.length === 1) {
+      const model = multiModel.selectedModels[0]!;
+      const current = llmManager.currentLlm;
+      if (
+        model.provider !== current.provider ||
+        model.modelName !== current.modelName ||
+        model.name !== current.name
+      ) {
+        llmManager.updateCurrentLlm({
+          name: model.name,
+          provider: model.provider,
+          modelName: model.modelName,
+        });
+      }
+    }
+  }, [multiModel.selectedModels]);
 
   const {
     onSubmit,
@@ -465,19 +546,30 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const onChat = useCallback(
     (message: string) => {
+      if (multiModel.isMultiModelActive) {
+        foldSidebarForMultiModel();
+      }
+      resetInputBar();
       onSubmit({
         message,
         currentMessageFiles,
         deepResearch: deepResearchEnabledForCurrentWorkflow,
+        selectedModels: multiModel.isMultiModelActive
+          ? multiModel.selectedModels
+          : undefined,
       });
       if (showOnboarding || !onboardingDismissed) {
         finishOnboarding();
       }
     },
     [
+      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,
+      multiModel.isMultiModelActive,
+      multiModel.selectedModels,
+      foldSidebarForMultiModel,
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
@@ -511,10 +603,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
+        resetInputBar();
         onSubmit({
           message,
           currentMessageFiles,
           deepResearch: deepResearchEnabledForCurrentWorkflow,
+          selectedModels: multiModel.isMultiModelActive
+            ? multiModel.selectedModels
+            : undefined,
         });
         if (showOnboarding || !onboardingDismissed) {
           finishOnboarding();
@@ -523,7 +619,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
 
       // For new sessions, let the query controller handle routing.
-      // resetInputBar is called inside useChatController.onSubmit for chat-routed queries.
+      // resetInputBar is called inside onChat for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
       // so the user can see and refine their search query.
       await submitQuery(message, onChat);
@@ -532,12 +628,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentChatSessionId,
       submitQuery,
       onChat,
+      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
+      multiModel.isMultiModelActive,
+      multiModel.selectedModels,
     ]
   );
 
@@ -710,6 +809,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         stopGenerating={stopGenerating}
                         onResubmit={handleResubmitLastMessage}
                         anchorNodeId={anchorNodeId}
+                        selectedModels={multiModel.selectedModels}
                       />
                     </ChatScrollContainer>
                   </Fade>
@@ -772,10 +872,31 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     }
                     className="w-full flex-1 flex flex-col items-center justify-end"
                   >
-                    <WelcomeMessage
-                      agent={liveAgent}
-                      isDefaultAgent={isDefaultAgent}
-                    />
+                    <Section
+                      flexDirection="row"
+                      justifyContent="between"
+                      alignItems="end"
+                      className="max-w-[var(--app-page-main-content-width)]"
+                    >
+                      <WelcomeMessage
+                        agent={liveAgent}
+                        isDefaultAgent={isDefaultAgent}
+                      />
+                      {!isSearch &&
+                        !(
+                          state.phase === "idle" && state.appMode === "search"
+                        ) &&
+                        liveAgent &&
+                        !llmManager.isLoadingProviders && (
+                          <ModelSelector
+                            llmManager={llmManager}
+                            selectedModels={multiModel.selectedModels}
+                            onAdd={multiModel.addModel}
+                            onRemove={multiModel.removeModel}
+                            onReplace={multiModel.replaceModel}
+                          />
+                        )}
+                    </Section>
                     <Spacer rem={1.5} />
                   </Fade>
                 </div>
@@ -812,7 +933,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           handleFinishOnboarding={finishOnboarding}
                           state={onboardingState}
                           actions={onboardingActions}
-                          llmDescriptors={llmDescriptors}
                         />
                       )}
 
@@ -841,6 +961,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
+                      {appFocus.isChat() &&
+                        liveAgent &&
+                        !llmManager.isLoadingProviders && (
+                          <div className="pb-1">
+                            <ModelSelector
+                              llmManager={llmManager}
+                              selectedModels={multiModel.selectedModels}
+                              onAdd={multiModel.addModel}
+                              onRemove={multiModel.removeModel}
+                              onReplace={multiModel.replaceModel}
+                            />
+                          </div>
+                        )}
                       <AppInputBar
                         ref={chatInputBarRef}
                         deepResearchEnabled={
@@ -868,6 +1001,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         // Intentionally enabled during name-only onboarding (showOnboarding=false)
                         // since LLM providers are already configured and the user can chat.
                         disabled={
+                          awaitingPreferredSelection ||
                           (!llmManager.isLoadingProviders &&
                             llmManager.hasAnyProvider === false) ||
                           (showOnboarding &&

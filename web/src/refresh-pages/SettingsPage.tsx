@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
 import { Content, ContentAction } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
@@ -32,6 +33,7 @@ import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
@@ -57,7 +59,7 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { Disabled, Interactive } from "@opal/core";
+import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -109,11 +111,12 @@ function PATModal({
         !!createdToken?.token ? (
           <Button onClick={onClose}>Done</Button>
         ) : (
-          <Disabled disabled={isCreating || !newTokenName.trim()}>
-            <Button onClick={onCreate}>
-              {isCreating ? "Creating Token..." : "Create Token"}
-            </Button>
-          </Disabled>
+          <Button
+            disabled={isCreating || !newTokenName.trim()}
+            onClick={onCreate}
+          >
+            {isCreating ? "Creating Token..." : "Create Token"}
+          </Button>
         )
       }
       hideCancel={!!createdToken}
@@ -235,16 +238,15 @@ function GeneralSettings() {
           title="Delete All Chats"
           onClose={() => setShowDeleteConfirmation(false)}
           submit={
-            <Disabled disabled={isDeleting}>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  void handleDeleteAllChats();
-                }}
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isDeleting}
+              variant="danger"
+              onClick={() => {
+                void handleDeleteAllChats();
+              }}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -697,21 +699,18 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <Disabled
+                  <Button
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
-                  >
-                    <Button
-                      icon={SvgMinusCircle}
-                      onClick={() => void handleRemoveShortcut(index)}
-                      prominence="tertiary"
-                      aria-label="Remove shortcut"
-                      tooltip={
-                        shortcut.is_public
-                          ? "Cannot delete public prompt-shortcuts."
-                          : undefined
-                      }
-                    />
-                  </Disabled>
+                    icon={SvgMinusCircle}
+                    onClick={() => void handleRemoveShortcut(index)}
+                    prominence="tertiary"
+                    aria-label="Remove shortcut"
+                    tooltip={
+                      shortcut.is_public
+                        ? "Cannot delete public prompt-shortcuts."
+                        : undefined
+                    }
+                  />
                 </Section>
                 <InputTextArea
                   placeholder="Provide a concise 1–2 sentence summary of the following:"
@@ -984,8 +983,8 @@ function ChatPreferencesSettings() {
         />
         <Card>
           <InputLayouts.Horizontal
-            title="Auto-Send"
-            description="Automatically send voice input when recording stops."
+            title="Auto-Send on Pause"
+            description="Automatically send voice input when you stop speaking."
           >
             <Switch
               checked={user?.preferences.voice_auto_send ?? false}
@@ -1080,7 +1079,7 @@ function AccountsAccessSettings() {
     error,
     isLoading,
   } = useSWR<PAT[]>(
-    showTokensSection ? "/api/user/pats" : null,
+    showTokensSection ? SWR_KEYS.userPats : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: true,
@@ -1274,20 +1273,19 @@ function AccountsAccessSettings() {
                 icon={SvgLock}
                 title="Change Password"
                 submit={
-                  <Disabled disabled={isSubmitting || !dirty || !isValid}>
-                    <Button
-                      onClick={async () => {
-                        setSubmitting(true);
-                        try {
-                          await handleChangePassword(values);
-                        } finally {
-                          setSubmitting(false);
-                        }
-                      }}
-                    >
-                      {isSubmitting ? "Updating..." : "Update"}
-                    </Button>
-                  </Disabled>
+                  <Button
+                    disabled={isSubmitting || !dirty || !isValid}
+                    onClick={async () => {
+                      setSubmitting(true);
+                      try {
+                        await handleChangePassword(values);
+                      } finally {
+                        setSubmitting(false);
+                      }
+                    }}
+                  >
+                    {isSubmitting ? "Updating..." : "Update"}
+                  </Button>
                 }
                 onClose={() => {
                   setShowPasswordModal(false);
@@ -1559,14 +1557,16 @@ function FederatedConnectorCard({
       {showDisconnectConfirmation && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={`Disconnect ${sourceMetadata.displayName}`}
+          title={markdown(`Disconnect *${sourceMetadata.displayName}*`)}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
-            <Disabled disabled={isDisconnecting}>
-              <Button variant="danger" onClick={() => void handleDisconnect()}>
-                {isDisconnecting ? "Disconnecting..." : "Disconnect"}
-              </Button>
-            </Disabled>
+            <Button
+              disabled={isDisconnecting}
+              variant="danger"
+              onClick={() => void handleDisconnect()}
+            >
+              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+            </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
@@ -1595,14 +1595,13 @@ function FederatedConnectorCard({
           paddingVariant="sm"
           rightChildren={
             connector.has_oauth_token ? (
-              <Disabled disabled={isDisconnecting}>
-                <Button
-                  icon={SvgUnplug}
-                  prominence="tertiary"
-                  size="sm"
-                  onClick={() => setShowDisconnectConfirmation(true)}
-                />
-              </Disabled>
+              <Button
+                disabled={isDisconnecting}
+                icon={SvgUnplug}
+                prominence="tertiary"
+                size="sm"
+                onClick={() => setShowDisconnectConfirmation(true)}
+              />
             ) : connector.authorize_url ? (
               <Button
                 prominence="internal"

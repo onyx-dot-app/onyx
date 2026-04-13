@@ -3,7 +3,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { Button } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
-import { Disabled } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -341,9 +340,9 @@ export default function EditUserModal({
           >
             Cancel
           </Button>
-          <Disabled disabled={isSubmitting || !hasChanges}>
-            <Button onClick={handleSave}>Save Changes</Button>
-          </Disabled>
+          <Button disabled={isSubmitting || !hasChanges} onClick={handleSave}>
+            Save Changes
+          </Button>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

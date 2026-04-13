@@ -1,9 +1,7 @@
+"use client";
+
 import "@opal/components/buttons/select-button/styles.css";
-import {
-  Interactive,
-  useDisabled,
-  type InteractiveStatefulProps,
-} from "@opal/core";
+import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
@@ -62,6 +60,9 @@ type SelectButtonProps = InteractiveStatefulProps &
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
+
+    /** Applies disabled styling and suppresses clicks. */
+    disabled?: boolean;
   };
 
 // ---------------------------------------------------------------------------
@@ -78,32 +79,32 @@ function SelectButton({
   width,
   tooltip,
   tooltipSide = "top",
+  disabled,
   ...statefulProps
 }: SelectButtonProps) {
-  const { isDisabled } = useDisabled();
   const isLarge = size === "lg";
 
   const labelEl = children ? (
-    <span className="opal-select-button-label">
-      <Text font={isLarge ? "main-ui-body" : "secondary-body"} color="inherit">
-        {children}
-      </Text>
-    </span>
+    <Text
+      font={isLarge ? "main-ui-body" : "secondary-body"}
+      color="inherit"
+      nowrap
+    >
+      {children}
+    </Text>
   ) : null;
 
   const button = (
-    <Interactive.Stateful {...statefulProps}>
+    <Interactive.Stateful disabled={disabled} {...statefulProps}>
       <Interactive.Container
         type={type}
         heightVariant={size}
         widthVariant={width}
-        roundingVariant={
-          isLarge ? "default" : size === "2xs" ? "mini" : "compact"
-        }
+        roundingVariant={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
       >
         <div
           className={cn(
-            "opal-select-button interactive-foreground",
+            "opal-select-button",
             foldable && "interactive-foldable-host"
           )}
         >
@@ -126,7 +127,7 @@ function SelectButton({
   );
 
   const resolvedTooltip =
-    tooltip ?? (foldable && isDisabled && children ? children : undefined);
+    tooltip ?? (foldable && disabled && children ? children : undefined);
 
   if (!resolvedTooltip) return button;
 

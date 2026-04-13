@@ -2,13 +2,12 @@
  * Stream Parser - Processes SSE packets and updates state
  */
 
-import { Packet, Message } from "@/types/api-types";
+import { Packet, Message, SearchDocument } from "@/types/api-types";
 import { ChatMessage } from "@/types/widget-types";
 
 export interface ParsedMessage {
   message: ChatMessage;
   isComplete: boolean;
-  citations?: any[];
 }
 
 export interface MessageIDs {
@@ -25,7 +24,8 @@ export function processPacket(
   currentMessage: ChatMessage | null,
 ): {
   message: ChatMessage | null;
-  citations?: any[];
+  citation?: { citation_number: number; document_id: string };
+  documents?: SearchDocument[];
   status?: string;
   messageIds?: MessageIDs;
 } {
@@ -80,14 +80,14 @@ export function processPacket(
       return { message: currentMessage };
 
     case "citation_info":
-      // Handle citations
-      if (currentMessage) {
-        return {
-          message: currentMessage,
-          citations: obj.citations,
-        };
-      }
-      return { message: currentMessage };
+      // Handle individual citation info packet
+      return {
+        message: currentMessage,
+        citation: {
+          citation_number: obj.citation_number,
+          document_id: obj.document_id,
+        },
+      };
 
     case "search_tool_start":
       // Tool is starting - check if it's internet search
@@ -106,9 +106,10 @@ export function processPacket(
       };
 
     case "search_tool_documents_delta":
-      // Search results coming in
+      // Search results coming in — capture document metadata for citation resolution
       return {
         message: currentMessage,
+        documents: obj.documents,
         status: "Reading documents...",
       };
 
@@ -125,8 +126,10 @@ export function processPacket(
       };
 
     case "open_url_documents":
+      // Capture documents from URL fetching for citation resolution
       return {
         message: currentMessage,
+        documents: obj.documents,
         status: "Processing web content...",
       };
 

@@ -235,12 +235,16 @@ class UpdatableChunkData(BaseModel):
     boost_score: float
 
 
-class BuildMetadataAwareChunksResult(BaseModel):
-    chunks: list[DocMetadataAwareIndexChunk]
+class ChunkEnrichmentContext(Protocol):
+    """Returned by prepare_enrichment. Holds pre-computed metadata lookups
+    and provides per-chunk enrichment."""
+
     doc_id_to_previous_chunk_cnt: dict[str, int]
     doc_id_to_new_chunk_cnt: dict[str, int]
-    user_file_id_to_raw_text: dict[str, str]
-    user_file_id_to_token_count: dict[str, int | None]
+
+    def enrich_chunk(
+        self, chunk: IndexChunk, score: float
+    ) -> DocMetadataAwareIndexChunk: ...
 
 
 class IndexingBatchAdapter(Protocol):
@@ -254,18 +258,24 @@ class IndexingBatchAdapter(Protocol):
     ) -> Generator[TransactionalContext, None, None]:
         """Provide a transaction/row-lock context for critical updates."""
 
-    def build_metadata_aware_chunks(
+    def prepare_enrichment(
         self,
-        chunks_with_embeddings: list[IndexChunk],
-        chunk_content_scores: list[float],
-        tenant_id: str,
         context: "DocumentBatchPrepareContext",
-    ) -> BuildMetadataAwareChunksResult: ...
+        tenant_id: str,
+        chunks: list[DocAwareChunk],
+    ) -> ChunkEnrichmentContext:
+        """Prepare per-chunk enrichment data (access, document sets, boost, etc.).
+
+        Precondition: ``chunks`` have already been through the embedding step
+        (i.e. they are ``IndexChunk`` instances with populated embeddings,
+        passed here as the base ``DocAwareChunk`` type).
+        """
+        ...
 
     def post_index(
         self,
         context: "DocumentBatchPrepareContext",
         updatable_chunk_data: list[UpdatableChunkData],
         filtered_documents: list[Document],
-        result: BuildMetadataAwareChunksResult,
+        enrichment: ChunkEnrichmentContext,
     ) -> None: ...

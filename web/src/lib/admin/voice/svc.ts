@@ -53,6 +53,12 @@ export async function fetchVoicesByType(
   return fetch(`/api/admin/voice/voices?provider_type=${providerType}`);
 }
 
+export async function deleteVoiceProvider(
+  providerId: number
+): Promise<Response> {
+  return fetch(`${VOICE_PROVIDERS_URL}/${providerId}`, { method: "DELETE" });
+}
+
 export async function fetchLLMProviders(): Promise<Response> {
   return fetch("/api/admin/llm/provider");
 }

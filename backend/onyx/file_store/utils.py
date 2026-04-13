@@ -110,16 +110,20 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     # check for plain text normalized version first, then use original file otherwise
     try:
         file_io = file_store.read_file(plaintext_file_name, mode="b")
-        # For plaintext versions, use PLAIN_TEXT type (unless it's an image which doesn't have plaintext)
-        plaintext_chat_file_type = (
-            ChatFileType.PLAIN_TEXT
-            if chat_file_type != ChatFileType.IMAGE
-            else chat_file_type
-        )
-
-        # if we have plaintext for image (which happens when image extraction is enabled), we use PLAIN_TEXT type
-        if file_io is not None:
+        # Metadata-only file types preserve their original type so
+        # downstream injection paths can route them correctly.
+        if chat_file_type.use_metadata_only():
+            plaintext_chat_file_type = chat_file_type
+        elif file_io is not None:
+            # if we have plaintext for image (which happens when image
+            # extraction is enabled), we use PLAIN_TEXT type
             plaintext_chat_file_type = ChatFileType.PLAIN_TEXT
+        else:
+            plaintext_chat_file_type = (
+                ChatFileType.PLAIN_TEXT
+                if chat_file_type != ChatFileType.IMAGE
+                else chat_file_type
+            )
 
         chat_file = InMemoryChatFile(
             file_id=str(user_file.file_id),

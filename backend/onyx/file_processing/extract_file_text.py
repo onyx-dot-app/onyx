@@ -1,3 +1,4 @@
+import csv
 import gc
 import io
 import json
@@ -19,6 +20,7 @@ from zipfile import BadZipFile
 
 import chardet
 import openpyxl
+from openpyxl.worksheet.worksheet import Worksheet
 from PIL import Image
 
 from onyx.configs.constants import ONYX_METADATA_FILENAME
@@ -44,14 +46,27 @@ KNOWN_OPENPYXL_BUGS = [
     "Value must be either numerical or a string containing a wildcard",
     "File contains no valid workbook part",
     "Unable to read workbook: could not read stylesheet from None",
+    "Colors must be aRGB hex values",
 ]
 
 
 def get_markitdown_converter() -> "MarkItDown":
     global _MARKITDOWN_CONVERTER
-    from markitdown import MarkItDown
 
     if _MARKITDOWN_CONVERTER is None:
+        from markitdown import MarkItDown
+
+        # Patch this function to effectively no-op because we were seeing this
+        # module take an inordinate amount of time to convert charts to markdown,
+        # making some powerpoint files with many or complicated charts nearly
+        # unindexable.
+        from markitdown.converters._pptx_converter import PptxConverter
+
+        setattr(
+            PptxConverter,
+            "_convert_chart_to_markdown",
+            lambda self, chart: "\n\n[chart omitted]\n\n",  # noqa: ARG005
+        )
         _MARKITDOWN_CONVERTER = MarkItDown(enable_plugins=False)
     return _MARKITDOWN_CONVERTER
 
@@ -202,18 +217,26 @@ def read_pdf_file(
     try:
         pdf_reader = PdfReader(file)
 
-        if pdf_reader.is_encrypted and pdf_pass is not None:
+        if pdf_reader.is_encrypted:
+            # Try the explicit password first, then fall back to an empty
+            # string.  Owner-password-only PDFs (permission restrictions but
+            # no open password) decrypt successfully with "".
+            # See https://github.com/onyx-dot-app/onyx/issues/9754
+            passwords = [p for p in [pdf_pass, ""] if p is not None]
             decrypt_success = False
-            try:
-                decrypt_success = pdf_reader.decrypt(pdf_pass) != 0
-            except Exception:
-                logger.error("Unable to decrypt pdf")
+            for pw in passwords:
+                try:
+                    if pdf_reader.decrypt(pw) != 0:
+                        decrypt_success = True
+                        break
+                except Exception:
+                    pass
 
             if not decrypt_success:
+                logger.error(
+                    "Encrypted PDF could not be decrypted, returning empty text."
+                )
                 return "", metadata, []
-        elif pdf_reader.is_encrypted:
-            logger.warning("No Password for an encrypted PDF, returning empty text.")
-            return "", metadata, []
 
         # Basic PDF metadata
         if pdf_reader.metadata is not None:
@@ -352,6 +375,94 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     return presentation.markdown
 
 
+def _worksheet_to_matrix(
+    worksheet: Worksheet,
+) -> list[list[str]]:
+    """
+    Converts a singular worksheet to a matrix of values
+    """
+    rows: list[list[str]] = []
+    for worksheet_row in worksheet.iter_rows(min_row=1, values_only=True):
+        row = ["" if cell is None else str(cell) for cell in worksheet_row]
+        rows.append(row)
+
+    return rows
+
+
+def _clean_worksheet_matrix(matrix: list[list[str]]) -> list[list[str]]:
+    """
+    Cleans a worksheet matrix by removing rows if there are N consecutive empty
+    rows and removing cols if there are M consecutive empty columns
+    """
+    MAX_EMPTY_ROWS = 2  # Runs longer than this are capped to max_empty; shorter runs are preserved as-is
+    MAX_EMPTY_COLS = 2
+
+    # Row cleanup
+    matrix = _remove_empty_runs(matrix, max_empty=MAX_EMPTY_ROWS)
+
+    if not matrix:
+        return matrix
+
+    # Column cleanup — determine which columns to keep without transposing.
+    num_cols = len(matrix[0])
+    keep_cols = _columns_to_keep(matrix, num_cols, max_empty=MAX_EMPTY_COLS)
+    if len(keep_cols) < num_cols:
+        matrix = [[row[c] for c in keep_cols] for row in matrix]
+
+    return matrix
+
+
+def _columns_to_keep(
+    matrix: list[list[str]], num_cols: int, max_empty: int
+) -> list[int]:
+    """Return the indices of columns to keep after removing empty-column runs.
+
+    Uses the same logic as ``_remove_empty_runs`` but operates on column
+    indices so no transpose is needed.
+    """
+    kept: list[int] = []
+    empty_buffer: list[int] = []
+
+    for col_idx in range(num_cols):
+        col_is_empty = all(not row[col_idx] for row in matrix)
+        if col_is_empty:
+            empty_buffer.append(col_idx)
+        else:
+            kept.extend(empty_buffer[:max_empty])
+            kept.append(col_idx)
+            empty_buffer = []
+
+    return kept
+
+
+def _remove_empty_runs(
+    rows: list[list[str]],
+    max_empty: int,
+) -> list[list[str]]:
+    """Removes entire runs of empty rows when the run length exceeds max_empty.
+
+    Leading empty runs are capped to max_empty, just like interior runs.
+    Trailing empty rows are always dropped since there is no subsequent
+    non-empty row to flush them.
+    """
+    result: list[list[str]] = []
+    empty_buffer: list[list[str]] = []
+
+    for row in rows:
+        # Check if empty
+        if not any(row):
+            if len(empty_buffer) < max_empty:
+                empty_buffer.append(row)
+        else:
+            # Add upto max empty rows onto the result - that's what we allow
+            result.extend(empty_buffer[:max_empty])
+            # Add the new non-empty row
+            result.append(row)
+            empty_buffer = []
+
+    return result
+
+
 def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     # TODO: switch back to this approach in a few months when markitdown
     # fixes their handling of excel files
@@ -390,30 +501,15 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
                 f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
             )
             return ""
-        raise e
+        raise
 
     text_content = []
     for sheet in workbook.worksheets:
-        rows = []
-        num_empty_consecutive_rows = 0
-        for row in sheet.iter_rows(min_row=1, values_only=True):
-            row_str = ",".join(str(cell or "") for cell in row)
-
-            # Only add the row if there are any values in the cells
-            if len(row_str) >= len(row):
-                rows.append(row_str)
-                num_empty_consecutive_rows = 0
-            else:
-                num_empty_consecutive_rows += 1
-
-            if num_empty_consecutive_rows > 100:
-                # handle massive excel sheets with mostly empty cells
-                logger.warning(
-                    f"Found {num_empty_consecutive_rows} empty rows in {file_name}, skipping rest of file"
-                )
-                break
-        sheet_str = "\n".join(rows)
-        text_content.append(sheet_str)
+        sheet_matrix = _clean_worksheet_matrix(_worksheet_to_matrix(sheet))
+        buf = io.StringIO()
+        writer = csv.writer(buf, lineterminator="\n")
+        writer.writerows(sheet_matrix)
+        text_content.append(buf.getvalue().rstrip("\n"))
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 

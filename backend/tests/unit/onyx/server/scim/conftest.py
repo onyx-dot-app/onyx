@@ -113,6 +113,7 @@ def make_db_group(**kwargs: Any) -> MagicMock:
     group.name = kwargs.get("name", "Engineering")
     group.is_up_for_deletion = kwargs.get("is_up_for_deletion", False)
     group.is_up_to_date = kwargs.get("is_up_to_date", True)
+    group.is_default = kwargs.get("is_default", False)
     return group
 
 

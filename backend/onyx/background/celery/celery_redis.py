@@ -1,5 +1,6 @@
 # These are helper objects for tracking the keys we need to write in redis
 import json
+import threading
 from typing import Any
 from typing import cast
 
@@ -7,7 +8,59 @@ from celery import Celery
 from redis import Redis
 
 from onyx.background.celery.configs.base import CELERY_SEPARATOR
+from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
 from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
+
+
+_broker_client: Redis | None = None
+_broker_url: str | None = None
+_broker_client_lock = threading.Lock()
+
+
+def celery_get_broker_client(app: Celery) -> Redis:
+    """Return a shared Redis client connected to the Celery broker DB.
+
+    Uses a module-level singleton so all tasks on a worker share one
+    connection instead of creating a new one per call. The client
+    connects directly to the broker Redis DB (parsed from the broker URL).
+
+    Thread-safe via lock — safe for use in Celery thread-pool workers.
+
+    Usage:
+        r_celery = celery_get_broker_client(self.app)
+        length = celery_get_queue_length(queue, r_celery)
+    """
+    global _broker_client, _broker_url
+    with _broker_client_lock:
+        url = app.conf.broker_url
+        if _broker_client is not None and _broker_url == url:
+            try:
+                _broker_client.ping()
+                return _broker_client
+            except Exception:
+                try:
+                    _broker_client.close()
+                except Exception:
+                    pass
+                _broker_client = None
+        elif _broker_client is not None:
+            try:
+                _broker_client.close()
+            except Exception:
+                pass
+            _broker_client = None
+
+        _broker_url = url
+        _broker_client = Redis.from_url(
+            url,
+            decode_responses=False,
+            health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
+            socket_keepalive=True,
+            socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
+            retry_on_timeout=True,
+        )
+        return _broker_client
 
 
 def celery_get_unacked_length(r: Redis) -> int:

@@ -1,5 +1,6 @@
 import useSWR from "swr";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 interface AuthTypeAPIResponse {
   auth_type: string;
@@ -54,11 +55,12 @@ export function useAuthTypeMetadata(): {
   error: Error | undefined;
 } {
   const { data, error, isLoading } = useSWR<AuthTypeMetadata>(
-    "/api/auth/type",
+    SWR_KEYS.authType,
     fetchAuthTypeMetadata,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      revalidateIfStale: false,
       dedupingInterval: 30_000,
     }
   );

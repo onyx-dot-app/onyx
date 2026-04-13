@@ -12,6 +12,11 @@ SLACK_USER_TOKEN_PREFIX = "xoxp-"
 SLACK_BOT_TOKEN_PREFIX = "xoxb-"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
+# The mask_string() function in encryption.py uses "•" (U+2022 BULLET) to mask secrets.
+MASK_CREDENTIAL_CHAR = "\u2022"
+# Pattern produced by mask_string for strings >= 14 chars: "abcd...wxyz" (exactly 11 chars)
+MASK_CREDENTIAL_LONG_RE = re.compile(r"^.{4}\.{3}.{4}$")
+
 SOURCE_TYPE = "source_type"
 # stored in the `metadata` of a chunk. Used to signify that this chunk should
 # not be used for QA. For example, Google Drive file types which can't be parsed
@@ -212,6 +217,7 @@ class DocumentSource(str, Enum):
     PRODUCTBOARD = "productboard"
     FILE = "file"
     CODA = "coda"
+    CANVAS = "canvas"
     NOTION = "notion"
     ZULIP = "zulip"
     LINEAR = "linear"
@@ -388,10 +394,6 @@ class MilestoneRecordType(str, Enum):
     CREATED_ASSISTANT = "created_assistant"
     CREATED_ONYX_BOT = "created_onyx_bot"
     REQUESTED_CONNECTOR = "requested_connector"
-
-
-class PostgresAdvisoryLocks(Enum):
-    KOMBU_MESSAGE_CLEANUP_LOCK_ID = auto()
 
 
 class OnyxCeleryQueues:
@@ -576,7 +578,6 @@ class OnyxCeleryTask:
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
 
-    KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
     )
@@ -672,6 +673,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.SLAB: "slab data",
     DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
     DocumentSource.FILE: "files",
+    DocumentSource.CANVAS: "canvas lms - courses, pages, assignments, and announcements",
     DocumentSource.CODA: "coda - team workspace with docs, tables, and pages",
     DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
 project management, and collaboration tools into a single, customizable platform",

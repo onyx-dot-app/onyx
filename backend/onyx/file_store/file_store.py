@@ -136,12 +136,14 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    def delete_file(self, file_id: str) -> None:
+    def delete_file(self, file_id: str, error_on_missing: bool = True) -> None:
         """
         Delete a file by its ID.
 
         Parameters:
-        - file_name: Name of file to delete
+        - file_id: ID of file to delete
+        - error_on_missing: If False, silently return when the file record
+          does not exist instead of raising.
         """
 
     @abstractmethod
@@ -452,12 +454,23 @@ class S3BackedFileStore(FileStore):
             logger.warning(f"Error getting file size for {file_id}: {e}")
             return None
 
-    def delete_file(self, file_id: str, db_session: Session | None = None) -> None:
+    def delete_file(
+        self,
+        file_id: str,
+        error_on_missing: bool = True,
+        db_session: Session | None = None,
+    ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                file_record = get_filerecord_by_file_id(
+                file_record = get_filerecord_by_file_id_optional(
                     file_id=file_id, db_session=db_session
                 )
+                if file_record is None:
+                    if error_on_missing:
+                        raise RuntimeError(
+                            f"File by id {file_id} does not exist or was deleted"
+                        )
+                    return
                 if not file_record.bucket_name:
                     logger.error(
                         f"File record {file_id} with key {file_record.object_key} "

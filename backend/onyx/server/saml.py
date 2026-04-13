@@ -70,7 +70,7 @@ async def upsert_saml_user(email: str) -> User:
                 try:
                     user = await user_manager.get_by_email(email)
                     # If user has a non-authenticated role, treat as non-existent
-                    if not user.role.is_web_login():
+                    if not user.account_type.is_web_login():
                         raise exceptions.UserNotExists()
                     return user
                 except exceptions.UserNotExists:

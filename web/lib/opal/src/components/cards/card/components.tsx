@@ -1,6 +1,6 @@
 import "@opal/components/cards/card/styles.css";
-import type { ContainerSizeVariants } from "@opal/types";
-import { containerSizeVariants } from "@opal/shared";
+import type { PaddingVariants, RoundingVariants } from "@opal/types";
+import { paddingVariants, cardRoundingVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
@@ -12,21 +12,34 @@ type BorderVariant = "none" | "dashed" | "solid";
 
 type CardProps = {
   /**
-   * Size preset — controls padding and border-radius.
+   * Padding preset.
    *
-   * Padding comes from the shared size scale. Rounding follows the same
-   * mapping as `Button` / `Interactive.Container`:
+   * | Value   | Class   |
+   * |---------|---------|
+   * | `"lg"`  | `p-6`   |
+   * | `"md"`  | `p-4`   |
+   * | `"sm"`  | `p-2`   |
+   * | `"xs"`  | `p-1`   |
+   * | `"2xs"` | `p-0.5` |
+   * | `"fit"` | `p-0`   |
    *
-   * | Size   | Rounding   |
-   * |--------|------------|
-   * | `lg`   | `default`  |
-   * | `md`–`sm` | `compact` |
-   * | `xs`–`2xs` | `mini`  |
-   * | `fit`  | `default`  |
-   *
-   * @default "lg"
+   * @default "md"
    */
-  sizeVariant?: ContainerSizeVariants;
+  padding?: PaddingVariants;
+
+  /**
+   * Border-radius preset.
+   *
+   * | Value  | Class        |
+   * |--------|--------------|
+   * | `"xs"` | `rounded-04` |
+   * | `"sm"` | `rounded-08` |
+   * | `"md"` | `rounded-12` |
+   * | `"lg"` | `rounded-16` |
+   *
+   * @default "md"
+   */
+  rounding?: RoundingVariants;
 
   /**
    * Background fill intensity.
@@ -36,7 +49,7 @@ type CardProps = {
    *
    * @default "light"
    */
-  backgroundVariant?: BackgroundVariant;
+  background?: BackgroundVariant;
 
   /**
    * Border style.
@@ -46,7 +59,7 @@ type CardProps = {
    *
    * @default "none"
    */
-  borderVariant?: BorderVariant;
+  border?: BorderVariant;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -55,39 +68,26 @@ type CardProps = {
 };
 
 // ---------------------------------------------------------------------------
-// Rounding
-// ---------------------------------------------------------------------------
-
-/** Maps a size variant to a rounding class, mirroring the Button pattern. */
-const roundingForSize: Record<ContainerSizeVariants, string> = {
-  lg: "rounded-12",
-  md: "rounded-08",
-  sm: "rounded-08",
-  xs: "rounded-04",
-  "2xs": "rounded-04",
-  fit: "rounded-12",
-};
-
-// ---------------------------------------------------------------------------
 // Card
 // ---------------------------------------------------------------------------
 
 function Card({
-  sizeVariant = "lg",
-  backgroundVariant = "light",
-  borderVariant = "none",
+  padding: paddingProp = "md",
+  rounding: roundingProp = "md",
+  background = "light",
+  border = "none",
   ref,
   children,
 }: CardProps) {
-  const { padding } = containerSizeVariants[sizeVariant];
-  const rounding = roundingForSize[sizeVariant];
+  const padding = paddingVariants[paddingProp];
+  const rounding = cardRoundingVariants[roundingProp];
 
   return (
     <div
       ref={ref}
       className={cn("opal-card", padding, rounding)}
-      data-background={backgroundVariant}
-      data-border={borderVariant}
+      data-background={background}
+      data-border={border}
     >
       {children}
     </div>

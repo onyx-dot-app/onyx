@@ -24,6 +24,7 @@ var slashCommands = []slashCommand{
 	{"/configure", "Re-run connection setup"},
 	{"/connectors", "Open connectors in browser"},
 	{"/settings", "Open settings in browser"},
+	{"/experiments", "List experimental features"},
 	{"/quit", "Exit Onyx CLI"},
 }
 

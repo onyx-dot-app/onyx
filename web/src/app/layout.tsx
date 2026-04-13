@@ -9,11 +9,12 @@ import { PHProvider } from "./providers";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
-import { Hanken_Grotesk } from "next/font/google";
+import { DM_Mono, Hanken_Grotesk } from "next/font/google";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
+import { cn } from "@/lib/utils";
 import AppHealthBanner from "@/sections/AppHealthBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
@@ -23,6 +24,29 @@ const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
   variable: "--font-hanken-grotesk",
   display: "swap",
+  fallback: [
+    "-apple-system",
+    "BlinkMacSystemFont",
+    "Segoe UI",
+    "Roboto",
+    "sans-serif",
+  ],
+});
+
+const dmMono = DM_Mono({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-dm-mono",
+  display: "swap",
+  fallback: [
+    "SF Mono",
+    "Monaco",
+    "Cascadia Code",
+    "Roboto Mono",
+    "Consolas",
+    "Courier New",
+    "monospace",
+  ],
 });
 
 export const metadata: Metadata = {
@@ -44,7 +68,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${hankenGrotesk.variable}`}
+      className={cn(hankenGrotesk.variable, dmMono.variable)}
       suppressHydrationWarning
     >
       <head>

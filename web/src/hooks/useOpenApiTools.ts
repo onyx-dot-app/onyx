@@ -3,6 +3,7 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**
  * Fetches OpenAPI tools configuration.
@@ -27,7 +28,7 @@ export default function useOpenApiTools() {
     error,
     isLoading: isOpenApiLoading,
     mutate: mutateOpenApiTools,
-  } = useSWR<ToolSnapshot[]>("/api/tool/openapi", errorHandlingFetcher);
+  } = useSWR<ToolSnapshot[]>(SWR_KEYS.openApiTools, errorHandlingFetcher);
 
   return {
     openApiTools: openApiTools ?? null,

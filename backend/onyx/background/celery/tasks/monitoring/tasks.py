@@ -1,6 +1,5 @@
 import json
 import time
-from collections.abc import Callable
 from datetime import timedelta
 from itertools import islice
 from typing import Any
@@ -19,6 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.memory_monitoring import emit_process_memory
@@ -698,31 +698,27 @@ def monitor_background_processes(self: Task, *, tenant_id: str) -> None:
         return None
 
     try:
-        # Get Redis client for Celery broker
-        redis_celery = self.app.broker_connection().channel().client  # type: ignore
         redis_std = get_redis_client()
 
-        # Define metric collection functions and their dependencies
-        metric_functions: list[Callable[[], list[Metric]]] = [
-            lambda: _collect_queue_metrics(redis_celery),
-            lambda: _collect_connector_metrics(db_session, redis_std),
-            lambda: _collect_sync_metrics(db_session, redis_std),
-        ]
+        # Collect queue metrics with broker connection
+        r_celery = celery_get_broker_client(self.app)
+        queue_metrics = _collect_queue_metrics(r_celery)
 
-        # Collect and log each metric
+        # Collect remaining metrics (no broker connection needed)
         with get_session_with_current_tenant() as db_session:
-            for metric_fn in metric_functions:
-                metrics = metric_fn()
-                for metric in metrics:
-                    # double check to make sure we aren't double-emitting metrics
-                    if metric.key is None or not _has_metric_been_emitted(
-                        redis_std, metric.key
-                    ):
-                        metric.log()
-                        metric.emit(tenant_id)
+            all_metrics: list[Metric] = queue_metrics
+            all_metrics.extend(_collect_connector_metrics(db_session, redis_std))
+            all_metrics.extend(_collect_sync_metrics(db_session, redis_std))
 
-                    if metric.key is not None:
-                        _mark_metric_as_emitted(redis_std, metric.key)
+            for metric in all_metrics:
+                if metric.key is None or not _has_metric_been_emitted(
+                    redis_std, metric.key
+                ):
+                    metric.log()
+                    metric.emit(tenant_id)
+
+                if metric.key is not None:
+                    _mark_metric_as_emitted(redis_std, metric.key)
 
         task_logger.info("Successfully collected background metrics")
     except SoftTimeLimitExceeded:
@@ -890,7 +886,7 @@ def monitor_celery_queues_helper(
 ) -> None:
     """A task to monitor all celery queue lengths."""
 
-    r_celery = task.app.broker_connection().channel().client  # type: ignore
+    r_celery = celery_get_broker_client(task.app)
     n_celery = celery_get_queue_length(OnyxCeleryQueues.PRIMARY, r_celery)
     n_docfetching = celery_get_queue_length(
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
@@ -1080,7 +1076,7 @@ def cloud_monitor_celery_pidbox(
     num_deleted = 0
 
     MAX_PIDBOX_IDLE = 24 * 3600  # 1 day in seconds
-    r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
+    r_celery = celery_get_broker_client(self.app)
     for key in r_celery.scan_iter("*.reply.celery.pidbox"):
         key_bytes = cast(bytes, key)
         key_str = key_bytes.decode("utf-8")

@@ -1,5 +1,6 @@
 """Tests for indexing pipeline Prometheus collectors."""
 
+from collections.abc import Iterator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -13,6 +14,16 @@ from onyx.server.metrics.indexing_pipeline import IndexAttemptCollector
 from onyx.server.metrics.indexing_pipeline import QueueDepthCollector
 
 
+@pytest.fixture(autouse=True)
+def _mock_broker_client() -> Iterator[None]:
+    """Patch celery_get_broker_client for all collector tests."""
+    with patch(
+        "onyx.background.celery.celery_redis.celery_get_broker_client",
+        return_value=MagicMock(),
+    ):
+        yield
+
+
 class TestQueueDepthCollector:
     def test_returns_empty_when_factory_not_set(self) -> None:
         collector = QueueDepthCollector()
@@ -24,8 +35,7 @@ class TestQueueDepthCollector:
 
     def test_collects_queue_depths(self) -> None:
         collector = QueueDepthCollector(cache_ttl=0)
-        mock_redis = MagicMock()
-        collector.set_redis_factory(lambda: mock_redis)
+        collector.set_celery_app(MagicMock())
 
         with (
             patch(
@@ -60,8 +70,8 @@ class TestQueueDepthCollector:
 
     def test_handles_redis_error_gracefully(self) -> None:
         collector = QueueDepthCollector(cache_ttl=0)
-        mock_redis = MagicMock()
-        collector.set_redis_factory(lambda: mock_redis)
+        MagicMock()
+        collector.set_celery_app(MagicMock())
 
         with patch(
             "onyx.server.metrics.indexing_pipeline.celery_get_queue_length",
@@ -74,8 +84,8 @@ class TestQueueDepthCollector:
 
     def test_caching_returns_stale_within_ttl(self) -> None:
         collector = QueueDepthCollector(cache_ttl=60)
-        mock_redis = MagicMock()
-        collector.set_redis_factory(lambda: mock_redis)
+        MagicMock()
+        collector.set_celery_app(MagicMock())
 
         with (
             patch(
@@ -98,31 +108,10 @@ class TestQueueDepthCollector:
 
         assert first is second  # Same object, from cache
 
-    def test_factory_called_each_scrape(self) -> None:
-        """Verify the Redis factory is called on each fresh collect, not cached."""
-        collector = QueueDepthCollector(cache_ttl=0)
-        factory = MagicMock(return_value=MagicMock())
-        collector.set_redis_factory(factory)
-
-        with (
-            patch(
-                "onyx.server.metrics.indexing_pipeline.celery_get_queue_length",
-                return_value=0,
-            ),
-            patch(
-                "onyx.server.metrics.indexing_pipeline.celery_get_unacked_task_ids",
-                return_value=set(),
-            ),
-        ):
-            collector.collect()
-            collector.collect()
-
-        assert factory.call_count == 2
-
     def test_error_returns_stale_cache(self) -> None:
         collector = QueueDepthCollector(cache_ttl=0)
-        mock_redis = MagicMock()
-        collector.set_redis_factory(lambda: mock_redis)
+        MagicMock()
+        collector.set_celery_app(MagicMock())
 
         # First call succeeds
         with (

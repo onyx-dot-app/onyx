@@ -17,7 +17,8 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { FormField } from "@/refresh-components/form/FormField";
 import { Vertical, Horizontal } from "@/layouts/input-layouts";
 import { Section } from "@/layouts/general-layouts";
-import { SvgArrowExchange, SvgOnyxLogo } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
+import { SvgOnyxLogo } from "@opal/logos";
 import { Disabled } from "@opal/core";
 import type { IconProps } from "@opal/types";
 import { VoiceProviderView } from "@/hooks/useVoiceProviders";
@@ -401,7 +402,7 @@ export default function VoiceProviderSetupModal({
                     options={existingApiKeyOptions}
                     separatorLabel="Reuse OpenAI API Keys"
                     strict={false}
-                    showAddPrefix
+                    createPrefix="Add"
                   />
                 ) : (
                   <PasswordInputTypeIn

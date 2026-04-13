@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics";
@@ -42,7 +43,7 @@ export default function NotificationsPopover({
     data: notifications,
     mutate,
     isLoading,
-  } = useSWR<Notification[]>("/api/notifications", errorHandlingFetcher);
+  } = useSWR<Notification[]>(SWR_KEYS.notifications, errorHandlingFetcher);
 
   const handleNotificationClick = (notification: Notification) => {
     // Handle build_mode feature announcement specially - show intro animation

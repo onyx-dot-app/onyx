@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
+from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
@@ -71,6 +72,7 @@ from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import format_error_for_logging
@@ -203,7 +205,6 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
 def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
     r = get_redis_client()
     r_replica = get_redis_replica_client()
-    r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
 
     lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_PRUNE_BEAT_LOCK,
@@ -217,7 +218,7 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
     try:
         # the entire task needs to run frequently in order to finalize pruning
 
-        # but pruning only kicks off once per hour
+        # but pruning only kicks off once per min
         if not r.exists(OnyxRedisSignals.BLOCK_PRUNING):
             task_logger.info("Checking for pruning due")
 
@@ -261,6 +262,7 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
             # tasks can be in the queue in redis, in reserved tasks (prefetched by the worker),
             # or be currently executing
             try:
+                r_celery = celery_get_broker_client(self.app)
                 validate_pruning_fences(tenant_id, r, r_replica, r_celery, lock_beat)
             except Exception:
                 task_logger.exception("Exception while validating pruning fences")
@@ -569,8 +571,9 @@ def connector_pruning_generator_task(
             )
 
             # Extract docs and hierarchy nodes from the source
+            connector_type = cc_pair.connector.source.value
             extraction_result = extract_ids_from_runnable_connector(
-                runnable_connector, callback
+                runnable_connector, callback, connector_type=connector_type
             )
             all_connector_doc_ids = extraction_result.raw_id_to_parent
 
@@ -635,40 +638,46 @@ def connector_pruning_generator_task(
                 commit=True,
             )
 
-            # a list of docs in our local index
-            all_indexed_document_ids = {
-                doc.id
-                for doc in get_documents_for_connector_credential_pair(
-                    db_session=db_session,
-                    connector_id=connector_id,
-                    credential_id=credential_id,
+            diff_start = time.monotonic()
+            try:
+                # a list of docs in our local index
+                all_indexed_document_ids = {
+                    doc.id
+                    for doc in get_documents_for_connector_credential_pair(
+                        db_session=db_session,
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                    )
+                }
+
+                # generate list of docs to remove (no longer in the source)
+                doc_ids_to_remove = list(
+                    all_indexed_document_ids - all_connector_doc_ids.keys()
                 )
-            }
 
-            # generate list of docs to remove (no longer in the source)
-            doc_ids_to_remove = list(
-                all_indexed_document_ids - all_connector_doc_ids.keys()
-            )
+                task_logger.info(
+                    "Pruning set collected: "
+                    f"cc_pair={cc_pair_id} "
+                    f"connector_source={cc_pair.connector.source} "
+                    f"docs_to_remove={len(doc_ids_to_remove)}"
+                )
 
-            task_logger.info(
-                "Pruning set collected: "
-                f"cc_pair={cc_pair_id} "
-                f"connector_source={cc_pair.connector.source} "
-                f"docs_to_remove={len(doc_ids_to_remove)}"
-            )
+                task_logger.info(
+                    f"RedisConnector.prune.generate_tasks starting. cc_pair={cc_pair_id}"
+                )
+                tasks_generated = redis_connector.prune.generate_tasks(
+                    set(doc_ids_to_remove), self.app, db_session, None
+                )
+                if tasks_generated is None:
+                    return None
 
-            task_logger.info(
-                f"RedisConnector.prune.generate_tasks starting. cc_pair={cc_pair_id}"
-            )
-            tasks_generated = redis_connector.prune.generate_tasks(
-                set(doc_ids_to_remove), self.app, db_session, None
-            )
-            if tasks_generated is None:
-                return None
-
-            task_logger.info(
-                f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
-            )
+                task_logger.info(
+                    f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
+                )
+            finally:
+                observe_pruning_diff_duration(
+                    time.monotonic() - diff_start, connector_type
+                )
 
             redis_connector.prune.generator_complete = tasks_generated
 

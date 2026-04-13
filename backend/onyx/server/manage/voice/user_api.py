@@ -10,9 +10,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider
 from onyx.db.voice import fetch_default_tts_provider
@@ -42,7 +43,7 @@ class VoiceStatusResponse(BaseModel):
 
 @router.get("/status")
 def get_voice_status(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> VoiceStatusResponse:
     """Check whether STT and TTS providers are configured and ready."""
@@ -57,7 +58,7 @@ def get_voice_status(
 @router.post("/transcribe")
 async def transcribe_audio(
     audio: UploadFile = File(...),
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """Transcribe audio to text using the default STT provider."""
@@ -121,7 +122,7 @@ async def synthesize_speech(
     speed: float | None = Query(
         default=None, description="Playback speed (0.5-2.0)", ge=0.5, le=2.0
     ),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> StreamingResponse:
     """
     Synthesize text to speech using the default TTS provider.
@@ -208,7 +209,7 @@ async def synthesize_speech(
 @router.patch("/settings")
 def update_voice_settings(
     request: VoiceSettingsUpdateRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """Update user's voice settings."""
@@ -229,7 +230,7 @@ class WSTokenResponse(BaseModel):
 
 @router.post("/ws-token")
 async def get_ws_token(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> WSTokenResponse:
     """
     Generate a short-lived token for WebSocket authentication.

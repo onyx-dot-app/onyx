@@ -2,8 +2,9 @@ from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.llm import fetch_existing_embedding_providers
 from onyx.db.llm import remove_embedding_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
@@ -34,7 +35,7 @@ basic_router = APIRouter(prefix="/embedding")
 @admin_router.post("/test-embedding")
 def test_embedding_configuration(
     test_llm_request: TestEmbeddingRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     try:
         test_model = EmbeddingModel(
@@ -65,7 +66,7 @@ def test_embedding_configuration(
 
 @admin_router.get("", response_model=list[EmbeddingModelDetail])
 def list_embedding_models(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[EmbeddingModelDetail]:
     search_settings = get_all_search_settings(db_session)
@@ -74,7 +75,7 @@ def list_embedding_models(
 
 @admin_router.get("/embedding-provider")
 def list_embedding_providers(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[CloudEmbeddingProvider]:
     return [
@@ -86,7 +87,7 @@ def list_embedding_providers(
 @admin_router.delete("/embedding-provider/{provider_type}")
 def delete_embedding_provider(
     provider_type: EmbeddingProvider,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     embedding_provider = get_current_db_embedding_provider(db_session=db_session)
@@ -105,7 +106,7 @@ def delete_embedding_provider(
 @admin_router.put("/embedding-provider")
 def put_cloud_embedding_provider(
     provider: CloudEmbeddingProviderCreationRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CloudEmbeddingProvider:
     return upsert_cloud_embedding_provider(db_session, provider)

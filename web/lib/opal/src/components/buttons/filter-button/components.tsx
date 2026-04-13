@@ -67,7 +67,7 @@ function FilterButton({
         state={active ? "selected" : "empty"}
       >
         <Interactive.Container type="button">
-          <div className="interactive-foreground flex flex-row items-center gap-1">
+          <div className="flex flex-row items-center gap-1">
             {iconWrapper(Icon, "lg", true)}
             <Text font="main-ui-action" color="inherit" nowrap>
               {children}

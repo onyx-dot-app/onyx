@@ -4,10 +4,8 @@ import { Button } from "@opal/components/buttons/button/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import {
-  resolveStr,
-  toPlainString,
-} from "@opal/components/text/InlineMarkdown";
+import { Text, type TextFont } from "@opal/components/text/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
 
@@ -30,8 +28,8 @@ interface ContentXlPresetConfig {
   moreIcon2Size: string;
   /** Tailwind padding class for the more-icon-2 container. */
   moreIcon2ContainerPadding: string;
-  /** Tailwind font class for the title. */
-  titleFont: string;
+  /** Opal font name for the title (without `font-` prefix). */
+  titleFont: TextFont;
   /** Title line-height — also used as icon container min-height (CSS value). */
   lineHeight: string;
   /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
@@ -65,9 +63,6 @@ interface ContentXlProps {
   /** Optional tertiary icon rendered in the icon row. */
   moreIcon2?: IconFunctionComponent;
 
-  /** When `true`, the title color hooks into `Interactive`'s `--interactive-foreground` variable. */
-  withInteractive?: boolean;
-
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -84,7 +79,7 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     moreIcon1ContainerPadding: "p-0.5",
     moreIcon2Size: "2rem",
     moreIcon2ContainerPadding: "p-0.5",
-    titleFont: "font-heading-h2",
+    titleFont: "heading-h2",
     lineHeight: "2.25rem",
     editButtonSize: "md",
     editButtonPadding: "p-1",
@@ -96,7 +91,7 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     moreIcon1ContainerPadding: "p-0.5",
     moreIcon2Size: "1.5rem",
     moreIcon2ContainerPadding: "p-0.5",
-    titleFont: "font-heading-h3",
+    titleFont: "heading-h3",
     lineHeight: "1.75rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0.5",
@@ -116,7 +111,6 @@ function ContentXl({
   onTitleChange,
   moreIcon1: MoreIcon1,
   moreIcon2: MoreIcon2,
-  withInteractive,
   ref,
 }: ContentXlProps) {
   const [editing, setEditing] = useState(false);
@@ -136,11 +130,7 @@ function ContentXl({
   }
 
   return (
-    <div
-      ref={ref}
-      className="opal-content-xl"
-      data-interactive={withInteractive || undefined}
-    >
+    <div ref={ref} className="opal-content-xl">
       {(Icon || MoreIcon1 || MoreIcon2) && (
         <div className="opal-content-xl-icon-row">
           {Icon && (
@@ -199,14 +189,17 @@ function ContentXl({
           {editing ? (
             <div className="opal-content-xl-input-sizer">
               <span
-                className={cn("opal-content-xl-input-mirror", config.titleFont)}
+                className={cn(
+                  "opal-content-xl-input-mirror",
+                  `font-${config.titleFont}`
+                )}
               >
                 {editValue || "\u00A0"}
               </span>
               <input
                 className={cn(
                   "opal-content-xl-input",
-                  config.titleFont,
+                  `font-${config.titleFont}`,
                   "text-text-04"
                 )}
                 value={editValue}
@@ -226,19 +219,15 @@ function ContentXl({
               />
             </div>
           ) : (
-            <span
-              className={cn(
-                "opal-content-xl-title",
-                config.titleFont,
-                "text-text-04",
-                editable && "cursor-pointer"
-              )}
-              onClick={editable ? startEditing : undefined}
-              style={{ height: config.lineHeight }}
+            <Text
+              font={config.titleFont}
+              color="inherit"
+              maxLines={1}
               title={toPlainString(title)}
+              onClick={editable ? startEditing : undefined}
             >
-              {resolveStr(title)}
-            </span>
+              {title}
+            </Text>
           )}
 
           {editable && !editing && (
@@ -261,8 +250,10 @@ function ContentXl({
         </div>
 
         {description && toPlainString(description) && (
-          <div className="opal-content-xl-description font-secondary-body text-text-03">
-            {resolveStr(description)}
+          <div className="opal-content-xl-description">
+            <Text font="secondary-body" color="text-03" as="p">
+              {description}
+            </Text>
           </div>
         )}
       </div>

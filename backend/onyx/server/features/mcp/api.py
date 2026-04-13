@@ -25,9 +25,9 @@ from pydantic import AnyUrl
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -35,6 +35,7 @@ from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
+from onyx.db.enums import Permission
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
@@ -93,6 +94,32 @@ def _truncate_description(description: str | None, max_length: int = 500) -> str
     if len(description) <= max_length:
         return description
     return description[: max_length - 3] + "..."
+
+
+# TODO: Replace mask-comparison approach with an explicit Unset sentinel from the
+# frontend indicating whether each credential field was actually modified. The current
+# approach is brittle (e.g. short credentials produce a fixed-length mask that could
+# collide) and mutates request values, which is surprising. The frontend should signal
+# "unchanged" vs "new value" directly rather than relying on masked-string equality.
+def _restore_masked_oauth_credentials(
+    request_client_id: str | None,
+    request_client_secret: str | None,
+    existing_client: OAuthClientInformationFull,
+) -> tuple[str | None, str | None]:
+    """If the frontend sent back masked credentials, restore the real stored values."""
+    if (
+        request_client_id
+        and existing_client.client_id
+        and request_client_id == mask_string(existing_client.client_id)
+    ):
+        request_client_id = existing_client.client_id
+    if (
+        request_client_secret
+        and existing_client.client_secret
+        and request_client_secret == mask_string(existing_client.client_secret)
+    ):
+        request_client_secret = existing_client.client_secret
+    return request_client_id, request_client_secret
 
 
 router = APIRouter(prefix="/mcp")
@@ -360,7 +387,7 @@ async def connect_admin_oauth(
 async def connect_user_oauth(
     request: MCPUserOAuthConnectRequest,
     db: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPUserOAuthConnectResponse:
     return await _connect_oauth(request, db, is_admin=False, user=user)
 
@@ -390,6 +417,26 @@ async def _connect_oauth(
             status_code=400,
             detail=f"Server was configured with authentication type {auth_type_str}",
         )
+
+    # If the frontend sent back masked credentials (unchanged by the user),
+    # restore the real stored values so we don't overwrite them with masks.
+    if mcp_server.admin_connection_config:
+        existing_data = extract_connection_data(
+            mcp_server.admin_connection_config, apply_mask=False
+        )
+        existing_client_raw = existing_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        if existing_client_raw:
+            existing_client = OAuthClientInformationFull.model_validate(
+                existing_client_raw
+            )
+            (
+                request.oauth_client_id,
+                request.oauth_client_secret,
+            ) = _restore_masked_oauth_credentials(
+                request.oauth_client_id,
+                request.oauth_client_secret,
+                existing_client,
+            )
 
     # Create admin config with client info if provided
     config_data = MCPConnectionData(headers={})
@@ -572,7 +619,7 @@ async def _connect_oauth(
 async def process_oauth_callback(
     request: Request,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPOAuthCallbackResponse:
     """Complete OAuth flow by exchanging code for tokens and storing them.
 
@@ -655,7 +702,7 @@ async def process_oauth_callback(
 def save_user_credentials(
     request: MCPUserCredentialsRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPApiKeyResponse:
     """Save user credentials for template-based MCP server authentication"""
 
@@ -983,7 +1030,7 @@ def _db_mcp_server_to_api_mcp_server(
 def get_mcp_servers_for_assistant(
     assistant_id: str,
     db: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPServersResponse:
     """Get MCP servers for an assistant"""
 
@@ -1011,7 +1058,7 @@ def get_mcp_servers_for_assistant(
 @router.get("/servers", response_model=MCPServersResponse)
 def get_mcp_servers_for_user(
     db: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPServersResponse:
     """List all MCP servers for use in agent configuration and chat UI.
 
@@ -1140,7 +1187,7 @@ def get_mcp_server_tools_snapshots(
 def user_list_mcp_tools_by_id(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPToolListResponse:
     return _list_mcp_tools_by_id(server_id, db, False, user)
 
@@ -1354,6 +1401,19 @@ def _upsert_mcp_server(
             )
             if client_info_raw:
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
+
+        # If the frontend sent back masked credentials (unchanged by the user),
+        # restore the real stored values so the comparison below sees no change
+        # and the credentials aren't overwritten with masked strings.
+        if client_info and request.auth_type == MCPAuthenticationType.OAUTH:
+            (
+                request.oauth_client_id,
+                request.oauth_client_secret,
+            ) = _restore_masked_oauth_credentials(
+                request.oauth_client_id,
+                request.oauth_client_secret,
+                client_info,
+            )
 
         changing_connection_config = (
             not mcp_server.admin_connection_config
