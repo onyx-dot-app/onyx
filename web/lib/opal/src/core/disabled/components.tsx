@@ -37,7 +37,7 @@ interface DisabledProps
   /** Which side the tooltip appears on. @default "right" */
   tooltipSide?: TooltipSide;
 
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 // ---------------------------------------------------------------------------
