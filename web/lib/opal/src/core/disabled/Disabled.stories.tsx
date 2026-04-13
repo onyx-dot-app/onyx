@@ -90,12 +90,13 @@ export const WithAllowClick: Story = {
           <p className="text-sm">
             Disabled visuals, but pointer events are still active.
           </p>
-          <button
-            className="mt-2 text-xs underline"
+          <Button
+            prominence="tertiary"
+            size="sm"
             onClick={() => alert("Clicked!")}
           >
             Click me
-          </button>
+          </Button>
         </Card>
       </Disabled>
     </div>
