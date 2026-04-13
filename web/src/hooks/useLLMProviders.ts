@@ -49,11 +49,15 @@ export function useLLMProviders(personaId?: number) {
       ? SWR_KEYS.llmProvidersForPersona(personaId)
       : SWR_KEYS.llmProviders;
 
+  // `revalidateIfStale` is intentionally left at its default (true), unlike
+  // `useAdminLLMProviders` below. Admin edits call `refreshLlmProviderCaches`,
+  // but persona-scoped keys are orphaned when that runs, so `mutate` on them
+  // is a no-op. Mount-time revalidation picks up the edits on next nav.
+  // `dedupingInterval: 60000` keeps this off the hot path.
   const { data, error, mutate } = useSWR<
     LLMProviderResponse<LLMProviderDescriptor>
   >(url, errorHandlingFetcher, {
     revalidateOnFocus: false,
-    revalidateIfStale: false,
     dedupingInterval: 60000,
   });
 
