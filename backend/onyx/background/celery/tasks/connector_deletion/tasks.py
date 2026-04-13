@@ -508,7 +508,11 @@ def monitor_connector_deletion_taskset(
                 db_session=db_session,
                 connector_id=connector_id_to_delete,
             )
-            if not connector or not len(connector.credentials):
+            if not connector:
+                task_logger.info(
+                    "Connector deletion - Connector already deleted, skipping connector cleanup"
+                )
+            elif not len(connector.credentials):
                 task_logger.info(
                     "Connector deletion - Found no credentials left for connector, deleting connector"
                 )
