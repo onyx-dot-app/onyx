@@ -619,7 +619,7 @@ function ChatPreferencesForm() {
                 title="Multi-Model Generation"
                 tag={{ title: "beta", color: "blue" }}
                 description="Allow multiple models to generate responses in parallel in chat."
-                nonInteractive
+                withLabel={false}
               >
                 <Switch
                   checked={s.multi_model_chat_enabled ?? true}
