@@ -212,7 +212,7 @@ function InputErrorText({ children, type = "error" }: InputErrorTextProps) {
 
   return (
     <div className="px-1">
-      {/* TODO(raunak): update this with `Content` when it supports custom colours */}
+      {/* TODO(@raunakab): update this with `Content` when it supports custom colours */}
       <Section flexDirection="row" justifyContent="start" gap={0.25}>
         <Icon size={12} className={strokeClass} />
         <span className={colorClass} role="alert">
