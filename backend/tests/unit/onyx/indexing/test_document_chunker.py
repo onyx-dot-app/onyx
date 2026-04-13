@@ -570,9 +570,7 @@ def test_strict_chunk_token_limit_subdivides_oversized_split(
     # 500 non-whitespace chars with no sentence boundaries — chonkie will
     # return it as one oversized piece (>200) which triggers the fallback.
     run = "a" * 500
-    doc = _make_doc(
-        sections=[Section(type=SectionType.TEXT, text=run, link="l-run")]
-    )
+    doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=run, link="l-run")])
 
     chunks = chunker._chunk_document_with_sections(
         document=doc,
@@ -607,9 +605,7 @@ def test_strict_chunk_token_limit_disabled_allows_oversized_split(
     monkeypatch.setattr(chunker_module, "STRICT_CHUNK_TOKEN_LIMIT", False)
     chunker = _make_chunker()
     run = "a" * 500
-    doc = _make_doc(
-        sections=[Section(type=SectionType.TEXT, text=run, link="l-run")]
-    )
+    doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=run, link="l-run")])
 
     chunks = chunker._chunk_document_with_sections(
         document=doc,
@@ -636,7 +632,9 @@ def test_first_empty_section_with_title_is_processed_not_skipped() -> None:
     chunker = _make_chunker()
     doc = _make_doc(
         sections=[
-            Section(type=SectionType.TEXT, text="", link="l0"),  # empty first section, kept
+            Section(
+                type=SectionType.TEXT, text="", link="l0"
+            ),  # empty first section, kept
             Section(type=SectionType.TEXT, text="Real content.", link="l1"),
         ],
         title="Has A Title",
@@ -669,9 +667,7 @@ def test_clean_text_strips_control_chars_from_section_content() -> None:
     # NUL + BEL are control chars below 0x20 and not \n or \t → should be
     # stripped by clean_text.
     dirty = "Hello\x00 World\x07!"
-    doc = _make_doc(
-        sections=[Section(type=SectionType.TEXT, text=dirty, link="l1")]
-    )
+    doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=dirty, link="l1")])
 
     chunks = chunker._chunk_document_with_sections(
         document=doc,
@@ -765,9 +761,7 @@ def test_no_trailing_empty_chunk_when_last_section_was_oversized() -> None:
         "Ten eleven twelve. Thirteen fourteen fifteen. Sixteen seventeen."
     )
     assert len(big) > CHUNK_LIMIT
-    doc = _make_doc(
-        sections=[Section(type=SectionType.TEXT, text=big, link="l-big")]
-    )
+    doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=big, link="l-big")])
 
     chunks = chunker._chunk_document_with_sections(
         document=doc,
