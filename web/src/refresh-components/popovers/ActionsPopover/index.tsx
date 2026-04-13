@@ -96,10 +96,6 @@ const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
     href: "/admin/configuration/code-interpreter",
     tooltip: "Configure Code Interpreter",
   },
-  KnowledgeGraphTool: {
-    href: "/admin/kg",
-    tooltip: "Configure Knowledge Graph",
-  },
 };
 
 const OPENAPI_ADMIN_CONFIG = {

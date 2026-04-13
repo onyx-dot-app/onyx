@@ -13,7 +13,6 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import * as SidebarLayouts from "@/layouts/sidebar-layouts";
 import { useSidebarFolded } from "@/layouts/sidebar-layouts";
-import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
@@ -58,7 +57,6 @@ function buildItems(
   enableCloud: boolean,
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
-  kgExposed: boolean,
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean,
   hooksEnabled: boolean
@@ -86,10 +84,6 @@ function buildItems(
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.VOICE);
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CODE_INTERPRETER);
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
-
-    if (vectorDbEnabled && kgExposed) {
-      add(SECTIONS.UNLABELED, ADMIN_ROUTES.KNOWLEDGE_GRAPH);
-    }
 
     if (!enableCloud && customAnalyticsEnabled) {
       addDisabled(
@@ -218,7 +212,6 @@ function AdminSidebarInner({
       setFocusSearch(false);
     }
   }, [focusSearch, folded]);
-  const { kgExposed } = useIsKGExposed();
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
@@ -245,7 +238,6 @@ function AdminSidebarInner({
     enableCloudSS,
     enableEnterprise,
     settings,
-    kgExposed,
     customAnalyticsEnabled,
     hasSubscriptionOrLicense,
     hooksEnabled
