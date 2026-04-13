@@ -1,3 +1,5 @@
+import csv
+import io
 from typing import IO
 
 from onyx.connectors.models import TabularSection
@@ -14,6 +16,16 @@ def is_tabular_file(file_name: str) -> bool:
     return any(lowered.endswith(ext) for ext in OnyxFileExtensions.TABULAR_EXTENSIONS)
 
 
+def _tsv_to_csv(tsv_text: str) -> str:
+    """Re-serialize tab-separated text as CSV so downstream parsers that
+    assume the default Excel dialect read the columns correctly."""
+    out = io.StringIO()
+    csv.writer(out, lineterminator="\n").writerows(
+        csv.reader(io.StringIO(tsv_text), dialect="excel-tab")
+    )
+    return out.getvalue().rstrip("\n")
+
+
 def tabular_file_to_sections(
     file: IO[bytes],
     file_name: str,
@@ -22,8 +34,8 @@ def tabular_file_to_sections(
     """Convert a tabular file into one or more TabularSections.
 
     - .xlsx → one TabularSection per non-empty sheet.
-    - .csv / .tsv → a single TabularSection containing the full
-      decoded file.
+    - .csv / .tsv → a single TabularSection containing the full decoded
+      file.
 
     Returns an empty list when the file yields no extractable content.
     """
@@ -45,6 +57,8 @@ def tabular_file_to_sections(
             return []
         if not text:
             return []
+        if lowered.endswith(".tsv"):
+            text = _tsv_to_csv(text)
         return [TabularSection(link=link or file_name, text=text)]
 
     raise ValueError(f"{file_name!r} is not a tabular file")
