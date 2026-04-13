@@ -3,14 +3,15 @@ import "@opal/components/tooltip.css";
 import React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { TooltipSide } from "@opal/components";
-import type { RichStr } from "@opal/types";
+import type { RichStr, WithoutStyles } from "@opal/types";
 import { Text } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface DisabledProps extends React.HTMLAttributes<HTMLDivElement> {
+interface DisabledProps
+  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   ref?: React.Ref<HTMLDivElement>;
 
   /**
@@ -77,6 +78,7 @@ function Disabled({
   const wrapper = (
     <div
       ref={ref}
+      className="opal-disabled"
       {...rest}
       aria-disabled={disabled || undefined}
       data-opal-disabled={disabled || undefined}

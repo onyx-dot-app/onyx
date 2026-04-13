@@ -9,6 +9,10 @@
  * re-enabled so the JS layer can suppress onClick.
  */
 
+.opal-disabled {
+  @apply self-stretch;
+}
+
 [data-opal-disabled] {
   @apply cursor-not-allowed select-none;
   pointer-events: none;
