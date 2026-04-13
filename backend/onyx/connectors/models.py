@@ -388,10 +388,17 @@ class IndexingDocument(Document):
         title_len = len(self.title or self.semantic_identifier)
 
         # Use processed_sections if available, otherwise fall back to original sections
-        sections: list[Section] = self.processed_sections or list(self.sections)
-        section_len = sum(
-            len(section.text) if section.text is not None else 0 for section in sections
-        )
+        if self.processed_sections:
+            section_len = sum(
+                len(section.text) if section.text is not None else 0
+                for section in self.processed_sections
+            )
+        else:
+            section_len = sum(
+                len(section.text) if section.text is not None else 0
+                for section in self.sections
+                if isinstance(section, (TextSection, TabularSection))
+            )
 
         return title_len + section_len
 
