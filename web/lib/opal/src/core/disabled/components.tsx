@@ -95,7 +95,7 @@ function Disabled({
       <TooltipPrimitive.Trigger asChild>{wrapper}</TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content
-          className="opal-tooltip opal-disabled-tooltip"
+          className="opal-tooltip"
           side={tooltipSide}
           sideOffset={4}
         >

@@ -13,10 +13,6 @@
   @apply self-stretch;
 }
 
-.opal-disabled-tooltip {
-  max-width: 20rem;
-}
-
 [data-opal-disabled] {
   @apply w-full cursor-not-allowed select-none;
   pointer-events: none;
