@@ -1,12 +1,11 @@
 """Unit tests for the checklist importer engine component.
 
 Tests cover:
-- _parse_import_response: JSON array parsing and validation
+- _parse_json_array: JSON array parsing, code-fence stripping, error handling
 - _validate_rule: field validation, type normalization, missing fields
-- Compound decomposition (multiple rules sharing a category)
+- enumerate_checklist_items: LLM response parsing into ChecklistItems
+- decompose_checklist_item: LLM response parsing into rule dicts
 - Refinement detection (refinement_needed / refinement_question)
-- Malformed response handling (invalid JSON, non-array)
-- import_checklist: empty-input guard and LLM error propagation
 """
 
 import json
@@ -16,13 +15,17 @@ from unittest.mock import patch
 import pytest
 
 from onyx.server.features.proposal_review.engine.checklist_importer import (
-    _parse_import_response,
+    _parse_json_array,
 )
 from onyx.server.features.proposal_review.engine.checklist_importer import (
     _validate_rule,
 )
+from onyx.server.features.proposal_review.engine.checklist_importer import ChecklistItem
 from onyx.server.features.proposal_review.engine.checklist_importer import (
-    import_checklist,
+    decompose_checklist_item,
+)
+from onyx.server.features.proposal_review.engine.checklist_importer import (
+    enumerate_checklist_items,
 )
 
 
@@ -127,168 +130,280 @@ class TestValidateRule:
 
 
 # =====================================================================
-# _parse_import_response  --  full array parsing
+# _parse_json_array  --  JSON array parsing
 # =====================================================================
 
 
-class TestParseImportResponse:
-    """Tests for _parse_import_response (JSON array parsing + validation)."""
+class TestParseJsonArray:
+    """Tests for _parse_json_array (JSON parsing + code-fence stripping)."""
 
     def test_parses_valid_array(self):
-        rules_json = json.dumps(
-            [
-                {
-                    "name": "Rule A",
-                    "description": "Checks A",
-                    "category": "Cat-1",
-                    "rule_type": "DOCUMENT_CHECK",
-                    "rule_intent": "CHECK",
-                    "prompt_template": "Check {{proposal_text}}",
-                    "refinement_needed": False,
-                    "refinement_question": None,
-                },
-                {
-                    "name": "Rule B",
-                    "description": "Checks B",
-                    "category": "Cat-1",
-                    "rule_type": "METADATA_CHECK",
-                    "rule_intent": "HIGHLIGHT",
-                    "prompt_template": "Check {{metadata.sponsor}}",
-                    "refinement_needed": False,
-                    "refinement_question": None,
-                },
-            ]
-        )
-        result = _parse_import_response(rules_json)
+        raw = json.dumps([{"name": "Rule A"}, {"name": "Rule B"}])
+        result = _parse_json_array(raw, context="test")
         assert len(result) == 2
         assert result[0]["name"] == "Rule A"
-        assert result[1]["name"] == "Rule B"
 
     def test_strips_markdown_code_fences(self):
-        inner = json.dumps([{"name": "R", "prompt_template": "p"}])
+        inner = json.dumps([{"name": "R"}])
         raw = f"```json\n{inner}\n```"
-        result = _parse_import_response(raw)
+        result = _parse_json_array(raw, context="test")
         assert len(result) == 1
         assert result[0]["name"] == "R"
 
+    def test_strips_plain_code_fences(self):
+        inner = json.dumps([{"key": "val"}])
+        raw = f"```\n{inner}\n```"
+        result = _parse_json_array(raw, context="test")
+        assert len(result) == 1
+
     def test_invalid_json_raises_runtime_error(self):
         with pytest.raises(RuntimeError, match="invalid JSON"):
-            _parse_import_response("not valid json [")
+            _parse_json_array("not valid json [", context="test")
 
     def test_non_array_json_raises_runtime_error(self):
         with pytest.raises(RuntimeError, match="non-array JSON"):
-            _parse_import_response('{"name": "single rule"}')
+            _parse_json_array('{"name": "single object"}', context="test")
 
-    def test_skips_non_dict_entries(self):
-        raw = json.dumps(
-            [
-                {"name": "Valid", "prompt_template": "p"},
-                "this is a string, not a dict",
-                42,
-            ]
-        )
-        result = _parse_import_response(raw)
-        assert len(result) == 1
-        assert result[0]["name"] == "Valid"
+    def test_empty_array(self):
+        result = _parse_json_array("[]", context="test")
+        assert result == []
 
-    def test_skips_rules_missing_required_fields(self):
-        raw = json.dumps(
-            [
-                {"name": "Valid", "prompt_template": "p"},
-                {"description": "no name or template"},
-            ]
-        )
-        result = _parse_import_response(raw)
+    def test_whitespace_stripped(self):
+        raw = "  \n" + json.dumps([{"a": 1}]) + "\n  "
+        result = _parse_json_array(raw, context="test")
         assert len(result) == 1
 
-    def test_compound_decomposition_shared_category(self):
-        """Multiple rules from the same checklist item share a category."""
+
+# =====================================================================
+# enumerate_checklist_items  --  pass 1
+# =====================================================================
+
+
+class TestEnumerateChecklistItems:
+    """Tests for enumerate_checklist_items (LLM → ChecklistItems)."""
+
+    def _make_mock_llm(self) -> MagicMock:
+        mock_llm = MagicMock()
+        mock_llm.config.model_name = "test-model"
+        mock_llm.config.model_provider = "test-provider"
+        mock_response = MagicMock()
+        mock_llm.invoke.return_value = mock_response
+        return mock_llm
+
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_response_to_string"
+    )
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.record_llm_response"
+    )
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_generation_span"
+    )
+    def test_parses_items(self, mock_span, _mock_record, mock_to_string):
+        mock_span.return_value.__enter__ = MagicMock()
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        items_json = json.dumps(
+            [
+                {
+                    "id": "IR-1",
+                    "name": "PI Eligibility",
+                    "category": "IR-1: PI Eligibility",
+                    "description": "Check PI eligibility",
+                    "sub_checks": ["PI has PhD", "PI is faculty"],
+                },
+                {
+                    "id": "IR-2",
+                    "name": "Budget Review",
+                    "category": "IR-2: Budget Review",
+                    "description": "Check budget compliance",
+                    "sub_checks": ["Under $500k"],
+                },
+            ]
+        )
+        mock_to_string.return_value = items_json
+        mock_llm = self._make_mock_llm()
+
+        result = enumerate_checklist_items("Some checklist text", mock_llm)
+
+        assert len(result) == 2
+        assert result[0].id == "IR-1"
+        assert result[0].name == "PI Eligibility"
+        assert result[0].sub_checks == ["PI has PhD", "PI is faculty"]
+        assert result[1].id == "IR-2"
+        mock_llm.invoke.assert_called_once()
+
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_response_to_string"
+    )
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.record_llm_response"
+    )
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_generation_span"
+    )
+    def test_skips_items_without_name(self, mock_span, _mock_record, mock_to_string):
+        mock_span.return_value.__enter__ = MagicMock()
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        items_json = json.dumps(
+            [
+                {"id": "IR-1", "name": "Valid", "description": "ok"},
+                {"id": "IR-2", "description": "missing name"},
+            ]
+        )
+        mock_to_string.return_value = items_json
+        mock_llm = self._make_mock_llm()
+
+        result = enumerate_checklist_items("text", mock_llm)
+        assert len(result) == 1
+        assert result[0].name == "Valid"
+
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_response_to_string"
+    )
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.record_llm_response"
+    )
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_generation_span"
+    )
+    def test_generates_default_id(self, mock_span, _mock_record, mock_to_string):
+        mock_span.return_value.__enter__ = MagicMock()
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        items_json = json.dumps([{"name": "No ID Item"}])
+        mock_to_string.return_value = items_json
+        mock_llm = self._make_mock_llm()
+
+        result = enumerate_checklist_items("text", mock_llm)
+        assert len(result) == 1
+        assert result[0].id == "ITEM-1"
+
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_generation_span"
+    )
+    def test_llm_failure_raises_runtime_error(self, mock_span):
+        mock_span.return_value.__enter__ = MagicMock()
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        mock_llm = MagicMock()
+        mock_llm.config.model_name = "test-model"
+        mock_llm.config.model_provider = "test-provider"
+        mock_llm.invoke.side_effect = RuntimeError("API down")
+
+        with pytest.raises(RuntimeError, match="Failed to enumerate"):
+            enumerate_checklist_items("text", mock_llm)
+
+
+# =====================================================================
+# decompose_checklist_item  --  pass 2
+# =====================================================================
+
+
+class TestDecomposeChecklistItem:
+    """Tests for decompose_checklist_item (ChecklistItem → rule dicts)."""
+
+    SAMPLE_ITEM = ChecklistItem(
+        id="IR-3",
+        name="Budget Compliance",
+        category="IR-3: Budget Compliance",
+        description="Check budget compliance",
+        sub_checks=["Budget under 500k", "IDC rates correct"],
+    )
+
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_response_to_string"
+    )
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.record_llm_response"
+    )
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_generation_span"
+    )
+    def test_decomposes_into_rules(self, mock_span, _mock_record, mock_to_string):
+        mock_span.return_value.__enter__ = MagicMock()
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
+
         rules_json = json.dumps(
             [
                 {
                     "name": "Budget under 500k",
+                    "description": "Check budget cap",
                     "category": "IR-3: Budget Compliance",
-                    "prompt_template": "Check if budget < 500k using {{budget_text}}",
+                    "rule_type": "DOCUMENT_CHECK",
+                    "rule_intent": "CHECK",
+                    "prompt_template": "Check {{budget_text}} for cap.",
                 },
                 {
-                    "name": "Budget justification present",
+                    "name": "IDC rates correct",
+                    "description": "Verify IDC rates",
                     "category": "IR-3: Budget Compliance",
-                    "prompt_template": "Check for budget justification in {{proposal_text}}",
-                },
-                {
-                    "name": "Indirect costs correct",
-                    "category": "IR-3: Budget Compliance",
-                    "prompt_template": "Verify IDC rates in {{budget_text}}",
+                    "rule_type": "DOCUMENT_CHECK",
+                    "rule_intent": "CHECK",
+                    "prompt_template": "Check {{budget_text}} for IDC.",
                     "refinement_needed": True,
-                    "refinement_question": "What is the negotiated IDC rate?",
+                    "refinement_question": "What is the IDC rate?",
                 },
-            ]
-        )
-        result = _parse_import_response(rules_json)
-        assert len(result) == 3
-        # All share the same category
-        categories = {r["category"] for r in result}
-        assert categories == {"IR-3: Budget Compliance"}
-
-    def test_refinement_preserved_in_output(self):
-        raw = json.dumps(
-            [
-                {
-                    "name": "IDC Rate Check",
-                    "prompt_template": "Verify {{INSTITUTION_IDC_RATES}} against {{budget_text}}",
-                    "refinement_needed": True,
-                    "refinement_question": "What are your institution's IDC rates?",
-                }
-            ]
-        )
-        result = _parse_import_response(raw)
-        assert len(result) == 1
-        assert result[0]["refinement_needed"] is True
-        assert "IDC rates" in result[0]["refinement_question"]
-
-
-# =====================================================================
-# import_checklist  --  top-level function
-# =====================================================================
-
-
-class TestImportChecklist:
-    """Tests for the top-level import_checklist function."""
-
-    def test_empty_text_returns_empty_list(self):
-        assert import_checklist("") == []
-        assert import_checklist("   ") == []
-
-    def test_none_text_returns_empty_list(self):
-        # The function checks `not extracted_text`, which is True for None
-        assert import_checklist(None) == []  # type: ignore[arg-type]
-
-    @patch(
-        "onyx.server.features.proposal_review.engine.checklist_importer.get_default_llm"
-    )
-    @patch(
-        "onyx.server.features.proposal_review.engine.checklist_importer.llm_response_to_string"
-    )
-    def test_successful_import(self, mock_to_string, mock_get_llm):
-        rules_json = json.dumps(
-            [
-                {"name": "Rule 1", "prompt_template": "Check {{proposal_text}}"},
             ]
         )
         mock_to_string.return_value = rules_json
         mock_llm = MagicMock()
-        mock_get_llm.return_value = mock_llm
+        mock_llm.config.model_name = "test-model"
+        mock_llm.config.model_provider = "test-provider"
 
-        result = import_checklist("Some checklist content here.")
-        assert len(result) == 1
-        assert result[0]["name"] == "Rule 1"
-        mock_llm.invoke.assert_called_once()
+        result = decompose_checklist_item(self.SAMPLE_ITEM, "checklist text", mock_llm)
+
+        assert len(result) == 2
+        assert result[0]["name"] == "Budget under 500k"
+        assert result[1]["refinement_needed"] is True
+        assert result[1]["refinement_question"] == "What is the IDC rate?"
 
     @patch(
-        "onyx.server.features.proposal_review.engine.checklist_importer.get_default_llm"
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_response_to_string"
     )
-    def test_llm_failure_raises_runtime_error(self, mock_get_llm):
-        mock_get_llm.side_effect = RuntimeError("No API key")
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.record_llm_response"
+    )
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_generation_span"
+    )
+    def test_fills_missing_category_from_item(
+        self, mock_span, _mock_record, mock_to_string
+    ):
+        mock_span.return_value.__enter__ = MagicMock()
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
 
-        with pytest.raises(RuntimeError, match="Failed to parse checklist"):
-            import_checklist("Some checklist content.")
+        rules_json = json.dumps(
+            [
+                {
+                    "name": "Some rule",
+                    "prompt_template": "Check {{proposal_text}}",
+                    # no category — should inherit from item
+                },
+            ]
+        )
+        mock_to_string.return_value = rules_json
+        mock_llm = MagicMock()
+        mock_llm.config.model_name = "test-model"
+        mock_llm.config.model_provider = "test-provider"
+
+        result = decompose_checklist_item(self.SAMPLE_ITEM, "text", mock_llm)
+
+        assert len(result) == 1
+        assert result[0]["category"] == "IR-3: Budget Compliance"
+
+    @patch(
+        "onyx.server.features.proposal_review.engine.checklist_importer.llm_generation_span"
+    )
+    def test_llm_failure_raises_runtime_error(self, mock_span):
+        mock_span.return_value.__enter__ = MagicMock()
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        mock_llm = MagicMock()
+        mock_llm.config.model_name = "test-model"
+        mock_llm.config.model_provider = "test-provider"
+        mock_llm.invoke.side_effect = RuntimeError("API down")
+
+        with pytest.raises(RuntimeError, match="LLM call failed"):
+            decompose_checklist_item(self.SAMPLE_ITEM, "text", mock_llm)
