@@ -441,7 +441,7 @@ export default function VoiceProviderSetupModal({
                 subDescription={markdown(
                   "Paste the endpoint shown in [Azure Portal (Keys and Endpoint)](https://portal.azure.com/). Onyx extracts the speech region from this URL. Examples: https://westus.api.cognitive.microsoft.com/ or https://westus.tts.speech.microsoft.com/."
                 )}
-                nonInteractive
+                withLabel={false}
               >
                 <InputTypeIn
                   placeholder={
@@ -456,7 +456,7 @@ export default function VoiceProviderSetupModal({
             )}
 
             {providerType === "openai" && mode === "stt" && (
-              <Horizontal title="STT Model" center nonInteractive>
+              <Horizontal title="STT Model" center withLabel={false}>
                 <InputSelect value={sttModel} onValueChange={setSttModel}>
                   <InputSelect.Trigger />
                   <InputSelect.Content>
@@ -474,7 +474,7 @@ export default function VoiceProviderSetupModal({
               <Vertical
                 title="Default Model"
                 subDescription="This model will be used by Onyx by default for text-to-speech."
-                nonInteractive
+                withLabel={false}
               >
                 <InputSelect value={ttsModel} onValueChange={setTtsModel}>
                   <InputSelect.Trigger />
@@ -500,7 +500,7 @@ export default function VoiceProviderSetupModal({
                     PROVIDER_DOCS_URLS[providerType]
                   }).`
                 )}
-                nonInteractive
+                withLabel={false}
               >
                 <InputComboBox
                   value={defaultVoice}

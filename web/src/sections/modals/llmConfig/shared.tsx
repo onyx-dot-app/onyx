@@ -483,7 +483,7 @@ export function ModelSelectionField({
         <InputLayouts.Horizontal
           title="Models"
           description="Select models to make available for this provider."
-          nonInteractive
+          withLabel={false}
           center
         >
           <Section flexDirection="row" gap={0}>

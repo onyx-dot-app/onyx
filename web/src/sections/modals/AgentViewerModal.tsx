@@ -353,7 +353,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   <Horizontal
                     title="Default Model"
                     description="This model will be used by Onyx by default in your chats."
-                    nonInteractive
+                    withLabel={false}
                     sizePreset="main-ui"
                   >
                     <Text>{defaultModel}</Text>
@@ -363,7 +363,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   <Horizontal
                     title="Knowledge Cutoff Date"
                     description="Documents with a last-updated date prior to this will be ignored."
-                    nonInteractive
+                    withLabel={false}
                     sizePreset="main-ui"
                   >
                     <Text mainUiMono>
@@ -374,7 +374,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 <Horizontal
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
-                  nonInteractive
+                  withLabel={false}
                   sizePreset="main-ui"
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />

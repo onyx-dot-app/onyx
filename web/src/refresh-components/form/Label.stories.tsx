@@ -24,11 +24,3 @@ export const Disabled: Story = {
     disabled: true,
   },
 };
-
-export const NonInteractive: Story = {
-  args: {
-    children: "Non-Interactive Label",
-    name: "readonly-input",
-    nonInteractive: true,
-  },
-};

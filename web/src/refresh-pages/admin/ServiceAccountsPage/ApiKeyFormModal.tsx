@@ -96,7 +96,7 @@ export default function ApiKeyFormModal({
                 <VerticalInput
                   name="name"
                   title="Name"
-                  nonInteractive
+                  withLabel={false}
                   sizePreset="main-ui"
                 >
                   <FormikField<string>
@@ -115,7 +115,7 @@ export default function ApiKeyFormModal({
                 <VerticalInput
                   name="role"
                   title="Account Permissions"
-                  nonInteractive
+                  withLabel={false}
                   sizePreset="main-ui"
                 >
                   <FormikField<string>
