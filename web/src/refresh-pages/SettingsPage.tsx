@@ -401,7 +401,7 @@ function GeneralSettings() {
                       }
                       className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
                       title={bg.label}
-                      aria-withLabel={`${bg.label} background${
+                      aria-label={`${bg.label} background${
                         isSelected ? " (selected)" : ""
                       }`}
                     >
@@ -711,7 +711,7 @@ function PromptShortcuts() {
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
                     prominence="tertiary"
-                    aria-withLabel="Remove shortcut"
+                    aria-label="Remove shortcut"
                     tooltip={
                       shortcut.is_public
                         ? "Cannot delete public prompt-shortcuts."
@@ -1478,7 +1478,7 @@ function AccountsAccessSettings() {
                                   onClick={() => setTokenToDelete(pat)}
                                   prominence="tertiary"
                                   size="sm"
-                                  aria-withLabel={`Delete token ${pat.name}`}
+                                  aria-label={`Delete token ${pat.name}`}
                                 />
                               }
                             />

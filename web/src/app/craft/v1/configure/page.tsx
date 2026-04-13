@@ -417,7 +417,6 @@ export default function BuildConfigPage() {
                           : "Not set"
                     }
                     center
-                    withLabel
                   >
                     <SimpleTooltip
                       tooltip={

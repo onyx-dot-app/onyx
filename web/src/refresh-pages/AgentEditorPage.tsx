@@ -967,7 +967,7 @@ export default function AgentEditorPage({
     <>
       <div
         data-testid="AgentsEditorPage/container"
-        aria-withLabel="Agents Editor Page"
+        aria-label="Agents Editor Page"
         className="h-full w-full"
       >
         <Formik

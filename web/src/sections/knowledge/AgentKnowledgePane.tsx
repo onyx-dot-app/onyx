@@ -74,13 +74,13 @@ function KnowledgeSidebar({
   vectorDbEnabled,
 }: KnowledgeSidebarProps) {
   return (
-    <TableLayouts.SidebarLayout aria-withLabel="knowledge-sidebar">
+    <TableLayouts.SidebarLayout aria-label="knowledge-sidebar">
       <LineItem
         icon={SvgFiles}
         onClick={onNavigateToRecent}
         selected={activeView === "recent"}
         emphasized={activeView === "recent" || selectedFileIds.length > 0}
-        aria-withLabel="knowledge-sidebar-files"
+        aria-label="knowledge-sidebar-files"
         rightChildren={
           selectedFileIds.length > 0 ? (
             <Text mainUiAction className="text-action-link-05">
@@ -102,7 +102,7 @@ function KnowledgeSidebar({
               activeView === "document-sets" ||
               selectedDocumentSetIds.length > 0
             }
-            aria-withLabel="knowledge-sidebar-document-sets"
+            aria-label="knowledge-sidebar-document-sets"
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
                 <Text mainUiAction className="text-action-link-05">
@@ -132,7 +132,7 @@ function KnowledgeSidebar({
                 onClick={() => onNavigateToSource(connectedSource.source)}
                 selected={isActive}
                 emphasized={isActive || isSelected || selectionCount > 0}
-                aria-withLabel={`knowledge-sidebar-source-${connectedSource.source}`}
+                aria-label={`knowledge-sidebar-source-${connectedSource.source}`}
                 rightChildren={
                   selectionCount > 0 ? (
                     <Text mainUiAction className="text-action-link-05">
@@ -259,7 +259,7 @@ function KnowledgeTable<T>({
                 key={String(id)}
                 selected={isSelected}
                 onClick={() => onToggleItem(id)}
-                aria-withLabel={
+                aria-label={
                   ariaLabelPrefix ? `${ariaLabelPrefix}-${id}` : undefined
                 }
               >
@@ -659,7 +659,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
       gap={0.5}
       alignItems="start"
       height="auto"
-      aria-withLabel="knowledge-add-view"
+      aria-label="knowledge-add-view"
     >
       <GeneralLayouts.Section
         flexDirection="row"
@@ -673,7 +673,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
             icon={SvgFolder}
             onClick={onNavigateToDocumentSets}
             emphasized={selectedDocumentSetIds.length > 0}
-            aria-withLabel="knowledge-add-document-sets"
+            aria-label="knowledge-add-document-sets"
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
                 <Text mainUiAction className="text-action-link-05">
@@ -691,7 +691,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
           description="Recent or new uploads"
           onClick={onNavigateToRecent}
           emphasized={selectedFileIds.length > 0}
-          aria-withLabel="knowledge-add-files"
+          aria-label="knowledge-add-files"
           rightChildren={
             selectedFileIds.length > 0 ? (
               <Text mainUiAction className="text-action-link-05">
@@ -720,7 +720,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
                 icon={sourceMetadata.icon}
                 onClick={() => onNavigateToSource(connectedSource.source)}
                 emphasized={isSelected || selectionCount > 0}
-                aria-withLabel={`knowledge-add-source-${connectedSource.source}`}
+                aria-label={`knowledge-add-source-${connectedSource.source}`}
                 rightChildren={
                   selectionCount > 0 ? (
                     <Text mainUiAction className="text-action-link-05">
@@ -787,7 +787,7 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
           icon={SvgPlusCircle}
           onClick={onAddKnowledge}
           prominence="tertiary"
-          aria-withLabel="knowledge-add-button"
+          aria-label="knowledge-add-button"
         />
       </GeneralLayouts.Section>
     );
@@ -816,7 +816,7 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         prominence="internal"
         icon={SvgArrowUpRight}
         onClick={onViewEdit}
-        aria-withLabel="knowledge-view-edit"
+        aria-label="knowledge-view-edit"
       >
         View / Edit
       </Button>
