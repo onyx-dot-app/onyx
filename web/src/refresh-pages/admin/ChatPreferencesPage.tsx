@@ -522,6 +522,73 @@ function ChatPreferencesForm() {
         />
 
         <SettingsLayouts.Body>
+          {/* Features */}
+          <Card>
+            <SimpleTooltip
+              tooltip={
+                uniqueSources.length === 0
+                  ? "Set up connectors to use Search Mode"
+                  : undefined
+              }
+              side="top"
+            >
+              <Disabled disabled={uniqueSources.length === 0} allowClick>
+                <div className="w-full">
+                  <InputLayouts.Horizontal
+                    title="Search Mode"
+                    tag={{ title: "beta", color: "blue" }}
+                    description="UI mode for quick document search across your organization."
+                    disabled={uniqueSources.length === 0}
+                  >
+                    <Switch
+                      checked={s.search_ui_enabled ?? true}
+                      onCheckedChange={(checked) => {
+                        void saveSettings({ search_ui_enabled: checked });
+                      }}
+                      disabled={uniqueSources.length === 0}
+                    />
+                  </InputLayouts.Horizontal>
+                </div>
+              </Disabled>
+            </SimpleTooltip>
+            <InputLayouts.Horizontal
+              title="Multi-Model Generation"
+              tag={{ title: "beta", color: "blue" }}
+              description="Allow multiple models to generate responses in parallel in chat."
+            >
+              <Switch
+                checked={s.multi_model_chat_enabled ?? true}
+                onCheckedChange={(checked) => {
+                  void saveSettings({ multi_model_chat_enabled: checked });
+                }}
+              />
+            </InputLayouts.Horizontal>
+            <InputLayouts.Horizontal
+              title="Deep Research"
+              description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
+            >
+              <Switch
+                checked={s.deep_research_enabled ?? true}
+                onCheckedChange={(checked) => {
+                  void saveSettings({ deep_research_enabled: checked });
+                }}
+              />
+            </InputLayouts.Horizontal>
+            <InputLayouts.Horizontal
+              title="Chat Auto-Scroll"
+              description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
+            >
+              <Switch
+                checked={s.auto_scroll ?? false}
+                onCheckedChange={(checked) => {
+                  void saveSettings({ auto_scroll: checked });
+                }}
+              />
+            </InputLayouts.Horizontal>
+          </Card>
+
+          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
           {/* Team Context */}
           <Section gap={1}>
             <InputLayouts.Vertical
@@ -578,80 +645,6 @@ function ChatPreferencesForm() {
               Modify Prompt
             </Button>
           </InputLayouts.Horizontal>
-
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-
-          {/* Features */}
-          <Section gap={0.75}>
-            <Content
-              title="Features"
-              sizePreset="main-content"
-              variant="section"
-            />
-            <Card>
-              <SimpleTooltip
-                tooltip={
-                  uniqueSources.length === 0
-                    ? "Set up connectors to use Search Mode"
-                    : undefined
-                }
-                side="top"
-              >
-                <Disabled disabled={uniqueSources.length === 0} allowClick>
-                  <div className="w-full">
-                    <InputLayouts.Horizontal
-                      title="Search Mode"
-                      description="UI mode for quick document search across your organization."
-                      disabled={uniqueSources.length === 0}
-                    >
-                      <Switch
-                        checked={s.search_ui_enabled ?? false}
-                        onCheckedChange={(checked) => {
-                          void saveSettings({ search_ui_enabled: checked });
-                        }}
-                        disabled={uniqueSources.length === 0}
-                      />
-                    </InputLayouts.Horizontal>
-                  </div>
-                </Disabled>
-              </SimpleTooltip>
-              <InputLayouts.Horizontal
-                title="Multi-Model Generation"
-                tag={{ title: "beta", color: "blue" }}
-                description="Allow multiple models to generate responses in parallel in chat."
-                withLabel={false}
-              >
-                <Switch
-                  checked={s.multi_model_chat_enabled ?? true}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ multi_model_chat_enabled: checked });
-                  }}
-                />
-              </InputLayouts.Horizontal>
-              <InputLayouts.Horizontal
-                title="Deep Research"
-                description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
-              >
-                <Switch
-                  checked={s.deep_research_enabled ?? true}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ deep_research_enabled: checked });
-                  }}
-                />
-              </InputLayouts.Horizontal>
-              <InputLayouts.Horizontal
-                title="Chat Auto-Scroll"
-                description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
-              >
-                <Switch
-                  checked={s.auto_scroll ?? false}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ auto_scroll: checked });
-                  }}
-                />
-              </InputLayouts.Horizontal>
-            </Card>
-          </Section>
 
           <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 

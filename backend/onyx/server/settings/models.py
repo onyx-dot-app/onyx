@@ -65,8 +65,8 @@ class Settings(BaseModel):
     anonymous_user_enabled: bool | None = None
     invite_only_enabled: bool = False
     deep_research_enabled: bool | None = None
-    multi_model_chat_enabled: bool | None = None
-    search_ui_enabled: bool | None = None
+    multi_model_chat_enabled: bool | None = True
+    search_ui_enabled: bool | None = True
 
     # Whether EE features are unlocked for use.
     # Depends on license status: True when the user has a valid license
