@@ -1376,7 +1376,7 @@ export default function AgentEditorPage({
                               disabled={!isImageGenerationAvailable}
                               tooltip="Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin."
                             >
-                              <Card border="solid">
+                              <Card border="solid" rounding="lg">
                                 <InputLayouts.Horizontal
                                   name="image_generation"
                                   title="Image Generation"
@@ -1392,7 +1392,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!webSearchTool}>
-                              <Card border="solid">
+                              <Card border="solid" rounding="lg">
                                 <InputLayouts.Horizontal
                                   name="web_search"
                                   title="Web Search"
@@ -1408,7 +1408,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!openURLTool}>
-                              <Card border="solid">
+                              <Card border="solid" rounding="lg">
                                 <InputLayouts.Horizontal
                                   name="open_url"
                                   title="Open URL"
@@ -1424,7 +1424,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!codeInterpreterTool}>
-                              <Card border="solid">
+                              <Card border="solid" rounding="lg">
                                 <InputLayouts.Horizontal
                                   name="code_interpreter"
                                   title="Code Interpreter"
@@ -1494,78 +1494,82 @@ export default function AgentEditorPage({
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section>
-                            <Card border="solid">
-                              <InputLayouts.Horizontal
-                                title="Share This Agent"
-                                description="with other users, groups, or everyone in your organization."
-                                center
-                              >
-                                <OpalButton
-                                  prominence="secondary"
-                                  icon={isShared ? SvgUsers : SvgLock}
-                                  onClick={() => shareAgentModal.toggle(true)}
+                            <Card border="solid" rounding="lg">
+                              <GeneralLayouts.Section width="full">
+                                <InputLayouts.Horizontal
+                                  title="Share This Agent"
+                                  description="with other users, groups, or everyone in your organization."
+                                  center
                                 >
-                                  Share
-                                </OpalButton>
-                              </InputLayouts.Horizontal>
-                              {canUpdateFeaturedStatus && (
-                                <>
-                                  <InputLayouts.Horizontal
-                                    name="is_featured"
-                                    title="Feature This Agent"
-                                    description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                                  <OpalButton
+                                    prominence="secondary"
+                                    icon={isShared ? SvgUsers : SvgLock}
+                                    onClick={() => shareAgentModal.toggle(true)}
                                   >
-                                    <SwitchField name="is_featured" />
-                                  </InputLayouts.Horizontal>
-                                  {values.is_featured && !isShared && (
-                                    <Message
-                                      static
-                                      close={false}
-                                      className="w-full"
-                                      text="This agent is private to you and will only be featured for yourself."
-                                    />
-                                  )}
-                                </>
-                              )}
+                                    Share
+                                  </OpalButton>
+                                </InputLayouts.Horizontal>
+                                {canUpdateFeaturedStatus && (
+                                  <>
+                                    <InputLayouts.Horizontal
+                                      name="is_featured"
+                                      title="Feature This Agent"
+                                      description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                                    >
+                                      <SwitchField name="is_featured" />
+                                    </InputLayouts.Horizontal>
+                                    {values.is_featured && !isShared && (
+                                      <Message
+                                        static
+                                        close={false}
+                                        className="w-full"
+                                        text="This agent is private to you and will only be featured for yourself."
+                                      />
+                                    )}
+                                  </>
+                                )}
+                              </GeneralLayouts.Section>
                             </Card>
 
-                            <Card border="solid">
-                              <InputLayouts.Horizontal
-                                name="llm_model"
-                                title="Default Model"
-                                description="This model will be used by Onyx by default in your chats."
-                              >
-                                <LLMSelector
+                            <Card border="solid" rounding="lg">
+                              <GeneralLayouts.Section width="full">
+                                <InputLayouts.Horizontal
                                   name="llm_model"
-                                  llmProviders={llmProviders ?? []}
-                                  currentLlm={getCurrentLlm(
-                                    values,
-                                    llmProviders
-                                  )}
-                                  onSelect={(selected) =>
-                                    onLlmSelect(selected, setFieldValue)
-                                  }
-                                />
-                              </InputLayouts.Horizontal>
-                              <InputLayouts.Horizontal
-                                name="knowledge_cutoff_date"
-                                title="Knowledge Cutoff Date"
-                                suffix="optional"
-                                description="Documents with a last-updated date prior to this will be ignored."
-                              >
-                                <InputDatePickerField
+                                  title="Default Model"
+                                  description="This model will be used by Onyx by default in your chats."
+                                >
+                                  <LLMSelector
+                                    name="llm_model"
+                                    llmProviders={llmProviders ?? []}
+                                    currentLlm={getCurrentLlm(
+                                      values,
+                                      llmProviders
+                                    )}
+                                    onSelect={(selected) =>
+                                      onLlmSelect(selected, setFieldValue)
+                                    }
+                                  />
+                                </InputLayouts.Horizontal>
+                                <InputLayouts.Horizontal
                                   name="knowledge_cutoff_date"
-                                  maxDate={new Date()}
-                                />
-                              </InputLayouts.Horizontal>
-                              <InputLayouts.Horizontal
-                                name="replace_base_system_prompt"
-                                title="Overwrite System Prompt"
-                                suffix="(Not Recommended)"
-                                description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
-                              >
-                                <SwitchField name="replace_base_system_prompt" />
-                              </InputLayouts.Horizontal>
+                                  title="Knowledge Cutoff Date"
+                                  suffix="optional"
+                                  description="Documents with a last-updated date prior to this will be ignored."
+                                >
+                                  <InputDatePickerField
+                                    name="knowledge_cutoff_date"
+                                    maxDate={new Date()}
+                                  />
+                                </InputLayouts.Horizontal>
+                                <InputLayouts.Horizontal
+                                  name="replace_base_system_prompt"
+                                  title="Overwrite System Prompt"
+                                  suffix="(Not Recommended)"
+                                  description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
+                                >
+                                  <SwitchField name="replace_base_system_prompt" />
+                                </InputLayouts.Horizontal>
+                              </GeneralLayouts.Section>
                             </Card>
 
                             <GeneralLayouts.Section gap={0.25}>
@@ -1598,7 +1602,7 @@ export default function AgentEditorPage({
                             paddingPerpendicular="fit"
                           />
 
-                          <Card border="solid">
+                          <Card border="solid" rounding="lg">
                             <InputLayouts.Horizontal
                               title="Delete This Agent"
                               description="Anyone using this agent will no longer be able to access it."
