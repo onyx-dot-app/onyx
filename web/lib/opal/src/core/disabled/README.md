@@ -10,7 +10,7 @@ Wrapper component that applies baseline disabled CSS (opacity, cursor, pointer-e
 |------|------|---------|-------------|
 | `disabled` | `boolean` | `false` | Applies disabled styling when truthy |
 | `allowClick` | `boolean` | `false` | Re-enables pointer events while keeping disabled visuals |
-| `tooltip` | `string` | — | Tooltip shown on hover when disabled (implies `allowClick`) |
+| `tooltip` | `string \| RichStr` | — | Tooltip shown on hover when disabled (implies `allowClick`). Supports `markdown()`. |
 | `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on |
 
 ## CSS behavior

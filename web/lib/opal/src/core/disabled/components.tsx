@@ -3,6 +3,8 @@ import "@opal/components/tooltip.css";
 import React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { TooltipSide } from "@opal/components";
+import type { RichStr } from "@opal/types";
+import { resolveStr } from "@opal/components/text/InlineMarkdown";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,10 +27,11 @@ interface DisabledProps extends React.HTMLAttributes<HTMLDivElement> {
   allowClick?: boolean;
 
   /**
-   * Tooltip text shown on hover when disabled. Implies `allowClick` so that
-   * the tooltip trigger can receive pointer events.
+   * Tooltip content shown on hover when disabled. Implies `allowClick` so that
+   * the tooltip trigger can receive pointer events. Supports inline markdown
+   * via `markdown()`.
    */
-  tooltip?: string;
+  tooltip?: string | RichStr;
 
   /** Which side the tooltip appears on. @default "right" */
   tooltipSide?: TooltipSide;
@@ -92,7 +95,7 @@ function Disabled({
           side={tooltipSide}
           sideOffset={4}
         >
-          {tooltip}
+          {resolveStr(tooltip)}
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>
